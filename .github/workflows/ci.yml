@@ -1,0 +1,37 @@
+name: Validate Duckpad
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  acceptance:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python: ['3.11', '3.13']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync --extra dev --locked
+      - run: uv run ruff check src tests scripts
+      - run: uv run ruff format --check src tests scripts
+      - run: uv run pytest -q
+      - run: npm ci --prefix frontend
+      - run: npm run build --prefix frontend
+      - run: npm exec --prefix frontend -- playwright install --with-deps chromium
+      - run: npm run test:e2e --prefix frontend
+      - run: uv build
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: browser-diagnostics-${{ matrix.python }}
+          path: frontend/test-results/

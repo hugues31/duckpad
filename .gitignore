@@ -1,0 +1,14 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+node_modules/
+dist/
+src/duckpad/static/
+.duckpad-dev/
+test-results/
+playwright-report/
+*.egg-info/
+.coverage
+*.tsbuildinfo

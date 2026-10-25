@@ -1,0 +1,31 @@
+{
+  "versions": {
+    "huey": "3.5.3",
+    "apscheduler": "3.11.3",
+    "sqlalchemy": "2.1.6",
+    "duckdb": "2.0.0"
+  },
+  "apscheduler": {
+    "dynamic_create_modify_reschedule_delete": true,
+    "sqlite_schedule_restart": true,
+    "started_paused_without_replay": true
+  },
+  "huey": {
+    "sqlite_queue_survives_restart": true,
+    "pending_jobs_need_explicit_no_replay_policy": true,
+    "task_queue_does_not_replace_worktree_admission": true
+  },
+  "embedded": {
+    "origins_rejected_while_busy": [
+      "api",
+      "prototype_schedule",
+      "prototype_webhook"
+    ],
+    "another_worktree_admitted": true,
+    "cancellation_keeps_admission_until_cleanup": true,
+    "same_context_preview": true,
+    "durable_history_after_restart": true,
+    "no_dataset_or_job_replay": true
+  },
+  "decision": "Embedded execution service for the MVP. APScheduler 3.x is the future scheduling adapter; no schedules or automatic retries are enabled."
+}

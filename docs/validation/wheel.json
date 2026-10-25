@@ -1,0 +1,12 @@
+{
+  "status": "passed",
+  "installed_wheel_outside_checkout": true,
+  "bundled_assets": true,
+  "authentication_persists": true,
+  "password_printed_only_once": true,
+  "one_process_per_instance": true,
+  "complete_example_run": true,
+  "history_survives_restart": true,
+  "results_are_not_persisted": true,
+  "node_tooling_used": false
+}

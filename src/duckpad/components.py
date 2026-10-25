@@ -1,0 +1,308 @@
+"""Project-owned reusable subgraphs with stable boundary ports."""
+
+import copy
+import re
+
+from .templates import parse_template
+from .util import Problem, uid
+
+
+def expand(bundle, tolerant=False):
+    nodes, edges, boundaries = {}, [], {}
+
+    def visit(graph, prefix="", stack=()):
+        local_ports = {}
+        for node in graph.get("nodes", []):
+            key = prefix + node["id"]
+            try:
+                if node.get("component"):
+                    definition_id = node["component"]
+                    if definition_id in stack:
+                        raise Problem("Recursive component reference: " + " → ".join((*stack, definition_id)))
+                    if definition_id not in bundle["components"]:
+                        raise Problem(f"Missing component: {definition_id}")
+                    definition = copy.deepcopy(bundle["components"][definition_id])
+                    for name, parameter in definition.get("parameters", {}).items():
+                        value = node.get("params", {}).get(name, parameter.get("default"))
+                        for target in parameter.get("targets", []):
+                            target_node = next(
+                                (n for n in definition["nodes"] if n["id"] == target["node"]), None
+                            )
+                            if not target_node:
+                                raise Problem(f"Invalid exposed parameter target: {name}")
+                            target_node.setdefault("params", {})[target["param"]] = value
+                    inner = visit(definition, key + "::", (*stack, definition_id))
+                    ports = {"inputs": {}, "outputs": {}}
+                    for direction in ("inputs", "outputs"):
+                        for name, target in definition.get(direction, {}).items():
+                            try:
+                                ports[direction][name] = inner[target["node"]][direction][target["port"]]
+                            except KeyError as error:
+                                raise Problem(
+                                    f"Invalid component {definition_id} {direction} port: {name}"
+                                ) from error
+                    local_ports[node["id"]] = ports
+                    boundaries[key] = ports
+                else:
+                    if node.get("template") not in bundle["templates"]:
+                        raise Problem(f"Missing template: {node.get('template')}")
+                    template = parse_template(bundle["templates"][node["template"]])
+                    nodes[key] = {
+                        **copy.deepcopy(node),
+                        "id": key,
+                        "root": key.split("::")[0],
+                        "parsed": template,
+                        "template_sql": bundle["templates"][node["template"]],
+                    }
+                    local_ports[node["id"]] = {
+                        direction: {p: (key, p) for p in template[direction]}
+                        for direction in ("inputs", "outputs")
+                    }
+            except (Problem, KeyError, TypeError) as error:
+                if not tolerant:
+                    raise
+                for old in list(nodes):
+                    if old == key or old.startswith(key + "::"):
+                        del nodes[old]
+                edges[:] = [
+                    e
+                    for e in edges
+                    if not (e["source"].startswith(key + "::") or e["target"].startswith(key + "::"))
+                ]
+                text = bundle["templates"].get(node.get("template"), "")
+                inputs = set(re.findall(r"--\s*@input\s+(\w+)", text))
+                outputs = set(re.findall(r"--\s*@output\s+(\w+)", text))
+                inputs.update(e["targetHandle"] for e in graph.get("edges", []) if e["target"] == node["id"])
+                outputs.update(e["sourceHandle"] for e in graph.get("edges", []) if e["source"] == node["id"])
+                for direction, ports in (("inputs", inputs), ("outputs", outputs)):
+                    ports.update(
+                        p["port"] for p in graph.get(direction, {}).values() if p["node"] == node["id"]
+                    )
+                template = {
+                    "kind": "transform",
+                    "inputs": sorted(inputs),
+                    "outputs": sorted(outputs),
+                    "parameters": [],
+                }
+                nodes[key] = {
+                    **copy.deepcopy(node),
+                    "id": key,
+                    "root": key.split("::")[0],
+                    "parsed": template,
+                    "template_sql": text,
+                    "error": str(error),
+                }
+                local_ports[node["id"]] = {
+                    direction: {p: (key, p) for p in template[direction]}
+                    for direction in ("inputs", "outputs")
+                }
+        for edge in graph.get("edges", []):
+            try:
+                source, output = local_ports[edge["source"]]["outputs"][edge["sourceHandle"]]
+                target, input_name = local_ports[edge["target"]]["inputs"][edge["targetHandle"]]
+            except KeyError as error:
+                message = f"Invalid edge or incompatible interface: {edge.get('id', 'unknown')}"
+                if not tolerant:
+                    raise Problem(message) from error
+                target_key = prefix + edge["target"]
+                for key, node in nodes.items():
+                    if key == target_key or key.startswith(target_key + "::"):
+                        node["error"] = message
+                continue
+            edges.append(
+                {
+                    "id": prefix + edge["id"],
+                    "source": source,
+                    "sourceHandle": output,
+                    "target": target,
+                    "targetHandle": input_name,
+                }
+            )
+        return local_ports
+
+    visit(bundle["flow"])
+    if tolerant:
+        occupied = set()
+        for edge in edges:
+            port = (edge["target"], edge["targetHandle"])
+            if port in occupied:
+                nodes[edge["target"]]["error"] = f"Input {port} has more than one source"
+            occupied.add(port)
+        for key, node in nodes.items():
+            for port in node["parsed"]["inputs"]:
+                if (key, port) not in occupied:
+                    node["error"] = f"Connect input {port} on {node.get('label', key)}"
+    return nodes, edges, boundaries
+
+
+def group(bundle, selection, label, exposed=None, parent=None):
+    bundle = copy.deepcopy(bundle)
+    graph = bundle["components"][parent] if parent else bundle["flow"]
+    selected = set(selection)
+    internal = [n for n in graph["nodes"] if n["id"] in selected]
+    if not internal:
+        raise Problem("Select at least one node")
+    component_id, instance_id = uid("component_"), uid("node_")
+    definition = {
+        "id": component_id,
+        "name": label,
+        "description": "",
+        "nodes": internal,
+        "edges": [],
+        "inputs": {},
+        "outputs": {},
+        "parameters": exposed or {},
+    }
+    prefixes = component_paths(bundle).get(parent, []) if parent else [""]
+    for section in ("nodes", "datasets", "columns"):
+        values = bundle.get("documentation", {}).get(section, {})
+        for prefix in prefixes:
+            for key in list(values):
+                local = key[len(prefix) :] if key.startswith(prefix) else ""
+                if any(local == node or local.startswith(node + ":") for node in selected):
+                    value = values.pop(key)
+                    values[prefix + instance_id + "::" + local] = value
+                    definition.setdefault("documentation", {}).setdefault(section, {})[local] = copy.deepcopy(
+                        value
+                    )
+    outer = []
+    outgoing_ports, incoming_ports = {}, {}
+    for edge in graph["edges"]:
+        a, b = edge["source"] in selected, edge["target"] in selected
+        if a and b:
+            definition["edges"].append(edge)
+        elif b:
+            key = (edge["target"], edge["targetHandle"])
+            port = incoming_ports.setdefault(key, f"input_{len(incoming_ports) + 1}")
+            definition["inputs"][port] = {"node": key[0], "port": key[1]}
+            outer.append({**edge, "target": instance_id, "targetHandle": port})
+        elif a:
+            key = (edge["source"], edge["sourceHandle"])
+            port = outgoing_ports.setdefault(key, f"output_{len(outgoing_ports) + 1}")
+            definition["outputs"][port] = {"node": key[0], "port": key[1]}
+            outer.append({**edge, "source": instance_id, "sourceHandle": port})
+        else:
+            outer.append(edge)
+    # Preserve the containing component's boundary and exposed parameters.
+    for direction, lookup in (("inputs", incoming_ports), ("outputs", outgoing_ports)):
+        for name, target in graph.get(direction, {}).items():
+            if target["node"] in selected:
+                key = (target["node"], target["port"])
+                port = lookup.setdefault(key, f"{direction[:-1]}_{len(lookup) + 1}")
+                definition[direction][port] = dict(target)
+                graph[direction][name] = {"node": instance_id, "port": port}
+    for name, parameter in graph.get("parameters", {}).items():
+        targets = []
+        for target in parameter.get("targets", []):
+            if target["node"] in selected:
+                exposed_name = f"{name}_{len(definition['parameters']) + 1}"
+                definition["parameters"][exposed_name] = {**copy.deepcopy(parameter), "targets": [target]}
+                targets.append({"node": instance_id, "param": exposed_name})
+            else:
+                targets.append(target)
+        parameter["targets"] = targets
+    # Expose unconnected terminal outputs too, so a grouped result is inspectable.
+    for node in internal:
+        outputs = (
+            bundle["components"][node["component"]].get("outputs", {})
+            if node.get("component")
+            else parse_template(bundle["templates"][node["template"]])["outputs"]
+        )
+        for output in outputs:
+            key = (node["id"], output)
+            if key not in outgoing_ports and not any(
+                e["source"] == key[0] and e["sourceHandle"] == key[1] for e in definition["edges"]
+            ):
+                port = f"output_{len(definition['outputs']) + 1}"
+                definition["outputs"][port] = {"node": key[0], "port": key[1]}
+    bundle["components"][component_id] = definition
+    graph["nodes"] = [n for n in graph["nodes"] if n["id"] not in selected] + [
+        {
+            "id": instance_id,
+            "component": component_id,
+            "label": label,
+            "params": {},
+            "position": internal[0].get("position", {"x": 100, "y": 100}),
+        }
+    ]
+    graph["edges"] = outer
+    expand(bundle)
+    return bundle, instance_id
+
+
+def import_definition(destination, source, kind, identity, origin):
+    result = copy.deepcopy(destination)
+    remap = {}
+
+    def transfer(category, key):
+        if (category, key) in remap:
+            return remap[(category, key)]
+        if key not in source[category]:
+            raise Problem(f"Missing imported definition: {key}")
+        new_id = uid("template_" if category == "templates" else "component_")
+        remap[(category, key)] = new_id
+        value = copy.deepcopy(source[category][key])
+        if category == "components":
+            value.update(id=new_id, origin=origin)
+            prefixes = component_paths(source).get(key, [])
+            if prefixes:
+                prefix = prefixes[0]
+                for section in ("nodes", "datasets", "columns"):
+                    for path, text in source.get("documentation", {}).get(section, {}).items():
+                        if path.startswith(prefix):
+                            value.setdefault("documentation", {}).setdefault(section, {})[
+                                path[len(prefix) :]
+                            ] = copy.deepcopy(text)
+            for node in value["nodes"]:
+                field = "component" if node.get("component") else "template"
+                node[field] = transfer("components" if field == "component" else "templates", node[field])
+        result[category][new_id] = value
+        return new_id
+
+    imported = transfer(kind, identity)
+    return result, imported
+
+
+def component_paths(bundle):
+    """Return every instance path without requiring valid SQL or input wiring."""
+    result = {}
+
+    def visit(graph, prefix="", stack=()):
+        for node in graph.get("nodes", []):
+            identity = node.get("component")
+            if identity and identity in bundle["components"] and identity not in stack:
+                path = prefix + node["id"] + "::"
+                result.setdefault(identity, []).append(path)
+                visit(bundle["components"][identity], path, (*stack, identity))
+
+    visit(bundle["flow"])
+    return result
+
+
+def reconcile_documentation(previous, current):
+    """Copy imported documentation and prune explicitly deleted owning nodes."""
+    documentation = current.setdefault("documentation", {})
+    paths = component_paths(current)
+    for identity, prefixes in paths.items():
+        defaults = current["components"][identity].get("documentation", {})
+        for section in ("nodes", "datasets", "columns"):
+            for key, value in defaults.get(section, {}).items():
+                for prefix in prefixes:
+                    documentation.setdefault(section, {}).setdefault(prefix + key, copy.deepcopy(value))
+    if not previous:
+        return
+    old_paths = component_paths(previous)
+    pairs = [(previous["flow"], current["flow"], [""])]
+    pairs.extend(
+        (old, current["components"][key], old_paths.get(key, []))
+        for key, old in previous["components"].items()
+        if key in current["components"]
+    )
+    for before, after, prefixes in pairs:
+        removed = {n["id"] for n in before.get("nodes", [])} - {n["id"] for n in after.get("nodes", [])}
+        owners = [prefix + node for prefix in prefixes for node in removed]
+        for section in ("nodes", "datasets", "columns"):
+            values = documentation.get(section, {})
+            for key in list(values):
+                if any(key == owner or key.startswith(owner + ":") for owner in owners):
+                    del values[key]

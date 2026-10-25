@@ -1,0 +1,233 @@
+{
+  "aggregate_preview_seconds": 0.0023596420069225132,
+  "cpu": "13th Gen Intel(R) Core(TM) i5-1340P",
+  "distribution": "10,000 customer keys; uniform fact multiplicity (100 at 1M rows); dimension contains 12,000 rows, with two matches for keys 0..1999 and one for remaining keys; 8 regions; 16-character numeric strings; amounts in 0.00..999.99",
+  "duckdb": "2.0.0",
+  "extensions": [
+    "core_functions 2.0.0",
+    "parquet 2.0.0"
+  ],
+  "flow": "Read 50-column Parquet facts and CSV dimension; one-to-many join; grouped SUM, AVG, COUNT and COUNT DISTINCT; CSV export",
+  "input_columns": 50,
+  "input_rows": 1000000,
+  "lineage_first_five_and_exact_count_seconds": 0.0662607469712384,
+  "lineage_next_five_seconds": 0.06311339297099039,
+  "lineage_total_contributions": 150000,
+  "logical_cpus": 16,
+  "memory_total_kib": 16074876,
+  "native_value_comparison": "passed",
+  "node_seconds": {
+    "customers": 0.020171663956716657,
+    "export": 0.009668547019828111,
+    "facts": 0.26221384695963934,
+    "joined": 0.17982897598994896,
+    "totals": 0.03825697099091485
+  },
+  "peak_process_memory_kib": 1482492,
+  "pipeline_seconds_including_source_reads": 0.5828448060201481,
+  "platform": "Linux-7.2.9-2-cachyos-x86_64-with-glibc2.44",
+  "python": "3.13.12",
+  "schema": [
+    {
+      "name": "id",
+      "type": "BIGINT"
+    },
+    {
+      "name": "customer_id",
+      "type": "INTEGER"
+    },
+    {
+      "name": "amount",
+      "type": "DECIMAL(14,2)"
+    },
+    {
+      "name": "metric_0",
+      "type": "DOUBLE"
+    },
+    {
+      "name": "metric_1",
+      "type": "DOUBLE"
+    },
+    {
+      "name": "metric_2",
+      "type": "DOUBLE"
+    },
+    {
+      "name": "metric_3",
+      "type": "DOUBLE"
+    },
+    {
+      "name": "metric_4",
+      "type": "DOUBLE"
+    },
+    {
+      "name": "metric_5",
+      "type": "DOUBLE"
+    },
+    {
+      "name": "metric_6",
+      "type": "DOUBLE"
+    },
+    {
+      "name": "metric_7",
+      "type": "DOUBLE"
+    },
+    {
+      "name": "metric_8",
+      "type": "DOUBLE"
+    },
+    {
+      "name": "metric_9",
+      "type": "DOUBLE"
+    },
+    {
+      "name": "flag_0",
+      "type": "BOOLEAN"
+    },
+    {
+      "name": "flag_1",
+      "type": "BOOLEAN"
+    },
+    {
+      "name": "flag_2",
+      "type": "BOOLEAN"
+    },
+    {
+      "name": "flag_3",
+      "type": "BOOLEAN"
+    },
+    {
+      "name": "flag_4",
+      "type": "BOOLEAN"
+    },
+    {
+      "name": "event_0",
+      "type": "DATE"
+    },
+    {
+      "name": "event_1",
+      "type": "DATE"
+    },
+    {
+      "name": "event_2",
+      "type": "DATE"
+    },
+    {
+      "name": "event_3",
+      "type": "DATE"
+    },
+    {
+      "name": "event_4",
+      "type": "DATE"
+    },
+    {
+      "name": "code_0",
+      "type": "VARCHAR"
+    },
+    {
+      "name": "code_1",
+      "type": "VARCHAR"
+    },
+    {
+      "name": "code_2",
+      "type": "VARCHAR"
+    },
+    {
+      "name": "code_3",
+      "type": "VARCHAR"
+    },
+    {
+      "name": "code_4",
+      "type": "VARCHAR"
+    },
+    {
+      "name": "code_5",
+      "type": "VARCHAR"
+    },
+    {
+      "name": "code_6",
+      "type": "VARCHAR"
+    },
+    {
+      "name": "code_7",
+      "type": "VARCHAR"
+    },
+    {
+      "name": "code_8",
+      "type": "VARCHAR"
+    },
+    {
+      "name": "code_9",
+      "type": "VARCHAR"
+    },
+    {
+      "name": "count_0",
+      "type": "INTEGER"
+    },
+    {
+      "name": "count_1",
+      "type": "INTEGER"
+    },
+    {
+      "name": "count_2",
+      "type": "INTEGER"
+    },
+    {
+      "name": "count_3",
+      "type": "INTEGER"
+    },
+    {
+      "name": "count_4",
+      "type": "INTEGER"
+    },
+    {
+      "name": "count_5",
+      "type": "INTEGER"
+    },
+    {
+      "name": "count_6",
+      "type": "INTEGER"
+    },
+    {
+      "name": "count_7",
+      "type": "INTEGER"
+    },
+    {
+      "name": "count_8",
+      "type": "INTEGER"
+    },
+    {
+      "name": "count_9",
+      "type": "INTEGER"
+    },
+    {
+      "name": "time_0",
+      "type": "TIMESTAMP"
+    },
+    {
+      "name": "time_1",
+      "type": "TIMESTAMP"
+    },
+    {
+      "name": "time_2",
+      "type": "TIMESTAMP"
+    },
+    {
+      "name": "time_3",
+      "type": "TIMESTAMP"
+    },
+    {
+      "name": "time_4",
+      "type": "TIMESTAMP"
+    },
+    {
+      "name": "time_5",
+      "type": "TIMESTAMP"
+    },
+    {
+      "name": "time_6",
+      "type": "TIMESTAMP"
+    }
+  ],
+  "source_preview_100_rows_seconds": 0.03504823200637475
+}

@@ -1,0 +1,278 @@
+"""Declarative connector definitions and environment-specific connections."""
+
+import copy
+import re
+
+import duckdb
+
+from .util import Problem, digest, literal, qi
+
+PRESETS = [
+    {
+        "id": "local",
+        "name": "Local files",
+        "description": "CSV and Parquet on this computer.",
+        "parameters": [{"name": "root", "type": "text", "default": ""}],
+        "extensions": [],
+        "init_sql": "",
+        "capabilities": ["read", "write"],
+        "compatibility": "Validated on DuckDB 2.0.0, Linux x86_64, with native CSV and Parquet. Other DuckDB versions and platforms require validation.",
+    },
+    {
+        "id": "s3",
+        "name": "Amazon S3",
+        "description": "CSV and Parquet in S3-compatible object storage.",
+        "parameters": [
+            {"name": "key_id", "type": "text", "secret": True},
+            {"name": "secret", "type": "text", "secret": True},
+            {"name": "region", "type": "text", "default": "us-east-1"},
+            {"name": "endpoint", "type": "text", "default": "s3.amazonaws.com"},
+            {"name": "use_ssl", "type": "boolean", "default": True},
+            {"name": "url_style", "type": "text", "default": "vhost"},
+        ],
+        "extensions": [{"name": "httpfs"}],
+        "init_sql": "CREATE OR REPLACE TEMPORARY SECRET {{ secret_name }} (TYPE S3, KEY_ID {{ key_id }}, SECRET {{ secret }}, REGION {{ region }}, ENDPOINT {{ endpoint }}, USE_SSL {{ use_ssl }}, URL_STYLE {{ url_style }});",
+        "capabilities": ["read", "write"],
+        "compatibility": "Validated on DuckDB 2.0.0 with matching httpfs, Linux x86_64, and a Moto S3 endpoint. Live AWS IAM/TLS behavior requires deployment validation.",
+    },
+    {
+        "id": "oracle",
+        "name": "Oracle · OraDuck",
+        "description": "Read Oracle tables and load existing tables through OraDuck.",
+        "parameters": [
+            {"name": "user", "type": "text"},
+            {"name": "password", "type": "text", "secret": True},
+            {"name": "dsn", "type": "text"},
+        ],
+        "extensions": [{"name": "oraduck", "repository": "community"}],
+        "init_sql": "CREATE OR REPLACE TEMPORARY SECRET {{ secret_name }} (TYPE oraduck, USER {{ user }}, PASSWORD {{ password }}, DSN {{ dsn }}); ATTACH '' AS {{ alias }} (TYPE oraduck, SECRET {{ secret_name }});",
+        "capabilities": ["read", "write"],
+        "compatibility": "Validated with DuckDB 2.0.0, OraDuck 0.4.0, Oracle 19.3, Instant Client 19.32 on Linux x86_64. Requires a matching extension, Instant Client 19+ (Basic/Basic Light), libaio and libnsl on Linux. Other platforms and versions require validation.",
+    },
+]
+
+
+class Catalog:
+    def __init__(self, store):
+        self.store = store
+        self._validated = set()
+        self.on_change = lambda: None
+        if not store.get("settings", "catalog_initialized"):
+            for definition in PRESETS:
+                store.put("connector", definition["id"], definition)
+            store.put(
+                "connection",
+                "local",
+                {
+                    "id": "local",
+                    "name": "Local workspace",
+                    "connector": "local",
+                    "environments": {"dev": {"root": ""}, "prod": {"root": ""}},
+                },
+            )
+            store.put("settings", "environments", ["dev", "prod"])
+            store.put("settings", "catalog_initialized", True)
+        for connection in store.all("connection"):
+            if "secret_fields" not in connection:
+                definition = store.get("connector", connection["connector"], {})
+                connection["secret_fields"] = [
+                    p["name"] for p in definition.get("parameters", []) if p.get("secret")
+                ]
+                store.put("connection", connection["id"], connection)
+
+    def redact(self, text, secrets):
+        for value in sorted((str(v) for v in secrets if v is not None and str(v)), key=len, reverse=True):
+            text = text.replace(value, "••••").replace(value.replace("'", "''"), "••••")
+        return text
+
+    def public(self):
+        connections = copy.deepcopy(self.store.all("connection"))
+        for connection in connections:
+            definition = self.store.get("connector", connection["connector"], {})
+            secret_names = set(connection.pop("secret_fields", [])) | {
+                p["name"] for p in definition.get("parameters", []) if p.get("secret")
+            }
+            for values in connection["environments"].values():
+                for name in secret_names:
+                    if values.get(name):
+                        values[name] = "••••"
+        return {
+            "connectors": self.store.all("connector"),
+            "connections": connections,
+            "environments": self.store.get("settings", "environments"),
+            "duckdb_version": duckdb.__version__,
+        }
+
+    def save(self, kind, data):
+        if not re.fullmatch(r"[a-zA-Z][\w-]*", data.get("id", "")):
+            raise Problem(
+                "Use an identifier starting with a letter and containing letters, numbers, hyphens or underscores"
+            )
+        if kind == "connection":
+            definition = self.store.get("connector", data["connector"])
+            if not definition:
+                raise Problem("Connector definition does not exist")
+            previous = self.store.get("connection", data["id"], {"environments": {}})
+            data["secret_fields"] = sorted(
+                set(previous.get("secret_fields", []))
+                | {p["name"] for p in definition.get("parameters", []) if p.get("secret")}
+            )
+            for env, values in data["environments"].items():
+                for parameter in definition.get("parameters", []):
+                    key = parameter["name"]
+                    if parameter.get("secret") and values.get(key) == "••••":
+                        values[key] = previous["environments"].get(env, {}).get(key, "")
+        elif kind == "connector":
+            self.validate_definition(data)
+            names = [p["name"] for p in data.get("parameters", [])]
+            if len(names) != len(set(names)) or any(not re.fullmatch(r"[a-zA-Z_]\w*", n) for n in names):
+                raise Problem("Connector parameter names must be unique identifiers")
+            for ext in data.get("extensions", []):
+                if not re.fullmatch(r"[a-zA-Z_]\w*", ext["name"]):
+                    raise Problem("Invalid extension name")
+        self.store.put(kind, data["id"], data)
+        self.on_change()
+
+    def validate_definition(self, definition):
+        fingerprint = digest(definition)
+        if fingerprint in self._validated:
+            return
+        parameters = definition.get("parameters", [])
+        reserved = {"alias", "secret_name"}
+        for parameter in parameters:
+            name, kind = parameter.get("name", ""), parameter.get("type", "text")
+            if name in reserved or not re.fullmatch(r"[A-Za-z_]\w*", name):
+                raise Problem("Connector parameters must be identifiers other than alias and secret_name")
+            if kind not in ("text", "number", "boolean", "file") and not re.fullmatch(
+                r"choice\([^()]+\)", kind
+            ):
+                raise Problem(f"Unsupported connector parameter type: {kind}")
+        if not set(definition.get("capabilities", [])) <= {"read", "write"}:
+            raise Problem("Connector capabilities must be read and/or write")
+        for extension in definition.get("extensions", []):
+            if not re.fullmatch(r"[A-Za-z_]\w*", extension.get("name", "")):
+                raise Problem("Invalid extension name")
+        sql = re.sub(r"--[^\n]*|/\*.*?\*/", "", definition.get("init_sql", ""), flags=re.S)
+        names = {p["name"] for p in parameters} | reserved
+        for key in re.findall(r"{{\s*(\w+)\s*}}", sql):
+            if key not in names:
+                raise Problem(f"Undeclared connector parameter: {key}")
+        sample = re.sub(r"{{\s*(\w+)\s*}}", lambda m: qi(m[1]) if m[1] in reserved else "'value'", sql)
+        try:
+            with duckdb.connect() as db:
+                statements = db.extract_statements(sample)
+            for statement in statements:
+                query = statement.query.strip().rstrip(";").strip()
+                if statement.type == duckdb.StatementType.ATTACH:
+                    if not re.search(r'\bAS\s+"alias"(?:\s*\(|$)', query, re.I):
+                        raise Problem("ATTACH must use the assigned {{ alias }}")
+                elif statement.type == duckdb.StatementType.CREATE:
+                    if not re.match(
+                        r'^CREATE\s+OR\s+REPLACE\s+TEMPORARY\s+SECRET\s+"secret_name"\s*\(', query, re.I
+                    ):
+                        raise Problem("Connection setup may only create an assigned temporary secret")
+                elif statement.type == duckdb.StatementType.LOAD:
+                    name = query.split(None, 1)[1].strip("\"'")
+                    if name not in {ext["name"] for ext in definition.get("extensions", [])}:
+                        raise Problem("LOAD must refer to a declared extension")
+                else:
+                    raise Problem(
+                        "Initialization is reserved for LOAD, temporary secrets and ATTACH; put data operations in source or export nodes"
+                    )
+        except duckdb.Error as error:
+            raise Problem(f"Invalid connector initialization SQL: {error}") from error
+        self._validated.add(fingerprint)
+
+    def capture(self, references, environment):
+        captured, secrets = {}, []
+        for reference in set(references):
+            connection = self.store.get("connection", reference)
+            if not connection:
+                raise Problem(f"Missing connection: {reference}")
+            definition = self.store.get("connector", connection["connector"])
+            if not definition:
+                raise Problem(f"Missing connector definition: {connection['connector']}")
+            self.validate_definition(definition)
+            if environment not in connection["environments"]:
+                raise Problem(f"Connection {reference} has no configuration for {environment}")
+            values = copy.deepcopy(connection["environments"][environment])
+            for p in definition.get("parameters", []):
+                name = p["name"]
+                if name not in values:
+                    if "default" not in p:
+                        raise Problem(f"Connection {reference} requires {name} in {environment}")
+                    values[name] = p["default"]
+                if p.get("secret"):
+                    secrets.append(values[name])
+                kind = p.get("type", "text")
+                if kind == "number" and (
+                    isinstance(values[name], bool) or not isinstance(values[name], (int, float))
+                ):
+                    raise Problem(f"Connection {reference}: {name} requires a number")
+                if kind == "boolean" and not isinstance(values[name], bool):
+                    raise Problem(f"Connection {reference}: {name} requires a boolean")
+                if kind.startswith("choice(") and values[name] not in kind[7:-1].split("|"):
+                    raise Problem(f"Connection {reference}: invalid choice for {name}")
+            public_values = {
+                k: v
+                for k, v in values.items()
+                if k not in {p["name"] for p in definition.get("parameters", []) if p.get("secret")}
+            }
+            captured[reference] = {
+                "definition": definition,
+                "values": values,
+                "settings": public_values,
+                "name": connection["name"],
+                "fingerprint": digest(
+                    [
+                        {
+                            k: v
+                            for k, v in definition.items()
+                            if k not in ("name", "description", "compatibility")
+                        },
+                        values,
+                    ]
+                ),
+                "alias": "conn_" + digest(reference)[:12],
+                "secret_name": "secret_" + digest(reference)[:12],
+            }
+        return captured, secrets
+
+    def prepare(self, db, captured):
+        for connection in captured.values():
+            definition = connection["definition"]
+            for ext in definition.get("extensions", []):
+                name = ext["name"]
+                try:
+                    db.execute(f"LOAD {qi(name)}")
+                except duckdb.Error:
+                    repository = ext.get("repository")
+                    suffix = (
+                        (" FROM community" if repository == "community" else f" FROM {literal(repository)}")
+                        if repository
+                        else ""
+                    )
+                    db.execute(f"INSTALL {qi(name)}{suffix}")
+                    db.execute(f"LOAD {qi(name)}")
+            aliases = {r[1] for r in db.execute("PRAGMA database_list").fetchall()}
+            if connection["alias"] in aliases:
+                db.execute(f"DETACH {qi(connection['alias'])}")
+            values = connection["values"]
+            types = {p["name"]: p["type"] for p in definition.get("parameters", [])}
+
+            def replace(match, connection=connection, values=values, types=types):
+                key = match[1].strip()
+                if key in ("alias", "secret_name"):
+                    return qi(connection[key])
+                if key not in values:
+                    raise Problem(f"Undeclared connector parameter: {key}")
+                value = values[key]
+                if types.get(key) == "number":
+                    value = float(value)
+                if types.get(key) == "boolean" and not isinstance(value, bool):
+                    raise Problem(f"{key} requires a boolean")
+                return literal(value)
+
+            sql = re.sub(r"{{\s*(\w+)\s*}}", replace, definition.get("init_sql", ""))
+            if sql.strip():
+                db.execute(sql)

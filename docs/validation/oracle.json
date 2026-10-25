@@ -1,0 +1,42 @@
+{
+  "checks": [
+    "source",
+    "transform",
+    "native export equivalence",
+    "shared named connection",
+    "repeated append",
+    "schema refresh",
+    "materialized source freshness",
+    "cell lineage",
+    "secret redaction"
+  ],
+  "connector": "oracle",
+  "duckdb": "2.0.0",
+  "extensions": [
+    [
+      "core_functions",
+      "v2.0.0"
+    ],
+    [
+      "icu",
+      "v2.0.0"
+    ],
+    [
+      "json",
+      "v2.0.0"
+    ],
+    [
+      "oraduck",
+      "v0.4.0"
+    ],
+    [
+      "parquet",
+      "v2.0.0"
+    ]
+  ],
+  "first_run_seconds": 1.337360745004844,
+  "oracle": "19.3.0.0.0",
+  "platform": "Linux-7.2.9-2-cachyos-x86_64-with-glibc2.44",
+  "refresh_run_seconds": 0.24243849096819758,
+  "status": "passed"
+}
