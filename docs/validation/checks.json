@@ -1,12 +1,12 @@
 {
-  "checked_at": "2026-10-25T22:41:21.124816+00:00",
+  "checked_at": "2026-10-25T22:49:07.224692+00:00",
   "python": "3.14.8",
   "python_tests": {
     "passed": 66,
     "command": ".venv/bin/pytest -q"
   },
   "playwright": {
-    "passed": 7,
+    "passed": 8,
     "browser": "Chromium headless shell 1243",
     "viewport": [
       1512,

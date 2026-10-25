@@ -64,6 +64,11 @@ export function ParameterField({
           onBlur={onBlur}
         >
           {!value && <option value="">{t("notConnected")}</option>}
+          {value && !connections.some((c) => c.id === value) && (
+            <option value={value} disabled>
+              {value} · {t("unavailableConnection")}
+            </option>
+          )}
           {connections.map((c) => (
             <option key={c.id} value={c.id}>
               {c.name}

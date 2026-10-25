@@ -248,5 +248,6 @@
   "zoomIn": "Zoom in",
   "zoomOut": "Zoom out",
   "fitView": "Fit view",
-  "minimap": "Mini map"
+  "minimap": "Mini map",
+  "unavailableConnection": "Unavailable for this operation"
 }

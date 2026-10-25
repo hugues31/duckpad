@@ -248,5 +248,6 @@
   "zoomIn": "Agrandir",
   "zoomOut": "Réduire",
   "fitView": "Centrer la vue",
-  "minimap": "Mini-carte"
+  "minimap": "Mini-carte",
+  "unavailableConnection": "Indisponible pour cette opération"
 }

@@ -1203,7 +1203,18 @@ function WorkspaceApp({
                     graphEdges={graph.edges}
                     fullNode={fullNode}
                     environment={environment}
-                    connections={workspace?.catalog.connections || []}
+                    connections={(workspace?.catalog.connections || []).filter(
+                      (connection: Json) => {
+                        if (!["source", "export"].includes(definition.kind))
+                          return true;
+                        const connector = workspace?.catalog.connectors.find(
+                          (item: Json) => item.id === connection.connector,
+                        );
+                        return connector?.capabilities?.includes(
+                          definition.kind === "export" ? "write" : "read",
+                        );
+                      },
+                    )}
                     status={statuses}
                     preview={preview}
                     onSave={async (updated, base) => {

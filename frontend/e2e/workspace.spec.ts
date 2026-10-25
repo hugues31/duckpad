@@ -1,4 +1,4 @@
-import fr from "../src/locales/fr.json";
+import fr from "../src/locales/fr.json" with { type: "json" };
 import { test, expect, type Page } from "@playwright/test";
 
 async function signIn(page: Page) {
@@ -321,4 +321,52 @@ test("an open lineage explanation is interrupted when its generation is recalcul
     "This exploration was interrupted",
   );
   await expect(page.locator(".lineage-panel .contribution")).toHaveCount(0);
+});
+
+test("connection capabilities constrain source and export forms without a project commit", async ({
+  page,
+}) => {
+  await sample(page);
+  const worktree = await page.evaluate(() =>
+    localStorage.getItem("duckpad-worktree"),
+  );
+  const before = await (
+    await page.request.get("/api/worktrees/" + worktree)
+  ).json();
+  await page.request.put("/api/catalog/connector", {
+    data: {
+      id: "read_only",
+      name: "Read only files",
+      parameters: [{ name: "root", type: "text", default: "" }],
+      capabilities: ["read"],
+      init_sql: "",
+    },
+  });
+  await page.request.put("/api/catalog/connection", {
+    data: {
+      id: "read_only_files",
+      name: "Read only files",
+      connector: "read_only",
+      environments: { dev: { root: "" }, prod: { root: "" } },
+    },
+  });
+  await page.reload();
+  await page
+    .locator(".react-flow__node")
+    .filter({ has: page.getByText("Orders", { exact: true }) })
+    .click();
+  await expect(
+    page.locator(".inspector").getByRole("combobox", { name: /connection/ }),
+  ).toContainText("Read only files");
+  await page
+    .locator(".react-flow__node")
+    .filter({ has: page.getByText("Export revenue", { exact: true }) })
+    .click();
+  await expect(
+    page.locator(".inspector").getByRole("combobox", { name: /connection/ }),
+  ).not.toContainText("Read only files");
+  const after = await (
+    await page.request.get("/api/worktrees/" + worktree)
+  ).json();
+  expect(after.commit).toBe(before.commit);
 });

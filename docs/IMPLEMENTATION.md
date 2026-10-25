@@ -13,7 +13,7 @@ SPEC.md remains the source of product requirements. This checklist links the del
 - [x] React Flow canvas, Monaco, guided/typed forms, preview and lineage navigation
 - [x] English/French localization, light/dark theme and business documentation
 - [x] Complete Northstar example with separate development/production inputs
-- [x] 66 Python acceptance tests and seven regularly exercised Playwright scenarios
+- [x] 66 Python acceptance tests and eight regularly exercised Playwright scenarios
 - [x] Execution-service prototype comparison, with recorded results
 - [x] Million-row, fifty-column benchmark and native value comparison
 - [x] Live Oracle/OraDuck read/write/refresh validation and local S3 emulator validation
