@@ -3,6 +3,7 @@ import { api, send, withQuery } from "./api";
 import ComparisonView from "./ComparisonView";
 import { useT } from "./i18n";
 import { Modal } from "./modals";
+import Select from "./Select";
 import type { Json } from "./types";
 import "./git.css";
 
@@ -401,13 +402,13 @@ export default function GitWorkspace({
               {currentCommit && currentCommit.parents.length > 1 && (
                 <label>
                   {t("actualParent")}{" "}
-                  <select value={a} onChange={(e) => setA(e.target.value)}>
+                  <Select value={a} onChange={(e) => setA(e.target.value)}>
                     {currentCommit.parents.map((parent: string) => (
                       <option key={parent} value={parent}>
                         {parent.slice(0, 12)}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 </label>
               )}
               <details className="git-history" open={!!historyEntity}>
@@ -511,7 +512,7 @@ export default function GitWorkspace({
               <div className="git-controls">
                 <label>
                   {t("sourceBranch")}{" "}
-                  <select
+                  <Select
                     value={source}
                     onChange={(e) => setSource(e.target.value)}
                   >
@@ -521,12 +522,12 @@ export default function GitWorkspace({
                         {v.remote ? ` (${t("remote")})` : ""}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 </label>
                 <span>→</span>
                 <label>
                   {t("destinationBranch")}{" "}
-                  <select
+                  <Select
                     value={destination}
                     onChange={(e) => setDestination(e.target.value)}
                   >
@@ -537,7 +538,7 @@ export default function GitWorkspace({
                           {v.name}
                         </option>
                       ))}
-                  </select>
+                  </Select>
                 </label>
                 <button
                   className="button secondary"

@@ -40,8 +40,7 @@
   flex: 1;
   padding: 16px 20px;
 }
-.git-workspace input:not([type="checkbox"]):not([type="radio"]),
-.git-workspace select {
+.git-workspace input:not([type="checkbox"]):not([type="radio"]) {
   padding: 7px;
   border: 1px solid var(--border);
   border-radius: 6px;
