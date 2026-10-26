@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { X } from "lucide-react";
-import { api } from "./types";
+import { api } from "./api";
 import { useT } from "./i18n";
 
 interface Counters {

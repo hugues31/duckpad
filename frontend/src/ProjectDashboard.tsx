@@ -6,25 +6,24 @@ import {
   Play,
   Plus,
 } from "lucide-react";
-import { useT, type Language } from "./i18n";
+import { useLanguage, useT } from "./i18n";
 import type { Project } from "./types";
 
 export default function ProjectDashboard({
   projects,
-  language,
   busy,
   onOpen,
   onCreate,
   onExample,
 }: {
   projects: Project[];
-  language: Language;
   busy: boolean;
   onOpen: (id: string) => void;
   onCreate: () => void;
   onExample: () => void;
 }) {
   const t = useT();
+  const language = useLanguage();
   const dateFormat = new Intl.DateTimeFormat(language, { dateStyle: "medium" });
   return (
     <main className="project-dashboard" aria-labelledby="projects-heading">
