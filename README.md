@@ -117,6 +117,7 @@ See the [contributing guide](CONTRIBUTING.md) before opening a pull request.
 
 ## Documentation
 
+- [Configure OIDC single sign-on](docs/SSO.md)
 - [Product specification](docs/SPEC.md)
 - [Release automation and publishing](docs/RELEASING.md)
 - [Multica issue workflow and preview deployment](docs/MULTICA.md)
