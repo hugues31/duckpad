@@ -356,3 +356,18 @@ def test_read_only_connection_root_cannot_be_written_through_another_connection(
         cursor.execute("COPY (SELECT 1) TO '" + str(root / "output.csv") + "'")
     assert not (root / "output.csv").exists()
     cursor.close()
+
+
+def test_sql_worker_cancellation_stays_armed_between_queries(instance):
+    import duckdb
+
+    app, client = instance
+    _, headers = account(app, "cancel-gap")
+    worktree = own_project(app, client, headers)
+    engine = app.state.services[3]
+    cursor = engine.context(worktree["id"], "dev", create=True).db.cursor()
+    assert cursor.execute("SELECT 1").fetchone() == (1,)
+    cursor.interrupt()
+    with pytest.raises(duckdb.InterruptException, match="canceled"):
+        cursor.execute("SELECT 2")
+    cursor.close()
