@@ -56,13 +56,12 @@ running development commands (the setup script also does this automatically):
 export PATH="$HOME/.local/share/duckpad-tools/node/bin:$HOME/.local/bin:$PATH"
 ```
 
-The server's Ivy Bridge CPU cannot load the published DuckDB 2.0 wheel. The
-runtime therefore pins DuckDB 1.5.5, whose precompiled Python package passes the
-application's 70 tests on this server. Docker and `scripts/setup.sh` require a
-binary package for DuckDB: no C++ compiler or native build is needed. The preview
-wrapper allows up to 20 minutes for deployment. Development uses Python 3.12,
-installed by uv when needed. Historical Oracle/S3 reports used DuckDB 2.0;
-validate matching extensions before using those external connectors with 1.5.5.
+The server's Ivy Bridge CPU cannot load the published DuckDB 2.0 wheel. Docker
+and `scripts/setup.sh` build the locked DuckDB version from source for baseline
+x86-64, with two compiler jobs to limit memory usage. The first build is slow;
+subsequent worktrees and previews reuse the uv/Docker build caches. The preview
+wrapper allows up to 90 minutes for a cold build. Development
+uses Python 3.12, installed by uv when needed. Do not replace DuckDB with 1.x.
 
 Previews are Coolify applications in the existing `preview-project` project.
 Their URL is `https://<issue-id>.app.example.invalid`. The server's nginx
