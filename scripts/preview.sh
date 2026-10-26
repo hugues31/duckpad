@@ -27,7 +27,7 @@ case "${1:-}" in
             exit 1
         }
         "$helper" deploy "$slug" https://github.com/hugues31/duckpad "$branch"
-        python3 scripts/verify_preview.py "https://$slug.app.example.invalid"
+        python3 scripts/verify_preview.py "https://$slug.app.example.invalid" --commit "$local_commit"
         ;;
     status|destroy) exec "$helper" "$@" ;;
     *) echo "Usage: scripts/preview.sh {deploy <slug> [branch]|status <slug>|destroy <slug>}" >&2; exit 2 ;;
