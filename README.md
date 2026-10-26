@@ -77,4 +77,4 @@ The Playwright suite starts a disposable instance on port 8766. `DUCKPAD_CHROMIU
 - [Execution-service prototype and scheduling decision](docs/EXECUTION_SERVICE.md)
 - [Validation results and performance reference](docs/VALIDATION.md)
 
-The required dependency is `duckdb>=2.0`; the recorded validation uses **DuckDB 2.0.0 on Linux x86_64**. Oracle needs a matching OraDuck extension and Oracle Instant Client. S3 validation uses a local S3 emulator; live AWS IAM, TLS and deployment-specific behavior need their own integration checks. Details and reproducible commands are in the connector guide.
+The runtime pins **DuckDB 1.5.5**, whose precompiled Python package works on the preview server's Ivy Bridge CPU. DuckDB 2.0's published package crashes on that server. The historical connector and performance reports use **DuckDB 2.0.0 on Linux x86_64**; they are not validation of external connectors on 1.5.5. Oracle needs a matching OraDuck extension and Oracle Instant Client. S3 validation uses a local S3 emulator; live AWS IAM, TLS and deployment-specific behavior need their own integration checks. Details and reproducible commands are in the connector guide.

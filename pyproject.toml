@@ -9,7 +9,7 @@ description = "A local SQL canvas with reproducible execution and cell lineage"
 readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"
-dependencies = ["duckdb>=2.0", "fastapi>=0.115", "uvicorn>=0.34", "sqlglot>=27", "pydantic>=2.10", "python-multipart>=0.0.20", "filelock>=3.18"]
+dependencies = ["duckdb==1.5.5", "fastapi>=0.115", "uvicorn>=0.34", "sqlglot>=27", "pydantic>=2.10", "python-multipart>=0.0.20", "filelock>=3.18"]
 
 [project.scripts]
 duckpad = "duckpad.cli:main"
