@@ -20,6 +20,7 @@ from .engine import Engine
 from .example import create_example
 from .lineage import Lineage
 from .projects import Projects, bundle_to_files
+from .resources import resource_usage
 from .store import Store
 from .templates import parse_template
 from .util import Problem, clean, uid
@@ -105,6 +106,10 @@ def create_app(home: Path, watch=True):
     @app.get("/api/session")
     def session():
         return {"username": "admin", "version": "0.1.0"}
+
+    @app.get("/api/resources")
+    def resources():
+        return resource_usage()
 
     @app.get("/api/workspace")
     def workspace():
