@@ -5,7 +5,7 @@ import {
   useState,
   type CSSProperties,
 } from "react";
-import { AlertCircle, GitBranch, Loader2 } from "lucide-react";
+import { AlertCircle, Loader2 } from "lucide-react";
 import { api, ApiError, send, withQuery } from "./api";
 import { UsersPage, ProjectSettings } from "./Administration";
 import Canvas from "./Canvas";
@@ -878,15 +878,7 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
                       }}
                       onData={setPreview}
                     />
-                  ) : (
-                    <div className="canvas-footer">
-                      <span>
-                        <GitBranch size={13} />
-                        {t("autoVersioned")}
-                      </span>
-                      <span>{t("selectionHint")}</span>
-                    </div>
-                  )}
+                  ) : null}
                 </main>
                 <div
                   className="inspector-layer"
