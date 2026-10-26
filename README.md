@@ -7,7 +7,7 @@ Build local DuckDB pipelines on a visual canvas, inspect their results, and expl
 Requires **Python 3.11+ and Git** on `PATH`. Shared SQL execution also requires **Linux with Landlock ABI 2 or later** (Linux 5.19+ with Landlock enabled); unsupported hosts refuse execution rather than running without isolation. Release wheels include the frontend, Monaco and its workers; Node.js is not needed to run the installed application.
 
 ```sh
-pip install ./dist/duckpad-0.1.0-py3-none-any.whl
+pip install ./dist/duckpad-0.2.0-py3-none-any.whl
 duckpad start
 ```
 
