@@ -787,6 +787,16 @@ test("account menu owns preferences and signs out only on an explicit action", a
   });
   await avatar.focus();
   await page.keyboard.press("ArrowDown");
+  expect(
+    await page.getByRole("menu").evaluate((menu) => {
+      const rect = menu.getBoundingClientRect();
+      return [12, rect.height / 2, rect.height - 12].every((y) =>
+        [12, rect.width - 12].every((x) =>
+          menu.contains(document.elementFromPoint(rect.x + x, rect.y + y)),
+        ),
+      );
+    }),
+  ).toBe(true);
   await expect(
     page.getByRole("menuitemradio", { name: "English", exact: true }),
   ).toBeFocused();
