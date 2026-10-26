@@ -77,6 +77,14 @@ class Remotes:
             if url:
                 validate_url(url)
                 self.git(worktree["path"], "check-ref-format", "refs/heads/" + remote_branch)
+            changed = (url or None) != config["url"]
+            if changed:
+                for branch in config["mappings"]:
+                    for key in ("remote", "merge"):
+                        self.git(
+                            worktree["path"], "config", "--unset-all", f"branch.{branch}.{key}", check=False
+                        )
+            if url:
                 self.git(worktree["path"], "config", "remote.origin.url", url)
                 self.git(
                     worktree["path"], "config", "remote.origin.fetch", "+refs/heads/*:refs/remotes/origin/*"
@@ -90,7 +98,6 @@ class Remotes:
                 )
             else:
                 self.git(worktree["path"], "config", "--remove-section", "remote.origin", check=False)
-            changed = url != config["url"]
             if changed:
                 refs = self.git(
                     worktree["path"], "for-each-ref", "--format=%(refname)", "refs/remotes/origin/"

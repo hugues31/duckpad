@@ -101,7 +101,7 @@ function ComparisonGraph({
     [entities, scope, selected, t],
   );
   useEffect(() => {
-    const timer = setTimeout(() => fitView({ padding: 0.2 }), 50);
+    const timer = setTimeout(() => fitView({ padding: 0.2, maxZoom: 1 }), 50);
     return () => clearTimeout(timer);
   }, [scope, entities, fitView]);
   return (
@@ -115,6 +115,15 @@ function ComparisonGraph({
         onNodeClick={(_, node) => onSelect(node.id)}
         onEdgeClick={(_, edge) => onSelect(edge.data!.entity)}
         fitView
+        fitViewOptions={{ padding: 0.2, maxZoom: 1 }}
+        ariaLabelConfig={{
+          "controls.ariaLabel": t("canvasControls"),
+          "controls.zoomIn.ariaLabel": t("zoomIn"),
+          "controls.zoomOut.ariaLabel": t("zoomOut"),
+          "controls.fitView.ariaLabel": t("fitView"),
+          "node.a11yDescription.default": t("readOnlyGraph"),
+          "edge.a11yDescription.default": t("readOnlyGraph"),
+        }}
         minZoom={0.1}
         proOptions={{ hideAttribution: true }}
       >

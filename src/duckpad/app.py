@@ -382,14 +382,12 @@ def create_app(home: Path, watch=True):
 
     @app.post("/api/worktrees/{worktree}/git/cleanup")
     def git_cleanup(worktree: str, data: schemas.BranchCleanup):
-        if any(
-            r.get("worktree") == data.remove_worktree and r["status"] in ("preparing", "running", "canceling")
-            for r in store.all("run")
-        ):
-            raise Problem("Stop the worktree's execution before removing it", 409)
-        return projects.versioning.cleanup(
-            worktree, data.remove_worktree, data.integrated_worktree, data.expected_head
-        )
+        with projects.lock, engine.lock:
+            if data.remove_worktree in engine.active:
+                raise Problem("Stop the worktree's execution before removing it", 409)
+            return projects.versioning.cleanup(
+                worktree, data.remove_worktree, data.integrated_worktree, data.expected_head
+            )
 
     @app.post("/api/worktrees/{worktree}/git/reviews")
     def git_review(worktree: str, data: schemas.GitReview):
