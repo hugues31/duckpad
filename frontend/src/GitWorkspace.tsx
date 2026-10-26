@@ -49,6 +49,7 @@ export default function GitWorkspace({
   const [url, setUrl] = useState("");
   const [mapping, setMapping] = useState("");
   const [history, setHistory] = useState<Json[]>([]);
+  const [historyVersion, setHistoryVersion] = useState(0);
   const [historyHead, setHistoryHead] = useState("HEAD");
   const [next, setNext] = useState<number | null>(null);
   const [historyEntity, setHistoryEntity] = useState(entity || "");
@@ -160,7 +161,7 @@ export default function GitWorkspace({
     return () => {
       valid = false;
     };
-  }, [base, historyEntity, commit]);
+  }, [base, historyEntity, commit, historyVersion]);
 
   useEffect(() => {
     if (tab !== "compare") return;
@@ -969,7 +970,10 @@ export default function GitWorkspace({
                             proposal_revision: review.proposal_revision,
                           }),
                         );
-                        if (live.current) setIntegrated(review);
+                        if (live.current) {
+                          setIntegrated(review);
+                          setHistoryVersion((value) => value + 1);
+                        }
                         await onChanged();
                         await reload();
                       })
