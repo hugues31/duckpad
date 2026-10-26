@@ -1899,6 +1899,119 @@ small {
 .empty-small svg {
   margin: auto;
 }
+.dashboard-brand {
+  margin-right: auto;
+  font-size: 15px;
+  font-weight: 650;
+}
+.project-dashboard {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: clamp(24px, 5vw, 72px) clamp(20px, 5vw, 64px);
+}
+.dashboard-content {
+  max-width: 1120px;
+  margin: 0 auto;
+}
+.dashboard-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 20px;
+  margin-bottom: 32px;
+}
+.dashboard-heading h1 {
+  font-size: 32px;
+  letter-spacing: -0.04em;
+  margin: 8px 0;
+}
+.dashboard-heading p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.6;
+}
+.project-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr));
+  gap: 18px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.project-grid li {
+  min-width: 0;
+}
+.project-card {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 24px;
+  text-align: left;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--glass-shadow);
+}
+.project-card:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.project-card-icon {
+  display: flex;
+  padding: 12px;
+  border-radius: 10px;
+  color: var(--accent);
+  background: var(--accent-soft);
+  margin-bottom: 8px;
+}
+.project-card strong {
+  font-size: 17px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.project-card-date {
+  color: var(--muted);
+  font-size: 12px;
+}
+.project-card-action {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  margin-top: auto;
+  padding-top: 18px;
+  color: var(--accent);
+  font-weight: 600;
+}
+.dashboard-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: clamp(24px, 6vw, 72px) 20px;
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.dashboard-empty > svg {
+  color: var(--accent);
+  margin-bottom: 24px;
+}
+.dashboard-empty p {
+  max-width: 460px;
+  color: var(--muted);
+  line-height: 1.7;
+}
+.dashboard-example-note {
+  margin: 24px 0 0;
+  font-size: 12px;
+}
 .welcome {
   flex: 1;
   display: flex;

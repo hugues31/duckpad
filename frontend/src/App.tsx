@@ -4,6 +4,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type CSSProperties,
 } from "react";
@@ -54,6 +55,7 @@ import Inspector from "./Inspector";
 import LineagePanel from "./LineagePanel";
 import AccountMenu from "./AccountMenu";
 import ResourceMonitor from "./ResourceMonitor";
+import ProjectDashboard from "./ProjectDashboard";
 import { PanelResizeHandle, usePanelSizes } from "./WorkspacePanels";
 import {
   ConnectionsPanel,
@@ -134,9 +136,11 @@ function WorkspaceApp({
   const [worktree, setWorktree] = useState(
     localStorage.getItem("duckpad-worktree") || "",
   );
+  const currentWorktree = useRef(worktree);
+  currentWorktree.current = worktree;
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [environment, setEnvironment] = useState("dev");
-  const [area, setArea] = useState("pipelines");
+  const [area, setArea] = useState(worktree ? "pipelines" : "projects");
   const [tab, setTab] = useState("flow");
   const [selected, setSelected] = useState<string | null>(null);
   const [path, setPath] = useState<
@@ -191,7 +195,9 @@ function WorkspaceApp({
     async (id = worktree) => {
       if (!id) return;
       const value = await api<Snapshot>(`/worktrees/${id}`);
+      if (id !== currentWorktree.current) return;
       setSnapshot((old) =>
+        old?.worktree.id === value.worktree.id &&
         old?.revision === value.revision &&
         JSON.stringify(old.conflicts) === JSON.stringify(value.conflicts)
           ? old
@@ -204,8 +210,11 @@ function WorkspaceApp({
     if (authenticated)
       refreshWorkspace()
         .then((value) => {
-          if (!value.worktrees.some((w) => w.id === worktree))
-            setWorktree(value.worktrees[0]?.id || "");
+          if (!value.worktrees.some((w) => w.id === worktree)) {
+            setWorktree("");
+            localStorage.removeItem("duckpad-worktree");
+            setArea("projects");
+          }
         })
         .catch((e) => notify(e.message, true));
   }, [authenticated]);
@@ -214,9 +223,11 @@ function WorkspaceApp({
       localStorage.setItem("duckpad-worktree", worktree);
       setSnapshot(null);
       setSelected(null);
+      setSelection([]);
       setPath([]);
       setCell(null);
       setPreview(null);
+      setStatuses({ nodes: {}, active: null });
       load(worktree).catch((e) => notify(e.message, true));
     }
   }, [worktree, authenticated]);
@@ -364,6 +375,17 @@ function WorkspaceApp({
   const safe = (fn: () => Promise<unknown>) => {
     void fn().catch((e) => notify(e.message, true));
   };
+  function openProject(id: string) {
+    setWorktree(id);
+    setArea("pipelines");
+    setTab("flow");
+    setPath([]);
+    setSelected(null);
+    setSelection([]);
+    setCell(null);
+    setPreview(null);
+    setSearch("");
+  }
   function newBranch(revision = "") {
     setModal({
       kind: "form",
@@ -412,8 +434,7 @@ function WorkspaceApp({
       submit: async (v: Json) => {
         const next = await api("/projects", send(v));
         await refreshWorkspace();
-        setWorktree(next.id);
-        setArea("pipelines");
+        openProject(next.id);
       },
     });
   }
@@ -422,8 +443,7 @@ function WorkspaceApp({
     try {
       const result = await api("/example", send({}));
       await refreshWorkspace();
-      setWorktree(result.id);
-      setArea("pipelines");
+      openProject(result.id);
     } catch (e) {
       notify((e as Error).message, true);
     } finally {
@@ -499,7 +519,12 @@ function WorkspaceApp({
             <button
               className="brand-button"
               title="Duckpad"
-              onClick={() => setArea("pipelines")}
+              aria-label={t("backToProjects")}
+              aria-current={area === "projects" ? "page" : undefined}
+              onClick={() => {
+                setArea("projects");
+                safe(refreshWorkspace);
+              }}
             >
               <DuckMark size={30} />
             </button>
@@ -527,45 +552,49 @@ function WorkspaceApp({
               <HelpCircle size={20} />
             </button>
           </nav>
-          <div className="project-picker">
-            <span className="project-symbol">
-              <Layers size={18} />
-            </span>
-            <div>
-              <span className="eyebrow">{t("workspace")}</span>
-              <select
-                aria-label={t("activeProject")}
-                value={
-                  snapshot?.worktree.project ||
-                  workspace?.worktrees.find((w) => w.id === worktree)
-                    ?.project ||
-                  ""
-                }
-                onChange={(e) => {
-                  const project = workspace?.projects.find(
-                    (p) => p.id === e.target.value,
-                  );
-                  if (project) setWorktree(project.main);
-                }}
+          {area === "projects" ? (
+            <div className="dashboard-brand">Duckpad</div>
+          ) : (
+            <div className="project-picker">
+              <span className="project-symbol">
+                <Layers size={18} />
+              </span>
+              <div>
+                <span className="eyebrow">{t("workspace")}</span>
+                <select
+                  aria-label={t("activeProject")}
+                  value={
+                    snapshot?.worktree.project ||
+                    workspace?.worktrees.find((w) => w.id === worktree)
+                      ?.project ||
+                    ""
+                  }
+                  onChange={(e) => {
+                    const project = workspace?.projects.find(
+                      (p) => p.id === e.target.value,
+                    );
+                    if (project) openProject(project.main);
+                  }}
+                >
+                  {!workspace?.projects.length && <option>Duckpad</option>}
+                  {workspace?.projects.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <button
+                className="icon"
+                title={t("newProject")}
+                onClick={projectForm}
               >
-                {!workspace?.projects.length && <option>Duckpad</option>}
-                {workspace?.projects.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
+                <Plus size={16} />
+              </button>
             </div>
-            <button
-              className="icon"
-              title={t("newProject")}
-              onClick={projectForm}
-            >
-              <Plus size={16} />
-            </button>
-          </div>
+          )}
           <div className="topbar-right">
-            {snapshot && (
+            {snapshot && area !== "projects" && (
               <>
                 <div className="branch-picker">
                   <GitBranch size={14} />
@@ -727,46 +756,21 @@ function WorkspaceApp({
               </form>
             </div>
           </section>
-        ) : !worktree ? (
-          <section className="welcome">
-            <div className="welcome-art">
-              <DuckMark size={76} />
-              <span className="orbit one">
-                <Database size={25} />
-              </span>
-              <span className="orbit two">
-                <GitBranch size={25} />
-              </span>
-              <span className="orbit three">
-                <Code2 size={25} />
-              </span>
+        ) : area === "projects" || !worktree ? (
+          workspace ? (
+            <ProjectDashboard
+              projects={workspace.projects}
+              language={language}
+              busy={busy}
+              onOpen={openProject}
+              onCreate={projectForm}
+              onExample={example}
+            />
+          ) : (
+            <div className="startup" role="status" aria-label={t("loading")}>
+              <Loader2 className="spin" />
             </div>
-            <span className="eyebrow">DUCKPAD / LOCAL DATA WORKSPACE</span>
-            <h1>{t("welcome")}</h1>
-            <p>{t("welcomeDescription")}</p>
-            <div className="row gap">
-              <button
-                className="button primary large"
-                onClick={example}
-                disabled={busy}
-              >
-                {busy ? (
-                  <Loader2 className="spin" size={17} />
-                ) : (
-                  <Play size={16} />
-                )}{" "}
-                {t("example")}
-              </button>
-              <button className="button secondary large" onClick={projectForm}>
-                <Plus size={17} />
-                {t("startBlank")}
-              </button>
-            </div>
-            <div className="example-note">
-              <Boxes size={20} />
-              <span>{t("exampleDescription")}</span>
-            </div>
-          </section>
+          )
         ) : !snapshot ? (
           <div className="startup">
             <Loader2 className="spin" />
