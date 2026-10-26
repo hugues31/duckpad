@@ -78,7 +78,7 @@ test("manage instance accounts, project participants and live reader access", as
     readerPage.getByRole("button", { name: "Run pipeline", exact: true }),
   ).toBeDisabled();
   await expect(
-    readerPage.getByRole("button", { name: "New branch", exact: true }),
+    readerPage.getByRole("button", { name: "New working branch", exact: true }),
   ).toBeDisabled();
   await page
     .getByLabel(`Project role · ${username}`, { exact: true })
@@ -93,7 +93,10 @@ test("manage instance accounts, project participants and live reader access", as
     .click();
   await dialog.getByRole("button", { name: "Confirm", exact: true }).click();
   await expect(
-    readerPage.getByRole("heading", { name: "No projects yet", exact: true }),
+    readerPage.getByRole("heading", {
+      name: "Your first pipeline starts here.",
+      exact: true,
+    }),
   ).toBeVisible();
   await page.getByRole("button", { name: "Users", exact: true }).click();
   await row.getByRole("button", { name: "Deactivate", exact: true }).click();

@@ -61,7 +61,8 @@ class Auth:
             self.attempts[peer] = recent
             if len(recent) >= 12:
                 raise Problem("Too many login attempts. Try again in a minute.", 429)
-            recent.append(time.time())
+            attempt = time.time()
+            recent.append(attempt)
         user = next(
             (u for u in self.store.all("user") if u["username"].casefold() == username.casefold()), None
         )
@@ -75,6 +76,7 @@ class Auth:
             current = self.store.get("user", user["id"])
             if not current["active"] or current["hash"] != user["hash"]:
                 raise Problem("Invalid username or password", 401)
+            self.attempts[peer] = [t for t in self.attempts.get(peer, []) if t != attempt]
             self.store.put(
                 "session",
                 self.token_key(token),

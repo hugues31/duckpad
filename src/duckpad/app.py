@@ -240,14 +240,14 @@ def create_app(home: Path, watch=True):
 
     @app.put("/api/projects/{project}/connections")
     def project_connections(project: str, data: dict):
-        with engine.lock:
+        with projects.lock, engine.lock:
             engine.reset_project(project)
             access.grant_connections(project, data.get("connections"))
         return {"ok": True}
 
     @app.delete("/api/projects/{project}")
     def delete_project(project: str):
-        with engine.lock:
+        with projects.lock, engine.lock:
             engine.reset_project(project)
             projects.delete(project)
             store.delete("access", project)
@@ -375,7 +375,7 @@ def create_app(home: Path, watch=True):
     def save_catalog(kind: str, data: dict):
         if kind not in ("connector", "connection"):
             raise Problem("Unknown catalog entity")
-        with engine.lock:
+        with projects.lock, engine.lock:
             engine.reset_catalog()
             catalog.save(kind, copy.deepcopy(data))
         return catalog.public()
@@ -384,7 +384,7 @@ def create_app(home: Path, watch=True):
     def delete_catalog(kind: str, identity: str):
         if kind not in ("connector", "connection"):
             raise Problem("Unknown catalog entity")
-        with engine.lock:
+        with projects.lock, engine.lock:
             engine.reset_catalog()
             store.delete(kind, identity)
             engine.invalidate()
@@ -394,8 +394,9 @@ def create_app(home: Path, watch=True):
     def environments(data: list[str]):
         if not data or any(not value.strip() for value in data):
             raise Problem("Provide at least one named environment")
-        engine.reset_catalog()
-        store.put("settings", "environments", list(dict.fromkeys(data)))
+        with projects.lock, engine.lock:
+            engine.reset_catalog()
+            store.put("settings", "environments", list(dict.fromkeys(data)))
         return catalog.public()
 
     @app.post("/api/worktrees/{worktree}/uploads")

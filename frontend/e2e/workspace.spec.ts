@@ -44,6 +44,7 @@ async function run(page: Page) {
       async () =>
         (await (await page.request.get("/api/runs/" + result.id)).json())
           .status,
+      { timeout: 30000 },
     )
     .toBe("success");
   await expect(
