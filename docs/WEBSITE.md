@@ -33,6 +33,31 @@ optionally supplies the public canonical origin; leave it unset for private
 previews. The built site is in `website/dist/`. The application image also serves
 a separately built copy under `/site/` so a ticket preview includes the website.
 
+## Release notes
+
+The `/releases/` page and static `/releases.json` feed retrieve published versions
+from the GitHub Releases API during the build. Notes are rendered as sanitized
+Markdown, ordered by publication date, with pre-releases labeled separately.
+Drafts and API metadata are excluded. Browsers receive only static content;
+no GitHub credential or client-side API request is needed.
+
+CI uses its read-only `GITHUB_TOKEN` to read releases while the repository is
+private. An authenticated API failure fails the build. Without a token, an API
+failure uses the bundled `website/src/data/releases.json` snapshot so local and
+container builds remain usable offline or while the repository is private.
+Refresh that snapshot before shipping a preview with new release notes:
+
+```sh
+npm run releases:update --prefix website
+```
+
+For a private repository, supply `GITHUB_TOKEN` through your shell's secret
+manager. Never commit it or pass it to browser code. The website workflow also
+runs after a successful **Release Duckpad** workflow, since releases created by
+`GITHUB_TOKEN` do not themselves trigger other release workflows. This rebuilds
+the site from `main` after publication completes. After manually editing or
+deleting release notes, run the website workflow with `workflow_dispatch`.
+
 ## Regenerate the demonstrations
 
 The recorder drives the **real Duckpad application**, using the built-in Northstar
@@ -63,8 +88,9 @@ existing frontend test configuration.
 
 ## Automatic publishing
 
-`.github/workflows/website.yml` runs on pull requests, pushes to `main` and manual
-dispatch. It builds the application, regenerates the media from that revision,
+`.github/workflows/website.yml` runs on pull requests, pushes to `main`, completed
+release workflows and manual dispatch. It builds the application, regenerates
+the media from that revision,
 checks and builds the site, and tests its links, search, mobile navigation,
 reduced motion and video. A failed demonstration prevents publication. This
 keeps the published screenshots and walkthrough tied to the code being shipped

@@ -139,7 +139,7 @@ test("mobile navigation, theme persistence and reduced motion", async ({
   ).toBeTruthy();
   expect(
     await page
-      .locator(".flow-lines path")
+      .locator(".flow-scene")
       .evaluate((element) => getComputedStyle(element).animationName),
   ).toBe("none");
   await page.screenshot({
@@ -190,5 +190,53 @@ test("content and documentation navigation remain usable without JavaScript", as
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(
     "Connections and connector compatibility",
   );
+  await page
+    .getByRole("navigation", { name: "Footer", exact: true })
+    .getByRole("link", { name: "Releases", exact: true })
+    .click();
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(
+    "What’s new in Duckpad.",
+  );
+  const olderRelease = page.locator(".release-entry").nth(1);
+  await olderRelease.locator("summary").click();
+  await expect(olderRelease.locator(".release-body")).toBeVisible();
   await context.close();
+});
+
+test("release notes match the feed and remain readable on mobile", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  const feed = await (await page.request.get("releases.json")).json();
+  expect(feed.length).toBeGreaterThanOrEqual(2);
+  await page.goto("releases/");
+  await expect(page.locator(".release-entry")).toHaveCount(feed.length);
+  for (const release of feed) {
+    await expect(
+      page.getByRole("heading", { name: release.tag, exact: true }),
+    ).toBeVisible();
+  }
+  await expect(page.locator(".release-body").first()).toContainText(
+    "pip install duckpad==",
+  );
+  await expect(page.getByText("Latest release", { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "Release and downloads on GitHub" }).first(),
+  ).toHaveAttribute(
+    "href",
+    /^https:\/\/github.com\/hugues31\/duckpad\/releases\/tag\//,
+  );
+  expect(
+    (
+      await new AxeBuilder({ page })
+        .withTags(["wcag2a", "wcag2aa", "wcag21aa"])
+        .analyze()
+    ).violations,
+  ).toEqual([]);
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBeTruthy();
 });
