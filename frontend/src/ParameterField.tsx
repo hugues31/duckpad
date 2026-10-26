@@ -1,3 +1,4 @@
+import Select from "./Select";
 import { useId, useState } from "react";
 import { FileUp } from "lucide-react";
 import { uploadFile } from "./api";
@@ -35,16 +36,16 @@ export default function ParameterField({
         <small>{base}</small>
       </span>
       {base === "boolean" ? (
-        <select
+        <Select
           value={String(value ?? false)}
           onChange={(e) => onChange(e.target.value === "true")}
           onBlur={onBlur}
         >
           <option value="true">true</option>
           <option value="false">false</option>
-        </select>
+        </Select>
       ) : base === "connection" ? (
-        <select
+        <Select
           value={value || ""}
           onChange={(e) => onChange(e.target.value)}
           onBlur={onBlur}
@@ -60,9 +61,9 @@ export default function ParameterField({
               {c.name}
             </option>
           ))}
-        </select>
+        </Select>
       ) : base === "choice" || base === "keyword" ? (
-        <select
+        <Select
           value={value}
           onChange={(e) => onChange(e.target.value)}
           onBlur={onBlur}
@@ -70,7 +71,7 @@ export default function ParameterField({
           {(type.match(/\((.*)\)/)?.[1] || "").split("|").map((x: string) => (
             <option key={x}>{x}</option>
           ))}
-        </select>
+        </Select>
       ) : base === "list" ? (
         <input
           value={Array.isArray(value) ? value.join(", ") : value || ""}

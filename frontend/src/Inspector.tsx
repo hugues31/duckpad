@@ -1,3 +1,4 @@
+import Select from "./Select";
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import {
   ArrowRight,
@@ -243,7 +244,7 @@ export default function Inspector({
                   return (
                     <label className="field" key={port}>
                       <span>{port}</span>
-                      <select
+                      <Select
                         aria-label={port}
                         value={
                           edge ? `${edge.source}:${edge.sourceHandle}` : ""
@@ -265,7 +266,7 @@ export default function Inspector({
                               ),
                             ),
                           )}
-                      </select>
+                      </Select>
                     </label>
                   );
                 })}
