@@ -13,6 +13,12 @@ Apply it to every change, even when it is not explicitly invoked.
 
 Follow [the Multica workflow](docs/MULTICA.md) for issues handled through Multica.
 Use a dedicated branch and pull request for every issue, deploy and verify its
-preview, then wait for Hugues's explicit approval before merging into `main` and
+preview, then wait for the designated human reviewer's explicit approval before merging into `main` and
 publishing the merge to GitHub. Never interpret ticket creation or a successful
 check as merge approval. Use `bash scripts/preview.sh` for Duckpad previews.
+
+Keep private infrastructure details outside this public repository. Never include
+personal domains, preview URLs, server names, deployment identifiers, or credentials
+in tracked files, commits, GitHub pull requests, or public build output. Share
+preview URLs only in the private Multica issue; retrieve deployment configuration
+from the operator's private environment. Do not include credentials in tickets.
