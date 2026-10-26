@@ -466,7 +466,7 @@ small {
 }
 .topbar {
   position: relative;
-  z-index: 30;
+  z-index: 40;
   height: var(--menu-height);
   display: flex;
   align-items: center;
