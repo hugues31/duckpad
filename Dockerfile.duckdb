@@ -9,5 +9,5 @@ COPY *.whl /tmp/duckdb-wheels/
 RUN uv venv /app/.venv \
     && uv pip install --python /app/.venv/bin/python --no-index \
        --find-links /tmp/duckdb-wheels duckdb==2.0.0 \
-    && /app/.venv/bin/python -c "import duckdb; assert duckdb.__version__ == '2.0.0'; assert duckdb.sql('select 42').fetchone() == (42,)" \
+    && /app/.venv/bin/python -c "import duckdb; assert duckdb.__version__ == '2.0.0'; assert duckdb.sql('select 42').fetchall() == [(42,)]" \
     && rm -rf /tmp/duckdb-wheels
