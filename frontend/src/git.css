@@ -1,4 +1,4 @@
-.modal:has(.git-workspace) {
+.modal.wide:has(.git-workspace) {
   width: min(1500px, 97vw);
   max-width: 97vw;
   height: 94dvh;

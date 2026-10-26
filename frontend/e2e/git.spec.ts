@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { signIn } from "./helpers";
+import fr from "../src/locales/fr.json" with { type: "json" };
 
 async function createProject(page: Page) {
   await signIn(page);
@@ -262,4 +263,43 @@ test("outdated comparison responses cannot replace the latest selection", async 
   await expect(dialog.getByLabel("B: target")).toHaveValue(second.commit);
   await dialog.getByRole("button", { name: "Swap A/B" }).click();
   await expect(dialog.getByLabel("A: reference")).toHaveValue(second.commit);
+});
+
+test("SQL inspection is read-only in French and dark theme", async ({
+  page,
+}) => {
+  const main = await createProject(page);
+  const before = await (
+    await page.request.get(`/api/worktrees/${main.id}`)
+  ).json();
+  const after = await change(page, main.id, (bundle) => {
+    bundle.templates.query += "\n-- Updated SQL definition";
+  });
+  await page.locator(".account .avatar").click();
+  await page.getByRole("menuitemradio", { name: "Dark", exact: true }).click();
+  await page.locator(".account .avatar").click();
+  await page
+    .getByRole("menuitemradio", { name: "French", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: fr.gitSynchronization, exact: true })
+    .click();
+  const dialog = page.getByRole("dialog", { name: fr.gitWorkspace });
+  await dialog
+    .getByRole("button", { name: fr.compareVersions, exact: true })
+    .click();
+  await dialog.getByLabel(fr.referenceA).fill(before.commit);
+  await dialog.getByLabel(fr.targetB).fill(after.commit);
+  await expect(dialog.locator(".monaco-diff-editor")).toBeVisible();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  await expect(dialog.locator(".change-list")).toContainText(fr.processing);
+  await expect(dialog.locator(".git-impact")).toContainText(fr.analysisPartial);
+  const firstEditor = dialog.locator(".monaco-editor textarea").first();
+  await firstEditor.focus();
+  await page.keyboard.type("not an edit");
+  const current = await (
+    await page.request.get(`/api/worktrees/${main.id}`)
+  ).json();
+  expect(current.commit).toBe(after.commit);
+  expect(current.files).toEqual(after.files);
 });
