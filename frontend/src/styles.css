@@ -516,17 +516,35 @@ small {
 }
 .resource-trigger {
   display: grid;
-  gap: 2px;
-  padding: 5px 8px;
+  gap: 3px;
+  padding: 3px;
+  min-width: 94px;
   border: 1px solid var(--border);
   border-radius: 7px;
   font-size: 10px;
   font-variant-numeric: tabular-nums;
 }
-.resource-trigger > span {
+.resource-meter {
+  position: relative;
   display: flex;
   justify-content: space-between;
   gap: 8px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  overflow: hidden;
+  color: var(--accent);
+}
+.resource-meter-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: currentColor;
+  opacity: 0.16;
+  pointer-events: none;
+}
+.resource-meter > span:not(.resource-meter-fill),
+.resource-meter > b {
+  position: relative;
+  color: var(--text);
 }
 .resource-trigger:hover,
 .resource-trigger[aria-expanded="true"] {
@@ -599,6 +617,14 @@ small {
   stroke-width: 2;
   stroke-linecap: round;
   stroke-linejoin: round;
+}
+.resource-memory-detail {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px 8px;
+  padding-top: 10px;
+  font-variant-numeric: tabular-nums;
 }
 .branch-picker {
   display: flex;

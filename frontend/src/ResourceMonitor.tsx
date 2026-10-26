@@ -7,35 +7,40 @@ interface Counters {
   process_id: number;
   sampled_at: number;
   cpu_seconds: number;
+  cpu_capacity: number;
   memory_bytes: number | null;
+  memory_total_bytes: number | null;
 }
 interface Sample {
   at: number;
   cpu: number | null;
   memory: number | null;
+  memoryBytes: number | null;
+  memoryTotalBytes: number | null;
 }
 const interval = 2000;
 const historyWindow = 120_000;
 const format = (value: number | null, unit: string) =>
   value === null ? "—" : `${value.toFixed(1)} ${unit}`;
+const percent = (value: number) => Math.min(100, Math.max(0, value));
+const formatMemory = (bytes: number | null) =>
+  bytes === null
+    ? "—"
+    : bytes >= 1024 ** 3
+      ? format(bytes / 1024 ** 3, "GiB")
+      : format(bytes / 1024 ** 2, "MiB");
 
 function Chart({
   samples,
   metric,
   label,
-  unit,
 }: {
   samples: Sample[];
   metric: "cpu" | "memory";
   label: string;
-  unit: string;
 }) {
   const t = useT();
   const end = samples.at(-1)?.at ?? Date.now();
-  const maximum = Math.max(
-    metric === "cpu" ? 100 : 1,
-    ...samples.map((sample) => sample[metric] ?? 0),
-  );
   let connected = false;
   let previousAt = 0;
   const path = samples
@@ -46,7 +51,7 @@ function Chart({
         return "";
       }
       const x = 4 + 312 * (1 - (end - sample.at) / historyWindow);
-      const y = 74 - (value / maximum) * 56;
+      const y = 74 - (value / 100) * 56;
       const command =
         connected && sample.at - previousAt < interval * 3 ? "L" : "M";
       connected = true;
@@ -58,7 +63,7 @@ function Chart({
     <div className={`resource-chart resource-${metric}`}>
       <div className="resource-chart-heading">
         <strong>{label}</strong>
-        <span>{format(samples.at(-1)?.[metric] ?? null, unit)}</span>
+        <span>{format(samples.at(-1)?.[metric] ?? null, "%")}</span>
       </div>
       <svg
         viewBox="0 0 320 80"
@@ -67,7 +72,7 @@ function Chart({
       >
         <path className="resource-grid" d="M4,18 H316 M4,74 H316" />
         <text x="4" y="12">
-          {format(maximum, unit)}
+          100 %
         </text>
         <path className="resource-line" d={path} />
       </svg>
@@ -88,7 +93,13 @@ export default function ResourceMonitor() {
     const poll = async () => {
       request = new AbortController();
       const timeout = setTimeout(() => request.abort(), 5000);
-      let sample: Sample = { at: Date.now(), cpu: null, memory: null };
+      let sample: Sample = {
+        at: Date.now(),
+        cpu: null,
+        memory: null,
+        memoryBytes: null,
+        memoryTotalBytes: null,
+      };
       try {
         const current = await api<Counters>("/resources", {
           signal: request.signal,
@@ -100,14 +111,26 @@ export default function ResourceMonitor() {
           cpu:
             previous &&
             previous.process_id === current.process_id &&
+            previous.cpu_capacity === current.cpu_capacity &&
+            current.cpu_capacity > 0 &&
             elapsed > 0 &&
             current.cpu_seconds >= previous.cpu_seconds
-              ? (100 * (current.cpu_seconds - previous.cpu_seconds)) / elapsed
+              ? percent(
+                  (100 * (current.cpu_seconds - previous.cpu_seconds)) /
+                    elapsed /
+                    current.cpu_capacity,
+                )
               : null,
           memory:
-            current.memory_bytes === null
-              ? null
-              : current.memory_bytes / 1024 ** 2,
+            current.memory_bytes !== null &&
+            current.memory_total_bytes &&
+            current.memory_total_bytes > 0
+              ? percent(
+                  (100 * current.memory_bytes) / current.memory_total_bytes,
+                )
+              : null,
+          memoryBytes: current.memory_bytes,
+          memoryTotalBytes: current.memory_total_bytes,
         };
         previous = current;
         setFailed(false);
@@ -145,12 +168,17 @@ export default function ResourceMonitor() {
         aria-expanded={open}
         aria-controls="resource-history"
       >
-        <span>
-          CPU <b>{format(latest?.cpu ?? null, "%")}</b>
-        </span>
-        <span>
-          RAM <b>{format(latest?.memory ?? null, "MiB")}</b>
-        </span>
+        {(["cpu", "memory"] as const).map((metric) => (
+          <span className={`resource-meter resource-${metric}`} key={metric}>
+            <span
+              className="resource-meter-fill"
+              aria-hidden="true"
+              style={{ width: `${latest?.[metric] ?? 0}%` }}
+            />
+            <span>{metric === "cpu" ? "CPU" : "RAM"}</span>
+            <b>{format(latest?.[metric] ?? null, "%")}</b>
+          </span>
+        ))}
       </button>
       <section
         id="resource-history"
@@ -174,12 +202,19 @@ export default function ResourceMonitor() {
         <p className="resource-description">{t("resourceScope")}</p>
         {failed && <p role="status">{t("resourceUnavailable")}</p>}
         {!samples.length && <p role="status">{t("loading")}</p>}
-        <Chart samples={samples} metric="cpu" label="CPU" unit="%" />
-        <Chart samples={samples} metric="memory" label="RAM" unit="MiB" />
+        <Chart samples={samples} metric="cpu" label="CPU" />
+        <Chart samples={samples} metric="memory" label="RAM" />
         <div className="resource-time">
           <span>{t("resourcePast")}</span>
           <span>{t("resourceNow")}</span>
         </div>
+        <p className="resource-memory-detail">
+          <span>{t("resourceMemoryAmount")}</span>
+          <strong>
+            {formatMemory(latest?.memoryBytes ?? null)} /{" "}
+            {formatMemory(latest?.memoryTotalBytes ?? null)}
+          </strong>
+        </p>
         <p className="resource-description">{t("resourceHint")}</p>
         {!failed && latest?.memory === null && (
           <p role="status">{t("resourceMemoryUnavailable")}</p>
