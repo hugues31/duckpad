@@ -91,6 +91,7 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
   );
   const currentWorktree = useRef(worktree);
   currentWorktree.current = worktree;
+  const snapshotEpoch = useRef(0);
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [environment, setEnvironment] = useState("dev");
   const [area, setArea] = useState<Area>(worktree ? "pipelines" : "projects");
@@ -136,9 +137,11 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
   const load = useCallback(
     async (id = worktree) => {
       if (!id) return;
+      const epoch = snapshotEpoch.current;
       const value = await api<Snapshot>(`/worktrees/${id}`);
-      // Ignore a late response for a worktree that is no longer open.
-      if (id !== currentWorktree.current) return;
+      // Discard reads started before a save completed or the worktree changed.
+      if (id !== currentWorktree.current || epoch !== snapshotEpoch.current)
+        return;
       setSnapshot((old) =>
         old?.worktree.id === value.worktree.id &&
         old?.revision === value.revision &&
@@ -289,9 +292,11 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
         `/worktrees/${base.worktree.id}`,
         send({ revision: base.revision, bundle: value }, "PUT"),
       );
+      snapshotEpoch.current++;
       await load(base.worktree.id);
       return saved;
     } catch (e) {
+      snapshotEpoch.current++;
       await load(base.worktree.id);
       notify((e as Error).message, true);
       throw e;
@@ -836,13 +841,18 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
                       selected={selected}
                       onSelect={select}
                       onMove={(nodes) =>
-                        safe(() =>
-                          updateGraph((g) => {
-                            g.nodes = g.nodes.map(
-                              (n) => nodes.find((m) => m.id === n.id) || n,
-                            );
-                          }),
-                        )
+                        updateGraph((g) => {
+                          const positions = new Map(
+                            nodes.map((n) => [n.id, n.position]),
+                          );
+                          g.nodes = g.nodes.map((n) => ({
+                            ...n,
+                            position: positions.get(n.id) ?? n.position,
+                          }));
+                        }).catch((error) => {
+                          notify(error.message, true);
+                          throw error;
+                        })
                       }
                       onConnect={(connection) =>
                         safe(() =>
