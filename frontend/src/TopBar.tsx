@@ -1,3 +1,4 @@
+import Select from "./Select";
 import {
   Database,
   GitBranch,
@@ -110,7 +111,7 @@ export default function TopBar({
           </span>
           <div>
             <span className="eyebrow">{t("workspace")}</span>
-            <select
+            <Select
               aria-label={t("activeProject")}
               value={
                 snapshot?.worktree.project ||
@@ -130,7 +131,7 @@ export default function TopBar({
                   {p.name}
                 </option>
               ))}
-            </select>
+            </Select>
           </div>
           <button
             className="icon"
@@ -146,7 +147,7 @@ export default function TopBar({
           <>
             <div className="branch-picker">
               <GitBranch size={14} />
-              <select
+              <Select
                 aria-label={t("branch")}
                 value={worktree}
                 onChange={(e) => onWorktree(e.target.value)}
@@ -158,7 +159,7 @@ export default function TopBar({
                       {w.branch}
                     </option>
                   ))}
-              </select>
+              </Select>
               <button
                 className="icon"
                 title={t("newBranch")}
@@ -177,7 +178,7 @@ export default function TopBar({
             <span className="header-divider" />
             <label className="environment-picker">
               <span className={`env-dot ${environment}`} />
-              <select
+              <Select
                 aria-label={t("environment")}
                 value={environment}
                 onChange={(e) => onEnvironment(e.target.value)}
@@ -185,7 +186,7 @@ export default function TopBar({
                 {workspace?.catalog.environments.map((env: string) => (
                   <option key={env}>{env}</option>
                 ))}
-              </select>
+              </Select>
             </label>
           </>
         )}
