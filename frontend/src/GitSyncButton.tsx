@@ -7,10 +7,12 @@ import type { Json } from "./types";
 export default function GitSyncButton({
   worktree,
   commit,
+  version,
   onClick,
 }: {
   worktree: string;
   commit: string;
+  version: number;
   onClick: () => void;
 }) {
   const t = useT();
@@ -27,7 +29,7 @@ export default function GitSyncButton({
     return () => {
       live = false;
     };
-  }, [worktree, commit]);
+  }, [worktree, commit, version]);
   return (
     <button
       className="button secondary small git-status-button"

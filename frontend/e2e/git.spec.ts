@@ -237,6 +237,10 @@ test("configure origin, fetch, review first publication, integrate incoming chan
     .getByRole("button", { name: "Publish reviewed commit", exact: true })
     .click();
   await expect(dialog.locator(".git-sync-summary")).toContainText("Up to date");
+  await page.keyboard.press("Escape");
+  await expect(
+    page.getByRole("button", { name: "Git synchronization", exact: true }),
+  ).toContainText("0 ↑ / 0 ↓");
 });
 
 test("outdated comparison responses cannot replace the latest selection", async ({
