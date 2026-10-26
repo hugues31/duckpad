@@ -139,7 +139,7 @@ test("mobile navigation, theme persistence and reduced motion", async ({
   ).toBeTruthy();
   expect(
     await page
-      .locator(".flow-scene")
+      .locator(".flow-lines path")
       .evaluate((element) => getComputedStyle(element).animationName),
   ).toBe("none");
   await page.screenshot({

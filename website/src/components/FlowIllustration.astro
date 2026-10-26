@@ -1,42 +1,7 @@
 ---
-// Cards, sockets and connections share SVG coordinates, including their rotations.
-const orders = { x: 24, y: 94, width: 184, height: 76, angle: -5 };
-const customers = { x: 264, y: 109, width: 198, height: 76, angle: 5 };
-const aggregate = { x: 122, y: 278, width: 260, height: 78, angle: 0 };
-const report = { x: 147, y: 400, width: 220, height: 42, angle: -3 };
-type Card = typeof orders;
-const transform = (card: Card) =>
-  `translate(${card.x} ${card.y}) rotate(${card.angle} ${card.width / 2} ${card.height / 2})`;
-function socket(card: Card, x: number, y: number) {
-  const angle = (card.angle * Math.PI) / 180;
-  const dx = x - card.width / 2;
-  const dy = y - card.height / 2;
-  return {
-    x: card.x + card.width / 2 + dx * Math.cos(angle) - dy * Math.sin(angle),
-    y: card.y + card.height / 2 + dx * Math.sin(angle) + dy * Math.cos(angle),
-  };
-}
-function connect(
-  from: ReturnType<typeof socket>,
-  to: ReturnType<typeof socket>,
-) {
-  const middle = (from.y + to.y) / 2;
-  return `M${from.x} ${from.y} C${from.x} ${middle} ${to.x} ${middle} ${to.x} ${to.y}`;
-}
-const connections = [
-  connect(
-    socket(orders, orders.width / 2, orders.height),
-    socket(aggregate, 65, 0),
-  ),
-  connect(
-    socket(customers, customers.width / 2, customers.height),
-    socket(aggregate, 195, 0),
-  ),
-  connect(
-    socket(aggregate, aggregate.width / 2, aggregate.height),
-    socket(report, report.width / 2, 0),
-  ),
-].join(" ");
+import { cards, transform, connectionsFor } from "../lib/flow-illustration";
+const [orders, customers, aggregate, report] = cards;
+const connections = connectionsFor(cards);
 ---
 
 <div
@@ -51,7 +16,7 @@ const connections = [
       <g class="flow-lines">
         <path d={connections} />
       </g>
-      <g class="flow-node" transform={transform(orders)}>
+      <g class="flow-node" data-flow-card transform={transform(orders)}>
         <rect
           class="node-card"
           width={orders.width}
@@ -89,7 +54,7 @@ const connections = [
           r="4"
         />
       </g>
-      <g class="flow-node" transform={transform(customers)}>
+      <g class="flow-node" data-flow-card transform={transform(customers)}>
         <rect
           class="node-card"
           width={customers.width}
@@ -127,7 +92,7 @@ const connections = [
           r="4"
         />
       </g>
-      <g class="flow-node" transform={transform(aggregate)}>
+      <g class="flow-node" data-flow-card transform={transform(aggregate)}>
         <rect
           class="node-card aggregate-card"
           width={aggregate.width}
@@ -167,7 +132,7 @@ const connections = [
           r="4"
         />
       </g>
-      <g class="report-node" transform={transform(report)}>
+      <g class="report-node" data-flow-card transform={transform(report)}>
         <rect
           class="report-card"
           width={report.width}
@@ -185,24 +150,70 @@ const connections = [
   <span class="art-coordinate">01 / FOLLOW THE DATA</span>
 </div>
 
+<script>
+  import {
+    animatedCards,
+    cards,
+    connectionsFor,
+    transform,
+  } from "../lib/flow-illustration";
+
+  document.querySelectorAll<HTMLElement>(".flow-art").forEach((art) => {
+    const nodes = [...art.querySelectorAll<SVGGElement>("[data-flow-card]")];
+    const path = art.querySelector<SVGPathElement>(".flow-lines path")!;
+    const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
+    let visible = false;
+    let frame: number | undefined;
+    let previous: number | undefined;
+    let elapsed = 0;
+
+    function render(poses: typeof cards) {
+      nodes.forEach((node, index) =>
+        node.setAttribute("transform", transform(poses[index])),
+      );
+      // Move the nodes and their socket endpoints in the same animation frame.
+      path.setAttribute("d", connectionsFor(poses));
+    }
+
+    function tick(time: number) {
+      elapsed +=
+        previous === undefined ? 0 : Math.min(time - previous, 100) / 1000;
+      previous = time;
+      render(animatedCards(elapsed));
+      frame = requestAnimationFrame(tick);
+    }
+
+    function sync() {
+      const running = visible && !document.hidden && !reducedMotion.matches;
+      art.toggleAttribute("data-animating", running);
+      if (frame !== undefined) cancelAnimationFrame(frame);
+      frame = undefined;
+      previous = undefined;
+      if (reducedMotion.matches) {
+        elapsed = 0;
+        render(cards);
+      }
+      if (running) frame = requestAnimationFrame(tick);
+    }
+
+    new IntersectionObserver(([entry]) => {
+      visible = entry.isIntersecting;
+      sync();
+    }).observe(art);
+    reducedMotion.addEventListener("change", sync);
+    document.addEventListener("visibilitychange", sync);
+  });
+</script>
+
 <style>
   .flow-diagram {
     width: 100%;
     height: auto;
     overflow: visible;
   }
-  .flow-scene {
-    transform-box: view-box;
-    transform-origin: center;
-    animation: float-flow 10s ease-in-out infinite;
-  }
-  @keyframes float-flow {
-    0%,
-    100% {
-      transform: translateY(4px) rotate(-0.5deg);
-    }
-    50% {
-      transform: translateY(-4px) rotate(0.5deg);
+  @keyframes dash-flow {
+    to {
+      stroke-dashoffset: -60;
     }
   }
   .flow-lines path {
@@ -210,6 +221,11 @@ const connections = [
     stroke: #73a1ff;
     stroke-width: 1.8;
     stroke-dasharray: 5 5;
+    animation: dash-flow 18s linear infinite;
+    animation-play-state: paused;
+  }
+  .flow-art[data-animating] .flow-lines path {
+    animation-play-state: running;
   }
   .node-card {
     fill: var(--surface);
@@ -258,7 +274,7 @@ const connections = [
     font-weight: 650;
   }
   @media (prefers-reduced-motion: reduce) {
-    .flow-scene {
+    .flow-lines path {
       animation: none;
     }
   }
