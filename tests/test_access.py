@@ -125,6 +125,33 @@ def test_project_role_matrix_and_cross_project_import(instance, role):
     app.state.access.member(project, participant["id"], role)
     snapshot = request(client, headers, "GET", f"/worktrees/{worktree}").json()
     assert snapshot["role"] == role
+    for suffix in ("git/history", "git/compare", "git/branches", "git/remote"):
+        assert request(client, headers, "GET", f"/worktrees/{worktree}/{suffix}").status_code == 200
+    for suffix in (
+        "git/open",
+        "git/cleanup",
+        "git/reviews",
+        "git/reviews/missing",
+        "git/reviews/missing/apply",
+        "git/fetch",
+        "git/pull",
+        "git/push",
+    ):
+        response = request(client, headers, "POST", f"/worktrees/{worktree}/{suffix}", json={})
+        assert response.status_code in ((403,) if role == "reader" else (409, 422))
+    remote = request(client, headers, "GET", f"/worktrees/{worktree}/git/remote").json()
+    response = request(
+        client,
+        headers,
+        "PUT",
+        f"/worktrees/{worktree}/git/remote",
+        json={
+            "url": "https://example.invalid/project.git",
+            "remote_branch": "main",
+            "config_revision": remote["config_revision"],
+        },
+    )
+    assert response.status_code == (200 if role == "admin" else 403)
     assert request(client, headers, "GET", f"/worktrees/{worktree}/archive.zip").status_code == 200
     assert request(
         client,
