@@ -21,6 +21,7 @@ from .engine import Engine
 from .example import create_example
 from .lineage import Lineage
 from .projects import Projects, bundle_to_files
+from .resources import resource_usage
 from .store import Store
 from .templates import parse_template
 from .util import Problem, clean, uid
@@ -59,7 +60,7 @@ def create_app(home: Path, watch=True):
     def authorize(request, user):
         parts = request.url.path.strip("/").split("/")
         route = parts[1] if len(parts) > 1 else ""
-        if route in ("users", "identity", "environments", "catalog"):
+        if route in ("users", "identity", "environments", "catalog", "resources"):
             access.instance_admin(user)
         elif route == "projects" and len(parts) >= 3:
             access.require(user, parts[2], "reader" if request.method == "GET" else "admin")
@@ -142,6 +143,16 @@ def create_app(home: Path, watch=True):
     def session(request: Request):
         return {**request.state.user, "version": "0.1.0"}
 
+    @app.get("/api/resources")
+    def resources():
+        with engine.lock:
+            workers = [
+                context.db.process.pid
+                for context in engine.contexts.values()
+                if context.db and hasattr(context.db, "process") and context.db.process.poll() is None
+            ]
+        return resource_usage(workers)
+
     @app.get("/api/workspace")
     def workspace(request: Request):
         user = request.state.user
@@ -171,12 +182,15 @@ def create_app(home: Path, watch=True):
 
     @app.post("/api/projects")
     def create_project(data: dict, request: Request):
-        return access.own(projects.create(str(data.get("name", "Untitled project"))), request.state.user)
+        return access.create(
+            request.state.user, lambda: projects.create(str(data.get("name", "Untitled project")))
+        )
 
     @app.post("/api/example")
     def example(request: Request):
-        worktree = create_example(projects, catalog, private=True)
-        return access.own(worktree, request.state.user, ["local", "sample_" + worktree["project"]])
+        return access.create(
+            request.state.user, lambda: create_example(projects, catalog, private=True), sample=True
+        )
 
     @app.get("/api/users")
     def users():

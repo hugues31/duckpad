@@ -1,5 +1,6 @@
 """Instance roles, private project membership and connection grants."""
 
+import threading
 from pathlib import Path
 
 from .auth import Auth
@@ -11,6 +12,7 @@ LEVELS = {"reader": 1, "editor": 2, "admin": 3}
 class Access:
     def __init__(self, store):
         self.store = store
+        self.membership_lock = threading.RLock()
         # Existing projects belonged to the original administrator. Do not infer
         # memberships again on subsequent starts or from editable Git content.
         with store.lock:
@@ -56,6 +58,15 @@ class Access:
         if user["role"] != "admin":
             raise Problem("Instance administrator access required", 403)
 
+    def create(self, user, factory, sample=False):
+        with self.membership_lock:
+            current = self.store.get("user", user["id"])
+            if not current or not current["active"]:
+                raise Problem("Authentication required", 401)
+            worktree = factory()
+            connections = ["local", "sample_" + worktree["project"]] if sample else ["local"]
+            return self.own(worktree, user, connections)
+
     def own(self, worktree, user, connections=None):
         self.store.put(
             "access",
@@ -81,7 +92,7 @@ class Access:
         if "active" in data and not isinstance(data["active"], bool):
             raise Problem("Active must be a boolean")
         credentials = Auth.credentials(data["password"]) if "password" in data else {}
-        with self.store.lock:
+        with self.membership_lock, self.store.lock:
             user = self.store.get("user", identity)
             if not user:
                 raise Problem("User not found", 404)
@@ -100,7 +111,7 @@ class Access:
     def member(self, project, identity, role):
         if role is not None and role not in LEVELS:
             raise Problem("Unknown project role")
-        with self.store.lock:
+        with self.membership_lock, self.store.lock:
             user = self.store.get("user", identity)
             if role is not None and (not user or not user["active"]):
                 raise Problem("Choose an active user")

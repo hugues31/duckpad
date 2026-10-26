@@ -286,3 +286,73 @@ def test_account_validation_and_no_credential_disclosure(instance):
     assert set(created) == {"id", "username", "role", "active"}
     assert client.post("/api/users", json={"username": "NEW", "password": PASSWORD}).status_code == 409
     assert PASSWORD not in client.get("/api/users").text
+
+
+def test_sql_worker_cancels_and_recovers_after_process_exit(instance):
+    import time
+
+    from duckpad.projects import bundle_to_files
+
+    app, client = instance
+    _, headers = account(app, "runner")
+    worktree = own_project(app, client, headers)
+    store, projects, _, engine = app.state.services
+    snapshot = projects.snapshot(worktree["id"])
+    bundle = snapshot["bundle"]
+    bundle["templates"]["slow"] = (
+        "-- @kind source\n-- @output result\nSELECT SUM(random()) AS value FROM range(10000000000);"
+    )
+    bundle["flow"]["nodes"] = [{"id": "source", "template": "slow", "params": {}}]
+    projects.write(worktree["id"], snapshot["revision"], bundle_to_files(bundle))
+    run = engine.launch(worktree["id"], "dev")
+    deadline = time.monotonic() + 10
+    while store.get("run", run["id"])["nodes"]["source"]["status"] != "running":
+        assert time.monotonic() < deadline
+        time.sleep(0.01)
+    engine.cancel(run["id"])
+    assert wait_run(store, run)["status"] == "canceled"
+    database = engine.context(worktree["id"], "dev").db
+    database.process.kill()
+    database.process.wait()
+    database.reader.join(timeout=5)
+    snapshot = projects.snapshot(worktree["id"])
+    bundle["templates"]["slow"] = "-- @kind source\n-- @output result\nSELECT 42 AS value;"
+    projects.write(worktree["id"], snapshot["revision"], bundle_to_files(bundle))
+    assert wait_run(store, engine.launch(worktree["id"], "dev"))["status"] == "success"
+    assert engine.context(worktree["id"], "dev").db.process.pid != database.process.pid
+    database.close()
+
+
+def test_read_only_connection_root_cannot_be_written_through_another_connection(instance, tmp_path):
+    app, client = instance
+    _, headers = account(app, "author")
+    worktree = own_project(app, client, headers)
+    root = tmp_path / "read-only-source"
+    root.mkdir()
+    (root / "input.csv").write_text("value\n42\n")
+    _, _, catalog, engine = app.state.services
+    catalog.save(
+        "connector",
+        {
+            "id": "read_only",
+            "parameters": [{"name": "root", "type": "text"}],
+            "capabilities": ["read"],
+            "init_sql": "",
+        },
+    )
+    catalog.save(
+        "connection",
+        {
+            "id": "source_files",
+            "name": "Source files",
+            "connector": "read_only",
+            "environments": {"dev": {"root": str(root)}},
+        },
+    )
+    app.state.access.grant_connections(worktree["project"], ["local", "source_files"])
+    cursor = engine.context(worktree["id"], "dev", create=True).db.cursor()
+    assert cursor.execute("SELECT * FROM read_csv('" + str(root / "input.csv") + "')").fetchall() == [(42,)]
+    with pytest.raises(Exception, match="Permission|denied"):
+        cursor.execute("COPY (SELECT 1) TO '" + str(root / "output.csv") + "'")
+    assert not (root / "output.csv").exists()
+    cursor.close()

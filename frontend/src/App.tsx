@@ -57,6 +57,7 @@ import Preview from "./Preview";
 import Inspector from "./Inspector";
 import LineagePanel from "./LineagePanel";
 import AccountMenu from "./AccountMenu";
+import ResourceMonitor from "./ResourceMonitor";
 import ProjectDashboard from "./ProjectDashboard";
 import { PanelResizeHandle, usePanelSizes } from "./WorkspacePanels";
 import {
@@ -688,6 +689,7 @@ function WorkspaceApp({
                 </label>
               </>
             )}
+            {instanceAdmin && <ResourceMonitor />}
             <AccountMenu
               username={workspace?.user.username || ""}
               theme={theme}
