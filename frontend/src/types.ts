@@ -36,8 +36,14 @@ export interface Snapshot {
   conflicts: Json[];
   parsed_templates: Record<string, Json>;
 }
+export interface Project {
+  id: string;
+  name: string;
+  main: string;
+  created: string;
+}
 export interface Workspace {
-  projects: Json[];
+  projects: Project[];
   worktrees: Json[];
   catalog: Json;
   identity: Json;
