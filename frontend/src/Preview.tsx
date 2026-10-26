@@ -14,6 +14,7 @@ import type { Json } from "./types";
 import { useT } from "./i18n";
 
 export default function Preview({
+  readOnly = false,
   worktree,
   environment,
   node,
@@ -26,6 +27,7 @@ export default function Preview({
   onExplain,
   onData,
 }: {
+  readOnly?: boolean;
   worktree: string;
   environment: string;
   node: string;
@@ -302,11 +304,11 @@ export default function Preview({
           <Database size={25} />
           <div>
             <strong>{error || t("noResult")}</strong>
-            <p>{t("noResultHint")}</p>
+            <p>{t(readOnly ? "readerNoResult" : "noResultHint")}</p>
           </div>
           <button
             className="button secondary small"
-            disabled={active}
+            disabled={readOnly || active}
             onClick={onRun}
           >
             <Play size={13} />

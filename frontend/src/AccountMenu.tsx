@@ -4,10 +4,12 @@ import { useT } from "./i18n";
 import type { Preferences } from "./preferences";
 
 export default function AccountMenu({
+  username,
   preferences: { language, setLanguage, theme, setTheme },
   onSettings,
   onSignOut,
 }: {
+  username: string;
   preferences: Preferences;
   onSettings: () => void;
   onSignOut: () => void;
@@ -48,7 +50,7 @@ export default function AccountMenu({
           }
         }}
       >
-        A
+        {username.slice(0, 1).toUpperCase()}
       </button>
       {open && (
         <div

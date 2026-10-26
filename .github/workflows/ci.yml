@@ -55,6 +55,13 @@ jobs:
       - run: npm run test:e2e --prefix frontend
       # uv builds the wheel from the sdist, checking that the source archive is complete.
       - run: uv build
+      - name: Run tests from the source archive
+        run: |
+          archive_tests="$(mktemp -d)"
+          tar -xzf dist/duckpad-*.tar.gz --strip-components=1 -C "$archive_tests"
+          export PATH="$PWD/.venv/bin:$PATH"
+          cd "$archive_tests"
+          PYTHONPATH="$PWD/src" python -m pytest -q
       - name: Smoke test the installed wheel outside the checkout
         run: |
           uv venv /tmp/duckpad-smoke --python 3.12

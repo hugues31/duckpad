@@ -10,6 +10,7 @@ const CATEGORIES = ["sources", "transforms", "components", "exports"] as const;
 export type NodeKind = "template" | "component";
 
 export default function NodePalette({
+  readOnly,
   snapshot,
   hidden,
   onClose,
@@ -17,6 +18,7 @@ export default function NodePalette({
   onNewTemplate,
   onLibrary,
 }: {
+  readOnly: boolean;
   snapshot: Snapshot;
   hidden: boolean;
   onClose: () => void;
@@ -92,7 +94,8 @@ export default function NodePalette({
                   <button
                     className="palette-item"
                     key={item.id}
-                    draggable
+                    draggable={!readOnly}
+                    disabled={readOnly}
                     onDragStart={(e) => {
                       e.dataTransfer.setData(
                         DRAG_TYPE,
@@ -114,7 +117,7 @@ export default function NodePalette({
           </section>
         ))}
       </div>
-      <div className="palette-bottom">
+      <fieldset className="palette-bottom" disabled={readOnly}>
         <button className="text-button" onClick={onNewTemplate}>
           <Code2 size={14} />
           {t("newTemplate")}
@@ -124,7 +127,7 @@ export default function NodePalette({
           {t("library")}
         </button>
         <p>{t("dragHint")}</p>
-      </div>
+      </fieldset>
     </aside>
   );
 }

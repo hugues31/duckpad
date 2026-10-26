@@ -87,7 +87,7 @@ export function EditorModal({
         <button className="button secondary" onClick={onClose}>
           {t("close")}
         </button>
-        {onSave && (
+        {onSave && !readOnly && (
           <button
             className="button primary"
             disabled={pending}
@@ -178,6 +178,7 @@ export function FormModal({
 }
 
 export function FileModal({
+  readOnly = false,
   snapshot,
   onSave,
   onClose,
@@ -185,6 +186,7 @@ export function FileModal({
   description,
   initialFiles,
 }: {
+  readOnly?: boolean;
   snapshot: Snapshot;
   onSave: (files: Record<string, string>) => Promise<void>;
   onClose: () => void;
@@ -216,6 +218,7 @@ export function FileModal({
         </nav>
         <Suspense fallback={<p>{t("loading")}</p>}>
           <CodeEditor
+            readOnly={readOnly}
             value={files[selected] || ""}
             onChange={(text) => setFiles({ ...files, [selected]: text })}
             language={selected.endsWith(".sql") ? "sql" : "json"}
@@ -230,7 +233,7 @@ export function FileModal({
         </button>
         <button
           className="button primary"
-          disabled={pending}
+          disabled={readOnly || pending}
           onClick={async () => {
             if (await run(() => onSave(files))) onClose();
           }}

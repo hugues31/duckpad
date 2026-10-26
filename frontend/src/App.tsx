@@ -7,6 +7,7 @@ import {
 } from "react";
 import { AlertCircle, GitBranch, Loader2 } from "lucide-react";
 import { api, ApiError, send, withQuery } from "./api";
+import { UsersPage, ProjectSettings } from "./Administration";
 import Canvas from "./Canvas";
 import CanvasHeader from "./CanvasHeader";
 import ConnectionsPanel from "./ConnectionsPanel";
@@ -141,6 +142,8 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
       setSnapshot((old) =>
         old?.worktree.id === value.worktree.id &&
         old?.revision === value.revision &&
+        old?.role === value.role &&
+        JSON.stringify(old.connections) === JSON.stringify(value.connections) &&
         JSON.stringify(old.conflicts) === JSON.stringify(value.conflicts)
           ? old
           : value,
@@ -189,7 +192,25 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
           api<Statuses>(
             withQuery(`/worktrees/${worktree}/status`, { environment }),
           ),
-          load(worktree),
+          load(worktree).catch(async (e) => {
+            // Only a denied snapshot means project access was revoked. A status
+            // request can return 404 while a renamed environment is refreshing.
+            if (
+              live &&
+              e instanceof ApiError &&
+              [403, 404].includes(e.status)
+            ) {
+              setSnapshot(null);
+              setCell(null);
+              setPreview(null);
+              setModal(null);
+              setStatuses(EMPTY_STATUSES);
+              setWorktree("");
+              setArea("pipelines");
+              await refreshWorkspace();
+            }
+            throw e;
+          }),
         ]);
         // Keep the previous object when nothing changed, so dependents do not refetch.
         if (live)
@@ -197,6 +218,7 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
             JSON.stringify(old) === JSON.stringify(status) ? old : status,
           );
       } catch (e) {
+        if (!live) return;
         if (e instanceof ApiError && e.status === 401) setAuthenticated(false);
       }
       if (live) timer = window.setTimeout(poll, POLL_INTERVAL);
@@ -207,7 +229,34 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
       clearTimeout(timer);
     };
   }, [worktree, environment, authenticated, load]);
-
+  useEffect(() => {
+    if (!authenticated) {
+      setWorkspace(null);
+      setSnapshot(null);
+      setStatuses({ nodes: {}, active: null });
+      setModal(null);
+      setCell(null);
+      setPreview(null);
+      setArea("pipelines");
+      return;
+    }
+    const timer = setInterval(() => {
+      refreshWorkspace()
+        .then((value) => {
+          if (
+            value.user.role !== "admin" &&
+            ["users", "connections"].includes(area)
+          )
+            setArea("pipelines");
+        })
+        .catch((e) => {
+          if (e.status === 401) setAuthenticated(false);
+        });
+    }, 5000);
+    return () => clearInterval(timer);
+  }, [authenticated, refreshWorkspace, area]);
+  const canEdit = snapshot?.role === "admin" || snapshot?.role === "editor";
+  const instanceAdmin = workspace?.user.role === "admin";
   const bundle = snapshot?.bundle;
   const graph = bundle ? graphAt(bundle, path) : undefined;
   const prefix = pathPrefix(path);
@@ -233,6 +282,7 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
     }
   };
   async function saveBundle(value: Bundle, base = snapshot!) {
+    if (!canEdit) throw new Error(t("readerNotice"));
     setSaving(true);
     try {
       const saved = await api<Snapshot>(
@@ -256,7 +306,7 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
     return saveBundle(value, base);
   };
   async function updateGraph(change: (graph: Graph) => void) {
-    if (!snapshot?.bundle) return;
+    if (!snapshot?.bundle || !canEdit) return;
     await saveFrom(snapshot, (value) => change(graphAt(value, path)));
   }
   async function addNode(
@@ -302,6 +352,7 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
     select(null);
   }
   async function run(target?: string) {
+    if (!canEdit) return;
     setBusy(true);
     try {
       const result = await api(
@@ -380,6 +431,7 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
     setModal({
       kind: "editor",
       title: t("editTemplate"),
+      readOnly: !canEdit,
       description: t("sharedTemplateHint"),
       value: base.bundle!.templates[id],
       save: async (text) => {
@@ -408,6 +460,7 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
       kind: "editor",
       language: "json",
       title: t("definition"),
+      readOnly: !canEdit,
       value: JSON.stringify(base.bundle!.components[id], null, 2),
       description: t("sharedTemplateHint"),
       save: async (text) => {
@@ -451,6 +504,7 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
   function showFiles(base: Snapshot) {
     setModal({
       kind: "files",
+      readOnly: !canEdit,
       snapshot: base,
       save: async (files) => {
         await api(
@@ -562,16 +616,12 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
         onSuccess={() => setAuthenticated(true)}
       />
     );
-  const connections = (workspace?.catalog.connections || []).filter(
-    (connection: Json) => {
-      if (!["source", "export"].includes(definition?.kind)) return true;
-      const connector = workspace?.catalog.connectors.find(
-        (item: Json) => item.id === connection.connector,
-      );
-      return connector?.capabilities?.includes(
+  const connections = (snapshot?.connections || []).filter(
+    (connection) =>
+      !["source", "export"].includes(definition?.kind) ||
+      connection.capabilities.includes(
         definition?.kind === "export" ? "write" : "read",
-      );
-    },
+      ),
   );
   const panelOpen = {
     palette: paletteOpen,
@@ -609,7 +659,21 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
             })
           }
         />
-        {area === "connections" && workspace ? (
+        {area === "users" && workspace && instanceAdmin ? (
+          <UsersPage refresh={refreshWorkspace} />
+        ) : area === "projectSettings" && project && workspace ? (
+          <ProjectSettings
+            key={project.id}
+            project={project.id}
+            workspace={workspace}
+            refresh={refreshWorkspace}
+            onDeleted={() => {
+              setSnapshot(null);
+              setWorktree("");
+              setArea("pipelines");
+            }}
+          />
+        ) : area === "connections" && workspace && instanceAdmin ? (
           <ConnectionsPanel
             workspace={workspace}
             refresh={async () => {
@@ -633,6 +697,7 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
           />
         ) : area === "settings" && workspace ? (
           <SettingsPage
+            onPasswordChanged={() => setAuthenticated(false)}
             workspace={workspace}
             preferences={preferences}
             onIdentity={(identity) =>
@@ -671,6 +736,8 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
         ) : (
           <>
             <FlowToolbar
+              readOnly={!canEdit}
+              onProjectSettings={() => setArea("projectSettings")}
               tab={tab}
               saving={saving}
               branch={snapshot.worktree.branch}
@@ -698,12 +765,14 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
             />
             {tab === "history" ? (
               <HistoryPanel
+                readOnly={!canEdit}
                 worktree={worktree}
                 onDiff={(commit) => safe(() => showDiff(commit))}
                 onRevision={newBranch}
               />
             ) : tab === "documentation" && bundle ? (
               <DocumentationPanel
+                readOnly={!canEdit}
                 key={worktree}
                 snapshot={snapshot}
                 onSave={(text, base) =>
@@ -725,6 +794,7 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
                 }
               >
                 <NodePalette
+                  readOnly={!canEdit}
                   snapshot={snapshot}
                   hidden={!paletteOpen}
                   onClose={() => setPaletteOpen(false)}
@@ -740,7 +810,7 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
                     paletteOpen={paletteOpen}
                     previewOpen={previewOpen}
                     inspectorOpen={inspectorOpen}
-                    selectionCount={selection.length}
+                    selectionCount={canEdit ? selection.length : 0}
                     onNavigate={(depth) => {
                       setPath(path.slice(0, depth));
                       select(null);
@@ -753,6 +823,7 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
                   />
                   <div className="canvas">
                     <Canvas
+                      readOnly={!canEdit}
                       nodes={graph.nodes}
                       edges={graph.edges}
                       parsed={snapshot.parsed_templates}
@@ -790,6 +861,7 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
                   </div>
                   {node && ports.length > 0 ? (
                     <Preview
+                      readOnly={!canEdit}
                       key={worktree + fullNode}
                       worktree={worktree}
                       environment={environment}
@@ -831,6 +903,7 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
                     />
                   ) : node && definition ? (
                     <Inspector
+                      readOnly={!canEdit}
                       key={worktree + fullNode}
                       node={node}
                       definition={definition}

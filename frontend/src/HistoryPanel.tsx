@@ -13,10 +13,12 @@ import { Modal } from "./modals";
 import type { Json } from "./types";
 
 export default function HistoryPanel({
+  readOnly = false,
   worktree,
   onDiff,
   onRevision,
 }: {
+  readOnly?: boolean;
   worktree: string;
   onDiff: (commit: string) => void;
   onRevision: (commit: string) => void;
@@ -130,6 +132,7 @@ export default function HistoryPanel({
             <button
               className="icon"
               title={t("restoreRevision")}
+              disabled={readOnly}
               onClick={() => onRevision(commit.commit)}
             >
               <GitBranch size={17} />

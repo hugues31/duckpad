@@ -58,7 +58,16 @@ integration = ["oracledb>=3", "boto3>=1.38", "moto[server]>=5"]
 packages = ["src/duckpad"]
 
 [tool.hatch.build.targets.sdist]
-include = ["/src", "/tests", "/scripts/build_hook.py", "/README.md", "/LICENSE", "/pyproject.toml"]
+include = [
+    "/src",
+    "/tests",
+    "/scripts/build_hook.py",
+    "/scripts/release.py",
+    "/cliff.toml",
+    "/README.md",
+    "/LICENSE",
+    "/pyproject.toml",
+]
 
 [tool.hatch.build.hooks.custom]
 path = "scripts/build_hook.py"

@@ -9,6 +9,7 @@ import {
   Loader2,
   Play,
   Square,
+  Settings2,
   Workflow,
 } from "lucide-react";
 import { useT } from "./i18n";
@@ -23,6 +24,8 @@ const TABS = [
 ] as const;
 
 export function FlowToolbar({
+  readOnly,
+  onProjectSettings,
   tab,
   saving,
   branch,
@@ -34,6 +37,8 @@ export function FlowToolbar({
   onRun,
   onStop,
 }: {
+  readOnly: boolean;
+  onProjectSettings: () => void;
   tab: WorkspaceTab;
   saving: boolean;
   branch: string;
@@ -62,6 +67,10 @@ export function FlowToolbar({
         ))}
       </div>
       <div className="row gap">
+        <button className="button secondary small" onClick={onProjectSettings}>
+          <Settings2 size={14} />
+          {t("projectSettings")}
+        </button>
         <span className="save-status">
           {saving ? (
             <Loader2 size={13} className="spin" />
@@ -73,7 +82,7 @@ export function FlowToolbar({
         <button className="icon" title={t("files")} onClick={onFiles}>
           <FileCode2 size={16} />
         </button>
-        {branch !== "main" && (
+        {!readOnly && branch !== "main" && (
           <button className="button secondary small" onClick={onMerge}>
             <GitMerge size={14} />
             {t("merge")}
@@ -84,13 +93,17 @@ export function FlowToolbar({
             className="button stop"
             title={t("cancelRunHint")}
             onClick={onStop}
-            disabled={active.status === "canceling"}
+            disabled={readOnly || active.status === "canceling"}
           >
             <Square size={12} fill="currentColor" />
             {t(active.status === "canceling" ? "canceling" : "stop")}
           </button>
         ) : (
-          <button className="button primary" disabled={!canRun} onClick={onRun}>
+          <button
+            className="button primary"
+            disabled={readOnly || !canRun}
+            onClick={onRun}
+          >
             <Play size={14} fill="currentColor" />
             {t("run")}
           </button>
@@ -117,11 +130,16 @@ export function WorkspaceNotices({
   const completed = nodes.filter((n) => n.status === "success").length;
   return (
     <>
+      {snapshot.role === "reader" && (
+        <div className="banner">
+          <span>{t("readerNotice")}</span>
+        </div>
+      )}
       {!!snapshot.conflicts.length && (
         <div className="banner warning">
           <AlertCircle size={16} />
           <span>{t("conflictHint")}</span>
-          <button onClick={onResolve}>
+          <button disabled={snapshot.role === "reader"} onClick={onResolve}>
             {t("resolve")}
             <ArrowRight size={14} />
           </button>
@@ -162,4 +180,5 @@ export function WorkspaceNotices({
 export const noticeCount = (snapshot: Snapshot, active: Json | null) =>
   Number(!!snapshot.conflicts.length) +
   Number(!!snapshot.diagnostics.length) +
-  Number(!!active);
+  Number(!!active) +
+  Number(snapshot.role === "reader");

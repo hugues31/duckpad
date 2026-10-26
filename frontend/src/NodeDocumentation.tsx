@@ -70,6 +70,7 @@ export default function NodeDocumentation({
         </select>
       )}
       <textarea
+        readOnly={snapshot.role === "reader"}
         className="documentation-editor"
         value={value}
         placeholder={t("documentationPlaceholder")}
@@ -78,7 +79,7 @@ export default function NodeDocumentation({
       <button
         className="button primary full"
         onClick={save}
-        disabled={kind === "columns" && !column}
+        disabled={snapshot.role === "reader" || (kind === "columns" && !column)}
       >
         {t("save")}
       </button>
