@@ -1,16 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
 import fr from "../src/locales/fr.json" with { type: "json" };
-
-async function signIn(page: Page) {
-  await page.goto("/");
-  await page
-    .getByLabel("Password", { exact: true })
-    .fill("duckpad-browser-test");
-  await page.getByRole("button", { name: "Sign in", exact: true }).click();
-  await expect(
-    page.getByRole("navigation", { name: "Workspace", exact: true }),
-  ).toBeVisible();
-}
+import { signIn } from "./helpers";
 
 test("live server metrics, popup dismissal, mobile layout and translated dark theme", async ({
   page,
