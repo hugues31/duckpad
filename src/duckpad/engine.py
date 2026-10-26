@@ -495,6 +495,7 @@ class Engine:
                             context.outputs[key] = staged
                             context.errors.pop(key, None)
                             published[key] = staged
+                            created_tables.clear()
                     # Old tables are retained only until no active lineage reader can
                     # access them. Readers acknowledge cancellation in their finally.
                     for dataset in previous.values():
@@ -509,9 +510,13 @@ class Engine:
                                     if d.id.startswith("trace_") and d.node == key and d.run != run["id"]
                                 ],
                             ]
-                            for old in retired:
-                                drop_dataset(cursor, old)
-                                context.datasets.pop(old.id, None)
+                            cleanup = context.db.cursor()
+                            try:
+                                for old in retired:
+                                    drop_dataset(cleanup, old)
+                                    context.datasets.pop(old.id, None)
+                            finally:
+                                cleanup.close()
                     state.update(status="success", outputs={p: d.public() for p, d in staged.items()})
                     try:
                         self.cleanup_column_docs(
@@ -523,9 +528,18 @@ class Engine:
                     except Exception as error:
                         state["documentation_error"] = str(error)
                 except Exception as error:
-                    for table, storage in created_tables:
-                        cursor.execute(f"DROP VIEW IF EXISTS {qi(table)}")
-                        cursor.execute(f"DROP TABLE IF EXISTS {qi(storage)}")
+                    if created_tables:
+                        try:
+                            cleanup = context.db.cursor()
+                            try:
+                                for table, storage in created_tables:
+                                    cleanup.execute(f"DROP VIEW IF EXISTS {qi(table)}")
+                                    cleanup.execute(f"DROP TABLE IF EXISTS {qi(storage)}")
+                            finally:
+                                cleanup.close()
+                        except (duckdb.Error, Problem):
+                            # A dead worker has already discarded its tables.
+                            pass
                     message = self.catalog.redact(str(error), secrets)
                     state.update(status="canceled" if token["cancel"].is_set() else "failed", error=message)
                     context.errors[key] = message

@@ -66,7 +66,7 @@ def serve(descriptor):
     channel = socket.socket(fileno=descriptor)
     stream = channel.makefile("rb")
     send_lock = threading.Lock()
-    cursors = {}
+    cursors, canceled, executing = {}, {}, {}
     db = None
 
     def reply(message, value=None, error=None):
@@ -82,21 +82,40 @@ def serve(descriptor):
             if operation == "cursor":
                 identity = str(message["id"])
                 cursors[identity] = db.cursor()
+                canceled[identity] = threading.Event()
                 reply(message, identity)
                 return
             cursor = cursors[message["cursor"]]
             if operation == "execute":
-                cursor.execute(message["query"], message["parameters"] or [])
-                result = (
-                    [(d[0], str(d[1]), *d[2:]) for d in cursor.description] if cursor.description else None
-                )
+                finished = threading.Event()
+                executing[message["cursor"]] = finished
+                try:
+                    if canceled[message["cursor"]].is_set():
+                        raise duckdb.InterruptException("Execution canceled")
+                    cursor.execute(message["query"], message["parameters"] or [])
+                    result = (
+                        [(d[0], str(d[1]), *d[2:]) for d in cursor.description]
+                        if cursor.description
+                        else None
+                    )
+                finally:
+                    finished.set()
             elif operation in ("fetchone", "fetchall"):
                 result = getattr(cursor, operation)()
             elif operation == "interrupt":
-                cursor.interrupt()
+                canceled[message["cursor"]].set()
+                finished = executing.get(message["cursor"])
+                # Keep cancellation armed across the boundary between planning
+                # and execution; a one-shot native interrupt can miss that gap.
+                if finished:
+                    while not finished.is_set():
+                        cursor.interrupt()
+                        finished.wait(0.01)
                 result = None
             elif operation == "close":
                 cursors.pop(message["cursor"]).close()
+                canceled.pop(message["cursor"], None)
+                executing.pop(message["cursor"], None)
                 result = None
             else:
                 raise ValueError("Unknown SQL worker operation")
