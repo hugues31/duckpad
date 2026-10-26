@@ -67,7 +67,7 @@ jobs:
           uv venv /tmp/duckpad-smoke --python 3.12
           uv pip install --python /tmp/duckpad-smoke/bin/python dist/*.whl
           uv run python scripts/smoke_wheel.py --python /tmp/duckpad-smoke/bin/python
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: failure()
         with:
           name: browser-diagnostics
