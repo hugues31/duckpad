@@ -13,7 +13,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import __version__, schemas
-from .auth import SESSION_LIFETIME, USERNAME, Auth
+from .auth import SESSION_LIFETIME, Auth
 from .bundle import bundle_to_files
 from .components import group, import_definition
 from .example import create_example
@@ -40,9 +40,10 @@ def session_token(request: Request):
 
 
 def create_app(home: Path, watch=True):
-    services = Services.open(home)
+    services = Services.open(home, enforce_access=True)
     store, projects, catalog, engine = services.store, services.projects, services.catalog, services.engine
     auth = Auth(store)
+    access = engine.access
 
     @asynccontextmanager
     async def lifespan(app):
@@ -59,7 +60,38 @@ def create_app(home: Path, watch=True):
         redoc_url=None,
         openapi_url=None,
     )
+    app.state.services = services
     app.state.auth = auth
+    app.state.access = access
+
+    def authorize(request, user):
+        parts = request.url.path.strip("/").split("/")
+        route = parts[1] if len(parts) > 1 else ""
+        if route in ("users", "identity", "environments", "catalog", "resources"):
+            access.instance_admin(user)
+        elif route == "projects" and len(parts) >= 3:
+            access.require(user, parts[2], "reader" if request.method == "GET" else "admin")
+            if len(parts) >= 4 and parts[3] == "connections" and request.method != "GET":
+                access.instance_admin(user)
+        elif route == "worktrees" and len(parts) >= 3:
+            read = request.method == "GET" or (request.method == "POST" and parts[3:] == ["lineage"])
+            access.worktree(user, parts[2], "reader" if read else "editor")
+        elif route in ("runs", "conflicts") and len(parts) >= 3:
+            record = store.get("run" if route == "runs" else "conflict", parts[2])
+            if not record:
+                raise Problem("Resource not found", 404)
+            access.worktree(user, record["worktree"], "reader" if request.method == "GET" else "editor")
+        elif route not in (
+            "session",
+            "logout",
+            "workspace",
+            "projects",
+            "example",
+            "library",
+            "runs",
+            "password",
+        ):
+            raise Problem("Not found", 404)
 
     @app.exception_handler(Problem)
     async def problem_handler(request, error):
@@ -75,7 +107,8 @@ def create_app(home: Path, watch=True):
     async def authentication(request: Request, call_next):
         try:
             if request.url.path.startswith("/api/") and request.url.path != "/api/login":
-                auth.check(session_token(request))
+                request.state.user = auth.check(session_token(request))
+                authorize(request, request.state.user)
             if request.method not in SAFE_METHODS:
                 origin = request.headers.get("origin")
                 if origin and urlparse(origin).netloc != request.headers.get("host"):
@@ -95,7 +128,7 @@ def create_app(home: Path, watch=True):
     @app.post("/api/login")
     def login(data: schemas.Login, request: Request):
         token = auth.login(data.username, data.password, request.client.host if request.client else "local")
-        response = JSONResponse({"username": USERNAME})
+        response = JSONResponse(auth.check(token))
         response.set_cookie(
             SESSION_COOKIE,
             token,
@@ -114,22 +147,40 @@ def create_app(home: Path, watch=True):
         return response
 
     @app.get("/api/session")
-    def session():
-        return {"username": USERNAME, "version": __version__}
+    def session(request: Request):
+        return {**request.state.user, "version": __version__}
 
     @app.get("/api/resources")
     def resources():
-        return resource_usage()
+        with engine.lock:
+            workers = [
+                context.db.process.pid
+                for context in engine.contexts.values()
+                if context.db and hasattr(context.db, "process") and context.db.process.poll() is None
+            ]
+        return resource_usage(workers)
 
     # Instance
 
     @app.get("/api/workspace")
-    def workspace():
+    def workspace(request: Request):
+        user = request.state.user
+        visible = [
+            {**p, "role": access.role(user, p["id"])}
+            for p in store.all("project")
+            if access.role(user, p["id"])
+        ]
+        ids = {p["id"] for p in visible}
         return {
-            "projects": store.all("project"),
-            "worktrees": store.all("worktree"),
-            "catalog": catalog.public(),
-            "identity": projects.identity(),
+            "user": user,
+            "projects": visible,
+            "worktrees": [w for w in store.all("worktree") if w["project"] in ids],
+            "catalog": catalog.public()
+            if user["role"] == "admin"
+            else {"connectors": [], "connections": [], "environments": store.get("settings", "environments")},
+            "identity": store.get(
+                "settings", "identity", {"name": "Duckpad user", "email": "admin@duckpad.local"}
+            ),
         }
 
     @app.put("/api/identity")
@@ -142,23 +193,29 @@ def create_app(home: Path, watch=True):
 
     @app.put("/api/catalog/{kind}")
     def save_catalog(kind: str, data: dict[str, Any]):
-        catalog.save(kind, data)
+        with projects.lock, engine.lock:
+            engine.reset_catalog()
+            catalog.save(kind, data)
         return catalog.public()
 
     @app.delete("/api/catalog/{kind}/{identity}")
     def delete_catalog(kind: str, identity: str):
-        catalog.delete(kind, identity)
+        with projects.lock, engine.lock:
+            engine.reset_catalog()
+            catalog.delete(kind, identity)
         return catalog.public()
 
     @app.put("/api/environments")
     def environments(data: list[str]):
-        catalog.set_environments(data)
+        with projects.lock, engine.lock:
+            engine.reset_catalog()
+            catalog.set_environments(data)
         return catalog.public()
 
-    @app.post("/api/uploads")
-    async def upload(file: Annotated[UploadFile, File()]):
-        folder = store.home / "resources"
-        folder.mkdir(exist_ok=True)
+    @app.post("/api/worktrees/{worktree}/uploads")
+    async def upload(worktree: str, file: Annotated[UploadFile, File()]):
+        folder = store.home / "resources" / projects.get(worktree)["project"]
+        folder.mkdir(parents=True, exist_ok=True)
         name = Path(file.filename or "data.csv").name
         path = folder / (uid() + "_" + name)
         with path.open("wb") as stream:
@@ -169,20 +226,109 @@ def create_app(home: Path, watch=True):
     # Projects and worktrees
 
     @app.post("/api/projects")
-    def create_project(data: schemas.NewProject):
-        return projects.create(data.name)
+    def create_project(data: schemas.NewProject, request: Request):
+        return access.create(request.state.user, lambda: projects.create(data.name))
 
     @app.post("/api/example")
-    def example():
-        return create_example(projects, catalog)
+    def example(request: Request):
+        return access.create(
+            request.state.user, lambda: create_example(projects, catalog, private=True), sample=True
+        )
+
+    @app.get("/api/users")
+    def users():
+        return [auth.public(u) for u in store.all("user")]
+
+    @app.post("/api/users")
+    def create_user(data: dict):
+        return auth.create_user(data.get("username"), data.get("password"), data.get("role", "member"))
+
+    @app.patch("/api/users/{identity}")
+    def update_user(identity: str, data: dict):
+        return access.update_user(identity, data)
+
+    @app.post("/api/password")
+    def change_password(data: dict, request: Request):
+        user = store.get("user", request.state.user["id"])
+        import hmac
+
+        if not hmac.compare_digest(
+            auth.hash_password(str(data.get("current", ""))[:1024], user["salt"]), user["hash"]
+        ):
+            raise Problem("Current password is incorrect", 403)
+        access.update_user(user["id"], {"password": data.get("password")})
+        return {"ok": True}
+
+    @app.get("/api/projects/{project}/settings")
+    def project_settings(project: str, request: Request):
+        role = access.role(request.state.user, project)
+        record = access.record(project)
+        directory = [auth.public(u) for u in store.all("user")]
+        return {
+            "project": store.get("project", project),
+            "role": role,
+            "members": [
+                {
+                    "id": u["id"],
+                    "username": u["username"],
+                    "active": u["active"],
+                    "role": record["members"][u["id"]],
+                }
+                for u in directory
+                if u["id"] in record["members"]
+            ],
+            "users": [{"id": u["id"], "username": u["username"]} for u in directory if u["active"]]
+            if role == "admin"
+            else [],
+            "connections": record["connections"],
+        }
+
+    @app.put("/api/projects/{project}/members/{identity}")
+    def set_member(project: str, identity: str, data: dict):
+        if "role" not in data or data["role"] is None:
+            raise Problem("Choose a project role")
+        access.member(project, identity, data["role"])
+        return {"ok": True}
+
+    @app.delete("/api/projects/{project}/members/{identity}")
+    def remove_member(project: str, identity: str):
+        access.member(project, identity, None)
+        return {"ok": True}
+
+    @app.put("/api/projects/{project}/connections")
+    def project_connections(project: str, data: dict):
+        with projects.lock, engine.lock:
+            engine.reset_project(project)
+            access.grant_connections(project, data.get("connections"))
+        return {"ok": True}
+
+    @app.delete("/api/projects/{project}")
+    def delete_project(project: str):
+        with projects.lock, engine.lock:
+            engine.reset_project(project)
+            projects.delete(project)
+            store.delete("access", project)
+        return {"ok": True}
 
     @app.get("/api/library")
-    def library():
-        return projects.library()
+    def library(request: Request):
+        visible = {p["id"] for p in store.all("project") if access.role(request.state.user, p["id"])}
+        return projects.library(visible)
 
     @app.get("/api/worktrees/{worktree}")
-    def get_project(worktree: str):
+    def get_project(worktree: str, request: Request):
         result = projects.snapshot(worktree, committed=True)
+        project = result["worktree"]["project"]
+        result["role"] = access.role(request.state.user, project)
+        result["connections"] = [
+            {
+                "id": c["id"],
+                "name": c["name"],
+                "capabilities": store.get("connector", c["connector"], {}).get("capabilities", []),
+            }
+            for c in store.all("connection")
+            if c["id"] in access.record(project)["connections"]
+        ]
         result["parsed_templates"] = parse_templates((result["bundle"] or {}).get("templates", {}))
         return result
 
@@ -228,7 +374,8 @@ def create_app(home: Path, watch=True):
         return result
 
     @app.post("/api/worktrees/{worktree}/import")
-    def import_item(worktree: str, data: schemas.Import):
+    def import_item(worktree: str, data: schemas.Import, request: Request):
+        access.worktree(request.state.user, data.source_worktree)
         snapshot = projects.snapshot(worktree)
         source = projects.snapshot(data.source_worktree)
         if snapshot["bundle"] is None or source["bundle"] is None:
@@ -256,8 +403,19 @@ def create_app(home: Path, watch=True):
         return engine.launch(worktree, data.environment, data.node, entry_point)
 
     @app.get("/api/runs")
-    def runs(worktree: str | None = None):
-        return list(reversed([r for r in store.all("run") if not worktree or r["worktree"] == worktree]))
+    def runs(request: Request, worktree: str | None = None):
+        if worktree:
+            access.worktree(request.state.user, worktree)
+        return list(
+            reversed(
+                [
+                    r
+                    for r in store.all("run")
+                    if (not worktree or r["worktree"] == worktree)
+                    and access.role(request.state.user, r["project"])
+                ]
+            )
+        )
 
     @app.get("/api/runs/{run}")
     def get_run(run: str):

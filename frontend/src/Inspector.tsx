@@ -26,6 +26,7 @@ const TABS = [
 ] as const;
 
 export default function Inspector({
+  readOnly = false,
   node,
   definition,
   snapshot,
@@ -45,6 +46,7 @@ export default function Inspector({
   onEditTemplate,
   onClose,
 }: {
+  readOnly?: boolean;
   node: FlowNode;
   definition: Json;
   snapshot: Snapshot;
@@ -123,7 +125,7 @@ export default function Inspector({
     setDraft(draftRef.current);
   };
   const persist = async () => {
-    if (dirty.current) {
+    if (dirty.current && !readOnly) {
       try {
         await onSave(draftRef.current, base.current);
         dirty.current = false;
@@ -185,7 +187,7 @@ export default function Inspector({
         <button
           className="icon run-node"
           title={t("runNode")}
-          disabled={!!statuses.active}
+          disabled={readOnly || !!statuses.active}
           onClick={onRun}
         >
           <Play size={16} />
@@ -207,7 +209,7 @@ export default function Inspector({
       <div className="inspector-body">
         {error && <div className="notice error">{error}</div>}
         {tab === "parameters" ? (
-          <>
+          <fieldset className="readonly-fields" disabled={readOnly}>
             <label className="field">
               <span>{t("nodeLabel")}</span>
               <input
@@ -275,6 +277,7 @@ export default function Inspector({
             {parameters.map((parameter: Json) => (
               <ParameterField
                 key={parameter.name}
+                worktree={snapshot.worktree.id}
                 parameter={parameter}
                 value={draft.params?.[parameter.name] ?? parameter.default}
                 onChange={(value) =>
@@ -311,7 +314,7 @@ export default function Inspector({
                 {t("deleteNode")}
               </button>
             </div>
-          </>
+          </fieldset>
         ) : tab === "sql" ? (
           <>
             <div className="segmented">

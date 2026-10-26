@@ -5,6 +5,7 @@ import {
   Layers,
   Plus,
   Workflow,
+  Users,
 } from "lucide-react";
 import AccountMenu from "./AccountMenu";
 import DuckMark from "./DuckMark";
@@ -13,11 +14,18 @@ import type { Preferences } from "./preferences";
 import ResourceMonitor from "./ResourceMonitor";
 import type { Snapshot, Workspace } from "./types";
 
-export type Area = "projects" | "pipelines" | "connections" | "settings";
+export type Area =
+  | "projects"
+  | "pipelines"
+  | "connections"
+  | "settings"
+  | "users"
+  | "projectSettings";
 
 const RAIL = [
   ["pipelines", Workflow],
   ["connections", Database],
+  ["users", Users],
 ] as const;
 
 export default function TopBar({
@@ -54,6 +62,8 @@ export default function TopBar({
   onSignOut: () => void;
 }) {
   const t = useT();
+  const instanceAdmin = workspace?.user.role === "admin";
+  const canEdit = snapshot?.role === "admin" || snapshot?.role === "editor";
   return (
     <header className="topbar">
       <nav className="rail" aria-label={t("workspace")}>
@@ -67,18 +77,20 @@ export default function TopBar({
           <DuckMark size={30} />
         </button>
         <div className="rail-main">
-          {RAIL.map(([key, Icon]) => (
-            <button
-              key={key}
-              className={`rail-button ${area === key ? "active" : ""}`}
-              title={t(key)}
-              aria-label={t(key)}
-              aria-current={area === key ? "page" : undefined}
-              onClick={() => onArea(key)}
-            >
-              <Icon size={21} />
-            </button>
-          ))}
+          {RAIL.filter(([key]) => key === "pipelines" || instanceAdmin).map(
+            ([key, Icon]) => (
+              <button
+                key={key}
+                className={`rail-button ${area === key ? "active" : ""}`}
+                title={t(key)}
+                aria-label={t(key)}
+                aria-current={area === key ? "page" : undefined}
+                onClick={() => onArea(key)}
+              >
+                <Icon size={21} />
+              </button>
+            ),
+          )}
         </div>
         <button className="rail-button" title={t("help")} onClick={onHelp}>
           <HelpCircle size={20} />
@@ -145,6 +157,7 @@ export default function TopBar({
               <button
                 className="icon"
                 title={t("newBranch")}
+                disabled={!canEdit}
                 onClick={onNewBranch}
               >
                 <Plus size={13} />
@@ -165,8 +178,9 @@ export default function TopBar({
             </label>
           </>
         )}
-        <ResourceMonitor />
+        {instanceAdmin && <ResourceMonitor />}
         <AccountMenu
+          username={workspace?.user.username || ""}
           preferences={preferences}
           onSettings={() => onArea("settings")}
           onSignOut={onSignOut}

@@ -30,6 +30,7 @@ export type ModalState =
     }
   | {
       kind: "files";
+      readOnly?: boolean;
       snapshot: Snapshot;
       title?: string;
       description?: string;
@@ -79,6 +80,7 @@ export default function ModalHost({
     case "files":
       return (
         <FileModal
+          readOnly={modal.readOnly}
           title={modal.title}
           description={modal.description}
           snapshot={modal.snapshot}

@@ -3,9 +3,11 @@ import { useT } from "./i18n";
 import type { Snapshot } from "./types";
 
 export default function DocumentationPanel({
+  readOnly = false,
   snapshot,
   onSave,
 }: {
+  readOnly?: boolean;
   snapshot: Snapshot;
   /** Save the text on top of the given revision; resolve to the saved snapshot. */
   onSave: (text: string, base: Snapshot) => Promise<Snapshot>;
@@ -15,6 +17,8 @@ export default function DocumentationPanel({
     snapshot.bundle?.documentation.project || "",
   );
   const [message, setMessage] = useState("");
+  const [pending, setPending] = useState(false);
+  const saving = useRef(false);
   // The revision being edited; it advances with each save and, while there
   // are no unsaved edits, with external changes.
   const base = useRef(snapshot);
@@ -37,6 +41,7 @@ export default function DocumentationPanel({
       <h1>{t("projectDocs")}</h1>
       <p className="muted">{t("emptyDocumentation")}</p>
       <textarea
+        readOnly={readOnly}
         className="project-documentation"
         value={text}
         placeholder={t("documentationPlaceholder")}
@@ -45,7 +50,12 @@ export default function DocumentationPanel({
       <div className="row gap">
         <button
           className="button primary"
+          disabled={readOnly || pending}
           onClick={async () => {
+            if (saving.current || readOnly) return;
+            saving.current = true;
+            setPending(true);
+            setMessage("");
             const saved = text;
             try {
               base.current = await onSave(saved, base.current);
@@ -54,10 +64,13 @@ export default function DocumentationPanel({
               setMessage(t("saved"));
             } catch (e) {
               setMessage((e as Error).message);
+            } finally {
+              saving.current = false;
+              setPending(false);
             }
           }}
         >
-          {t("save")}
+          {t(pending ? "saving" : "save")}
         </button>
         <span className="muted small">{message}</span>
       </div>

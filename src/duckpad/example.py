@@ -8,8 +8,12 @@ from .builtin_templates import BUILTINS
 from .util import literal
 
 
-def create_example(projects, catalog):
+def create_example(projects, catalog, private=False):
+    worktree = projects.create("Northstar analytics") if private else None
+    connection_id = "sample_" + worktree["project"] if worktree else "northstar"
     root = projects.store.home / "examples" / "northstar"
+    if worktree:
+        root = projects.store.home / "resources" / worktree["project"] / "sample"
     for environment, multiplier in (("dev", 1), ("prod", 3)):
         folder = root / environment
         folder.mkdir(parents=True, exist_ok=True)
@@ -66,7 +70,7 @@ def create_example(projects, catalog):
     catalog.save(
         "connection",
         {
-            "id": "northstar",
+            "id": connection_id,
             "name": "Northstar sample data",
             "connector": "local",
             "environments": {env: {"root": str(root / env)} for env in ("dev", "prod")},
@@ -182,14 +186,14 @@ EXCEPT SELECT customer_id FROM {{ source }} WHERE amount > 400;
         },
     }
     nodes = [
-        node("orders", "load_csv", "Orders", 30, 80, connection="northstar", file="orders.csv"),
+        node("orders", "load_csv", "Orders", 30, 80, connection=connection_id, file="orders.csv"),
         node(
             "customers",
             "load_parquet",
             "Customers",
             30,
             290,
-            connection="northstar",
+            connection=connection_id,
             file="customers.parquet",
         ),
         node(
@@ -265,17 +269,22 @@ EXCEPT SELECT customer_id FROM {{ source }} WHERE amount > 400;
             },
         },
     }
-    return projects.create(
-        "Northstar · Revenue operations",
-        {
-            "flow": {
-                "name": "Northstar",
-                "description": "From raw orders to explainable revenue",
-                "nodes": nodes,
-                "edges": edges,
-            },
-            "templates": templates,
-            "components": {"regional_summary": metrics, "regional_report": report},
-            "documentation": documentation,
+    bundle = {
+        "flow": {
+            "name": "Northstar",
+            "description": "From raw orders to explainable revenue",
+            "nodes": nodes,
+            "edges": edges,
         },
-    )
+        "templates": templates,
+        "components": {"regional_summary": metrics, "regional_report": report},
+        "documentation": documentation,
+    }
+    if worktree:
+        from .projects import bundle_to_files
+
+        bundle["flow"]["id"] = worktree["project"]
+        snapshot = projects.snapshot(worktree["id"])
+        projects.write(worktree["id"], snapshot["revision"], bundle_to_files(bundle))
+        return worktree
+    return projects.create("Northstar · Revenue operations", bundle)

@@ -11,6 +11,7 @@ export default function ParameterField({
   onBlur,
   connections,
   schemas,
+  worktree,
 }: {
   parameter: Json;
   value: any;
@@ -18,6 +19,7 @@ export default function ParameterField({
   onBlur?: () => void;
   connections: Json[];
   schemas?: string[];
+  worktree?: string;
 }) {
   const t = useT();
   const columnList = useId();
@@ -104,7 +106,7 @@ export default function ParameterField({
           list={base === "column" && schemas ? columnList : undefined}
         />
       )}
-      {base === "file" && (
+      {base === "file" && worktree && (
         <span className="file-upload">
           <FileUp size={13} />
           {t("upload")}
@@ -118,7 +120,7 @@ export default function ParameterField({
               if (!file) return;
               setUploadError("");
               try {
-                onChange(await uploadFile(file));
+                onChange(await uploadFile(file, worktree));
               } catch (error) {
                 setUploadError((error as Error).message);
               } finally {

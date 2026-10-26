@@ -14,6 +14,7 @@ export default function LoginPage({
   onSuccess: () => void;
 }) {
   const t = useT();
+  const [username, setUsername] = useState("admin");
   const [password, setPassword] = useState("");
   const { pending, error, run } = useAsyncAction();
   return (
@@ -33,14 +34,19 @@ export default function LoginPage({
           onSubmit={(e) => {
             e.preventDefault();
             void run(async () => {
-              await api("/login", send({ password }));
+              await api("/login", send({ username, password }));
               onSuccess();
             });
           }}
         >
           <label className="field">
             <span>{t("username")}</span>
-            <input value="admin" readOnly autoComplete="username" />
+            <input
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              required
+              autoComplete="username"
+            />
           </label>
           <label className="field">
             <span>{t("password")}</span>
