@@ -40,6 +40,11 @@ Select **Regional revenue**, choose the `report` output, then click a revenue ce
 - Recompute manually, stop active SQL, retain stale previews after failure, and inspect durable execution history.
 - Configure reusable connections and environments outside project Git, with local, S3 and Oracle presets.
 - Switch English/French and light/dark themes without changing the project.
+- Monitor Duckpad server CPU and RAM in the header; click for the last two minutes
+  of history, sampled every two seconds while the workspace is open. CPU includes
+  all server threads (100% is one core); RAM is current resident memory on Linux
+  and is shown as unavailable on platforms without procfs. History stays in the
+  browser until reload or sign-out.
 
 Results live in memory per worktree and environment. After a backend restart, history remains available but previews and lineage require another manual run. Editing or changing an external source does not launch a run automatically.
 
