@@ -9,7 +9,13 @@ from duckpad.app import create_app
 from duckpad.resources import resource_usage
 
 
-def test_resources_require_authentication_and_return_live_machine_counters(tmp_path):
+@pytest.mark.parametrize("idle_samples", [None, (53.63, 53.64)], ids=["live", "roundoff"])
+def test_resources_require_authentication_and_return_machine_counters(tmp_path, monkeypatch, idle_samples):
+    if idle_samples is not None:
+        # Increasing idle time can slightly decrease the derived busy float.
+        cpu_times = namedtuple("CpuTimes", "user system idle")
+        samples = iter(cpu_times(74.38, 0, idle) for idle in idle_samples)
+        monkeypatch.setattr(psutil, "cpu_times", lambda: next(samples))
     app = create_app(tmp_path / "instance", watch=False)
     with TestClient(app) as client:
         assert client.get("/api/resources").status_code == 401
@@ -18,9 +24,15 @@ def test_resources_require_authentication_and_return_live_machine_counters(tmp_p
         second = client.get("/api/resources").json()
         assert first.status_code == 200
         assert first.headers["cache-control"] == "no-store"
-        assert second["sampled_at"] > first.json()["sampled_at"]
-        assert second["cpu_seconds"] >= first.json()["cpu_seconds"] >= 0
-        assert second["cpu_total_seconds"] >= first.json()["cpu_total_seconds"] > 0
+        before = first.json()
+        assert second["sampled_at"] > before["sampled_at"]
+        assert before["cpu_seconds"] >= 0
+        assert second["cpu_seconds"] >= 0
+        # Subtracting idle counters can introduce floating-point roundoff.
+        assert second["cpu_seconds"] >= before["cpu_seconds"] or second["cpu_seconds"] == pytest.approx(
+            before["cpu_seconds"], rel=1e-12, abs=1e-9
+        )
+        assert second["cpu_total_seconds"] >= before["cpu_total_seconds"] > 0
         assert second["cpu_total_seconds"] >= second["cpu_seconds"]
         assert 0 <= second["memory_bytes"] <= second["memory_total_bytes"]
         assert second["memory_total_bytes"] == psutil.virtual_memory().total
