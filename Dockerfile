@@ -7,14 +7,19 @@ RUN npm run build
 
 FROM python:3.12-slim-bookworm AS backend
 COPY --from=ghcr.io/astral-sh/uv:0.9.5 /uv /usr/local/bin/uv
+RUN apt-get update && apt-get install -y --no-install-recommends g++ make \
+    && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
-ENV UV_LINK_MODE=copy UV_PYTHON_DOWNLOADS=never
-COPY pyproject.toml uv.lock README.md LICENSE ./
-RUN uv sync --locked --no-dev --no-install-project
+ENV UV_LINK_MODE=copy UV_PYTHON_DOWNLOADS=never CMAKE_BUILD_PARALLEL_LEVEL=2
+# DuckDB 2.0's published wheel crashes on the preview server's Ivy Bridge CPU.
+# Build the same locked version for baseline x86-64 instead of downgrading it.
+ENV CFLAGS="-march=x86-64 -mtune=generic" CXXFLAGS="-march=x86-64 -mtune=generic"
+COPY pyproject.toml uv.lock README.md LICENSE .gitignore ./
+RUN uv sync --locked --no-dev --no-install-project --no-binary-package duckdb
 COPY scripts/build_hook.py scripts/build_hook.py
 COPY src/ src/
 COPY --from=frontend /build/src/duckpad/static/ src/duckpad/static/
-RUN uv sync --locked --no-dev --no-editable
+RUN uv sync --locked --no-dev --no-editable --no-binary-package duckdb
 
 FROM python:3.12-slim-bookworm AS runtime
 RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates \

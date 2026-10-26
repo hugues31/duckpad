@@ -36,11 +36,8 @@ The server checkout is `/home/preview-user/duckpad` and the repository is
    `bash scripts/preview.sh destroy <issue-id-in-lowercase>`, report the merge in
    the issue, and mark it done. Also destroy previews for cancelled issues.
 
-Before the initial implementation/setup PR is approved, the Multica repository
-resource points to `codex/implement-duckpad`. New work may use that branch as its
-temporary base, but must not merge into `main` before the setup PR is approved.
-After the setup PR is merged, change the resource ref to `main` and use the normal
-workflow above.
+The initial application is already on `main`. Preview setup corrections are
+reviewed separately in `codex/multica-preview`; merge them only after approval.
 
 ## Preview infrastructure
 
@@ -50,6 +47,12 @@ running development commands (the setup script also does this automatically):
 ```sh
 export PATH="$HOME/.local/share/duckpad-tools/node/bin:$HOME/.local/bin:$PATH"
 ```
+
+The server's Ivy Bridge CPU cannot load the published DuckDB 2.0 wheel. Docker
+and `scripts/setup.sh` build the locked DuckDB version from source for baseline
+x86-64, with two compiler jobs to limit memory usage. The first build is slow;
+subsequent worktrees and previews reuse the uv/Docker build caches. Development
+uses Python 3.12, installed by uv when needed. Do not replace DuckDB with 1.x.
 
 Previews are Coolify applications in the existing `preview-project` project.
 Their URL is `https://<issue-id>.app.example.invalid`. The server's nginx
