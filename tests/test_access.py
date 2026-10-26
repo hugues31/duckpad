@@ -85,6 +85,7 @@ def test_private_discovery_and_all_direct_resource_routes(instance):
         ("GET", f"/worktrees/{branch['id']}"),
         ("GET", f"/worktrees/{worktree['id']}/status"),
         ("GET", f"/worktrees/{worktree['id']}/history"),
+        ("GET", f"/worktrees/{worktree['id']}/archive.zip"),
         ("GET", f"/worktrees/{worktree['id']}/diff/HEAD"),
         ("GET", f"/worktrees/{worktree['id']}/compile/source"),
         ("GET", f"/worktrees/{worktree['id']}/preview/source"),
@@ -124,6 +125,7 @@ def test_project_role_matrix_and_cross_project_import(instance, role):
     app.state.access.member(project, participant["id"], role)
     snapshot = request(client, headers, "GET", f"/worktrees/{worktree}").json()
     assert snapshot["role"] == role
+    assert request(client, headers, "GET", f"/worktrees/{worktree}/archive.zip").status_code == 200
     assert request(
         client,
         headers,

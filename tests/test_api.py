@@ -1,4 +1,6 @@
+import io
 import tomllib
+import zipfile
 from pathlib import Path
 
 import pytest
@@ -98,3 +100,43 @@ def test_logout_revokes_a_bearer_token(app):
         assert client.get("/api/session", headers=headers).status_code == 200
         assert client.post("/api/logout", headers=headers).status_code == 200
         assert client.get("/api/session", headers=headers).status_code == 401
+
+
+def test_project_zip_contains_only_saved_declarative_files(app, client, worktree):
+    snapshot = client.get(f"/api/worktrees/{worktree}").json()
+    path = Path(snapshot["worktree"]["path"])
+    (path / ".env").write_text("PRIVATE_VALUE=not-for-export\n")
+    (path / "data").mkdir()
+    (path / "data" / "input.csv").write_text("id\n1\n")
+    (path / "notes.txt").write_text("Unrelated local file")
+    # An external edit still being written must not leak into a saved download.
+    (path / "flow.json").write_text("{")
+    response = client.get(f"/api/worktrees/{worktree}/archive.zip")
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/zip"
+    assert response.headers["content-disposition"] == 'attachment; filename="duckpad-project.zip"'
+    assert response.headers["cache-control"] == "no-store"
+    with zipfile.ZipFile(io.BytesIO(response.content)) as archive:
+        assert archive.testzip() is None
+        assert set(archive.namelist()) == set(snapshot["files"])
+        assert {name: archive.read(name).decode("utf-8") for name in archive.namelist()} == snapshot["files"]
+
+
+def test_project_zip_exports_selected_branch_and_invalid_saved_content(client, worktree):
+    branch = client.post(f"/api/worktrees/{worktree}/branches", json={"name": "code-export"}).json()["id"]
+    snapshot = client.get(f"/api/worktrees/{branch}").json()
+    files = {**snapshot["files"], "flow.json": "{", "templates/unicode.sql": "SELECT '東京';\n"}
+    files["components/report.json"] = '{"nodes": [], "edges": []}\n'
+    saved = client.put(f"/api/worktrees/{branch}", json={"revision": snapshot["revision"], "files": files})
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["diagnostics"]
+    response = client.get(f"/api/worktrees/{branch}/archive.zip")
+    with zipfile.ZipFile(io.BytesIO(response.content)) as archive:
+        assert {name: archive.read(name).decode("utf-8") for name in archive.namelist()} == files
+    main = client.get(f"/api/worktrees/{worktree}/archive.zip")
+    with zipfile.ZipFile(io.BytesIO(main.content)) as archive:
+        assert archive.read("flow.json").decode() == snapshot["files"]["flow.json"]
+        assert "templates/unicode.sql" not in archive.namelist()
+    assert client.get("/api/worktrees/missing/archive.zip").status_code == 404
+    client.cookies.clear()
+    assert client.get(f"/api/worktrees/{branch}/archive.zip").status_code == 401
