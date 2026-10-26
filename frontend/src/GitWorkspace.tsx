@@ -216,6 +216,7 @@ export default function GitWorkspace({
       setPublication(null);
       setPublishedDiff(null);
     }
+    await onChanged();
     await reload();
   };
   const compare = (left: string, right: string) => {

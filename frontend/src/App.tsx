@@ -104,6 +104,7 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
   const [preview, setPreview] = useState<Json | null>(null);
   const [cell, setCell] = useState<Json | null>(null);
   const [modal, setModal] = useState<ModalState | null>(null);
+  const [gitVersion, setGitVersion] = useState(0);
   const [saving, setSaving] = useState(false);
   const [busy, setBusy] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(
@@ -533,6 +534,7 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
       commit,
       entity,
       onChanged: async () => {
+        setGitVersion((value) => value + 1);
         await refreshWorkspace();
         await load();
       },
@@ -643,6 +645,7 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
           onWorktree={setWorktree}
           onNewBranch={() => newBranch()}
           onGit={() => showGit("sync")}
+          gitVersion={gitVersion}
           onEnvironment={(value) => {
             setEnvironment(value);
             setCell(null);
