@@ -1,6 +1,8 @@
 # Authoring projects
 
-The Files button opens the same declarative files stored in the worktree. Editing them in an external editor is supported. Every completed save is versioned, including invalid SQL or JSON. Corrections create later commits. Inspect errors and fix the current files; Duckpad never runs an earlier valid graph silently.
+The **Code** tab, between **Flow** and **Documentation**, displays the worktree's declarative files in a folder tree beside the Monaco editor. Select a file to edit its SQL or JSON, then choose **Save changes**. Drafts are retained when switching files or workspace tabs. Editing files in an external editor is also supported. Every completed save is versioned, including invalid SQL or JSON. Corrections create later commits. Inspect errors and fix the current files; Duckpad never runs an earlier valid graph silently.
+
+Choose **Download ZIP** in the Code tab to export the selected branch's saved `flow.json`, `documentation.json`, SQL templates and component definitions, preserving their relative paths. Save or discard pending edits before downloading. The archive excludes Git history, datasets, execution results and instance connection settings. Project readers can browse and download these files; editing requires an editor or administrator role.
 
 ## SQL template contract
 
