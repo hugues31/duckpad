@@ -49,6 +49,24 @@ export const send = (data: unknown, method = "POST"): RequestInit => ({
   body: JSON.stringify(data),
 });
 
+/** Download the saved declarative files of the current working branch. */
+export async function downloadProject(worktree: string) {
+  const response = await fetch(
+    `/api/worktrees/${encodeURIComponent(worktree)}/archive.zip`,
+    { credentials: "same-origin" },
+  );
+  if (!response.ok) throw await readError(response);
+  const url = URL.createObjectURL(await response.blob());
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "duckpad-project.zip";
+  document.body.append(link);
+  link.click();
+  link.remove();
+  // Leave the object URL alive long enough for the browser to start reading it.
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 /** Store a local file on the server and return its server-side path. */
 export async function uploadFile(
   file: File,
