@@ -10,7 +10,8 @@ The server checkout is `/home/preview-user/duckpad` and the repository is
 
 1. Read the issue, this guide, and `AGENTS.md`. Fetch `origin` and start a dedicated
    `codex/<issue-id>-<short-description>` branch from `origin/main` in an isolated
-   worktree. Continue the existing issue branch for review follow-ups.
+   worktree. Reuse the worktree allocated by Multica when available. Continue the
+   existing issue branch for review follow-ups.
 2. Run `bash scripts/setup.sh` in each new worktree. Implement the requested change
    and run the relevant checks from the README.
 3. Commit with an English Conventional Commit message, push the issue branch to
@@ -42,6 +43,13 @@ After the setup PR is merged, change the resource ref to `main` and use the norm
 workflow above.
 
 ## Preview infrastructure
+
+The server has an isolated Node.js 22 installation and `uv`; load them before
+running development commands (the setup script also does this automatically):
+
+```sh
+export PATH="$HOME/.local/share/duckpad-tools/node/bin:$HOME/.local/bin:$PATH"
+```
 
 Previews are Coolify applications in the existing `preview-project` project.
 Their URL is `https://<issue-id>.app.example.invalid`. The server's nginx
