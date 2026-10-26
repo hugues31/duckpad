@@ -11,6 +11,7 @@ test-results/
 playwright-report/
 *.egg-info/
 .coverage
+release-notes.md
 *.tsbuildinfo
 .multica/
 .env
