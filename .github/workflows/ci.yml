@@ -18,13 +18,13 @@ jobs:
       matrix:
         python: ['3.11', '3.12', '3.13']
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
       - run: uv sync --locked --python ${{ matrix.python }}
       - run: uv run ruff check src tests scripts
       - run: uv run ruff format --check src tests scripts
@@ -35,7 +35,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
       - uses: actions/setup-python@v5
@@ -46,7 +46,7 @@ jobs:
           node-version: '22'
           cache: npm
           cache-dependency-path: frontend/package-lock.json
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
       - run: uv sync --locked --python 3.12
       - run: npm ci --prefix frontend
       - run: npm run format:check --prefix frontend
@@ -67,7 +67,7 @@ jobs:
           uv venv /tmp/duckpad-smoke --python 3.12
           uv pip install --python /tmp/duckpad-smoke/bin/python dist/*.whl
           uv run python scripts/smoke_wheel.py --python /tmp/duckpad-smoke/bin/python
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: failure()
         with:
           name: browser-diagnostics
