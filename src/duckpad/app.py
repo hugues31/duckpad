@@ -1,7 +1,9 @@
 """Authenticated FastAPI endpoints for the local workspace."""
 
+import io
 import json
 import os
+import zipfile
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Annotated, Any
@@ -9,7 +11,7 @@ from urllib.parse import urlparse
 
 from fastapi import FastAPI, File, Query, Request, UploadFile
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from . import __version__, schemas
@@ -154,13 +156,7 @@ def create_app(home: Path, watch=True):
 
     @app.get("/api/resources")
     def resources():
-        with engine.lock:
-            workers = [
-                context.db.process.pid
-                for context in engine.contexts.values()
-                if context.db and hasattr(context.db, "process") and context.db.process.poll() is None
-            ]
-        return resource_usage(workers)
+        return resource_usage()
 
     # Instance
 
@@ -338,6 +334,19 @@ def create_app(home: Path, watch=True):
     def save_project(worktree: str, data: schemas.Save):
         proposal = data.files if data.files is not None else bundle_to_files(data.bundle)
         return projects.write(worktree, data.revision, proposal)
+
+    @app.get("/api/worktrees/{worktree}/archive.zip")
+    def download_project(worktree: str):
+        snapshot = projects.snapshot(worktree, committed=True)
+        output = io.BytesIO()
+        with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+            for name, content in sorted(snapshot["files"].items()):
+                archive.writestr(name, content)
+        return Response(
+            output.getvalue(),
+            media_type="application/zip",
+            headers={"Content-Disposition": 'attachment; filename="duckpad-project.zip"'},
+        )
 
     @app.post("/api/conflicts/{conflict}/resolve")
     def resolve_conflict(conflict: str, data: schemas.Resolution):
