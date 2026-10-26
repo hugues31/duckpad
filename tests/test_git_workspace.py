@@ -234,7 +234,25 @@ def test_dirty_source_destination_and_invalid_combination_are_rejected(project):
         apply(projects, review)
     assert projects.git(main["path"], "rev-parse", "HEAD") == review["target_head"]
     projects.flush(feature["id"])
-    edit(projects, main, lambda b: b["flow"]["nodes"].pop())
+
+    def remove_total(b):
+        b["flow"]["nodes"].pop()
+        b["flow"]["edges"].pop()
+
+    def add_dependent(b):
+        b["flow"]["nodes"].append({"id": "copy", "template": "filter", "params": {}})
+        b["flow"]["edges"].append(
+            {
+                "id": "c",
+                "source": "total",
+                "sourceHandle": "result",
+                "target": "copy",
+                "targetHandle": "source",
+            }
+        )
+
+    edit(projects, main, remove_total)
+    edit(projects, feature, add_dependent)
     invalid = projects.versioning.prepare(main["id"], "refs/heads/feature")
     assert invalid["diagnostics"]
     with pytest.raises(Problem, match="validation errors"):
@@ -464,3 +482,27 @@ def test_network_errors_never_echo_authentication_material(project, monkeypatch)
     monkeypatch.setattr(subprocess, "run", timeout)
     with pytest.raises(Problem, match="timed out"):
         projects.remotes.network(main["path"], "fetch", "https://example.com/repo")
+
+
+def test_integration_locks_both_reviewed_heads_during_checkout(project, monkeypatch):
+    projects, main = project
+    feature = projects.branch(main["id"], "feature")
+    edit(projects, feature, lambda b: b["documentation"].update(project="Reviewed"))
+    review = projects.versioning.prepare(main["id"], "refs/heads/feature")
+    run = projects.versioning.run
+    attempts = []
+
+    def concurrent(path, *args, **kwargs):
+        if args[:3] == ("read-tree", "-m", "-u"):
+            for ref in ("main", "feature"):
+                result = subprocess.run(
+                    ["git", "-C", path, "update-ref", "refs/heads/" + ref, review["source_head"]],
+                    capture_output=True,
+                )
+                attempts.append(result.returncode)
+        return run(path, *args, **kwargs)
+
+    monkeypatch.setattr(projects.versioning, "run", concurrent)
+    merged = apply(projects, review)
+    assert len(attempts) == 2 and all(attempts)
+    assert merged["bundle"]["documentation"]["project"] == "Reviewed"

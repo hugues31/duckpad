@@ -3,6 +3,7 @@
 import os
 import subprocess
 import tempfile
+import threading
 from collections import OrderedDict
 from pathlib import Path
 
@@ -245,9 +246,20 @@ class GitWorkspace:
             target = self.projects.get(destination)
             path = target["path"]
             target_head, current = self.clean(target)
+            try:
+                current_errors = validate(files_to_bundle(current))
+            except (Problem, TypeError, KeyError, AttributeError) as error:
+                raise Problem("Fix destination project definitions before review", 422) from error
+            if current_errors:
+                raise Problem("Fix destination project definitions before review", 422, current_errors)
             if not source_ref.startswith(("refs/heads/", "refs/remotes/origin/")):
                 raise Problem("Choose an explicit local or fetched remote branch")
             source_head = self.resolve(path, source_ref)
+            if source_ref.startswith("refs/remotes/"):
+                config = self.projects.remotes.config(target)
+                self.projects.remotes.checked_config(target, digest(config))
+                if not config.get("checked"):
+                    raise Problem("Fetch origin before reviewing a remote branch", 409)
             source_tree = next(
                 (
                     w
@@ -347,6 +359,7 @@ class GitWorkspace:
             config = self.store.get("git_remote", target["project"], {})
             if digest(config) != review["remote_guard"]:
                 raise Problem("Remote configuration or fetched state changed. Fetch and review again.", 409)
+            self.projects.remotes.checked_config(target, review["remote_guard"])
         return target
 
     def run(self, path, *args, env=None, input=None):
@@ -373,6 +386,59 @@ class GitWorkspace:
         if result.returncode:
             raise Problem("Git could not complete the reviewed operation. Reload and retry.", 409)
         return result.stdout.strip()
+
+    def install(self, target, review, commit):
+        """Hold both Git ref locks across checkout, so another Git client cannot advance either head."""
+        path = target["path"]
+        identity = self.projects.identity()
+        command = [
+            "git",
+            "-c",
+            "core.hooksPath=/dev/null",
+            "-c",
+            f"user.name={identity['name']}",
+            "-c",
+            f"user.email={identity['email']}",
+            "-C",
+            path,
+            "update-ref",
+            "--stdin",
+        ]
+        with subprocess.Popen(
+            command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True
+        ) as transaction:
+            watchdog = threading.Timer(30, transaction.kill)
+            watchdog.start()
+            installed = False
+
+            def request(commands, acknowledgement):
+                transaction.stdin.write(commands)
+                transaction.stdin.flush()
+                if transaction.stdout.readline().strip() != acknowledgement:
+                    raise Problem("Git heads changed or are locked. Reload and review again.", 409)
+
+            try:
+                request("start\n", "start: ok")
+                request(
+                    f"update refs/heads/{target['branch']} {commit} {review['target_head']}\nverify {review['source_ref']} {review['source_head']}\nprepare\n",
+                    "prepare: ok",
+                )
+                self.verify_review(review)
+                # Two-tree checkout refuses dirty files and untracked collisions.
+                self.run(path, "read-tree", "-m", "-u", review["target_head"], commit)
+                installed = True
+                request("commit\n", "commit: ok")
+            except (Problem, BrokenPipeError) as error:
+                if installed and self.resolve(path, "HEAD") == review["target_head"]:
+                    self.run(path, "read-tree", "-m", "-u", commit, review["target_head"])
+                raise Problem(
+                    "Git integration was rejected. Local edits are retained; reload and review again.", 409
+                ) from error
+            finally:
+                transaction.stdin.close()
+                transaction.wait(timeout=35)
+                watchdog.cancel()
+                watchdog.join()
 
     def apply(self, worktree_id, key, choices, proposal_revision):
         with self.projects.lock:
@@ -415,14 +481,8 @@ class GitWorkspace:
                     message,
                 )
             self.verify_review(review)
-            # Git's two-tree checkout refuses dirty/untracked collisions. CAS protects ancestry.
-            self.run(path, "read-tree", "-m", "-u", review["target_head"], commit)
-            try:
-                self.run(path, "update-ref", "refs/heads/" + target["branch"], commit, review["target_head"])
-            except Problem:
-                self.run(path, "read-tree", "-m", "-u", commit, review["target_head"])
-                raise
-            self.projects.observed[worktree_id] = self.projects.read_files(target)
+            self.install(target, review, commit)
+            self.projects.observed[worktree_id] = files
             self.projects.on_change(worktree_id)
             self.reviews.pop(key, None)
             return self.projects.snapshot(worktree_id)
