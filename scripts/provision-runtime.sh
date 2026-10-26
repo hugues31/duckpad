@@ -32,10 +32,10 @@ PY
     uv venv --python 3.12 "$cache/validation-venv"
     uv pip install --python "$cache/validation-venv/bin/python" \
         --no-index --find-links "$wheelhouse" duckdb==2.0.0
-    "$cache/validation-venv/bin/python" -c "import duckdb; assert duckdb.__version__ == '2.0.0'; assert duckdb.sql('select 42').fetchone() == (42,)"
+    "$cache/validation-venv/bin/python" -c "import duckdb; assert duckdb.__version__ == '2.0.0'; assert duckdb.sql('select 42').fetchall() == [(42,)]"
     (cd "$wheelhouse" && sha256sum *.whl > SHA256SUMS)
 fi
 (cd "$wheelhouse" && sha256sum --check SHA256SUMS)
 docker build -f Dockerfile.duckdb -t duckpad-python:3.12-duckdb2.0.0 "$wheelhouse"
 docker run --rm duckpad-python:3.12-duckdb2.0.0 \
-    /app/.venv/bin/python -c "import duckdb; print('Portable DuckDB', duckdb.__version__, duckdb.sql('select 42').fetchone())"
+    /app/.venv/bin/python -c "import duckdb; print('Portable DuckDB', duckdb.__version__, duckdb.sql('select 42').fetchall())"
