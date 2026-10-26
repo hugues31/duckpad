@@ -1,10 +1,11 @@
 import copy
-import time
+import threading
+from pathlib import Path
 
 import pytest
-from conftest import example_bundle, wait_run
+from helpers import example_bundle, pipeline, wait_run, wait_until
 
-from duckpad.projects import bundle_to_files
+from duckpad.bundle import bundle_to_files
 from duckpad.util import Problem
 
 
@@ -66,7 +67,6 @@ def test_conflicts_survive_and_disjoint_fields_merge(services, tmp_path):
     snapshot = projects.snapshot(worktree["id"])
     external = copy.deepcopy(snapshot["bundle"])
     external["flow"]["nodes"][1]["params"]["threshold"] = 10
-    from pathlib import Path
 
     (Path(worktree["path"]) / "flow.json").write_text(bundle_to_files(external)["flow.json"])
     snapshot["bundle"]["flow"]["nodes"][1]["params"]["threshold"] = 20
@@ -100,8 +100,6 @@ def test_atomic_admission_and_cancellation(services, tmp_path):
     wt = projects.create("Test", bundle)["id"]
     # Hold preparation deterministically to verify rejection cannot invalidate or queue.
     original = engine.catalog.prepare
-    import threading
-
     entered, release = threading.Event(), threading.Event()
 
     def hold(db, values):
@@ -117,5 +115,13 @@ def test_atomic_admission_and_cancellation(services, tmp_path):
     assert engine.cancel(run["id"])["status"] == "canceling"
     release.set()
     assert wait_run(store, run)["status"] == "canceled"
-    time.sleep(0.02)
-    assert not engine.active
+    wait_until(lambda: not engine.active, message="The worktree stayed reserved")
+
+
+def test_preview_returns_timestamps_with_time_zones(services, tmp_path):
+    _, preview, _ = pipeline(
+        services,
+        tmp_path,
+        "SELECT id, TIMESTAMPTZ '2024-01-02 12:00:00+00' AS seen FROM {{ source }} WHERE id = 1;",
+    )
+    assert preview["rows"][0]["values"][1].startswith("2024-01-02")
