@@ -1,13 +1,18 @@
-import { createContext, useContext, useCallback } from "react";
+import { createContext, useCallback, useContext } from "react";
 import en from "./locales/en.json";
 import fr from "./locales/fr.json";
+
 export type Language = "en" | "fr";
 export const I18n = createContext<{
   language: Language;
   setLanguage: (l: Language) => void;
 }>({ language: "en", setLanguage: () => {} });
+
+export const useLanguage = () => useContext(I18n).language;
+
+/** Translate a key; unknown keys, such as server-provided status values, are shown as is. */
 export function useT() {
-  const { language } = useContext(I18n);
+  const language = useLanguage();
   return useCallback(
     (key: string): string =>
       (language === "fr" ? fr : en)[key as keyof typeof en] ?? key,
@@ -26,6 +31,8 @@ const builtinLabels: Record<string, string> = {
   export_oracle: "Export Oracle",
   sql: "SQL transform",
 };
+
+/** Built-in templates keep a translated label until their label is edited. */
 export function templateLabel(
   id: string,
   label: string | undefined,

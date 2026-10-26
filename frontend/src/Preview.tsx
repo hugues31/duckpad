@@ -8,7 +8,9 @@ import {
   Search,
   X,
 } from "lucide-react";
-import { api, formatValue, type Json } from "./types";
+import { api } from "./api";
+import { formatValue } from "./graph";
+import type { Json } from "./types";
 import { useT } from "./i18n";
 
 export default function Preview({
@@ -161,7 +163,7 @@ export default function Preview({
       {data ? (
         <>
           <div className="preview-tools">
-            <div className="search compact">
+            <div className="search">
               <Search size={13} />
               <input
                 aria-label={t("filterRows")}
