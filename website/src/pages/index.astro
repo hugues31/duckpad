@@ -1,6 +1,7 @@
 ---
 import Layout from "../layouts/Layout.astro";
 import Demo from "../components/Demo.astro";
+import FlowIllustration from "../components/FlowIllustration.astro";
 import { url } from "../lib/docs";
 ---
 
@@ -24,6 +25,18 @@ import { url } from "../lib/docs";
           Turn scattered data into a story you can follow. Build SQL pipelines
           visually. Explore the results. Trace a number all the way home.
         </p>
+        <div class="install-terminal">
+          <div class="terminal-bar">
+            <span class="terminal-lights" aria-hidden="true">
+              <i></i>
+              <i></i>
+              <i></i>
+            </span>
+            <span>Terminal</span>
+          </div>
+          <pre aria-label="Install and start Duckpad"><code>pip install duckpad
+duckpad start</code></pre>
+        </div>
         <div class="hero-actions">
           <a class="button" href={url("docs/quickstart/")}>
             Build your first pipeline <span aria-hidden="true">↗</span>
@@ -37,46 +50,7 @@ import { url } from "../lib/docs";
           MIT licensed
         </p>
       </div>
-      <div
-        class="flow-art"
-        role="img"
-        aria-label="Illustration: orders and customers join, aggregate and become a traceable revenue report."
-      >
-        <div class="art-grid"></div>
-        <span class="art-label">A LITTLE LOGIC. A CLEARER PICTURE.</span>
-        <svg class="flow-lines" viewBox="0 0 480 470" aria-hidden="true">
-          <path d="M130 145V200Q130 225 155 225H240M355 145V200Q355 225 330 225H240M240 225V305M240 355V400" />
-        </svg>
-        <div class="flow-node source-a">
-          <span class="node-icon">↳</span>
-          <div>
-            <b>Orders</b>
-            <small>orders.csv</small>
-          </div>
-          <span class="node-port"></span>
-        </div>
-        <div class="flow-node source-b">
-          <span class="node-icon">▤</span>
-          <div>
-            <b>Customers</b>
-            <small>customers.parquet</small>
-          </div>
-          <span class="node-port"></span>
-        </div>
-        <div class="flow-node transform">
-          <span class="node-icon">⋈</span>
-          <div>
-            <b>Enrich & aggregate</b>
-            <small>A little SQL goes a long way.</small>
-          </div>
-          <span class="node-port"></span>
-        </div>
-        <div class="result-chip">
-          <span class="live-dot" aria-hidden="true"></span> One number. Every
-          source.
-        </div>
-        <span class="art-coordinate">01 / FOLLOW THE DATA</span>
-      </div>
+      <FlowIllustration />
     </section>
     <section
       id="demo"

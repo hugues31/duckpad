@@ -256,6 +256,43 @@ h2 {
   gap: 24px;
   margin-top: 30px;
 }
+.install-terminal {
+  max-width: 360px;
+  margin-top: 25px;
+  overflow: hidden;
+  border: 1px solid #344259;
+  border-radius: 9px;
+  background: #162032;
+  box-shadow: 0 12px 28px #132e6110;
+}
+.terminal-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  border-bottom: 1px solid #344259;
+  color: #bcc9df;
+  font-family: ui-monospace, monospace;
+  font-size: 10px;
+}
+.terminal-lights {
+  display: flex;
+  gap: 5px;
+}
+.terminal-lights i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #6f819f;
+}
+.install-terminal pre {
+  margin: 0;
+  padding: 16px 20px;
+  background: transparent;
+  color: #e4eaf5;
+  font-size: 13px;
+  line-height: 1.9;
+}
 .hero-note {
   margin-top: 22px;
   font-size: 10px;
@@ -291,100 +328,6 @@ h2 {
   right: 0;
   font-size: 8px;
   color: var(--muted);
-}
-.flow-lines {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-}
-.flow-lines path {
-  fill: none;
-  stroke: #73a1ff;
-  stroke-width: 1.8;
-  stroke-dasharray: 5 5;
-  animation: flow 18s linear infinite;
-}
-@keyframes flow {
-  to {
-    stroke-dashoffset: -160;
-  }
-}
-.flow-node {
-  position: absolute;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  background: var(--surface);
-  box-shadow: 0 12px 28px #132e6110;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 17px 15px;
-}
-.flow-node b {
-  display: block;
-  font-size: 12px;
-  letter-spacing: -0.025em;
-}
-.flow-node small {
-  display: block;
-  color: var(--muted);
-  font-family: ui-monospace, monospace;
-  font-size: 8px;
-  margin-top: 5px;
-}
-.source-a {
-  top: 19%;
-  left: 5%;
-  width: 40%;
-  transform: rotate(-5deg);
-}
-.source-b {
-  top: 22%;
-  right: 0;
-  width: 43%;
-  transform: rotate(5deg);
-}
-.node-icon {
-  color: var(--blue);
-  width: 32px;
-  height: 32px;
-  background: var(--soft);
-  display: grid;
-  place-items: center;
-  border-radius: 5px;
-  font-size: 24px;
-}
-.node-port {
-  position: absolute;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--surface);
-  border: 2px solid #226bff;
-  bottom: -4px;
-  left: calc(50% - 4px);
-}
-.transform {
-  top: 59%;
-  left: 24%;
-  width: 55%;
-  border-color: #7ea5fc;
-}
-.result-chip {
-  position: absolute;
-  top: 85%;
-  left: 29%;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  border: 1px solid #aac4fc;
-  background: var(--soft);
-  padding: 10px 14px;
-  border-radius: 5px;
-  font-size: 10px;
-  font-weight: 650;
-  transform: rotate(-3deg);
 }
 .section-kicker {
   display: flex;
@@ -934,24 +877,6 @@ pre {
   .hero h1 {
     font-size: 5.6vw;
   }
-  .flow-node {
-    padding: 13px 9px;
-    gap: 6px;
-  }
-  .flow-node b {
-    font-size: 10px;
-  }
-  .flow-node small {
-    font-size: 6px;
-  }
-  .node-icon {
-    width: 25px;
-    height: 25px;
-  }
-  .result-chip {
-    font-size: 8px;
-    padding: 7px 9px;
-  }
   .hero-description {
     font-size: 14px;
   }
@@ -1036,15 +961,6 @@ pre {
     max-width: 360px;
     justify-self: center;
     margin-block: 15px 0;
-  }
-  .flow-node b {
-    font-size: 11px;
-  }
-  .flow-node small {
-    font-size: 7px;
-  }
-  .result-chip {
-    font-size: 9px;
   }
   .section-kicker {
     font-size: 8px;
@@ -1177,6 +1093,9 @@ pre {
   }
 }
 @media (prefers-reduced-motion: reduce) {
+  @view-transition {
+    navigation: none;
+  }
   html {
     scroll-behavior: auto;
   }

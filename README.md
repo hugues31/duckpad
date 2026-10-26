@@ -21,22 +21,19 @@ source.
 
 ## Try it
 
-With Git, uv, Python 3.11+ and Node.js 20+ installed:
+With Python 3.11+ and Git installed:
 
 ```sh
-git clone https://github.com/hugues31/duckpad.git
-cd duckpad
-bash scripts/setup.sh
-uv run duckpad start --home .duckpad-dev --no-browser
+pip install duckpad
+duckpad start
 ```
 
 SQL execution requires Linux with Landlock ABI 2+ (Linux 5.19+ with Landlock
 enabled). Open the printed local address and sign in with the initial admin
 password from the terminal. Choose **Open example project**, then **Run pipeline**.
 
-Already have a release wheel? `pip install <wheel-file>` and `duckpad start` are
-enough; Node.js is only needed for development. See the [quickstart](docs/QUICKSTART.md)
-for the complete first-run walkthrough.
+The package includes the interface; Node.js is only needed for development.
+See the [quickstart](docs/QUICKSTART.md) for the complete first-run walkthrough.
 
 ## Go further
 
