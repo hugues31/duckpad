@@ -44,6 +44,7 @@ export default function TopBar({
   onWorktree,
   onNewBranch,
   onGit,
+  gitVersion,
   onEnvironment,
   onSignOut,
 }: {
@@ -61,6 +62,7 @@ export default function TopBar({
   onWorktree: (worktree: string) => void;
   onNewBranch: () => void;
   onGit: () => void;
+  gitVersion: number;
   onEnvironment: (environment: string) => void;
   onSignOut: () => void;
 }) {
@@ -169,6 +171,7 @@ export default function TopBar({
             <GitSyncButton
               worktree={worktree}
               commit={snapshot.commit}
+              version={gitVersion}
               onClick={onGit}
             />
             <span className="header-divider" />
