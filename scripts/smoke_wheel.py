@@ -52,7 +52,7 @@ def smoke(python):
         try:
             first, log = start("first.log")
             password = re.search(r"Password: (\S+)", log.read_text())[1]
-            duplicate = subprocess.run(command, cwd=folder, capture_output=True, text=True)
+            duplicate = subprocess.run(command, cwd=folder, capture_output=True, text=True, timeout=60)
             assert duplicate.returncode != 0 and "already running" in duplicate.stderr
             with httpx.Client(base_url=base) as client:
                 assert client.get("/api/workspace").status_code == 401
@@ -65,7 +65,7 @@ def smoke(python):
                 deadline = time.monotonic() + 15
                 while time.monotonic() < deadline:
                     result = client.get(f"/api/runs/{run['id']}").json()
-                    if result["status"] not in ("preparing", "running"):
+                    if result["status"] not in ("preparing", "running", "canceling"):
                         break
                     time.sleep(0.05)
                 assert result["status"] == "success", result
@@ -101,8 +101,12 @@ def smoke(python):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--python", required=True)
+    parser.add_argument(
+        "--python", required=True, help="Interpreter of a virtualenv with the wheel installed"
+    )
+    parser.add_argument("--output", type=Path, help="Also write the JSON summary to this file")
     args = parser.parse_args()
-    result = smoke(str(Path(args.python).absolute()))
-    Path("docs/validation/wheel.json").write_text(json.dumps(result, indent=2) + "\n")
-    print(json.dumps(result, indent=2))
+    result = json.dumps(smoke(str(Path(args.python).absolute())), indent=2) + "\n"
+    if args.output:
+        args.output.write_text(result, encoding="utf-8")
+    print(result, end="")
