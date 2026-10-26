@@ -4,159 +4,29 @@ import {
   BookOpen,
   Boxes,
   Code2,
-  FileUp,
   Play,
   Settings2,
   Trash2,
   X,
 } from "lucide-react";
-import {
-  api,
-  send,
-  type Json,
-  type FlowNode,
-  type FlowEdge,
-  type Snapshot,
-} from "./types";
+import { api, withQuery } from "./api";
+import { definitionOf, outputPorts } from "./graph";
 import { useT } from "./i18n";
+import NodeDocumentation from "./NodeDocumentation";
+import ParameterField from "./ParameterField";
 import QueryBuilder from "./QueryBuilder";
+import type { FlowEdge, FlowNode, Json, Snapshot, Statuses } from "./types";
+
 const CodeEditor = lazy(() => import("./Editor"));
 
-export function ParameterField({
-  parameter,
-  value,
-  onChange,
-  onBlur,
-  connections,
-  schemas,
-}: {
-  parameter: Json;
-  value: any;
-  onChange: (value: any) => void;
-  onBlur?: () => void;
-  connections: Json[];
-  schemas?: string[];
-}) {
-  const t = useT();
-  const name = parameter.name;
-  const type = parameter.type || "text";
-  const base = type.split(/[<(]/)[0];
-  if (base === "secret") return null;
-  return (
-    <label className="field">
-      <span>
-        {name.replaceAll("_", " ")}
-        <small>{base}</small>
-      </span>
-      {base === "boolean" ? (
-        <select
-          value={String(value ?? false)}
-          onChange={(e) => onChange(e.target.value === "true")}
-          onBlur={onBlur}
-        >
-          <option value="true">true</option>
-          <option value="false">false</option>
-        </select>
-      ) : base === "connection" ? (
-        <select
-          value={value || ""}
-          onChange={(e) => onChange(e.target.value)}
-          onBlur={onBlur}
-        >
-          {!value && <option value="">{t("notConnected")}</option>}
-          {value && !connections.some((c) => c.id === value) && (
-            <option value={value} disabled>
-              {value} · {t("unavailableConnection")}
-            </option>
-          )}
-          {connections.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-            </option>
-          ))}
-        </select>
-      ) : base === "choice" || base === "keyword" ? (
-        <select
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          onBlur={onBlur}
-        >
-          {(type.match(/\((.*)\)/)?.[1] || "").split("|").map((x: string) => (
-            <option key={x}>{x}</option>
-          ))}
-        </select>
-      ) : base === "list" ? (
-        <input
-          value={Array.isArray(value) ? value.join(", ") : value || ""}
-          onChange={(e) =>
-            onChange(e.target.value.split(",").map((x) => x.trim()))
-          }
-          onBlur={onBlur}
-        />
-      ) : base === "expressions" ||
-        base === "expression" ||
-        base === "schema" ? (
-        <textarea
-          rows={3}
-          className="code-input"
-          value={
-            typeof value === "object"
-              ? JSON.stringify(value, null, 2)
-              : (value ?? "")
-          }
-          onChange={(e) => onChange(e.target.value)}
-          onBlur={onBlur}
-        />
-      ) : (
-        <input
-          type={base === "number" ? "number" : "text"}
-          value={value ?? ""}
-          onChange={(e) =>
-            onChange(
-              base === "number" ? Number(e.target.value) : e.target.value,
-            )
-          }
-          onBlur={onBlur}
-          list={base === "column" ? "input-columns" : undefined}
-        />
-      )}
-      {base === "file" && (
-        <span className="file-upload">
-          <FileUp size={13} />
-          {t("upload")}
-          <input
-            type="file"
-            accept=".csv,.parquet,.tsv"
-            aria-label={t("upload")}
-            onChange={async (e) => {
-              const file = e.target.files?.[0];
-              if (!file) return;
-              const form = new FormData();
-              form.append("file", file);
-              const response = await fetch("/api/uploads", {
-                method: "POST",
-                body: form,
-              });
-              const result = await response.json();
-              if (response.ok) {
-                onChange(result.path);
-              }
-            }}
-          />
-        </span>
-      )}
-      {schemas && (
-        <datalist id="input-columns">
-          {schemas.map((s) => (
-            <option key={s} value={s} />
-          ))}
-        </datalist>
-      )}
-    </label>
-  );
-}
+const TABS = [
+  ["parameters", Settings2],
+  ["sql", Code2],
+  ["notes", BookOpen],
+] as const;
 
 export default function Inspector({
+  readOnly = false,
   node,
   definition,
   snapshot,
@@ -165,9 +35,10 @@ export default function Inspector({
   fullNode,
   environment,
   connections,
-  status,
+  statuses,
   preview,
   onSave,
+  onSaveDocumentation,
   onInput,
   onDelete,
   onRun,
@@ -175,6 +46,7 @@ export default function Inspector({
   onEditTemplate,
   onClose,
 }: {
+  readOnly?: boolean;
   node: FlowNode;
   definition: Json;
   snapshot: Snapshot;
@@ -183,9 +55,13 @@ export default function Inspector({
   fullNode: string;
   environment: string;
   connections: Json[];
-  status: Json;
+  statuses: Statuses;
   preview: Json | null;
   onSave: (node: FlowNode, base: Snapshot) => Promise<void>;
+  onSaveDocumentation: (
+    change: (documentation: Json) => void,
+    base: Snapshot,
+  ) => Promise<void>;
   onInput: (port: string, source: string) => void;
   onDelete: () => void;
   onRun: () => void;
@@ -194,15 +70,16 @@ export default function Inspector({
   onClose: () => void;
 }) {
   const t = useT();
-  const [tab, setTab] = useState("parameters");
+  const [tab, setTab] = useState<(typeof TABS)[number][0]>("parameters");
   const [draft, setDraft] = useState(node);
   const dirty = useRef(false);
   const base = useRef(snapshot);
   const draftRef = useRef(node);
-  const [sqlMode, setSqlMode] = useState("current");
+  const [sqlMode, setSqlMode] = useState<"current" | "executed">("current");
   const [compiled, setCompiled] = useState<Json[]>([]);
   const [error, setError] = useState("");
   const [schemas, setSchemas] = useState<Record<string, string[]>>({});
+  // Column suggestions come from the materialized inputs; refresh them when results change.
   useEffect(() => {
     let live = true;
     const prefix = fullNode.includes("::")
@@ -214,7 +91,10 @@ export default function Inspector({
         .map(async (edge) => {
           try {
             const result = await api(
-              `/worktrees/${snapshot.worktree.id}/preview/${encodeURIComponent(prefix + edge.source)}?environment=${environment}&port=${edge.sourceHandle}&limit=1`,
+              withQuery(
+                `/worktrees/${snapshot.worktree.id}/preview/${encodeURIComponent(prefix + edge.source)}`,
+                { environment, port: edge.sourceHandle, limit: 1 },
+              ),
             );
             return [
               edge.targetHandle,
@@ -230,7 +110,7 @@ export default function Inspector({
     return () => {
       live = false;
     };
-  }, [graphEdges, fullNode, environment, status, snapshot.worktree.id]);
+  }, [graphEdges, fullNode, environment, statuses, snapshot.worktree.id]);
   useEffect(() => {
     if (!dirty.current) {
       setDraft(node);
@@ -245,7 +125,7 @@ export default function Inspector({
     setDraft(draftRef.current);
   };
   const persist = async () => {
-    if (dirty.current) {
+    if (dirty.current && !readOnly) {
       try {
         await onSave(draftRef.current, base.current);
         dirty.current = false;
@@ -257,11 +137,22 @@ export default function Inspector({
   useEffect(() => {
     if (tab === "sql" && sqlMode === "current") {
       setError("");
+      let live = true;
       api(
-        `/worktrees/${snapshot.worktree.id}/compile/${encodeURIComponent(fullNode)}?environment=${environment}`,
+        withQuery(
+          `/worktrees/${snapshot.worktree.id}/compile/${encodeURIComponent(fullNode)}`,
+          { environment },
+        ),
       )
-        .then(setCompiled)
-        .catch((e) => setError(e.message));
+        .then((statements) => {
+          if (live) setCompiled(statements);
+        })
+        .catch((e) => {
+          if (live) setError(e.message);
+        });
+      return () => {
+        live = false;
+      };
     }
   }, [tab, sqlMode, snapshot.revision, fullNode, environment]);
   const parameters = node.component
@@ -296,32 +187,29 @@ export default function Inspector({
         <button
           className="icon run-node"
           title={t("runNode")}
-          disabled={!!status.active}
+          disabled={readOnly || !!statuses.active}
           onClick={onRun}
         >
           <Play size={16} />
         </button>
       </div>
       <div className="tabs inspector-tabs">
-        {[
-          ["parameters", Settings2],
-          ["sql", Code2],
-          ["notes", BookOpen],
-        ].map(([key, Icon]) => (
+        {TABS.map(([key, Icon]) => (
           <button
-            key={key as string}
+            key={key}
             className={tab === key ? "active" : ""}
-            onClick={() => setTab(key as string)}
+            aria-pressed={tab === key}
+            onClick={() => setTab(key)}
           >
             <Icon size={14} />
-            {t(key as string)}
+            {t(key)}
           </button>
         ))}
       </div>
       <div className="inspector-body">
         {error && <div className="notice error">{error}</div>}
         {tab === "parameters" ? (
-          <>
+          <fieldset className="readonly-fields" disabled={readOnly}>
             <label className="field">
               <span>{t("nodeLabel")}</span>
               <input
@@ -360,22 +248,18 @@ export default function Inspector({
                         <option value="">{t("notConnected")}</option>
                         {graphNodes
                           .filter((n) => n.id !== node.id)
-                          .flatMap((n) => {
-                            const def = n.component
-                              ? snapshot.bundle!.components[n.component]
-                              : snapshot.parsed_templates[n.template || ""];
-                            const ports = n.component
-                              ? Object.keys(def?.outputs || {})
-                              : def?.outputs || [];
-                            return ports.map((p: string) => (
-                              <option
-                                key={n.id + ":" + p}
-                                value={n.id + ":" + p}
-                              >
-                                {n.label || n.id} · {p}
-                              </option>
-                            ));
-                          })}
+                          .flatMap((n) =>
+                            outputPorts(n, definitionOf(n, snapshot)).map(
+                              (p) => (
+                                <option
+                                  key={n.id + ":" + p}
+                                  value={n.id + ":" + p}
+                                >
+                                  {n.label || n.id} · {p}
+                                </option>
+                              ),
+                            ),
+                          )}
                       </select>
                     </label>
                   );
@@ -393,6 +277,7 @@ export default function Inspector({
             {parameters.map((parameter: Json) => (
               <ParameterField
                 key={parameter.name}
+                worktree={snapshot.worktree.id}
                 parameter={parameter}
                 value={draft.params?.[parameter.name] ?? parameter.default}
                 onChange={(value) =>
@@ -429,18 +314,20 @@ export default function Inspector({
                 {t("deleteNode")}
               </button>
             </div>
-          </>
+          </fieldset>
         ) : tab === "sql" ? (
           <>
             <div className="segmented">
               <button
                 className={sqlMode === "current" ? "active" : ""}
+                aria-pressed={sqlMode === "current"}
                 onClick={() => setSqlMode("current")}
               >
                 {t("currentSql")}
               </button>
               <button
                 className={sqlMode === "executed" ? "active" : ""}
+                aria-pressed={sqlMode === "executed"}
                 onClick={() => setSqlMode("executed")}
               >
                 {t("executedSql")}
@@ -483,97 +370,13 @@ export default function Inspector({
           </>
         ) : (
           <NodeDocumentation
-            node={node}
             snapshot={snapshot}
             fullNode={fullNode}
             preview={preview}
+            onSave={onSaveDocumentation}
           />
         )}
       </div>
     </aside>
-  );
-}
-
-function NodeDocumentation({
-  snapshot,
-  fullNode,
-  preview,
-}: {
-  node: FlowNode;
-  snapshot: Snapshot;
-  fullNode: string;
-  preview: Json | null;
-}) {
-  const t = useT();
-  const [kind, setKind] = useState("nodes");
-  const [column, setColumn] = useState("");
-  const key =
-    kind === "nodes" ? fullNode : fullNode + ":" + (preview?.port || "result");
-  const current =
-    kind === "columns"
-      ? snapshot.bundle?.documentation.columns?.[key]?.[column] || ""
-      : snapshot.bundle?.documentation[kind]?.[key] || "";
-  const [value, setValue] = useState(current);
-  const [message, setMessage] = useState("");
-  const base = useRef(snapshot);
-  useEffect(() => {
-    setValue(current);
-    base.current = snapshot;
-  }, [kind, column, key, current]);
-  async function save() {
-    try {
-      const bundle = structuredClone(base.current.bundle!);
-      bundle.documentation[kind] ??= {};
-      if (kind === "columns") {
-        bundle.documentation.columns[key] ??= {};
-        bundle.documentation.columns[key][column] = value;
-      } else bundle.documentation[kind][key] = value;
-      await api(
-        `/worktrees/${snapshot.worktree.id}`,
-        send({ revision: base.current.revision, bundle }, "PUT"),
-      );
-      setMessage(t("saved"));
-    } catch (e) {
-      setMessage((e as Error).message);
-    }
-  }
-  return (
-    <>
-      <select
-        value={kind}
-        onChange={(e) => setKind(e.target.value)}
-        aria-label={t("documentation")}
-      >
-        <option value="nodes">{t("nodeDocs")}</option>
-        <option value="datasets">{t("datasetDocs")}</option>
-        <option value="columns">{t("columnDocs")}</option>
-      </select>
-      {kind === "columns" && (
-        <select
-          value={column}
-          onChange={(e) => setColumn(e.target.value)}
-          aria-label={t("chooseColumn")}
-        >
-          <option value="">{t("chooseColumn")}</option>
-          {preview?.columns.map((c: Json) => (
-            <option key={c.name}>{c.name}</option>
-          ))}
-        </select>
-      )}
-      <textarea
-        className="documentation-editor"
-        value={value}
-        placeholder={t("documentationPlaceholder")}
-        onChange={(e) => setValue(e.target.value)}
-      />
-      <button
-        className="button primary full"
-        onClick={save}
-        disabled={kind === "columns" && !column}
-      >
-        {t("save")}
-      </button>
-      {message && <p className="muted small">{message}</p>}
-    </>
   );
 }
