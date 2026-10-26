@@ -35,6 +35,7 @@ async function run(page: Page) {
       async () =>
         (await (await page.request.get("/api/runs/" + result.id)).json())
           .status,
+      { timeout: 30000 },
     )
     .toBe("success");
   await expect(
@@ -345,6 +346,15 @@ test("connection capabilities constrain source and export forms without a projec
       environments: { dev: { root: "" }, prod: { root: "" } },
     },
   });
+  const settings = await (
+    await page.request.get(`/api/projects/${before.worktree.project}/settings`)
+  ).json();
+  await page.request.put(
+    `/api/projects/${before.worktree.project}/connections`,
+    {
+      data: { connections: [...settings.connections, "read_only_files"] },
+    },
+  );
   await page.reload();
   await page
     .locator(".react-flow__node")
@@ -1022,6 +1032,74 @@ test("project documentation saves repeatedly without an edit conflict", async ({
   ).json();
   expect(snapshot.bundle.documentation.project).toBe("Second revision");
   expect(snapshot.conflicts).toEqual([]);
+});
+
+test("documentation waits for its refreshed revision and preserves edits during a slow save", async ({
+  page,
+}) => {
+  await sample(page);
+  await page
+    .getByRole("button", { name: "Documentation", exact: true })
+    .click();
+  const panel = page.locator(".documentation-page");
+  const editor = panel.locator(".project-documentation");
+  const button = panel.getByRole("button");
+  const worktree = await page.evaluate(() =>
+    localStorage.getItem("duckpad-worktree"),
+  );
+  let releaseRefresh!: () => void;
+  const refreshGate = new Promise<void>((resolve) => {
+    releaseRefresh = resolve;
+  });
+  let saving = false;
+  let refreshBlocked = false;
+  let writes = 0;
+  await page.route(`**/api/worktrees/${worktree}`, async (route) => {
+    if (route.request().method() === "PUT") {
+      saving = true;
+      writes++;
+    } else if (route.request().method() === "GET" && saving) {
+      refreshBlocked = true;
+      await refreshGate;
+    }
+    await route.continue();
+  });
+  try {
+    await editor.fill("First revision");
+    const saved = page.waitForResponse(
+      (response) =>
+        response.request().method() === "PUT" &&
+        response.url().endsWith(`/api/worktrees/${worktree}`),
+    );
+    await button.click();
+    expect((await saved).ok()).toBe(true);
+    await expect.poll(() => refreshBlocked).toBe(true);
+    await editor.fill("Second revision typed while saving");
+    await expect(button).toBeDisabled();
+    // A repeated activation cannot submit the old revision while the GET is blocked.
+    await button.evaluate((element: HTMLButtonElement) => element.click());
+    expect(writes).toBe(1);
+  } finally {
+    releaseRefresh();
+  }
+  await expect(button).toBeEnabled();
+  await expect(editor).toHaveValue("Second revision typed while saving");
+  const saved = page.waitForResponse(
+    (response) =>
+      response.request().method() === "PUT" &&
+      response.url().endsWith(`/api/worktrees/${worktree}`),
+  );
+  await button.click();
+  expect((await saved).ok()).toBe(true);
+  await expect(button).toBeEnabled();
+  const snapshot = await (
+    await page.request.get(`/api/worktrees/${worktree}`)
+  ).json();
+  expect(snapshot.bundle.documentation.project).toBe(
+    "Second revision typed while saving",
+  );
+  expect(snapshot.conflicts).toEqual([]);
+  expect(writes).toBe(2);
 });
 
 test("runs use a configured environment after the environments are renamed", async ({

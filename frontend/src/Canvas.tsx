@@ -129,6 +129,7 @@ function PipelineNode({ data, selected }: NodeProps<Node<Json>>) {
 }
 const nodeTypes = { pipeline: PipelineNode };
 interface CanvasProps {
+  readOnly?: boolean;
   nodes: FlowNode[];
   edges: FlowEdge[];
   parsed: Record<string, Json>;
@@ -352,6 +353,9 @@ function CanvasInner(props: CanvasProps) {
     <>
       <div className="canvas-safe-area" ref={safeArea} aria-hidden="true" />
       <ReactFlow
+        nodesDraggable={!props.readOnly}
+        nodesConnectable={!props.readOnly}
+        edgesReconnectable={!props.readOnly}
         nodes={nodes}
         edges={edges}
         nodeTypes={nodeTypes}
@@ -367,8 +371,11 @@ function CanvasInner(props: CanvasProps) {
         }}
         onPaneClick={() => props.onSelect(null)}
         onNodeDoubleClick={(_, node) => props.onOpen(node.id)}
-        onConnect={(connection: Connection) =>
-          props.onConnect(connection as Omit<FlowEdge, "id">)
+        onConnect={
+          props.readOnly
+            ? undefined
+            : (connection: Connection) =>
+                props.onConnect(connection as Omit<FlowEdge, "id">)
         }
         onNodeDragStop={(_, __, moved) =>
           props.onMove(
@@ -379,6 +386,7 @@ function CanvasInner(props: CanvasProps) {
           )
         }
         onDelete={({ nodes, edges }) =>
+          !props.readOnly &&
           props.onDelete(
             nodes.map((n) => n.id),
             edges.map((e) => e.id),
@@ -390,6 +398,7 @@ function CanvasInner(props: CanvasProps) {
           event.dataTransfer.dropEffect = "move";
         }}
         onDrop={(event) => {
+          if (props.readOnly) return;
           event.preventDefault();
           try {
             const value = JSON.parse(event.dataTransfer.getData(DRAG_TYPE));
@@ -412,7 +421,7 @@ function CanvasInner(props: CanvasProps) {
         minZoom={0.1}
         maxZoom={1.8}
         connectionRadius={28}
-        deleteKeyCode={["Backspace", "Delete"]}
+        deleteKeyCode={props.readOnly ? null : ["Backspace", "Delete"]}
         selectionKeyCode="Shift"
         multiSelectionKeyCode="Shift"
         proOptions={{ hideAttribution: true }}

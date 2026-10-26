@@ -4,6 +4,7 @@ import copy
 import logging
 import threading
 import time
+from contextlib import suppress
 from dataclasses import dataclass, field
 
 import duckdb
@@ -77,7 +78,8 @@ def run_outcome(statuses, canceled):
 
 
 class Engine:
-    def __init__(self, store, projects, catalog):
+    def __init__(self, store, projects, catalog, access=None):
+        self.access = access
         self.store, self.projects, self.catalog = store, projects, catalog
         self.lock = threading.RLock()
         self.contexts, self.active = {}, {}
@@ -95,20 +97,82 @@ class Engine:
                             node["external_outcome"] = "unknown"
                 store.put("run", run["id"], run)
 
-    def context(self, worktree, environment):
+    def context(self, worktree, environment, create=False):
         """The live DuckDB context of an existing worktree in a configured environment."""
         self.projects.get(worktree)
         if environment not in self.store.get("settings", "environments", []):
             raise Problem("Unknown environment", 404)
         with self.lock:
             key = (worktree, environment)
-            if key not in self.contexts:
+            if key not in self.contexts or getattr(self.contexts[key].db, "closed", False):
+                self.contexts[key] = Context(*key, db=None)
+            if self.contexts[key].db is None and (create or not self.access):
                 extensions = self.store.home / "extensions"
                 extensions.mkdir(exist_ok=True)
-                self.contexts[key] = Context(
-                    *key, db=duckdb.connect(":memory:", config={"extension_directory": str(extensions)})
-                )
+                if self.access:
+                    from .sandbox import Database
+
+                    project = self.projects.get(worktree)["project"]
+                    references = self.access.record(project)["connections"]
+                    available = [
+                        r
+                        for r in references
+                        if environment in self.store.get("connection", r, {}).get("environments", {})
+                    ]
+                    captured, _ = self.catalog.capture(available, environment)
+                    roots, writable = self.access.local_roots(project, captured)
+                    directory = self.store.home / "exports" / worktree / environment
+                    directory.mkdir(parents=True, exist_ok=True)
+                    temporary = directory / ".temporary"
+                    temporary.mkdir(exist_ok=True)
+                    # Provision only trusted administrator-declared extensions,
+                    # before giving the worker read-only access to their cache.
+                    if any(c["definition"].get("extensions") for c in captured.values()):
+                        with duckdb.connect(config={"extension_directory": str(extensions)}) as setup:
+                            self.catalog.prepare(setup, captured)
+                    database = Database(
+                        {
+                            "captured": captured,
+                            "extensions": str(extensions),
+                            "read_paths": [str(p) for p in roots],
+                            "write_paths": [str(p) for p in [*writable, directory]],
+                            "temporary": str(temporary),
+                            "remote_paths": ["s3://"]
+                            if any(c["definition"]["id"] == "s3" for c in captured.values())
+                            else [],
+                        }
+                    )
+                else:
+                    database = duckdb.connect(":memory:", config={"extension_directory": str(extensions)})
+                self.contexts[key].db = database
             return self.contexts[key]
+
+    def capture(self, worktree, references, environment):
+        if self.access:
+            self.access.connections(self.projects.get(worktree)["project"], references)
+        return self.catalog.capture(references, environment)
+
+    def reset_catalog(self):
+        with self.lock:
+            if self.active:
+                raise Problem("Stop active executions before changing connections", 409)
+            for project in self.store.all("project"):
+                self.reset_project(project["id"])
+
+    def reset_project(self, project):
+        with self.lock:
+            worktrees = {w["id"] for w in self.store.all("worktree") if w["project"] == project}
+            if worktrees & self.active.keys():
+                raise Problem(
+                    "Stop active executions before changing project connections or deleting the project", 409
+                )
+            for key, context in list(self.contexts.items()):
+                if context.worktree in worktrees:
+                    with context.lock:
+                        self.cancel_lineage(context, {d.node for d in context.datasets.values()})
+                        if context.db:
+                            context.db.close()
+                        del self.contexts[key]
 
     def fingerprints(self, bundle, environment, captured=None):
         nodes, edges, _ = expand(bundle, tolerant=True)
@@ -226,9 +290,11 @@ class Engine:
             else:
                 scope = set(nodes)
             self._check_conflicts(snapshot["conflicts"], scope, environment)
-            captured, secrets = self._capture_connections(nodes, scope, environment, strict=bool(target))
+            captured, secrets = self._capture_connections(
+                worktree_id, nodes, scope, environment, strict=bool(target)
+            )
             fingerprints = self.fingerprints(bundle, environment, captured)
-            context = self.context(worktree_id, environment)
+            context = self.context(worktree_id, environment, create=True)
             affected = reachable(scope, edges, upstream=False)
             with context.lock:
                 self.cancel_lineage(context, affected)
@@ -288,13 +354,13 @@ class Engine:
             if computation_conflict:
                 raise Problem("Resolve computation-affecting edit conflicts before running", 409)
 
-    def _capture_connections(self, nodes, scope, environment, strict):
+    def _capture_connections(self, worktree, nodes, scope, environment, strict):
         """Freeze connection settings for the scope; invalid ones block their nodes (or the run if strict)."""
         captured, secrets = {}, []
         for key in scope:
             node = nodes[key]
             try:
-                values, hidden = self.catalog.capture(connection_references(node), environment)
+                values, hidden = self.capture(worktree, connection_references(node), environment)
                 captured.update(values)
                 secrets.extend(hidden)
             except Problem as error:
@@ -354,7 +420,8 @@ class Engine:
         finally:
             with self.lock:
                 if execution.cursor:
-                    execution.cursor.close()
+                    with suppress(duckdb.Error, Problem):
+                        execution.cursor.close()
                 execution.token["cursor"] = None
                 if execution.canceled:
                     run["status"] = "canceled"
@@ -393,6 +460,7 @@ class Engine:
             if execution.canceled:
                 raise Problem("Execution canceled after the active SQL operation ended")
             previous = self._publish(execution, key, staged)
+            created_tables.clear()
             self._retire(execution, key, previous)
             state.update(status="success", outputs={p: d.public() for p, d in staged.items()})
             try:
@@ -405,8 +473,17 @@ class Engine:
             except Exception as error:
                 state["documentation_error"] = str(error)
         except Exception as error:
-            for table, storage in created_tables:
-                drop_relations(execution.cursor, table, storage)
+            if created_tables:
+                try:
+                    cleanup = context.db.cursor()
+                    try:
+                        for table, storage in created_tables:
+                            drop_relations(cleanup, table, storage)
+                    finally:
+                        cleanup.close()
+                except (duckdb.Error, Problem):
+                    # A dead worker has already discarded its tables.
+                    pass
             message = redact(str(error), secrets)
             state.update(status="canceled" if execution.canceled else "failed", error=message)
             with context.lock:
@@ -423,7 +500,8 @@ class Engine:
         for reference in connection_references(node):
             if reference not in execution.prepared:
                 try:
-                    self.catalog.prepare(execution.cursor, {reference: execution.captured[reference]})
+                    if not self.access:
+                        self.catalog.prepare(execution.cursor, {reference: execution.captured[reference]})
                     execution.prepared[reference] = None
                 except Exception as error:
                     execution.prepared[reference] = error
@@ -526,9 +604,13 @@ class Engine:
                     for d in context.datasets.values()
                     if d.id.startswith("trace_") and d.node == key and d.run != execution.run["id"]
                 ]
-                for old in [dataset, *traces]:
-                    drop_dataset(execution.cursor, old)
-                    context.datasets.pop(old.id, None)
+                cleanup = context.db.cursor()
+                try:
+                    for old in [dataset, *traces]:
+                        drop_dataset(cleanup, old)
+                        context.datasets.pop(old.id, None)
+                finally:
+                    cleanup.close()
 
     def wait(self, run_id, timeout=None):
         """Block until a run's worker has finished and released its worktree; return the record."""
@@ -673,7 +755,7 @@ class Engine:
         output = []
         for key in selected:
             node = nodes[key]
-            captured, secrets = self.catalog.capture(connection_references(node), environment)
+            captured, secrets = self.capture(worktree, connection_references(node), environment)
             inputs = {
                 e["targetHandle"]: qi("input_" + e["source"].replace("::", "_") + "_" + e["sourceHandle"])
                 for e in edges
@@ -703,4 +785,5 @@ class Engine:
         for thread in threads:
             thread.join()
         for context in self.contexts.values():
-            context.db.close()
+            if context.db:
+                context.db.close()

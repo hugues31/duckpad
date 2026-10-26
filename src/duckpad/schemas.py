@@ -4,11 +4,9 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
-from .auth import USERNAME
-
 
 class Login(BaseModel):
-    username: str = USERNAME
+    username: str = "admin"
     password: str
 
 

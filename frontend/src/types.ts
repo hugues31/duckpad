@@ -31,6 +31,8 @@ export interface Bundle {
   documentation: Json;
 }
 export interface Snapshot {
+  role: "reader" | "editor" | "admin";
+  connections: Json[];
   worktree: Json;
   revision: string;
   commit: string;
@@ -41,12 +43,19 @@ export interface Snapshot {
   parsed_templates: Record<string, Json>;
 }
 export interface Project {
+  role: "admin" | "editor" | "reader";
   id: string;
   name: string;
   main: string;
   created: string;
 }
 export interface Workspace {
+  user: {
+    id: string;
+    username: string;
+    role: "admin" | "member";
+    active: boolean;
+  };
   projects: Project[];
   worktrees: Json[];
   catalog: Json;

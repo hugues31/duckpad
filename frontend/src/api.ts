@@ -50,14 +50,20 @@ export const send = (data: unknown, method = "POST"): RequestInit => ({
 });
 
 /** Store a local file on the server and return its server-side path. */
-export async function uploadFile(file: File): Promise<string> {
+export async function uploadFile(
+  file: File,
+  worktree: string,
+): Promise<string> {
   const form = new FormData();
   form.append("file", file);
-  const response = await fetch("/api/uploads", {
-    method: "POST",
-    body: form,
-    credentials: "same-origin",
-  });
+  const response = await fetch(
+    `/api/worktrees/${encodeURIComponent(worktree)}/uploads`,
+    {
+      method: "POST",
+      body: form,
+      credentials: "same-origin",
+    },
+  );
   if (!response.ok) throw await readError(response);
   return (await response.json()).path;
 }

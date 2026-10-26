@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 from pathlib import Path
 
+from .access import Access
 from .catalog import Catalog
 from .engine import Engine
 from .lineage import Lineage
@@ -19,10 +20,10 @@ class Services:
     lineage: Lineage
 
     @classmethod
-    def open(cls, home: Path):
+    def open(cls, home: Path, *, enforce_access=False):
         store = Store(home)
         projects, catalog = Projects(store), Catalog(store)
-        engine = Engine(store, projects, catalog)
+        engine = Engine(store, projects, catalog, access=Access(store) if enforce_access else None)
         # Definition and connection edits mark dependent results stale.
         projects.on_change = engine.invalidate
         catalog.on_change = engine.invalidate
