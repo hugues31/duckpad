@@ -87,6 +87,19 @@ test("auto-arrange saves only the current DAG, preserves selection and frames th
   ).toBe(true);
   await openWorktree(page, worktree.id);
   await expect(page.locator(".canvas-footer")).toHaveCount(0);
+  const layoutGroup = page.getByRole("group", {
+    name: "Auto-arrange nodes",
+    exact: true,
+  });
+  const navigation = page.locator(".react-flow__controls");
+  await expect(layoutGroup.getByRole("button")).toHaveCount(1);
+  await expect(navigation.getByRole("button")).toHaveCount(3);
+  const groupBounds = (await layoutGroup.boundingBox())!;
+  const navigationBounds = (await navigation.boundingBox())!;
+  expect(
+    groupBounds.x - navigationBounds.x - navigationBounds.width,
+  ).toBeGreaterThanOrEqual(8);
+  expect(groupBounds.y).toBe(navigationBounds.y);
   const before: Snapshot = await (await page.request.get(url)).json();
   const after = await arrange(page, url);
   expectArranged(before.bundle!.flow, after.bundle!.flow);
@@ -170,6 +183,159 @@ test("auto-arrange saves only the current DAG, preserves selection and frames th
     page.getByRole("button", { name: "Auto-arrange nodes", exact: true }),
   ).toBeDisabled();
 });
+
+for (const failSave of [false, true]) {
+  test(`node drops stay in place during a slow save${failSave ? " and roll back on failure" : " and ignore stale polls"}`, async ({
+    page,
+  }) => {
+    await signIn(page);
+    const worktree = await (
+      await page.request.post("/api/example", { data: {} })
+    ).json();
+    await openWorktree(page, worktree.id);
+    const url = `/api/worktrees/${worktree.id}`;
+    const orders = page
+      .locator(".react-flow__node")
+      .filter({ has: page.getByText("Orders", { exact: true }) });
+    await orders.click();
+    await page.getByRole("button", { name: "Fit view", exact: true }).click();
+    let releaseSave!: () => void;
+    let releasePoll!: () => void;
+    const saveGate = new Promise<void>((resolve) => {
+      releaseSave = resolve;
+    });
+    const pollGate = new Promise<void>((resolve) => {
+      releasePoll = resolve;
+    });
+    let writeBlocked = false;
+    let pollBlocked = false;
+    let pollReleased = false;
+    await page.route(`**${url}`, async (route) => {
+      if (route.request().method() === "PUT") {
+        writeBlocked = true;
+        await saveGate;
+        if (failSave) {
+          await route.fulfill({
+            status: 503,
+            json: { error: "Simulated save failure" },
+          });
+          return;
+        }
+      } else if (!pollBlocked) {
+        const response = await route.fetch();
+        pollBlocked = true;
+        await pollGate;
+        await route.fulfill({ response });
+        pollReleased = true;
+        return;
+      }
+      await route.continue();
+    });
+    try {
+      await expect.poll(() => pollBlocked).toBe(true);
+      const original = await orders.evaluate(
+        (element) => (element as HTMLElement).style.transform,
+      );
+      const shape = (await orders.locator(".node-shape").boundingBox())!;
+      await page.mouse.move(
+        shape.x + shape.width / 2,
+        shape.y + shape.height / 2,
+      );
+      await page.mouse.down();
+      await page.mouse.move(
+        shape.x + shape.width / 2 + 45,
+        shape.y + shape.height / 2 + 30,
+        { steps: 10 },
+      );
+      const dropped = await orders.evaluate(
+        (element) => (element as HTMLElement).style.transform,
+      );
+      expect(dropped).not.toBe(original);
+      await orders.evaluate((element) => {
+        const node = element as HTMLElement;
+        const positions = [node.style.transform];
+        (window as any).dropPositions = positions;
+        const observer = new MutationObserver(() =>
+          positions.push(node.style.transform),
+        );
+        observer.observe(node, {
+          attributes: true,
+          attributeFilter: ["style"],
+        });
+        (window as any).dropObserver = observer;
+      });
+      const saved = page.waitForResponse(
+        (response) =>
+          response.url().endsWith(url) && response.request().method() === "PUT",
+      );
+      await page.mouse.up();
+      await expect.poll(() => writeBlocked).toBe(true);
+      // Selection refreshes node data while the server still holds the old position.
+      await page
+        .locator(".react-flow__node")
+        .filter({ has: page.getByText("Customers", { exact: true }) })
+        .click();
+      await page.evaluate(
+        () =>
+          new Promise((resolve) =>
+            requestAnimationFrame(() => requestAnimationFrame(resolve)),
+          ),
+      );
+      expect(
+        await page.evaluate(() =>
+          (window as any).dropPositions.every(
+            (position: string) => position === (window as any).dropPositions[0],
+          ),
+        ),
+      ).toBe(true);
+      releaseSave();
+      expect((await saved).status()).toBe(failSave ? 503 : 200);
+      await expect(
+        page.getByText("All changes saved", { exact: true }),
+      ).toBeVisible();
+      if (failSave) {
+        await expect(page.getByRole("alert")).toContainText(
+          "Simulated save failure",
+        );
+        await expect(orders).toHaveCSS(
+          "transform",
+          await page.evaluate(
+            (value) => new DOMMatrix(value).toString(),
+            original!,
+          ),
+        );
+      }
+      releasePoll();
+      await expect.poll(() => pollReleased).toBe(true);
+      await page.waitForResponse(
+        (response) =>
+          response.url().endsWith(url) && response.request().method() === "GET",
+      );
+      if (!failSave) {
+        expect(
+          await page.evaluate(() =>
+            (window as any).dropPositions.every(
+              (position: string) =>
+                position === (window as any).dropPositions[0],
+            ),
+          ),
+        ).toBe(true);
+        await page.reload();
+        await expect
+          .poll(() =>
+            orders.evaluate(
+              (element) => (element as HTMLElement).style.transform,
+            ),
+          )
+          .toBe(dropped);
+      }
+    } finally {
+      releaseSave();
+      releasePoll();
+      await page.evaluate(() => (window as any).dropObserver?.disconnect());
+    }
+  });
+}
 
 test("auto-arrange is disabled for empty graphs and has a French label on small screens", async ({
   page,

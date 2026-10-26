@@ -933,9 +933,16 @@ small {
 .canvas-empty p {
   font-size: 12px;
 }
-.react-flow__controls.react-flow__panel {
+.canvas-control-groups.react-flow__panel {
   left: calc(var(--canvas-left) + 12px);
   bottom: calc(var(--canvas-bottom) + 12px);
+  margin: 0;
+  display: flex;
+  gap: 8px;
+}
+.canvas-control-groups > .react-flow__controls,
+.canvas-layout-controls {
+  position: static;
   margin: 0;
   display: flex;
   flex-direction: row;
@@ -2223,6 +2230,7 @@ small {
 .canvas-breadcrumb,
 .component-notice,
 .react-flow__controls,
+.canvas-layout-controls,
 .react-flow__minimap,
 .modal,
 .toast,
