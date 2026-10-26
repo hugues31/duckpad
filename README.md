@@ -50,6 +50,11 @@ Select **Regional revenue**, choose the `report` output, then click a revenue ce
   limits constrain those capacities; otherwise system totals apply. Measurements
   cover the Duckpad server process. Missing measurements are shown as unavailable.
 
+Language defaults to the first supported language in your browser preferences
+(English or French, with English as the fallback), and the theme defaults to your
+system color scheme. Manual choices are saved in this browser and take priority
+on subsequent visits.
+
 Results live in memory per worktree and environment. After a backend restart, history remains available but previews and lineage require another manual run. Editing or changing an external source does not launch a run automatically.
 
 ## Develop and verify
