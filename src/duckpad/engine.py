@@ -57,7 +57,8 @@ class Context:
 
 
 class Engine:
-    def __init__(self, store, projects, catalog):
+    def __init__(self, store, projects, catalog, access=None):
+        self.access = access
         self.store, self.projects, self.catalog = store, projects, catalog
         self.lock = threading.RLock()
         self.contexts, self.active = {}, {}
@@ -75,16 +76,78 @@ class Engine:
                             node["external_outcome"] = "unknown"
                 store.put("run", run["id"], run)
 
-    def context(self, worktree, environment):
+    def context(self, worktree, environment, create=False):
         with self.lock:
             key = (worktree, environment)
             if key not in self.contexts:
+                self.contexts[key] = Context(*key, db=None)
+            if self.contexts[key].db is None and (create or not self.access):
                 extensions = self.store.home / "extensions"
                 extensions.mkdir(exist_ok=True)
-                self.contexts[key] = Context(
-                    *key, db=duckdb.connect(":memory:", config={"extension_directory": str(extensions)})
-                )
+                if self.access:
+                    from .sandbox import Database
+
+                    project = self.projects.get(worktree)["project"]
+                    references = self.access.record(project)["connections"]
+                    available = [
+                        r
+                        for r in references
+                        if environment in self.store.get("connection", r, {}).get("environments", {})
+                    ]
+                    captured, _ = self.catalog.capture(available, environment)
+                    roots = self.access.local_roots(project, captured)
+                    directory = self.store.home / "exports" / worktree / environment
+                    directory.mkdir(parents=True, exist_ok=True)
+                    temporary = directory / ".temporary"
+                    temporary.mkdir(exist_ok=True)
+                    # Provision only trusted administrator-declared extensions,
+                    # before giving the worker read-only access to their cache.
+                    if any(c["definition"].get("extensions") for c in captured.values()):
+                        with duckdb.connect(config={"extension_directory": str(extensions)}) as setup:
+                            self.catalog.prepare(setup, captured)
+                    database = Database(
+                        {
+                            "captured": captured,
+                            "extensions": str(extensions),
+                            "read_paths": [str(p) for p in roots],
+                            "write_paths": [str(p) for p in [*roots, directory]],
+                            "temporary": str(temporary),
+                            "remote_paths": ["s3://"]
+                            if any(c["definition"]["id"] == "s3" for c in captured.values())
+                            else [],
+                        }
+                    )
+                else:
+                    database = duckdb.connect(":memory:", config={"extension_directory": str(extensions)})
+                self.contexts[key].db = database
             return self.contexts[key]
+
+    def capture(self, worktree, references, environment):
+        if self.access:
+            self.access.connections(self.projects.get(worktree)["project"], references)
+        return self.catalog.capture(references, environment)
+
+    def reset_catalog(self):
+        with self.lock:
+            if self.active:
+                raise Problem("Stop active executions before changing connections", 409)
+            for project in self.store.all("project"):
+                self.reset_project(project["id"])
+
+    def reset_project(self, project):
+        with self.lock:
+            worktrees = {w["id"] for w in self.store.all("worktree") if w["project"] == project}
+            if worktrees & self.active.keys():
+                raise Problem(
+                    "Stop active executions before changing project connections or deleting the project", 409
+                )
+            for key, context in list(self.contexts.items()):
+                if context.worktree in worktrees:
+                    with context.lock:
+                        self.cancel_lineage(context, {d.node for d in context.datasets.values()})
+                        if context.db:
+                            context.db.close()
+                        del self.contexts[key]
 
     def fingerprints(self, bundle, environment, captured=None):
         nodes, edges, _ = expand(bundle, tolerant=True)
@@ -221,7 +284,7 @@ class Engine:
                     if p["type"] == "connection"
                 ]
                 try:
-                    values, hidden = self.catalog.capture(references, environment)
+                    values, hidden = self.capture(worktree_id, references, environment)
                     captured.update(values)
                     secrets.extend(hidden)
                 except Problem as error:
@@ -229,7 +292,7 @@ class Engine:
                 if target and node.get("error"):
                     raise Problem(node["error"], 422)
             fingerprints = self.fingerprints(bundle, environment, captured)
-            context = self.context(worktree_id, environment)
+            context = self.context(worktree_id, environment, create=True)
             affected = set(scope)
             while True:
                 extended = affected | {e["target"] for e in edges if e["source"] in affected}
@@ -347,7 +410,8 @@ class Engine:
                             )
                             if reference not in prepared:
                                 try:
-                                    self.catalog.prepare(cursor, {reference: captured[reference]})
+                                    if not self.access:
+                                        self.catalog.prepare(cursor, {reference: captured[reference]})
                                     prepared[reference] = None
                                 except Exception as error:
                                     prepared[reference] = error
@@ -632,7 +696,7 @@ class Engine:
                 for p in node["parsed"]["parameters"]
                 if p["type"] == "connection"
             ]
-            captured, secrets = self.catalog.capture(refs, environment)
+            captured, secrets = self.capture(worktree, refs, environment)
             inputs = {
                 e["targetHandle"]: qi("input_" + e["source"].replace("::", "_") + "_" + e["sourceHandle"])
                 for e in edges
@@ -660,4 +724,5 @@ class Engine:
         for thread in self.threads:
             thread.join()
         for context in self.contexts.values():
-            context.db.close()
+            if context.db:
+                context.db.close()

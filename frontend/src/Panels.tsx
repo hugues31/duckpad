@@ -96,7 +96,7 @@ export function EditorModal({
         <button className="button secondary" onClick={onClose}>
           {t("close")}
         </button>
-        {onSave && (
+        {onSave && !readOnly && (
           <button
             className="button primary"
             disabled={saving}
@@ -200,6 +200,7 @@ export function FormModal({
   );
 }
 export function FileModal({
+  readOnly = false,
   snapshot,
   onSave,
   onClose,
@@ -207,6 +208,7 @@ export function FileModal({
   description,
   initialFiles,
 }: {
+  readOnly?: boolean;
   snapshot: Snapshot;
   onSave: (files: Record<string, string>) => Promise<void>;
   onClose: () => void;
@@ -238,6 +240,7 @@ export function FileModal({
         </nav>
         <Suspense fallback={<p>{t("loading")}</p>}>
           <CodeEditor
+            readOnly={readOnly}
             value={files[selected] || ""}
             onChange={(text) => setFiles({ ...files, [selected]: text })}
             language={selected.endsWith(".sql") ? "sql" : "json"}
@@ -252,7 +255,7 @@ export function FileModal({
         </button>
         <button
           className="button primary"
-          disabled={pending}
+          disabled={readOnly || pending}
           onClick={async () => {
             setPending(true);
             try {
@@ -273,10 +276,12 @@ export function FileModal({
 }
 
 export function HistoryPanel({
+  readOnly = false,
   worktree,
   onDiff,
   onRevision,
 }: {
+  readOnly?: boolean;
   worktree: string;
   onDiff: (commit: string) => void;
   onRevision: (commit: string) => void;
@@ -381,6 +386,7 @@ export function HistoryPanel({
             <button
               className="icon"
               title={t("restoreRevision")}
+              disabled={readOnly}
               onClick={() => onRevision(commit.commit)}
             >
               <GitBranch size={17} />
@@ -741,9 +747,11 @@ export function ConnectionsPanel({
 }
 
 export function DocumentationPanel({
+  readOnly = false,
   snapshot,
   onSave,
 }: {
+  readOnly?: boolean;
   snapshot: Snapshot;
   onSave: (text: string, base: Snapshot) => Promise<void>;
 }) {
@@ -759,6 +767,7 @@ export function DocumentationPanel({
       <h1>{t("projectDocs")}</h1>
       <p className="muted">{t("emptyDocumentation")}</p>
       <textarea
+        readOnly={readOnly}
         className="project-documentation"
         value={text}
         placeholder={t("documentationPlaceholder")}
@@ -767,6 +776,7 @@ export function DocumentationPanel({
       <div className="row gap">
         <button
           className="button primary"
+          disabled={readOnly}
           onClick={async () => {
             try {
               await onSave(text, base);

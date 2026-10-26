@@ -29,6 +29,7 @@ export function ParameterField({
   onBlur,
   connections,
   schemas,
+  worktree,
 }: {
   parameter: Json;
   value: any;
@@ -36,6 +37,7 @@ export function ParameterField({
   onBlur?: () => void;
   connections: Json[];
   schemas?: string[];
+  worktree?: string;
 }) {
   const t = useT();
   const name = parameter.name;
@@ -133,10 +135,13 @@ export function ParameterField({
               if (!file) return;
               const form = new FormData();
               form.append("file", file);
-              const response = await fetch("/api/uploads", {
-                method: "POST",
-                body: form,
-              });
+              const response = await fetch(
+                `/api/worktrees/${worktree}/uploads`,
+                {
+                  method: "POST",
+                  body: form,
+                },
+              );
               const result = await response.json();
               if (response.ok) {
                 onChange(result.path);
@@ -157,6 +162,7 @@ export function ParameterField({
 }
 
 export default function Inspector({
+  readOnly = false,
   node,
   definition,
   snapshot,
@@ -175,6 +181,7 @@ export default function Inspector({
   onEditTemplate,
   onClose,
 }: {
+  readOnly?: boolean;
   node: FlowNode;
   definition: Json;
   snapshot: Snapshot;
@@ -245,7 +252,7 @@ export default function Inspector({
     setDraft(draftRef.current);
   };
   const persist = async () => {
-    if (dirty.current) {
+    if (dirty.current && !readOnly) {
       try {
         await onSave(draftRef.current, base.current);
         dirty.current = false;
@@ -296,7 +303,7 @@ export default function Inspector({
         <button
           className="icon run-node"
           title={t("runNode")}
-          disabled={!!status.active}
+          disabled={readOnly || !!status.active}
           onClick={onRun}
         >
           <Play size={16} />
@@ -321,7 +328,7 @@ export default function Inspector({
       <div className="inspector-body">
         {error && <div className="notice error">{error}</div>}
         {tab === "parameters" ? (
-          <>
+          <fieldset className="readonly-fields" disabled={readOnly}>
             <label className="field">
               <span>{t("nodeLabel")}</span>
               <input
@@ -393,6 +400,7 @@ export default function Inspector({
             {parameters.map((parameter: Json) => (
               <ParameterField
                 key={parameter.name}
+                worktree={snapshot.worktree.id}
                 parameter={parameter}
                 value={draft.params?.[parameter.name] ?? parameter.default}
                 onChange={(value) =>
@@ -429,7 +437,7 @@ export default function Inspector({
                 {t("deleteNode")}
               </button>
             </div>
-          </>
+          </fieldset>
         ) : tab === "sql" ? (
           <>
             <div className="segmented">
@@ -561,6 +569,7 @@ function NodeDocumentation({
         </select>
       )}
       <textarea
+        readOnly={snapshot.role === "reader"}
         className="documentation-editor"
         value={value}
         placeholder={t("documentationPlaceholder")}
@@ -569,7 +578,7 @@ function NodeDocumentation({
       <button
         className="button primary full"
         onClick={save}
-        disabled={kind === "columns" && !column}
+        disabled={snapshot.role === "reader" || (kind === "columns" && !column)}
       >
         {t("save")}
       </button>
