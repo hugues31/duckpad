@@ -249,5 +249,15 @@
   "zoomOut": "Zoom out",
   "fitView": "Fit view",
   "minimap": "Mini map",
-  "unavailableConnection": "Unavailable for this operation"
+  "unavailableConnection": "Unavailable for this operation",
+  "toggleNodes": "Toggle node library",
+  "hideNodes": "Hide node library",
+  "togglePreview": "Toggle data preview",
+  "hidePreview": "Hide data preview",
+  "toggleInspector": "Toggle inspector",
+  "accountMenu": "Account menu",
+  "resizeNodes": "Resize node library",
+  "resizeInspector": "Resize inspector",
+  "resizePreview": "Resize data preview",
+  "resizeHint": "Drag or use arrow keys. Double-click to reset."
 }
