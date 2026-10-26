@@ -92,7 +92,9 @@ test("manage instance accounts, project participants and live reader access", as
   await expect(
     documentation.getByRole("button", { name: "Save changes", exact: true }),
   ).toBeDisabled();
-  await readerPage.getByRole("button", { name: "Project files", exact: true }).click();
+  await readerPage
+    .getByRole("button", { name: "Project files", exact: true })
+    .click();
   const files = readerPage.getByRole("dialog");
   await expect(
     files.getByRole("button", { name: "Save changes", exact: true }),
