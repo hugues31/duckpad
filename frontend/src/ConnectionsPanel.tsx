@@ -1,3 +1,4 @@
+import Select from "./Select";
 import { useState } from "react";
 import { Database, KeyRound, Plus, Settings2 } from "lucide-react";
 import { api, send } from "./api";
@@ -196,7 +197,7 @@ export default function ConnectionsPanel({
               </label>
               <label className="field">
                 <span>{t("connector")}</span>
-                <select
+                <Select
                   value={selected.connector}
                   onChange={(e) =>
                     setSelected({ ...selected, connector: e.target.value })
@@ -207,7 +208,7 @@ export default function ConnectionsPanel({
                       {c.name}
                     </option>
                   ))}
-                </select>
+                </Select>
               </label>
               <div className="tabs">
                 {catalog.environments.map((e: string) => (
@@ -228,7 +229,7 @@ export default function ConnectionsPanel({
                     {p.secret && <KeyRound size={12} />} {p.name}
                   </span>
                   {p.type === "boolean" ? (
-                    <select
+                    <Select
                       value={String(
                         selected.environments?.[env]?.[p.name] ??
                           p.default ??
@@ -240,7 +241,7 @@ export default function ConnectionsPanel({
                     >
                       <option value="true">true</option>
                       <option value="false">false</option>
-                    </select>
+                    </Select>
                   ) : (
                     <input
                       type={
