@@ -45,6 +45,12 @@ A stop request sets a cancellation token and calls `interrupt()` on the active c
 
 Run records are persisted at admission and at each node/status transition, including SQL, timings, sanitized connection snapshots, code definitions and observed write outcomes. On restart, unfinished records become interrupted; no computation or export is replayed. In-memory result tables are not persisted.
 
+### Scheduling decision
+
+The MVP uses the embedded execution service without a scheduler or persistent task queue. A completed comparison with SqliteHuey selected APScheduler 3.x as the preferred future scheduling adapter. Queue persistence does not replace worktree admission, live result contexts or durable run history, and consuming queued work after a restart would require an explicit policy for replaying external writes. Neither scheduling library is a current dependency; the prototype and its report remain in Git history.
+
+Future schedule and webhook handlers must submit worktree, environment, scope and trigger identity through the same execution service. They must capture fresh configuration, keep connections and credentials out of trigger payloads, and reject occupied worktrees without deferring the request. Before enabling automation, define time zones and DST, missed occurrences, rejected-trigger outcomes, webhook authentication and idempotency, and retention policies. Schedules, webhooks, retries and missed-run replay are not enabled in the MVP.
+
 ## Lineage concurrency
 
 Public views contain exactly the query's original columns. Private tables hold stable row identities and, where safe, hidden input witnesses or grouping keys. Deterministic native-equivalence tests compare values, types and multiplicities against DuckDB without instrumentation. Uncovered SQL remains executable; exploration reports limitations explicitly.
