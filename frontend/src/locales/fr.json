@@ -1,11 +1,11 @@
 {
   "workspace": "Espace de travail",
   "resourceMonitor": "Utilisation des ressources",
-  "resourceScope": "Serveur Duckpad · 2 dernières minutes",
+  "resourceScope": "Machine serveur entière · 2 dernières minutes",
   "resourceHistory": "2 dernières minutes",
   "resourcePast": "Il y a 2 min",
   "resourceNow": "Maintenant",
-  "resourceHint": "Actualisation toutes les 2 secondes. CPU et RAM indiquent la part des capacités accessibles consommée par Duckpad, en tenant compte des limites du conteneur si elles sont définies.",
+  "resourceHint": "Actualisation toutes les 2 secondes. Le CPU mesure l’activité de tous les cœurs et applications de la machine serveur. La RAM correspond à la mémoire physique totale moins la mémoire disponible ; les caches récupérables sont considérés comme disponibles.",
   "resourceMemoryAmount": "RAM utilisée / totale",
   "resourceUnavailable": "Mesures indisponibles. Nouvelle tentative…",
   "resourceMemoryUnavailable": "La mesure de la RAM est indisponible.",

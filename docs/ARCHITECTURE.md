@@ -14,7 +14,7 @@ Duckpad has a Python API process serving a compiled React application and isolat
 | `engine.py`, `datasets.py`, `materialize.py` | Admission, immutable execution configuration, DuckDB ownership, cancellation, output publication and invalidation |
 | `lineage.py`, `trace.py`, `sqlast.py` | Lineage requests and their cancellation; SQLGlot normalization and targeted provenance queries over materialized dependencies |
 | `sandbox.py`, `sql_worker.py` | JSON RPC, separate SQL processes, kernel filesystem restrictions and locked DuckDB configuration |
-| `resources.py` | Portable process CPU and memory counters, including visible container limits |
+| `resources.py` | Portable machine-wide CPU and physical memory counters |
 | `example.py` | Reproducible local sample data and documented Northstar project |
 
 The frontend in `frontend/src` mirrors this split: `api.ts` is the only HTTP client, `App.tsx` owns the workspace state, and each page, panel and dialog has its own module.
@@ -54,6 +54,16 @@ A lineage request registers its result generation and dependency nodes. Recalcul
 ## HTTP surface
 
 All `/api` routes except login require a session cookie or bearer session token. Mutation requests reject a mismatched browser Origin. The static login shell is public; project content is authenticated.
+
+The administrator-only resource widget samples machine-wide counters every two
+seconds and retains two minutes of history in the browser. CPU is the change in
+busy time divided by the change in total time across all cores; Linux guest time
+is counted once and I/O wait is excluded from busy time. RAM is physical memory
+minus available memory, so reclaimable caches count as available. Measurements
+cover all applications on the server OS (the guest OS for a VM), independent of
+Duckpad's workers, CPU affinity or container quotas. In containers, the operating
+system counters exposed by the runtime determine visibility. Missing metrics are
+shown as unavailable, and CPU sampling resumes after two valid snapshots.
 
 The main endpoint groups are `/session`, `/workspace`, `/identity`, `/projects`, `/example`, `/worktrees`, `/catalog`, `/environments`, `/runs`, `/conflicts`, `/library`, `/users`, `/password` and `/resources`. Uploads use `/worktrees/{id}/uploads` and are stored under `resources/<project>/`. Request bodies are validated; invalid requests receive a 422 response in the same `{"error", "detail"}` format as other failures. A worktree exposes definition snapshots and saves, branch/merge history, compiled SQL, status, previews, lineage and manual run launch. See the route definitions in `src/duckpad/app.py` for request shapes. APIs use the same services as the interface; there is no second runner or separate editor state.
 
