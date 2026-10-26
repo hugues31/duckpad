@@ -17,3 +17,8 @@ release-notes.md
 .env
 .env.*
 !.env.example
+.DS_Store
+.idea/
+.vscode/
+htmlcov/
+.mypy_cache/
