@@ -10,26 +10,22 @@ import json
 import os
 import platform
 import tempfile
-import time
 import uuid
 from pathlib import Path
 
 import duckdb
 
-from duckpad.catalog import Catalog
-from duckpad.engine import Engine
+from duckpad.builtin_templates import BUILTINS
 from duckpad.lineage import Lineage
-from duckpad.projects import Projects
-from duckpad.store import Store
-from duckpad.templates import BUILTINS
+from duckpad.services import Services
 from duckpad.util import dumps, literal
+
+RUN_TIMEOUT = 600
 
 
 def wait(store, engine, worktree):
     run = engine.launch(worktree, "dev")
-    while store.get("run", run["id"])["status"] in ("preparing", "running", "canceling"):
-        time.sleep(0.02)
-    result = store.get("run", run["id"])
+    result = engine.wait(run["id"], RUN_TIMEOUT)
     assert result["status"] == "success", {
         key: {"status": value["status"], "error": value.get("error")}
         for key, value in result["nodes"].items()
@@ -51,15 +47,6 @@ def node(identity, template, **params):
     return {"id": identity, "template": template, "params": params, "position": {"x": 0, "y": 0}}
 
 
-def services(home):
-    store = Store(home)
-    projects, catalog = Projects(store), Catalog(store)
-    engine = Engine(store, projects, catalog)
-    projects.on_change = engine.invalidate
-    catalog.on_change = engine.invalidate
-    return store, projects, catalog, engine
-
-
 def oracle(home):
     import oracledb
 
@@ -73,7 +60,8 @@ def oracle(home):
     suffix = uuid.uuid4().hex[:8].upper()
     source, destination, native = [f"DP_TEST_{role}_{suffix}" for role in ("SRC", "DST", "NATIVE")]
     created = []
-    store, projects, catalog, engine = services(home)
+    instance = Services.open(home)
+    store, projects, catalog, engine = instance.store, instance.projects, instance.catalog, instance.engine
     try:
         for name in (source, destination, native):
             cursor.execute(f"CREATE TABLE {name} (ID NUMBER(10), AMOUNT NUMBER(10,2))")
@@ -120,7 +108,7 @@ def oracle(home):
         )
         assert explanation["complete"] and explanation["total"] == 1, explanation
         # Compare with the same native COPY SQL in the same context and engine.
-        context, dataset = engine.find_dataset(worktree, "dev", "calculate")
+        context, _dataset = engine.find_dataset(worktree, "dev", "calculate")
         sql = first["nodes"]["write"]["statements"][0]["sql"].replace("$destination", literal(native))
         context.db.execute(sql)
         cursor.execute(f"SELECT ID, AMOUNT FROM {destination} ORDER BY ID")
@@ -164,8 +152,7 @@ def oracle(home):
             ],
         }
     finally:
-        engine.close()
-        store.close()
+        instance.close()
         for table in created:
             cursor.execute(f"DROP TABLE {table} PURGE")
         cursor.close()
@@ -187,7 +174,8 @@ def s3(home):
         aws_secret_access_key="duckpad-test-secret",
         region_name="us-east-1",
     )
-    store, projects, catalog, engine = services(home)
+    instance = Services.open(home)
+    store, projects, catalog, engine = instance.store, instance.projects, instance.catalog, instance.engine
     try:
         client.create_bucket(Bucket="duckpad-acceptance")
         client.put_object(
@@ -279,8 +267,7 @@ def s3(home):
             ],
         }
     finally:
-        engine.close()
-        store.close()
+        instance.close()
         server.stop()
 
 
