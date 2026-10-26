@@ -4,7 +4,7 @@ The MVP uses a small embedded execution service. APScheduler 3.x is the preferre
 
 ## Prototype evidence
 
-Run `uv run python scripts/prototype_jobs.py`. The recorded result is `validation/jobs.json`, using Huey 3.5.3, APScheduler 3.11.3, SQLAlchemy 2.1.6 and DuckDB 2.0.0.
+The recorded result is `validation/jobs.json`, using Huey 3.5.3, APScheduler 3.11.3, SQLAlchemy 2.1.6 and DuckDB 2.0.0. The prototype script was removed once the decision was made; it remains available in the Git history.
 
 | Criterion | SqliteHuey | Embedded service with future APScheduler adapter |
 | --- | --- | --- |
