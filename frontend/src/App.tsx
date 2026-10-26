@@ -73,16 +73,16 @@ function DuckMark({ size = 30 }: { size?: number }) {
       fill="none"
       aria-hidden="true"
     >
-      <rect width="40" height="40" rx="12" fill="#173d36" />
+      <rect width="40" height="40" rx="12" fill="#226bff" />
       <path
         d="M11 22c0-3 3-5 7-5h4v-4a5 5 0 1 1 10 0v8c0 7-6 10-12 10-6 0-10-3-10-8l1-1Z"
-        fill="#e5ebbd"
+        fill="#ffffff"
       />
       <path d="m31 14 6 2-6 3" fill="#e4ad61" />
-      <circle cx="28.5" cy="12.5" r="1.2" fill="#173d36" />
+      <circle cx="28.5" cy="12.5" r="1.2" fill="#226bff" />
       <path
         d="M16 23c2 3 6 3 9 0"
-        stroke="#173d36"
+        stroke="#226bff"
         strokeWidth="1.5"
         strokeLinecap="round"
       />
@@ -497,53 +497,53 @@ function WorkspaceApp({
     );
   return (
     <div className="app-shell">
-      <nav className="rail" aria-label={t("workspace")}>
-        <button
-          className="brand-button"
-          title="Duckpad"
-          onClick={() => setArea("pipelines")}
-        >
-          <DuckMark size={36} />
-        </button>
-        <div className="rail-main">
-          {[
-            ["pipelines", Workflow],
-            ["connections", Database],
-            ["settings", Settings2],
-          ].map(([key, Icon]) => (
-            <button
-              key={key as string}
-              className={`rail-button ${area === key ? "active" : ""}`}
-              title={t(key as string)}
-              aria-label={t(key as string)}
-              onClick={() => setArea(key as string)}
-            >
-              <Icon size={21} />
-            </button>
-          ))}
-        </div>
-        <button
-          className="rail-button"
-          title={t("help")}
-          onClick={() => setModal({ kind: "about" })}
-        >
-          <HelpCircle size={20} />
-        </button>
-        <button
-          className="avatar"
-          title={t("signOut")}
-          onClick={() =>
-            safe(async () => {
-              await api("/logout", send({}));
-              setAuthenticated(false);
-            })
-          }
-        >
-          A
-        </button>
-      </nav>
       <div className="workspace-shell">
         <header className="topbar">
+          <nav className="rail" aria-label={t("workspace")}>
+            <button
+              className="brand-button"
+              title="Duckpad"
+              onClick={() => setArea("pipelines")}
+            >
+              <DuckMark size={30} />
+            </button>
+            <div className="rail-main">
+              {[
+                ["pipelines", Workflow],
+                ["connections", Database],
+                ["settings", Settings2],
+              ].map(([key, Icon]) => (
+                <button
+                  key={key as string}
+                  className={`rail-button ${area === key ? "active" : ""}`}
+                  title={t(key as string)}
+                  aria-label={t(key as string)}
+                  onClick={() => setArea(key as string)}
+                >
+                  <Icon size={21} />
+                </button>
+              ))}
+            </div>
+            <button
+              className="rail-button"
+              title={t("help")}
+              onClick={() => setModal({ kind: "about" })}
+            >
+              <HelpCircle size={20} />
+            </button>
+            <button
+              className="avatar"
+              title={t("signOut")}
+              onClick={() =>
+                safe(async () => {
+                  await api("/logout", send({}));
+                  setAuthenticated(false);
+                })
+              }
+            >
+              A
+            </button>
+          </nav>
           <div className="project-picker">
             <span className="project-symbol">
               <Layers size={18} />
@@ -936,7 +936,7 @@ function WorkspaceApp({
                 className={`flow-layout ${paletteOpen ? "palette-open" : ""} ${node && inspectorOpen ? "inspector-open" : ""} ${node && ports.length && previewOpen ? "preview-open" : ""} ${path.length ? "nested-flow" : ""}`}
                 style={
                   {
-                    "--notice-height": `${40 * (Number(!!snapshot.conflicts.length) + Number(!!snapshot.diagnostics.length) + Number(!!active))}px`,
+                    "--notice-height": `${36 * (Number(!!snapshot.conflicts.length) + Number(!!snapshot.diagnostics.length) + Number(!!active))}px`,
                   } as CSSProperties
                 }
               >

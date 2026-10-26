@@ -548,3 +548,216 @@ test("floating panels remain usable on tablet and phone with higher contrast", a
     await page.locator(".app-shell").boundingBox(),
   );
 });
+
+test("panning, zooming and moving nodes survive release and backend polling", async ({
+  page,
+}) => {
+  await sample(page);
+  const orders = page
+    .locator(".react-flow__node")
+    .filter({ has: page.getByText("Orders", { exact: true }) });
+  await orders.click();
+  const viewport = page.locator(".react-flow__viewport");
+  await page.getByRole("button", { name: "Fit view", exact: true }).click();
+  const origin = await viewport.getAttribute("style");
+  const point = await page.locator(".canvas-safe-area").evaluate((element) => {
+    const rect = element.getBoundingClientRect();
+    for (let y = rect.bottom - 5; y > rect.top; y -= 30) {
+      for (let x = rect.left + 5; x < rect.right - 100; x += 30) {
+        if (
+          document
+            .elementFromPoint(x, y)
+            ?.classList.contains("react-flow__pane")
+        )
+          return { x, y };
+      }
+    }
+    throw new Error("No exposed canvas point found");
+  });
+  await page.mouse.move(point.x, point.y);
+  await page.mouse.down();
+  await page.mouse.move(point.x + 85, point.y - 40, { steps: 12 });
+  const dragged = await viewport.getAttribute("style");
+  expect(dragged).not.toBe(origin);
+  await page.mouse.up();
+  for (let i = 0; i < 2; i++)
+    await page.waitForResponse(
+      (response) => response.url().includes("/status?") && response.ok(),
+    );
+  await expect(viewport).toHaveAttribute("style", dragged!);
+  await expect(page.locator(".inspector")).toBeVisible();
+
+  await page.getByRole("button", { name: "Zoom in", exact: true }).click();
+  await expect(viewport).not.toHaveAttribute("style", dragged!);
+  const zoomed = await viewport.getAttribute("style");
+  await page
+    .getByRole("button", { name: "Toggle data preview", exact: true })
+    .click();
+  await page.waitForResponse(
+    (response) => response.url().includes("/status?") && response.ok(),
+  );
+  await expect(viewport).toHaveAttribute("style", zoomed!);
+  await page
+    .getByRole("button", { name: "Toggle data preview", exact: true })
+    .click();
+  await expect(viewport).toHaveAttribute("style", zoomed!);
+
+  await page.getByRole("button", { name: "Fit view", exact: true }).click();
+  const fitted = await viewport.getAttribute("style");
+  const node = await orders.locator(".node-shape").boundingBox();
+  const before = await orders.getAttribute("style");
+  await page.mouse.move(node!.x + node!.width / 2, node!.y + node!.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(
+    node!.x + node!.width / 2 + 45,
+    node!.y + node!.height / 2 + 25,
+    { steps: 10 },
+  );
+  const moved = await orders.getAttribute("style");
+  expect(moved).not.toBe(before);
+  await page.waitForResponse(
+    (response) => response.url().includes("/status?") && response.ok(),
+  );
+  await expect(orders).toHaveAttribute("style", moved!);
+  const save = page.waitForResponse(
+    (response) =>
+      response.request().method() === "PUT" &&
+      response.url().includes("/worktrees/"),
+  );
+  await page.mouse.up();
+  expect((await save).ok()).toBe(true);
+  for (let i = 0; i < 2; i++)
+    await page.waitForResponse(
+      (response) => response.url().includes("/status?") && response.ok(),
+    );
+  await expect(viewport).toHaveAttribute("style", fitted!);
+  await expect(orders).toHaveAttribute("style", moved!);
+});
+
+test("workspace docks to the edges with square datasets, circular operations and neutral backgrounds", async ({
+  page,
+}) => {
+  await sample(page);
+  await page
+    .locator(".react-flow__node")
+    .filter({ hasText: "Regional revenue" })
+    .click();
+  const viewport = page.viewportSize()!;
+  const header = (await page.locator(".topbar").boundingBox())!;
+  const toolbar = (await page.locator(".flow-toolbar").boundingBox())!;
+  const palette = (await page.locator(".palette").boundingBox())!;
+  const inspector = (await page.locator(".inspector").boundingBox())!;
+  const preview = (await page.locator(".preview-panel").boundingBox())!;
+  expect(header.y).toBe(0);
+  expect(header.x).toBe(0);
+  expect(header.width).toBe(viewport.width);
+  expect(toolbar.y).toBe(header.height);
+  expect(palette.x).toBe(0);
+  expect(palette.y).toBe(toolbar.y + toolbar.height);
+  expect(inspector.y).toBe(palette.y);
+  expect(inspector.x + inspector.width).toBe(viewport.width);
+  expect(preview.x).toBe(palette.width);
+  expect(preview.x + preview.width).toBe(inspector.x);
+  expect(preview.y + preview.height).toBe(viewport.height);
+  for (const panel of [
+    ".topbar",
+    ".flow-toolbar",
+    ".palette",
+    ".inspector",
+    ".preview-panel",
+  ]) {
+    await expect(page.locator(panel)).toHaveCSS("border-radius", "0px");
+  }
+  const shapes = await page.locator(".node-shape").evaluateAll((elements) =>
+    elements.map((element) => {
+      const css = getComputedStyle(element);
+      return {
+        source: element.closest(".source-node") !== null,
+        radius: css.borderRadius,
+        width: css.width,
+        height: css.height,
+      };
+    }),
+  );
+  for (const shape of shapes) {
+    expect(shape.width).toBe(shape.height);
+    expect(shape.radius).toBe(shape.source ? "8px" : "50%");
+  }
+  await expect(page.locator(".app-shell")).toHaveCSS(
+    "background-image",
+    "none",
+  );
+  await expect(page.locator(".react-flow__background")).toHaveCount(0);
+  await page.getByTitle("Dark", { exact: true }).click();
+  await expect(page.locator(".app-shell")).toHaveCSS(
+    "background-color",
+    "rgb(28, 28, 30)",
+  );
+  await expect(page.locator(".app-shell")).toHaveCSS(
+    "background-image",
+    "none",
+  );
+});
+
+test("glass reveals nodes moving behind stationary panel content", async ({
+  page,
+}) => {
+  await sample(page);
+  await page
+    .locator(".react-flow__node")
+    .filter({ hasText: "Regional revenue" })
+    .click();
+  for (const theme of ["light", "dark"]) {
+    if (theme === "dark")
+      await page.getByTitle("Dark", { exact: true }).click();
+    await page.getByRole("button", { name: "Fit view", exact: true }).click();
+    const palette = page.locator(".palette");
+    const text = await palette.innerText();
+    const before = await palette.screenshot({ animations: "disabled" });
+    const source = (await page
+      .locator(".source-node .node-shape")
+      .first()
+      .boundingBox())!;
+    const canvas = (await page.locator(".canvas-safe-area").boundingBox())!;
+    const start = {
+      x: canvas.x + canvas.width - 180,
+      y: canvas.y + canvas.height + 25,
+    };
+    expect(
+      await page.evaluate(
+        ({ x, y }) =>
+          document
+            .elementFromPoint(x, y)
+            ?.classList.contains("react-flow__pane"),
+        start,
+      ),
+    ).toBe(true);
+    await page.mouse.move(start.x, start.y);
+    await page.mouse.down();
+    await page.mouse.move(
+      start.x + 100 - (source.x + source.width / 2),
+      start.y,
+      { steps: 15 },
+    );
+    await page.mouse.up();
+    await page.waitForResponse(
+      (response) => response.url().includes("/status?") && response.ok(),
+    );
+    const after = await palette.screenshot({ animations: "disabled" });
+    expect(await palette.innerText()).toBe(text);
+    // Only the canvas moved: the difference comes from content visible through the glass.
+    expect(after.equals(before)).toBe(false);
+    const covered = (await page
+      .locator(".source-node .node-shape")
+      .first()
+      .boundingBox())!;
+    expect(covered.x).toBeGreaterThan(0);
+    expect(covered.x + covered.width).toBeLessThan(
+      (await palette.boundingBox())!.width,
+    );
+    await page.screenshot({
+      path: `test-results/glass-overlap-${theme}.png`,
+      animations: "disabled",
+    });
+  }
+});

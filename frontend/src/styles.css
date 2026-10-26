@@ -3,50 +3,42 @@
   color: var(--text);
   background: var(--bg);
   font-synthesis: none;
-  --bg: #eaf0f4;
-  --surface: #f9fbfd;
-  --surface-alt: #edf2f6;
-  --border: #73869540;
-  --text: #20343f;
-  --muted: #455b68;
-  --accent: #176954;
-  --accent-hover: #10533f;
-  --accent-soft: #deeee6;
-  --grid: #8b9eac60;
-  --edge: #7c97a9;
-  --glass: #f8fbfbd6;
-  --glass-border: #ffffffd9;
-  --glass-highlight: #ffffffc9;
-  --glass-shadow: 0 12px 36px #23465d12, 0 2px 7px #23465d0a;
-  --wash-green: #a3d7c866;
-  --wash-blue: #a8bee64d;
-  --wash-gold: #ebd9b54d;
-  --shadow: 0 8px 35px #23384212;
-  --minimap-mask: #eaf0f4b3;
+  --bg: #f2f2f4;
+  --surface: #fafafa;
+  --surface-alt: #eaeaee;
+  --border: #71717a40;
+  --text: #16161b;
+  --muted: #191b22;
+  --accent: #1559df;
+  --accent-hover: #1048ba;
+  --accent-soft: #dbe7ff;
+  --edge: #92929e;
+  --glass: #ffffff8c;
+  --glass-border: #71717a40;
+  --glass-highlight: #ffffff80;
+  --glass-shadow: 0 2px 12px #18181b0d;
+  --shadow: 0 4px 16px #18181b14;
+  --minimap-mask: #f2f2f4b3;
   color-scheme: light;
   font-size: 13px;
 }
 :root[data-theme="dark"] {
-  --bg: #101e2a;
-  --surface: #1b2c39;
-  --surface-alt: #223745;
-  --border: #9ab4c33b;
-  --text: #ecf3f8;
-  --muted: #b0c1ce;
-  --accent: #8cdec2;
-  --accent-hover: #b1ebd6;
-  --accent-soft: #24483e;
-  --grid: #91b2c338;
-  --edge: #7d9bac;
-  --glass: #192c3bdc;
-  --glass-border: #b9d4e638;
-  --glass-highlight: #cce5f014;
-  --glass-shadow: 0 16px 44px #00000030, 0 2px 8px #00000026;
-  --wash-green: #2c79674a;
-  --wash-blue: #496da638;
-  --wash-gold: #957d4926;
-  --shadow: 0 8px 35px #0003;
-  --minimap-mask: #101e2ab3;
+  --bg: #1c1c1e;
+  --surface: #29292c;
+  --surface-alt: #343438;
+  --border: #a1a1aa40;
+  --text: #fafafa;
+  --muted: #f0f0f3;
+  --accent: #63a5ff;
+  --accent-hover: #90bfff;
+  --accent-soft: #233c61;
+  --edge: #92929e;
+  --glass: #1c1c1ea6;
+  --glass-border: #a1a1aa40;
+  --glass-highlight: #ffffff0d;
+  --glass-shadow: 0 2px 12px #0000001a;
+  --shadow: 0 4px 16px #00000030;
+  --minimap-mask: #1c1c1eb3;
   color-scheme: dark;
 }
 * {
@@ -195,13 +187,13 @@ small {
   background: var(--accent);
   color: white;
   border: 1px solid transparent;
-  box-shadow: 0 2px 3px #173d3610;
+  box-shadow: 0 2px 3px #18181b10;
 }
 .button.primary:hover {
   background: var(--accent-hover);
 }
 [data-theme="dark"] .button.primary {
-  color: #102c24;
+  color: #081a33;
 }
 .button.secondary {
   border: 1px solid var(--border);
@@ -356,44 +348,36 @@ small {
   color: var(--accent);
 }
 .app-shell {
-  --rail-space: 88px;
+  --menu-height: 54px;
+  --toolbar-height: 42px;
   display: flex;
   height: 100dvh;
   overflow: hidden;
   position: relative;
   isolation: isolate;
-  background:
-    radial-gradient(ellipse at 15% 25%, var(--wash-green), transparent 55%),
-    radial-gradient(ellipse at 85% 70%, var(--wash-blue), transparent 55%),
-    radial-gradient(ellipse at 45% 100%, var(--wash-gold), transparent 50%),
-    var(--bg);
+  background: var(--bg);
 }
 .rail {
-  position: absolute;
-  inset: 14px auto 14px 14px;
-  z-index: 40;
-  width: 60px;
   display: flex;
-  flex-direction: column;
   align-items: center;
-  padding: 15px 0;
-  gap: 14px;
-  border-radius: 22px;
+  gap: 5px;
+  flex-shrink: 0;
+  padding-right: 12px;
+  border-right: 1px solid var(--border);
 }
 .brand-button {
   padding: 0;
-  margin-bottom: 28px;
+  display: flex;
+  margin-right: 8px;
 }
 .rail-main {
   display: flex;
-  flex: 1;
-  flex-direction: column;
-  gap: 12px;
+  gap: 3px;
 }
 .rail-button {
-  width: 40px;
-  height: 40px;
-  border-radius: 9px;
+  width: 32px;
+  height: 32px;
+  border-radius: 7px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -407,12 +391,12 @@ small {
   background: var(--surface-alt);
 }
 .avatar {
-  width: 30px;
-  height: 30px;
+  width: 28px;
+  height: 28px;
   border: 1px solid var(--border);
   border-radius: 50%;
-  background: #e8e5d8;
-  color: #716d5c;
+  background: var(--surface-alt);
+  color: var(--text);
   font-weight: 600;
 }
 .workspace-shell {
@@ -420,35 +404,26 @@ small {
   flex-direction: column;
   flex: 1;
   min-width: 0;
-  padding: 14px 16px 16px var(--rail-space);
 }
 .topbar {
   position: relative;
   z-index: 30;
-  height: 64px;
+  height: var(--menu-height);
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 0 20px;
-  border-radius: 20px;
+  padding: 0 12px;
   flex-shrink: 0;
-  gap: 12px;
+  gap: 16px;
 }
 .project-picker {
   display: flex;
   align-items: center;
-  gap: 12px;
-  min-width: 200px;
+  gap: 8px;
+  min-width: 0;
+  margin-right: auto;
 }
 .project-symbol {
-  background: var(--surface-alt);
-  width: 35px;
-  height: 35px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 8px;
-  color: var(--muted);
+  display: none;
 }
 .project-picker > div {
   display: flex;
@@ -465,8 +440,7 @@ small {
   letter-spacing: -0.015em;
 }
 .project-picker .eyebrow {
-  font-size: 9px;
-  letter-spacing: 0.09em;
+  display: none;
 }
 .topbar-right {
   display: flex;
@@ -508,7 +482,7 @@ small {
 .env-dot {
   height: 6px;
   width: 6px;
-  background: #77ad93;
+  background: var(--accent);
   border-radius: 50%;
 }
 .env-dot.prod {
@@ -526,15 +500,13 @@ small {
 .flow-toolbar {
   position: relative;
   z-index: 30;
-  height: 52px;
-  margin-top: 10px;
-  padding: 0 10px;
+  height: var(--toolbar-height);
+  padding: 0 12px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  border-radius: 17px;
   flex-shrink: 0;
-  gap: 12px;
+  gap: 10px;
 }
 .tabs {
   display: flex;
@@ -564,13 +536,15 @@ small {
   margin-right: 8px;
 }
 .flow-layout {
-  --palette-width: 212px;
-  --inspector-width: 330px;
-  --stage-top: calc(156px + var(--notice-height, 0px));
-  --canvas-left: var(--rail-space);
-  --canvas-right: 16px;
-  --canvas-bottom: 82px;
-  --preview-height: clamp(230px, 31vh, 320px);
+  --palette-width: 208px;
+  --inspector-width: 320px;
+  --stage-top: calc(
+    var(--menu-height) + var(--toolbar-height) + var(--notice-height, 0px)
+  );
+  --canvas-left: 0px;
+  --canvas-right: 0px;
+  --canvas-bottom: 26px;
+  --preview-height: clamp(200px, 28vh, 280px);
   position: absolute;
   inset: 0;
   min-height: 0;
@@ -580,12 +554,11 @@ small {
   position: absolute;
   z-index: 20;
   top: var(--stage-top);
-  bottom: 16px;
-  left: var(--rail-space);
+  bottom: 0;
+  left: 0;
   width: var(--palette-width);
   display: flex;
   flex-direction: column;
-  border-radius: 20px;
   overflow: hidden;
 }
 .palette-title {
@@ -717,14 +690,13 @@ small {
   top: var(--stage-top);
   left: var(--canvas-left);
   right: var(--canvas-right);
-  min-height: 44px;
+  height: 38px;
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 10px;
+  padding: 3px 10px;
   font-size: 11px;
   color: var(--muted);
-  border-radius: 15px;
 }
 .canvas-breadcrumb button {
   display: flex;
@@ -755,18 +727,17 @@ small {
 .canvas-footer {
   position: absolute;
   z-index: 10;
-  bottom: 16px;
+  bottom: 0;
   left: var(--canvas-left);
   right: var(--canvas-right);
-  min-height: 38px;
+  height: 26px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
   font-size: 10px;
   color: var(--muted);
-  padding: 8px 14px;
-  border-radius: 13px;
+  padding: 4px 12px;
 }
 .canvas-footer span {
   display: flex;
@@ -776,16 +747,15 @@ small {
 .component-notice {
   position: absolute;
   z-index: 15;
-  top: calc(var(--stage-top) + 54px);
+  top: calc(var(--stage-top) + 38px);
   left: var(--canvas-left);
   right: var(--canvas-right);
   font-size: 11px;
   color: var(--text);
-  padding: 9px 14px;
+  padding: 8px 12px;
   display: flex;
   justify-content: space-between;
   gap: 12px;
-  border-radius: 12px;
 }
 .component-notice button {
   color: inherit;
@@ -810,13 +780,13 @@ small {
   font-size: 12px;
 }
 .react-flow__controls.react-flow__panel {
-  left: var(--canvas-left);
-  bottom: calc(var(--canvas-bottom) - 22px);
+  left: calc(var(--canvas-left) + 12px);
+  bottom: calc(var(--canvas-bottom) + 12px);
   margin: 0;
   display: flex;
   flex-direction: row;
-  border-radius: 14px;
-  padding: 4px;
+  border-radius: 8px;
+  padding: 2px;
   overflow: hidden;
 }
 .react-flow__controls-button {
@@ -832,69 +802,66 @@ small {
   background: var(--surface-alt);
 }
 .react-flow__minimap.react-flow__panel {
-  right: var(--canvas-right);
-  bottom: calc(var(--canvas-bottom) - 22px);
+  right: calc(var(--canvas-right) + 12px);
+  bottom: calc(var(--canvas-bottom) + 12px);
   margin: 0;
-  border-radius: 14px;
+  border-radius: 8px;
   overflow: hidden;
-  width: 130px;
-  height: 85px;
+  width: 110px;
+  height: 70px;
 }
 .react-flow__minimap svg {
-  width: 130px;
-  height: 85px;
+  width: 110px;
+  height: 70px;
 }
 .pipeline-node {
-  width: 178px;
-  min-height: 124px;
+  width: 150px;
   position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 16px 12px 14px;
   color: var(--text);
-  border: 1px solid var(--border);
-  border-radius: 20px;
-  background: var(--surface);
-  box-shadow:
-    0 6px 18px #20343f0d,
-    inset 0 1px 0 var(--glass-highlight);
 }
 .node-shape {
-  width: 44px;
-  height: 44px;
-  border-radius: 14px;
-  background: var(--surface-alt);
-  border: 1px solid var(--border);
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
+  background: var(--surface);
+  border: 1.5px solid var(--edge);
+  box-shadow: var(--shadow);
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--muted);
+  color: var(--accent);
   position: relative;
 }
 .source-node .node-shape {
-  border-color: #549d7d55;
-  color: var(--accent);
-  background: var(--accent-soft);
+  border-radius: 8px;
+  border-color: var(--accent);
+  color: light-dark(#1559df, #f2f6ff);
+  background: light-dark(#c0d6ff, #245bb8);
 }
 .pipeline-node.component .node-shape {
-  border-color: #9481c466;
+  border-color: #9481c4;
   color: light-dark(#6b589c, #d0bcff);
-  background: light-dark(#ede8f6, #3b3352);
+  background: var(--surface);
 }
 .pipeline-node.export .node-shape {
-  border-color: #ac853d66;
-  color: light-dark(#886025, #f0cf92);
-  background: light-dark(#f5edde, #453a28);
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--surface);
 }
 .pipeline-node.is-selected .node-shape {
   border-color: var(--accent);
+  box-shadow:
+    0 0 0 4px color-mix(in srgb, var(--accent) 24%, transparent),
+    var(--shadow);
 }
 .node-title {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 650;
   text-align: center;
-  max-width: 150px;
+  max-width: 170px;
   margin-top: 12px;
   white-space: nowrap;
   overflow: hidden;
@@ -921,7 +888,7 @@ small {
 }
 .node-status.valid,
 .node-status.success {
-  background: #5c9f85;
+  background: var(--accent);
   color: white;
 }
 .node-status.stale {
@@ -977,13 +944,12 @@ small {
   position: absolute;
   z-index: 20;
   top: var(--stage-top);
-  bottom: 16px;
-  right: 16px;
+  bottom: 0;
+  right: 0;
   width: var(--inspector-width);
   display: flex;
   flex-direction: column;
   min-height: 0;
-  border-radius: 20px;
   overflow: hidden;
 }
 .inspector-title {
@@ -1043,8 +1009,8 @@ small {
   background: var(--accent-soft);
 }
 .inspector-tabs {
-  padding: 0 17px;
-  gap: 17px;
+  padding: 0 12px;
+  gap: 10px;
   border-bottom: 1px solid var(--border);
 }
 .inspector-tabs button {
@@ -1144,12 +1110,11 @@ small {
   z-index: 20;
   left: var(--canvas-left);
   right: var(--canvas-right);
-  bottom: 16px;
+  bottom: 0;
   height: var(--preview-height);
   min-height: 180px;
   display: flex;
   flex-direction: column;
-  border-radius: 20px;
   overflow: hidden;
 }
 .preview-header {
@@ -1498,7 +1463,7 @@ small {
 .progress-track {
   width: 100px;
   height: 3px;
-  background: #277b6820;
+  background: var(--accent-soft);
   border-radius: 2px;
   margin-left: auto;
 }
@@ -1747,7 +1712,7 @@ small {
   justify-content: center;
   text-align: center;
   position: relative;
-  background: radial-gradient(ellipse at 50% 35%, #c9dfd326, transparent 55%);
+  background: var(--bg);
 }
 .welcome-art {
   width: 270px;
@@ -1953,7 +1918,7 @@ small {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  background: radial-gradient(ellipse at 50% 35%, #d2e2d754, transparent 65%);
+  background: var(--bg);
 }
 .login-preferences {
   position: absolute;
@@ -2039,8 +2004,7 @@ small {
   min-height: 90px;
 }
 
-/* Floating surfaces keep the canvas visible through the workspace chrome. */
-.rail,
+/* Translucent surfaces sit directly over the full workspace canvas. */
 .topbar,
 .flow-toolbar,
 .palette,
@@ -2059,8 +2023,40 @@ small {
   box-shadow:
     var(--glass-shadow),
     inset 0 1px 0 var(--glass-highlight);
-  -webkit-backdrop-filter: blur(22px) saturate(140%);
-  backdrop-filter: blur(22px) saturate(140%);
+  -webkit-backdrop-filter: blur(5px) saturate(160%);
+  backdrop-filter: blur(5px) saturate(160%);
+}
+.topbar,
+.flow-toolbar,
+.palette,
+.inspector,
+.preview-panel,
+.canvas-breadcrumb,
+.canvas-footer,
+.component-notice {
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+.topbar,
+.flow-toolbar,
+.canvas-breadcrumb,
+.component-notice {
+  border-bottom: 1px solid var(--border);
+}
+.palette {
+  border-right: 1px solid var(--border);
+}
+.inspector {
+  border-left: 1px solid var(--border);
+}
+.preview-panel,
+.canvas-footer {
+  border-top: 1px solid var(--border);
+}
+.button {
+  border-radius: 7px;
+  padding: 8px 12px;
 }
 [hidden] {
   display: none !important;
@@ -2069,25 +2065,25 @@ small {
   display: contents;
 }
 .palette-open {
-  --canvas-left: calc(var(--rail-space) + var(--palette-width) + 16px);
+  --canvas-left: var(--palette-width);
 }
 .inspector-open {
-  --canvas-right: calc(var(--inspector-width) + 32px);
+  --canvas-right: var(--inspector-width);
 }
 .preview-open {
-  --canvas-bottom: calc(var(--preview-height) + 44px);
+  --canvas-bottom: var(--preview-height);
 }
 .canvas-safe-area {
   position: absolute;
-  top: calc(var(--stage-top) + 64px);
-  left: calc(var(--canvas-left) + 24px);
-  right: calc(var(--canvas-right) + 24px);
-  bottom: calc(var(--canvas-bottom) + 76px);
+  top: calc(var(--stage-top) + 50px);
+  left: calc(var(--canvas-left) + 20px);
+  right: calc(var(--canvas-right) + 20px);
+  bottom: calc(var(--canvas-bottom) + 90px);
   pointer-events: none;
   visibility: hidden;
 }
 .nested-flow .canvas-safe-area {
-  top: calc(var(--stage-top) + 108px);
+  top: calc(var(--stage-top) + 90px);
 }
 .canvas-empty {
   left: var(--canvas-left);
@@ -2114,7 +2110,7 @@ small {
   font-size: 11px;
 }
 .palette-bottom {
-  background: var(--glass-highlight);
+  background: transparent;
 }
 .palette-icon,
 .palette-icon.sources,
@@ -2143,20 +2139,16 @@ option {
   color: var(--text);
 }
 .main-tabs {
-  gap: 3px;
-  padding: 4px;
-  border-radius: 12px;
-  background: var(--surface-alt);
+  gap: 5px;
 }
 .main-tabs button {
   border: 0;
-  padding: 8px 14px;
-  border-radius: 9px;
+  padding: 7px 12px;
+  border-radius: 6px;
 }
 .main-tabs button.active {
-  background: var(--surface);
-  color: var(--text);
-  box-shadow: 0 2px 5px #0000000c;
+  background: var(--accent-soft);
+  color: var(--accent);
 }
 .canvas-breadcrumb button {
   font-size: 11px;
@@ -2177,23 +2169,20 @@ option {
 .canvas-breadcrumb .group-button {
   margin-left: 4px;
 }
-.pipeline-node.is-selected {
-  border-color: var(--accent);
-  box-shadow:
-    0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent),
-    var(--shadow);
-}
-.pipeline-node:hover {
+.pipeline-node:hover .node-shape {
   border-color: var(--accent);
 }
 .node-subtitle {
   font-size: 11px;
 }
-.inspector-tabs button,
 .inspector-body input,
 .inspector-body select,
 .inspector-body textarea {
   font-size: 12px;
+}
+.inspector-tabs button {
+  font-size: 11px;
+  gap: 5px;
 }
 .inspector-title {
   height: 52px;
@@ -2210,7 +2199,7 @@ option {
   background: var(--surface-alt);
 }
 .data-scroll {
-  background: color-mix(in srgb, var(--surface) 70%, transparent);
+  background: color-mix(in srgb, var(--surface) 25%, transparent);
 }
 .cell,
 .data-table th button {
@@ -2244,8 +2233,8 @@ option {
   position: relative;
   z-index: 35;
   min-height: 36px;
-  border-radius: 12px;
-  margin-top: 4px;
+  border-radius: 0;
+  margin-top: 0;
 }
 .banner.warning {
   background: var(--surface);
@@ -2272,8 +2261,8 @@ option {
   color: light-dark(#79551d, #efcc8d);
 }
 .workspace-shell > .full-panel {
-  margin-top: 16px;
-  border-radius: 20px;
+  margin-top: 0;
+  border-radius: 0;
   background: var(--glass);
 }
 .modal {
@@ -2283,10 +2272,7 @@ option {
   background: #10233270;
 }
 .login-page {
-  background:
-    radial-gradient(ellipse at 25% 25%, var(--wash-green), transparent 60%),
-    radial-gradient(ellipse at 80% 75%, var(--wash-blue), transparent 60%),
-    var(--bg);
+  background: var(--bg);
 }
 .login-card {
   border-radius: 28px;
@@ -2302,26 +2288,26 @@ option {
 }
 @media (min-width: 1700px) {
   .flow-layout {
-    --palette-width: 230px;
-    --inspector-width: 360px;
+    --palette-width: 224px;
+    --inspector-width: 350px;
   }
 }
 @media (max-width: 1200px) {
   .flow-layout {
-    --palette-width: 190px;
-    --inspector-width: 300px;
+    --palette-width: 180px;
+    --inspector-width: 290px;
   }
   .project-picker select {
     max-width: 230px;
   }
   .topbar-right {
-    gap: 8px;
+    gap: 7px;
+  }
+  .branch-picker select {
+    max-width: 120px;
   }
   .save-status {
     display: none;
-  }
-  .main-tabs button {
-    padding: 8px 10px;
   }
   .canvas-footer span:last-child {
     display: none;
@@ -2339,163 +2325,139 @@ option {
   .preview-empty .button {
     margin-left: 0;
   }
+  .palette-item {
+    font-size: 11px;
+  }
 }
 @media (max-width: 1099px) {
-  .palette-open {
-    --canvas-left: var(--rail-space);
-  }
-  .palette {
-    z-index: 25;
-    top: calc(var(--stage-top) + 54px);
-    width: 230px;
-  }
-  .preview-panel {
-    left: var(--rail-space);
-    right: 16px;
-  }
-  .inspector {
-    top: calc(var(--stage-top) + 54px);
-    bottom: calc(var(--preview-height) + 32px);
-  }
-  .flow-layout:not(.preview-open) .inspector {
-    bottom: 16px;
-  }
-  .inspector-open .canvas-breadcrumb {
-    right: 16px;
-  }
-  .canvas-safe-area {
-    top: calc(var(--stage-top) + 64px);
-  }
-  .nested-flow .canvas-safe-area {
-    top: calc(var(--stage-top) + 108px);
-  }
-  .preview-open .palette {
-    bottom: calc(var(--preview-height) + 32px);
-  }
-  .branch-picker select {
-    max-width: 105px;
-  }
-}
-@media (max-width: 700px) {
-  .app-shell {
-    --rail-space: 12px;
-  }
-  .rail {
-    inset: auto 12px 12px;
-    height: 54px;
-    width: auto;
-    flex-direction: row;
-    padding: 6px 12px;
-    border-radius: 18px;
-  }
-  .brand-button {
-    margin: 0 8px 0 0;
-  }
-  .rail-main {
-    flex-direction: row;
-    gap: 6px;
-  }
-  .workspace-shell {
-    padding: 12px 12px 78px;
-  }
   .topbar {
-    height: 98px;
-    flex-wrap: wrap;
-    padding: 12px;
-    gap: 6px;
-    border-radius: 18px;
-  }
-  .topbar-right {
-    justify-content: flex-end;
-    width: 100%;
     gap: 10px;
   }
-  .project-picker {
-    min-width: 0;
+  .project-picker select {
+    max-width: 200px;
   }
-  .project-picker .eyebrow,
-  .project-symbol,
+  .palette-open {
+    --canvas-left: 0px;
+  }
+  .palette {
+    top: calc(var(--stage-top) + 38px);
+    width: 208px;
+    z-index: 25;
+  }
+  .preview-panel {
+    left: 0;
+    right: 0;
+  }
+  .inspector {
+    top: calc(var(--stage-top) + 38px);
+  }
+  .preview-open .inspector,
+  .preview-open .palette {
+    bottom: var(--preview-height);
+  }
+  .canvas-breadcrumb {
+    right: 0;
+  }
+  .branch-picker select {
+    max-width: 90px;
+  }
+}
+@media (max-width: 800px) {
+  .app-shell {
+    --menu-height: 90px;
+  }
+  .topbar {
+    flex-wrap: wrap;
+    gap: 4px 12px;
+    padding: 6px 10px;
+  }
+  .rail {
+    border-right: 0;
+    padding-right: 0;
+  }
+  .topbar-right {
+    width: 100%;
+    justify-content: flex-end;
+  }
+  .project-picker {
+    margin-right: 0;
+    margin-left: auto;
+  }
+  .project-picker select {
+    max-width: 210px;
+    font-size: 12px;
+  }
   .header-divider {
     display: none;
   }
+}
+@media (max-width: 600px) {
+  .app-shell {
+    --menu-height: 120px;
+    --toolbar-height: 78px;
+  }
+  .topbar {
+    gap: 3px;
+  }
+  .rail {
+    width: 100%;
+  }
+  .rail-main {
+    flex: 1;
+  }
+  .project-picker {
+    margin-left: 0;
+  }
   .project-picker select {
-    max-width: 230px;
+    max-width: 295px;
   }
   .flow-toolbar {
-    height: auto;
-    min-height: 52px;
     flex-wrap: wrap;
-    padding: 8px;
-    gap: 8px;
+    padding: 6px 10px;
+    gap: 3px;
   }
   .flow-toolbar > .row {
     margin-left: auto;
   }
   .main-tabs {
-    flex: 1;
+    width: 100%;
     justify-content: space-between;
   }
   .main-tabs button {
-    padding: 7px;
     font-size: 11px;
-  }
-  .main-tabs button svg {
-    display: none;
+    padding: 6px 9px;
   }
   .flow-layout {
-    --stage-top: calc(234px + var(--notice-height, 0px));
-    --canvas-right: 12px;
-    --canvas-bottom: 144px;
-    --preview-height: 230px;
+    --preview-height: 220px;
   }
   .inspector-open {
-    --canvas-right: 12px;
+    --canvas-right: 0px;
   }
-  .preview-open {
-    --canvas-bottom: calc(var(--preview-height) + 106px);
-  }
-  .preview-panel {
-    right: 12px;
-    bottom: 78px;
-  }
-  .inspector,
-  .flow-layout:not(.preview-open) .inspector {
-    top: calc(var(--stage-top) + 54px);
-    right: 12px;
-    bottom: 78px;
-    width: min(330px, calc(100% - 24px));
+  .inspector {
+    width: min(320px, 100%);
     z-index: 26;
   }
   .preview-open .inspector {
-    bottom: 78px;
-  }
-  .palette,
-  .preview-open .palette {
-    bottom: 78px;
-  }
-  .inspector-open .canvas-breadcrumb {
-    right: 12px;
+    bottom: 0;
   }
   .canvas-breadcrumb {
-    gap: 5px;
+    gap: 4px;
     overflow-x: auto;
+    padding: 3px 8px;
   }
   .canvas-breadcrumb > button:not(.icon):not(.group-button) {
-    max-width: 115px;
+    max-width: 125px;
   }
   .canvas-breadcrumb .group-button {
     font-size: 0;
     padding: 7px;
     flex-shrink: 0;
   }
-  .canvas-footer {
-    bottom: 78px;
-  }
   .react-flow__minimap.react-flow__panel {
     display: none;
   }
   .canvas-safe-area {
-    bottom: calc(var(--canvas-bottom) + 36px);
+    bottom: calc(var(--canvas-bottom) + 60px);
   }
   .component-notice {
     font-size: 10px;
