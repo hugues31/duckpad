@@ -254,5 +254,10 @@
   "hideNodes": "Masquer les nœuds",
   "togglePreview": "Afficher ou masquer les données",
   "hidePreview": "Masquer les données",
-  "toggleInspector": "Afficher ou masquer l’inspecteur"
+  "toggleInspector": "Afficher ou masquer l’inspecteur",
+  "accountMenu": "Menu du compte",
+  "resizeNodes": "Redimensionner la bibliothèque de nœuds",
+  "resizeInspector": "Redimensionner l’inspecteur",
+  "resizePreview": "Redimensionner l’aperçu des données",
+  "resizeHint": "Glissez ou utilisez les flèches du clavier. Double-cliquez pour réinitialiser."
 }

@@ -11,6 +11,10 @@ async function signIn(page: Page) {
     page.getByRole("navigation", { name: "Workspace", exact: true }),
   ).toBeVisible();
 }
+async function choosePreference(page: Page, name: string) {
+  await page.locator(".account .avatar").click();
+  await page.getByRole("menuitemradio", { name, exact: true }).click();
+}
 async function sample(page: Page) {
   await signIn(page);
   const workspace = await (await page.request.get("/api/workspace")).json();
@@ -114,11 +118,11 @@ test("theme and language persist without a project commit and environments have 
   const before = await (
     await page.request.get("/api/worktrees/" + worktree)
   ).json();
-  await page.getByTitle("Language", { exact: true }).click();
+  await choosePreference(page, "French");
   await expect(
     page.getByRole("button", { name: fr.run, exact: true }),
   ).toBeVisible();
-  await page.getByTitle(fr.dark, { exact: true }).click();
+  await choosePreference(page, fr.dark);
   await page.reload();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   await expect(page.locator("html")).toHaveAttribute("lang", "fr");
@@ -132,8 +136,8 @@ test("theme and language persist without a project commit and environments have 
     .filter({ has: page.getByText("Orders", { exact: true }) })
     .click();
   await expect(page.getByText(fr.noResult, { exact: true })).toBeVisible();
-  await page.getByTitle(fr.language, { exact: true }).click();
-  await page.getByTitle("Light", { exact: true }).click();
+  await choosePreference(page, fr.english);
+  await choosePreference(page, "Light");
   await run(page);
   await expect(page.locator(".data-table tbody tr")).toHaveCount(100);
 });
@@ -409,8 +413,7 @@ test("glass panels overlay the full canvas and fitting keeps nodes reachable", a
   expect(await canvas.boundingBox()).toEqual(shell);
 
   for (const theme of ["light", "dark"]) {
-    if (theme === "dark")
-      await page.getByTitle("Dark", { exact: true }).click();
+    if (theme === "dark") await choosePreference(page, "Dark");
     const glass = await page.locator(".palette").evaluate((element) => {
       const style = getComputedStyle(element);
       return { background: style.backgroundColor, blur: style.backdropFilter };
@@ -688,7 +691,7 @@ test("workspace docks to the edges with square datasets, circular operations and
     "none",
   );
   await expect(page.locator(".react-flow__background")).toHaveCount(0);
-  await page.getByTitle("Dark", { exact: true }).click();
+  await choosePreference(page, "Dark");
   await expect(page.locator(".app-shell")).toHaveCSS(
     "background-color",
     "rgb(28, 28, 30)",
@@ -708,8 +711,7 @@ test("glass reveals nodes moving behind stationary panel content", async ({
     .filter({ hasText: "Regional revenue" })
     .click();
   for (const theme of ["light", "dark"]) {
-    if (theme === "dark")
-      await page.getByTitle("Dark", { exact: true }).click();
+    if (theme === "dark") await choosePreference(page, "Dark");
     await page.getByRole("button", { name: "Fit view", exact: true }).click();
     const palette = page.locator(".palette");
     const text = await palette.innerText();
@@ -760,4 +762,233 @@ test("glass reveals nodes moving behind stationary panel content", async ({
       animations: "disabled",
     });
   }
+});
+
+test("account menu owns preferences and signs out only on an explicit action", async ({
+  page,
+}) => {
+  await sample(page);
+  const avatar = page.getByRole("button", {
+    name: "Account menu",
+    exact: true,
+  });
+  const box = (await avatar.boundingBox())!;
+  expect(box.x + box.width).toBeGreaterThan(page.viewportSize()!.width - 20);
+  await expect(
+    page.locator(".topbar").getByTitle("Settings", { exact: true }),
+  ).toHaveCount(0);
+  await expect(page.locator(".topbar .language-button")).toHaveCount(0);
+  await expect(
+    page.locator(".topbar").getByTitle("Dark", { exact: true }),
+  ).toHaveCount(0);
+  let logouts = 0;
+  page.on("request", (request) => {
+    if (request.url().endsWith("/api/logout")) logouts++;
+  });
+  await avatar.focus();
+  await page.keyboard.press("ArrowDown");
+  await expect(
+    page.getByRole("menuitemradio", { name: "English", exact: true }),
+  ).toBeFocused();
+  await page.keyboard.press("End");
+  await expect(
+    page.getByRole("menuitem", { name: "Sign out", exact: true }),
+  ).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(avatar).toBeFocused();
+  await expect(page.getByRole("menu")).toHaveCount(0);
+  await avatar.press("ArrowDown");
+  await page.keyboard.press("Tab");
+  await expect(page.getByRole("menu")).toHaveCount(0);
+  await expect(avatar).not.toBeFocused();
+  await avatar.click();
+  await page.locator(".palette-title").click();
+  await expect(page.getByRole("menu")).toHaveCount(0);
+  expect(logouts).toBe(0);
+  await avatar.click();
+  await page.getByRole("menuitem", { name: "Settings", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "Settings", exact: true }),
+  ).toBeVisible();
+  await avatar.click();
+  await page.getByRole("menuitem", { name: "Sign out", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "Sign in", exact: true }),
+  ).toBeVisible();
+  expect(logouts).toBe(1);
+});
+
+test("three panel dividers resize, persist and preserve manual canvas navigation", async ({
+  page,
+}) => {
+  await sample(page);
+  const select = () =>
+    page
+      .locator(".react-flow__node")
+      .filter({ hasText: "Regional revenue" })
+      .click();
+  await select();
+  const worktree = await page.evaluate(() =>
+    localStorage.getItem("duckpad-worktree"),
+  );
+  const before = await (
+    await page.request.get("/api/worktrees/" + worktree)
+  ).json();
+  await page.getByRole("button", { name: "Zoom in", exact: true }).click();
+  const viewport = page.locator(".react-flow__viewport");
+  const camera = await viewport.getAttribute("style");
+  for (const [label, selector, dx, dy] of [
+    ["Resize node library", ".palette", 70, 0],
+    ["Resize inspector", ".inspector", -90, 0],
+    ["Resize data preview", ".preview-panel", 0, -110],
+  ] as const) {
+    const divider = page.getByRole("separator", { name: label });
+    const start = (await divider.boundingBox())!;
+    const panel = page.locator(selector);
+    const previous = (await panel.boundingBox())!;
+    await page.mouse.move(
+      start.x + start.width / 2,
+      start.y + start.height / 2,
+    );
+    await page.mouse.down();
+    await page.mouse.move(
+      start.x + start.width / 2 + dx,
+      start.y + start.height / 2 + dy,
+      { steps: 10 },
+    );
+    await page.mouse.up();
+    const next = (await panel.boundingBox())!;
+    expect(
+      dy ? next.height - previous.height : next.width - previous.width,
+    ).toBeCloseTo(Math.abs(dx || dy), 0);
+    await expect(viewport).toHaveAttribute("style", camera!);
+  }
+  const dimensions = await page.evaluate(() =>
+    JSON.parse(localStorage.getItem("duckpad-panel-sizes")!),
+  );
+  await page.reload();
+  await select();
+  expect((await page.locator(".palette").boundingBox())!.width).toBe(
+    dimensions.palette,
+  );
+  expect((await page.locator(".inspector").boundingBox())!.width).toBe(
+    dimensions.inspector,
+  );
+  expect(
+    (await page.locator(".preview-panel").boundingBox())!.height,
+  ).toBeCloseTo(dimensions.preview, 0);
+  const right = page.getByRole("separator", {
+    name: "Resize inspector",
+    exact: true,
+  });
+  await right.focus();
+  await page.keyboard.press("ArrowLeft");
+  expect((await page.locator(".inspector").boundingBox())!.width).toBe(
+    dimensions.inspector + 16,
+  );
+  await page.keyboard.press("Home");
+  await expect(right).toHaveAttribute("aria-valuenow", "260");
+  await page.keyboard.press("End");
+  expect(Number(await right.getAttribute("aria-valuenow"))).toBe(
+    Number(await right.getAttribute("aria-valuemax")),
+  );
+  const after = await (
+    await page.request.get("/api/worktrees/" + worktree)
+  ).json();
+  expect(after.commit).toBe(before.commit);
+  await page.setViewportSize({ width: 1100, height: 800 });
+  await expect
+    .poll(
+      async () =>
+        (await page.locator(".canvas-safe-area").boundingBox())!.width,
+    )
+    .toBeGreaterThanOrEqual(320);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect
+    .poll(() => page.evaluate(() => document.documentElement.scrollWidth))
+    .toBe(390);
+  await expect
+    .poll(async () => (await page.locator(".inspector").boundingBox())!.width)
+    .toBeLessThanOrEqual(390);
+});
+
+test("selected nodes show incoming and outgoing flow, with larger usable sockets", async ({
+  page,
+}) => {
+  await sample(page);
+  const worktree = await page.evaluate(() =>
+    localStorage.getItem("duckpad-worktree"),
+  );
+  const snapshot = await (
+    await page.request.get("/api/worktrees/" + worktree)
+  ).json();
+  const join = snapshot.bundle.flow.nodes.find(
+    (node: any) => node.label === "Enrich orders",
+  );
+  const graph = snapshot.bundle.flow.edges;
+  const expected = graph.filter(
+    (edge: any) => edge.source === join.id || edge.target === join.id,
+  );
+  await page
+    .locator(".react-flow__node")
+    .filter({ hasText: "Enrich orders" })
+    .click();
+  await expect(page.locator(".react-flow__edge.node-connected")).toHaveCount(
+    expected.length,
+  );
+  for (const edge of graph) {
+    const element = page.locator(`.react-flow__edge[data-id="${edge.id}"]`);
+    if (expected.includes(edge)) {
+      await expect(element).toHaveClass(/animated/);
+      const path = element.locator(".react-flow__edge-path");
+      await expect(path).toHaveAttribute("marker-end", /url\(/);
+      await expect(path).toHaveCSS("animation-name", "data-flow");
+      const before = await path.evaluate(
+        (node) => getComputedStyle(node).strokeDashoffset,
+      );
+      await expect
+        .poll(() =>
+          path.evaluate((node) => getComputedStyle(node).strokeDashoffset),
+        )
+        .not.toBe(before);
+    } else await expect(element).not.toHaveClass(/animated/);
+  }
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await expect(
+    page.locator(".node-connected .react-flow__edge-path").first(),
+  ).toHaveCSS("animation-name", "none");
+  await expect(
+    page.locator(".node-connected .react-flow__edge-path").first(),
+  ).toHaveAttribute("marker-end", /url\(/);
+  const customers = page
+    .locator(".react-flow__node")
+    .filter({ has: page.getByText("Customers", { exact: true }) });
+  const source = customers.locator(".react-flow__handle.source");
+  const target = page.locator(
+    `.react-flow__node[data-id="${join.id}"] .react-flow__handle[data-handleid="left"]`,
+  );
+  await expect(source).toHaveCSS("width", "16px");
+  await expect(target).toHaveCSS("height", "16px");
+  const start = (await source.boundingBox())!;
+  const end = (await target.boundingBox())!;
+  const saved = page.waitForResponse(
+    (response) =>
+      response.request().method() === "PUT" &&
+      response.url().includes("/worktrees/"),
+  );
+  await page.mouse.move(start.x + start.width / 2, start.y + start.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(end.x + end.width / 2, end.y + end.height / 2, {
+    steps: 12,
+  });
+  await page.mouse.up();
+  expect((await saved).ok()).toBe(true);
+  const updated = await (
+    await page.request.get("/api/worktrees/" + worktree)
+  ).json();
+  const incoming = updated.bundle.flow.edges.filter(
+    (edge: any) => edge.target === join.id && edge.targetHandle === "left",
+  );
+  expect(incoming).toHaveLength(1);
+  expect(incoming[0].source).toBe(await customers.getAttribute("data-id"));
 });
