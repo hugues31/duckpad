@@ -1,37 +1,74 @@
 name: Validate Duckpad
 on:
   push:
+    branches: [main]
   pull_request:
 permissions:
   contents: read
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
-  acceptance:
+  python:
+    name: Python ${{ matrix.python }}
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     strategy:
+      fail-fast: false
       matrix:
-        python: ['3.11', '3.13']
+        python: ['3.11', '3.12', '3.13']
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
+      - uses: astral-sh/setup-uv@v7
+      - run: uv sync --locked --python ${{ matrix.python }}
+      - run: uv run ruff check src tests scripts
+      - run: uv run ruff format --check src tests scripts
+      - run: uv run pytest -q
+
+  browser:
+    name: Frontend, browser tests and package
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
           cache: npm
           cache-dependency-path: frontend/package-lock.json
-      - uses: astral-sh/setup-uv@v6
-      - run: uv sync --extra dev --locked
-      - run: uv run ruff check src tests scripts
-      - run: uv run ruff format --check src tests scripts
-      - run: uv run pytest -q
+      - uses: astral-sh/setup-uv@v7
+      - run: uv sync --locked --python 3.12
       - run: npm ci --prefix frontend
+      - run: npm run format:check --prefix frontend
       - run: npm run build --prefix frontend
       - run: npm exec --prefix frontend -- playwright install --with-deps chromium
       - run: npm run test:e2e --prefix frontend
+      # uv builds the wheel from the sdist, checking that the source archive is complete.
       - run: uv build
-      - uses: actions/upload-artifact@v4
+      - name: Run tests from the source archive
+        run: |
+          archive_tests="$(mktemp -d)"
+          tar -xzf dist/duckpad-*.tar.gz --strip-components=1 -C "$archive_tests"
+          export PATH="$PWD/.venv/bin:$PATH"
+          cd "$archive_tests"
+          PYTHONPATH="$PWD/src" python -m pytest -q
+      - name: Smoke test the installed wheel outside the checkout
+        run: |
+          uv venv /tmp/duckpad-smoke --python 3.12
+          uv pip install --python /tmp/duckpad-smoke/bin/python dist/*.whl
+          uv run python scripts/smoke_wheel.py --python /tmp/duckpad-smoke/bin/python
+      - uses: actions/upload-artifact@v7
         if: failure()
         with:
-          name: browser-diagnostics-${{ matrix.python }}
+          name: browser-diagnostics
           path: frontend/test-results/
