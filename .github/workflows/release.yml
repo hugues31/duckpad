@@ -57,14 +57,14 @@ jobs:
       - name: Calculate distribution checksums
         working-directory: dist
         run: sha256sum *.whl *.tar.gz > SHA256SUMS
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: release-bundle
           path: |
             dist/
             release-notes.md
           if-no-files-found: error
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: failure()
         with:
           name: release-browser-diagnostics
