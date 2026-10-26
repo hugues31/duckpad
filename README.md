@@ -25,7 +25,7 @@ Only one backend may own an instance directory at a time. Use separate `--home` 
 
 Choose **Open example project** and **Run pipeline**. The Northstar example creates CSV and Parquet inputs, joins customers to orders, computes ordered outputs, uses nested reusable components twice with separate parameters, computes aggregates, distinct counts, set operations and window ranks, and exports two CSV reports. Its `dev` and `prod` data are deliberately different.
 
-Select **Regional revenue**, choose the `report` output, then click a revenue cell. Follow a contribution into the nested aggregate and page through its source amounts. No external accounts are required for this example. See the [example tour](docs/EXAMPLE.md).
+Select **Regional revenue**, choose the `report` output, then click a revenue cell. Choose **Explore lineage**, follow a contribution into the nested aggregate, and inspect its complete source records alongside the contribution graph. No external accounts are required for this example. See the [example tour](docs/EXAMPLE.md).
 
 ![Northstar pipeline and preview](docs/images/workspace.png)
 
@@ -33,7 +33,7 @@ Select **Regional revenue**, choose the `report` output, then click a revenue ce
 
 - Drag templates onto the canvas, connect ports, configure typed parameters, and edit shared SQL definitions in Monaco.
 - Use guided filter, join-key and aggregate forms, or edit their generated SQL expressions.
-- Preview, filter and sort results; explain valid cells with five contributions per page and complete counts.
+- Preview, filter and sort results; explain valid cells in a compact panel or a contribution workspace with a pinned target, synchronized graph and paginated records.
 - Group nodes into nested components, expose parameters, and import independent copies between projects.
 - Save automatically to Git, inspect diffs, open isolated branches or historical revisions, and explicitly merge changes.
 - Detect concurrent UI/file edits and resolve recoverable conflicts without losing either proposal.

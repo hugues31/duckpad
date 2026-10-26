@@ -1168,12 +1168,14 @@ function WorkspaceApp({
                       worktree={worktree}
                       environment={environment}
                       node={fullNode}
+                      label={node.label || node.id}
                       ports={ports}
                       version={resultVersion}
                       active={!!active}
                       onRun={() => run(fullNode)}
                       onExplain={setCell}
                       onData={setPreview}
+                      selectedCell={cell}
                     />
                   ) : (
                     <div className="canvas-footer">
@@ -1187,7 +1189,13 @@ function WorkspaceApp({
                 </main>
                 {cell ? (
                   <LineagePanel
-                    key={worktree + environment}
+                    key={JSON.stringify([
+                      worktree,
+                      environment,
+                      cell.dataset,
+                      cell.row,
+                      cell.column,
+                    ])}
                     worktree={worktree}
                     environment={environment}
                     cell={cell}

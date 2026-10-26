@@ -1,0 +1,607 @@
+.explore-lineage {
+  width: 100%;
+  justify-content: center;
+}
+.cell.lineage-selected-cell {
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 2px var(--accent);
+  color: var(--accent);
+}
+.lineage-workspace {
+  width: calc(100vw - 40px);
+  max-width: 1800px;
+  height: calc(100dvh - 40px);
+  max-height: none;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 24px 100px #0005;
+  overflow: hidden;
+}
+.lineage-workspace[open] {
+  display: flex;
+  flex-direction: column;
+}
+.lineage-workspace::backdrop {
+  background: #0d202866;
+  backdrop-filter: blur(3px);
+}
+.lineage-workspace-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 13px 20px;
+  border-bottom: 1px solid var(--border);
+  flex: none;
+}
+.lineage-target {
+  display: flex;
+  gap: 24px;
+  align-items: center;
+  padding: 14px 22px;
+  background: var(--accent-soft);
+  flex: none;
+}
+.lineage-target > div {
+  flex: 1;
+  min-width: 0;
+}
+.lineage-target h2 {
+  font-size: 18px;
+  margin: 6px 0;
+  overflow-wrap: anywhere;
+}
+.lineage-target h2 span {
+  font-size: 13px;
+  font-weight: 400;
+}
+.lineage-target p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+.lineage-target-value {
+  font-size: 30px;
+  color: var(--accent);
+  max-width: 35%;
+  overflow-wrap: anywhere;
+}
+.lineage-workspace summary {
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 11px;
+}
+.lineage-workspace dl {
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+.lineage-workspace dt {
+  color: var(--muted);
+  margin-top: 8px;
+}
+.lineage-workspace dd {
+  margin: 4px 0 10px;
+}
+.lineage-metadata {
+  position: relative;
+  align-self: flex-start;
+}
+.lineage-metadata dl {
+  position: absolute;
+  right: 0;
+  width: 310px;
+  max-height: 300px;
+  overflow: auto;
+  padding: 15px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  z-index: 6;
+  box-shadow: var(--shadow);
+}
+.lineage-coverage {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 20px;
+  font-size: 10px;
+  border-bottom: 1px solid var(--border);
+}
+.lineage-coverage.sources_reached strong {
+  color: var(--accent);
+}
+.lineage-coverage.upstream_not_explored strong,
+.lineage-coverage.unsupported_operation strong {
+  color: #ac7a36;
+}
+.lineage-coverage span {
+  color: var(--muted);
+}
+.lineage-breadcrumbs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  overflow-x: auto;
+  flex: none;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--border);
+}
+.lineage-breadcrumbs > button {
+  font-size: 10px;
+  padding: 6px 9px;
+  border-radius: 5px;
+  flex-shrink: 0;
+}
+.lineage-breadcrumbs > button[aria-current] {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.lineage-breadcrumbs > button:not(:first-child)::before {
+  content: "›";
+  margin-right: 8px;
+}
+.lineage-progress {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 7px 20px;
+  font-size: 11px;
+}
+.lineage-progress progress {
+  height: 6px;
+  width: 100px;
+  accent-color: var(--accent);
+}
+.lineage-workspace > .notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 0;
+}
+.lineage-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 6px var(--inspector-width);
+  grid-template-rows: minmax(160px, 1fr) 6px var(--records-height);
+  min-height: 0;
+  flex: 1;
+}
+.lineage-map-pane {
+  min-height: 0;
+  min-width: 0;
+  grid-column: 1;
+  grid-row: 1;
+  display: flex;
+  flex-direction: column;
+}
+.lineage-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 9px 12px;
+  background: var(--surface-alt);
+}
+.lineage-toolbar .segmented {
+  display: flex;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.lineage-toolbar .segmented button {
+  padding: 6px 10px;
+  font-size: 11px;
+}
+.lineage-toolbar .segmented button[aria-pressed="true"] {
+  background: var(--surface);
+  color: var(--accent);
+  border-radius: 5px;
+  box-shadow: var(--shadow);
+}
+.lineage-toolbar label {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10px;
+  white-space: nowrap;
+}
+.lineage-toolbar input[type="checkbox"] {
+  width: 12px;
+  height: 12px;
+  accent-color: var(--accent);
+}
+.lineage-toolbar .search {
+  flex: 1;
+  min-width: 100px;
+  max-width: 230px;
+}
+.lineage-toolbar .search input {
+  width: 100%;
+}
+.lineage-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  padding: 5px 12px;
+  font-size: 9px;
+  color: var(--muted);
+}
+.lineage-legend > span:not(:last-child)::before {
+  content: "";
+  display: inline-block;
+  width: 22px;
+  margin: 0 5px 3px 0;
+  border-top: 2px solid var(--accent);
+}
+.lineage-legend > .dependency-condition::before {
+  border-top: 2px dashed var(--muted) !important;
+}
+.lineage-legend > .dependency-existence::before {
+  border-top: 2px dotted var(--text) !important;
+}
+.lineage-map-content {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+}
+.lineage-graph-container,
+.lineage-graph {
+  height: 100%;
+  width: 100%;
+}
+.lineage-graph .react-flow {
+  background: var(--bg);
+  --xy-edge-label-background-color: var(--surface);
+  --xy-edge-label-color: var(--text);
+  --xy-controls-button-background-color: var(--surface);
+  --xy-controls-button-color: var(--text);
+  --xy-controls-button-border-color: var(--border);
+}
+.lineage-graph-card {
+  width: 250px;
+  min-height: 100px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  text-align: left;
+  box-shadow: var(--shadow);
+}
+.lineage-graph-card strong {
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.lineage-graph-card span {
+  font-size: 10px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.lineage-graph-card small {
+  font-size: 9px;
+  color: var(--accent);
+}
+.lineage-graph-card.selected {
+  border: 2px solid var(--accent);
+  background: var(--accent-soft);
+}
+.lineage-graph-card.dependency-condition {
+  border-style: dashed;
+}
+.lineage-graph-card.dependency-existence {
+  border-style: dotted;
+}
+.lineage-detailed-path {
+  height: 100%;
+  overflow: auto;
+  list-style: none;
+  margin: 0;
+  padding: 15px;
+}
+.lineage-detailed-path li {
+  margin-bottom: 15px;
+  border-left: 2px solid var(--border);
+  padding-left: 12px;
+}
+.lineage-detailed-path li > button {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  text-align: left;
+  border-radius: 6px;
+  width: 100%;
+}
+.lineage-detailed-path .selected,
+.lineage-path-role[aria-pressed="true"] {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.lineage-detailed-path span,
+.lineage-detailed-path small {
+  font-size: 10px;
+}
+.lineage-path-role {
+  border: 1px solid var(--border);
+  padding: 7px;
+  margin: 4px 4px 0 0;
+  border-radius: 5px;
+  font-size: 10px;
+}
+.lineage-step-inspector {
+  grid-column: 3;
+  grid-row: 1 / 4;
+  padding: 18px;
+  min-height: 0;
+  overflow: auto;
+  background: var(--surface);
+}
+.lineage-step-inspector h3 {
+  font-size: 17px;
+  margin: 9px 0;
+}
+.lineage-step-inspector h4 {
+  margin: 18px 0 7px;
+  font-size: 10px;
+}
+.lineage-step-inspector details {
+  margin: 14px 0;
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+.lineage-step-value {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 18px 0;
+  padding: 14px;
+  background: var(--surface-alt);
+  border-radius: 8px;
+}
+.lineage-step-value span {
+  font-size: 11px;
+}
+.lineage-step-value strong {
+  color: var(--accent);
+  font-size: 24px;
+  overflow-wrap: anywhere;
+}
+.lineage-explanation {
+  line-height: 1.6;
+  font-size: 12px;
+}
+.lineage-status {
+  font-size: 10px;
+  color: var(--muted);
+}
+.lineage-calculations > div {
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border);
+}
+.lineage-calculations dt {
+  color: var(--text);
+}
+.lineage-calculations dd {
+  color: var(--accent);
+  text-align: right;
+}
+.lineage-counts {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 6px;
+}
+.lineage-counts dt,
+.lineage-counts dd {
+  margin: 0;
+}
+.lineage-role-summary {
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 11px;
+  line-height: 1.6;
+}
+.lineage-role-summary h4 {
+  margin: 0;
+}
+.lineage-role-summary.dependency-condition {
+  border-style: dashed;
+}
+.lineage-role-summary.dependency-existence {
+  border-style: dotted;
+}
+.lineage-resizer {
+  touch-action: none;
+  background: var(--surface-alt);
+  z-index: 3;
+}
+.lineage-resizer:hover,
+.lineage-resizer:focus-visible {
+  background: var(--accent);
+}
+.lineage-resizer.vertical {
+  grid-column: 2;
+  grid-row: 1 / 4;
+  cursor: col-resize;
+  border-inline: 1px solid var(--border);
+}
+.lineage-resizer.horizontal {
+  grid-column: 1;
+  grid-row: 2;
+  cursor: row-resize;
+  border-block: 1px solid var(--border);
+}
+.lineage-records-pane {
+  grid-column: 1;
+  grid-row: 3;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+.lineage-records-toolbar {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 10px 12px;
+  flex-wrap: wrap;
+}
+.lineage-records-toolbar strong {
+  font-size: 11px;
+}
+.lineage-records-toolbar select {
+  font-size: 10px;
+  padding: 5px;
+  max-width: 330px;
+}
+.lineage-records-toolbar select:first-of-type {
+  flex: 1;
+  min-width: 0;
+}
+.lineage-records-caption {
+  margin: 0;
+  padding: 0 12px 6px;
+  font-size: 10px;
+  color: var(--muted);
+}
+.lineage-records-scroll {
+  overflow: auto;
+  min-height: 0;
+  flex: 1;
+}
+.lineage-records-table {
+  min-width: 100%;
+}
+.lineage-records-table th,
+.lineage-records-table td {
+  padding: 7px 12px;
+  white-space: nowrap;
+}
+.lineage-records-table th small {
+  display: block;
+  font-weight: 400;
+  color: var(--muted);
+  margin-top: 3px;
+}
+.lineage-records-table .followed-column {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+}
+.lineage-records-table tbody tr:focus-within {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.lineage-records-pager {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  align-items: center;
+  padding: 7px 12px;
+  border-top: 1px solid var(--border);
+  font-size: 10px;
+}
+.lineage-mobile-tabs,
+.lineage-workspace .lineage-mobile-only {
+  display: none;
+}
+@media (max-width: 800px) {
+  .lineage-workspace {
+    width: 100vw;
+    height: 100dvh;
+    border-radius: 0;
+    max-width: none;
+    margin: 0;
+  }
+  .lineage-target {
+    padding: 10px 14px;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .lineage-target h2 {
+    font-size: 14px;
+  }
+  .lineage-target h2 span {
+    display: block;
+    margin-top: 4px;
+  }
+  .lineage-target-value {
+    font-size: 22px;
+  }
+  .lineage-metadata {
+    margin-left: auto;
+  }
+  .lineage-coverage {
+    flex-direction: column;
+    gap: 4px;
+    padding: 8px 14px;
+  }
+  .lineage-coverage span {
+    font-size: 9px;
+  }
+  .lineage-mobile-tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border);
+  }
+  .lineage-mobile-tabs button {
+    flex: 1;
+    padding: 10px;
+  }
+  .lineage-mobile-tabs [aria-selected="true"] {
+    background: var(--accent-soft);
+    color: var(--accent);
+  }
+  .lineage-workspace .lineage-mobile-only {
+    display: flex;
+  }
+  .lineage-layout {
+    display: flex;
+    flex-direction: column;
+  }
+  .lineage-layout > section {
+    display: none;
+    flex: 1;
+  }
+  .lineage-layout[data-tab="graph"] .lineage-map-pane,
+  .lineage-layout[data-tab="records"] .lineage-records-pane {
+    display: flex;
+  }
+  .lineage-layout[data-tab="inspector"] .lineage-step-inspector {
+    display: block;
+  }
+  .lineage-resizer {
+    display: none;
+  }
+  .lineage-records-toolbar {
+    gap: 5px;
+  }
+  .lineage-records-toolbar strong {
+    width: 100%;
+  }
+  .lineage-workspace-header {
+    padding: 10px 14px;
+  }
+}
+.lineage-search-results {
+  display: flex;
+  flex-direction: column;
+  max-height: 130px;
+  overflow: auto;
+  padding: 8px 14px;
+  gap: 5px;
+  border-bottom: 1px solid var(--border);
+}
+.lineage-search-results button {
+  text-align: left;
+  padding: 6px;
+  font-size: 11px;
+  border-radius: 4px;
+}
+.lineage-search-results button:hover {
+  background: var(--accent-soft);
+}

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ChevronLeft,
   ChevronRight,
@@ -15,24 +15,32 @@ export default function Preview({
   worktree,
   environment,
   node,
+  label,
   ports,
   version,
   active,
   onRun,
   onExplain,
   onData,
+  selectedCell,
 }: {
   worktree: string;
   environment: string;
   node: string;
+  label: string;
   ports: string[];
   version: string;
   active: boolean;
   onRun: () => void;
   onExplain: (cell: Json) => void;
   onData: (data: Json | null) => void;
+  selectedCell: Json | null;
 }) {
   const t = useT();
+  const followedButton = useRef<HTMLButtonElement | null>(null);
+  useEffect(() => {
+    if (!selectedCell) followedButton.current?.focus({ preventScroll: true });
+  }, [selectedCell]);
   const [port, setPort] = useState(ports[0] || "result");
   const [data, setData] = useState<Json | null>(null);
   const [error, setError] = useState("");
@@ -225,7 +233,12 @@ export default function Preview({
                     {row.values.map((value: any, i: number) => (
                       <td key={i}>
                         <button
-                          className={`cell ${value === null ? "null" : ""}`}
+                          className={`cell ${value === null ? "null" : ""} ${selectedCell?.dataset === data.id && selectedCell?.row === row.id && selectedCell?.column === data.columns[i].name ? "lineage-selected-cell" : ""}`}
+                          aria-pressed={
+                            selectedCell?.dataset === data.id &&
+                            selectedCell?.row === row.id &&
+                            selectedCell?.column === data.columns[i].name
+                          }
                           disabled={data.status !== "valid" || active}
                           title={
                             data.status === "valid"
@@ -233,13 +246,17 @@ export default function Preview({
                               : t("staleHint")
                           }
                           aria-label={`${t("explain")}: ${data.columns[i].name}, ${t("rows")} ${row.id + 1}, ${formatValue(value)}`}
-                          onClick={() =>
+                          onClick={(event) => {
+                            followedButton.current = event.currentTarget;
                             onExplain({
                               dataset: data.id,
+                              execution: data.run,
+                              label,
+                              port,
                               row: row.id,
                               column: data.columns[i].name,
-                            })
-                          }
+                            });
+                          }}
                         >
                           {formatValue(value)}
                         </button>

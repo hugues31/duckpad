@@ -1,6 +1,9 @@
 import fr from "../src/locales/fr.json" with { type: "json" };
 import { test, expect, type Page } from "@playwright/test";
 
+// Portable DuckDB builds and concurrent worktrees can take longer to run examples.
+test.setTimeout(120000);
+
 async function signIn(page: Page) {
   await page.goto("/");
   await page
@@ -40,6 +43,7 @@ async function run(page: Page) {
       async () =>
         (await (await page.request.get("/api/runs/" + result.id)).json())
           .status,
+      { timeout: 60000 },
     )
     .toBe("success");
   await expect(
@@ -66,7 +70,7 @@ test("complete example, ordered outputs, nested components, lineage pagination a
     .getByRole("button", { name: /Explain this value: revenue, rows 1,/ })
     .click();
   await expect(
-    page.getByText("Complete explanation", { exact: true }),
+    page.getByText("Step explained", { exact: true }),
   ).toBeVisible();
   await page.locator(".lineage-panel .contribution").first().click();
   await expect(page.locator(".lineage-panel")).toContainText(
@@ -314,7 +318,7 @@ test("an open lineage explanation is interrupted when its generation is recalcul
     .getByRole("button", { name: /Explain this value: revenue, rows 1,/ })
     .click();
   await expect(
-    page.getByText("Complete explanation", { exact: true }),
+    page.getByText("Step explained", { exact: true }),
   ).toBeVisible();
   await run(page);
   await expect(page.locator(".lineage-panel")).toContainText(

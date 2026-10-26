@@ -6,6 +6,7 @@ they never reopen a source resource or change result values or cardinalities.
 
 import json
 import threading
+import time
 
 import sqlglot
 from sqlglot import exp
@@ -213,19 +214,39 @@ class Lineage:
 
 
 class TraceQuery:
-    def __init__(self, context, cursor, dataset, row):
+    def __init__(self, context, cursor, dataset, row, detailed=False):
         self.context, self.cursor, self.dataset = context, cursor, dataset
         self.row = row
         self.sources = {}
         self.expression, self.kind = "", "projection"
+        self.detailed = detailed
+        self.role_columns = set()
+        self.existence = ""
+        self.evidence = {}
+        self.branch_columns = set()
+        self.declarations = {}
 
     def virtual(self, query, owner, name):
-        with self.context.trace_lock:
+        lock = self.context.trace_lock
+        timeout = max(0, self.cursor.deadline - time.monotonic()) if hasattr(self.cursor, "deadline") else -1
+        if not lock.acquire(timeout=timeout):
+            raise Problem("The investigation exceeded its SQL materialization budget", 408)
+        try:
             return self._virtual(query, owner, name)
+        finally:
+            lock.release()
 
     def _virtual(self, query, owner, name):
         from .util import digest
 
+        local_ctes = {cte.alias for cte in query.find_all(exp.CTE)}
+        if any(
+            table.name not in self.context.datasets and table.name not in local_ctes
+            for table in query.find_all(exp.Table)
+        ):
+            raise Coverage(
+                "An intermediate relation is not retained execution data. External sources are never reopened for lineage."
+            )
         key = "trace_" + digest([owner.id, sql(query), name])[:24]
         if key not in self.context.datasets:
             data_inputs = {
@@ -526,6 +547,34 @@ class TraceQuery:
                     raise Coverage(
                         "Split expressions combining multiple extrema into separate output columns for exact tie explanations."
                     )
+            if self.detailed:
+                conditions += [c for e in group_exprs for c in e.find_all(exp.Column)]
+                self.existence = self.contributions(self.existence_columns(), raw_clause)
+                self.evidence["group_keys"] = [sql(e) for e in group_exprs]
+                if group_exprs:
+                    self.evidence["group_values"] = clean(
+                        self.cursor.execute(
+                            "SELECT " + ", ".join(sql(e) for e in group_exprs) + raw_clause + " LIMIT 1"
+                        ).fetchone()
+                    )
+                if len(aggregates) == 1:
+                    self.evidence["function"] = aggregates[0].key.upper()
+                    self.evidence["argument"] = sql(argument) if argument is not None else "*"
+                    self.evidence["row_count"] = isinstance(aggregates[0], exp.Count) and isinstance(
+                        argument, exp.Star
+                    )
+                    self.evidence["examined_rows"] = self.cursor.execute(
+                        "SELECT COUNT(*) " + raw_clause
+                    ).fetchone()[0]
+                    self.evidence["retained_rows"] = self.cursor.execute(
+                        "SELECT COUNT(*) " + from_clause
+                    ).fetchone()[0]
+                if len(self.sources) > 1:
+                    self.capture_pairs(
+                        "SELECT "
+                        + ", ".join(f"{qi(alias)}.rowid AS {qi(alias)}" for alias in self.sources)
+                        + raw_clause
+                    )
             context_query = self.contributions(columns + conditions, raw_clause)
             return self.contributions(columns, from_clause), context_query, distinct
         self.kind = (
@@ -540,18 +589,151 @@ class TraceQuery:
         row_names = {alias: "_dp_row_" + str(i) for i, alias in enumerate(self.sources)}
         identity_projection = [f"{qi(alias)}.rowid AS {qi(name)}" for alias, name in row_names.items()]
         matching += self.witness_filter(row_names)
-        candidate = f"SELECT {', '.join(projections + identity_projection)} {from_clause}"
+        additions, value_paths = [], None
+        if self.detailed:
+            value_paths, condition_columns = self.scalar_paths(target)
+            conditions += condition_columns
+            for i, (_, predicate) in enumerate(value_paths):
+                additions.append(f"({predicate}) IS TRUE AS {qi('_dp_gate_' + str(i))}")
+            calculations = self.scalar_evaluations[:32]
+            additions += [
+                f"CASE WHEN ({predicate}) IS TRUE THEN to_json({sql(e)}) END AS {qi('_dp_calc_' + str(i))}"
+                for i, (e, predicate) in enumerate(calculations)
+            ]
+            additions += [
+                f"({predicate}) IS TRUE AS {qi('_dp_eval_' + str(i))}"
+                for i, (_, predicate) in enumerate(calculations)
+            ]
+        candidate = f"SELECT {', '.join(projections + identity_projection + additions)} {from_clause}"
         matched = f"SELECT * FROM ({candidate}) candidates WHERE {matching}"
         if not self.dataset.witnesses and not tree.args.get("distinct"):
             if self.cursor.execute(f"SELECT COUNT(*) FROM ({matched}) occurrences").fetchone()[0] > 1:
                 raise Coverage(
                     "This composed SQL step has indistinguishable duplicate occurrences without captured row witnesses. Exact occurrence provenance is unavailable; use separate pipeline nodes for these stages."
                 )
+        contributions = self.from_matched(columns, matched, row_names)
+        if self.detailed:
+            paths = [
+                self.from_matched(
+                    [column], f"SELECT * FROM ({matched}) gated WHERE {qi('_dp_gate_' + str(i))}", row_names
+                )
+                for i, (column, _) in enumerate(value_paths)
+            ]
+            contributions = " UNION ALL ".join(paths)
+            self.declarations[contributions] = set().union(*(self.declarations.get(p, set()) for p in paths))
+            if value_paths:
+                selected = self.cursor.execute(
+                    "SELECT "
+                    + ", ".join(f"bool_or({qi('_dp_gate_' + str(i))})" for i in range(len(value_paths)))
+                    + f" FROM ({matched}) gates"
+                ).fetchone()
+                self.branch_columns = {
+                    (c.table, self.original_column(self.sources[c.table], c.name))
+                    for (c, predicate), active in zip(value_paths, selected, strict=True)
+                    if predicate != "TRUE" and not active
+                }
+            self.existence = self.from_matched(self.existence_columns(), matched, row_names)
+            if len(self.sources) > 1:
+                self.capture_pairs(
+                    "SELECT "
+                    + ", ".join(f"{qi(name)} AS {qi(alias)}" for alias, name in row_names.items())
+                    + f" FROM ({matched}) pairs"
+                )
+            if calculations:
+                values = self.cursor.execute(
+                    "SELECT "
+                    + ", ".join(
+                        qi("_dp_calc_" + str(i)) + ", " + qi("_dp_eval_" + str(i))
+                        for i in range(len(calculations))
+                    )
+                    + f" FROM ({matched}) evaluated LIMIT 2"
+                ).fetchall()
+                if len(values) == 1:
+                    self.evidence["calculations"] = [
+                        {"expression": sql(e), "value": json.loads(v) if v is not None else None}
+                        for (e, _), v, active in zip(
+                            calculations, values[0][::2], values[0][1::2], strict=True
+                        )
+                        if active
+                    ]
         return (
-            self.from_matched(columns, matched, row_names),
+            contributions,
             self.from_matched(conditions, matched, row_names),
             None,
         )
+
+    def existence_columns(self):
+        return [
+            exp.column(data.column_map.get(data.columns[0]["name"], data.columns[0]["name"]), table=alias)
+            for alias, data in self.sources.items()
+            if data.columns
+        ]
+
+    def capture_pairs(self, query):
+        total = self.cursor.execute(f"SELECT COUNT(*) FROM ({query}) pairs").fetchone()[0]
+        self.evidence["join_pairs"] = {
+            "aliases": list(self.sources),
+            "rows": clean(self.cursor.execute(query + " ORDER BY ALL LIMIT 25").fetchall()),
+            "total": total,
+            "limit": 25,
+        }
+
+    def scalar_paths(self, target):
+        """Keep CASE/IF predicates as context; follow only selected value branches."""
+        paths, conditions, evaluations = [], [], {}
+
+        def visit(expression, predicate="TRUE", value=True):
+            if isinstance(expression, (exp.Column, exp.Binary, exp.Case, exp.If, exp.Literal, exp.Cast)):
+                key = sql(expression)
+                previous = evaluations.get(key)
+                evaluations[key] = (
+                    expression,
+                    f"({previous[1]}) OR ({predicate})" if previous else predicate,
+                )
+            if isinstance(expression, exp.Column):
+                if value:
+                    paths.append((expression, predicate))
+                else:
+                    conditions.append(expression)
+            elif isinstance(expression, exp.Case):
+                remaining = predicate
+                for branch in expression.args.get("ifs", []):
+                    condition = (
+                        exp.EQ(this=expression.this.copy(), expression=branch.this.copy())
+                        if expression.this
+                        else branch.this
+                    )
+                    visit(condition, remaining, False)
+                    visit(branch.args["true"], f"({remaining}) AND ({sql(condition)}) IS TRUE", value)
+                    remaining = f"({remaining}) AND ({sql(condition)}) IS NOT TRUE"
+                if expression.args.get("default"):
+                    visit(expression.args["default"], remaining, value)
+            elif isinstance(expression, exp.If):
+                visit(expression.this, predicate, False)
+                visit(expression.args["true"], f"({predicate}) AND ({sql(expression.this)}) IS TRUE", value)
+                if expression.args.get("false"):
+                    visit(
+                        expression.args["false"],
+                        f"({predicate}) AND ({sql(expression.this)}) IS NOT TRUE",
+                        value,
+                    )
+            else:
+                for child in expression.iter_expressions():
+                    visit(child, predicate, value)
+
+        visit(target)
+        self.scalar_evaluations = list(evaluations.values())
+        # One input cell may occur more than once syntactically. Participation
+        # counts represent joined rows, not repeated references in an expression.
+        grouped = {}
+        for column, predicate in paths:
+            key = (column.table, column.name)
+            if key in grouped:
+                old, previous = grouped[key]
+                grouped[key] = (old, f"({previous}) OR ({predicate})")
+            else:
+                grouped[key] = (column, predicate)
+        return list(grouped.values()), conditions
 
     def witness_filter(self, row_names):
         conditions = []
@@ -576,12 +758,18 @@ class TraceQuery:
             if data is None or column.name == "*" or (alias, column.name) in seen:
                 continue
             seen.add((alias, column.name))
+            self.role_columns.add((alias, self.original_column(data, column.name)))
+            role = f", {literal(alias)} AS role" if self.detailed else ""
             queries.append(
-                f"SELECT {literal(data.id)} AS dataset, {literal(data.node)} AS node, {literal(data.port)} AS port, {qi(alias)}.rowid AS row_id, {literal(self.original_column(data, column.name))} AS column_name, to_json({sql(column)}) AS value, {literal(data.source)} AS source {from_clause}"
+                f"SELECT {literal(data.id)} AS dataset, {literal(data.node)} AS node, {literal(data.port)} AS port, {qi(alias)}.rowid AS row_id, {literal(self.original_column(data, column.name))} AS column_name, to_json({sql(column)}) AS value, {literal(data.source)} AS source{role} {from_clause}"
                 + (" AND " if " WHERE " in from_clause else " WHERE ")
                 + f"{qi(alias)}.rowid IS NOT NULL"
             )
-        return " UNION ALL ".join(queries)
+        query = " UNION ALL ".join(queries)
+        self.declarations[query] = {
+            (alias, self.original_column(self.sources[alias], name)) for alias, name in seen
+        }
+        return query
 
     def from_matched(self, columns, matched, row_names, lists=False, predicate=None):
         queries, seen = [], set()
@@ -591,12 +779,23 @@ class TraceQuery:
             if data is None or name == "*" or (alias, name) in seen:
                 continue
             seen.add((alias, name))
+            self.role_columns.add((alias, self.original_column(data, name)))
+            role = f", {literal(alias)} AS role" if self.detailed else ""
             identities = f"SELECT {'unnest(' if lists else ''}{qi(row_names[alias])}{')' if lists else ''} AS rid FROM ({matched}) witnesses"
+            membership = (
+                f"JOIN ({identities}) participation ON d.rowid=participation.rid WHERE TRUE"
+                if self.detailed
+                else f"WHERE d.rowid IN ({identities})"
+            )
             queries.append(
-                f"SELECT {literal(data.id)} AS dataset, {literal(data.node)} AS node, {literal(data.port)} AS port, d.rowid AS row_id, {literal(self.original_column(data, name))} AS column_name, to_json(d.{qi(name)}) AS value, {literal(data.source)} AS source FROM {qi(data.storage or data.table)} d WHERE d.rowid IN ({identities})"
+                f"SELECT {literal(data.id)} AS dataset, {literal(data.node)} AS node, {literal(data.port)} AS port, d.rowid AS row_id, {literal(self.original_column(data, name))} AS column_name, to_json(d.{qi(name)}) AS value, {literal(data.source)} AS source{role} FROM {qi(data.storage or data.table)} d {membership}"
                 + (" AND " + predicate(alias) if predicate else "")
             )
-        return " UNION ALL ".join(queries)
+        query = " UNION ALL ".join(queries)
+        self.declarations[query] = {
+            (alias, self.original_column(self.sources[alias], name)) for alias, name in seen
+        }
+        return query
 
     def window(
         self,
@@ -724,6 +923,16 @@ class TraceQuery:
         context_query = self.from_matched(
             columns + conditions + list(window.find_all(exp.Column)), matched, row_names, lists=True
         )
+        if self.detailed:
+            self.existence = self.from_matched(self.existence_columns(), matched, row_names, lists=True)
+            self.evidence.update(
+                function=function.key.upper(),
+                argument=sql(function),
+                row_count=isinstance(function, exp.Count) and isinstance(function.this, exp.Star),
+                partition=[sql(e) for e in window.args.get("partition_by", [])],
+                order=sql(window.args["order"]) if window.args.get("order") else "",
+                frame=sql(window.args["spec"]) if window.args.get("spec") else "SQL default frame",
+            )
         distinct = None
         if isinstance(function, exp.Count) and isinstance(function.this, exp.Distinct) and not all_context:
             if len(function.this.expressions) != 1:
@@ -754,8 +963,22 @@ class TraceQuery:
             columns = [c["name"] for c in data.columns]
             match = self.matches([data.column_map.get(c, c) for c in columns], record, "d")
             statement = f"SELECT {literal(data.id)} AS dataset, {literal(data.node)} AS node, {literal(data.port)} AS port, d.rowid AS row_id, {literal(columns[index])} AS column_name, to_json(d.{qi(data.column_map.get(columns[index], columns[index]))}) AS value, FALSE AS source FROM {qi(data.storage or data.table)} d"
+            if self.detailed:
+                self.role_columns.add((side, columns[index]))
+                statement = statement.replace(
+                    " AS source FROM ", f" AS source, {literal(side)} AS role FROM "
+                )
             if isinstance(tree, exp.Except) and side == "right":
                 contexts.append(statement)
             else:
                 queries.append(statement + " WHERE " + match)
-        return " UNION ALL ".join(queries), " UNION ALL ".join(contexts), None
+        values, selection = " UNION ALL ".join(queries), " UNION ALL ".join(contexts)
+        self.declarations[values] = {
+            (side, self.sources[side].columns[index]["name"])
+            for side in self.sources
+            if not (isinstance(tree, exp.Except) and side == "right")
+        }
+        self.declarations[selection] = (
+            {("right", self.sources["right"].columns[index]["name"])} if contexts else set()
+        )
+        return values, selection, None

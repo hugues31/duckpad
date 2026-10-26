@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft,
   ArrowUpRight,
@@ -12,6 +12,8 @@ import {
 } from "lucide-react";
 import { api, send, formatValue, type Json } from "./types";
 import { useT } from "./i18n";
+import LineageExplorer from "./LineageExplorer";
+import { asCell } from "./lineageModel";
 export default function LineagePanel({
   worktree,
   environment,
@@ -24,6 +26,9 @@ export default function LineagePanel({
   onClose: () => void;
 }) {
   const t = useT();
+  const [expanded, setExpanded] = useState(false);
+  const [explored, setExplored] = useState(false);
+  const root = useMemo(() => asCell(cell), [cell]);
   const [history, setHistory] = useState<Json[]>([cell]);
   const [result, setResult] = useState<Json | null>(null);
   const [pending, setPending] = useState(false);
@@ -104,6 +109,18 @@ export default function LineagePanel({
         </button>
       </div>
       <div className="lineage-body">
+        <button
+          className="button primary explore-lineage"
+          disabled={interrupted.current}
+          onClick={() => {
+            setExplored(true);
+            setExpanded(true);
+          }}
+        >
+          <GitBranch size={16} />
+          {t("exploreLineage")}
+        </button>
+        <p className="muted small">{t("compactLineageHint")}</p>
         {history.length > 1 && !interrupted.current && (
           <button
             className="text-button"
@@ -134,7 +151,13 @@ export default function LineagePanel({
                 className={`lineage-quality ${result.complete ? "complete" : "partial"}`}
               >
                 <CheckCircle2 size={14} />
-                {t(result.complete ? "complete" : "partial")}
+                {t(
+                  result.complete
+                    ? result.kind === "source"
+                      ? "sources_reached"
+                      : "step_explained"
+                    : "unsupported_operation",
+                )}
               </div>
               {result.warnings?.map((w: string) => (
                 <p key={w} className="notice warning">
@@ -292,6 +315,17 @@ export default function LineagePanel({
           )
         )}
       </div>
+      {explored && (
+        <LineageExplorer
+          worktree={worktree}
+          environment={environment}
+          root={root}
+          targetName={cell.label}
+          targetPort={cell.port}
+          open={expanded}
+          onClose={() => setExpanded(false)}
+        />
+      )}
     </aside>
   );
 }

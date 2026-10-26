@@ -19,6 +19,8 @@ from .components import group, import_definition
 from .engine import Engine
 from .example import create_example
 from .lineage import Lineage
+from .lineage_explorer import LineageExplorer
+from .lineage_models import CancelRequest, Records, RecordsRequest, Stage, StageRequest
 from .projects import Projects, bundle_to_files
 from .store import Store
 from .templates import parse_template
@@ -35,6 +37,7 @@ def create_app(home: Path, watch=True):
     auth, projects, catalog = Auth(store), Projects(store), Catalog(store)
     engine = Engine(store, projects, catalog)
     lineage = Lineage(engine)
+    explorer = LineageExplorer(engine)
     projects.on_change = engine.invalidate
     catalog.on_change = engine.invalidate
 
@@ -332,6 +335,18 @@ def create_app(home: Path, watch=True):
             data.get("group"),
             data.get("context", False),
         )
+
+    @app.post("/api/worktrees/{worktree}/lineage/stage", response_model=Stage)
+    def lineage_stage(worktree: str, data: StageRequest):
+        return explorer.stage(worktree, data)
+
+    @app.post("/api/worktrees/{worktree}/lineage/records", response_model=Records)
+    def lineage_records(worktree: str, data: RecordsRequest):
+        return explorer.records(worktree, data)
+
+    @app.post("/api/worktrees/{worktree}/lineage/cancel")
+    def cancel_lineage(worktree: str, data: CancelRequest):
+        return explorer.cancel(worktree, data)
 
     static = Path(__file__).parent / "static"
     if (static / "assets").exists():
