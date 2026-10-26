@@ -11,7 +11,7 @@ pip install ./dist/duckpad-0.1.0-py3-none-any.whl
 duckpad start
 ```
 
-The distribution is named `duckpad`. Once published to a package index, the same package can be installed with `pip install duckpad`; this repository does not publish releases automatically.
+The distribution is named `duckpad`. Version tags publish the package to PyPI and create a GitHub release with Conventional Commit notes and downloadable distributions. After the first release, install it with `pip install duckpad`. See the [release guide](docs/RELEASING.md) for one-time publishing setup and tagging instructions.
 
 Open the localhost address printed in the terminal. Sign in as `admin` using the password printed **once** on the first launch. The same password remains valid after a restart. The default instance directory is `$XDG_DATA_HOME/duckpad`, or `~/.local/share/duckpad`. Authentication, connection settings and execution history are kept there, outside project repositories.
 
@@ -76,6 +76,7 @@ The Playwright suite starts a disposable instance on port 8766. `DUCKPAD_CHROMIU
 
 ## Documentation
 
+- [Release automation and publishing](docs/RELEASING.md)
 - [Multica issue workflow and preview deployment](docs/MULTICA.md)
 - [Architecture and execution invariants](docs/ARCHITECTURE.md)
 - [Project files, templates and components](docs/AUTHORING.md)
