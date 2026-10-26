@@ -53,6 +53,7 @@ import Preview from "./Preview";
 import Inspector from "./Inspector";
 import LineagePanel from "./LineagePanel";
 import AccountMenu from "./AccountMenu";
+import ResourceMonitor from "./ResourceMonitor";
 import { PanelResizeHandle, usePanelSizes } from "./WorkspacePanels";
 import {
   ConnectionsPanel,
@@ -607,6 +608,7 @@ function WorkspaceApp({
                 </label>
               </>
             )}
+            <ResourceMonitor />
             <AccountMenu
               theme={theme}
               language={language}
