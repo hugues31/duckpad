@@ -17,11 +17,13 @@ export default function HistoryPanel({
   worktree,
   onDiff,
   onRevision,
+  onCompare,
 }: {
   readOnly?: boolean;
   worktree: string;
   onDiff: (commit: string) => void;
   onRevision: (commit: string) => void;
+  onCompare: () => void;
 }) {
   const t = useT();
   const [tab, setTab] = useState<"runs" | "git">("runs");
@@ -54,6 +56,9 @@ export default function HistoryPanel({
           <span className="eyebrow">{t("history")}</span>
           <h1>{tab === "runs" ? t("runHistory") : t("gitHistory")}</h1>
         </div>
+        <button className="button secondary" onClick={onCompare}>
+          {t("compareVersions")}
+        </button>
         <div className="segmented">
           <button
             className={tab === "runs" ? "active" : ""}
