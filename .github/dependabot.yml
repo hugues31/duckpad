@@ -15,3 +15,10 @@ updates:
     groups:
       frontend:
         patterns: ["*"]
+  - package-ecosystem: npm
+    directory: /website
+    schedule:
+      interval: monthly
+    groups:
+      website:
+        patterns: ["*"]

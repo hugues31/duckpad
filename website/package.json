@@ -1,0 +1,28 @@
+{
+  "name": "duckpad-website",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "engines": {
+    "node": ">=22.23.4"
+  },
+  "scripts": {
+    "dev": "astro dev --host 127.0.0.1 --ignore-lock",
+    "check": "astro check",
+    "build": "astro build",
+    "preview": "astro preview --host 127.0.0.1 --ignore-lock",
+    "format": "prettier --write src astro.config.mjs",
+    "format:check": "prettier --check src astro.config.mjs"
+  },
+  "dependencies": {
+    "@astrojs/markdown-remark": "^7.3.4",
+    "@fontsource-variable/manrope": "^5.2.8",
+    "astro": "7.4.2"
+  },
+  "devDependencies": {
+    "@astrojs/check": "0.9.12",
+    "prettier": "^3.9.10",
+    "prettier-plugin-astro": "^1.1.2",
+    "typescript": "^5.7.0"
+  }
+}

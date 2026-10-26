@@ -1,0 +1,162 @@
+---
+import "@fontsource-variable/manrope";
+import "../styles/global.css";
+import Mark from "../components/Mark.astro";
+import { url } from "../lib/docs";
+interface Props {
+  title: string;
+  description: string;
+  docs?: boolean;
+}
+const { title, description, docs = false } = Astro.props;
+const canonical = Astro.site
+  ? new URL(Astro.url.pathname, Astro.site)
+  : undefined;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content={description} />
+    <meta name="theme-color" content="#226bff" />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Duckpad" />
+    {canonical && (
+      <>
+        <link rel="canonical" href={canonical} />
+        <meta property="og:url" content={canonical} />
+      </>
+    )}
+    <link rel="icon" type="image/svg+xml" href={url("favicon.svg")} />
+    <title>{title}</title>
+    <script is:inline>
+      try {
+        const theme = localStorage.getItem("duckpad-site-theme");
+        document.documentElement.dataset.theme =
+          theme ||
+          (matchMedia("(prefers-color-scheme: dark)").matches
+            ? "dark"
+            : "light");
+      } catch {}
+    </script>
+  </head>
+  <body class:list={[{ "docs-page": docs }]}>
+    <a class="skip-link" href="#main">
+      Skip to content
+    </a>
+    <header class="site-header">
+      <a class="brand" href={url()} aria-label="Duckpad home">
+        <Mark />
+        duckpad<span class="brand-dot">.</span>
+      </a>
+      <nav class="desktop-nav" aria-label="Main navigation">
+        <a href={url("#workflow")}>Why Duckpad</a>
+        <a
+          href={url("docs/quickstart/")}
+          aria-current={docs ? "true" : undefined}
+        >
+          Documentation
+        </a>
+        <a href="https://github.com/hugues31/duckpad">
+          GitHub <span aria-hidden="true">↗</span>
+        </a>
+      </nav>
+      <div class="header-actions">
+        <button
+          class="theme-toggle icon-button"
+          aria-label="Switch color theme"
+          title="Switch color theme"
+        >
+          <span aria-hidden="true">◐</span>
+        </button>
+        <a class="button small" href={url("docs/quickstart/")}>
+          Get started <span aria-hidden="true">↗</span>
+        </a>
+        <details class="mobile-nav">
+          <summary aria-label="Navigation menu">
+            <span aria-hidden="true">☰</span>
+          </summary>
+          <nav aria-label="Mobile navigation">
+            <a href={url("#workflow")}>Why Duckpad</a>
+            <a href={url("docs/quickstart/")}>Documentation</a>
+            <a href="https://github.com/hugues31/duckpad">GitHub ↗</a>
+          </nav>
+        </details>
+      </div>
+    </header>
+    <slot />
+    <footer class="site-footer">
+      <div>
+        <a class="brand" href={url()}>
+          <Mark />
+          duckpad.
+        </a>
+        <p>Your data. Your logic. Your workspace.</p>
+      </div>
+      <nav aria-label="Footer">
+        <a href={url("docs/quickstart/")}>Quickstart</a>
+        <a href="https://github.com/hugues31/duckpad">Source code ↗</a>
+        <a href="https://github.com/hugues31/duckpad/blob/main/CONTRIBUTING.md">
+          Contribute ↗
+        </a>
+        <a href="https://github.com/hugues31/duckpad/blob/main/LICENSE">
+          MIT license ↗
+        </a>
+      </nav>
+      <small>Built with DuckDB. Made for the open-source community.</small>
+    </footer>
+    <script>
+      document
+        .querySelector<HTMLButtonElement>(".theme-toggle")
+        ?.addEventListener("click", () => {
+          const theme =
+            document.documentElement.dataset.theme === "dark"
+              ? "light"
+              : "dark";
+          document.documentElement.dataset.theme = theme;
+          try {
+            localStorage.setItem("duckpad-site-theme", theme);
+          } catch {}
+        });
+      document
+        .querySelectorAll<HTMLDetailsElement>(".mobile-nav")
+        .forEach((menu) => {
+          menu.addEventListener("keydown", (event) => {
+            if (event.key === "Escape") {
+              menu.open = false;
+              menu.querySelector("summary")?.focus();
+            }
+          });
+          menu.querySelectorAll("a").forEach((link) =>
+            link.addEventListener("click", () => {
+              menu.open = false;
+            }),
+          );
+        });
+      document.querySelectorAll<HTMLElement>("pre").forEach((pre) => {
+        const code = pre.querySelector("code");
+        if (!code) return;
+        const button = document.createElement("button");
+        button.className = "copy-code";
+        button.textContent = "Copy";
+        button.setAttribute("aria-label", "Copy code");
+        button.addEventListener("click", async () => {
+          try {
+            await navigator.clipboard.writeText(code.textContent || "");
+            button.textContent = "Copied";
+          } catch {
+            button.textContent = "Select to copy";
+          }
+          setTimeout(() => {
+            button.textContent = "Copy";
+          }, 2000);
+        });
+        pre.append(button);
+      });
+    </script>
+  </body>
+</html>

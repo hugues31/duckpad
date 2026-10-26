@@ -553,6 +553,9 @@ def create_app(home: Path, watch=True):
 
     # Interface
 
+    if (STATIC / "site" / "index.html").exists():
+        app.mount("/site", StaticFiles(directory=STATIC / "site", html=True), name="website")
+
     if (STATIC / "assets").exists():
         app.mount("/assets", StaticFiles(directory=STATIC / "assets"), name="assets")
 

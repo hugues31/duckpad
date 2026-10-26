@@ -14,6 +14,8 @@ playwright-report/
 release-notes.md
 *.tsbuildinfo
 .multica/
+website/.astro/
+website/public/demos/*.png
 .env
 .env.*
 !.env.example

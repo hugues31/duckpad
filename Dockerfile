@@ -5,6 +5,14 @@ RUN npm ci
 COPY frontend/ ./
 RUN npm run build
 
+FROM node:22-bookworm-slim AS website
+WORKDIR /build/website
+COPY website/package.json website/package-lock.json ./
+RUN npm ci
+COPY website/ ./
+COPY docs/ /build/docs/
+RUN WEBSITE_BASE_PATH=/site/ npm run build
+
 # Prepared once on the preview server by scripts/provision-runtime.sh.
 FROM duckpad-python:3.12-duckdb2.0.0 AS backend
 WORKDIR /app
@@ -15,6 +23,7 @@ RUN uv sync --locked --no-dev --no-install-project --no-build-package duckdb \
 COPY scripts/build_hook.py scripts/build_hook.py
 COPY src/ src/
 COPY --from=frontend /build/src/duckpad/static/ src/duckpad/static/
+COPY --from=website /build/website/dist/ src/duckpad/static/site/
 RUN uv sync --locked --no-dev --no-editable --no-build-package duckdb
 
 FROM python:3.12-slim-bookworm AS runtime
