@@ -4,7 +4,7 @@ Build local DuckDB pipelines on a visual canvas, inspect their results, and expl
 
 ## Start
 
-Requires **Python 3.11+ and Git** on `PATH`. Release wheels include the frontend, Monaco and its workers; Node.js is not needed to run the installed application.
+Requires **Python 3.11+ and Git** on `PATH`. Shared SQL execution also requires **Linux with Landlock ABI 2 or later** (Linux 5.19+ with Landlock enabled); unsupported hosts refuse execution rather than running without isolation. Release wheels include the frontend, Monaco and its workers; Node.js is not needed to run the installed application.
 
 ```sh
 pip install ./dist/duckpad-0.1.0-py3-none-any.whl
@@ -20,6 +20,33 @@ duckpad start --home /path/to/my-instance --port 8765 --no-browser
 ```
 
 Only one backend may own an instance directory at a time. Use separate `--home` directories for independent instances. The default address is `127.0.0.1`.
+
+## Accounts and project access
+
+The initial `admin` account manages the instance. Open **Users** to create individual
+accounts, reset passwords, change instance roles, or deactivate/reactivate accounts.
+Passwords require at least 12 characters. Users can change their own password in
+**Settings**; resets and deactivations revoke existing sessions.
+
+- **Instance Admin** manages accounts, configuration, connections and every project.
+- **Instance Member** sees only their projects and can create private projects.
+  The creator becomes the project's admin.
+- **Project Reader** can inspect the flow, SQL, history and existing results.
+- **Project Editor** can also edit content, run/cancel pipelines and export through
+  authorized connections.
+- **Project Admin** can also manage participants and delete the project.
+
+Open a project and select **Project settings** to add participants, change roles or
+remove access. Every instance and project must retain an active admin. Instance
+admins choose the connections authorized for each project on this screen. A project
+admin cannot grant connections or promote an instance admin. Readers can copy data
+they can see; read access is not an extraction restriction.
+
+Existing installations preserve the original administrator password and assign
+legacy projects to that account. Old sessions require a new sign-in. Memberships,
+password hashes and connection grants remain in instance SQLite, outside project Git.
+See [authorization and execution isolation](docs/ARCHITECTURE.md#authorization-and-execution-isolation)
+for deployment requirements and file access boundaries.
 
 ## Try the complete example
 
@@ -63,7 +90,7 @@ npm run test:e2e --prefix frontend
 uv build
 ```
 
-The Playwright suite starts a disposable instance on port 8766. `DUCKPAD_CHROMIUM_EXECUTABLE` can point to an already installed Chromium executable. Building a release without compiled assets fails with an actionable message; editable installation permits building them afterward.
+The Playwright suite starts a disposable instance on port 8766. Set `DUCKPAD_E2E_PORT` to use another port when running isolated worktrees concurrently. `DUCKPAD_CHROMIUM_EXECUTABLE` can point to an already installed Chromium executable. Building a release without compiled assets fails with an actionable message; editable installation permits building them afterward.
 
 ## Documentation
 

@@ -19,6 +19,8 @@ export default function Preview({
   ports,
   version,
   active,
+  hidden,
+  onClose,
   onRun,
   onExplain,
   onData,
@@ -30,6 +32,8 @@ export default function Preview({
   ports: string[];
   version: string;
   active: boolean;
+  hidden: boolean;
+  onClose: () => void;
   onRun: () => void;
   onExplain: (cell: Json) => void;
   onData: (data: Json | null) => void;
@@ -113,7 +117,12 @@ export default function Preview({
     debounced,
   ]);
   return (
-    <section className="preview-panel" aria-label={t("preview")}>
+    <section
+      className="preview-panel"
+      id="data-preview"
+      aria-label={t("preview")}
+      hidden={hidden}
+    >
       <div className="preview-header">
         <div className="row gap">
           <Database size={15} />
@@ -137,12 +146,17 @@ export default function Preview({
           )}
           {loading && <Loader2 size={14} className="spin" />}
         </div>
-        {data && (
-          <span className="muted small">
-            {data.count.toLocaleString()} {t("rows")} · {data.columns.length}{" "}
-            {t("columns")}
-          </span>
-        )}
+        <div className="row gap">
+          {data && (
+            <span className="muted small">
+              {data.count.toLocaleString()} {t("rows")} · {data.columns.length}{" "}
+              {t("columns")}
+            </span>
+          )}
+          <button className="icon" title={t("hidePreview")} onClick={onClose}>
+            <X size={15} />
+          </button>
+        </div>
       </div>
       {data ? (
         <>
