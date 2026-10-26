@@ -8,6 +8,7 @@ import {
   useReactFlow,
 } from "@xyflow/react";
 import { useT } from "./i18n";
+import Select from "./Select";
 import type { Json } from "./types";
 
 const CodeDiff = lazy(() =>
@@ -210,7 +211,7 @@ export default function ComparisonView({
         </label>
         <label>
           {t("changeCategory")}{" "}
-          <select
+          <Select
             aria-label={t("changeCategory")}
             value={filters.category}
             onChange={(e) =>
@@ -223,7 +224,7 @@ export default function ComparisonView({
                 {c !== "all" ? ` (${report.categories[c] || 0})` : ""}
               </option>
             ))}
-          </select>
+          </Select>
         </label>
         <input
           type="search"
@@ -285,7 +286,7 @@ export default function ComparisonView({
         <div className="comparison-detail">
           <label className="git-scope">
             {t("componentScope")}{" "}
-            <select value={scope} onChange={(e) => setScope(e.target.value)}>
+            <Select value={scope} onChange={(e) => setScope(e.target.value)}>
               <option value="">{t("flow")}</option>
               {entities
                 .filter((e) => e.kind === "component")
@@ -294,7 +295,7 @@ export default function ComparisonView({
                     {e.name} · {e.id}
                   </option>
                 ))}
-            </select>
+            </Select>
           </label>
           <ReactFlowProvider>
             <ComparisonGraph
