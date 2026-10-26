@@ -4,7 +4,8 @@ import csv
 
 import duckdb
 
-from .templates import BUILTINS
+from .builtin_templates import BUILTINS
+from .util import literal
 
 
 def create_example(projects, catalog, private=False):
@@ -16,7 +17,7 @@ def create_example(projects, catalog, private=False):
     for environment, multiplier in (("dev", 1), ("prod", 3)):
         folder = root / environment
         folder.mkdir(parents=True, exist_ok=True)
-        with (folder / "orders.csv").open("w", newline="") as stream:
+        with (folder / "orders.csv").open("w", newline="", encoding="utf-8") as stream:
             writer = csv.writer(stream)
             writer.writerow(["order_id", "customer_id", "order_date", "amount", "status", "channel"])
             for index in range(1, 121):
@@ -63,8 +64,6 @@ def create_example(projects, catalog, private=False):
                     )
                 ],
             )
-            from .util import literal
-
             db.execute(f"COPY customers TO {literal(str(folder / 'customers.parquet'))} (FORMAT PARQUET)")
         finally:
             db.close()

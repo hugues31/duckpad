@@ -19,7 +19,6 @@ import {
   applyNodeChanges,
 } from "@xyflow/react";
 import {
-  Database,
   FileInput,
   GitMerge,
   Filter,
@@ -36,7 +35,9 @@ import {
 } from "lucide-react";
 import "@xyflow/react/dist/style.css";
 import { useT, templateLabel } from "./i18n";
-import { type Json, type FlowNode, type FlowEdge } from "./types";
+import { DRAG_TYPE } from "./graph";
+import type { NodeKind } from "./NodePalette";
+import type { FlowEdge, FlowNode, Json, Statuses } from "./types";
 
 export const nodeIcon = (key: string) =>
   key.includes("export")
@@ -74,7 +75,7 @@ function PipelineNode({ data, selected }: NodeProps<Node<Json>>) {
   };
   return (
     <div
-      className={`pipeline-node ${source ? "source-node" : "round-node"} ${data.kind} ${selected ? "is-selected" : ""} status-${data.status}`}
+      className={`pipeline-node ${source ? "source-node" : "round-node"} ${data.kind} ${selected ? "is-selected" : ""}`}
     >
       <div className="node-shape">
         <Icon size={27} strokeWidth={1.6} />
@@ -127,22 +128,22 @@ function PipelineNode({ data, selected }: NodeProps<Node<Json>>) {
   );
 }
 const nodeTypes = { pipeline: PipelineNode };
-export interface CanvasProps {
+interface CanvasProps {
   readOnly?: boolean;
   nodes: FlowNode[];
   edges: FlowEdge[];
   parsed: Record<string, Json>;
   components: Record<string, Json>;
-  statuses: Json;
+  statuses: Statuses;
   prefix: string;
   viewKey: string;
   selected: string | null;
   onSelect: (id: string | null) => void;
   onMove: (nodes: FlowNode[]) => void;
-  onConnect: (c: Connection) => void;
+  onConnect: (edge: Omit<FlowEdge, "id">) => void;
   onDelete: (nodes: string[], edges: string[]) => void;
   onAdd: (
-    kind: string,
+    kind: NodeKind,
     id: string,
     position?: { x: number; y: number },
   ) => void;
@@ -370,7 +371,12 @@ function CanvasInner(props: CanvasProps) {
         }}
         onPaneClick={() => props.onSelect(null)}
         onNodeDoubleClick={(_, node) => props.onOpen(node.id)}
-        onConnect={props.readOnly ? undefined : props.onConnect}
+        onConnect={
+          props.readOnly
+            ? undefined
+            : (connection: Connection) =>
+                props.onConnect(connection as Omit<FlowEdge, "id">)
+        }
         onNodeDragStop={(_, __, moved) =>
           props.onMove(
             moved.map((n) => ({
@@ -395,15 +401,15 @@ function CanvasInner(props: CanvasProps) {
           if (props.readOnly) return;
           event.preventDefault();
           try {
-            const value = JSON.parse(
-              event.dataTransfer.getData("application/duckpad"),
-            );
+            const value = JSON.parse(event.dataTransfer.getData(DRAG_TYPE));
             props.onAdd(
               value.kind,
               value.id,
               screenToFlowPosition({ x: event.clientX, y: event.clientY }),
             );
-          } catch {}
+          } catch {
+            // Ignore drops that are not palette items.
+          }
         }}
         ariaLabelConfig={{
           "controls.ariaLabel": t("canvasControls"),

@@ -80,6 +80,27 @@ test("manage instance accounts, project participants and live reader access", as
   await expect(
     readerPage.getByRole("button", { name: "New working branch", exact: true }),
   ).toBeDisabled();
+  await expect(readerPage.locator(".palette-item").first()).toBeDisabled();
+  await readerPage
+    .getByRole("button", { name: "Documentation", exact: true })
+    .click();
+  const documentation = readerPage.locator(".documentation-page");
+  await expect(documentation.locator("textarea")).toHaveAttribute(
+    "readonly",
+    "",
+  );
+  await expect(
+    documentation.getByRole("button", { name: "Save changes", exact: true }),
+  ).toBeDisabled();
+  await readerPage
+    .getByRole("button", { name: "Project files", exact: true })
+    .click();
+  const files = readerPage.getByRole("dialog");
+  await expect(
+    files.getByRole("button", { name: "Save changes", exact: true }),
+  ).toBeDisabled();
+  await files.getByRole("button", { name: "Cancel", exact: true }).click();
+  await readerPage.getByRole("button", { name: "Flow", exact: true }).click();
   await page
     .getByLabel(`Project role · ${username}`, { exact: true })
     .selectOption("editor");

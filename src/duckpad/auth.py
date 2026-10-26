@@ -8,6 +8,15 @@ import time
 
 from .util import Problem, uid
 
+SESSION_LIFETIME = 7 * 24 * 3600
+LOGIN_ATTEMPTS = 12
+LOGIN_WINDOW = 60
+
+
+def session_key(token):
+    """Sessions are stored by token hash, so the database never holds a usable token."""
+    return hashlib.sha256((token or "").encode()).hexdigest()
+
 
 class Auth:
     def __init__(self, store):
@@ -28,7 +37,7 @@ class Auth:
         self.attempts = {}
 
     @staticmethod
-    def hash(password, salt):
+    def hash_password(password, salt):
         return hashlib.scrypt(password.encode(), salt=bytes.fromhex(salt), n=16384, r=8, p=1).hex()
 
     @classmethod
@@ -36,7 +45,7 @@ class Auth:
         if not isinstance(password, str) or not 12 <= len(password) <= 1024:
             raise Problem("Use a password between 12 and 1024 characters")
         salt = secrets.token_hex(32)
-        return {"salt": salt, "hash": cls.hash(password, salt)}
+        return {"salt": salt, "hash": cls.hash_password(password, salt)}
 
     @staticmethod
     def public(user):
@@ -44,7 +53,7 @@ class Auth:
 
     def create_user(self, username, password, role="member"):
         if not isinstance(username, str) or not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9_.-]{0,63}", username):
-            raise Problem("Use a username of 1–64 letters, numbers, dots, hyphens or underscores")
+            raise Problem("Use a username of 1-64 letters, numbers, dots, hyphens or underscores")
         if role not in ("admin", "member"):
             raise Problem("Unknown instance role")
         credentials = self.credentials(password)
@@ -56,10 +65,15 @@ class Auth:
         return self.public(user)
 
     def login(self, username, password, peer="local"):
+        now = time.time()
         with self.store.lock:
-            recent = [t for t in self.attempts.get(peer, []) if t > time.time() - 60]
-            self.attempts[peer] = recent
-            if len(recent) >= 12:
+            self.attempts = {
+                address: recent
+                for address, times in self.attempts.items()
+                if (recent := [t for t in times if t > now - LOGIN_WINDOW])
+            }
+            recent = self.attempts.setdefault(peer, [])
+            if len(recent) >= LOGIN_ATTEMPTS:
                 raise Problem("Too many login attempts. Try again in a minute.", 429)
             attempt = time.time()
             recent.append(attempt)
@@ -68,7 +82,7 @@ class Auth:
         )
         # Run the same password derivation for unknown and disabled accounts.
         record = user or {"salt": "00" * 32, "hash": "00" * 64}
-        valid = hmac.compare_digest(self.hash(password[:1024], record["salt"]), record["hash"])
+        valid = hmac.compare_digest(self.hash_password(password[:1024], record["salt"]), record["hash"])
         if not user or not user["active"] or not valid or len(password) > 1024:
             raise Problem("Invalid username or password", 401)
         token = secrets.token_urlsafe(32)
@@ -77,24 +91,26 @@ class Auth:
             if not current["active"] or current["hash"] != user["hash"]:
                 raise Problem("Invalid username or password", 401)
             self.attempts[peer] = [t for t in self.attempts.get(peer, []) if t != attempt]
+            self._purge_expired(now)
             self.store.put(
                 "session",
-                self.token_key(token),
+                session_key(token),
                 {
                     "user": user["id"],
                     "credential": user["hash"],
                     "version": user.get("session_version", 0),
-                    "expires": time.time() + 86400 * 7,
+                    "expires": now + SESSION_LIFETIME,
                 },
             )
         return token
 
-    @staticmethod
-    def token_key(token):
-        return hashlib.sha256((token or "").encode()).hexdigest()
+    def _purge_expired(self, now):
+        for key, session in self.store.items("session"):
+            if session["expires"] < now:
+                self.store.delete("session", key)
 
     def check(self, token):
-        session = self.store.get("session", self.token_key(token))
+        session = self.store.get("session", session_key(token))
         user = self.store.get("user", session.get("user", "")) if session else None
         if (
             not session
@@ -108,4 +124,4 @@ class Auth:
         return self.public(user)
 
     def logout(self, token):
-        self.store.delete("session", self.token_key(token))
+        self.store.delete("session", session_key(token))

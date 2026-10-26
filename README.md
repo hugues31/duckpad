@@ -19,7 +19,7 @@ Open the localhost address printed in the terminal. Sign in as `admin` using the
 duckpad start --home /path/to/my-instance --port 8765 --no-browser
 ```
 
-Only one backend may own an instance directory at a time. Use separate `--home` directories for independent instances. The default address is `127.0.0.1`.
+Only one backend may own an instance directory at a time. Use separate `--home` directories for independent instances. The default address is `127.0.0.1`. Behind an HTTPS reverse proxy, set `DUCKPAD_SECURE_COOKIES=1` so the session cookie is only sent over HTTPS.
 
 ## Accounts and project access
 
@@ -99,6 +99,7 @@ uv run ruff check src tests scripts
 uv run ruff format --check src tests scripts
 uv run pytest -q
 npm run check --prefix frontend
+npm run format:check --prefix frontend
 npm exec --prefix frontend -- playwright install chromium
 npm run build --prefix frontend
 npm run test:e2e --prefix frontend
@@ -107,8 +108,11 @@ uv build
 
 The Playwright suite starts a disposable instance on port 8766. Set `DUCKPAD_E2E_PORT` to use another port when running isolated worktrees concurrently. `DUCKPAD_CHROMIUM_EXECUTABLE` can point to an already installed Chromium executable. Building a release without compiled assets fails with an actionable message; editable installation permits building them afterward.
 
+See the [contributing guide](CONTRIBUTING.md) before opening a pull request.
+
 ## Documentation
 
+- [Product specification](docs/SPEC.md)
 - [Release automation and publishing](docs/RELEASING.md)
 - [Multica issue workflow and preview deployment](docs/MULTICA.md)
 - [Architecture and execution invariants](docs/ARCHITECTURE.md)
@@ -117,5 +121,6 @@ The Playwright suite starts a disposable instance on port 8766. Set `DUCKPAD_E2E
 - [Connector setup and validated compatibility](docs/CONNECTORS.md)
 - [Execution-service prototype and scheduling decision](docs/EXECUTION_SERVICE.md)
 - [Validation results and performance reference](docs/VALIDATION.md)
+- [Security policy](SECURITY.md)
 
 The required dependency is `duckdb>=2.0`; the recorded validation uses **DuckDB 2.0.0 on Linux x86_64**. Oracle needs a matching OraDuck extension and Oracle Instant Client. S3 validation uses a local S3 emulator; live AWS IAM, TLS and deployment-specific behavior need their own integration checks. Details and reproducible commands are in the connector guide.

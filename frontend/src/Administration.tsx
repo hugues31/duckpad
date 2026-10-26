@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { Plus, Shield, Trash2, Users } from "lucide-react";
-import { api, send, type Json, type Workspace } from "./types";
+import { api, send } from "./api";
+import type { Json, Workspace } from "./types";
 import { useT } from "./i18n";
-import { Modal } from "./Panels";
+import { Modal } from "./modals";
 
 function RoleSelect({
   value,

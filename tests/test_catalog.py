@@ -2,8 +2,9 @@ import copy
 
 import duckdb
 import pytest
-from conftest import wait_run
+from helpers import wait_run
 
+from duckpad.catalog import redact
 from duckpad.lineage import Lineage
 from duckpad.util import Problem
 
@@ -97,7 +98,7 @@ def test_setup_rejects_data_operations_and_secret_redaction_survives_definition_
     catalog.save("connection", copy.deepcopy(connection))
     _, secrets = catalog.capture(["hidden"], "dev")
     assert secret not in str(catalog.public())
-    assert secret.replace("'", "''") not in catalog.redact(secret.replace("'", "''"), secrets)
+    assert secret.replace("'", "''") not in redact(secret.replace("'", "''"), secrets)
     store.delete("connector", "secret_test")
     assert secret not in str(catalog.public())
     with pytest.raises(Problem, match="Missing connector"):

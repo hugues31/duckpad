@@ -29,7 +29,7 @@ Configure access key ID, secret access key, region and endpoint per environment.
 The local integration test validates both read formats, a join, CSV export, connection reuse, lineage and replacement of the same destination. It does not validate real AWS credentials, IAM policies, TLS configuration or every provider's object-storage behavior.
 
 ```sh
-uv sync --extra dev --extra integration
+uv sync --group integration
 uv run python scripts/integration.py s3 --output docs/validation/s3.json
 ```
 

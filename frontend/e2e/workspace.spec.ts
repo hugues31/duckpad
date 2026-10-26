@@ -1,16 +1,7 @@
 import fr from "../src/locales/fr.json" with { type: "json" };
+import { signIn } from "./helpers";
 import { test, expect, type Page } from "@playwright/test";
 
-async function signIn(page: Page) {
-  await page.goto("/");
-  await page
-    .getByLabel("Password", { exact: true })
-    .fill("duckpad-browser-test");
-  await page.getByRole("button", { name: "Sign in", exact: true }).click();
-  await expect(
-    page.getByRole("navigation", { name: "Workspace", exact: true }),
-  ).toBeVisible();
-}
 async function choosePreference(page: Page, name: string) {
   await page.locator(".account .avatar").click();
   await page.getByRole("menuitemradio", { name, exact: true }).click();
@@ -1011,4 +1002,132 @@ test("selected nodes show incoming and outgoing flow, with larger usable sockets
   );
   expect(incoming).toHaveLength(1);
   expect(incoming[0].source).toBe(await customers.getAttribute("data-id"));
+});
+
+test("project documentation saves repeatedly without an edit conflict", async ({
+  page,
+}) => {
+  await sample(page);
+  await page
+    .getByRole("button", { name: "Documentation", exact: true })
+    .click();
+  const panel = page.locator(".documentation-page");
+  for (const text of ["First revision", "Second revision"]) {
+    await panel.locator(".project-documentation").fill(text);
+    const saved = page.waitForResponse(
+      (r) =>
+        r.request().method() === "PUT" && r.url().includes("/api/worktrees/"),
+    );
+    await panel
+      .getByRole("button", { name: "Save changes", exact: true })
+      .click();
+    expect((await saved).ok()).toBe(true);
+  }
+  await expect(page.locator(".banner.warning")).toHaveCount(0);
+  const worktree = await page.evaluate(() =>
+    localStorage.getItem("duckpad-worktree"),
+  );
+  const snapshot = await (
+    await page.request.get(`/api/worktrees/${worktree}`)
+  ).json();
+  expect(snapshot.bundle.documentation.project).toBe("Second revision");
+  expect(snapshot.conflicts).toEqual([]);
+});
+
+test("documentation waits for its refreshed revision and preserves edits during a slow save", async ({
+  page,
+}) => {
+  await sample(page);
+  await page
+    .getByRole("button", { name: "Documentation", exact: true })
+    .click();
+  const panel = page.locator(".documentation-page");
+  const editor = panel.locator(".project-documentation");
+  const button = panel.getByRole("button");
+  const worktree = await page.evaluate(() =>
+    localStorage.getItem("duckpad-worktree"),
+  );
+  let releaseRefresh!: () => void;
+  const refreshGate = new Promise<void>((resolve) => {
+    releaseRefresh = resolve;
+  });
+  let saving = false;
+  let refreshBlocked = false;
+  let writes = 0;
+  await page.route(`**/api/worktrees/${worktree}`, async (route) => {
+    if (route.request().method() === "PUT") {
+      saving = true;
+      writes++;
+    } else if (route.request().method() === "GET" && saving) {
+      refreshBlocked = true;
+      await refreshGate;
+    }
+    await route.continue();
+  });
+  try {
+    await editor.fill("First revision");
+    const saved = page.waitForResponse(
+      (response) =>
+        response.request().method() === "PUT" &&
+        response.url().endsWith(`/api/worktrees/${worktree}`),
+    );
+    await button.click();
+    expect((await saved).ok()).toBe(true);
+    await expect.poll(() => refreshBlocked).toBe(true);
+    await editor.fill("Second revision typed while saving");
+    await expect(button).toBeDisabled();
+    // A repeated activation cannot submit the old revision while the GET is blocked.
+    await button.evaluate((element: HTMLButtonElement) => element.click());
+    expect(writes).toBe(1);
+  } finally {
+    releaseRefresh();
+  }
+  await expect(button).toBeEnabled();
+  await expect(editor).toHaveValue("Second revision typed while saving");
+  const saved = page.waitForResponse(
+    (response) =>
+      response.request().method() === "PUT" &&
+      response.url().endsWith(`/api/worktrees/${worktree}`),
+  );
+  await button.click();
+  expect((await saved).ok()).toBe(true);
+  await expect(button).toBeEnabled();
+  const snapshot = await (
+    await page.request.get(`/api/worktrees/${worktree}`)
+  ).json();
+  expect(snapshot.bundle.documentation.project).toBe(
+    "Second revision typed while saving",
+  );
+  expect(snapshot.conflicts).toEqual([]);
+  expect(writes).toBe(2);
+});
+
+test("runs use a configured environment after the environments are renamed", async ({
+  page,
+}) => {
+  await signIn(page);
+  const project = await (
+    await page.request.post("/api/projects", { data: { name: "Renamed" } })
+  ).json();
+  try {
+    await page.request.put("/api/environments", {
+      data: ["staging", "prod"],
+    });
+    await page.evaluate(
+      (id) => localStorage.setItem("duckpad-worktree", id),
+      project.id,
+    );
+    await page.reload();
+    const launched = page.waitForResponse(
+      (r) => r.url().endsWith("/runs") && r.request().method() === "POST",
+    );
+    await page
+      .getByRole("button", { name: "Run pipeline", exact: true })
+      .click();
+    const response = await launched;
+    expect(response.ok()).toBe(true);
+    expect((await response.json()).environment).toBe("staging");
+  } finally {
+    await page.request.put("/api/environments", { data: ["dev", "prod"] });
+  }
 });
