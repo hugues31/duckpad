@@ -98,7 +98,11 @@ def test_private_discovery_and_all_direct_resource_routes(instance):
     ]:
         response = request(client, outsider, method, path, **({"json": {}} if method == "POST" else {}))
         assert response.status_code == 404, (path, response.text)
-    assert client.get(f"/worktrees/{worktree['id']}").status_code == 200  # SPA remains public.
+    # Backend-only CI runs before the frontend build. The public shell may
+    # report missing assets, but it must not require an authenticated session.
+    shell = client.get(f"/worktrees/{worktree['id']}", headers={"cookie": ""})
+    assert shell.status_code in (200, 503)
+    assert shell.content == client.get("/", headers={"cookie": ""}).content
     assert client.get(f"/api/worktrees/{worktree['id']}").status_code == 200
     assert (
         request(client, owner_headers, "GET", f"/projects/{worktree['project']}/settings").json()["members"][
