@@ -154,13 +154,7 @@ def create_app(home: Path, watch=True):
 
     @app.get("/api/resources")
     def resources():
-        with engine.lock:
-            workers = [
-                context.db.process.pid
-                for context in engine.contexts.values()
-                if context.db and hasattr(context.db, "process") and context.db.process.poll() is None
-            ]
-        return resource_usage(workers)
+        return resource_usage()
 
     # Instance
 

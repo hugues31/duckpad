@@ -1,4 +1,4 @@
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect } from "@playwright/test";
 import fr from "../src/locales/fr.json" with { type: "json" };
 import { signIn } from "./helpers";
 
@@ -20,6 +20,8 @@ test("live server metrics, popup dismissal, mobile layout and translated dark th
   const popup = page.getByRole("dialog", { name: "Resource usage" });
   await expect(popup).toBeVisible();
   await expect(popup.getByRole("img")).toHaveCount(2);
+  await expect(popup).toContainText("Entire server machine");
+  await expect(popup).toContainText("all cores and applications");
   await expect(popup.locator(".resource-memory-detail")).toContainText(
     "RAM used / total",
   );
@@ -60,12 +62,12 @@ test("live server metrics, popup dismissal, mobile layout and translated dark th
   await expect(translated).toBeHidden();
 });
 
-test("metrics retain a bounded history and recover honestly from outages and server restarts", async ({
+test("metrics retain a bounded history and recover honestly from outages and counter resets", async ({
   page,
 }) => {
   let calls = 0;
   let failed = false;
-  let processId = 1;
+  let counterOffset = 1000;
   let memory: number | null = 256 * 1024 ** 2;
   await page.route("**/api/resources", async (route) => {
     calls++;
@@ -74,10 +76,9 @@ test("metrics retain a bounded history and recover honestly from outages and ser
       json: failed
         ? { error: "Unavailable" }
         : {
-            process_id: processId,
             sampled_at: calls * 2,
-            cpu_seconds: calls * 3,
-            cpu_capacity: 4,
+            cpu_seconds: counterOffset + calls * 3,
+            cpu_total_seconds: counterOffset + calls * 8,
             memory_bytes: memory,
             memory_total_bytes: 1024 ** 3,
           },
@@ -130,7 +131,7 @@ test("metrics retain a bounded history and recover honestly from outages and ser
     /M.*M/,
   );
 
-  processId = 2;
+  counterOffset = 0;
   memory = null;
   await expect(cpuValue).toHaveText("—");
   await expect(ramValue).toHaveText("—");
@@ -155,20 +156,22 @@ test("metrics retain a bounded history and recover honestly from outages and ser
   expect(calls).toBe(afterLogout);
 });
 
-test("unknown capacities stay unavailable and capacity changes reset CPU sampling", async ({
+test("missing or stalled CPU counters stay unavailable while memory keeps updating", async ({
   page,
 }) => {
   let calls = 0;
-  let cpuCapacity = 0;
+  let cpuAvailable = false;
+  let cpuTotal = 0;
+  let stalled = false;
   let totalMemory: number | null = null;
   await page.route("**/api/resources", async (route) => {
     calls++;
+    if (!stalled) cpuTotal += 8;
     await route.fulfill({
       json: {
-        process_id: 1,
         sampled_at: calls * 2,
-        cpu_seconds: calls * 3,
-        cpu_capacity: cpuCapacity,
+        cpu_seconds: cpuAvailable ? calls * 3 : null,
+        cpu_total_seconds: cpuAvailable ? cpuTotal : null,
         memory_bytes: 256 * 1024 ** 2,
         memory_total_bytes: totalMemory,
       },
@@ -185,16 +188,17 @@ test("unknown capacities stay unavailable and capacity changes reset CPU samplin
   );
   await expect(widget.locator(".resource-cpu b")).toHaveText("—");
   await expect(widget.locator(".resource-memory b")).toHaveText("—");
-  cpuCapacity = 4;
+  cpuAvailable = true;
   totalMemory = 512 * 1024 ** 2;
   await expect(widget.locator(".resource-cpu b")).toHaveText("37.5 %");
   await expect(widget.locator(".resource-memory b")).toHaveText("50.0 %");
-  cpuCapacity = 1;
+  stalled = true;
   await expect(widget.locator(".resource-cpu b")).toHaveText("—");
-  await expect(widget.locator(".resource-cpu b")).toHaveText("100.0 %");
-  await expect(
-    widget.locator(".resource-cpu .resource-meter-fill"),
-  ).toHaveAttribute("style", "width: 100%;");
+  await expect(widget.locator(".resource-memory b")).toHaveText("50.0 %");
+  stalled = false;
+  await expect(widget.locator(".resource-cpu b")).toHaveText("37.5 %");
+  cpuAvailable = false;
+  await expect(widget.locator(".resource-cpu b")).toHaveText("—");
   totalMemory = 0;
   await expect(widget.locator(".resource-memory b")).toHaveText("—");
   await expect(widget).not.toContainText(/NaN|Infinity/);
