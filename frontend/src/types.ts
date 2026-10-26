@@ -1,4 +1,5 @@
 export type Json = Record<string, any>;
+export type Theme = "light" | "dark";
 export interface FlowNode {
   id: string;
   template?: string;
@@ -14,13 +15,16 @@ export interface FlowEdge {
   sourceHandle: string;
   targetHandle: string;
 }
+export interface Graph {
+  nodes: FlowNode[];
+  edges: FlowEdge[];
+  [key: string]: any;
+}
 export interface Bundle {
-  flow: {
+  flow: Graph & {
     id: string;
     name: string;
     description?: string;
-    nodes: FlowNode[];
-    edges: FlowEdge[];
   };
   templates: Record<string, string>;
   components: Record<string, Json>;
@@ -48,42 +52,7 @@ export interface Workspace {
   catalog: Json;
   identity: Json;
 }
-export class ApiError extends Error {
-  constructor(
-    message: string,
-    public status: number,
-    public detail?: any,
-  ) {
-    super(message);
-  }
+export interface Statuses {
+  nodes: Record<string, Json>;
+  active: Json | null;
 }
-export async function api<T = any>(
-  path: string,
-  options?: RequestInit,
-): Promise<T> {
-  const response = await fetch("/api" + path, {
-    credentials: "same-origin",
-    ...options,
-    headers: { "Content-Type": "application/json", ...options?.headers },
-  });
-  const result = await response.json();
-  if (!response.ok)
-    throw new ApiError(
-      result.error || result.detail || "Request failed",
-      response.status,
-      result.detail,
-    );
-  return result;
-}
-export const send = (data: unknown, method = "POST"): RequestInit => ({
-  method,
-  body: JSON.stringify(data),
-});
-export const identifier = (prefix = "node") =>
-  prefix + "_" + crypto.randomUUID().replaceAll("-", "").slice(0, 12);
-export const formatValue = (value: any) =>
-  value === null
-    ? "NULL"
-    : typeof value === "object"
-      ? JSON.stringify(value)
-      : String(value);

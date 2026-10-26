@@ -1,16 +1,7 @@
 import fr from "../src/locales/fr.json" with { type: "json" };
+import { signIn } from "./helpers";
 import { test, expect, type Page } from "@playwright/test";
 
-async function signIn(page: Page) {
-  await page.goto("/");
-  await page
-    .getByLabel("Password", { exact: true })
-    .fill("duckpad-browser-test");
-  await page.getByRole("button", { name: "Sign in", exact: true }).click();
-  await expect(
-    page.getByRole("navigation", { name: "Workspace", exact: true }),
-  ).toBeVisible();
-}
 async function choosePreference(page: Page, name: string) {
   await page.locator(".account .avatar").click();
   await page.getByRole("menuitemradio", { name, exact: true }).click();
@@ -1001,4 +992,64 @@ test("selected nodes show incoming and outgoing flow, with larger usable sockets
   );
   expect(incoming).toHaveLength(1);
   expect(incoming[0].source).toBe(await customers.getAttribute("data-id"));
+});
+
+test("project documentation saves repeatedly without an edit conflict", async ({
+  page,
+}) => {
+  await sample(page);
+  await page
+    .getByRole("button", { name: "Documentation", exact: true })
+    .click();
+  const panel = page.locator(".documentation-page");
+  for (const text of ["First revision", "Second revision"]) {
+    await panel.locator(".project-documentation").fill(text);
+    const saved = page.waitForResponse(
+      (r) =>
+        r.request().method() === "PUT" && r.url().includes("/api/worktrees/"),
+    );
+    await panel
+      .getByRole("button", { name: "Save changes", exact: true })
+      .click();
+    expect((await saved).ok()).toBe(true);
+  }
+  await expect(page.locator(".banner.warning")).toHaveCount(0);
+  const worktree = await page.evaluate(() =>
+    localStorage.getItem("duckpad-worktree"),
+  );
+  const snapshot = await (
+    await page.request.get(`/api/worktrees/${worktree}`)
+  ).json();
+  expect(snapshot.bundle.documentation.project).toBe("Second revision");
+  expect(snapshot.conflicts).toEqual([]);
+});
+
+test("runs use a configured environment after the environments are renamed", async ({
+  page,
+}) => {
+  await signIn(page);
+  const project = await (
+    await page.request.post("/api/projects", { data: { name: "Renamed" } })
+  ).json();
+  try {
+    await page.request.put("/api/environments", {
+      data: ["staging", "prod"],
+    });
+    await page.evaluate(
+      (id) => localStorage.setItem("duckpad-worktree", id),
+      project.id,
+    );
+    await page.reload();
+    const launched = page.waitForResponse(
+      (r) => r.url().endsWith("/runs") && r.request().method() === "POST",
+    );
+    await page
+      .getByRole("button", { name: "Run pipeline", exact: true })
+      .click();
+    const response = await launched;
+    expect(response.ok()).toBe(true);
+    expect((await response.json()).environment).toBe("staging");
+  } finally {
+    await page.request.put("/api/environments", { data: ["dev", "prod"] });
+  }
 });

@@ -2012,84 +2012,6 @@ small {
   margin: 24px 0 0;
   font-size: 12px;
 }
-.welcome {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  position: relative;
-  background: var(--bg);
-}
-.welcome-art {
-  width: 270px;
-  height: 155px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  position: relative;
-  margin-bottom: 20px;
-}
-.orbit {
-  position: absolute;
-  width: 51px;
-  height: 51px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid var(--border);
-  background: var(--surface);
-  border-radius: 14px;
-  color: #92ada5;
-  box-shadow: var(--shadow);
-}
-.orbit.one {
-  left: 0;
-  top: 16px;
-  transform: rotate(-10deg);
-}
-.orbit.two {
-  right: 3px;
-  top: 0;
-  transform: rotate(12deg);
-  color: #9f92bc;
-}
-.orbit.three {
-  right: 15px;
-  bottom: 0;
-  transform: rotate(7deg);
-  color: #c0a382;
-}
-.welcome h1 {
-  font-size: 39px;
-  margin: 15px 0;
-  letter-spacing: -0.05em;
-}
-.welcome > p {
-  max-width: 470px;
-  color: var(--muted);
-  font-size: 14px;
-  line-height: 1.8;
-  margin-bottom: 28px;
-}
-.example-note {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  font-size: 11px;
-  line-height: 1.7;
-  text-align: left;
-  max-width: 470px;
-  margin-top: 38px;
-  border-top: 1px solid var(--border);
-  padding-top: 24px;
-  color: var(--muted);
-}
-.example-note svg {
-  flex-shrink: 0;
-  color: #9a8bb7;
-}
 .modal-backdrop {
   position: fixed;
   inset: 0;
@@ -2864,13 +2786,6 @@ option {
   }
   .page-heading {
     flex-wrap: wrap;
-  }
-  .welcome h1 {
-    font-size: 30px;
-  }
-  .welcome .row {
-    flex-wrap: wrap;
-    justify-content: center;
   }
 }
 @media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
