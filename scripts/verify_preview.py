@@ -42,7 +42,7 @@ def wait_for_deployment(base, commit):
             if status == "finished":
                 print(f"Coolify finished deployment of {commit}.")
                 return
-            if status in ("failed", "cancelled", "canceled"):
+            if status in ("failed", "cancelled", "canceled", "cancelled-by-user"):
                 raise SystemExit(f"Coolify deployment of {commit} {status}.")
         time.sleep(10)
     raise SystemExit(f"No finished deployment of {commit}; the URL may still serve an earlier version.")
