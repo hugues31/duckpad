@@ -4,10 +4,9 @@ import { api } from "./api";
 import { useT } from "./i18n";
 
 interface Counters {
-  process_id: number;
   sampled_at: number;
-  cpu_seconds: number;
-  cpu_capacity: number;
+  cpu_seconds: number | null;
+  cpu_total_seconds: number | null;
   memory_bytes: number | null;
   memory_total_bytes: number | null;
 }
@@ -105,20 +104,20 @@ export default function ResourceMonitor() {
           signal: request.signal,
         });
         if (stopped) return;
-        const elapsed = previous ? current.sampled_at - previous.sampled_at : 0;
         sample = {
           at: Date.now(),
           cpu:
             previous &&
-            previous.process_id === current.process_id &&
-            previous.cpu_capacity === current.cpu_capacity &&
-            current.cpu_capacity > 0 &&
-            elapsed > 0 &&
+            previous.cpu_seconds !== null &&
+            current.cpu_seconds !== null &&
+            previous.cpu_total_seconds !== null &&
+            current.cpu_total_seconds !== null &&
+            current.sampled_at > previous.sampled_at &&
+            current.cpu_total_seconds > previous.cpu_total_seconds &&
             current.cpu_seconds >= previous.cpu_seconds
               ? percent(
                   (100 * (current.cpu_seconds - previous.cpu_seconds)) /
-                    elapsed /
-                    current.cpu_capacity,
+                    (current.cpu_total_seconds - previous.cpu_total_seconds),
                 )
               : null,
           memory:
