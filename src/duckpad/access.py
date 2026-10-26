@@ -96,6 +96,8 @@ class Access:
             user = self.store.get("user", identity)
             if not user:
                 raise Problem("User not found", 404)
+            if user.get("oidc") and "password" in data:
+                raise Problem("SSO accounts authenticate with their identity provider")
             if data.get("active") is False:
                 user["session_version"] = user.get("session_version", 0) + 1
             user.update({k: v for k, v in data.items() if k != "password"})
@@ -103,6 +105,8 @@ class Access:
             users = [user if u["id"] == identity else u for u in self.store.all("user")]
             if not any(u["active"] and u["role"] == "admin" for u in users):
                 raise Problem("Keep at least one active instance administrator", 409)
+            if not any(u["active"] and u["role"] == "admin" and not u.get("oidc") for u in users):
+                raise Problem("Keep at least one active local administrator for SSO recovery", 409)
             for project in self.store.all("project"):
                 self.validate_admins(self.record(project["id"])["members"], users)
             self.store.put("user", identity, user)

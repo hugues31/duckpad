@@ -51,6 +51,7 @@ export interface Project {
 }
 export interface Workspace {
   user: {
+    auth_method?: "oidc";
     id: string;
     username: string;
     role: "admin" | "member";
