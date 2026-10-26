@@ -10,8 +10,12 @@ import {
   Loader2,
   X,
 } from "lucide-react";
-import { api, send, formatValue, type Json } from "./types";
+import { api, send, withQuery } from "./api";
+import { formatValue } from "./graph";
+import type { Json } from "./types";
 import { useT } from "./i18n";
+const GENERATION_CHECK_INTERVAL = 500;
+
 export default function LineagePanel({
   worktree,
   environment,
@@ -31,33 +35,39 @@ export default function LineagePanel({
   const serial = useRef(0);
   const interrupted = useRef(false);
   useEffect(() => setHistory([cell]), [cell]);
+  // Watch the explained result generation; a recalculation interrupts this view for good.
   useEffect(() => {
     let live = true;
+    let timer: number | undefined;
     interrupted.current = false;
     const verify = async () => {
       try {
         const state = await api(
-          `/worktrees/${worktree}/generations/${cell.dataset}?environment=${environment}`,
+          withQuery(`/worktrees/${worktree}/generations/${cell.dataset}`, {
+            environment,
+          }),
         );
         if (live && !state.valid) {
           interrupted.current = true;
           serial.current++;
+          clearInterval(timer);
           setResult(null);
           setPending(false);
           setError(t("lineageInterrupted"));
         }
       } catch {
-        /* The request itself reports authentication and network failures. */
+        // Transient failures are retried by the next check.
       }
     };
     void verify();
-    const timer = setInterval(verify, 500);
+    timer = window.setInterval(verify, GENERATION_CHECK_INTERVAL);
     return () => {
       live = false;
       clearInterval(timer);
     };
   }, [worktree, environment, cell, t]);
   const current = history[history.length - 1];
+  // Responses belong to an explicit result generation; never replay on refresh.
   useEffect(() => {
     if (interrupted.current) return;
     const id = ++serial.current;
@@ -80,7 +90,6 @@ export default function LineagePanel({
       serial.current++;
     };
   }, [worktree, environment, current]);
-  // Responses belong to an explicit result generation; never replay on refresh.
   const change = (values: Json) =>
     setHistory([...history.slice(0, -1), { ...current, ...values }]);
   const navigate = (contribution: Json) =>
@@ -226,7 +235,10 @@ export default function LineagePanel({
                       disabled={!current.offset}
                       onClick={() =>
                         change({
-                          offset: Math.max(0, (current.offset || 0) - 5),
+                          offset: Math.max(
+                            0,
+                            (current.offset || 0) - result.page_size,
+                          ),
                         })
                       }
                     >
@@ -234,14 +246,21 @@ export default function LineagePanel({
                       {t("previous")}
                     </button>
                     <span className="muted small">
-                      {Math.min((current.offset || 0) + 5, result.total)} /{" "}
-                      {result.total}
+                      {Math.min(
+                        (current.offset || 0) + result.page_size,
+                        result.total,
+                      )}{" "}
+                      / {result.total}
                     </span>
                     <button
                       className="button secondary small"
-                      disabled={(current.offset || 0) + 5 >= result.total}
+                      disabled={
+                        (current.offset || 0) + result.page_size >= result.total
+                      }
                       onClick={() =>
-                        change({ offset: (current.offset || 0) + 5 })
+                        change({
+                          offset: (current.offset || 0) + result.page_size,
+                        })
                       }
                     >
                       {t("next")}
