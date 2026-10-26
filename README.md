@@ -21,6 +21,11 @@ duckpad start --home /path/to/my-instance --port 8765 --no-browser
 
 Only one backend may own an instance directory at a time. Use separate `--home` directories for independent instances. The default address is `127.0.0.1`. Behind an HTTPS reverse proxy, set `DUCKPAD_SECURE_COOKIES=1` so the session cookie is only sent over HTTPS.
 
+Successful GET requests used for background polling (workspace, resources, worktree
+snapshots, status, and generations) are logged at DEBUG. The default INFO level
+still shows other requests, including failed polling requests. Use
+`duckpad start --log-level debug` to include polling in the server logs.
+
 ## Accounts and project access
 
 The initial `admin` account manages the instance. Open **Users** to create individual
