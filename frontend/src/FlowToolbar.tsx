@@ -15,10 +15,11 @@ import {
 import { useT } from "./i18n";
 import type { Json, Snapshot } from "./types";
 
-export type WorkspaceTab = "flow" | "documentation" | "history";
+export type WorkspaceTab = "flow" | "code" | "documentation" | "history";
 
 const TABS = [
   ["flow", Workflow],
+  ["code", FileCode2],
   ["documentation", BookOpen],
   ["history", Activity],
 ] as const;
@@ -28,11 +29,11 @@ export function FlowToolbar({
   onProjectSettings,
   tab,
   saving,
+  dirty,
   branch,
   active,
   canRun,
   onTab,
-  onFiles,
   onMerge,
   onRun,
   onStop,
@@ -41,11 +42,11 @@ export function FlowToolbar({
   onProjectSettings: () => void;
   tab: WorkspaceTab;
   saving: boolean;
+  dirty: boolean;
   branch: string;
   active: Json | null;
   canRun: boolean;
   onTab: (tab: WorkspaceTab) => void;
-  onFiles: () => void;
   onMerge: () => void;
   onRun: () => void;
   onStop: () => void;
@@ -74,14 +75,13 @@ export function FlowToolbar({
         <span className="save-status">
           {saving ? (
             <Loader2 size={13} className="spin" />
+          ) : dirty ? (
+            <AlertCircle size={13} />
           ) : (
             <Check size={13} />
           )}{" "}
-          {t(saving ? "saving" : "saved")}
+          {t(saving ? "saving" : dirty ? "unsavedChanges" : "saved")}
         </span>
-        <button className="icon" title={t("files")} onClick={onFiles}>
-          <FileCode2 size={16} />
-        </button>
         {!readOnly && branch !== "main" && (
           <button className="button secondary small" onClick={onMerge}>
             <GitMerge size={14} />
