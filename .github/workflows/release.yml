@@ -1,0 +1,119 @@
+name: Release Duckpad
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Validate and build release
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.release.outputs.version }}
+      prerelease: ${{ steps.release.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync --extra dev --locked
+      - name: Validate tag and generate release notes
+        id: release
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_REPOSITORY: ${{ github.repository }}
+        run: uv run python scripts/release.py "$RELEASE_TAG" --repository "$RELEASE_REPOSITORY" --output release-notes.md
+      - run: uv run ruff check src tests scripts
+      - run: uv run ruff format --check src tests scripts
+      - run: uv run pytest -q
+      - run: npm ci --prefix frontend
+      - run: npm run build --prefix frontend
+      - run: npm exec --prefix frontend -- playwright install --with-deps chromium
+      - run: npm run test:e2e --prefix frontend
+      # uv builds the wheel from the sdist, checking that the source archive is complete.
+      - run: uv build
+      - run: uv tool run --from twine==7.0.0 twine check --strict dist/*
+      - name: Smoke test the installed wheel outside the checkout
+        run: |
+          uv venv /tmp/duckpad-release-smoke
+          uv pip install --python /tmp/duckpad-release-smoke/bin/python dist/*.whl
+          uv run python scripts/smoke_wheel.py --python /tmp/duckpad-release-smoke/bin/python
+      - name: Calculate distribution checksums
+        working-directory: dist
+        run: sha256sum *.whl *.tar.gz > SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-bundle
+          path: |
+            dist/
+            release-notes.md
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: release-browser-diagnostics
+          path: frontend/test-results/
+
+  publish-pypi:
+    name: Publish to PyPI
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/project/duckpad/${{ needs.build.outputs.version }}/
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-bundle
+      - name: Verify and stage distributions
+        run: |
+          (cd dist && sha256sum --check SHA256SUMS)
+          mkdir packages
+          cp dist/*.whl dist/*.tar.gz packages/
+      - name: Publish with Trusted Publishing
+        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # release/v1
+        with:
+          packages-dir: packages/
+
+  publish-github:
+    name: Publish GitHub release
+    needs: [build, publish-pypi]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-bundle
+      - name: Publish notes and the exact PyPI artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          PRERELEASE: ${{ needs.build.outputs.prerelease }}
+        run: |
+          (cd dist && sha256sum --check SHA256SUMS)
+          flags=()
+          if [[ "$PRERELEASE" == true ]]; then
+            flags+=(--prerelease --latest=false)
+          fi
+          gh release create "$RELEASE_TAG" dist/*.whl dist/*.tar.gz dist/SHA256SUMS \
+            --verify-tag --title "Duckpad $RELEASE_TAG" --notes-file release-notes.md "${flags[@]}"
