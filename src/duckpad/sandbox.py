@@ -43,7 +43,7 @@ class Database:
             self.call("initialize", policy=policy)
         except Exception as error:
             self.close()
-            diagnostics = self.process.stderr.read().decode(errors="replace")
+            diagnostics = self.diagnostics
             raise Problem(
                 "Cannot initialize isolated SQL execution: "
                 + (
@@ -97,7 +97,13 @@ class Database:
     def close(self):
         if self.process.poll() is None:
             self.process.terminate()
-        self.process.wait(timeout=10)
+        try:
+            self.process.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            self.process.kill()
+            self.process.wait()
+        self.diagnostics = self.process.stderr.read().decode(errors="replace")
+        self.process.stderr.close()
         self.socket.close()
         self.reader.join(timeout=5)
         self.stream.close()
@@ -122,7 +128,12 @@ class Cursor:
         return tuple(row) if row is not None else None
 
     def interrupt(self):
-        self.database.call("interrupt", cursor=self.identity)
+        if not self.database.closed:
+            try:
+                self.database.call("interrupt", cursor=self.identity)
+            except (duckdb.Error, Problem):
+                if not self.database.closed:
+                    raise
 
     def close(self):
         if not self.database.closed:

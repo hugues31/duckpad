@@ -79,7 +79,7 @@ class Engine:
     def context(self, worktree, environment, create=False):
         with self.lock:
             key = (worktree, environment)
-            if key not in self.contexts:
+            if key not in self.contexts or getattr(self.contexts[key].db, "closed", False):
                 self.contexts[key] = Context(*key, db=None)
             if self.contexts[key].db is None and (create or not self.access):
                 extensions = self.store.home / "extensions"
@@ -370,11 +370,12 @@ class Engine:
 
     def _execute(self, token, context, run, nodes, edges, order, captured, secrets, fingerprints):
         started = time.monotonic()
-        cursor = context.db.cursor()
-        token["cursor"] = cursor
+        cursor = None
         published = {}
         prepared = {}
         try:
+            cursor = context.db.cursor()
+            token["cursor"] = cursor
             run["status"] = "running"
             self._persist(run, secrets)
             for key in order:
@@ -554,7 +555,11 @@ class Engine:
                     state["status"] = "canceled" if token["cancel"].is_set() else "blocked"
         finally:
             with self.lock:
-                cursor.close()
+                if cursor:
+                    try:
+                        cursor.close()
+                    except (duckdb.Error, Problem):
+                        pass
                 token["cursor"] = None
                 if token["cancel"].is_set():
                     run["status"] = "canceled"

@@ -225,7 +225,11 @@ export function UsersPage({ refresh }: { refresh: () => Promise<unknown> }) {
                   </label>
                   <label className="field">
                     <span>{t("instanceRole")}</span>
-                    <select name="role" defaultValue="member">
+                    <select
+                      aria-label={t("instanceRole")}
+                      name="role"
+                      defaultValue="member"
+                    >
                       <option value="member">{t("role_member")}</option>
                       <option value="admin">{t("role_admin")}</option>
                     </select>
@@ -240,6 +244,7 @@ export function UsersPage({ refresh }: { refresh: () => Promise<unknown> }) {
                 <label className="field">
                   <span>{t("newPassword")}</span>
                   <input
+                    aria-label={t("newPassword")}
                     name="password"
                     type="password"
                     required
@@ -375,7 +380,12 @@ export function ProjectSettings({
           >
             <label className="field">
               <span>{t("user")}</span>
-              <select name="user" required disabled={!available.length}>
+              <select
+                aria-label={t("user")}
+                name="user"
+                required
+                disabled={!available.length}
+              >
                 <option value="">
                   {t(available.length ? "chooseUser" : "noAvailableUsers")}
                 </option>
@@ -388,7 +398,11 @@ export function ProjectSettings({
             </label>
             <label className="field">
               <span>{t("projectRole")}</span>
-              <select name="role" defaultValue="reader">
+              <select
+                aria-label={t("projectRole")}
+                name="role"
+                defaultValue="reader"
+              >
                 {["reader", "editor", "admin"].map((role) => (
                   <option key={role} value={role}>
                     {t(`role_${role}`)}
@@ -612,6 +626,7 @@ export function PasswordForm({ onChanged }: { onChanged: () => void }) {
         <label className="field">
           <span>{t("newPassword")}</span>
           <input
+            aria-label={t("newPassword")}
             name="password"
             type="password"
             required
