@@ -130,7 +130,7 @@ class Access:
     def local_roots(self, project, captured):
         resource = self.store.home / "resources" / project
         resource.mkdir(parents=True, exist_ok=True)
-        roots = [resource]
+        roots, writable = [resource], [resource]
         for connection in captured.values():
             root = connection["values"].get("root")
             if not root:
@@ -145,4 +145,6 @@ class Access:
             if not path.is_dir():
                 raise Problem("Local connection root must be an existing directory")
             roots.append(path)
-        return roots
+            if "write" in connection["definition"].get("capabilities", []):
+                writable.append(path)
+        return roots, writable

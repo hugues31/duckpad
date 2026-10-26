@@ -4,7 +4,9 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
+  type CSSProperties,
 } from "react";
 import {
   Activity,
@@ -24,8 +26,10 @@ import {
   HelpCircle,
   Layers,
   Loader2,
-  LogOut,
   Moon,
+  PanelLeft,
+  PanelBottom,
+  PanelRight,
   Play,
   Plus,
   Search,
@@ -52,6 +56,9 @@ import Canvas, { nodeIcon } from "./Canvas";
 import Preview from "./Preview";
 import Inspector from "./Inspector";
 import LineagePanel from "./LineagePanel";
+import AccountMenu from "./AccountMenu";
+import ProjectDashboard from "./ProjectDashboard";
+import { PanelResizeHandle, usePanelSizes } from "./WorkspacePanels";
 import {
   ConnectionsPanel,
   DocumentationPanel,
@@ -71,19 +78,13 @@ function DuckMark({ size = 30 }: { size?: number }) {
       fill="none"
       aria-hidden="true"
     >
-      <rect width="40" height="40" rx="12" fill="#173d36" />
+      <rect width="40" height="40" rx="10" fill="#226bff" />
       <path
-        d="M11 22c0-3 3-5 7-5h4v-4a5 5 0 1 1 10 0v8c0 7-6 10-12 10-6 0-10-3-10-8l1-1Z"
-        fill="#e5ebbd"
+        d="M8 19h13v-7a5 5 0 0 1 10 0v2h6l-6 6v2a10 10 0 0 1-10 10H8V19Z"
+        fill="#ffffff"
       />
-      <path d="m31 14 6 2-6 3" fill="#e4ad61" />
-      <circle cx="28.5" cy="12.5" r="1.2" fill="#173d36" />
-      <path
-        d="M16 23c2 3 6 3 9 0"
-        stroke="#173d36"
-        strokeWidth="1.5"
-        strokeLinecap="round"
-      />
+      <path d="M12 25h12l3-3" stroke="#226bff" strokeWidth="2" />
+      <path d="M11 23h4v4h-4zM19 23h4v4h-4zM25 19h4v4h-4z" fill="#226bff" />
     </svg>
   );
 }
@@ -137,9 +138,11 @@ function WorkspaceApp({
   const [worktree, setWorktree] = useState(
     localStorage.getItem("duckpad-worktree") || "",
   );
+  const currentWorktree = useRef(worktree);
+  currentWorktree.current = worktree;
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [environment, setEnvironment] = useState("dev");
-  const [area, setArea] = useState("pipelines");
+  const [area, setArea] = useState(worktree ? "pipelines" : "projects");
   const [tab, setTab] = useState("flow");
   const [selected, setSelected] = useState<string | null>(null);
   const [path, setPath] = useState<
@@ -157,6 +160,12 @@ function WorkspaceApp({
   } | null>(null);
   const [saving, setSaving] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(
+    () => window.matchMedia("(min-width: 1100px)").matches,
+  );
+  const [previewOpen, setPreviewOpen] = useState(true);
+  const [inspectorOpen, setInspectorOpen] = useState(true);
+  const panels = usePanelSizes();
   const useStableSelection = useCallback(
     (ids: string[]) =>
       setSelection((previous) =>
@@ -188,7 +197,9 @@ function WorkspaceApp({
     async (id = worktree) => {
       if (!id) return;
       const value = await api<Snapshot>(`/worktrees/${id}`);
+      if (id !== currentWorktree.current) return;
       setSnapshot((old) =>
+        old?.worktree.id === value.worktree.id &&
         old?.revision === value.revision &&
         old?.role === value.role &&
         JSON.stringify(old.connections) === JSON.stringify(value.connections) &&
@@ -203,8 +214,11 @@ function WorkspaceApp({
     if (authenticated)
       refreshWorkspace()
         .then((value) => {
-          if (!value.worktrees.some((w) => w.id === worktree))
-            setWorktree(value.worktrees[0]?.id || "");
+          if (!value.worktrees.some((w) => w.id === worktree)) {
+            setWorktree("");
+            localStorage.removeItem("duckpad-worktree");
+            setArea("projects");
+          }
         })
         .catch((e) => notify(e.message, true));
   }, [authenticated]);
@@ -213,9 +227,11 @@ function WorkspaceApp({
       localStorage.setItem("duckpad-worktree", worktree);
       setSnapshot(null);
       setSelected(null);
+      setSelection([]);
       setPath([]);
       setCell(null);
       setPreview(null);
+      setStatuses({ nodes: {}, active: null });
       load(worktree).catch((e) => notify(e.message, true));
     }
   }, [worktree, authenticated]);
@@ -302,6 +318,12 @@ function WorkspaceApp({
     setSelected(id);
     setCell(null);
     setPreview(null);
+    if (id) {
+      setInspectorOpen(true);
+      setPreviewOpen(true);
+      if (window.matchMedia("(max-width: 1099px)").matches)
+        setPaletteOpen(false);
+    }
   };
   async function saveBundle(value: Bundle, base = snapshot!) {
     if (!canEdit) return;
@@ -397,6 +419,17 @@ function WorkspaceApp({
   const safe = (fn: () => Promise<unknown>) => {
     void fn().catch((e) => notify(e.message, true));
   };
+  function openProject(id: string) {
+    setWorktree(id);
+    setArea("pipelines");
+    setTab("flow");
+    setPath([]);
+    setSelected(null);
+    setSelection([]);
+    setCell(null);
+    setPreview(null);
+    setSearch("");
+  }
   function newBranch(revision = "") {
     setModal({
       kind: "form",
@@ -446,8 +479,7 @@ function WorkspaceApp({
       submit: async (v: Json) => {
         const next = await api("/projects", send(v));
         await refreshWorkspace();
-        setWorktree(next.id);
-        setArea("pipelines");
+        openProject(next.id);
       },
     });
   }
@@ -456,8 +488,7 @@ function WorkspaceApp({
     try {
       const result = await api("/example", send({}));
       await refreshWorkspace();
-      setWorktree(result.id);
-      setArea("pipelines");
+      openProject(result.id);
     } catch (e) {
       notify((e as Error).message, true);
     } finally {
@@ -527,97 +558,93 @@ function WorkspaceApp({
     );
   return (
     <div className="app-shell">
-      <nav className="rail" aria-label={t("workspace")}>
-        <button
-          className="brand-button"
-          title="Duckpad"
-          onClick={() => setArea("pipelines")}
-        >
-          <DuckMark size={36} />
-        </button>
-        <div className="rail-main">
-          {[
-            ["pipelines", Workflow],
-            ...(instanceAdmin
-              ? [
-                  ["connections", Database],
-                  ["users", Users],
-                ]
-              : []),
-            ["settings", Settings2],
-          ].map(([key, Icon]) => (
-            <button
-              key={key as string}
-              className={`rail-button ${area === key ? "active" : ""}`}
-              title={t(key as string)}
-              aria-label={t(key as string)}
-              onClick={() => setArea(key as string)}
-            >
-              <Icon size={21} />
-            </button>
-          ))}
-        </div>
-        <button
-          className="rail-button"
-          title={t("help")}
-          onClick={() => setModal({ kind: "about" })}
-        >
-          <HelpCircle size={20} />
-        </button>
-        <button
-          className="avatar"
-          title={t("signOut")}
-          onClick={() =>
-            safe(async () => {
-              await api("/logout", send({}));
-              setAuthenticated(false);
-            })
-          }
-        >
-          {workspace?.user.username.slice(0, 1).toUpperCase() || "?"}
-        </button>
-      </nav>
       <div className="workspace-shell">
         <header className="topbar">
-          <div className="project-picker">
-            <span className="project-symbol">
-              <Layers size={18} />
-            </span>
-            <div>
-              <span className="eyebrow">{t("workspace")}</span>
-              <select
-                aria-label={t("activeProject")}
-                value={
-                  snapshot?.worktree.project ||
-                  workspace?.worktrees.find((w) => w.id === worktree)
-                    ?.project ||
-                  ""
-                }
-                onChange={(e) => {
-                  const project = workspace?.projects.find(
-                    (p) => p.id === e.target.value,
-                  );
-                  if (project) setWorktree(project.main);
-                }}
-              >
-                {!workspace?.projects.length && <option>Duckpad</option>}
-                {workspace?.projects.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
+          <nav className="rail" aria-label={t("workspace")}>
+            <button
+              className="brand-button"
+              title="Duckpad"
+              aria-label={t("backToProjects")}
+              aria-current={area === "projects" ? "page" : undefined}
+              onClick={() => {
+                setArea("projects");
+                safe(refreshWorkspace);
+              }}
+            >
+              <DuckMark size={30} />
+            </button>
+            <div className="rail-main">
+              {[
+                ["pipelines", Workflow],
+                ...(instanceAdmin
+                  ? [
+                      ["connections", Database],
+                      ["users", Users],
+                    ]
+                  : []),
+              ].map(([key, Icon]) => (
+                <button
+                  key={key as string}
+                  className={`rail-button ${area === key ? "active" : ""}`}
+                  title={t(key as string)}
+                  aria-label={t(key as string)}
+                  onClick={() => setArea(key as string)}
+                >
+                  <Icon size={21} />
+                </button>
+              ))}
             </div>
             <button
-              className="icon"
-              title={t("newProject")}
-              onClick={projectForm}
+              className="rail-button"
+              title={t("help")}
+              onClick={() => setModal({ kind: "about" })}
             >
-              <Plus size={16} />
+              <HelpCircle size={20} />
             </button>
-          </div>
+          </nav>
+          {area === "projects" ? (
+            <div className="dashboard-brand">Duckpad</div>
+          ) : (
+            <div className="project-picker">
+              <span className="project-symbol">
+                <Layers size={18} />
+              </span>
+              <div>
+                <span className="eyebrow">{t("workspace")}</span>
+                <select
+                  aria-label={t("activeProject")}
+                  value={
+                    snapshot?.worktree.project ||
+                    workspace?.worktrees.find((w) => w.id === worktree)
+                      ?.project ||
+                    ""
+                  }
+                  onChange={(e) => {
+                    const project = workspace?.projects.find(
+                      (p) => p.id === e.target.value,
+                    );
+                    if (project) openProject(project.main);
+                  }}
+                >
+                  {!workspace?.projects.length && <option>Duckpad</option>}
+                  {workspace?.projects.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <button
+                className="icon"
+                title={t("newProject")}
+                onClick={projectForm}
+              >
+                <Plus size={16} />
+              </button>
+            </div>
+          )}
           <div className="topbar-right">
-            {snapshot && (
+            {snapshot && area !== "projects" && (
               <>
                 <div className="branch-picker">
                   <GitBranch size={14} />
@@ -661,7 +688,20 @@ function WorkspaceApp({
                 </label>
               </>
             )}
-            {themes}
+            <AccountMenu
+              username={workspace?.user.username || ""}
+              theme={theme}
+              language={language}
+              setTheme={setTheme}
+              setLanguage={setLanguage}
+              onSettings={() => setArea("settings")}
+              onSignOut={() =>
+                safe(async () => {
+                  await api("/logout", send({}));
+                  setAuthenticated(false);
+                })
+              }
+            />
           </div>
         </header>
         {area === "users" && workspace && instanceAdmin ? (
@@ -786,46 +826,21 @@ function WorkspaceApp({
               </div>
             )}
           </section>
-        ) : !worktree ? (
-          <section className="welcome">
-            <div className="welcome-art">
-              <DuckMark size={76} />
-              <span className="orbit one">
-                <Database size={25} />
-              </span>
-              <span className="orbit two">
-                <GitBranch size={25} />
-              </span>
-              <span className="orbit three">
-                <Code2 size={25} />
-              </span>
+        ) : area === "projects" || !worktree ? (
+          workspace ? (
+            <ProjectDashboard
+              projects={workspace.projects}
+              language={language}
+              busy={busy}
+              onOpen={openProject}
+              onCreate={projectForm}
+              onExample={example}
+            />
+          ) : (
+            <div className="startup" role="status" aria-label={t("loading")}>
+              <Loader2 className="spin" />
             </div>
-            <span className="eyebrow">DUCKPAD / LOCAL DATA WORKSPACE</span>
-            <h1>{t("welcome")}</h1>
-            <p>{t("welcomeDescription")}</p>
-            <div className="row gap">
-              <button
-                className="button primary large"
-                onClick={example}
-                disabled={busy}
-              >
-                {busy ? (
-                  <Loader2 className="spin" size={17} />
-                ) : (
-                  <Play size={16} />
-                )}{" "}
-                {t("example")}
-              </button>
-              <button className="button secondary large" onClick={projectForm}>
-                <Plus size={17} />
-                {t("startBlank")}
-              </button>
-            </div>
-            <div className="example-note">
-              <Boxes size={20} />
-              <span>{t("exampleDescription")}</span>
-            </div>
-          </section>
+          )
         ) : !snapshot ? (
           <div className="startup">
             <Loader2 className="spin" />
@@ -1002,11 +1017,33 @@ function WorkspaceApp({
                 }}
               />
             ) : bundle && graph ? (
-              <div className="flow-layout">
-                <aside className="palette">
+              <div
+                className={`flow-layout ${paletteOpen ? "palette-open" : ""} ${node && inspectorOpen ? "inspector-open" : ""} ${node && ports.length && previewOpen ? "preview-open" : ""} ${path.length ? "nested-flow" : ""}`}
+                style={
+                  {
+                    "--notice-height": `${36 * (Number(!!snapshot.conflicts.length) + Number(!!snapshot.diagnostics.length) + Number(!!active))}px`,
+                    "--palette-width": `${panels.sizes.palette}px`,
+                    "--inspector-width": `${panels.sizes.inspector}px`,
+                    "--preview-height": `${panels.sizes.preview}px`,
+                  } as CSSProperties
+                }
+              >
+                <aside
+                  className="palette"
+                  id="node-palette"
+                  aria-label={t("nodes")}
+                  hidden={!paletteOpen}
+                >
                   <div className="palette-title">
                     <span>{t("nodes")}</span>
                     <span className="counter">{palette.length}</span>
+                    <button
+                      className="icon"
+                      title={t("hideNodes")}
+                      onClick={() => setPaletteOpen(false)}
+                    >
+                      <X size={15} />
+                    </button>
                   </div>
                   <div className="search">
                     <Search size={14} />
@@ -1105,6 +1142,16 @@ function WorkspaceApp({
                 <main className="canvas-column">
                   <div className="canvas-breadcrumb">
                     <button
+                      className="icon panel-toggle"
+                      title={t("toggleNodes")}
+                      aria-label={t("toggleNodes")}
+                      aria-expanded={paletteOpen}
+                      aria-controls="node-palette"
+                      onClick={() => setPaletteOpen(!paletteOpen)}
+                    >
+                      <PanelLeft size={17} />
+                    </button>
+                    <button
                       onClick={() => {
                         setPath([]);
                         select(null);
@@ -1127,6 +1174,30 @@ function WorkspaceApp({
                       </span>
                     ))}
                     <span className="spacer" />
+                    {node && (
+                      <>
+                        <button
+                          className="icon panel-toggle"
+                          title={t("togglePreview")}
+                          aria-label={t("togglePreview")}
+                          aria-expanded={previewOpen}
+                          aria-controls="data-preview"
+                          onClick={() => setPreviewOpen(!previewOpen)}
+                        >
+                          <PanelBottom size={17} />
+                        </button>
+                        <button
+                          className="icon panel-toggle"
+                          title={t("toggleInspector")}
+                          aria-label={t("toggleInspector")}
+                          aria-expanded={inspectorOpen}
+                          aria-controls="node-inspector"
+                          onClick={() => setInspectorOpen(!inspectorOpen)}
+                        >
+                          <PanelRight size={17} />
+                        </button>
+                      </>
+                    )}
                     {canEdit && selection.length > 0 && (
                       <button
                         className="group-button"
@@ -1260,8 +1331,13 @@ function WorkspaceApp({
                       ports={ports}
                       version={resultVersion}
                       active={!!active}
+                      hidden={!previewOpen}
+                      onClose={() => setPreviewOpen(false)}
                       onRun={() => run(fullNode)}
-                      onExplain={setCell}
+                      onExplain={(value) => {
+                        setCell(value);
+                        setInspectorOpen(true);
+                      }}
                       onData={setPreview}
                     />
                   ) : (
@@ -1274,79 +1350,97 @@ function WorkspaceApp({
                     </div>
                   )}
                 </main>
-                {cell ? (
-                  <LineagePanel
-                    key={worktree + environment}
-                    worktree={worktree}
-                    environment={environment}
-                    cell={cell}
-                    onClose={() => setCell(null)}
-                  />
-                ) : node && definition ? (
-                  <Inspector
-                    readOnly={!canEdit}
-                    key={worktree + fullNode}
-                    node={node}
-                    definition={definition}
-                    snapshot={snapshot}
-                    graphNodes={graph.nodes}
-                    graphEdges={graph.edges}
-                    fullNode={fullNode}
-                    environment={environment}
-                    connections={snapshot.connections.filter(c => !["source", "export"].includes(definition.kind) || c.capabilities.includes(definition.kind === "export" ? "write" : "read"))}
-
-                    status={statuses}
-                    preview={preview}
-                    onSave={async (updated, base) => {
-                      const value = structuredClone(base.bundle!);
-                      mutateGraph(value, (g) => {
-                        g.nodes = g.nodes.map((n: FlowNode) =>
-                          n.id === updated.id ? updated : n,
-                        );
-                      });
-                      await saveBundle(value, base);
-                    }}
-                    onInput={(port, source) =>
-                      safe(() =>
-                        updateGraph((g) => {
-                          g.edges = g.edges.filter(
-                            (e: Json) =>
-                              !(
-                                e.target === node.id && e.targetHandle === port
-                              ),
+                <div
+                  className="inspector-layer"
+                  id="node-inspector"
+                  hidden={!inspectorOpen}
+                >
+                  {cell ? (
+                    <LineagePanel
+                      key={worktree + environment}
+                      worktree={worktree}
+                      environment={environment}
+                      cell={cell}
+                      onClose={() => setCell(null)}
+                    />
+                  ) : node && definition ? (
+                    <Inspector
+                      readOnly={!canEdit}
+                      key={worktree + fullNode}
+                      node={node}
+                      definition={definition}
+                      snapshot={snapshot}
+                      graphNodes={graph.nodes}
+                      graphEdges={graph.edges}
+                      fullNode={fullNode}
+                      environment={environment}
+                      connections={snapshot.connections.filter(
+                        (c) =>
+                          !["source", "export"].includes(definition.kind) ||
+                          c.capabilities.includes(
+                            definition.kind === "export" ? "write" : "read",
+                          ),
+                      )}
+                      status={statuses}
+                      preview={preview}
+                      onSave={async (updated, base) => {
+                        const value = structuredClone(base.bundle!);
+                        mutateGraph(value, (g) => {
+                          g.nodes = g.nodes.map((n: FlowNode) =>
+                            n.id === updated.id ? updated : n,
                           );
-                          if (source) {
-                            const [id, handle] = source.split(":");
-                            g.edges.push({
-                              id: identifier("edge"),
-                              source: id,
-                              sourceHandle: handle,
-                              target: node.id,
-                              targetHandle: port,
-                            });
-                          }
-                        }),
-                      )
-                    }
-                    onDelete={() => safe(() => removeNodes([node.id]))}
-                    onRun={() => run(fullNode)}
-                    onOpen={() => openComponent(node.id)}
-                    onEditTemplate={editTemplate}
-                    onClose={() => select(null)}
-                  />
-                ) : (
-                  <aside className="inspector empty-inspector">
-                    <span className="empty-inspector-icon">
-                      <Layers size={28} />
-                    </span>
-                    <h3>{t("nothingSelected")}</h3>
-                    <p>{t("selectNode")}</p>
-                    <div className="inspector-tip">
-                      <GitBranch size={17} />
-                      <span>{t("lineageHint")}</span>
-                    </div>
-                  </aside>
-                )}
+                        });
+                        await saveBundle(value, base);
+                      }}
+                      onInput={(port, source) =>
+                        safe(() =>
+                          updateGraph((g) => {
+                            g.edges = g.edges.filter(
+                              (e: Json) =>
+                                !(
+                                  e.target === node.id &&
+                                  e.targetHandle === port
+                                ),
+                            );
+                            if (source) {
+                              const [id, handle] = source.split(":");
+                              g.edges.push({
+                                id: identifier("edge"),
+                                source: id,
+                                sourceHandle: handle,
+                                target: node.id,
+                                targetHandle: port,
+                              });
+                            }
+                          }),
+                        )
+                      }
+                      onDelete={() => safe(() => removeNodes([node.id]))}
+                      onRun={() => run(fullNode)}
+                      onOpen={() => openComponent(node.id)}
+                      onEditTemplate={editTemplate}
+                      onClose={() => setInspectorOpen(false)}
+                    />
+                  ) : null}
+                </div>
+                {(["palette", "inspector", "preview"] as const)
+                  .filter((panel) =>
+                    panel === "palette"
+                      ? paletteOpen
+                      : panel === "inspector"
+                        ? inspectorOpen && !!node
+                        : previewOpen && !!node && ports.length > 0,
+                  )
+                  .map((panel) => (
+                    <PanelResizeHandle
+                      key={panel}
+                      panel={panel}
+                      value={panels.sizes[panel]}
+                      limits={panels.limits[panel]}
+                      onResize={(value) => panels.resize(panel, value)}
+                      onReset={() => panels.reset(panel)}
+                    />
+                  ))}
               </div>
             ) : (
               <div className="empty-state">

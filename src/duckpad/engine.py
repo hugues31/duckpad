@@ -95,7 +95,7 @@ class Engine:
                         if environment in self.store.get("connection", r, {}).get("environments", {})
                     ]
                     captured, _ = self.catalog.capture(available, environment)
-                    roots = self.access.local_roots(project, captured)
+                    roots, writable = self.access.local_roots(project, captured)
                     directory = self.store.home / "exports" / worktree / environment
                     directory.mkdir(parents=True, exist_ok=True)
                     temporary = directory / ".temporary"
@@ -110,7 +110,7 @@ class Engine:
                             "captured": captured,
                             "extensions": str(extensions),
                             "read_paths": [str(p) for p in roots],
-                            "write_paths": [str(p) for p in [*roots, directory]],
+                            "write_paths": [str(p) for p in [*writable, directory]],
                             "temporary": str(temporary),
                             "remote_paths": ["s3://"]
                             if any(c["definition"]["id"] == "s3" for c in captured.values())

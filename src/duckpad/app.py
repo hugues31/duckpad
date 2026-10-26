@@ -240,15 +240,17 @@ def create_app(home: Path, watch=True):
 
     @app.put("/api/projects/{project}/connections")
     def project_connections(project: str, data: dict):
-        engine.reset_project(project)
-        access.grant_connections(project, data.get("connections"))
+        with engine.lock:
+            engine.reset_project(project)
+            access.grant_connections(project, data.get("connections"))
         return {"ok": True}
 
     @app.delete("/api/projects/{project}")
     def delete_project(project: str):
-        engine.reset_project(project)
-        projects.delete(project)
-        store.delete("access", project)
+        with engine.lock:
+            engine.reset_project(project)
+            projects.delete(project)
+            store.delete("access", project)
         return {"ok": True}
 
     @app.get("/api/worktrees/{worktree}")
@@ -373,17 +375,19 @@ def create_app(home: Path, watch=True):
     def save_catalog(kind: str, data: dict):
         if kind not in ("connector", "connection"):
             raise Problem("Unknown catalog entity")
-        engine.reset_catalog()
-        catalog.save(kind, copy.deepcopy(data))
+        with engine.lock:
+            engine.reset_catalog()
+            catalog.save(kind, copy.deepcopy(data))
         return catalog.public()
 
     @app.delete("/api/catalog/{kind}/{identity}")
     def delete_catalog(kind: str, identity: str):
         if kind not in ("connector", "connection"):
             raise Problem("Unknown catalog entity")
-        engine.reset_catalog()
-        store.delete(kind, identity)
-        engine.invalidate()
+        with engine.lock:
+            engine.reset_catalog()
+            store.delete(kind, identity)
+            engine.invalidate()
         return catalog.public()
 
     @app.put("/api/environments")

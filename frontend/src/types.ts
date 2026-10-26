@@ -38,6 +38,13 @@ export interface Snapshot {
   conflicts: Json[];
   parsed_templates: Record<string, Json>;
 }
+export interface Project {
+  role: "admin" | "editor" | "reader";
+  id: string;
+  name: string;
+  main: string;
+  created: string;
+}
 export interface Workspace {
   user: {
     id: string;
@@ -45,7 +52,7 @@ export interface Workspace {
     role: "admin" | "member";
     active: boolean;
   };
-  projects: Json[];
+  projects: Project[];
   worktrees: Json[];
   catalog: Json;
   identity: Json;
