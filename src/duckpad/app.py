@@ -2,6 +2,7 @@
 
 import copy
 import json
+import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Annotated
@@ -90,7 +91,7 @@ def create_app(home: Path, watch=True):
             httponly=True,
             samesite="strict",
             max_age=604800,
-            secure=request.url.scheme == "https",
+            secure=os.environ.get("DUCKPAD_SECURE_COOKIES") == "1" or request.url.scheme == "https",
         )
         return response
 
