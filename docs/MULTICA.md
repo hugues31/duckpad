@@ -11,9 +11,11 @@ The server checkout is `/home/preview-user/duckpad` and the repository is
 ## Issue workflow
 
 1. Read the issue, this guide, and `AGENTS.md`. Fetch `origin` and start a dedicated
-   `codex/<issue-id>-<short-description>` branch from `origin/main` in an isolated
-   worktree. Reuse the worktree allocated by Multica when available. Continue the
-   existing issue branch for review follow-ups.
+   branch from `origin/main` in an isolated worktree. Reuse Multica's allocated
+   issue branch and worktree when available; otherwise name the branch
+   `codex/<issue-id>-<short-description>`. Continue the existing issue branch for
+   review follow-ups, including the merge step, and use the PR's head branch as
+   the source of truth.
 2. Run `bash scripts/setup.sh` in each new worktree. Implement the requested change
    and run the relevant checks from the README.
 3. Commit with an English Conventional Commit message, push the issue branch to
@@ -57,7 +59,8 @@ export PATH="$HOME/.local/share/duckpad-tools/node/bin:$HOME/.local/bin:$PATH"
 The server's Ivy Bridge CPU cannot load the published DuckDB 2.0 wheel. Docker
 and `scripts/setup.sh` build the locked DuckDB version from source for baseline
 x86-64, with two compiler jobs to limit memory usage. The first build is slow;
-subsequent worktrees and previews reuse the uv/Docker build caches. Development
+subsequent worktrees and previews reuse the uv/Docker build caches. The preview
+wrapper allows up to 90 minutes for a cold build. Development
 uses Python 3.12, installed by uv when needed. Do not replace DuckDB with 1.x.
 
 Previews are Coolify applications in the existing `preview-project` project.

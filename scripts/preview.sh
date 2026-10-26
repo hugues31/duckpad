@@ -9,6 +9,8 @@ if [[ ! -x "$helper" ]]; then
     exit 1
 fi
 export PREVIEW_BUILD_PACK=dockerfile PREVIEW_PORT=8765
+# A cold portable DuckDB build on the server can exceed the shared helper's 20 minutes.
+export PREVIEW_TIMEOUT="${PREVIEW_TIMEOUT:-5400}"
 export COOLIFY_GITHUB_APP_UUID="${COOLIFY_GITHUB_APP_UUID:-configured-github-app}"
 if [[ -z "${COOLIFY_TOKEN:-}" && -r "$HOME/.coolify/multica-token" ]]; then
     export COOLIFY_TOKEN
