@@ -11,16 +11,20 @@
     "check": "astro check",
     "build": "astro build",
     "preview": "astro preview --host 127.0.0.1 --ignore-lock",
-    "format": "prettier --write src astro.config.mjs",
-    "format:check": "prettier --check src astro.config.mjs"
+    "format": "prettier --write src scripts astro.config.mjs",
+    "format:check": "prettier --check src scripts astro.config.mjs",
+    "test": "node --test src/lib/releases.test.ts",
+    "releases:update": "node scripts/update-releases.mjs"
   },
   "dependencies": {
     "@astrojs/markdown-remark": "^7.3.4",
     "@fontsource-variable/manrope": "^5.2.8",
-    "astro": "7.4.2"
+    "astro": "7.4.2",
+    "rehype-sanitize": "^6.0.0"
   },
   "devDependencies": {
     "@astrojs/check": "0.9.12",
+    "@types/node": "^22.20.5",
     "prettier": "^3.9.10",
     "prettier-plugin-astro": "^1.1.2",
     "typescript": "^5.7.0"

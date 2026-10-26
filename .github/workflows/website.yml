@@ -4,6 +4,9 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+  workflow_run:
+    workflows: [Release Duckpad]
+    types: [completed]
 
 permissions:
   contents: read
@@ -14,6 +17,7 @@ concurrency:
 
 jobs:
   build:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     name: Record, build and verify the documentation
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -49,11 +53,13 @@ jobs:
         if: vars.PUBLISH_WEBSITE == 'true'
       - name: Build static documentation
         env:
+          GITHUB_TOKEN: ${{ github.token }}
           SITE_ORIGIN: ${{ steps.pages.outputs.origin }}
           WEBSITE_BASE_PATH: ${{ vars.PUBLISH_WEBSITE == 'true' && format('{0}/', steps.pages.outputs.base_path) || '/duckpad/' }}
         run: |
           npm run format:check --prefix website
           npm run check --prefix website
+          npm test --prefix website
           npm run build --prefix website
       - name: Check links, search, media and responsive navigation
         env:

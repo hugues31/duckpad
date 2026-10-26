@@ -7,8 +7,9 @@ interface Props {
   title: string;
   description: string;
   docs?: boolean;
+  releases?: boolean;
 }
-const { title, description, docs = false } = Astro.props;
+const { title, description, docs = false, releases = false } = Astro.props;
 const canonical = Astro.site
   ? new URL(Astro.url.pathname, Astro.site)
   : undefined;
@@ -61,6 +62,9 @@ const canonical = Astro.site
         >
           Documentation
         </a>
+        <a href={url("releases/")} aria-current={releases ? "page" : undefined}>
+          Releases
+        </a>
         <a href="https://github.com/hugues31/duckpad">
           GitHub <span aria-hidden="true">↗</span>
         </a>
@@ -83,6 +87,7 @@ const canonical = Astro.site
           <nav aria-label="Mobile navigation">
             <a href={url("#workflow")}>Why Duckpad</a>
             <a href={url("docs/quickstart/")}>Documentation</a>
+            <a href={url("releases/")}>Releases</a>
             <a href="https://github.com/hugues31/duckpad">GitHub ↗</a>
           </nav>
         </details>
@@ -99,6 +104,7 @@ const canonical = Astro.site
       </div>
       <nav aria-label="Footer">
         <a href={url("docs/quickstart/")}>Quickstart</a>
+        <a href={url("releases/")}>Releases</a>
         <a href="https://github.com/hugues31/duckpad">Source code ↗</a>
         <a href="https://github.com/hugues31/duckpad/blob/main/CONTRIBUTING.md">
           Contribute ↗
