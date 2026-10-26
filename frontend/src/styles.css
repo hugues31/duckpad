@@ -3123,3 +3123,25 @@ fieldset.palette-bottom {
     flex-direction: column;
   }
 }
+.sso-fields {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+.sso-fields .check-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 16px 0;
+}
+.sso-fields .check-row input {
+  width: auto;
+}
+.sso-login {
+  margin: 20px 0;
+  text-align: center;
+}
+.sso-login a {
+  text-decoration: none;
+}

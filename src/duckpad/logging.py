@@ -13,6 +13,14 @@ class PollingAccessFilter(logging.Filter):
     def filter(self, record):
         # Uvicorn supplies client, method, path with query, HTTP version, and status.
         args = record.args
+        if (
+            isinstance(args, tuple)
+            and len(args) == 5
+            and isinstance(args[2], str)
+            and args[2].partition("?")[0] == "/api/oidc/callback"
+        ):
+            record.args = (*args[:2], "/api/oidc/callback", *args[3:])
+            args = record.args
         if record.levelno == logging.INFO and isinstance(args, tuple) and len(args) == 5:
             _, method, target, _, status = args
             if (
