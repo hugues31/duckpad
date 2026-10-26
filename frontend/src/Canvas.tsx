@@ -1,7 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Background,
-  BackgroundVariant,
   Controls,
   ControlButton,
   Handle,
@@ -67,6 +65,12 @@ function PipelineNode({ data, selected }: NodeProps<Node<Json>>) {
   const Icon = nodeIcon(data.icon);
   const Status = statusIcon(data.status);
   const source = data.kind === "source";
+  const portPosition = (index: number, count: number) => {
+    const spacing = Math.min(18, 72 / Math.max(1, count - 1));
+    const top = 48 + (index - (count - 1) / 2) * spacing;
+    const inset = source ? 27 : 75 - Math.sqrt(48 ** 2 - (top - 48) ** 2);
+    return { top, inset };
+  };
   return (
     <div
       className={`pipeline-node ${source ? "source-node" : "round-node"} ${data.kind} ${selected ? "is-selected" : ""} status-${data.status}`}
@@ -92,7 +96,10 @@ function PipelineNode({ data, selected }: NodeProps<Node<Json>>) {
           type="target"
           position={Position.Left}
           id={port}
-          style={{ top: source ? 32 + i * 32 : 37 + i * 32 }}
+          style={{
+            top: portPosition(i, data.inputs.length).top,
+            left: portPosition(i, data.inputs.length).inset,
+          }}
           title={port}
           aria-label={`${t("inputs")}: ${port}`}
         >
@@ -105,7 +112,10 @@ function PipelineNode({ data, selected }: NodeProps<Node<Json>>) {
           type="source"
           position={Position.Right}
           id={port}
-          style={{ top: source ? 32 + i * 32 : 25 + i * 22 }}
+          style={{
+            top: portPosition(i, data.outputs.length).top,
+            right: portPosition(i, data.outputs.length).inset,
+          }}
           title={port}
           aria-label={`${t("output")}: ${port}`}
         >
@@ -143,15 +153,27 @@ function CanvasInner(props: CanvasProps) {
   const initialized = useNodesInitialized();
   const safeArea = useRef<HTMLDivElement>(null);
   const [frame, setFrame] = useState({ x: 0, y: 0, width: 0, height: 0 });
+  const viewportTouched = useRef(false);
+  const lastFit = useRef("");
   useEffect(() => {
     const element = safeArea.current!;
-    const measure = () =>
-      setFrame({
+    const measure = () => {
+      const next = {
         x: element.offsetLeft,
         y: element.offsetTop,
         width: element.clientWidth,
         height: element.clientHeight,
-      });
+      };
+      setFrame((previous) =>
+        Object.keys(next).every(
+          (key) =>
+            previous[key as keyof typeof next] ===
+            next[key as keyof typeof next],
+        )
+          ? previous
+          : next,
+      );
+    };
     const observer = new ResizeObserver(measure);
     observer.observe(element);
     measure();
@@ -262,18 +284,33 @@ function CanvasInner(props: CanvasProps) {
     const selectionChanged = previousSelected.current !== props.selected;
     previousSelected.current = props.selected;
     setNodes((previous) =>
-      displayNodes.map((node) => ({
-        ...node,
-        selected: selectionChanged
-          ? node.selected
-          : (previous.find((old) => old.id === node.id)?.selected ??
-            node.selected),
-      })),
+      displayNodes.map((node) => {
+        const old = previous.find((item) => item.id === node.id);
+        return {
+          ...old,
+          ...node,
+          position: old?.dragging ? old.position : node.position,
+          selected: selectionChanged
+            ? node.selected
+            : (old?.selected ?? node.selected),
+        };
+      }),
     );
   }, [displayNodes, props.selected]);
   useEffect(() => {
-    fitGraph();
-  }, [props.viewKey, props.nodes.length, fitGraph]);
+    if (!initialized || !frame.width || !frame.height) return;
+    const layout = [
+      frame.x,
+      frame.y,
+      frame.width,
+      frame.height,
+      props.nodes.length,
+    ].join(":");
+    if (lastFit.current === layout) return;
+    lastFit.current = layout;
+    // Polls and node measurements must never undo a user's pan or zoom.
+    if (!viewportTouched.current) fitGraph();
+  }, [initialized, frame, props.nodes.length, fitGraph]);
   const selectionChanged = useCallback(
     ({ nodes }: { nodes: Node<Json>[] }) =>
       props.onSelection(nodes.map((n) => n.id)),
@@ -299,6 +336,12 @@ function CanvasInner(props: CanvasProps) {
         edges={edges}
         nodeTypes={nodeTypes}
         onNodesChange={changes}
+        onMoveStart={(event) => {
+          if (event) viewportTouched.current = true;
+        }}
+        onNodeDragStart={() => {
+          viewportTouched.current = true;
+        }}
         onNodeClick={(event, node) => {
           if (!event.shiftKey) props.onSelect(node.id);
         }}
@@ -351,15 +394,21 @@ function CanvasInner(props: CanvasProps) {
         multiSelectionKeyCode="Shift"
         proOptions={{ hideAttribution: true }}
       >
-        <Background
-          variant={BackgroundVariant.Dots}
-          gap={22}
-          size={1}
-          color="var(--grid)"
-        />
-        <Controls showInteractive={false} showFitView={false}>
+        <Controls
+          showInteractive={false}
+          showFitView={false}
+          onZoomIn={() => {
+            viewportTouched.current = true;
+          }}
+          onZoomOut={() => {
+            viewportTouched.current = true;
+          }}
+        >
           <ControlButton
-            onClick={fitGraph}
+            onClick={() => {
+              viewportTouched.current = false;
+              fitGraph();
+            }}
             title={t("fitView")}
             aria-label={t("fitView")}
           >
@@ -371,10 +420,10 @@ function CanvasInner(props: CanvasProps) {
           zoomable
           nodeColor={(n) =>
             n.data.kind === "source"
-              ? "#a8d9ca"
+              ? "#4a8aff"
               : n.data.kind === "component"
-                ? "#bdc3f3"
-                : "#c5d1dd"
+                ? "#9d91df"
+                : "#a4a4ac"
           }
           maskColor="var(--minimap-mask)"
         />
@@ -391,7 +440,7 @@ function CanvasInner(props: CanvasProps) {
 }
 export default function Canvas(props: CanvasProps) {
   return (
-    <ReactFlowProvider>
+    <ReactFlowProvider key={props.viewKey}>
       <CanvasInner {...props} />
     </ReactFlowProvider>
   );
