@@ -1,30 +1,27 @@
 # Your first pipeline
 
-Go from a fresh checkout to a result you can explain. The included **Northstar**
+Go from a fresh install to a result you can explain. The included **Northstar**
 project provides synthetic CSV and Parquet data, reusable transformations and
 exports. You do not need an external database account.
 
 ## 1. Start Duckpad
 
-For this source-based quickstart, you need **Python 3.11+**, **Git**,
-[uv](https://docs.astral.sh/uv/) and **Node.js 20+**. Setup provisions Python 3.12.
+You need **Python 3.11+** and **Git**. The package includes the interface;
+you do not need Node.js or a source checkout.
 SQL execution requires **Linux with Landlock ABI 2 or later** (Linux 5.19+ with
 Landlock enabled). A Linux container or VM must also expose this capability.
 
 ```sh
-git clone https://github.com/hugues31/duckpad.git
-cd duckpad
-bash scripts/setup.sh
-uv run duckpad start --home .duckpad-dev --no-browser
+pip install duckpad
+duckpad start
 ```
 
 Open the local address printed in the terminal, normally `http://127.0.0.1:8765`.
 Sign in as **admin** using the password printed once on first launch. Save it
 somewhere private; the same password remains valid after a restart.
 
-Already have a built release wheel? Install it with `pip install <wheel-file>`
-and run `duckpad start`. Release wheels include the frontend and do not require
-Node.js. See [installation and accounts](INSTALLATION.md) for instance options.
+See [installation and accounts](INSTALLATION.md) for instance options,
+virtual environments and development from source.
 
 ## 2. Open the example
 

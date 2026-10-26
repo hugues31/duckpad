@@ -4,6 +4,8 @@ import { test, expect } from "@playwright/test";
 test("homepage, captions and recorded media are available", async ({
   page,
 }, testInfo) => {
+  // Full-page captures resize the viewport; suppress native navigation transitions.
+  await page.emulateMedia({ reducedMotion: "reduce" });
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await page.goto("./");
