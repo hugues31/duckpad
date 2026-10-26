@@ -1,11 +1,11 @@
 {
   "workspace": "Workspace",
   "resourceMonitor": "Resource usage",
-  "resourceScope": "Duckpad server · last 2 minutes",
+  "resourceScope": "Entire server machine · last 2 minutes",
   "resourceHistory": "Last 2 minutes",
   "resourcePast": "2 min ago",
   "resourceNow": "Now",
-  "resourceHint": "Updates every 2 seconds. CPU and RAM show Duckpad's share of the available capacity, accounting for container limits when configured.",
+  "resourceHint": "Updates every 2 seconds. CPU shows activity across all cores and applications on the server machine. RAM shows total physical memory minus available memory; reclaimable caches count as available.",
   "resourceMemoryAmount": "RAM used / total",
   "resourceUnavailable": "Metrics unavailable. Retrying…",
   "resourceMemoryUnavailable": "RAM measurement is unavailable.",
