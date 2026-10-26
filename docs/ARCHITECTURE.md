@@ -1,22 +1,23 @@
 # Architecture
 
-Duckpad is one local Python process serving a compiled React application. FastAPI exposes authenticated management endpoints; React Flow handles graph interaction; Monaco handles SQL and JSON editing. DuckDB executes SQL and retains live materialized data. Git owns project code history. SQLite owns instance metadata. These stores have separate lifecycles.
+Duckpad has a Python API process serving a compiled React application and isolated SQL worker processes. FastAPI exposes authenticated management endpoints; React Flow handles graph interaction; Monaco handles SQL and JSON editing. DuckDB executes SQL and retains live materialized data. Git owns project code history. SQLite owns instance metadata. These stores have separate lifecycles.
 
 ## Modules
 
 | Module | Responsibility |
 | --- | --- |
-| `app.py`, `auth.py`, `cli.py` | HTTP API, persistent salted password hash and session hashes, localhost startup, process lease |
+| `app.py`, `auth.py`, `access.py`, `cli.py` | HTTP API, individual accounts, salted password hashes, owned sessions, instance/project authorization, localhost startup, process lease |
 | `store.py`, `catalog.py` | SQLite records, environments, reusable connections, typed connector setup and secret redaction |
 | `projects.py` | Declarative files, Git worktrees, revision capture, three-way merge, durable conflict proposals, external-save batching |
 | `templates.py`, `components.py` | Typed SQL compilation, read/write contracts, recursive expansion, parameter exposure, independent imports |
 | `engine.py`, `materialize.py` | Admission, immutable execution configuration, DuckDB ownership, cancellation, output publication and invalidation |
+| `sandbox.py`, `sql_worker.py` | JSON RPC, separate SQL processes, kernel filesystem restrictions and locked DuckDB configuration |
 | `lineage.py` | SQLGlot resolution and targeted provenance queries over materialized dependencies |
 | `example.py` | Reproducible local sample data and documented Northstar project |
 
 ## Files and data
 
-An instance contains `instance.sqlite`, a private extension cache, `projects/`, separate `worktrees/`, uploads, example source files and `exports/<worktree>/<environment>/`. The database file is created with mode 0600 and the instance directory with mode 0700. Secrets are instance configuration; no project file contains resolved credentials. The SQLite authentication record contains an scrypt hash and salt, never the generated password. Sessions are stored as hashes.
+An instance contains `instance.sqlite`, a private extension cache, `projects/`, separate `worktrees/`, uploads, example source files and `exports/<worktree>/<environment>/`. The database file is created with mode 0600 and the instance directory with mode 0700. Secrets are instance configuration; no project file contains resolved credentials. SQLite user records contain scrypt hashes and salts, never plaintext passwords. Sessions are stored by token hash, identify their owner and expire after seven days. A session also records the credential and revocation version; resetting a password or deactivating an account invalidates its sessions, including after reactivation.
 
 Each project repository versions `flow.json`, `documentation.json`, `templates/*.sql`, and `components/*.json`. Results, source data and export files are outside that versioned definition set. Connector definitions and environment settings have no configuration-version history. Historical project code always uses the current instance catalog when explicitly run.
 
@@ -32,7 +33,7 @@ Display metadata, layout and documentation are excluded from computation fingerp
 
 `Engine.launch(worktree, environment, target, entry_point)` is the shared service. HTTP callers record `manual` origin and `ui` or `api` entry point. A lock reserves a worktree before preparation. Busy requests receive 409; no task is queued. Reservation spans preparation, execution, cancellation and cleanup, across all environments in that worktree. Other worktrees can run independently.
 
-Accepted runs capture project code, parameters, graph, environment and resolved connection settings. A worker thread owns its DuckDB cursor. Every requested ancestor runs once in topological order, including valid sources. Independent branches continue after a node failure; failed descendants are blocked. Connection preparation is lazy within that immutable run and each logical connection is prepared once. Oracle attachments are recreated on the next manual run.
+Accepted runs capture project code, parameters, graph, environment and resolved connection settings. A coordinator thread owns a cursor proxy in the isolated SQL worker. Every requested ancestor runs once in topological order, including valid sources. Independent branches continue after a node failure; failed descendants are blocked. HTTP execution initializes only project-authorized connections before locking the worker configuration. Changes to connection configuration or grants require idle executions and discard affected workers and cached results. Trusted in-process service clients without an `Access` policy retain lazy connection preparation; the HTTP application always supplies the policy.
 
 Outputs are staged under fresh physical names and published together only after all blocks succeed. A failed or canceled node keeps its previous successful output set as stale. No downstream node uses that set as a fallback. Publication rechecks computation fingerprints, so an edit during a run cannot make outdated results appear valid.
 
@@ -50,4 +51,43 @@ A lineage request registers its result generation and dependency nodes. Recalcul
 
 All `/api` routes except login require a session cookie or bearer session token. Mutation requests reject a mismatched browser Origin. The static login shell is public; project content is authenticated.
 
-The main endpoint groups are `/projects`, `/worktrees`, `/catalog`, `/environments`, `/runs`, `/conflicts`, `/library`, and `/uploads`. A worktree exposes definition snapshots and saves, branch/merge history, compiled SQL, status, previews, lineage and manual run launch. See the route definitions in `src/duckpad/app.py` for request shapes. APIs use the same services as the interface; there is no second runner or separate editor state.
+The main endpoint groups are `/projects`, `/worktrees`, `/catalog`, `/environments`, `/runs`, `/conflicts`, `/library`, and `/users`. Uploads use `/worktrees/{id}/uploads` and are stored under `resources/<project>/`. A worktree exposes definition snapshots and saves, branch/merge history, compiled SQL, status, previews, lineage and manual run launch. See the route definitions in `src/duckpad/app.py` for request shapes. APIs use the same services as the interface; there is no second runner or separate editor state.
+
+## Authorization and execution isolation
+
+The server rechecks the account, instance role and project membership on every
+request. Invisible projects and their worktrees, runs and conflicts return 404.
+Readers may inspect existing results and lineage, but cannot launch computation,
+change files, create branches, import definitions, cancel runs or upload files.
+Imports also require read access to their source project. Workspace, library and
+execution lists filter private resources before returning them. Last-admin checks
+and membership/account writes share a lock, including concurrent demotions.
+
+SQL runs in a separate process per worktree/environment. The worker receives only
+the project's authorized connection configuration and communicates through a
+JSON-only protocol. It does not inherit the API's environment credentials or
+SQLite descriptors. Before DuckDB creates threads, Linux Landlock restricts file
+access to project resources/exports, explicit administrator-authorized local roots,
+and read-only runtime libraries. Project Git metadata, other projects and instance
+SQLite remain outside the data allowlist. Traversal and symlink escapes are denied
+by the kernel. DuckDB external access is then disabled with explicit allowed paths;
+auto-installation/loading of extensions and unredacted/persistent secrets are
+disabled, and its configuration is locked before user SQL executes.
+
+This requires Landlock ABI 2+ on Linux x86-64 or arm64, including inside containers.
+A missing or blocked sandbox causes an explicit execution error; there is no
+unrestricted fallback. Workers use two DuckDB threads and a 512 MB memory limit.
+Connection extensions remain trusted administrator-installed code. Approved remote
+connections carry the privileges of their configured service credentials; operators
+must scope those credentials and any network egress policy accordingly. This does
+not provide tenant resource quotas or a complete hostile-code hosting boundary.
+See the [DuckDB security guidance](https://duckdb.org/docs/current/operations_manual/securing_duckdb/overview)
+and [Linux Landlock API](https://docs.kernel.org/userspace-api/landlock.html).
+
+The default local connection covers only each project's resources and exports.
+Additional local roots must exist and exclude the instance directory, its ancestors
+and other projects. Legacy unrestricted paths require explicit connection roots;
+existing results are not recomputed during migration or read requests. Sample
+projects receive their own input directories and connection grants. Users may
+upload source files from the node inspector. Read-only roots stay read-only at the
+OS layer even if SQL uses a different declared connection.

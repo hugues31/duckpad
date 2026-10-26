@@ -3,6 +3,7 @@ import { Check, LogOut, Settings2 } from "lucide-react";
 import { useT, type Language } from "./i18n";
 
 export default function AccountMenu({
+  username,
   theme,
   language,
   setTheme,
@@ -10,6 +11,7 @@ export default function AccountMenu({
   onSettings,
   onSignOut,
 }: {
+  username: string;
   theme: string;
   language: Language;
   setTheme: (value: string) => void;
@@ -53,7 +55,7 @@ export default function AccountMenu({
           }
         }}
       >
-        A
+        {username.slice(0, 1).toUpperCase()}
       </button>
       {open && (
         <div

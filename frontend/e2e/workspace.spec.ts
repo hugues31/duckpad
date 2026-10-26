@@ -44,6 +44,7 @@ async function run(page: Page) {
       async () =>
         (await (await page.request.get("/api/runs/" + result.id)).json())
           .status,
+      { timeout: 30000 },
     )
     .toBe("success");
   await expect(
@@ -354,6 +355,15 @@ test("connection capabilities constrain source and export forms without a projec
       environments: { dev: { root: "" }, prod: { root: "" } },
     },
   });
+  const settings = await (
+    await page.request.get(`/api/projects/${before.worktree.project}/settings`)
+  ).json();
+  await page.request.put(
+    `/api/projects/${before.worktree.project}/connections`,
+    {
+      data: { connections: [...settings.connections, "read_only_files"] },
+    },
+  );
   await page.reload();
   await page
     .locator(".react-flow__node")
