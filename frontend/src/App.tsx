@@ -91,17 +91,30 @@ function DuckMark({ size = 30 }: { size?: number }) {
 }
 
 export default function App() {
-  const [language, setLanguageState] = useState<Language>(() =>
-    localStorage.getItem("duckpad-language") === "fr" ? "fr" : "en",
-  );
+  const [language, setLanguageState] = useState<Language>(() => {
+    const saved = localStorage.getItem("duckpad-language");
+    if (saved === "en" || saved === "fr") return saved;
+    const languages = navigator.languages.length
+      ? navigator.languages
+      : [navigator.language];
+    for (const locale of languages) {
+      const candidate = locale.toLowerCase().split("-")[0];
+      if (candidate === "en" || candidate === "fr") return candidate;
+    }
+    return "en";
+  });
   const setLanguage = (value: Language) => {
     localStorage.setItem("duckpad-language", value);
     setLanguageState(value);
     document.documentElement.lang = value;
   };
-  const [theme, setThemeState] = useState(
-    () => localStorage.getItem("duckpad-theme") || "light",
-  );
+  const [theme, setThemeState] = useState(() => {
+    const saved = localStorage.getItem("duckpad-theme");
+    if (saved === "light" || saved === "dark") return saved;
+    return window.matchMedia("(prefers-color-scheme: dark)").matches
+      ? "dark"
+      : "light";
+  });
   const setTheme = (value: string) => {
     localStorage.setItem("duckpad-theme", value);
     setThemeState(value);
