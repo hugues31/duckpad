@@ -10,6 +10,7 @@ import { api, ApiError, send, withQuery } from "./api";
 import { UsersPage, ProjectSettings } from "./Administration";
 import Canvas from "./Canvas";
 import CanvasHeader from "./CanvasHeader";
+import CodePanel from "./CodePanel";
 import ConnectionsPanel from "./ConnectionsPanel";
 import DocumentationPanel from "./DocumentationPanel";
 import DuckMark from "./DuckMark";
@@ -96,6 +97,7 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
   const [environment, setEnvironment] = useState("dev");
   const [area, setArea] = useState<Area>(worktree ? "pipelines" : "projects");
   const [tab, setTab] = useState<WorkspaceTab>("flow");
+  const [codeDirty, setCodeDirty] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
   const [path, setPath] = useState<PathPart[]>([]);
   const [selection, setSelection] = useState<string[]>([]);
@@ -506,19 +508,21 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
       },
     });
   }
-  function showFiles(base: Snapshot) {
-    setModal({
-      kind: "files",
-      readOnly: !canEdit,
-      snapshot: base,
-      save: async (files) => {
-        await api(
-          `/worktrees/${worktree}`,
-          send({ revision: base.revision, files }, "PUT"),
-        );
-        await load();
-      },
-    });
+  async function saveFiles(files: Record<string, string>, base: Snapshot) {
+    if (!canEdit) throw new Error(t("readerNotice"));
+    setSaving(true);
+    try {
+      await api(
+        `/worktrees/${base.worktree.id}`,
+        send({ revision: base.revision, files }, "PUT"),
+      );
+    } finally {
+      try {
+        await load(base.worktree.id);
+      } finally {
+        setSaving(false);
+      }
+    }
   }
   async function compare(base: Snapshot) {
     const comparison = await api(`/worktrees/${worktree}/merge`);
@@ -745,11 +749,11 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
               onProjectSettings={() => setArea("projectSettings")}
               tab={tab}
               saving={saving}
+              dirty={codeDirty}
               branch={snapshot.worktree.branch}
               active={active}
               canRun={!busy && !!bundle}
               onTab={setTab}
-              onFiles={() => showFiles(snapshot)}
               onMerge={() => safe(() => compare(snapshot))}
               onRun={() => run()}
               onStop={() =>
@@ -766,9 +770,17 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
               snapshot={snapshot}
               active={active}
               onResolve={() => resolveConflict(snapshot.conflicts[0])}
-              onViewFiles={() => showFiles(snapshot)}
+              onViewFiles={() => setTab("code")}
             />
-            {tab === "history" ? (
+            <CodePanel
+              key={worktree}
+              hidden={tab !== "code"}
+              readOnly={!canEdit}
+              snapshot={snapshot}
+              onSave={saveFiles}
+              onDirtyChange={setCodeDirty}
+            />
+            {tab === "code" ? null : tab === "history" ? (
               <HistoryPanel
                 readOnly={!canEdit}
                 worktree={worktree}
@@ -981,7 +993,7 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
                 <p>{t("invalidHint")}</p>
                 <button
                   className="button primary"
-                  onClick={() => showFiles(snapshot)}
+                  onClick={() => setTab("code")}
                 >
                   {t("viewFiles")}
                 </button>

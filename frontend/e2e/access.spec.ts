@@ -92,14 +92,15 @@ test("manage instance accounts, project participants and live reader access", as
   await expect(
     documentation.getByRole("button", { name: "Save changes", exact: true }),
   ).toBeDisabled();
-  await readerPage
-    .getByRole("button", { name: "Project files", exact: true })
-    .click();
-  const files = readerPage.getByRole("dialog");
+  await readerPage.getByRole("button", { name: "Code", exact: true }).click();
+  const files = readerPage.getByRole("region", { name: "Code", exact: true });
   await expect(
     files.getByRole("button", { name: "Save changes", exact: true }),
   ).toBeDisabled();
-  await files.getByRole("button", { name: "Cancel", exact: true }).click();
+  await expect(files.locator(".monaco-editor")).toBeVisible();
+  await expect(
+    files.getByRole("button", { name: "Download ZIP", exact: true }),
+  ).toBeEnabled();
   await readerPage.getByRole("button", { name: "Flow", exact: true }).click();
   await page
     .getByLabel(`Project role · ${username}`, { exact: true })
