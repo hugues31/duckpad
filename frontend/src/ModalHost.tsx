@@ -1,5 +1,6 @@
 import { Boxes } from "lucide-react";
 import DuckMark from "./DuckMark";
+import GitWorkspace from "./GitWorkspace";
 import { useT } from "./i18n";
 import {
   EditorModal,
@@ -12,6 +13,16 @@ import type { Json, Snapshot } from "./types";
 
 /** Every dialog of the workspace, with the actions it triggers. */
 export type ModalState =
+  | {
+      kind: "git";
+      worktree: string;
+      role: string;
+      mode?: "compare" | "branches" | "sync";
+      commit?: string;
+      entity?: string;
+      onChanged: () => Promise<void>;
+      onOpen: (id: string) => void;
+    }
   | {
       kind: "form";
       title: string;
@@ -55,6 +66,8 @@ export default function ModalHost({
 }) {
   const t = useT();
   switch (modal?.kind) {
+    case "git":
+      return <GitWorkspace {...modal} onClose={onClose} />;
     case "form":
       return (
         <FormModal
