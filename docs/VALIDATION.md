@@ -10,7 +10,7 @@ Native-equivalence tests compare values, types and multiplicities against uninst
 
 Playwright runs against a disposable authenticated instance. Its scenarios exercise the complete example, nested navigation and lineage pagination, French/English and theme persistence, environment isolation, stale-preview behavior, branch/merge workflows, drag-and-drop, guided filter configuration, component grouping, recoverable conflicts across reload, and invalidation of an open explanation. Uncaught page errors are checked on the main example path. Browser diagnostics are retained on failure.
 
-The installed-wheel smoke test runs outside the checkout, starts the CLI without Node tooling, checks bundled assets and authentication, executes the complete example, rejects a second process for the same instance, then restarts and verifies the original password and history while results remain absent.
+The installed-wheel smoke test (`scripts/smoke_wheel.py`, run by CI and the release workflow) runs outside the checkout, starts the CLI without Node tooling, checks bundled assets and authentication, executes the complete example, rejects a second process for the same instance, then restarts and verifies the original password and history while results remain absent.
 
 ## Performance reference
 
@@ -41,6 +41,5 @@ The selected aggregate has **150,000 contributing cells**. Peak worker-process r
 - `validation/oracle.json`: live Oracle 19.3, OraDuck 0.4.0, exact DuckDB 2.0.0; read, transform, native export equivalence, repeated append, schema/data refresh, materialized-source lineage and secret redaction.
 - `validation/s3.json`: local Moto S3 endpoint; CSV/Parquet reads, join, CSV writes, repeated native replacement, connection reuse and lineage. Live AWS has not been claimed as tested.
 - `validation/jobs.json`: dynamic APScheduler/SQLite schedule persistence, Huey queue restart behavior, and the common engine's admission/cancellation/context/history boundary.
-- `validation/wheel.json`: isolated installed-wheel lifecycle smoke test.
 
 See [connector prerequisites](CONNECTORS.md), [the scheduler decision](EXECUTION_SERVICE.md), and [the explicit SQL coverage matrix](LINEAGE.md) for the scope and limits of these checks.
