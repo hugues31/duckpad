@@ -174,6 +174,17 @@ test("review and resolve a field conflict with base evidence, reject stale heads
     await page.request.get(`/api/worktrees/${main.id}/git/history`)
   ).json();
   expect(history.items[0].parents).toHaveLength(2);
+  await dialog
+    .getByRole("button", { name: "Compare versions", exact: true })
+    .first()
+    .click();
+  await dialog.getByLabel("B: target").fill(history.items[0].commit);
+  await dialog
+    .getByLabel("Actual Git parent")
+    .selectOption(history.items[0].parents[1]);
+  await expect(dialog.getByLabel("A: reference")).toHaveValue(
+    history.items[0].parents[1],
+  );
 });
 
 test("configure origin, fetch, review first publication, integrate incoming changes and publish", async ({
