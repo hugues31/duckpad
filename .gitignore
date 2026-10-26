@@ -11,8 +11,14 @@ test-results/
 playwright-report/
 *.egg-info/
 .coverage
+release-notes.md
 *.tsbuildinfo
 .multica/
 .env
 .env.*
 !.env.example
+.DS_Store
+.idea/
+.vscode/
+htmlcov/
+.mypy_cache/
