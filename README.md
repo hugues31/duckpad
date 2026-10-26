@@ -40,6 +40,15 @@ Select **Regional revenue**, choose the `report` output, then click a revenue ce
 - Recompute manually, stop active SQL, retain stale previews after failure, and inspect durable execution history.
 - Configure reusable connections and environments outside project Git, with local, S3 and Oracle presets.
 - Switch English/French and light/dark themes without changing the project.
+- Monitor Duckpad server CPU and RAM as percentages with subtle background bars;
+  click for two minutes of history and RAM used / total in MiB or GiB. Samples
+  refresh every two seconds while the workspace is open; history resets on reload
+  or sign-out. Process memory comes from [psutil](https://psutil.io/platform/),
+  supporting Linux, macOS, and Windows. CPU includes all server threads, normalized
+  to the available CPU capacity (100% means fully used); RAM is current resident
+  memory divided by total capacity. CPU affinity and visible Linux cgroup v1/v2
+  limits constrain those capacities; otherwise system totals apply. Measurements
+  cover the Duckpad server process. Missing measurements are shown as unavailable.
 
 Results live in memory per worktree and environment. After a backend restart, history remains available but previews and lineage require another manual run. Editing or changing an external source does not launch a run automatically.
 
