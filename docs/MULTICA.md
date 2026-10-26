@@ -70,7 +70,8 @@ retain it. Development uses Python 3.12, installed by uv when needed.
 
 The local Docker base image `duckpad-python:3.12-duckdb2.0.0` contains the same
 package. The application Dockerfile reuses it, so ticket previews do not compile
-DuckDB. This image must exist on the Coolify build server. Provision it once with
+DuckDB. The base image carries `coolify.managed=true` so Coolify's automatic
+image cleanup preserves it. This image must exist on the Coolify build server. Provision it once with
 `bash scripts/provision-runtime.sh`; this also documents how to rebuild it on a
 replacement Debian 12 server with Python 3.11+, a C++ compiler, uv and Docker.
 Do not prune this base image or delete the wheel directory. Upgrade the wheel,
