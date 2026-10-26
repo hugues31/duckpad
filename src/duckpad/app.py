@@ -11,7 +11,7 @@ from urllib.parse import urlparse
 
 from fastapi import FastAPI, File, Query, Request, UploadFile
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import FileResponse, JSONResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from . import __version__, schemas
@@ -19,12 +19,15 @@ from .auth import SESSION_LIFETIME, Auth
 from .bundle import bundle_to_files
 from .components import group, import_definition
 from .example import create_example
+from .oidc import CALLBACK_PATH, OIDC, TRANSACTION_LIFETIME, OIDCSettings
 from .resources import resource_usage
 from .services import Services
 from .templates import parse_templates
 from .util import Problem, clean, uid
 
 SESSION_COOKIE = "duckpad_session"
+OIDC_COOKIE = "duckpad_oidc"
+PUBLIC_API_PATHS = {"/api/login", "/api/oidc/provider", "/api/oidc/login", CALLBACK_PATH}
 SAFE_METHODS = ("GET", "HEAD", "OPTIONS")
 UPLOAD_CHUNK = 1024 * 1024
 STATIC = Path(__file__).parent / "static"
@@ -41,10 +44,26 @@ def session_token(request: Request):
     )
 
 
+def secure_cookies(request):
+    return os.environ.get("DUCKPAD_SECURE_COOKIES") == "1" or request.url.scheme == "https"
+
+
+def set_session_cookie(response, request, token):
+    response.set_cookie(
+        SESSION_COOKIE,
+        token,
+        httponly=True,
+        samesite="lax",
+        max_age=SESSION_LIFETIME,
+        secure=secure_cookies(request),
+    )
+
+
 def create_app(home: Path, watch=True):
     services = Services.open(home, enforce_access=True)
     store, projects, catalog, engine = services.store, services.projects, services.catalog, services.engine
     auth = Auth(store)
+    oidc = OIDC(store, auth)
     access = engine.access
 
     @asynccontextmanager
@@ -64,12 +83,13 @@ def create_app(home: Path, watch=True):
     )
     app.state.services = services
     app.state.auth = auth
+    app.state.oidc = oidc
     app.state.access = access
 
     def authorize(request, user):
         parts = request.url.path.strip("/").split("/")
         route = parts[1] if len(parts) > 1 else ""
-        if route in ("users", "identity", "environments", "catalog", "resources"):
+        if route in ("users", "identity", "environments", "catalog", "resources", "sso"):
             access.instance_admin(user)
         elif route == "projects" and len(parts) >= 3:
             access.require(user, parts[2], "reader" if request.method == "GET" else "admin")
@@ -110,7 +130,7 @@ def create_app(home: Path, watch=True):
     @app.middleware("http")
     async def authentication(request: Request, call_next):
         try:
-            if request.url.path.startswith("/api/") and request.url.path != "/api/login":
+            if request.url.path.startswith("/api/") and request.url.path not in PUBLIC_API_PATHS:
                 request.state.user = auth.check(session_token(request))
                 authorize(request, request.state.user)
             if request.method not in SAFE_METHODS:
@@ -121,7 +141,9 @@ def create_app(home: Path, watch=True):
             return problem_response(error)
         response = await call_next(request)
         response.headers["X-Content-Type-Options"] = "nosniff"
-        response.headers["Referrer-Policy"] = "same-origin"
+        response.headers["Referrer-Policy"] = (
+            "no-referrer" if request.url.path.startswith("/api/oidc/") else "same-origin"
+        )
         response.headers["X-Frame-Options"] = "DENY"
         if request.url.path.startswith("/api/"):
             response.headers["Cache-Control"] = "no-store"
@@ -133,13 +155,53 @@ def create_app(home: Path, watch=True):
     def login(data: schemas.Login, request: Request):
         token = auth.login(data.username, data.password, request.client.host if request.client else "local")
         response = JSONResponse(auth.check(token))
+        auth.logout(session_token(request))
+        set_session_cookie(response, request, token)
+        return response
+
+    @app.get("/api/sso")
+    def sso_settings():
+        return oidc.public_settings()
+
+    @app.put("/api/sso")
+    def save_sso_settings(data: OIDCSettings):
+        return oidc.save(data)
+
+    @app.get("/api/oidc/provider")
+    def sso_provider():
+        config = oidc.settings()
+        return {"label": config["label"]} if config["enabled"] else None
+
+    @app.get("/api/oidc/login")
+    def sso_login(request: Request):
+        try:
+            url, browser = oidc.start()
+        except Problem:
+            return RedirectResponse("/?sso_error=failed", status_code=303)
+        response = RedirectResponse(url, status_code=303)
         response.set_cookie(
-            SESSION_COOKIE,
-            token,
+            OIDC_COOKIE,
+            browser,
             httponly=True,
-            samesite="strict",
-            max_age=SESSION_LIFETIME,
-            secure=os.environ.get("DUCKPAD_SECURE_COOKIES") == "1" or request.url.scheme == "https",
+            samesite="lax",
+            max_age=TRANSACTION_LIFETIME,
+            path="/api/oidc",
+            secure=secure_cookies(request),
+        )
+        return response
+
+    @app.get(CALLBACK_PATH)
+    def sso_callback(request: Request):
+        try:
+            token = oidc.finish(request.query_params, request.cookies.get(OIDC_COOKIE))
+            auth.logout(session_token(request))
+            response = RedirectResponse("/", status_code=303)
+            set_session_cookie(response, request, token)
+        except Problem:
+            # Provider error details and tokens must not reach the browser or logs.
+            response = RedirectResponse("/?sso_error=failed", status_code=303)
+        response.delete_cookie(
+            OIDC_COOKIE, path="/api/oidc", secure=secure_cookies(request), httponly=True, samesite="lax"
         )
         return response
 
@@ -248,6 +310,8 @@ def create_app(home: Path, watch=True):
     @app.post("/api/password")
     def change_password(data: dict, request: Request):
         user = store.get("user", request.state.user["id"])
+        if user.get("oidc"):
+            raise Problem("SSO accounts authenticate with their identity provider")
         import hmac
 
         if not hmac.compare_digest(
