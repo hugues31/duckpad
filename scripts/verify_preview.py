@@ -12,22 +12,29 @@ from urllib.parse import urlparse
 
 def wait_for_deployment(base, commit):
     hostname = urlparse(base).hostname or ""
-    suffix = ".app.example.invalid"
-    if not hostname.endswith(suffix):
-        raise SystemExit("Commit verification is only configured for the server's preview domain.")
+    domain = os.environ.get("DUCKPAD_PREVIEW_DOMAIN", "").strip(".").lower()
+    api_url = os.environ.get("COOLIFY_API_URL", "").rstrip("/")
+    if not domain or not api_url:
+        raise SystemExit("Set DUCKPAD_PREVIEW_DOMAIN and COOLIFY_API_URL in the private configuration.")
+    suffix = "." + domain
+    slug = hostname.removesuffix(suffix)
+    if not hostname.endswith(suffix) or not slug or "." in slug:
+        raise SystemExit("The URL does not match the configured preview domain.")
     token = os.environ.get("COOLIFY_TOKEN")
+    if not token and os.environ.get("COOLIFY_TOKEN_FILE"):
+        token = Path(os.environ["COOLIFY_TOKEN_FILE"]).expanduser().read_text().strip()
     if not token:
-        token = (Path.home() / ".coolify/multica-token").read_text().strip()
+        raise SystemExit("Set COOLIFY_TOKEN or COOLIFY_TOKEN_FILE in the private configuration.")
 
     def api(path):
         request = urllib.request.Request(
-            "https://coolify.example.invalid/api/v1" + path,
+            api_url + path,
             headers={"Authorization": "Bearer " + token},
         )
         with urllib.request.urlopen(request, timeout=20) as response:
             return json.load(response)
 
-    name = "preview-" + hostname.removesuffix(suffix)
+    name = "preview-" + slug
     application = next((item for item in api("/applications") if item.get("name") == name), None)
     if not application:
         raise SystemExit(f"No Coolify application exists for {name}.")
@@ -66,4 +73,4 @@ except urllib.error.HTTPError as error:
         raise SystemExit(f"Expected authentication protection, received HTTP {error.code}.") from error
 else:
     raise SystemExit("The preview unexpectedly allows unauthenticated API access.")
-print(f"Verified Duckpad frontend and authentication: {base}")
+print("Verified Duckpad frontend and authentication.")
