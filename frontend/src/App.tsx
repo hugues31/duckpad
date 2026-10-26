@@ -1,177 +1,127 @@
 import {
-  lazy,
-  Suspense,
   useCallback,
   useEffect,
-  useMemo,
+  useRef,
   useState,
+  type CSSProperties,
 } from "react";
+import { AlertCircle, GitBranch, Loader2 } from "lucide-react";
+import { api, ApiError, send, withQuery } from "./api";
+import Canvas from "./Canvas";
+import CanvasHeader from "./CanvasHeader";
+import ConnectionsPanel from "./ConnectionsPanel";
+import DocumentationPanel from "./DocumentationPanel";
+import DuckMark from "./DuckMark";
+import ErrorBoundary from "./ErrorBoundary";
 import {
-  Activity,
-  AlertCircle,
-  ArrowRight,
-  BookOpen,
-  Box,
-  Boxes,
-  Check,
-  ChevronDown,
-  ChevronRight,
-  Code2,
-  Database,
-  FileCode2,
-  GitBranch,
-  GitMerge,
-  HelpCircle,
-  Layers,
-  Loader2,
-  LogOut,
-  Moon,
-  Play,
-  Plus,
-  Search,
-  Settings2,
-  Square,
-  Sun,
-  Workflow,
-  X,
-} from "lucide-react";
-import { I18n, useT, templateLabel, type Language } from "./i18n";
+  FlowToolbar,
+  WorkspaceNotices,
+  noticeCount,
+  type WorkspaceTab,
+} from "./FlowToolbar";
 import {
-  api,
+  connectInput,
+  definitionOf,
+  graphAt,
   identifier,
-  send,
-  type Bundle,
-  type FlowNode,
-  type Json,
-  type Snapshot,
-  type Workspace,
-} from "./types";
-import Canvas, { nodeIcon } from "./Canvas";
-import Preview from "./Preview";
+  outputPorts,
+  pathPrefix,
+  type PathPart,
+} from "./graph";
+import HistoryPanel from "./HistoryPanel";
+import { I18n, useT } from "./i18n";
 import Inspector from "./Inspector";
 import LineagePanel from "./LineagePanel";
-import {
-  ConnectionsPanel,
-  DocumentationPanel,
-  EditorModal,
-  FileModal,
-  FormModal,
-  HistoryPanel,
-  Modal,
-} from "./Panels";
+import LoginPage from "./LoginPage";
+import ModalHost, { type ModalState } from "./ModalHost";
+import NodePalette, { type NodeKind } from "./NodePalette";
+import { usePreferences, type Preferences } from "./preferences";
+import Preview from "./Preview";
+import ProjectDashboard from "./ProjectDashboard";
+import SettingsPage from "./SettingsPage";
+import { Toast, useToast } from "./Toast";
+import TopBar, { type Area } from "./TopBar";
+import type {
+  Bundle,
+  FlowNode,
+  Graph,
+  Json,
+  Snapshot,
+  Statuses,
+  Workspace,
+} from "./types";
+import { PanelResizeHandle, usePanelSizes } from "./WorkspacePanels";
 
-function DuckMark({ size = 30 }: { size?: number }) {
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 40 40"
-      fill="none"
-      aria-hidden="true"
-    >
-      <rect width="40" height="40" rx="12" fill="#173d36" />
-      <path
-        d="M11 22c0-3 3-5 7-5h4v-4a5 5 0 1 1 10 0v8c0 7-6 10-12 10-6 0-10-3-10-8l1-1Z"
-        fill="#e5ebbd"
-      />
-      <path d="m31 14 6 2-6 3" fill="#e4ad61" />
-      <circle cx="28.5" cy="12.5" r="1.2" fill="#173d36" />
-      <path
-        d="M16 23c2 3 6 3 9 0"
-        stroke="#173d36"
-        strokeWidth="1.5"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
-}
+const WORKTREE_KEY = "duckpad-worktree";
+const POLL_INTERVAL = 1000;
+/** Height of each banner stacked under the toolbar, in pixels. */
+const NOTICE_HEIGHT = 36;
+const WIDE_LAYOUT = "(min-width: 1100px)";
+const NEW_TEMPLATE = `-- @label Custom transform
+-- @input source
+-- @output result
+SELECT * FROM {{ source }};
+`;
+const EMPTY_STATUSES: Statuses = { nodes: {}, active: null };
 
 export default function App() {
-  const [language, setLanguageState] = useState<Language>(() =>
-    localStorage.getItem("duckpad-language") === "fr" ? "fr" : "en",
-  );
-  const setLanguage = (value: Language) => {
-    localStorage.setItem("duckpad-language", value);
-    setLanguageState(value);
-    document.documentElement.lang = value;
-  };
-  const [theme, setThemeState] = useState(
-    () => localStorage.getItem("duckpad-theme") || "light",
-  );
-  const setTheme = (value: string) => {
-    localStorage.setItem("duckpad-theme", value);
-    setThemeState(value);
-  };
-  useEffect(() => {
-    document.documentElement.dataset.theme = theme;
-    document.documentElement.lang = language;
-  }, [theme, language]);
+  const preferences = usePreferences();
   return (
-    <I18n.Provider value={{ language, setLanguage }}>
-      <WorkspaceApp
-        theme={theme}
-        setTheme={setTheme}
-        language={language}
-        setLanguage={setLanguage}
-      />
+    <I18n.Provider
+      value={{
+        language: preferences.language,
+        setLanguage: preferences.setLanguage,
+      }}
+    >
+      <ErrorBoundary>
+        <WorkspaceApp preferences={preferences} />
+      </ErrorBoundary>
     </I18n.Provider>
   );
 }
 
-function WorkspaceApp({
-  theme,
-  setTheme,
-  language,
-  setLanguage,
-}: {
-  theme: string;
-  setTheme: (v: string) => void;
-  language: Language;
-  setLanguage: (v: Language) => void;
-}) {
+function WorkspaceApp({ preferences }: { preferences: Preferences }) {
   const t = useT();
+  const { message, notify, dismiss } = useToast();
   const [authenticated, setAuthenticated] = useState<boolean | null>(null);
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [worktree, setWorktree] = useState(
-    localStorage.getItem("duckpad-worktree") || "",
+    localStorage.getItem(WORKTREE_KEY) || "",
   );
+  const currentWorktree = useRef(worktree);
+  currentWorktree.current = worktree;
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [environment, setEnvironment] = useState("dev");
-  const [area, setArea] = useState("pipelines");
-  const [tab, setTab] = useState("flow");
+  const [area, setArea] = useState<Area>(worktree ? "pipelines" : "projects");
+  const [tab, setTab] = useState<WorkspaceTab>("flow");
   const [selected, setSelected] = useState<string | null>(null);
-  const [path, setPath] = useState<
-    { instance: string; definition: string; label: string }[]
-  >([]);
+  const [path, setPath] = useState<PathPart[]>([]);
   const [selection, setSelection] = useState<string[]>([]);
-  const [statuses, setStatuses] = useState<Json>({ nodes: {}, active: null });
+  const [statuses, setStatuses] = useState<Statuses>(EMPTY_STATUSES);
   const [preview, setPreview] = useState<Json | null>(null);
   const [cell, setCell] = useState<Json | null>(null);
-  const [search, setSearch] = useState("");
-  const [modal, setModal] = useState<Json | null>(null);
-  const [toast, setToast] = useState<{
-    message: string;
-    error?: boolean;
-  } | null>(null);
+  const [modal, setModal] = useState<ModalState | null>(null);
   const [saving, setSaving] = useState(false);
   const [busy, setBusy] = useState(false);
-  const useStableSelection = useCallback(
+  const [paletteOpen, setPaletteOpen] = useState(
+    () => window.matchMedia(WIDE_LAYOUT).matches,
+  );
+  const [previewOpen, setPreviewOpen] = useState(true);
+  const [inspectorOpen, setInspectorOpen] = useState(true);
+  const panels = usePanelSizes();
+  const closeModal = useCallback(() => setModal(null), []);
+  const updateSelection = useCallback(
     (ids: string[]) =>
       setSelection((previous) =>
         previous.join("|") === ids.join("|") ? previous : ids,
       ),
     [],
   );
-  const notify = useCallback(
-    (message: string, error = false) => setToast({ message, error }),
-    [],
-  );
-  useEffect(() => {
-    if (toast) {
-      const timer = setTimeout(() => setToast(null), 7000);
-      return () => clearTimeout(timer);
-    }
-  }, [toast]);
+  /** Run an action from an event handler, reporting failures in a toast. */
+  const safe = (action: () => Promise<unknown>) => {
+    void action().catch((e) => notify(e.message, true));
+  };
+
   useEffect(() => {
     api("/session")
       .then(() => setAuthenticated(true))
@@ -186,7 +136,10 @@ function WorkspaceApp({
     async (id = worktree) => {
       if (!id) return;
       const value = await api<Snapshot>(`/worktrees/${id}`);
+      // Ignore a late response for a worktree that is no longer open.
+      if (id !== currentWorktree.current) return;
       setSnapshot((old) =>
+        old?.worktree.id === value.worktree.id &&
         old?.revision === value.revision &&
         JSON.stringify(old.conflicts) === JSON.stringify(value.conflicts)
           ? old
@@ -196,79 +149,98 @@ function WorkspaceApp({
     [worktree],
   );
   useEffect(() => {
-    if (authenticated)
-      refreshWorkspace()
-        .then((value) => {
-          if (!value.worktrees.some((w) => w.id === worktree))
-            setWorktree(value.worktrees[0]?.id || "");
-        })
-        .catch((e) => notify(e.message, true));
+    if (!authenticated) return;
+    refreshWorkspace()
+      .then((value) => {
+        if (!value.worktrees.some((w) => w.id === worktree)) {
+          setWorktree("");
+          localStorage.removeItem(WORKTREE_KEY);
+          setArea("projects");
+        }
+      })
+      .catch((e) => notify(e.message, true));
   }, [authenticated]);
+  // Environments can be renamed in the settings; keep a configured one selected.
+  const environments: string[] = workspace?.catalog.environments || [];
   useEffect(() => {
-    if (worktree && authenticated) {
-      localStorage.setItem("duckpad-worktree", worktree);
-      setSnapshot(null);
-      setSelected(null);
-      setPath([]);
-      setCell(null);
-      setPreview(null);
-      load(worktree).catch((e) => notify(e.message, true));
-    }
+    if (environments.length && !environments.includes(environment))
+      setEnvironment(environments[0]);
+  }, [environments.join("|"), environment]);
+  useEffect(() => {
+    if (!worktree || !authenticated) return;
+    localStorage.setItem(WORKTREE_KEY, worktree);
+    setSnapshot(null);
+    setSelected(null);
+    setSelection([]);
+    setPath([]);
+    setCell(null);
+    setPreview(null);
+    setStatuses(EMPTY_STATUSES);
+    load(worktree).catch((e) => notify(e.message, true));
   }, [worktree, authenticated]);
   useEffect(() => {
     if (!worktree || !authenticated) return;
     let live = true;
+    let timer: number | undefined;
+    // Each poll starts after the previous one ends, so responses never overlap.
     const poll = async () => {
       try {
         const [status] = await Promise.all([
-          api(`/worktrees/${worktree}/status?environment=${environment}`),
+          api<Statuses>(
+            withQuery(`/worktrees/${worktree}/status`, { environment }),
+          ),
           load(worktree),
         ]);
-        if (live) setStatuses(status);
+        // Keep the previous object when nothing changed, so dependents do not refetch.
+        if (live)
+          setStatuses((old) =>
+            JSON.stringify(old) === JSON.stringify(status) ? old : status,
+          );
       } catch (e) {
-        if ((e as any).status === 401) setAuthenticated(false);
+        if (e instanceof ApiError && e.status === 401) setAuthenticated(false);
       }
+      if (live) timer = window.setTimeout(poll, POLL_INTERVAL);
     };
-    poll();
-    const timer = setInterval(poll, 1000);
+    void poll();
     return () => {
       live = false;
-      clearInterval(timer);
+      clearTimeout(timer);
     };
   }, [worktree, environment, authenticated, load]);
+
   const bundle = snapshot?.bundle;
-  const graph = path.length
-    ? bundle?.components[path[path.length - 1].definition]
-    : bundle?.flow;
-  const prefix =
-    path.map((p) => p.instance).join("::") + (path.length ? "::" : "");
-  const node = graph?.nodes.find((n: FlowNode) => n.id === selected) as
-    FlowNode | undefined;
+  const graph = bundle ? graphAt(bundle, path) : undefined;
+  const prefix = pathPrefix(path);
+  const node = graph?.nodes.find((n) => n.id === selected);
   const fullNode = prefix + (selected || "");
-  const definition = node?.component
-    ? bundle?.components[node.component]
-    : snapshot?.parsed_templates[node?.template || ""];
-  const ports = node?.component
-    ? Object.keys(definition?.outputs || {})
-    : definition?.outputs || [];
+  const definition =
+    node && snapshot ? definitionOf(node, snapshot) : undefined;
+  const ports = node ? outputPorts(node, definition) : [];
   const active = statuses.active;
   const resultVersion = JSON.stringify(statuses.nodes);
   const project = workspace?.projects.find(
     (p) => p.id === snapshot?.worktree.project,
   );
+
   const select = (id: string | null) => {
     setSelected(id);
     setCell(null);
     setPreview(null);
+    if (id) {
+      setInspectorOpen(true);
+      setPreviewOpen(true);
+      if (!window.matchMedia(WIDE_LAYOUT).matches) setPaletteOpen(false);
+    }
   };
   async function saveBundle(value: Bundle, base = snapshot!) {
     setSaving(true);
     try {
-      await api(
+      const saved = await api<Snapshot>(
         `/worktrees/${base.worktree.id}`,
         send({ revision: base.revision, bundle: value }, "PUT"),
       );
       await load(base.worktree.id);
+      return saved;
     } catch (e) {
       await load(base.worktree.id);
       notify((e as Error).message, true);
@@ -277,30 +249,24 @@ function WorkspaceApp({
       setSaving(false);
     }
   }
-  function mutateGraph(value: Bundle, change: (graph: Json) => void) {
-    const graph = path.length
-      ? value.components[path[path.length - 1].definition]
-      : value.flow;
-    change(graph);
-  }
-  async function updateGraph(change: (graph: Json) => void) {
-    if (!bundle) return;
-    const value = structuredClone(bundle);
-    mutateGraph(value, change);
-    await saveBundle(value);
+  /** Save a change applied to a copy of the bundle of the given revision. */
+  const saveFrom = (base: Snapshot, change: (value: Bundle) => void) => {
+    const value = structuredClone(base.bundle!);
+    change(value);
+    return saveBundle(value, base);
+  };
+  async function updateGraph(change: (graph: Graph) => void) {
+    if (!snapshot?.bundle) return;
+    await saveFrom(snapshot, (value) => change(graphAt(value, path)));
   }
   async function addNode(
-    kind: string,
+    kind: NodeKind,
     id: string,
     position = {
       x: 160 + ((graph?.nodes.length || 0) % 4) * 240,
       y: 120 + Math.floor((graph?.nodes.length || 0) / 4) * 210,
     },
   ) {
-    const def =
-      kind === "component"
-        ? bundle?.components[id]
-        : snapshot?.parsed_templates[id];
     const created: FlowNode = {
       id: identifier(),
       ...(kind === "component" ? { component: id } : { template: id }),
@@ -312,9 +278,9 @@ function WorkspaceApp({
   }
   async function removeNodes(ids: string[], edges: string[] = []) {
     await updateGraph((g) => {
-      g.nodes = g.nodes.filter((n: FlowNode) => !ids.includes(n.id));
+      g.nodes = g.nodes.filter((n) => !ids.includes(n.id));
       g.edges = g.edges.filter(
-        (e: Json) =>
+        (e) =>
           !edges.includes(e.id) &&
           !ids.includes(e.source) &&
           !ids.includes(e.target),
@@ -323,18 +289,17 @@ function WorkspaceApp({
     if (selected && ids.includes(selected)) select(null);
   }
   function openComponent(id: string) {
-    const node = graph?.nodes.find((n: FlowNode) => n.id === id);
-    if (node?.component) {
-      setPath([
-        ...path,
-        {
-          instance: id,
-          definition: node.component,
-          label: node.label || bundle!.components[node.component].name,
-        },
-      ]);
-      select(null);
-    }
+    const instance = graph?.nodes.find((n) => n.id === id);
+    if (!instance?.component) return;
+    setPath([
+      ...path,
+      {
+        instance: id,
+        definition: instance.component,
+        label: instance.label || bundle!.components[instance.component].name,
+      },
+    ]);
+    select(null);
   }
   async function run(target?: string) {
     setBusy(true);
@@ -350,9 +315,16 @@ function WorkspaceApp({
       setBusy(false);
     }
   }
-  const safe = (fn: () => Promise<unknown>) => {
-    void fn().catch((e) => notify(e.message, true));
-  };
+  function openProject(id: string) {
+    setWorktree(id);
+    setArea("pipelines");
+    setTab("flow");
+    setPath([]);
+    setSelected(null);
+    setSelection([]);
+    setCell(null);
+    setPreview(null);
+  }
   function newBranch(revision = "") {
     setModal({
       kind: "form",
@@ -366,7 +338,7 @@ function WorkspaceApp({
           required: false,
         },
       ],
-      submit: async (v: Json) => {
+      submit: async (v) => {
         const next = await api(
           `/worktrees/${worktree}/branches`,
           send({ name: v.name, revision: v.revision || undefined }),
@@ -377,98 +349,205 @@ function WorkspaceApp({
       },
     });
   }
-  async function editTemplate() {
-    if (!node?.template) return;
-    const base = snapshot!;
-    const id = node.template;
-    setModal({
-      kind: "editor",
-      title: t("editTemplate"),
-      description: t("sharedTemplateHint"),
-      value: bundle!.templates[id],
-      save: async (text: string) => {
-        const value = structuredClone(base.bundle!);
-        value.templates[id] = text;
-        await saveBundle(value, base);
-      },
-    });
-  }
-  function projectForm() {
+  function newProject() {
     setModal({
       kind: "form",
       title: t("newProject"),
       fields: [{ key: "name", label: t("name") }],
-      submit: async (v: Json) => {
+      submit: async (v) => {
         const next = await api("/projects", send(v));
         await refreshWorkspace();
-        setWorktree(next.id);
-        setArea("pipelines");
+        openProject(next.id);
       },
     });
   }
-  async function example() {
+  async function openExample() {
     setBusy(true);
     try {
       const result = await api("/example", send({}));
       await refreshWorkspace();
-      setWorktree(result.id);
-      setArea("pipelines");
+      openProject(result.id);
     } catch (e) {
       notify((e as Error).message, true);
     } finally {
       setBusy(false);
     }
   }
-  async function compare() {
-    const comparison = await api(`/worktrees/${worktree}/merge`);
-    setModal({ kind: "merge", comparison });
+  function editTemplate() {
+    if (!node?.template || !snapshot) return;
+    const base = snapshot;
+    const id = node.template;
+    setModal({
+      kind: "editor",
+      title: t("editTemplate"),
+      description: t("sharedTemplateHint"),
+      value: base.bundle!.templates[id],
+      save: async (text) => {
+        await saveFrom(base, (value) => {
+          value.templates[id] = text;
+        });
+      },
+    });
   }
-  const palette = useMemo(() => {
-    if (!snapshot?.parsed_templates) return [];
-    return Object.entries(snapshot.parsed_templates)
-      .map(([id, d]) => ({
-        id,
-        kind: "template",
-        label: templateLabel(id, d.label, t),
-        category:
-          d.kind === "source"
-            ? "sources"
-            : d.kind === "export"
-              ? "exports"
-              : "transforms",
-        description: d.description,
-      }))
-      .concat(
-        Object.entries(bundle?.components || {}).map(([id, d]) => ({
-          id,
-          kind: "component",
-          label: d.name,
-          category: "components",
-          description: d.description,
-        })),
-      )
-      .filter((item) =>
-        item.label?.toLowerCase().includes(search.toLowerCase()),
-      );
-  }, [snapshot, bundle, search, t]);
-  const themes = (
-    <>
-      <button
-        className="icon"
-        title={t(theme === "light" ? "dark" : "light")}
-        onClick={() => setTheme(theme === "light" ? "dark" : "light")}
-      >
-        {theme === "light" ? <Moon size={17} /> : <Sun size={17} />}
-      </button>
-      <button
-        className="language-button"
-        title={t("language")}
-        onClick={() => setLanguage(language === "en" ? "fr" : "en")}
-      >
-        {language.toUpperCase()}
-      </button>
-    </>
-  );
+  function newTemplate(base: Snapshot) {
+    const id = identifier("template");
+    setModal({
+      kind: "editor",
+      title: t("newTemplate"),
+      value: NEW_TEMPLATE,
+      save: async (text) => {
+        await saveFrom(base, (value) => {
+          value.templates[id] = text;
+        });
+      },
+    });
+  }
+  function editComponentDefinition(base: Snapshot) {
+    const id = path[path.length - 1].definition;
+    setModal({
+      kind: "editor",
+      language: "json",
+      title: t("definition"),
+      value: JSON.stringify(base.bundle!.components[id], null, 2),
+      description: t("sharedTemplateHint"),
+      save: async (text) => {
+        await saveFrom(base, (value) => {
+          value.components[id] = JSON.parse(text);
+        });
+      },
+    });
+  }
+  function groupSelection(base: Snapshot) {
+    setModal({
+      kind: "form",
+      title: t("group"),
+      fields: [
+        { key: "name", label: t("groupName") },
+        {
+          key: "parameters",
+          label: t("exposedParameters"),
+          value: "{}",
+          multiline: true,
+          required: false,
+        },
+      ],
+      description: t("exposedHint"),
+      submit: async (values) => {
+        const result = await api(
+          `/worktrees/${worktree}/group`,
+          send({
+            revision: base.revision,
+            nodes: selection,
+            parent: path.at(-1)?.definition,
+            name: values.name,
+            parameters: JSON.parse(values.parameters || "{}"),
+          }),
+        );
+        await load();
+        select(result.selected);
+      },
+    });
+  }
+  function showFiles(base: Snapshot) {
+    setModal({
+      kind: "files",
+      snapshot: base,
+      save: async (files) => {
+        await api(
+          `/worktrees/${worktree}`,
+          send({ revision: base.revision, files }, "PUT"),
+        );
+        await load();
+      },
+    });
+  }
+  async function compare(base: Snapshot) {
+    const comparison = await api(`/worktrees/${worktree}/merge`);
+    setModal({
+      kind: "files",
+      title: t("mergeReview"),
+      description:
+        t("mergeHint") +
+        (comparison.conflicts.length
+          ? " · " + comparison.conflicts.join(", ")
+          : ""),
+      snapshot: base,
+      initialFiles: comparison.files,
+      save: async (files) => {
+        await api(
+          `/worktrees/${worktree}/merge`,
+          send({ ...comparison, files }),
+        );
+        await refreshWorkspace();
+        setWorktree(comparison.target.id);
+        notify(t("mergeComplete"));
+      },
+    });
+  }
+  function resolveConflict(conflict: Json) {
+    const resolve = async (body: Json) => {
+      await api(`/conflicts/${conflict.id}/resolve`, send(body));
+      await load();
+    };
+    setModal({
+      kind: "conflict",
+      conflict,
+      choose: (choice) =>
+        safe(async () => {
+          await resolve({ choice });
+          setModal(null);
+        }),
+      combine: () =>
+        setModal({
+          kind: "editor",
+          title: t("combined"),
+          language: "json",
+          value: JSON.stringify(conflict.proposal, null, 2),
+          save: (text) =>
+            resolve({ choice: "combined", files: JSON.parse(text) }),
+        }),
+    });
+  }
+  async function openLibrary(base: Snapshot) {
+    const items: Json[] = await api("/library");
+    setModal({
+      kind: "library",
+      items: items.filter((item) => item.project !== base.worktree.project),
+      importItem: (item) =>
+        safe(async () => {
+          await api(
+            `/worktrees/${worktree}/import`,
+            send({
+              revision: base.revision,
+              source_worktree: item.worktree,
+              kind: item.kind,
+              id: item.id,
+            }),
+          );
+          await load();
+          notify(t("importComplete"));
+        }),
+    });
+  }
+  async function showAbout() {
+    const session = await api("/session");
+    setModal({
+      kind: "about",
+      version: session.version,
+      duckdb: workspace?.catalog.duckdb_version,
+    });
+  }
+  async function showDiff(commit: string) {
+    const diff = await api(`/worktrees/${worktree}/diff/${commit}`);
+    setModal({
+      kind: "editor",
+      title: t("diff"),
+      value: diff.diff,
+      language: "diff",
+      readOnly: true,
+    });
+  }
+
   if (authenticated === null)
     return (
       <div className="startup">
@@ -478,141 +557,58 @@ function WorkspaceApp({
     );
   if (!authenticated)
     return (
-      <Login onSuccess={() => setAuthenticated(true)} preferences={themes} />
+      <LoginPage
+        preferences={preferences}
+        onSuccess={() => setAuthenticated(true)}
+      />
     );
+  const connections = (workspace?.catalog.connections || []).filter(
+    (connection: Json) => {
+      if (!["source", "export"].includes(definition?.kind)) return true;
+      const connector = workspace?.catalog.connectors.find(
+        (item: Json) => item.id === connection.connector,
+      );
+      return connector?.capabilities?.includes(
+        definition?.kind === "export" ? "write" : "read",
+      );
+    },
+  );
+  const panelOpen = {
+    palette: paletteOpen,
+    inspector: inspectorOpen && !!node,
+    preview: previewOpen && !!node && ports.length > 0,
+  };
   return (
     <div className="app-shell">
-      <nav className="rail" aria-label={t("workspace")}>
-        <button
-          className="brand-button"
-          title="Duckpad"
-          onClick={() => setArea("pipelines")}
-        >
-          <DuckMark size={36} />
-        </button>
-        <div className="rail-main">
-          {[
-            ["pipelines", Workflow],
-            ["connections", Database],
-            ["settings", Settings2],
-          ].map(([key, Icon]) => (
-            <button
-              key={key as string}
-              className={`rail-button ${area === key ? "active" : ""}`}
-              title={t(key as string)}
-              aria-label={t(key as string)}
-              onClick={() => setArea(key as string)}
-            >
-              <Icon size={21} />
-            </button>
-          ))}
-        </div>
-        <button
-          className="rail-button"
-          title={t("help")}
-          onClick={() => setModal({ kind: "about" })}
-        >
-          <HelpCircle size={20} />
-        </button>
-        <button
-          className="avatar"
-          title={t("signOut")}
-          onClick={() =>
+      <div className="workspace-shell">
+        <TopBar
+          area={area}
+          workspace={workspace}
+          worktree={worktree}
+          snapshot={snapshot}
+          environment={environment}
+          preferences={preferences}
+          onArea={setArea}
+          onHome={() => {
+            setArea("projects");
+            safe(refreshWorkspace);
+          }}
+          onHelp={() => safe(showAbout)}
+          onOpenProject={openProject}
+          onNewProject={newProject}
+          onWorktree={setWorktree}
+          onNewBranch={() => newBranch()}
+          onEnvironment={(value) => {
+            setEnvironment(value);
+            setCell(null);
+          }}
+          onSignOut={() =>
             safe(async () => {
               await api("/logout", send({}));
               setAuthenticated(false);
             })
           }
-        >
-          A
-        </button>
-      </nav>
-      <div className="workspace-shell">
-        <header className="topbar">
-          <div className="project-picker">
-            <span className="project-symbol">
-              <Layers size={18} />
-            </span>
-            <div>
-              <span className="eyebrow">{t("workspace")}</span>
-              <select
-                aria-label={t("activeProject")}
-                value={
-                  snapshot?.worktree.project ||
-                  workspace?.worktrees.find((w) => w.id === worktree)
-                    ?.project ||
-                  ""
-                }
-                onChange={(e) => {
-                  const project = workspace?.projects.find(
-                    (p) => p.id === e.target.value,
-                  );
-                  if (project) setWorktree(project.main);
-                }}
-              >
-                {!workspace?.projects.length && <option>Duckpad</option>}
-                {workspace?.projects.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <button
-              className="icon"
-              title={t("newProject")}
-              onClick={projectForm}
-            >
-              <Plus size={16} />
-            </button>
-          </div>
-          <div className="topbar-right">
-            {snapshot && (
-              <>
-                <div className="branch-picker">
-                  <GitBranch size={14} />
-                  <select
-                    aria-label={t("branch")}
-                    value={worktree}
-                    onChange={(e) => setWorktree(e.target.value)}
-                  >
-                    {workspace?.worktrees
-                      .filter((w) => w.project === snapshot.worktree.project)
-                      .map((w) => (
-                        <option key={w.id} value={w.id}>
-                          {w.branch}
-                        </option>
-                      ))}
-                  </select>
-                  <button
-                    className="icon"
-                    title={t("newBranch")}
-                    onClick={() => newBranch()}
-                  >
-                    <Plus size={13} />
-                  </button>
-                </div>
-                <span className="header-divider" />
-                <label className="environment-picker">
-                  <span className={`env-dot ${environment}`} />
-                  <select
-                    aria-label={t("environment")}
-                    value={environment}
-                    onChange={(e) => {
-                      setEnvironment(e.target.value);
-                      setCell(null);
-                    }}
-                  >
-                    {workspace?.catalog.environments.map((env: string) => (
-                      <option key={env}>{env}</option>
-                    ))}
-                  </select>
-                </label>
-              </>
-            )}
-            {themes}
-          </div>
-        </header>
+        />
         {area === "connections" && workspace ? (
           <ConnectionsPanel
             workspace={workspace}
@@ -625,7 +621,7 @@ function WorkspaceApp({
                 title: data.title,
                 value: data.value,
                 language: "json",
-                save: async (text: string) => {
+                save: async (text) => {
                   await api(
                     "/catalog/connector",
                     send(JSON.parse(text), "PUT"),
@@ -636,482 +632,125 @@ function WorkspaceApp({
             }
           />
         ) : area === "settings" && workspace ? (
-          <section className="full-panel settings-page">
-            <span className="eyebrow">{t("workspace")}</span>
-            <h1>{t("settings")}</h1>
-            <div className="settings-card">
-              <h2>{t("identity")}</h2>
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  const data = new FormData(e.currentTarget);
-                  safe(async () => {
-                    await api(
-                      "/identity",
-                      send(
-                        { name: data.get("name"), email: data.get("email") },
-                        "PUT",
-                      ),
-                    );
-                    await refreshWorkspace();
-                    notify(t("saved"));
-                  });
-                }}
-              >
-                <label className="field">
-                  <span>{t("authorName")}</span>
-                  <input
-                    name="name"
-                    defaultValue={workspace.identity.name}
-                    required
-                  />
-                </label>
-                <label className="field">
-                  <span>{t("authorEmail")}</span>
-                  <input
-                    name="email"
-                    type="email"
-                    defaultValue={workspace.identity.email}
-                    required
-                  />
-                </label>
-                <button className="button primary">{t("save")}</button>
-              </form>
+          <SettingsPage
+            workspace={workspace}
+            preferences={preferences}
+            onIdentity={(identity) =>
+              safe(async () => {
+                await api("/identity", send(identity, "PUT"));
+                await refreshWorkspace();
+                notify(t("saved"));
+              })
+            }
+            onEnvironments={(names) =>
+              safe(async () => {
+                await api("/environments", send(names, "PUT"));
+                await refreshWorkspace();
+                notify(t("saved"));
+              })
+            }
+          />
+        ) : area === "projects" || !worktree ? (
+          workspace ? (
+            <ProjectDashboard
+              projects={workspace.projects}
+              busy={busy}
+              onOpen={openProject}
+              onCreate={newProject}
+              onExample={openExample}
+            />
+          ) : (
+            <div className="startup" role="status" aria-label={t("loading")}>
+              <Loader2 className="spin" />
             </div>
-            <div className="settings-card">
-              <h2>{t("preferences")}</h2>
-              <p className="muted">{t("localPreferences")}</p>
-              <div className="row gap">{themes}</div>
-            </div>
-            <div className="settings-card">
-              <h2>{t("environments")}</h2>
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  const data = new FormData(e.currentTarget);
-                  safe(async () => {
-                    await api(
-                      "/environments",
-                      send(
-                        String(data.get("environments"))
-                          .split(",")
-                          .map((e) => e.trim())
-                          .filter(Boolean),
-                        "PUT",
-                      ),
-                    );
-                    await refreshWorkspace();
-                    notify(t("saved"));
-                  });
-                }}
-              >
-                <label className="field">
-                  <span>{t("environments")}</span>
-                  <input
-                    name="environments"
-                    defaultValue={workspace.catalog.environments.join(", ")}
-                  />
-                </label>
-                <button className="button secondary">{t("save")}</button>
-              </form>
-            </div>
-          </section>
-        ) : !worktree ? (
-          <section className="welcome">
-            <div className="welcome-art">
-              <DuckMark size={76} />
-              <span className="orbit one">
-                <Database size={25} />
-              </span>
-              <span className="orbit two">
-                <GitBranch size={25} />
-              </span>
-              <span className="orbit three">
-                <Code2 size={25} />
-              </span>
-            </div>
-            <span className="eyebrow">DUCKPAD / LOCAL DATA WORKSPACE</span>
-            <h1>{t("welcome")}</h1>
-            <p>{t("welcomeDescription")}</p>
-            <div className="row gap">
-              <button
-                className="button primary large"
-                onClick={example}
-                disabled={busy}
-              >
-                {busy ? (
-                  <Loader2 className="spin" size={17} />
-                ) : (
-                  <Play size={16} />
-                )}{" "}
-                {t("example")}
-              </button>
-              <button className="button secondary large" onClick={projectForm}>
-                <Plus size={17} />
-                {t("startBlank")}
-              </button>
-            </div>
-            <div className="example-note">
-              <Boxes size={20} />
-              <span>{t("exampleDescription")}</span>
-            </div>
-          </section>
+          )
         ) : !snapshot ? (
           <div className="startup">
             <Loader2 className="spin" />
           </div>
         ) : (
           <>
-            <div className="flow-toolbar">
-              <div className="tabs main-tabs">
-                {[
-                  ["flow", Workflow],
-                  ["documentation", BookOpen],
-                  ["history", Activity],
-                ].map(([key, Icon]) => (
-                  <button
-                    key={key as string}
-                    className={tab === key ? "active" : ""}
-                    onClick={() => setTab(key as string)}
-                  >
-                    <Icon size={15} />
-                    {t(key as string)}
-                  </button>
-                ))}
-              </div>
-              <div className="row gap">
-                <span className="save-status">
-                  {saving ? (
-                    <Loader2 size={13} className="spin" />
-                  ) : (
-                    <Check size={13} />
-                  )}{" "}
-                  {t(saving ? "saving" : "saved")}
-                </span>
-                <button
-                  className="icon"
-                  title={t("files")}
-                  onClick={() => setModal({ kind: "files", base: snapshot })}
-                >
-                  <FileCode2 size={16} />
-                </button>
-                {snapshot.worktree.branch !== "main" && (
-                  <button
-                    className="button secondary small"
-                    onClick={() => safe(compare)}
-                  >
-                    <GitMerge size={14} />
-                    {t("merge")}
-                  </button>
-                )}
-                {active ? (
-                  <button
-                    className="button stop"
-                    title={t("cancelRunHint")}
-                    onClick={() =>
-                      safe(async () => {
-                        const run = await api(
-                          `/runs/${active.id}/cancel`,
-                          send({}),
-                        );
-                        setStatuses({ ...statuses, active: run });
-                      })
-                    }
-                    disabled={active.status === "canceling"}
-                  >
-                    <Square size={12} fill="currentColor" />
-                    {t(active.status === "canceling" ? "canceling" : "stop")}
-                  </button>
-                ) : (
-                  <button
-                    className="button primary"
-                    disabled={busy || !bundle}
-                    onClick={() => run()}
-                  >
-                    <Play size={14} fill="currentColor" />
-                    {t("run")}
-                  </button>
-                )}
-              </div>
-            </div>
-            {!!snapshot.conflicts.length && (
-              <div className="banner warning">
-                <AlertCircle size={16} />
-                <span>{t("conflictHint")}</span>
-                <button
-                  onClick={() =>
-                    setModal({
-                      kind: "conflict",
-                      conflict: snapshot.conflicts[0],
-                    })
-                  }
-                >
-                  {t("resolve")}
-                  <ArrowRight size={14} />
-                </button>
-              </div>
-            )}
-            {!!snapshot.diagnostics.length && (
-              <div className="banner error">
-                <AlertCircle size={16} />
-                <span>
-                  {snapshot.diagnostics.length} ·{" "}
-                  {snapshot.diagnostics[0].message}
-                </span>
-                <button
-                  onClick={() => setModal({ kind: "files", base: snapshot })}
-                >
-                  {t("viewFiles")}
-                  <ArrowRight size={14} />
-                </button>
-              </div>
-            )}
-            {active && (
-              <div className="run-progress">
-                <Loader2 className="spin" size={13} />
-                <span>
-                  {t(active.status)} · {active.environment} ·{" "}
-                  {
-                    Object.values(active.nodes || {}).filter(
-                      (n: any) => n.status === "success",
-                    ).length
-                  }
-                  /{Object.keys(active.nodes || {}).length} {t("nodes")}
-                </span>
-                <div className="progress-track">
-                  <div
-                    style={{
-                      width: `${(100 * Object.values(active.nodes || {}).filter((n: any) => n.status === "success").length) / Math.max(1, Object.keys(active.nodes || {}).length)}%`,
-                    }}
-                  />
-                </div>
-              </div>
-            )}
+            <FlowToolbar
+              tab={tab}
+              saving={saving}
+              branch={snapshot.worktree.branch}
+              active={active}
+              canRun={!busy && !!bundle}
+              onTab={setTab}
+              onFiles={() => showFiles(snapshot)}
+              onMerge={() => safe(() => compare(snapshot))}
+              onRun={() => run()}
+              onStop={() =>
+                safe(async () => {
+                  const canceled = await api(
+                    `/runs/${active!.id}/cancel`,
+                    send({}),
+                  );
+                  setStatuses((old) => ({ ...old, active: canceled }));
+                })
+              }
+            />
+            <WorkspaceNotices
+              snapshot={snapshot}
+              active={active}
+              onResolve={() => resolveConflict(snapshot.conflicts[0])}
+              onViewFiles={() => showFiles(snapshot)}
+            />
             {tab === "history" ? (
               <HistoryPanel
                 worktree={worktree}
-                onDiff={(commit) =>
-                  safe(async () => {
-                    const diff = await api(
-                      `/worktrees/${worktree}/diff/${commit}`,
-                    );
-                    setModal({
-                      kind: "editor",
-                      title: t("diff"),
-                      value: diff.diff,
-                      language: "diff",
-                      readOnly: true,
-                    });
-                  })
-                }
+                onDiff={(commit) => safe(() => showDiff(commit))}
                 onRevision={newBranch}
               />
             ) : tab === "documentation" && bundle ? (
               <DocumentationPanel
                 key={worktree}
                 snapshot={snapshot}
-                onSave={async (text, base) => {
-                  const value = structuredClone(base.bundle!);
-                  value.documentation.project = text;
-                  await saveBundle(value, base);
-                }}
+                onSave={(text, base) =>
+                  saveFrom(base, (value) => {
+                    value.documentation.project = text;
+                  })
+                }
               />
             ) : bundle && graph ? (
-              <div className="flow-layout">
-                <aside className="palette">
-                  <div className="palette-title">
-                    <span>{t("nodes")}</span>
-                    <span className="counter">{palette.length}</span>
-                  </div>
-                  <div className="search">
-                    <Search size={14} />
-                    <input
-                      placeholder={t("searchNodes")}
-                      aria-label={t("searchNodes")}
-                      value={search}
-                      onChange={(e) => setSearch(e.target.value)}
-                    />
-                  </div>
-                  <div className="palette-list">
-                    {["sources", "transforms", "components", "exports"].map(
-                      (category) => (
-                        <section key={category}>
-                          <h4>{t(category)}</h4>
-                          {palette
-                            .filter((p) => p.category === category)
-                            .map((item) => {
-                              const Icon = nodeIcon(
-                                item.kind === "component"
-                                  ? "component"
-                                  : item.id,
-                              );
-                              return (
-                                <button
-                                  className="palette-item"
-                                  key={item.id}
-                                  draggable
-                                  onDragStart={(e) => {
-                                    e.dataTransfer.setData(
-                                      "application/duckpad",
-                                      JSON.stringify({
-                                        kind: item.kind,
-                                        id: item.id,
-                                      }),
-                                    );
-                                    e.dataTransfer.effectAllowed = "move";
-                                  }}
-                                  onClick={() =>
-                                    safe(() => addNode(item.kind, item.id))
-                                  }
-                                  title={item.description}
-                                >
-                                  <span
-                                    className={`palette-icon ${item.category}`}
-                                  >
-                                    <Icon size={17} />
-                                  </span>
-                                  <span>{item.label}</span>
-                                  <Plus size={12} className="palette-plus" />
-                                </button>
-                              );
-                            })}
-                        </section>
-                      ),
-                    )}
-                  </div>
-                  <div className="palette-bottom">
-                    <button
-                      className="text-button"
-                      onClick={() => {
-                        const id = identifier("template");
-                        const base = snapshot;
-                        setModal({
-                          kind: "editor",
-                          title: t("newTemplate"),
-                          value:
-                            "-- @label Custom transform\n-- @input source\n-- @output result\nSELECT * FROM {{ source }};\n",
-                          save: async (text: string) => {
-                            const value = structuredClone(base.bundle!);
-                            value.templates[id] = text;
-                            await saveBundle(value, base);
-                          },
-                        });
-                      }}
-                    >
-                      <Code2 size={14} />
-                      {t("newTemplate")}
-                    </button>
-                    <button
-                      className="text-button"
-                      onClick={() =>
-                        safe(async () => {
-                          const items = await api("/library");
-                          setModal({ kind: "library", items });
-                        })
-                      }
-                    >
-                      <Boxes size={14} />
-                      {t("library")}
-                    </button>
-                    <p>{t("dragHint")}</p>
-                  </div>
-                </aside>
+              <div
+                className={`flow-layout ${paletteOpen ? "palette-open" : ""} ${panelOpen.inspector ? "inspector-open" : ""} ${panelOpen.preview ? "preview-open" : ""} ${path.length ? "nested-flow" : ""}`}
+                style={
+                  {
+                    "--notice-height": `${NOTICE_HEIGHT * noticeCount(snapshot, active)}px`,
+                    "--palette-width": `${panels.sizes.palette}px`,
+                    "--inspector-width": `${panels.sizes.inspector}px`,
+                    "--preview-height": `${panels.sizes.preview}px`,
+                  } as CSSProperties
+                }
+              >
+                <NodePalette
+                  snapshot={snapshot}
+                  hidden={!paletteOpen}
+                  onClose={() => setPaletteOpen(false)}
+                  onAdd={(kind, id) => safe(() => addNode(kind, id))}
+                  onNewTemplate={() => newTemplate(snapshot)}
+                  onLibrary={() => safe(() => openLibrary(snapshot))}
+                />
                 <main className="canvas-column">
-                  <div className="canvas-breadcrumb">
-                    <button
-                      onClick={() => {
-                        setPath([]);
-                        select(null);
-                      }}
-                    >
-                      <Workflow size={13} />
-                      {project?.name || bundle.flow.name}
-                    </button>
-                    {path.map((part, index) => (
-                      <span key={part.instance} className="row gap">
-                        <ChevronRight size={12} />
-                        <button
-                          onClick={() => {
-                            setPath(path.slice(0, index + 1));
-                            select(null);
-                          }}
-                        >
-                          {part.label}
-                        </button>
-                      </span>
-                    ))}
-                    <span className="spacer" />
-                    {selection.length > 0 && (
-                      <button
-                        className="group-button"
-                        onClick={() =>
-                          setModal({
-                            kind: "form",
-                            title: t("group"),
-                            fields: [
-                              { key: "name", label: t("groupName") },
-                              {
-                                key: "parameters",
-                                label: t("exposedParameters"),
-                                value: "{}",
-                                multiline: true,
-                                required: false,
-                              },
-                            ],
-                            description: t("exposedHint"),
-                            submit: async (values: Json) => {
-                              const result = await api(
-                                `/worktrees/${worktree}/group`,
-                                send({
-                                  revision: snapshot.revision,
-                                  nodes: selection,
-                                  parent: path.at(-1)?.definition,
-                                  name: values.name,
-                                  parameters: JSON.parse(
-                                    values.parameters || "{}",
-                                  ),
-                                }),
-                              );
-                              await load();
-                              select(result.selected);
-                            },
-                          })
-                        }
-                      >
-                        <Boxes size={13} />
-                        {t("group")} ({selection.length})
-                      </button>
-                    )}
-                  </div>
-                  {path.length > 0 && (
-                    <div className="component-notice">
-                      {t("sharedComponentHint")}
-                      <button
-                        onClick={() => {
-                          const base = snapshot;
-                          const id = path[path.length - 1].definition;
-                          setModal({
-                            kind: "editor",
-                            language: "json",
-                            title: t("definition"),
-                            value: JSON.stringify(
-                              bundle.components[id],
-                              null,
-                              2,
-                            ),
-                            description: t("sharedTemplateHint"),
-                            save: async (text: string) => {
-                              const value = structuredClone(base.bundle!);
-                              value.components[id] = JSON.parse(text);
-                              await saveBundle(value, base);
-                            },
-                          });
-                        }}
-                      >
-                        {t("definition")}
-                      </button>
-                    </div>
-                  )}
+                  <CanvasHeader
+                    projectName={project?.name || bundle.flow.name}
+                    path={path}
+                    hasNode={!!node}
+                    paletteOpen={paletteOpen}
+                    previewOpen={previewOpen}
+                    inspectorOpen={inspectorOpen}
+                    selectionCount={selection.length}
+                    onNavigate={(depth) => {
+                      setPath(path.slice(0, depth));
+                      select(null);
+                    }}
+                    onTogglePalette={() => setPaletteOpen(!paletteOpen)}
+                    onTogglePreview={() => setPreviewOpen(!previewOpen)}
+                    onToggleInspector={() => setInspectorOpen(!inspectorOpen)}
+                    onGroup={() => groupSelection(snapshot)}
+                    onEditDefinition={() => editComponentDefinition(snapshot)}
+                  />
                   <div className="canvas">
                     <Canvas
                       nodes={graph.nodes}
@@ -1129,27 +768,14 @@ function WorkspaceApp({
                         safe(() =>
                           updateGraph((g) => {
                             g.nodes = g.nodes.map(
-                              (n: FlowNode) =>
-                                nodes.find((m) => m.id === n.id) || n,
+                              (n) => nodes.find((m) => m.id === n.id) || n,
                             );
                           }),
                         )
                       }
                       onConnect={(connection) =>
                         safe(() =>
-                          updateGraph((g) => {
-                            g.edges = g.edges.filter(
-                              (e: Json) =>
-                                !(
-                                  e.target === connection.target &&
-                                  e.targetHandle === connection.targetHandle
-                                ),
-                            );
-                            g.edges.push({
-                              ...connection,
-                              id: identifier("edge"),
-                            });
-                          }),
+                          updateGraph((g) => connectInput(g, connection)),
                         )
                       }
                       onDelete={(nodes, edges) =>
@@ -1159,7 +785,7 @@ function WorkspaceApp({
                         safe(() => addNode(kind, id, position))
                       }
                       onOpen={openComponent}
-                      onSelection={useStableSelection}
+                      onSelection={updateSelection}
                     />
                   </div>
                   {node && ports.length > 0 ? (
@@ -1171,8 +797,13 @@ function WorkspaceApp({
                       ports={ports}
                       version={resultVersion}
                       active={!!active}
+                      hidden={!previewOpen}
+                      onClose={() => setPreviewOpen(false)}
                       onRun={() => run(fullNode)}
-                      onExplain={setCell}
+                      onExplain={(value) => {
+                        setCell(value);
+                        setInspectorOpen(true);
+                      }}
                       onData={setPreview}
                     />
                   ) : (
@@ -1185,88 +816,88 @@ function WorkspaceApp({
                     </div>
                   )}
                 </main>
-                {cell ? (
-                  <LineagePanel
-                    key={worktree + environment}
-                    worktree={worktree}
-                    environment={environment}
-                    cell={cell}
-                    onClose={() => setCell(null)}
-                  />
-                ) : node && definition ? (
-                  <Inspector
-                    key={worktree + fullNode}
-                    node={node}
-                    definition={definition}
-                    snapshot={snapshot}
-                    graphNodes={graph.nodes}
-                    graphEdges={graph.edges}
-                    fullNode={fullNode}
-                    environment={environment}
-                    connections={(workspace?.catalog.connections || []).filter(
-                      (connection: Json) => {
-                        if (!["source", "export"].includes(definition.kind))
-                          return true;
-                        const connector = workspace?.catalog.connectors.find(
-                          (item: Json) => item.id === connection.connector,
-                        );
-                        return connector?.capabilities?.includes(
-                          definition.kind === "export" ? "write" : "read",
-                        );
-                      },
-                    )}
-                    status={statuses}
-                    preview={preview}
-                    onSave={async (updated, base) => {
-                      const value = structuredClone(base.bundle!);
-                      mutateGraph(value, (g) => {
-                        g.nodes = g.nodes.map((n: FlowNode) =>
-                          n.id === updated.id ? updated : n,
-                        );
-                      });
-                      await saveBundle(value, base);
-                    }}
-                    onInput={(port, source) =>
-                      safe(() =>
-                        updateGraph((g) => {
-                          g.edges = g.edges.filter(
-                            (e: Json) =>
-                              !(
-                                e.target === node.id && e.targetHandle === port
-                              ),
+                <div
+                  className="inspector-layer"
+                  id="node-inspector"
+                  hidden={!inspectorOpen}
+                >
+                  {cell ? (
+                    <LineagePanel
+                      key={worktree + environment}
+                      worktree={worktree}
+                      environment={environment}
+                      cell={cell}
+                      onClose={() => setCell(null)}
+                    />
+                  ) : node && definition ? (
+                    <Inspector
+                      key={worktree + fullNode}
+                      node={node}
+                      definition={definition}
+                      snapshot={snapshot}
+                      graphNodes={graph.nodes}
+                      graphEdges={graph.edges}
+                      fullNode={fullNode}
+                      environment={environment}
+                      connections={connections}
+                      statuses={statuses}
+                      preview={preview}
+                      onSave={async (updated, base) => {
+                        await saveFrom(base, (value) => {
+                          const target = graphAt(value, path);
+                          target.nodes = target.nodes.map((n) =>
+                            n.id === updated.id ? updated : n,
                           );
-                          if (source) {
+                        });
+                      }}
+                      onSaveDocumentation={async (change, base) => {
+                        await saveFrom(base, (value) =>
+                          change(value.documentation),
+                        );
+                      }}
+                      onInput={(port, source) =>
+                        safe(() =>
+                          updateGraph((g) => {
+                            if (!source) {
+                              g.edges = g.edges.filter(
+                                (e) =>
+                                  !(
+                                    e.target === node.id &&
+                                    e.targetHandle === port
+                                  ),
+                              );
+                              return;
+                            }
                             const [id, handle] = source.split(":");
-                            g.edges.push({
-                              id: identifier("edge"),
+                            connectInput(g, {
                               source: id,
                               sourceHandle: handle,
                               target: node.id,
                               targetHandle: port,
                             });
-                          }
-                        }),
-                      )
-                    }
-                    onDelete={() => safe(() => removeNodes([node.id]))}
-                    onRun={() => run(fullNode)}
-                    onOpen={() => openComponent(node.id)}
-                    onEditTemplate={editTemplate}
-                    onClose={() => select(null)}
-                  />
-                ) : (
-                  <aside className="inspector empty-inspector">
-                    <span className="empty-inspector-icon">
-                      <Layers size={28} />
-                    </span>
-                    <h3>{t("nothingSelected")}</h3>
-                    <p>{t("selectNode")}</p>
-                    <div className="inspector-tip">
-                      <GitBranch size={17} />
-                      <span>{t("lineageHint")}</span>
-                    </div>
-                  </aside>
-                )}
+                          }),
+                        )
+                      }
+                      onDelete={() => safe(() => removeNodes([node.id]))}
+                      onRun={() => run(fullNode)}
+                      onOpen={() => openComponent(node.id)}
+                      onEditTemplate={editTemplate}
+                      onClose={() => setInspectorOpen(false)}
+                    />
+                  ) : null}
+                </div>
+                {(["palette", "inspector", "preview"] as const)
+                  .filter((panel) => panelOpen[panel])
+                  .map((panel) => (
+                    <PanelResizeHandle
+                      key={panel}
+                      panel={panel}
+                      value={panels.sizes[panel]}
+                      limits={panels.limits[panel]}
+                      onResize={(value) => panels.resize(panel, value)}
+                      onReset={() => panels.reset(panel)}
+                    />
+                  ))}
               </div>
             ) : (
               <div className="empty-state">
@@ -1275,7 +906,7 @@ function WorkspaceApp({
                 <p>{t("invalidHint")}</p>
                 <button
                   className="button primary"
-                  onClick={() => setModal({ kind: "files", base: snapshot })}
+                  onClick={() => showFiles(snapshot)}
                 >
                   {t("viewFiles")}
                 </button>
@@ -1284,257 +915,8 @@ function WorkspaceApp({
           </>
         )}
       </div>
-      {toast && (
-        <div className={`toast ${toast.error ? "error" : ""}`} role="status">
-          {toast.error ? <AlertCircle size={17} /> : <Check size={17} />}
-          <span>{toast.message}</span>
-          <button className="icon" onClick={() => setToast(null)}>
-            <X size={15} />
-          </button>
-        </div>
-      )}
-      {modal?.kind === "form" && (
-        <FormModal
-          title={modal.title}
-          fields={modal.fields}
-          description={modal.description}
-          onSubmit={modal.submit}
-          onClose={() => setModal(null)}
-        />
-      )}
-      {modal?.kind === "editor" && (
-        <EditorModal
-          title={modal.title}
-          description={modal.description}
-          value={modal.value}
-          language={modal.language}
-          readOnly={modal.readOnly}
-          onSave={modal.save}
-          onClose={() => setModal(null)}
-        />
-      )}
-      {modal?.kind === "files" && (
-        <FileModal
-          snapshot={modal.base}
-          onClose={() => setModal(null)}
-          onSave={async (files) => {
-            await api(
-              `/worktrees/${worktree}`,
-              send({ revision: modal.base.revision, files }, "PUT"),
-            );
-            await load();
-          }}
-        />
-      )}
-      {modal?.kind === "merge" && (
-        <FileModal
-          title={t("mergeReview")}
-          description={
-            t("mergeHint") +
-            (modal.comparison.conflicts.length
-              ? " · " + modal.comparison.conflicts.join(", ")
-              : "")
-          }
-          snapshot={snapshot!}
-          initialFiles={modal.comparison.files}
-          onClose={() => setModal(null)}
-          onSave={async (files) => {
-            await api(
-              `/worktrees/${worktree}/merge`,
-              send({ ...modal.comparison, files }),
-            );
-            await refreshWorkspace();
-            setWorktree(modal.comparison.target.id);
-            notify(t("mergeComplete"));
-          }}
-        />
-      )}
-      {modal?.kind === "conflict" && (
-        <Modal title={t("conflict")} onClose={() => setModal(null)} wide>
-          <div className="modal-content">
-            <p>{t("conflictHint")}</p>
-            <pre className="expression">{modal.conflict.paths.join("\n")}</pre>
-            <div className="conflict-comparison">
-              <div>
-                <h4>{t("keepCurrent")}</h4>
-                <pre>{JSON.stringify(modal.conflict.current, null, 2)}</pre>
-              </div>
-              <div>
-                <h4>{t("keepProposal")}</h4>
-                <pre>{JSON.stringify(modal.conflict.proposal, null, 2)}</pre>
-              </div>
-            </div>
-          </div>
-          <footer>
-            <button
-              className="button secondary"
-              onClick={() =>
-                setModal({
-                  kind: "editor",
-                  title: t("combined"),
-                  language: "json",
-                  value: JSON.stringify(modal.conflict.proposal, null, 2),
-                  save: async (text: string) => {
-                    await api(
-                      `/conflicts/${modal.conflict.id}/resolve`,
-                      send({ choice: "combined", files: JSON.parse(text) }),
-                    );
-                    await load();
-                  },
-                })
-              }
-            >
-              {t("combined")}
-            </button>
-            {["current", "proposal"].map((choice) => (
-              <button
-                key={choice}
-                className={`button ${choice === "proposal" ? "primary" : "secondary"}`}
-                onClick={() =>
-                  safe(async () => {
-                    await api(
-                      `/conflicts/${modal.conflict.id}/resolve`,
-                      send({ choice }),
-                    );
-                    setModal(null);
-                    await load();
-                  })
-                }
-              >
-                {t(choice === "current" ? "keepCurrent" : "keepProposal")}
-              </button>
-            ))}
-          </footer>
-        </Modal>
-      )}
-      {modal?.kind === "library" && (
-        <Modal title={t("library")} onClose={() => setModal(null)} wide>
-          <div className="modal-content">
-            <p className="muted">{t("importHint")}</p>
-            {modal.items
-              .filter(
-                (item: Json) => item.project !== snapshot?.worktree.project,
-              )
-              .map((item: Json) => (
-                <div
-                  className="history-row"
-                  key={item.project + item.kind + item.id}
-                >
-                  <Boxes size={18} />
-                  <span className="grow">
-                    <strong>{item.name}</strong>
-                    <small>
-                      {item.project_name} · {item.kind}
-                    </small>
-                  </span>
-                  <button
-                    className="button secondary small"
-                    onClick={() =>
-                      safe(async () => {
-                        await api(
-                          `/worktrees/${worktree}/import`,
-                          send({
-                            revision: snapshot!.revision,
-                            source_worktree: item.worktree,
-                            kind: item.kind,
-                            id: item.id,
-                          }),
-                        );
-                        await load();
-                        notify(t("importComplete"));
-                      })
-                    }
-                  >
-                    {t("import")}
-                  </button>
-                </div>
-              ))}
-          </div>
-        </Modal>
-      )}
-      {modal?.kind === "about" && (
-        <Modal title="Duckpad" onClose={() => setModal(null)}>
-          <div className="modal-content">
-            <DuckMark size={48} />
-            <p>{t("aboutText")}</p>
-            <code>
-              DuckDB {workspace?.catalog.duckdb_version} · Duckpad 0.1.0
-            </code>
-          </div>
-        </Modal>
-      )}
-    </div>
-  );
-}
-
-function Login({
-  onSuccess,
-  preferences,
-}: {
-  onSuccess: () => void;
-  preferences: React.ReactNode;
-}) {
-  const t = useT();
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
-  const [pending, setPending] = useState(false);
-  return (
-    <div className="login-page">
-      <div className="login-preferences">{preferences}</div>
-      <div className="login-brand">
-        <DuckMark size={42} />
-        <span>duckpad</span>
-      </div>
-      <section className="login-card">
-        <span className="eyebrow">LOCAL DATA WORKSPACE</span>
-        <h1>{t("signIn")}</h1>
-        <p>{t("loginDescription")}</p>
-        <form
-          onSubmit={async (e) => {
-            e.preventDefault();
-            setPending(true);
-            setError("");
-            try {
-              await api("/login", send({ username: "admin", password }));
-              onSuccess();
-            } catch (e) {
-              setError((e as Error).message);
-            } finally {
-              setPending(false);
-            }
-          }}
-        >
-          <label className="field">
-            <span>{t("username")}</span>
-            <input value="admin" readOnly autoComplete="username" />
-          </label>
-          <label className="field">
-            <span>{t("password")}</span>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              autoFocus
-              autoComplete="current-password"
-            />
-          </label>
-          {error && <div className="notice error">{error}</div>}
-          <button className="button primary full large" disabled={pending}>
-            {pending ? (
-              <Loader2 size={17} className="spin" />
-            ) : (
-              <ArrowRight size={17} />
-            )}{" "}
-            {t("signInAction")}
-          </button>
-        </form>
-        <p className="login-hint">{t("passwordHint")}</p>
-      </section>
-      <div className="login-footnote">
-        <Database size={14} />
-        <span>DuckDB + SQL + lineage</span>
-      </div>
+      <Toast message={message} onDismiss={dismiss} />
+      <ModalHost modal={modal} onClose={closeModal} />
     </div>
   );
 }
