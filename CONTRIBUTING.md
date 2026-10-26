@@ -19,6 +19,10 @@ uv run duckpad start --home .duckpad-dev --no-browser
 - `frontend/src` is the React interface. `api.ts` is the only HTTP client and `App.tsx` owns the workspace state.
 - `tests` holds the Python suite; shared builders and waits live in `tests/helpers.py`.
 - `frontend/e2e` holds the Playwright scenarios; `e2e/helpers.ts` signs in to the disposable test instance.
+- `website` is the static Astro presentation and documentation site. See the
+  [website guide](docs/WEBSITE.md) for its Node.js requirement, local preview,
+  Playwright demo recording and publishing. Update the relevant guide and captured
+  media when changing a demonstrated workflow; CI regenerates them before publishing.
 
 ## Run the checks
 
