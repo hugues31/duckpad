@@ -221,6 +221,25 @@ class Projects:
         self.observed[worktree_id] = self.read_files(worktree)
         return worktree
 
+    def delete(self, project_id):
+        import shutil
+
+        with self.lock:
+            worktrees = [w for w in self.store.all("worktree") if w["project"] == project_id]
+            for worktree in worktrees:
+                self.store.delete("worktree", worktree["id"])
+                self.observed.pop(worktree["id"], None)
+                self.pending.pop(worktree["id"], None)
+            for kind in ("run", "conflict"):
+                for record in self.store.all(kind):
+                    if record.get("worktree") in {w["id"] for w in worktrees}:
+                        self.store.delete(kind, record["id"])
+            self.store.delete("project", project_id)
+            for worktree in worktrees:
+                shutil.rmtree(worktree["path"], ignore_errors=True)
+                shutil.rmtree(self.store.home / "exports" / worktree["id"], ignore_errors=True)
+            shutil.rmtree(self.store.home / "resources" / project_id, ignore_errors=True)
+
     def get(self, worktree_id):
         result = self.store.get("worktree", worktree_id)
         if not result:

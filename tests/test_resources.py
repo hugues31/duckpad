@@ -157,3 +157,15 @@ def test_cgroup_mount_paths_with_spaces(monkeypatch, portable_host):
         },
     )
     assert resource_usage()["memory_total_bytes"] == 1024**3
+
+
+def test_live_sql_workers_are_included_in_instance_counters(monkeypatch, portable_host):
+    worker = SimpleNamespace(
+        cpu_times=lambda: SimpleNamespace(user=3.0, system=2.0),
+        memory_info=lambda: SimpleNamespace(rss=64 * 1024**2),
+    )
+    monkeypatch.setattr(psutil, "Process", lambda pid=None: worker if pid else portable_host)
+    monkeypatch.setattr(resources.time, "process_time", lambda: 1.0)
+    sample = resource_usage([123])
+    assert sample["cpu_seconds"] == 6.0
+    assert sample["memory_bytes"] == 320 * 1024**2

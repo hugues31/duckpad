@@ -86,16 +86,27 @@ def _capacity(process):
     return cpu, memory
 
 
-def resource_usage():
+def resource_usage(worker_pids=()):
     process = psutil.Process()
     cpu_capacity, memory_total_bytes = _capacity(process)
     try:
         memory_bytes = process.memory_info().rss
     except (OSError, psutil.Error):
         memory_bytes = None
+    cpu_seconds = time.process_time()
+    for pid in worker_pids:
+        try:
+            worker = psutil.Process(pid)
+            times = worker.cpu_times()
+            cpu_seconds += times.user + times.system
+            if memory_bytes is not None:
+                memory_bytes += worker.memory_info().rss
+        except (OSError, psutil.Error):
+            # A worker may exit between the API snapshot and this sample.
+            continue
     return {
         "process_id": os.getpid(),
-        "cpu_seconds": time.process_time(),
+        "cpu_seconds": cpu_seconds,
         "sampled_at": time.monotonic(),
         "cpu_capacity": cpu_capacity,
         "memory_bytes": memory_bytes,

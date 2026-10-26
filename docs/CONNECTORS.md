@@ -1,8 +1,8 @@
 # Connections and connector compatibility
 
-A connector is a declarative setup definition. A connection is a named reusable instance with independent environment values. Both live in the instance catalog, outside Git. Projects store only references. Configure them from **Connections**; connector definitions have a JSON editor, and their typed parameters generate connection forms.
+A connector is a declarative setup definition. A connection is a named reusable instance with independent environment values. Both live in the instance catalog, outside Git. Projects store only references. Instance admins configure them from **Connections**; connector definitions have a JSON editor, and their typed parameters generate connection forms.
 
-The authenticated `PUT /api/catalog/connector` and `PUT /api/catalog/connection` endpoints accept those same JSON objects, so a technical user can submit declarative files without changing application code. Secret fields are masked in public catalog responses and execution records. Definition snapshots and non-secret settings used by each run remain in its history.
+The instance-admin-only `PUT /api/catalog/connector` and `PUT /api/catalog/connection` endpoints accept those same JSON objects, so an administrator can submit declarative files without changing application code. Secret fields are masked in public catalog responses and execution records. Definition snapshots and non-secret settings used by each run remain in its history. Instance admins grant each project access to connections in **Project settings**. Members see only the names and capabilities of granted connections, not the global catalog.
 
 ## Validated scope
 
@@ -12,11 +12,13 @@ The authenticated `PUT /api/catalog/connector` and `PUT /api/catalog/connection`
 | S3 | CSV and Parquet read; CSV export | DuckDB 2.0.0 with matching `httpfs`, Linux x86_64; Moto S3 emulator on localhost; repeated native destination replacement |
 | Oracle | Read attached tables; export to an existing table with OraDuck | DuckDB 2.0.0, signed community OraDuck 0.4.0, Oracle 19.3, Oracle Instant Client 19.32, Linux x86_64 |
 
+The table records connector validation of the embedded engine. The isolated HTTP worker additionally requires Linux Landlock; local CSV/Parquet execution, exports and lineage are covered by the account/permission tests. Remote S3/Oracle deployments need validation with their extension and network policy in this execution mode.
+
 These are the tested combinations, not claims that every newer DuckDB or operating-system build has been validated. A matching extension build is required for the installed DuckDB version. Other platforms and live AWS deployments need validation in their own environment. Raw results are in `docs/validation/`.
 
 ## Local files
 
-The `local` connection is available in `dev` and `prod` and supports an optional root directory. CSV exposes header, delimiter and a JSON type-override map; `{}` retains native inference. Parquet uses native types. An absolute path remains unchanged. Relative default exports resolve under `exports/<worktree>/<environment>/` when no connection root is set.
+The `local` connection is available in `dev` and `prod` and supports an optional root directory. CSV exposes header, delimiter and a JSON type-override map; `{}` retains native inference. Parquet uses native types. Absolute paths must fall within the project's resources/exports or an explicitly granted local connection root. Roots must exclude instance metadata and other projects. Uploads are scoped to the active project. Relative default exports resolve under `exports/<worktree>/<environment>/` when no connection root is set.
 
 Single-file CSV `COPY` follows DuckDB's native replacement behavior on a second run. Duckpad does not add an overwrite option, rename files, or ask for an existence-based confirmation.
 
