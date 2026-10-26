@@ -11,8 +11,11 @@ from pathlib import Path
 
 from .builtin_templates import BUILTINS
 from .bundle import bundle_to_files, files_to_bundle, is_declarative, validate
+from .comparison import commit_message
 from .components import reconcile_documentation
+from .git_workspace import GitWorkspace
 from .merge import merge_files
+from .remote import Remotes
 from .templates import parse_template
 from .util import Problem, atomic_write, digest, dumps, inside, now, uid
 
@@ -43,6 +46,8 @@ class Projects:
         self.commit_files = OrderedDict()
         self.on_change = lambda worktree: None
         self.thread = None
+        self.versioning = GitWorkspace(self)
+        self.remotes = Remotes(self.versioning)
 
     def identity(self):
         """The Git author recorded for UI and external saves."""
@@ -81,7 +86,7 @@ class Projects:
         bundle["flow"].update(id=project_id, name=name)
         for file, content in bundle_to_files(bundle).items():
             atomic_write(path / file, content)
-        self.commit(path, "feat(project): create workspace")
+        self.commit(path, "feat(project): create " + " ".join(name.split())[:64])
         project = {"id": project_id, "name": name, "main": worktree_id, "created": now()}
         worktree = {"id": worktree_id, "project": project_id, "branch": "main", "path": str(path)}
         self.store.put("project", project_id, project)
@@ -122,11 +127,22 @@ class Projects:
             for folder, pattern in [("templates", "*.sql"), ("components", "*.json")]
             for p in sorted((path / folder).glob(pattern))
         ]
-        return {name: decode(name, (path / name).read_bytes()) for name in names if (path / name).is_file()}
+        if any(
+            (path / name).is_symlink() or not (path / name).resolve().is_relative_to(path.resolve())
+            for name in names
+        ):
+            raise Problem("Project definitions cannot be symbolic links", 422)
+        return {
+            name: decode(name, (path / name).read_bytes())
+            for name in names
+            if is_declarative(name) and (path / name).is_file()
+        }
 
     def commit(self, path, message):
         tracked = self.git(path, "ls-files").splitlines()
         existing = self.read_files({"path": str(path)})
+        head = self.git(path, "rev-parse", "--verify", "HEAD", check=False)
+        previous_files = self.revision_files(path, head) if head else {}
         try:
             bundle = files_to_bundle(existing)
             head = self.git(path, "rev-parse", "--verify", "HEAD", check=False)
@@ -147,8 +163,19 @@ class Projects:
         )
         if paths:
             self.git(path, "add", "-A", "--", *paths)
-        if self.git(path, "diff", "--cached", "--name-only"):
-            self.git(path, "commit", "-m", message)
+        if self.git(path, "diff", "--cached", "--name-only", "--", *paths):
+            context = (
+                "external"
+                if message == EXTERNAL_SAVE
+                else "resolution"
+                if "resolve concurrent" in message
+                else "import"
+                if "import" in message
+                else ""
+            )
+            if head:
+                message = commit_message(previous_files, self.read_files({"path": str(path)}), context)
+            self.git(path, "commit", "--only", "-m", message, "--", *paths)
         return self.git(path, "rev-parse", "HEAD")
 
     def revision_files(self, path, commit):
@@ -363,8 +390,8 @@ class Projects:
     def branch(self, worktree_id, name, revision=None):
         with self.lock:
             worktree = self.get(worktree_id)
-            self.flush(worktree_id)
-            self.git(worktree["path"], "check-ref-format", "--branch", name)
+            self.versioning.clean(worktree)
+            self.git(worktree["path"], "check-ref-format", "refs/heads/" + name)
             key = uid("worktree_")
             path = self.store.home / "worktrees" / key
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -375,6 +402,16 @@ class Projects:
                 "--end-of-options",
                 f"{revision or 'HEAD'}^{{commit}}",
             )
+            if not self.git(
+                worktree["path"], "for-each-ref", "--format=%(refname)", "--contains", ref, "refs/heads/"
+            ):
+                self.versioning.validate_history(worktree["path"], ref)
+                try:
+                    errors = validate(files_to_bundle(self.revision_files(worktree["path"], ref)))
+                except (Problem, KeyError, TypeError, AttributeError) as error:
+                    raise Problem("Incoming project definitions are invalid", 422) from error
+                if errors:
+                    raise Problem("Fix incoming project definitions before opening a branch", 422, errors)
             self.git(worktree["path"], "worktree", "add", "-b", name, str(path), ref)
             result = {"id": key, "project": worktree["project"], "branch": name, "path": str(path)}
             self.store.put("worktree", key, result)
@@ -382,44 +419,16 @@ class Projects:
             return result
 
     def merge_preview(self, worktree_id):
+        """Compatibility for local callers; all applications still require the frozen review."""
         source = self.get(worktree_id)
         project = self.store.get("project", source["project"])
-        target = self.get(project["main"])
-        if source["id"] == target["id"]:
-            raise Problem("Open a working branch to merge into main")
-        self.flush(source["id"])
-        self.flush(target["id"])
-        base = self.git(target["path"], "merge-base", "HEAD", source["branch"])
-        base_files = self.revision_files(target["path"], base)
-        current, proposed = self.read_files(target), self.read_files(source)
-        merged, conflicts = merge_files(base_files, current, proposed)
-        return {
-            "source": source,
-            "target": target,
-            "source_revision": digest(proposed),
-            "target_revision": digest(current),
-            "base": base_files,
-            "current": current,
-            "proposal": proposed,
-            "files": merged,
-            "conflicts": conflicts,
-            "diff": self.git(target["path"], "diff", "HEAD..." + source["branch"]),
-        }
+        review = self.versioning.prepare(project["main"], "refs/heads/" + source["branch"])
+        return {**review, "source_revision": review["id"], "target_revision": review["target_head"]}
 
     def merge(self, worktree_id, source_revision, target_revision, files):
-        with self.lock:
-            preview = self.merge_preview(worktree_id)
-            if preview["source_revision"] != source_revision or preview["target_revision"] != target_revision:
-                raise Problem("Branches changed; compare again before merging", 409)
-            errors = validate(files_to_bundle(files))
-            if errors:
-                raise Problem("Fix validation errors before merging", 422, errors)
-            target = preview["target"]
-            path = target["path"]
-            source_commit = self.git(preview["source"]["path"], "rev-parse", "HEAD")
-            self.git(path, "merge", "--no-commit", "--no-ff", source_commit, check=False)
-            self._write_files(target, files, self.read_files(target))
-            self.commit(path, f"feat(project): merge {preview['source']['branch']} into main")
-            self.observed[target["id"]] = self.read_files(target)
-            self.on_change(target["id"])
-            return self.snapshot(target["id"])
+        source = self.get(worktree_id)
+        project = self.store.get("project", source["project"])
+        review = self.versioning.review(project["main"], source_revision)
+        if review["target_head"] != target_revision or review["source_worktree"] != worktree_id:
+            raise Problem("Branches changed; compare again before merging", 409)
+        return self.versioning.apply(project["main"], source_revision, {}, digest(files))
