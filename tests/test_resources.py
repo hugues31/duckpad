@@ -119,7 +119,7 @@ def test_cgroup_v1_mount_roots_and_namespaces(monkeypatch, portable_host, member
 
 
 @pytest.mark.parametrize(
-    "memory,quota",
+    ("memory", "quota"),
     [("max", "max 100000"), (str(2**63 - 4096), "-1 100000"), ("invalid", "invalid"), ("0", "0 0")],
 )
 def test_unlimited_or_invalid_cgroups_fall_back_to_host_and_affinity(

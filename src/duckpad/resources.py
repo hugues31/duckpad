@@ -1,5 +1,6 @@
 """Portable process counters, with visible Linux container limits."""
 
+import contextlib
 import os
 import re
 import time
@@ -55,10 +56,9 @@ def _cgroup_directories(controller):
 
 def _capacity(process):
     cpu = float(psutil.cpu_count() or 1)
-    try:
+    # CPU affinity is unavailable on macOS.
+    with contextlib.suppress(AttributeError, NotImplementedError, psutil.Error):
         cpu = min(cpu, len(process.cpu_affinity()) or cpu)
-    except (AttributeError, NotImplementedError, psutil.Error):
-        pass
     try:
         memory = psutil.virtual_memory().total or None
     except (OSError, psutil.Error):
