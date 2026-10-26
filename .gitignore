@@ -12,3 +12,4 @@ playwright-report/
 *.egg-info/
 .coverage
 *.tsbuildinfo
+.multica/

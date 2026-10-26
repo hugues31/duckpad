@@ -69,6 +69,7 @@ The Playwright suite starts a disposable instance on port 8766. `DUCKPAD_CHROMIU
 
 ## Documentation
 
+- [Multica issue workflow and preview deployment](docs/MULTICA.md)
 - [Architecture and execution invariants](docs/ARCHITECTURE.md)
 - [Project files, templates and components](docs/AUTHORING.md)
 - [Lineage coverage and limitations](docs/LINEAGE.md)
