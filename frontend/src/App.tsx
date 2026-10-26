@@ -25,7 +25,6 @@ import {
   HelpCircle,
   Layers,
   Loader2,
-  LogOut,
   Moon,
   PanelLeft,
   PanelBottom,
@@ -33,7 +32,6 @@ import {
   Play,
   Plus,
   Search,
-  Settings2,
   Square,
   Sun,
   Workflow,
@@ -54,6 +52,8 @@ import Canvas, { nodeIcon } from "./Canvas";
 import Preview from "./Preview";
 import Inspector from "./Inspector";
 import LineagePanel from "./LineagePanel";
+import AccountMenu from "./AccountMenu";
+import { PanelResizeHandle, usePanelSizes } from "./WorkspacePanels";
 import {
   ConnectionsPanel,
   DocumentationPanel,
@@ -73,19 +73,13 @@ function DuckMark({ size = 30 }: { size?: number }) {
       fill="none"
       aria-hidden="true"
     >
-      <rect width="40" height="40" rx="12" fill="#226bff" />
+      <rect width="40" height="40" rx="10" fill="#226bff" />
       <path
-        d="M11 22c0-3 3-5 7-5h4v-4a5 5 0 1 1 10 0v8c0 7-6 10-12 10-6 0-10-3-10-8l1-1Z"
+        d="M8 19h13v-7a5 5 0 0 1 10 0v2h6l-6 6v2a10 10 0 0 1-10 10H8V19Z"
         fill="#ffffff"
       />
-      <path d="m31 14 6 2-6 3" fill="#e4ad61" />
-      <circle cx="28.5" cy="12.5" r="1.2" fill="#226bff" />
-      <path
-        d="M16 23c2 3 6 3 9 0"
-        stroke="#226bff"
-        strokeWidth="1.5"
-        strokeLinecap="round"
-      />
+      <path d="M12 25h12l3-3" stroke="#226bff" strokeWidth="2" />
+      <path d="M11 23h4v4h-4zM19 23h4v4h-4zM25 19h4v4h-4z" fill="#226bff" />
     </svg>
   );
 }
@@ -164,6 +158,7 @@ function WorkspaceApp({
   );
   const [previewOpen, setPreviewOpen] = useState(true);
   const [inspectorOpen, setInspectorOpen] = useState(true);
+  const panels = usePanelSizes();
   const useStableSelection = useCallback(
     (ids: string[]) =>
       setSelection((previous) =>
@@ -511,7 +506,6 @@ function WorkspaceApp({
               {[
                 ["pipelines", Workflow],
                 ["connections", Database],
-                ["settings", Settings2],
               ].map(([key, Icon]) => (
                 <button
                   key={key as string}
@@ -530,18 +524,6 @@ function WorkspaceApp({
               onClick={() => setModal({ kind: "about" })}
             >
               <HelpCircle size={20} />
-            </button>
-            <button
-              className="avatar"
-              title={t("signOut")}
-              onClick={() =>
-                safe(async () => {
-                  await api("/logout", send({}));
-                  setAuthenticated(false);
-                })
-              }
-            >
-              A
             </button>
           </nav>
           <div className="project-picker">
@@ -625,7 +607,19 @@ function WorkspaceApp({
                 </label>
               </>
             )}
-            {themes}
+            <AccountMenu
+              theme={theme}
+              language={language}
+              setTheme={setTheme}
+              setLanguage={setLanguage}
+              onSettings={() => setArea("settings")}
+              onSignOut={() =>
+                safe(async () => {
+                  await api("/logout", send({}));
+                  setAuthenticated(false);
+                })
+              }
+            />
           </div>
         </header>
         {area === "connections" && workspace ? (
@@ -937,6 +931,9 @@ function WorkspaceApp({
                 style={
                   {
                     "--notice-height": `${36 * (Number(!!snapshot.conflicts.length) + Number(!!snapshot.diagnostics.length) + Number(!!active))}px`,
+                    "--palette-width": `${panels.sizes.palette}px`,
+                    "--inspector-width": `${panels.sizes.inspector}px`,
+                    "--preview-height": `${panels.sizes.preview}px`,
                   } as CSSProperties
                 }
               >
@@ -1335,6 +1332,24 @@ function WorkspaceApp({
                     />
                   ) : null}
                 </div>
+                {(["palette", "inspector", "preview"] as const)
+                  .filter((panel) =>
+                    panel === "palette"
+                      ? paletteOpen
+                      : panel === "inspector"
+                        ? inspectorOpen && !!node
+                        : previewOpen && !!node && ports.length > 0,
+                  )
+                  .map((panel) => (
+                    <PanelResizeHandle
+                      key={panel}
+                      panel={panel}
+                      value={panels.sizes[panel]}
+                      limits={panels.limits[panel]}
+                      onResize={(value) => panels.resize(panel, value)}
+                      onReset={() => panels.reset(panel)}
+                    />
+                  ))}
               </div>
             ) : (
               <div className="empty-state">

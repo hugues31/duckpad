@@ -4,6 +4,7 @@ import {
   ControlButton,
   Handle,
   MiniMap,
+  MarkerType,
   Position,
   ReactFlow,
   ReactFlowProvider,
@@ -66,7 +67,7 @@ function PipelineNode({ data, selected }: NodeProps<Node<Json>>) {
   const Status = statusIcon(data.status);
   const source = data.kind === "source";
   const portPosition = (index: number, count: number) => {
-    const spacing = Math.min(18, 72 / Math.max(1, count - 1));
+    const spacing = Math.min(24, 72 / Math.max(1, count - 1));
     const top = 48 + (index - (count - 1) / 2) * spacing;
     const inset = source ? 27 : 75 - Math.sqrt(48 ** 2 - (top - 48) ** 2);
     return { top, inset };
@@ -318,13 +319,31 @@ function CanvasInner(props: CanvasProps) {
   );
   const edges = useMemo(
     () =>
-      props.edges.map((e) => ({
-        ...e,
-        type: "smoothstep",
-        animated: !!props.statuses.active,
-        style: { stroke: "var(--edge)", strokeWidth: 1.8 },
-      })),
-    [props.edges, !!props.statuses.active],
+      props.edges.map((e) => {
+        const connected = nodes.some(
+          (n) => n.selected && (n.id === e.source || n.id === e.target),
+        );
+        const highlighted = connected || !!props.statuses.active;
+        return {
+          ...e,
+          type: "smoothstep",
+          animated: highlighted,
+          className: connected ? "node-connected" : undefined,
+          markerEnd: highlighted
+            ? {
+                type: MarkerType.ArrowClosed,
+                color: "var(--accent)",
+                width: 14,
+                height: 14,
+              }
+            : undefined,
+          style: {
+            stroke: highlighted ? "var(--accent)" : "var(--edge)",
+            strokeWidth: highlighted ? 2.3 : 1.8,
+          },
+        };
+      }),
+    [props.edges, nodes, !!props.statuses.active],
   );
   const changes = (changes: NodeChange<Node<Json>>[]) =>
     setNodes((current) => applyNodeChanges(changes, current));
@@ -389,6 +408,7 @@ function CanvasInner(props: CanvasProps) {
         }}
         minZoom={0.1}
         maxZoom={1.8}
+        connectionRadius={28}
         deleteKeyCode={["Backspace", "Delete"]}
         selectionKeyCode="Shift"
         multiSelectionKeyCode="Shift"
