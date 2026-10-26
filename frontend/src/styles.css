@@ -717,7 +717,7 @@ small {
   );
   --canvas-left: 0px;
   --canvas-right: 0px;
-  --canvas-bottom: 26px;
+  --canvas-bottom: 0px;
   --preview-height: clamp(200px, 28vh, 280px);
   position: absolute;
   inset: 0;
@@ -897,26 +897,6 @@ small {
   position: absolute;
   inset: 0;
   min-height: 0;
-}
-.canvas-footer {
-  position: absolute;
-  z-index: 10;
-  bottom: 0;
-  left: var(--canvas-left);
-  right: var(--canvas-right);
-  height: 26px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  font-size: 10px;
-  color: var(--muted);
-  padding: 4px 12px;
-}
-.canvas-footer span {
-  display: flex;
-  align-items: center;
-  gap: 6px;
 }
 .component-notice {
   position: absolute;
@@ -2241,7 +2221,6 @@ small {
 .inspector,
 .preview-panel,
 .canvas-breadcrumb,
-.canvas-footer,
 .component-notice,
 .react-flow__controls,
 .react-flow__minimap,
@@ -2267,7 +2246,6 @@ small {
 .inspector,
 .preview-panel,
 .canvas-breadcrumb,
-.canvas-footer,
 .component-notice {
   border: 0;
   border-radius: 0;
@@ -2285,8 +2263,7 @@ small {
 .inspector {
   border-left: 1px solid var(--border);
 }
-.preview-panel,
-.canvas-footer {
+.preview-panel {
   border-top: 1px solid var(--border);
 }
 .button {
@@ -2596,9 +2573,6 @@ option {
     max-width: 120px;
   }
   .save-status {
-    display: none;
-  }
-  .canvas-footer span:last-child {
     display: none;
   }
   .preview-tools .search {

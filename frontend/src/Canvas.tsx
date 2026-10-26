@@ -32,10 +32,12 @@ import {
   Circle,
   Sparkles,
   Maximize,
+  Workflow,
 } from "lucide-react";
 import "@xyflow/react/dist/style.css";
 import { useT, templateLabel } from "./i18n";
 import { DRAG_TYPE } from "./graph";
+import { layoutNodes } from "./graphLayout";
 import type { NodeKind } from "./NodePalette";
 import type { FlowEdge, FlowNode, Json, Statuses } from "./types";
 
@@ -182,23 +184,26 @@ function CanvasInner(props: CanvasProps) {
     measure();
     return () => observer.disconnect();
   }, []);
-  const fitGraph = useCallback(() => {
-    if (!initialized || !frame.width || !frame.height) return;
-    // Frame the unobscured area while keeping the graph surface behind every panel.
-    const viewport = getViewportForBounds(
-      getNodesBounds(getNodes()),
-      frame.width,
-      frame.height,
-      0.1,
-      1,
-      0.12,
-    );
-    void setViewport({
-      ...viewport,
-      x: viewport.x + frame.x,
-      y: viewport.y + frame.y,
-    });
-  }, [initialized, frame, getNodes, setViewport]);
+  const fitGraph = useCallback(
+    (graphNodes = getNodes()) => {
+      if (!initialized || !frame.width || !frame.height) return;
+      // Frame the unobscured area while keeping the graph surface behind every panel.
+      const viewport = getViewportForBounds(
+        getNodesBounds(graphNodes),
+        frame.width,
+        frame.height,
+        0.1,
+        1,
+        0.12,
+      );
+      void setViewport({
+        ...viewport,
+        x: viewport.x + frame.x,
+        y: viewport.y + frame.y,
+      });
+    },
+    [initialized, frame, getNodes, setViewport],
+  );
   const displayNodes = useMemo(
     () =>
       props.nodes.map((node) => {
@@ -349,6 +354,25 @@ function CanvasInner(props: CanvasProps) {
   );
   const changes = (changes: NodeChange<Node<Json>>[]) =>
     setNodes((current) => applyNodeChanges(changes, current));
+  const arrangeGraph = () => {
+    if (props.readOnly || !initialized || !nodes.length) return;
+    const arranged = layoutNodes(getNodes(), props.edges);
+    const positions = new Map(arranged.map((node) => [node.id, node.position]));
+    setNodes((current) =>
+      current.map((node) => ({
+        ...node,
+        position: positions.get(node.id)!,
+      })),
+    );
+    props.onMove(
+      props.nodes.map((node) => ({
+        ...node,
+        position: positions.get(node.id)!,
+      })),
+    );
+    viewportTouched.current = false;
+    fitGraph(arranged);
+  };
   return (
     <>
       <div className="canvas-safe-area" ref={safeArea} aria-hidden="true" />
@@ -445,6 +469,14 @@ function CanvasInner(props: CanvasProps) {
             aria-label={t("fitView")}
           >
             <Maximize />
+          </ControlButton>
+          <ControlButton
+            onClick={arrangeGraph}
+            disabled={props.readOnly || !initialized || !nodes.length}
+            title={t("autoLayout")}
+            aria-label={t("autoLayout")}
+          >
+            <Workflow style={{ fill: "none" }} />
           </ControlButton>
         </Controls>
         <MiniMap
