@@ -44,6 +44,7 @@ export default function Inspector({
   onRun,
   onOpen,
   onEditTemplate,
+  onHistory,
   onClose,
 }: {
   readOnly?: boolean;
@@ -67,6 +68,7 @@ export default function Inspector({
   onRun: () => void;
   onOpen: () => void;
   onEditTemplate: () => void;
+  onHistory: () => void;
   onClose: () => void;
 }) {
   const t = useT();
@@ -193,6 +195,9 @@ export default function Inspector({
           <Play size={16} />
         </button>
       </div>
+      <button className="button secondary small" onClick={onHistory}>
+        {t("elementHistory")}
+      </button>
       <div className="tabs inspector-tabs">
         {TABS.map(([key, Icon]) => (
           <button

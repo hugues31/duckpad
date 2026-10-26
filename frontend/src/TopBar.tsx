@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import AccountMenu from "./AccountMenu";
 import DuckMark from "./DuckMark";
+import GitSyncButton from "./GitSyncButton";
 import { useT } from "./i18n";
 import type { Preferences } from "./preferences";
 import ResourceMonitor from "./ResourceMonitor";
@@ -42,6 +43,7 @@ export default function TopBar({
   onNewProject,
   onWorktree,
   onNewBranch,
+  onGit,
   onEnvironment,
   onSignOut,
 }: {
@@ -58,6 +60,7 @@ export default function TopBar({
   onNewProject: () => void;
   onWorktree: (worktree: string) => void;
   onNewBranch: () => void;
+  onGit: () => void;
   onEnvironment: (environment: string) => void;
   onSignOut: () => void;
 }) {
@@ -163,6 +166,11 @@ export default function TopBar({
                 <Plus size={13} />
               </button>
             </div>
+            <GitSyncButton
+              worktree={worktree}
+              commit={snapshot.commit}
+              onClick={onGit}
+            />
             <span className="header-divider" />
             <label className="environment-picker">
               <span className={`env-dot ${environment}`} />

@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Annotated, Any
 from urllib.parse import urlparse
 
-from fastapi import FastAPI, File, Request, UploadFile
+from fastapi import FastAPI, File, Query, Request, UploadFile
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -76,6 +76,8 @@ def create_app(home: Path, watch=True):
         elif route == "worktrees" and len(parts) >= 3:
             read = request.method == "GET" or (request.method == "POST" and parts[3:] == ["lineage"])
             access.worktree(user, parts[2], "reader" if read else "editor")
+            if parts[3:] == ["git", "remote"] and request.method == "PUT":
+                access.worktree(user, parts[2], "admin")
         elif route in ("runs", "conflicts") and len(parts) >= 3:
             record = store.get("run" if route == "runs" else "conflict", parts[2])
             if not record:
@@ -342,8 +344,77 @@ def create_app(home: Path, watch=True):
         return projects.resolve(conflict, data.choice, data.files)
 
     @app.get("/api/worktrees/{worktree}/history")
-    def history(worktree: str):
-        return projects.history(worktree)
+    def history(
+        worktree: str, offset: int = Query(default=0, ge=0), limit: int = Query(default=100, ge=1, le=100)
+    ):
+        return projects.versioning.history(worktree, offset=offset, limit=limit)["items"]
+
+    @app.get("/api/worktrees/{worktree}/git/history")
+    def git_history(
+        worktree: str,
+        ref: str = "HEAD",
+        offset: int = Query(default=0, ge=0),
+        limit: int = Query(default=50, ge=1, le=100),
+        entity: str | None = None,
+    ):
+        return projects.versioning.history(worktree, ref, offset, limit, entity)
+
+    @app.get("/api/worktrees/{worktree}/git/compare")
+    def git_compare(worktree: str, a: str = "HEAD", b: str = "working"):
+        return projects.versioning.compare(worktree, a, b)
+
+    @app.get("/api/worktrees/{worktree}/git/branches")
+    def git_branches(worktree: str):
+        return projects.versioning.branches(worktree)
+
+    @app.post("/api/worktrees/{worktree}/git/open")
+    def git_open(worktree: str, data: schemas.NewBranch):
+        return projects.versioning.open_branch(worktree, data.name)
+
+    @app.post("/api/worktrees/{worktree}/git/cleanup")
+    def git_cleanup(worktree: str, data: schemas.BranchCleanup):
+        if any(
+            r.get("worktree") == data.remove_worktree and r["status"] in ("preparing", "running", "canceling")
+            for r in store.all("run")
+        ):
+            raise Problem("Stop the worktree's execution before removing it", 409)
+        return projects.versioning.cleanup(
+            worktree, data.remove_worktree, data.integrated_worktree, data.expected_head
+        )
+
+    @app.post("/api/worktrees/{worktree}/git/reviews")
+    def git_review(worktree: str, data: schemas.GitReview):
+        return projects.versioning.prepare(worktree, data.source)
+
+    @app.post("/api/worktrees/{worktree}/git/reviews/{review}")
+    def git_choices(worktree: str, review: str, data: schemas.GitChoices):
+        return projects.versioning.proposal(worktree, review, data.choices)
+
+    @app.post("/api/worktrees/{worktree}/git/reviews/{review}/apply")
+    def git_apply(worktree: str, review: str, data: schemas.GitApply):
+        return projects.versioning.apply(worktree, review, data.choices, data.proposal_revision)
+
+    @app.get("/api/worktrees/{worktree}/git/remote")
+    def git_remote(worktree: str):
+        return projects.remotes.status(worktree)
+
+    @app.put("/api/worktrees/{worktree}/git/remote")
+    def git_configure(worktree: str, data: schemas.RemoteConfiguration):
+        return projects.remotes.configure(worktree, data.url, data.remote_branch, data.config_revision)
+
+    @app.post("/api/worktrees/{worktree}/git/fetch")
+    def git_fetch(worktree: str, data: schemas.RemoteState):
+        return projects.remotes.fetch(worktree, data.config_revision)
+
+    @app.post("/api/worktrees/{worktree}/git/pull")
+    def git_pull(worktree: str, data: schemas.RemoteHeads):
+        return projects.remotes.pull(worktree, data.config_revision, data.local_head, data.remote_head)
+
+    @app.post("/api/worktrees/{worktree}/git/push")
+    def git_push(worktree: str, data: schemas.RemoteHeads):
+        return projects.remotes.push(
+            worktree, data.config_revision, data.local_head, data.remote_head, data.recreate
+        )
 
     @app.get("/api/worktrees/{worktree}/diff/{commit}")
     def diff(worktree: str, commit: str):
@@ -387,7 +458,9 @@ def create_app(home: Path, watch=True):
             data.id,
             {"project": source["worktree"]["project"], "commit": source["commit"]},
         )
-        result = projects.write(worktree, data.revision, bundle_to_files(bundle))
+        result = projects.write(
+            worktree, data.revision, bundle_to_files(bundle), "feat(project): import definition"
+        )
         result["imported"] = key
         return result
 
