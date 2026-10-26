@@ -5,6 +5,7 @@ import {
   useEffect,
   useMemo,
   useState,
+  type CSSProperties,
 } from "react";
 import {
   Activity,
@@ -26,6 +27,9 @@ import {
   Loader2,
   LogOut,
   Moon,
+  PanelLeft,
+  PanelBottom,
+  PanelRight,
   Play,
   Plus,
   Search,
@@ -155,6 +159,11 @@ function WorkspaceApp({
   } | null>(null);
   const [saving, setSaving] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(
+    () => window.matchMedia("(min-width: 1100px)").matches,
+  );
+  const [previewOpen, setPreviewOpen] = useState(true);
+  const [inspectorOpen, setInspectorOpen] = useState(true);
   const useStableSelection = useCallback(
     (ids: string[]) =>
       setSelection((previous) =>
@@ -260,6 +269,12 @@ function WorkspaceApp({
     setSelected(id);
     setCell(null);
     setPreview(null);
+    if (id) {
+      setInspectorOpen(true);
+      setPreviewOpen(true);
+      if (window.matchMedia("(max-width: 1099px)").matches)
+        setPaletteOpen(false);
+    }
   };
   async function saveBundle(value: Bundle, base = snapshot!) {
     setSaving(true);
@@ -917,11 +932,30 @@ function WorkspaceApp({
                 }}
               />
             ) : bundle && graph ? (
-              <div className="flow-layout">
-                <aside className="palette">
+              <div
+                className={`flow-layout ${paletteOpen ? "palette-open" : ""} ${node && inspectorOpen ? "inspector-open" : ""} ${node && ports.length && previewOpen ? "preview-open" : ""} ${path.length ? "nested-flow" : ""}`}
+                style={
+                  {
+                    "--notice-height": `${40 * (Number(!!snapshot.conflicts.length) + Number(!!snapshot.diagnostics.length) + Number(!!active))}px`,
+                  } as CSSProperties
+                }
+              >
+                <aside
+                  className="palette"
+                  id="node-palette"
+                  aria-label={t("nodes")}
+                  hidden={!paletteOpen}
+                >
                   <div className="palette-title">
                     <span>{t("nodes")}</span>
                     <span className="counter">{palette.length}</span>
+                    <button
+                      className="icon"
+                      title={t("hideNodes")}
+                      onClick={() => setPaletteOpen(false)}
+                    >
+                      <X size={15} />
+                    </button>
                   </div>
                   <div className="search">
                     <Search size={14} />
@@ -1019,6 +1053,16 @@ function WorkspaceApp({
                 <main className="canvas-column">
                   <div className="canvas-breadcrumb">
                     <button
+                      className="icon panel-toggle"
+                      title={t("toggleNodes")}
+                      aria-label={t("toggleNodes")}
+                      aria-expanded={paletteOpen}
+                      aria-controls="node-palette"
+                      onClick={() => setPaletteOpen(!paletteOpen)}
+                    >
+                      <PanelLeft size={17} />
+                    </button>
+                    <button
                       onClick={() => {
                         setPath([]);
                         select(null);
@@ -1041,6 +1085,30 @@ function WorkspaceApp({
                       </span>
                     ))}
                     <span className="spacer" />
+                    {node && (
+                      <>
+                        <button
+                          className="icon panel-toggle"
+                          title={t("togglePreview")}
+                          aria-label={t("togglePreview")}
+                          aria-expanded={previewOpen}
+                          aria-controls="data-preview"
+                          onClick={() => setPreviewOpen(!previewOpen)}
+                        >
+                          <PanelBottom size={17} />
+                        </button>
+                        <button
+                          className="icon panel-toggle"
+                          title={t("toggleInspector")}
+                          aria-label={t("toggleInspector")}
+                          aria-expanded={inspectorOpen}
+                          aria-controls="node-inspector"
+                          onClick={() => setInspectorOpen(!inspectorOpen)}
+                        >
+                          <PanelRight size={17} />
+                        </button>
+                      </>
+                    )}
                     {selection.length > 0 && (
                       <button
                         className="group-button"
@@ -1171,8 +1239,13 @@ function WorkspaceApp({
                       ports={ports}
                       version={resultVersion}
                       active={!!active}
+                      hidden={!previewOpen}
+                      onClose={() => setPreviewOpen(false)}
                       onRun={() => run(fullNode)}
-                      onExplain={setCell}
+                      onExplain={(value) => {
+                        setCell(value);
+                        setInspectorOpen(true);
+                      }}
                       onData={setPreview}
                     />
                   ) : (
@@ -1185,26 +1258,32 @@ function WorkspaceApp({
                     </div>
                   )}
                 </main>
-                {cell ? (
-                  <LineagePanel
-                    key={worktree + environment}
-                    worktree={worktree}
-                    environment={environment}
-                    cell={cell}
-                    onClose={() => setCell(null)}
-                  />
-                ) : node && definition ? (
-                  <Inspector
-                    key={worktree + fullNode}
-                    node={node}
-                    definition={definition}
-                    snapshot={snapshot}
-                    graphNodes={graph.nodes}
-                    graphEdges={graph.edges}
-                    fullNode={fullNode}
-                    environment={environment}
-                    connections={(workspace?.catalog.connections || []).filter(
-                      (connection: Json) => {
+                <div
+                  className="inspector-layer"
+                  id="node-inspector"
+                  hidden={!inspectorOpen}
+                >
+                  {cell ? (
+                    <LineagePanel
+                      key={worktree + environment}
+                      worktree={worktree}
+                      environment={environment}
+                      cell={cell}
+                      onClose={() => setCell(null)}
+                    />
+                  ) : node && definition ? (
+                    <Inspector
+                      key={worktree + fullNode}
+                      node={node}
+                      definition={definition}
+                      snapshot={snapshot}
+                      graphNodes={graph.nodes}
+                      graphEdges={graph.edges}
+                      fullNode={fullNode}
+                      environment={environment}
+                      connections={(
+                        workspace?.catalog.connections || []
+                      ).filter((connection: Json) => {
                         if (!["source", "export"].includes(definition.kind))
                           return true;
                         const connector = workspace?.catalog.connectors.find(
@@ -1213,60 +1292,49 @@ function WorkspaceApp({
                         return connector?.capabilities?.includes(
                           definition.kind === "export" ? "write" : "read",
                         );
-                      },
-                    )}
-                    status={statuses}
-                    preview={preview}
-                    onSave={async (updated, base) => {
-                      const value = structuredClone(base.bundle!);
-                      mutateGraph(value, (g) => {
-                        g.nodes = g.nodes.map((n: FlowNode) =>
-                          n.id === updated.id ? updated : n,
-                        );
-                      });
-                      await saveBundle(value, base);
-                    }}
-                    onInput={(port, source) =>
-                      safe(() =>
-                        updateGraph((g) => {
-                          g.edges = g.edges.filter(
-                            (e: Json) =>
-                              !(
-                                e.target === node.id && e.targetHandle === port
-                              ),
+                      })}
+                      status={statuses}
+                      preview={preview}
+                      onSave={async (updated, base) => {
+                        const value = structuredClone(base.bundle!);
+                        mutateGraph(value, (g) => {
+                          g.nodes = g.nodes.map((n: FlowNode) =>
+                            n.id === updated.id ? updated : n,
                           );
-                          if (source) {
-                            const [id, handle] = source.split(":");
-                            g.edges.push({
-                              id: identifier("edge"),
-                              source: id,
-                              sourceHandle: handle,
-                              target: node.id,
-                              targetHandle: port,
-                            });
-                          }
-                        }),
-                      )
-                    }
-                    onDelete={() => safe(() => removeNodes([node.id]))}
-                    onRun={() => run(fullNode)}
-                    onOpen={() => openComponent(node.id)}
-                    onEditTemplate={editTemplate}
-                    onClose={() => select(null)}
-                  />
-                ) : (
-                  <aside className="inspector empty-inspector">
-                    <span className="empty-inspector-icon">
-                      <Layers size={28} />
-                    </span>
-                    <h3>{t("nothingSelected")}</h3>
-                    <p>{t("selectNode")}</p>
-                    <div className="inspector-tip">
-                      <GitBranch size={17} />
-                      <span>{t("lineageHint")}</span>
-                    </div>
-                  </aside>
-                )}
+                        });
+                        await saveBundle(value, base);
+                      }}
+                      onInput={(port, source) =>
+                        safe(() =>
+                          updateGraph((g) => {
+                            g.edges = g.edges.filter(
+                              (e: Json) =>
+                                !(
+                                  e.target === node.id &&
+                                  e.targetHandle === port
+                                ),
+                            );
+                            if (source) {
+                              const [id, handle] = source.split(":");
+                              g.edges.push({
+                                id: identifier("edge"),
+                                source: id,
+                                sourceHandle: handle,
+                                target: node.id,
+                                targetHandle: port,
+                              });
+                            }
+                          }),
+                        )
+                      }
+                      onDelete={() => safe(() => removeNodes([node.id]))}
+                      onRun={() => run(fullNode)}
+                      onOpen={() => openComponent(node.id)}
+                      onEditTemplate={editTemplate}
+                      onClose={() => setInspectorOpen(false)}
+                    />
+                  ) : null}
+                </div>
               </div>
             ) : (
               <div className="empty-state">

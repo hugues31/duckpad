@@ -1,15 +1,18 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Background,
   BackgroundVariant,
   Controls,
+  ControlButton,
   Handle,
   MiniMap,
   Position,
   ReactFlow,
   ReactFlowProvider,
   useReactFlow,
-  useStore,
+  useNodesInitialized,
+  getNodesBounds,
+  getViewportForBounds,
   type Connection,
   type NodeProps,
   type Node,
@@ -30,6 +33,7 @@ import {
   Loader2,
   Circle,
   Sparkles,
+  Maximize,
 } from "lucide-react";
 import "@xyflow/react/dist/style.css";
 import { useT, templateLabel } from "./i18n";
@@ -135,9 +139,41 @@ export interface CanvasProps {
 }
 function CanvasInner(props: CanvasProps) {
   const t = useT();
-  const { fitView, screenToFlowPosition } = useReactFlow();
-  const width = useStore((state) => state.width);
-  const height = useStore((state) => state.height);
+  const { getNodes, setViewport, screenToFlowPosition } = useReactFlow();
+  const initialized = useNodesInitialized();
+  const safeArea = useRef<HTMLDivElement>(null);
+  const [frame, setFrame] = useState({ x: 0, y: 0, width: 0, height: 0 });
+  useEffect(() => {
+    const element = safeArea.current!;
+    const measure = () =>
+      setFrame({
+        x: element.offsetLeft,
+        y: element.offsetTop,
+        width: element.clientWidth,
+        height: element.clientHeight,
+      });
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    measure();
+    return () => observer.disconnect();
+  }, []);
+  const fitGraph = useCallback(() => {
+    if (!initialized || !frame.width || !frame.height) return;
+    // Frame the unobscured area while keeping the graph surface behind every panel.
+    const viewport = getViewportForBounds(
+      getNodesBounds(getNodes()),
+      frame.width,
+      frame.height,
+      0.1,
+      1,
+      0.12,
+    );
+    void setViewport({
+      ...viewport,
+      x: viewport.x + frame.x,
+      y: viewport.y + frame.y,
+    });
+  }, [initialized, frame, getNodes, setViewport]);
   const displayNodes = useMemo(
     () =>
       props.nodes.map((node) => {
@@ -221,25 +257,23 @@ function CanvasInner(props: CanvasProps) {
     ],
   );
   const [nodes, setNodes] = useState<Node<Json>[]>(displayNodes);
-  useEffect(
-    () =>
-      setNodes((previous) =>
-        displayNodes.map((node) => ({
-          ...node,
-          selected:
-            previous.find((old) => old.id === node.id)?.selected ??
-            node.selected,
-        })),
-      ),
-    [displayNodes],
-  );
+  const previousSelected = useRef(props.selected);
   useEffect(() => {
-    const timeout = setTimeout(
-      () => fitView({ padding: 0.12, maxZoom: 1 }),
-      100,
+    const selectionChanged = previousSelected.current !== props.selected;
+    previousSelected.current = props.selected;
+    setNodes((previous) =>
+      displayNodes.map((node) => ({
+        ...node,
+        selected: selectionChanged
+          ? node.selected
+          : (previous.find((old) => old.id === node.id)?.selected ??
+            node.selected),
+      })),
     );
-    return () => clearTimeout(timeout);
-  }, [props.viewKey, width, height, fitView]);
+  }, [displayNodes, props.selected]);
+  useEffect(() => {
+    fitGraph();
+  }, [props.viewKey, props.nodes.length, fitGraph]);
   const selectionChanged = useCallback(
     ({ nodes }: { nodes: Node<Json>[] }) =>
       props.onSelection(nodes.map((n) => n.id)),
@@ -251,97 +285,108 @@ function CanvasInner(props: CanvasProps) {
         ...e,
         type: "smoothstep",
         animated: !!props.statuses.active,
-        style: { stroke: "#a4b7c3", strokeWidth: 1.6 },
+        style: { stroke: "var(--edge)", strokeWidth: 1.8 },
       })),
     [props.edges, !!props.statuses.active],
   );
   const changes = (changes: NodeChange<Node<Json>>[]) =>
     setNodes((current) => applyNodeChanges(changes, current));
   return (
-    <ReactFlow
-      nodes={nodes}
-      edges={edges}
-      nodeTypes={nodeTypes}
-      onNodesChange={changes}
-      onNodeClick={(_, node) => props.onSelect(node.id)}
-      onPaneClick={() => props.onSelect(null)}
-      onNodeDoubleClick={(_, node) => props.onOpen(node.id)}
-      onConnect={props.onConnect}
-      onNodeDragStop={(_, __, moved) =>
-        props.onMove(
-          moved.map((n) => ({
-            ...props.nodes.find((x) => x.id === n.id)!,
-            position: n.position,
-          })),
-        )
-      }
-      onDelete={({ nodes, edges }) =>
-        props.onDelete(
-          nodes.map((n) => n.id),
-          edges.map((e) => e.id),
-        )
-      }
-      onSelectionChange={selectionChanged}
-      onDragOver={(event) => {
-        event.preventDefault();
-        event.dataTransfer.dropEffect = "move";
-      }}
-      onDrop={(event) => {
-        event.preventDefault();
-        try {
-          const value = JSON.parse(
-            event.dataTransfer.getData("application/duckpad"),
-          );
-          props.onAdd(
-            value.kind,
-            value.id,
-            screenToFlowPosition({ x: event.clientX, y: event.clientY }),
-          );
-        } catch {}
-      }}
-      fitView
-      ariaLabelConfig={{
-        "controls.ariaLabel": t("canvasControls"),
-        "controls.zoomIn.ariaLabel": t("zoomIn"),
-        "controls.zoomOut.ariaLabel": t("zoomOut"),
-        "controls.fitView.ariaLabel": t("fitView"),
-        "minimap.ariaLabel": t("minimap"),
-      }}
-      fitViewOptions={{ padding: 0.12, maxZoom: 1 }}
-      minZoom={0.25}
-      maxZoom={1.8}
-      deleteKeyCode={["Backspace", "Delete"]}
-      selectionKeyCode="Shift"
-      multiSelectionKeyCode="Shift"
-      proOptions={{ hideAttribution: true }}
-    >
-      <Background
-        variant={BackgroundVariant.Dots}
-        gap={22}
-        size={1}
-        color="var(--grid)"
-      />
-      <Controls showInteractive={false} />
-      <MiniMap
-        pannable
-        zoomable
-        nodeColor={(n) =>
-          n.data.kind === "source"
-            ? "#a8d9ca"
-            : n.data.kind === "component"
-              ? "#bdc3f3"
-              : "#c5d1dd"
+    <>
+      <div className="canvas-safe-area" ref={safeArea} aria-hidden="true" />
+      <ReactFlow
+        nodes={nodes}
+        edges={edges}
+        nodeTypes={nodeTypes}
+        onNodesChange={changes}
+        onNodeClick={(event, node) => {
+          if (!event.shiftKey) props.onSelect(node.id);
+        }}
+        onPaneClick={() => props.onSelect(null)}
+        onNodeDoubleClick={(_, node) => props.onOpen(node.id)}
+        onConnect={props.onConnect}
+        onNodeDragStop={(_, __, moved) =>
+          props.onMove(
+            moved.map((n) => ({
+              ...props.nodes.find((x) => x.id === n.id)!,
+              position: n.position,
+            })),
+          )
         }
-        maskColor="var(--minimap-mask)"
-      />
-      {!nodes.length && (
-        <div className="canvas-empty">
-          <Sparkles size={30} />
-          <h2>{t("noNodes")}</h2>
-          <p>{t("noNodesHint")}</p>
-        </div>
-      )}
-    </ReactFlow>
+        onDelete={({ nodes, edges }) =>
+          props.onDelete(
+            nodes.map((n) => n.id),
+            edges.map((e) => e.id),
+          )
+        }
+        onSelectionChange={selectionChanged}
+        onDragOver={(event) => {
+          event.preventDefault();
+          event.dataTransfer.dropEffect = "move";
+        }}
+        onDrop={(event) => {
+          event.preventDefault();
+          try {
+            const value = JSON.parse(
+              event.dataTransfer.getData("application/duckpad"),
+            );
+            props.onAdd(
+              value.kind,
+              value.id,
+              screenToFlowPosition({ x: event.clientX, y: event.clientY }),
+            );
+          } catch {}
+        }}
+        ariaLabelConfig={{
+          "controls.ariaLabel": t("canvasControls"),
+          "controls.zoomIn.ariaLabel": t("zoomIn"),
+          "controls.zoomOut.ariaLabel": t("zoomOut"),
+          "controls.fitView.ariaLabel": t("fitView"),
+          "minimap.ariaLabel": t("minimap"),
+        }}
+        minZoom={0.1}
+        maxZoom={1.8}
+        deleteKeyCode={["Backspace", "Delete"]}
+        selectionKeyCode="Shift"
+        multiSelectionKeyCode="Shift"
+        proOptions={{ hideAttribution: true }}
+      >
+        <Background
+          variant={BackgroundVariant.Dots}
+          gap={22}
+          size={1}
+          color="var(--grid)"
+        />
+        <Controls showInteractive={false} showFitView={false}>
+          <ControlButton
+            onClick={fitGraph}
+            title={t("fitView")}
+            aria-label={t("fitView")}
+          >
+            <Maximize />
+          </ControlButton>
+        </Controls>
+        <MiniMap
+          pannable
+          zoomable
+          nodeColor={(n) =>
+            n.data.kind === "source"
+              ? "#a8d9ca"
+              : n.data.kind === "component"
+                ? "#bdc3f3"
+                : "#c5d1dd"
+          }
+          maskColor="var(--minimap-mask)"
+        />
+        {!nodes.length && (
+          <div className="canvas-empty">
+            <Sparkles size={30} />
+            <h2>{t("noNodes")}</h2>
+            <p>{t("noNodesHint")}</p>
+          </div>
+        )}
+      </ReactFlow>
+    </>
   );
 }
 export default function Canvas(props: CanvasProps) {

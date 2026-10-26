@@ -370,3 +370,181 @@ test("connection capabilities constrain source and export forms without a projec
   ).json();
   expect(after.commit).toBe(before.commit);
 });
+
+test("glass panels overlay the full canvas and fitting keeps nodes reachable", async ({
+  page,
+}) => {
+  await sample(page);
+  const canvas = page.locator(".canvas");
+  const shell = await page.locator(".app-shell").boundingBox();
+  expect(await canvas.boundingBox()).toEqual(shell);
+
+  async function expectNodesReachable() {
+    await expect
+      .poll(async () =>
+        page.locator(".react-flow__node").evaluateAll((nodes) =>
+          nodes.every((node) => {
+            const rect = node.getBoundingClientRect();
+            return (
+              document
+                .elementFromPoint(
+                  rect.x + rect.width / 2,
+                  rect.y + rect.height / 2,
+                )
+                ?.closest(".react-flow__node") === node
+            );
+          }),
+        ),
+      )
+      .toBe(true);
+  }
+  await expectNodesReachable();
+  await page
+    .locator(".react-flow__node")
+    .filter({ hasText: "Regional revenue" })
+    .click();
+  await expect(page.locator(".inspector")).toBeVisible();
+  await expect(page.locator(".preview-panel")).toBeVisible();
+  await expectNodesReachable();
+  expect(await canvas.boundingBox()).toEqual(shell);
+
+  for (const theme of ["light", "dark"]) {
+    if (theme === "dark")
+      await page.getByTitle("Dark", { exact: true }).click();
+    const glass = await page.locator(".palette").evaluate((element) => {
+      const style = getComputedStyle(element);
+      return { background: style.backgroundColor, blur: style.backdropFilter };
+    });
+    expect(glass.background).toMatch(/^rgba\(/);
+    expect(glass.blur).toContain("blur");
+    // Check muted text even over the brightest/darkest possible content behind the glass.
+    const contrast = await page
+      .locator(".palette-list h4")
+      .first()
+      .evaluate((element) => {
+        const rgb = (value: string) => value.match(/[\d.]+/g)!.map(Number);
+        const foreground = rgb(getComputedStyle(element).color);
+        const surface = rgb(
+          getComputedStyle(element.closest(".palette")!).backgroundColor,
+        );
+        const luminance = (color: number[]) =>
+          color.slice(0, 3).reduce((sum, value, i) => {
+            const channel = value / 255;
+            return (
+              sum +
+              [0.2126, 0.7152, 0.0722][i] *
+                (channel <= 0.04045
+                  ? channel / 12.92
+                  : ((channel + 0.055) / 1.055) ** 2.4)
+            );
+          }, 0);
+        return Math.min(
+          ...[0, 255].map((backdrop) => {
+            const background = surface
+              .slice(0, 3)
+              .map(
+                (channel) => channel * surface[3] + backdrop * (1 - surface[3]),
+              );
+            const [low, high] = [
+              luminance(foreground),
+              luminance(background),
+            ].sort((a, b) => a - b);
+            return (high + 0.05) / (low + 0.05);
+          }),
+        );
+      });
+    expect(contrast).toBeGreaterThanOrEqual(4.5);
+    await page.getByRole("button", { name: "Fit view", exact: true }).click();
+    await expectNodesReachable();
+    await page.screenshot({
+      path: `test-results/glass-workspace-${theme}.png`,
+    });
+  }
+
+  await page
+    .getByRole("button", { name: "Toggle data preview", exact: true })
+    .click();
+  await expect(page.locator(".preview-panel")).toBeHidden();
+  await page
+    .locator(".inspector")
+    .getByRole("button", { name: "Documentation", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Toggle inspector", exact: true })
+    .click();
+  await expect(page.locator(".inspector")).toBeHidden();
+  await page
+    .getByRole("button", { name: "Toggle node library", exact: true })
+    .click();
+  await expect(page.locator(".palette")).toBeHidden();
+  await expectNodesReachable();
+  expect(await canvas.boundingBox()).toEqual(shell);
+  await page
+    .getByRole("button", { name: "Toggle node library", exact: true })
+    .click();
+  await page.getByLabel("Find a node…", { exact: true }).fill("Filter");
+  await expect(page.locator(".palette-item")).toHaveCount(1);
+  await page
+    .getByRole("button", { name: "Toggle data preview", exact: true })
+    .click();
+  await expect(page.locator(".preview-panel")).toBeVisible();
+  await page
+    .getByRole("button", { name: "Toggle inspector", exact: true })
+    .click();
+  await expect(page.locator(".inspector-tabs button.active")).toHaveText(
+    "Documentation",
+  );
+  await page
+    .locator(".react-flow__node")
+    .filter({ has: page.getByText("Orders", { exact: true }) })
+    .click({ modifiers: ["Shift"] });
+  await expect(page.locator(".group-button")).toContainText("(2)");
+});
+
+test("floating panels remain usable on tablet and phone with higher contrast", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1024, height: 900 });
+  await sample(page);
+  await expect(page.locator(".palette")).toBeHidden();
+  await page
+    .locator(".react-flow__node")
+    .filter({ hasText: "Orders" })
+    .first()
+    .click();
+  await expect(page.locator(".inspector")).toBeVisible();
+  await page
+    .getByRole("button", { name: "Toggle inspector", exact: true })
+    .click();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.emulateMedia({ contrast: "more", reducedMotion: "reduce" });
+  await expect
+    .poll(() => page.evaluate(() => document.documentElement.scrollWidth))
+    .toBe(390);
+  await page
+    .getByRole("button", { name: "Toggle node library", exact: true })
+    .click();
+  await expect(page.locator(".palette")).toBeVisible();
+  const background = await page
+    .locator(".palette")
+    .evaluate((element) => getComputedStyle(element).backgroundColor);
+  expect(background).toMatch(/^rgb\(/);
+  await page
+    .getByRole("button", { name: "Hide node library", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Toggle inspector", exact: true })
+    .click();
+  await expect(
+    page.locator(".inspector").getByLabel("Display name", { exact: true }),
+  ).toBeVisible();
+  await page.locator(".inspector").getByTitle("Close", { exact: true }).click();
+  await page
+    .getByRole("button", { name: "Hide data preview", exact: true })
+    .click();
+  await page.getByRole("button", { name: "Fit view", exact: true }).click();
+  await page.screenshot({ path: "test-results/glass-workspace-mobile.png" });
+  expect(await page.locator(".canvas").boundingBox()).toEqual(
+    await page.locator(".app-shell").boundingBox(),
+  );
+});

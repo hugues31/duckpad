@@ -249,5 +249,10 @@
   "zoomOut": "Réduire",
   "fitView": "Centrer la vue",
   "minimap": "Mini-carte",
-  "unavailableConnection": "Indisponible pour cette opération"
+  "unavailableConnection": "Indisponible pour cette opération",
+  "toggleNodes": "Afficher ou masquer les nœuds",
+  "hideNodes": "Masquer les nœuds",
+  "togglePreview": "Afficher ou masquer les données",
+  "hidePreview": "Masquer les données",
+  "toggleInspector": "Afficher ou masquer l’inspecteur"
 }
