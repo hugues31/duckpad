@@ -56,12 +56,34 @@ running development commands (the setup script also does this automatically):
 export PATH="$HOME/.local/share/duckpad-tools/node/bin:$HOME/.local/bin:$PATH"
 ```
 
-The server's Ivy Bridge CPU cannot load the published DuckDB 2.0 wheel. Docker
-and `scripts/setup.sh` build the locked DuckDB version from source for baseline
-x86-64, with two compiler jobs to limit memory usage. The first build is slow;
-subsequent worktrees and previews reuse the uv/Docker build caches. The preview
-wrapper allows up to 90 minutes for a cold build. Development
-uses Python 3.12, installed by uv when needed. Do not replace DuckDB with 1.x.
+The server's Ivy Bridge CPU cannot load the published DuckDB 2.0 wheel or run
+the official `duckdb/duckdb:2.0.0` image. The Python wheel fails on the BMI2
+`mulx` instruction; DuckDB's default release profile targets `x86-64-v3`.
+Keep DuckDB 2.0. Do not replace it with 1.x.
+
+The server uses a wheel built once from the locked 2.0.0 source distribution,
+with `DUCKDB_OPTIMIZATION_PROFILE=NONE` and baseline x86-64 compiler flags.
+The validated wheel and checksum are kept under
+`~/.local/share/duckpad-tools/wheels/2.0.0`. `scripts/setup.sh` installs that
+package in each worktree without compiling. Subsequent `uv sync` and `uv run`
+retain it. Development uses Python 3.12, installed by uv when needed.
+
+The local Docker base image `duckpad-python:3.12-duckdb2.0.0` contains the same
+package. The application Dockerfile reuses it, so ticket previews do not compile
+DuckDB. This image must exist on the Coolify build server. Provision it once with
+`bash scripts/provision-runtime.sh`; this also documents how to rebuild it on a
+replacement Debian 12 server with Python 3.11+, a C++ compiler, uv and Docker.
+Do not prune this base image or delete the wheel directory. Upgrade the wheel,
+image tag and lockfile together when changing DuckDB versions. The preview
+wrapper allows up to 20 minutes for ordinary application deployments.
+
+Playwright's Chromium is installed in the user's cache. Its missing Debian
+runtime libraries are unpacked under
+`~/.local/share/duckpad-tools/browser-libs`; the Playwright configuration uses
+that directory only for the browser process. This does not alter system
+libraries. A replacement server can install Playwright's normal OS dependencies
+or unpack `libnspr4`, `libnss3`, `libatk1.0-0`, `libatk-bridge2.0-0`, `libxdamage1`
+and `libatspi2.0-0` there with `apt-get download` and `dpkg-deb -x`.
 
 Previews are Coolify applications in the existing `preview-project` project.
 Their URL is `https://<issue-id>.app.example.invalid`. The server's nginx

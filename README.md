@@ -46,9 +46,7 @@ Results live in memory per worktree and environment. After a backend restart, hi
 ## Develop and verify
 
 ```sh
-uv sync --extra dev
-npm ci --prefix frontend
-npm run build --prefix frontend
+bash scripts/setup.sh
 uv run duckpad start --home .duckpad-dev --no-browser
 ```
 

@@ -5,21 +5,17 @@ RUN npm ci
 COPY frontend/ ./
 RUN npm run build
 
-FROM python:3.12-slim-bookworm AS backend
-COPY --from=ghcr.io/astral-sh/uv:0.9.5 /uv /usr/local/bin/uv
-RUN apt-get update && apt-get install -y --no-install-recommends g++ make \
-    && rm -rf /var/lib/apt/lists/*
+# Prepared once on the preview server by scripts/provision-runtime.sh.
+FROM duckpad-python:3.12-duckdb2.0.0 AS backend
 WORKDIR /app
-ENV UV_LINK_MODE=copy UV_PYTHON_DOWNLOADS=never CMAKE_BUILD_PARALLEL_LEVEL=2
-# DuckDB 2.0's published wheel crashes on the preview server's Ivy Bridge CPU.
-# Build the same locked version for baseline x86-64 instead of downgrading it.
-ENV CFLAGS="-march=x86-64 -mtune=generic" CXXFLAGS="-march=x86-64 -mtune=generic"
+ENV UV_LINK_MODE=copy UV_PYTHON_DOWNLOADS=never
 COPY pyproject.toml uv.lock README.md LICENSE .gitignore ./
-RUN uv sync --locked --no-dev --no-install-project --no-binary-package duckdb
+RUN uv sync --locked --no-dev --no-install-project --no-build-package duckdb \
+    && .venv/bin/python -c "import duckdb; assert duckdb.__version__ == '2.0.0'"
 COPY scripts/build_hook.py scripts/build_hook.py
 COPY src/ src/
 COPY --from=frontend /build/src/duckpad/static/ src/duckpad/static/
-RUN uv sync --locked --no-dev --no-editable --no-binary-package duckdb
+RUN uv sync --locked --no-dev --no-editable --no-build-package duckdb
 
 FROM python:3.12-slim-bookworm AS runtime
 RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates libstdc++6 \

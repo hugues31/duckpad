@@ -9,8 +9,7 @@ if [[ ! -x "$helper" ]]; then
     exit 1
 fi
 export PREVIEW_BUILD_PACK=dockerfile PREVIEW_PORT=8765
-# A cold portable DuckDB build on the server can exceed the shared helper's 20 minutes.
-export PREVIEW_TIMEOUT="${PREVIEW_TIMEOUT:-5400}"
+export PREVIEW_TIMEOUT="${PREVIEW_TIMEOUT:-1200}"
 export COOLIFY_GITHUB_APP_UUID="${COOLIFY_GITHUB_APP_UUID:-configured-github-app}"
 if [[ -z "${COOLIFY_TOKEN:-}" && -r "$HOME/.coolify/multica-token" ]]; then
     export COOLIFY_TOKEN
@@ -18,6 +17,10 @@ if [[ -z "${COOLIFY_TOKEN:-}" && -r "$HOME/.coolify/multica-token" ]]; then
 fi
 case "${1:-}" in
     deploy)
+        docker image inspect duckpad-python:3.12-duckdb2.0.0 >/dev/null 2>&1 || {
+            echo "Run bash scripts/provision-runtime.sh once before deploying previews on this server." >&2
+            exit 1
+        }
         slug="${2:?Usage: scripts/preview.sh deploy <ticket-slug> [branch]}"
         branch="${3:-$(git branch --show-current)}"
         [[ -n "$branch" ]] || { echo "Specify a branch when HEAD is detached." >&2; exit 1; }
