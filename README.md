@@ -117,6 +117,7 @@ See the [contributing guide](CONTRIBUTING.md) before opening a pull request.
 
 ## Documentation
 
+- [ETL and data engineering comparison with Alteryx and Dataiku](docs/ETL_COMPARISON.md)
 - [Product specification](docs/SPEC.md)
 - [Release automation and publishing](docs/RELEASING.md)
 - [Multica issue workflow and preview deployment](docs/MULTICA.md)
