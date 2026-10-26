@@ -34,7 +34,8 @@ case "${1:-}" in
         branch="${3:-$(git branch --show-current)}"
         [[ -n "$branch" ]] || { echo "Specify a branch when HEAD is detached." >&2; exit 1; }
         git check-ref-format --branch "$branch" >/dev/null
-        local_commit="$(git rev-parse "$branch")"
+        # A managed worktree can publish HEAD under a different PR branch name.
+        local_commit="$(git rev-parse HEAD)"
         remote_commit="$(git ls-remote --exit-code origin "refs/heads/$branch" | cut -f1)"
         [[ "$local_commit" == "$remote_commit" ]] || {
             echo "Push $branch to origin before deploying its preview." >&2
