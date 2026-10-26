@@ -6,13 +6,17 @@ Duckpad is one local Python process serving a compiled React application. FastAP
 
 | Module | Responsibility |
 | --- | --- |
-| `app.py`, `auth.py`, `cli.py` | HTTP API, persistent salted password hash and session hashes, localhost startup, process lease |
+| `app.py`, `schemas.py`, `auth.py`, `cli.py` | HTTP API and request bodies, persistent salted password hash and session hashes, localhost startup, process lease |
+| `services.py` | Wiring of the instance services shared by the API, tests and scripts |
 | `store.py`, `catalog.py` | SQLite records, environments, reusable connections, typed connector setup and secret redaction |
-| `projects.py` | Declarative files, Git worktrees, revision capture, three-way merge, durable conflict proposals, external-save batching |
-| `templates.py`, `components.py` | Typed SQL compilation, read/write contracts, recursive expansion, parameter exposure, independent imports |
-| `engine.py`, `materialize.py` | Admission, immutable execution configuration, DuckDB ownership, cancellation, output publication and invalidation |
-| `lineage.py` | SQLGlot resolution and targeted provenance queries over materialized dependencies |
+| `projects.py`, `bundle.py`, `merge.py` | Git worktrees, revision capture, external-save batching and durable conflict proposals; declarative file layout and validation; three-way merge |
+| `templates.py`, `builtin_templates.py`, `components.py` | Typed SQL compilation, read/write contracts, built-in templates, recursive expansion, parameter exposure, independent imports |
+| `engine.py`, `datasets.py`, `materialize.py` | Admission, immutable execution configuration, DuckDB ownership, cancellation, output publication and invalidation |
+| `lineage.py`, `trace.py`, `sqlast.py` | Lineage requests and their cancellation; SQLGlot normalization and targeted provenance queries over materialized dependencies |
+| `resources.py` | Portable process CPU and memory counters, including visible container limits |
 | `example.py` | Reproducible local sample data and documented Northstar project |
+
+The frontend in `frontend/src` mirrors this split: `api.ts` is the only HTTP client, `App.tsx` owns the workspace state, and each page, panel and dialog has its own module.
 
 ## Files and data
 
@@ -50,4 +54,4 @@ A lineage request registers its result generation and dependency nodes. Recalcul
 
 All `/api` routes except login require a session cookie or bearer session token. Mutation requests reject a mismatched browser Origin. The static login shell is public; project content is authenticated.
 
-The main endpoint groups are `/projects`, `/worktrees`, `/catalog`, `/environments`, `/runs`, `/conflicts`, `/library`, and `/uploads`. A worktree exposes definition snapshots and saves, branch/merge history, compiled SQL, status, previews, lineage and manual run launch. See the route definitions in `src/duckpad/app.py` for request shapes. APIs use the same services as the interface; there is no second runner or separate editor state.
+The main endpoint groups are `/session`, `/workspace`, `/identity`, `/projects`, `/example`, `/worktrees`, `/catalog`, `/environments`, `/runs`, `/conflicts`, `/library`, `/uploads` and `/resources`. Request bodies are validated; invalid requests receive a 422 response in the same `{"error", "detail"}` format as other failures. A worktree exposes definition snapshots and saves, branch/merge history, compiled SQL, status, previews, lineage and manual run launch. See the route definitions in `src/duckpad/app.py` for request shapes. APIs use the same services as the interface; there is no second runner or separate editor state.
