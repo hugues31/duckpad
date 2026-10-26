@@ -1,8 +1,10 @@
 # Multica development and previews
 
 The Duckpad project is available in the `general` workspace at
-<https://multica.example.invalid>. Assign development issues to
-**Dev - Astra XHigh**, which uses the Codex runtime on `preview-host`.
+<https://multica.example.invalid>. Its **Duckpad development and approval**
+workflow hands new **Todo** issues to **Dev - Astra XHigh**, which uses the Codex
+runtime on `preview-host`. Leave the assignee empty to use the automatic handoff.
+Use **Backlog** when an issue should not start yet.
 The server checkout is `/home/preview-user/duckpad` and the repository is
 <https://github.com/hugues31/duckpad>.
 
@@ -25,7 +27,10 @@ The server checkout is `/home/preview-user/duckpad` and the repository is
 6. Post the preview URL, PR link, tested commit, validation results, and a short
    change summary in the issue. Set the issue to `in_review` and stop.
 7. Merge **only after Hugues explicitly approves that issue's current changes** in
-   the ticket or PR. Opening a ticket, a successful build, an automated review,
+   the ticket or PR. He can move the ticket from **In Review** to **Approved to
+   merge** to approve and trigger the merge step, or send it back to **Todo** for
+   rework. Agents must never move their own work to **Approved to merge**.
+   Opening a ticket, a successful build, an automated review,
    or an `in_review` status is not approval. Further requested changes must be
    committed, pushed, redeployed, and reviewed again.
 8. After approval, fetch current `main`, resolve conflicts if needed, rerun relevant
@@ -38,6 +43,7 @@ The server checkout is `/home/preview-user/duckpad` and the repository is
 
 The initial application is already on `main`. Preview setup corrections are
 reviewed separately in `codex/multica-preview`; merge them only after approval.
+Until setup PR #1 is merged, use that branch as the temporary development base.
 
 ## Preview infrastructure
 
@@ -75,6 +81,11 @@ Retrieve the initial password privately from the application's runtime logs in
 Coolify. The setup preview's initial credentials are also saved on the server in
 `~/.config/duckpad/preview-credentials.json` with owner-only permissions.
 Passwords are generated on first launch and are not baked into the image.
+
+The preview image sets `DUCKPAD_SECURE_COOKIES=1`, so browsers only send session
+cookies over HTTPS even when nginx terminates TLS before the application. This
+does not require trusting arbitrary forwarded headers. For a container used
+exclusively on local HTTP, override this variable with `0`.
 
 ```sh
 bash scripts/preview.sh status mul-123
