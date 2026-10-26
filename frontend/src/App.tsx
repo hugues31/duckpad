@@ -33,6 +33,7 @@ import {
   Square,
   Sun,
   Workflow,
+  Users,
   X,
 } from "lucide-react";
 import { I18n, useT, templateLabel, type Language } from "./i18n";
@@ -46,6 +47,7 @@ import {
   type Snapshot,
   type Workspace,
 } from "./types";
+import { UsersPage, ProjectSettings, PasswordForm } from "./Administration";
 import Canvas, { nodeIcon } from "./Canvas";
 import Preview from "./Preview";
 import Inspector from "./Inspector";
@@ -188,6 +190,8 @@ function WorkspaceApp({
       const value = await api<Snapshot>(`/worktrees/${id}`);
       setSnapshot((old) =>
         old?.revision === value.revision &&
+        old?.role === value.role &&
+        JSON.stringify(old.connections) === JSON.stringify(value.connections) &&
         JSON.stringify(old.conflicts) === JSON.stringify(value.conflicts)
           ? old
           : value,
@@ -227,6 +231,16 @@ function WorkspaceApp({
         if (live) setStatuses(status);
       } catch (e) {
         if ((e as any).status === 401) setAuthenticated(false);
+        if ((e as any).status === 404 || (e as any).status === 403) {
+          setSnapshot(null);
+          setCell(null);
+          setPreview(null);
+          setModal(null);
+          setStatuses({ nodes: {}, active: null });
+          setWorktree("");
+          setArea("pipelines");
+          await refreshWorkspace();
+        }
       }
     };
     poll();
@@ -236,6 +250,34 @@ function WorkspaceApp({
       clearInterval(timer);
     };
   }, [worktree, environment, authenticated, load]);
+  useEffect(() => {
+    if (!authenticated) {
+      setWorkspace(null);
+      setSnapshot(null);
+      setStatuses({ nodes: {}, active: null });
+      setModal(null);
+      setCell(null);
+      setPreview(null);
+      setArea("pipelines");
+      return;
+    }
+    const timer = setInterval(() => {
+      refreshWorkspace()
+        .then((value) => {
+          if (
+            value.user.role !== "admin" &&
+            ["users", "connections"].includes(area)
+          )
+            setArea("pipelines");
+        })
+        .catch((e) => {
+          if (e.status === 401) setAuthenticated(false);
+        });
+    }, 5000);
+    return () => clearInterval(timer);
+  }, [authenticated, refreshWorkspace, area]);
+  const canEdit = snapshot?.role === "admin" || snapshot?.role === "editor";
+  const instanceAdmin = workspace?.user.role === "admin";
   const bundle = snapshot?.bundle;
   const graph = path.length
     ? bundle?.components[path[path.length - 1].definition]
@@ -262,6 +304,7 @@ function WorkspaceApp({
     setPreview(null);
   };
   async function saveBundle(value: Bundle, base = snapshot!) {
+    if (!canEdit) return;
     setSaving(true);
     try {
       await api(
@@ -284,7 +327,7 @@ function WorkspaceApp({
     change(graph);
   }
   async function updateGraph(change: (graph: Json) => void) {
-    if (!bundle) return;
+    if (!bundle || !canEdit) return;
     const value = structuredClone(bundle);
     mutateGraph(value, change);
     await saveBundle(value);
@@ -337,6 +380,7 @@ function WorkspaceApp({
     }
   }
   async function run(target?: string) {
+    if (!canEdit) return;
     setBusy(true);
     try {
       const result = await api(
@@ -384,6 +428,7 @@ function WorkspaceApp({
     setModal({
       kind: "editor",
       title: t("editTemplate"),
+      readOnly: !canEdit,
       description: t("sharedTemplateHint"),
       value: bundle!.templates[id],
       save: async (text: string) => {
@@ -493,7 +538,12 @@ function WorkspaceApp({
         <div className="rail-main">
           {[
             ["pipelines", Workflow],
-            ["connections", Database],
+            ...(instanceAdmin
+              ? [
+                  ["connections", Database],
+                  ["users", Users],
+                ]
+              : []),
             ["settings", Settings2],
           ].map(([key, Icon]) => (
             <button
@@ -524,7 +574,7 @@ function WorkspaceApp({
             })
           }
         >
-          A
+          {workspace?.user.username.slice(0, 1).toUpperCase() || "?"}
         </button>
       </nav>
       <div className="workspace-shell">
@@ -586,6 +636,7 @@ function WorkspaceApp({
                   </select>
                   <button
                     className="icon"
+                    disabled={!canEdit}
                     title={t("newBranch")}
                     onClick={() => newBranch()}
                   >
@@ -613,7 +664,21 @@ function WorkspaceApp({
             {themes}
           </div>
         </header>
-        {area === "connections" && workspace ? (
+        {area === "users" && workspace && instanceAdmin ? (
+          <UsersPage refresh={refreshWorkspace} />
+        ) : area === "projectSettings" && project && workspace ? (
+          <ProjectSettings
+            key={project.id}
+            project={project.id}
+            workspace={workspace}
+            refresh={refreshWorkspace}
+            onDeleted={() => {
+              setSnapshot(null);
+              setWorktree("");
+              setArea("pipelines");
+            }}
+          />
+        ) : area === "connections" && workspace && instanceAdmin ? (
           <ConnectionsPanel
             workspace={workspace}
             refresh={async () => {
@@ -639,82 +704,87 @@ function WorkspaceApp({
           <section className="full-panel settings-page">
             <span className="eyebrow">{t("workspace")}</span>
             <h1>{t("settings")}</h1>
-            <div className="settings-card">
-              <h2>{t("identity")}</h2>
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  const data = new FormData(e.currentTarget);
-                  safe(async () => {
-                    await api(
-                      "/identity",
-                      send(
-                        { name: data.get("name"), email: data.get("email") },
-                        "PUT",
-                      ),
-                    );
-                    await refreshWorkspace();
-                    notify(t("saved"));
-                  });
-                }}
-              >
-                <label className="field">
-                  <span>{t("authorName")}</span>
-                  <input
-                    name="name"
-                    defaultValue={workspace.identity.name}
-                    required
-                  />
-                </label>
-                <label className="field">
-                  <span>{t("authorEmail")}</span>
-                  <input
-                    name="email"
-                    type="email"
-                    defaultValue={workspace.identity.email}
-                    required
-                  />
-                </label>
-                <button className="button primary">{t("save")}</button>
-              </form>
-            </div>
+            {instanceAdmin && (
+              <div className="settings-card">
+                <h2>{t("identity")}</h2>
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    const data = new FormData(e.currentTarget);
+                    safe(async () => {
+                      await api(
+                        "/identity",
+                        send(
+                          { name: data.get("name"), email: data.get("email") },
+                          "PUT",
+                        ),
+                      );
+                      await refreshWorkspace();
+                      notify(t("saved"));
+                    });
+                  }}
+                >
+                  <label className="field">
+                    <span>{t("authorName")}</span>
+                    <input
+                      name="name"
+                      defaultValue={workspace.identity.name}
+                      required
+                    />
+                  </label>
+                  <label className="field">
+                    <span>{t("authorEmail")}</span>
+                    <input
+                      name="email"
+                      type="email"
+                      defaultValue={workspace.identity.email}
+                      required
+                    />
+                  </label>
+                  <button className="button primary">{t("save")}</button>
+                </form>
+              </div>
+            )}
+            <PasswordForm onChanged={() => setAuthenticated(false)} />
             <div className="settings-card">
               <h2>{t("preferences")}</h2>
               <p className="muted">{t("localPreferences")}</p>
               <div className="row gap">{themes}</div>
             </div>
-            <div className="settings-card">
-              <h2>{t("environments")}</h2>
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  const data = new FormData(e.currentTarget);
-                  safe(async () => {
-                    await api(
-                      "/environments",
-                      send(
-                        String(data.get("environments"))
-                          .split(",")
-                          .map((e) => e.trim())
-                          .filter(Boolean),
-                        "PUT",
-                      ),
-                    );
-                    await refreshWorkspace();
-                    notify(t("saved"));
-                  });
-                }}
-              >
-                <label className="field">
-                  <span>{t("environments")}</span>
-                  <input
-                    name="environments"
-                    defaultValue={workspace.catalog.environments.join(", ")}
-                  />
-                </label>
-                <button className="button secondary">{t("save")}</button>
-              </form>
-            </div>
+            {instanceAdmin && (
+              <div className="settings-card">
+                <h2>{t("environments")}</h2>
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    const data = new FormData(e.currentTarget);
+                    safe(async () => {
+                      await api(
+                        "/environments",
+                        send(
+                          String(data.get("environments"))
+                            .split(",")
+                            .map((e) => e.trim())
+                            .filter(Boolean),
+                          "PUT",
+                        ),
+                      );
+                      await refreshWorkspace();
+                      notify(t("saved"));
+                    });
+                  }}
+                >
+                  <label className="field">
+                    <span>{t("environments")}</span>
+                    <input
+                      name="environments"
+                      defaultValue={workspace.catalog.environments.join(", ")}
+                    />
+                  </label>
+                  <button className="button secondary">{t("save")}</button>
+                </form>
+              </div>
+            )}
           </section>
         ) : !worktree ? (
           <section className="welcome">
@@ -762,6 +832,11 @@ function WorkspaceApp({
           </div>
         ) : (
           <>
+            {!canEdit && (
+              <div className="banner">
+                <span>{t("readerNotice")}</span>
+              </div>
+            )}
             <div className="flow-toolbar">
               <div className="tabs main-tabs">
                 {[
@@ -780,6 +855,13 @@ function WorkspaceApp({
                 ))}
               </div>
               <div className="row gap">
+                <button
+                  className="button secondary small"
+                  onClick={() => setArea("projectSettings")}
+                >
+                  <Settings2 size={14} />
+                  {t("projectSettings")}
+                </button>
                 <span className="save-status">
                   {saving ? (
                     <Loader2 size={13} className="spin" />
@@ -795,7 +877,7 @@ function WorkspaceApp({
                 >
                   <FileCode2 size={16} />
                 </button>
-                {snapshot.worktree.branch !== "main" && (
+                {canEdit && snapshot.worktree.branch !== "main" && (
                   <button
                     className="button secondary small"
                     onClick={() => safe(compare)}
@@ -817,7 +899,7 @@ function WorkspaceApp({
                         setStatuses({ ...statuses, active: run });
                       })
                     }
-                    disabled={active.status === "canceling"}
+                    disabled={!canEdit || active.status === "canceling"}
                   >
                     <Square size={12} fill="currentColor" />
                     {t(active.status === "canceling" ? "canceling" : "stop")}
@@ -825,7 +907,7 @@ function WorkspaceApp({
                 ) : (
                   <button
                     className="button primary"
-                    disabled={busy || !bundle}
+                    disabled={!canEdit || busy || !bundle}
                     onClick={() => run()}
                   >
                     <Play size={14} fill="currentColor" />
@@ -839,6 +921,7 @@ function WorkspaceApp({
                 <AlertCircle size={16} />
                 <span>{t("conflictHint")}</span>
                 <button
+                  disabled={!canEdit}
                   onClick={() =>
                     setModal({
                       kind: "conflict",
@@ -889,6 +972,7 @@ function WorkspaceApp({
             )}
             {tab === "history" ? (
               <HistoryPanel
+                readOnly={!canEdit}
                 worktree={worktree}
                 onDiff={(commit) =>
                   safe(async () => {
@@ -908,6 +992,7 @@ function WorkspaceApp({
               />
             ) : tab === "documentation" && bundle ? (
               <DocumentationPanel
+                readOnly={!canEdit}
                 key={worktree}
                 snapshot={snapshot}
                 onSave={async (text, base) => {
@@ -949,7 +1034,8 @@ function WorkspaceApp({
                                 <button
                                   className="palette-item"
                                   key={item.id}
-                                  draggable
+                                  draggable={canEdit}
+                                  disabled={!canEdit}
                                   onDragStart={(e) => {
                                     e.dataTransfer.setData(
                                       "application/duckpad",
@@ -979,7 +1065,7 @@ function WorkspaceApp({
                       ),
                     )}
                   </div>
-                  <div className="palette-bottom">
+                  <fieldset className="palette-bottom" disabled={!canEdit}>
                     <button
                       className="text-button"
                       onClick={() => {
@@ -1014,7 +1100,7 @@ function WorkspaceApp({
                       {t("library")}
                     </button>
                     <p>{t("dragHint")}</p>
-                  </div>
+                  </fieldset>
                 </aside>
                 <main className="canvas-column">
                   <div className="canvas-breadcrumb">
@@ -1041,7 +1127,7 @@ function WorkspaceApp({
                       </span>
                     ))}
                     <span className="spacer" />
-                    {selection.length > 0 && (
+                    {canEdit && selection.length > 0 && (
                       <button
                         className="group-button"
                         onClick={() =>
@@ -1094,6 +1180,7 @@ function WorkspaceApp({
                             kind: "editor",
                             language: "json",
                             title: t("definition"),
+                            readOnly: !canEdit,
                             value: JSON.stringify(
                               bundle.components[id],
                               null,
@@ -1114,6 +1201,7 @@ function WorkspaceApp({
                   )}
                   <div className="canvas">
                     <Canvas
+                      readOnly={!canEdit}
                       nodes={graph.nodes}
                       edges={graph.edges}
                       parsed={snapshot.parsed_templates}
@@ -1164,6 +1252,7 @@ function WorkspaceApp({
                   </div>
                   {node && ports.length > 0 ? (
                     <Preview
+                      readOnly={!canEdit}
                       key={worktree + fullNode}
                       worktree={worktree}
                       environment={environment}
@@ -1195,6 +1284,7 @@ function WorkspaceApp({
                   />
                 ) : node && definition ? (
                   <Inspector
+                    readOnly={!canEdit}
                     key={worktree + fullNode}
                     node={node}
                     definition={definition}
@@ -1203,18 +1293,8 @@ function WorkspaceApp({
                     graphEdges={graph.edges}
                     fullNode={fullNode}
                     environment={environment}
-                    connections={(workspace?.catalog.connections || []).filter(
-                      (connection: Json) => {
-                        if (!["source", "export"].includes(definition.kind))
-                          return true;
-                        const connector = workspace?.catalog.connectors.find(
-                          (item: Json) => item.id === connection.connector,
-                        );
-                        return connector?.capabilities?.includes(
-                          definition.kind === "export" ? "write" : "read",
-                        );
-                      },
-                    )}
+                    connections={snapshot.connections.filter(c => !["source", "export"].includes(definition.kind) || c.capabilities.includes(definition.kind === "export" ? "write" : "read"))}
+
                     status={statuses}
                     preview={preview}
                     onSave={async (updated, base) => {
@@ -1315,6 +1395,7 @@ function WorkspaceApp({
       )}
       {modal?.kind === "files" && (
         <FileModal
+          readOnly={!canEdit}
           snapshot={modal.base}
           onClose={() => setModal(null)}
           onSave={async (files) => {
@@ -1475,6 +1556,7 @@ function Login({
   preferences: React.ReactNode;
 }) {
   const t = useT();
+  const [username, setUsername] = useState("admin");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
@@ -1495,7 +1577,7 @@ function Login({
             setPending(true);
             setError("");
             try {
-              await api("/login", send({ username: "admin", password }));
+              await api("/login", send({ username, password }));
               onSuccess();
             } catch (e) {
               setError((e as Error).message);
@@ -1506,7 +1588,12 @@ function Login({
         >
           <label className="field">
             <span>{t("username")}</span>
-            <input value="admin" readOnly autoComplete="username" />
+            <input
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              required
+              autoComplete="username"
+            />
           </label>
           <label className="field">
             <span>{t("password")}</span>

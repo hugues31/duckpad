@@ -113,6 +113,7 @@ function PipelineNode({ data, selected }: NodeProps<Node<Json>>) {
 }
 const nodeTypes = { pipeline: PipelineNode };
 export interface CanvasProps {
+  readOnly?: boolean;
   nodes: FlowNode[];
   edges: FlowEdge[];
   parsed: Record<string, Json>;
@@ -259,6 +260,9 @@ function CanvasInner(props: CanvasProps) {
     setNodes((current) => applyNodeChanges(changes, current));
   return (
     <ReactFlow
+      nodesDraggable={!props.readOnly}
+      nodesConnectable={!props.readOnly}
+      edgesReconnectable={!props.readOnly}
       nodes={nodes}
       edges={edges}
       nodeTypes={nodeTypes}
@@ -266,7 +270,7 @@ function CanvasInner(props: CanvasProps) {
       onNodeClick={(_, node) => props.onSelect(node.id)}
       onPaneClick={() => props.onSelect(null)}
       onNodeDoubleClick={(_, node) => props.onOpen(node.id)}
-      onConnect={props.onConnect}
+      onConnect={props.readOnly ? undefined : props.onConnect}
       onNodeDragStop={(_, __, moved) =>
         props.onMove(
           moved.map((n) => ({
@@ -276,6 +280,7 @@ function CanvasInner(props: CanvasProps) {
         )
       }
       onDelete={({ nodes, edges }) =>
+        !props.readOnly &&
         props.onDelete(
           nodes.map((n) => n.id),
           edges.map((e) => e.id),
@@ -287,6 +292,7 @@ function CanvasInner(props: CanvasProps) {
         event.dataTransfer.dropEffect = "move";
       }}
       onDrop={(event) => {
+        if (props.readOnly) return;
         event.preventDefault();
         try {
           const value = JSON.parse(
@@ -310,7 +316,7 @@ function CanvasInner(props: CanvasProps) {
       fitViewOptions={{ padding: 0.12, maxZoom: 1 }}
       minZoom={0.25}
       maxZoom={1.8}
-      deleteKeyCode={["Backspace", "Delete"]}
+      deleteKeyCode={props.readOnly ? null : ["Backspace", "Delete"]}
       selectionKeyCode="Shift"
       multiSelectionKeyCode="Shift"
       proOptions={{ hideAttribution: true }}
