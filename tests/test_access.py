@@ -6,8 +6,8 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pytest
-from conftest import wait_run
 from fastapi.testclient import TestClient
+from helpers import wait_run
 
 from duckpad.app import create_app
 from duckpad.auth import Auth
@@ -49,7 +49,7 @@ def test_legacy_password_and_projects_migrate_once(tmp_path):
     home = tmp_path / "old"
     store = Store(home)
     salt = secrets.token_hex(32)
-    store.put("auth", "admin", {"salt": salt, "hash": Auth.hash(PASSWORD, salt)})
+    store.put("auth", "admin", {"salt": salt, "hash": Auth.hash_password(PASSWORD, salt)})
     store.put("session", hashlib.sha256(b"legacy").hexdigest(), {"expires": 9999999999})
     worktree = Projects(store).create("Legacy")
     store.close()
@@ -70,7 +70,8 @@ def test_private_discovery_and_all_direct_resource_routes(instance):
     owner, owner_headers = account(app, "owner")
     _, outsider = account(app, "outsider")
     worktree = own_project(app, client, owner_headers)
-    store, projects, _, engine = app.state.services
+    services = app.state.services
+    store, projects, engine = services.store, services.projects, services.engine
     branch = projects.branch(worktree["id"], "private-branch")
     run = engine.launch(worktree["id"], "dev")
     wait_run(store, run)
@@ -220,7 +221,7 @@ def test_reader_results_and_no_recalculation(instance):
     user, headers = account(app, "reader")
     worktree = client.post("/api/example").json()
     app.state.access.member(worktree["project"], user["id"], "reader")
-    store, _, _, engine = app.state.services
+    store, engine = app.state.services.store, app.state.services.engine
     assert request(client, headers, "GET", f"/worktrees/{worktree['id']}/status").status_code == 200
     assert engine.context(worktree["id"], "dev").db is None
     run = client.post(f"/api/worktrees/{worktree['id']}/runs", json={}).json()
@@ -238,7 +239,8 @@ def test_sql_worker_blocks_metadata_other_projects_and_symlinks(instance, tmp_pa
     _, headers = account(app, "author")
     worktree = own_project(app, client, headers)
     other = client.post("/api/projects", json={"name": "Other"}).json()
-    store, projects, _, engine = app.state.services
+    services = app.state.services
+    store, projects, engine = services.store, services.projects, services.engine
     folder = store.home / "resources" / worktree["project"]
     folder.mkdir(parents=True)
     (folder / "allowed.csv").write_text("value\n42\n")
@@ -260,16 +262,16 @@ def test_sql_worker_blocks_metadata_other_projects_and_symlinks(instance, tmp_pa
                 "position": {"x": 0, "y": 0},
             }
         ]
-        from duckpad.projects import bundle_to_files
+        from duckpad.bundle import bundle_to_files
 
         projects.write(worktree["id"], snapshot["revision"], bundle_to_files(bundle))
         run = engine.launch(worktree["id"], "dev")
         result = wait_run(store, run)
         assert (result["status"] == "success") is success, result
     cursor = engine.context(worktree["id"], "dev").db.cursor()
-    with pytest.raises(Exception, match="configuration|locked"):
+    with pytest.raises(Exception, match=r"configuration|locked"):
         cursor.execute("SET enable_external_access = true")
-    with pytest.raises(Exception, match="Permission|disabled|denied"):
+    with pytest.raises(Exception, match=r"Permission|disabled|denied"):
         cursor.execute("COPY (SELECT 1) TO '" + str(store.home / "overwrite.csv") + "'")
     cursor.close()
     # An editor cannot grant a connection by editing the project bundle.
@@ -295,12 +297,13 @@ def test_account_validation_and_no_credential_disclosure(instance):
 def test_sql_worker_cancels_and_recovers_after_process_exit(instance):
     import time
 
-    from duckpad.projects import bundle_to_files
+    from duckpad.bundle import bundle_to_files
 
     app, client = instance
     _, headers = account(app, "runner")
     worktree = own_project(app, client, headers)
-    store, projects, _, engine = app.state.services
+    services = app.state.services
+    store, projects, engine = services.store, services.projects, services.engine
     snapshot = projects.snapshot(worktree["id"])
     bundle = snapshot["bundle"]
     bundle["templates"]["slow"] = (
@@ -334,7 +337,7 @@ def test_read_only_connection_root_cannot_be_written_through_another_connection(
     root = tmp_path / "read-only-source"
     root.mkdir()
     (root / "input.csv").write_text("value\n42\n")
-    _, _, catalog, engine = app.state.services
+    catalog, engine = app.state.services.catalog, app.state.services.engine
     catalog.save(
         "connector",
         {
@@ -356,7 +359,7 @@ def test_read_only_connection_root_cannot_be_written_through_another_connection(
     app.state.access.grant_connections(worktree["project"], ["local", "source_files"])
     cursor = engine.context(worktree["id"], "dev", create=True).db.cursor()
     assert cursor.execute("SELECT * FROM read_csv('" + str(root / "input.csv") + "')").fetchall() == [(42,)]
-    with pytest.raises(Exception, match="Permission|denied"):
+    with pytest.raises(Exception, match=r"Permission|denied"):
         cursor.execute("COPY (SELECT 1) TO '" + str(root / "output.csv") + "'")
     assert not (root / "output.csv").exists()
     cursor.close()
@@ -368,7 +371,7 @@ def test_sql_worker_cancellation_stays_armed_between_queries(instance):
     app, client = instance
     _, headers = account(app, "cancel-gap")
     worktree = own_project(app, client, headers)
-    engine = app.state.services[3]
+    engine = app.state.services.engine
     cursor = engine.context(worktree["id"], "dev", create=True).db.cursor()
     assert cursor.execute("SELECT 1").fetchone() == (1,)
     cursor.interrupt()

@@ -1,6 +1,7 @@
 import { test, expect } from "@playwright/test";
 import en from "../src/locales/en.json" with { type: "json" };
 import fr from "../src/locales/fr.json" with { type: "json" };
+import { submitLogin } from "./helpers";
 
 for (const scenario of [
   { locale: "fr-CA", colorScheme: "dark", language: "fr", theme: "dark" },
@@ -28,15 +29,7 @@ for (const scenario of [
         "data-theme",
         scenario.theme,
       );
-      await page
-        .getByLabel(labels.password, { exact: true })
-        .fill("duckpad-browser-test");
-      await page
-        .getByRole("button", { name: labels.signInAction, exact: true })
-        .click();
-      await expect(
-        page.getByRole("navigation", { name: labels.workspace, exact: true }),
-      ).toBeVisible();
+      await submitLogin(page, labels);
       await page.locator(".account .avatar").click();
       await expect(
         page.getByRole("menuitemradio", {
@@ -117,15 +110,7 @@ test.describe("manual preferences", () => {
         localStorage.getItem("duckpad-theme"),
       ]),
     ).toEqual(["en", "light"]);
-    await page
-      .getByLabel(en.password, { exact: true })
-      .fill("duckpad-browser-test");
-    await page
-      .getByRole("button", { name: en.signInAction, exact: true })
-      .click();
-    await expect(
-      page.getByRole("navigation", { name: en.workspace, exact: true }),
-    ).toBeVisible();
+    await submitLogin(page, en);
     await expect(page.locator("html")).toHaveAttribute("lang", "en");
     await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
   });

@@ -1,21 +1,16 @@
 import { useEffect, useRef, useState } from "react";
 import { Check, LogOut, Settings2 } from "lucide-react";
-import { useT, type Language } from "./i18n";
+import { useT } from "./i18n";
+import type { Preferences } from "./preferences";
 
 export default function AccountMenu({
   username,
-  theme,
-  language,
-  setTheme,
-  setLanguage,
+  preferences: { language, setLanguage, theme, setTheme },
   onSettings,
   onSignOut,
 }: {
   username: string;
-  theme: string;
-  language: Language;
-  setTheme: (value: string) => void;
-  setLanguage: (value: Language) => void;
+  preferences: Preferences;
   onSettings: () => void;
   onSignOut: () => void;
 }) {
@@ -114,7 +109,7 @@ export default function AccountMenu({
           <div role="group" aria-label={t("theme")}>
             <span className="account-menu-label">{t("theme")}</span>
             <div className="account-options">
-              {["light", "dark"].map((value) => (
+              {(["light", "dark"] as const).map((value) => (
                 <button
                   key={value}
                   role="menuitemradio"

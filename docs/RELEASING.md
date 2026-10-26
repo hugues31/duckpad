@@ -74,7 +74,7 @@ notes. The first release includes the full history.
 Preview notes for work not yet tagged, without publishing:
 
 ```sh
-uv sync --extra dev --locked
+uv sync --locked
 uv run git-cliff --offline --no-exec --unreleased --tag v0.2.0 --output release-notes.md
 ```
 
