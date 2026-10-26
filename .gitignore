@@ -13,3 +13,6 @@ playwright-report/
 .coverage
 *.tsbuildinfo
 .multica/
+.env
+.env.*
+!.env.example

@@ -1,123 +1,95 @@
 # Multica development and previews
 
-The Duckpad project is available in the `general` workspace at
-<https://multica.example.invalid>. Its **Duckpad development and approval**
-workflow hands new **Todo** issues to **Dev - Astra XHigh**, which uses the Codex
-runtime on `preview-host`. Leave the assignee empty to use the automatic handoff.
-Use **Backlog** when an issue should not start yet.
-The server checkout is `/home/preview-user/duckpad` and the repository is
-<https://github.com/hugues31/duckpad>.
+Configure a Multica project with a Git repository, a local checkout resource using
+isolated worktrees, a development agent, and a designated human reviewer. Keep
+instance URLs, server paths, resource identifiers, and credentials in private
+project settings and operator configuration, outside this public repository.
 
 ## Issue workflow
 
 1. Read the issue, this guide, and `AGENTS.md`. Fetch `origin` and start a dedicated
    branch from `origin/main` in an isolated worktree. Reuse Multica's allocated
    issue branch and worktree when available; otherwise name the branch
-   `codex/<issue-id>-<short-description>`. Continue the existing issue branch for
-   review follow-ups, including the merge step, and use the PR's head branch as
-   the source of truth.
-2. Run `bash scripts/setup.sh` in each new worktree. Implement the requested change
-   and run the relevant checks from the README.
+   `codex/<issue-id>-<short-description>`. Reuse that branch for review follow-ups.
+2. Run `bash scripts/setup.sh`, implement the change, and run the relevant checks
+   from the README.
 3. Commit with an English Conventional Commit message, push the issue branch to
    GitHub, and open a pull request targeting `main`.
-4. Deploy using `bash scripts/preview.sh deploy <issue-id-in-lowercase>`. This
-   configures the shared Coolify helper for the Dockerfile and port 8765. Do not
-   invoke the helper with its default Node/Nixpacks settings.
-5. Check that the Coolify deployment has **finished** for the expected Git commit.
-   A working URL can still be serving the previous deployment during a rebuild.
-   Confirm the public frontend, sign-in, and the changed behavior in a browser.
-6. Post the preview URL, PR link, tested commit, validation results, and a short
-   change summary in the issue. Set the issue to `in_review` and stop.
-7. Merge **only after Hugues explicitly approves that issue's current changes** in
-   the ticket or PR. He can move the ticket from **In Review** to **Approved to
-   merge** to approve and trigger the merge step, or send it back to **Todo** for
-   rework. Agents must never move their own work to **Approved to merge**.
-   Opening a ticket, a successful build, an automated review,
-   or an `in_review` status is not approval. Further requested changes must be
-   committed, pushed, redeployed, and reviewed again.
-8. After approval, fetch current `main`, resolve conflicts if needed, rerun relevant
-   checks, and merge the PR into GitHub `main`. Use an English Conventional Commit
-   merge/squash title. Verify that the approved changes are present on
-   `origin/main`; never force-push `main`.
-9. Only after the merge succeeds, destroy the ticket preview with
-   `bash scripts/preview.sh destroy <issue-id-in-lowercase>`, report the merge in
-   the issue, and mark it done. Also destroy previews for cancelled issues.
+4. Deploy using `bash scripts/preview.sh deploy <issue-id-in-lowercase>`. The wrapper
+   selects the Dockerfile and port 8765, then waits for Coolify to finish deploying
+   the exact pushed commit. Confirm sign-in and the changed behavior in a browser.
+5. Post the preview URL, PR link, tested commit, checks, and change summary in the
+   **private Multica issue only**. Keep preview URLs and private infrastructure
+   details out of GitHub PRs, commits, documentation, and public logs. Set the issue
+   to `in_review` and stop.
+6. Merge only after the designated human reviewer explicitly approves the current
+   changes. A human can move the ticket to **Approved to merge** to trigger this
+   step, or back to **Todo** for rework. Agents must never approve their own work.
+   Ticket creation, successful checks, automated reviews, and `in_review` status
+   are not approval. Further changes require another deployment and review.
+7. After approval, fetch current `main`, resolve conflicts, rerun relevant checks,
+   and merge the PR into GitHub `main`. Use an English Conventional Commit title.
+   Verify the approved changes are present on `origin/main`; never force-push it.
+8. After a successful merge, destroy the ticket preview with
+   `bash scripts/preview.sh destroy <issue-id-in-lowercase>`, report the merge in the
+   private issue, and mark it done. Also destroy previews for cancelled issues.
 
-The initial application is already on `main`. Preview setup corrections are
-reviewed separately in `codex/multica-preview`; merge them only after approval.
-Until setup PR #1 is merged, use that branch as the temporary development base.
+## Private deployment configuration
 
-## Preview infrastructure
+Install a trusted Coolify preview helper supporting `deploy <slug> <repository>
+<branch>`, `status <slug>`, and `destroy <slug>`. Configure its project, server, and
+preview domain privately. Applications must be named `preview-<slug>` and expose
+HTTPS at `<slug>.<preview-domain>`.
 
-The server has an isolated Node.js 22 installation and `uv`; load them before
-running development commands (the setup script also does this automatically):
-
-```sh
-export PATH="$HOME/.local/share/duckpad-tools/node/bin:$HOME/.local/bin:$PATH"
-```
-
-The server's Ivy Bridge CPU cannot load the published DuckDB 2.0 wheel or run
-the official `duckdb/duckdb:2.0.0` image. The Python wheel fails on the BMI2
-`mulx` instruction; DuckDB's default release profile targets `x86-64-v3`.
-Keep DuckDB 2.0. Do not replace it with 1.x.
-
-The server uses a wheel built once from the locked 2.0.0 source distribution,
-with `DUCKDB_OPTIMIZATION_PROFILE=NONE` and baseline x86-64 compiler flags.
-The validated wheel and checksum are kept under
-`~/.local/share/duckpad-tools/wheels/2.0.0`. `scripts/setup.sh` installs that
-package in each worktree without compiling. Subsequent `uv sync` and `uv run`
-retain it. Development uses Python 3.12, installed by uv when needed.
-
-The local Docker base image `duckpad-python:3.12-duckdb2.0.0` contains the same
-package. The application Dockerfile reuses it, so ticket previews do not compile
-DuckDB. The base image carries `coolify.managed=true` so Coolify's automatic
-image cleanup preserves it. This image must exist on the Coolify build server. Provision it once with
-`bash scripts/provision-runtime.sh`; this also documents how to rebuild it on a
-replacement Debian 12 server with Python 3.11+, a C++ compiler, uv and Docker.
-Do not prune this base image or delete the wheel directory. Upgrade the wheel,
-image tag and lockfile together when changing DuckDB versions. The preview
-wrapper allows up to 20 minutes for ordinary application deployments.
-
-Playwright's Chromium is installed in the user's cache. Its missing Debian
-runtime libraries are unpacked under
-`~/.local/share/duckpad-tools/browser-libs`; the Playwright configuration uses
-that directory only for the browser process. This does not alter system
-libraries. A replacement server can install Playwright's normal OS dependencies
-or unpack `libnspr4`, `libnss3`, `libatk1.0-0`, `libatk-bridge2.0-0`, `libxdamage1`
-and `libatspi2.0-0` there with `apt-get download` and `dpkg-deb -x`.
-
-Previews are Coolify applications in the existing `preview-project` project.
-Their URL is `https://<issue-id>.app.example.invalid`. The server's nginx
-terminates HTTPS and forwards to Coolify's Traefik proxy; the Coolify application
-domain intentionally uses `http://`. No extra public application port is needed.
-
-The helper is installed at
-`/home/preview-user/.claude/skills/coolify-preview/preview.sh`. Authentication comes from
-`COOLIFY_TOKEN` or the server's private `~/.coolify/multica-token` file. The
-repository wrapper selects the existing private-repository GitHub App. Never
-commit tokens, instance data, or preview passwords, or include them in tickets.
-
-The Docker image builds React and installs the locked Python dependencies, then
-runs the application as an unprivileged user. Each preview has its own generated
-`admin` password and disposable data under `/data/duckpad`. Redeploying or deleting
-a preview can reset both. Use synthetic example data in previews. An installation
-that must preserve data needs a persistent volume owned by UID/GID 10001.
-
-Retrieve the initial password privately from the application's runtime logs in
-Coolify. The setup preview's initial credentials are also saved on the server in
-`~/.config/duckpad/preview-credentials.json` with owner-only permissions.
-Passwords are generated on first launch and are not baked into the image.
-
-The preview image sets `DUCKPAD_SECURE_COOKIES=1`, so browsers only send session
-cookies over HTTPS even when nginx terminates TLS before the application. This
-does not require trusting arbitrary forwarded headers. For a container used
-exclusively on local HTTP, override this variable with `0`.
+The wrapper loads trusted shell configuration from
+`${XDG_CONFIG_HOME:-$HOME/.config}/duckpad/preview.env`, or the path specified by
+`DUCKPAD_PREVIEW_CONFIG`. Keep this file outside the checkout with owner-only
+permissions. These are placeholders, not a working deployment:
 
 ```sh
-bash scripts/preview.sh status mul-123
-python3 scripts/verify_preview.py https://mul-123.app.example.invalid
+COOLIFY_PREVIEW_HELPER="$HOME/.local/bin/coolify-preview"
+COOLIFY_API_URL="https://coolify.example.invalid/api/v1"
+DUCKPAD_PREVIEW_DOMAIN="preview.example.invalid"
+COOLIFY_TOKEN_FILE="$HOME/.config/duckpad/coolify-token"
+COOLIFY_GITHUB_APP_UUID="your-private-github-app-identifier"
 ```
 
-The baseline setup preview is <https://duckpad.app.example.invalid>. It is for
-reviewing the initial implementation/setup and should be removed after that
-review; future tickets receive separate URLs.
+The wrapper exports these values to the helper and verifier. Alternatively,
+provide them as environment variables. `COOLIFY_TOKEN` can replace the token file.
+The repository URL comes from `origin`; `DUCKPAD_REPOSITORY_URL` can override it.
+Never commit real configuration, share credentials in tickets, or publish helper
+output containing private infrastructure details.
+
+```sh
+bash scripts/preview.sh status issue-123
+bash scripts/preview.sh verify issue-123
+```
+
+## Runtime provisioning
+
+Keep DuckDB 2.0. Older x86-64 CPUs without AVX2 or BMI2 may not run published
+DuckDB 2.0 binaries. Provision the compatible package and Docker base once with
+`bash scripts/provision-runtime.sh`. This requires Python 3.11+, a C++ compiler,
+uv, and Docker on a Debian-compatible build host. The script builds the locked
+source with `DUCKDB_OPTIMIZATION_PROFILE=NONE` and baseline x86-64 compiler flags,
+or reuses an existing validated wheel. Ticket previews do not rebuild DuckDB.
+
+The validated wheel and checksum live under
+`~/.local/share/duckpad-tools/wheels/2.0.0`. `scripts/setup.sh` installs it when
+needed in each Python 3.12 worktree, and subsequent `uv sync` retains it. The
+Dockerfile reuses `duckpad-python:3.12-duckdb2.0.0` on the Coolify build server.
+Its `coolify.managed=true` label preserves it during automatic image cleanup.
+Keep the image and wheel directory; update both together with the lockfile.
+
+Setup also supports an isolated Node.js installation under
+`~/.local/share/duckpad-tools/node`. Playwright can use normal OS dependencies or
+libraries unpacked under `~/.local/share/duckpad-tools/browser-libs`, optionally
+overridden with `DUCKPAD_BROWSER_LIBRARY_PATH`.
+
+Preview containers run as UID/GID 10001, generate an initial admin password, and
+use disposable data under `/data/duckpad`. Retrieve credentials privately from
+runtime logs. Redeployment can reset data and credentials; use synthetic data.
+Persistent installations require a volume owned by that user.
+
+The preview image sets `DUCKPAD_SECURE_COOKIES=1` for HTTPS behind a TLS proxy.
+For a container used exclusively on local HTTP, override it with `0`.
