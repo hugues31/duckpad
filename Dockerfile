@@ -18,7 +18,7 @@ COPY --from=frontend /build/src/duckpad/static/ src/duckpad/static/
 RUN uv sync --locked --no-dev --no-editable --no-build-package duckdb
 
 FROM python:3.12-slim-bookworm AS runtime
-RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates libstdc++6 \
+RUN apt-get update && apt-get install -y --no-install-recommends git openssh-client ca-certificates libstdc++6 \
     && rm -rf /var/lib/apt/lists/* \
     && groupadd --gid 10001 duckpad \
     && useradd --uid 10001 --gid duckpad --home-dir /data --create-home duckpad

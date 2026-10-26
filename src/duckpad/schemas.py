@@ -43,6 +43,39 @@ class NewBranch(BaseModel):
     revision: str | None = None
 
 
+class GitReview(BaseModel):
+    source: str
+
+
+class GitChoices(BaseModel):
+    choices: dict[str, Literal["base", "current", "incoming"]] = Field(default_factory=dict)
+
+
+class GitApply(GitChoices):
+    proposal_revision: str
+
+
+class RemoteState(BaseModel):
+    config_revision: str
+
+
+class RemoteConfiguration(RemoteState):
+    url: str | None = None
+    remote_branch: str = "main"
+
+
+class RemoteHeads(RemoteState):
+    local_head: str
+    remote_head: str | None = None
+    recreate: bool = False
+
+
+class BranchCleanup(BaseModel):
+    remove_worktree: str
+    integrated_worktree: str
+    expected_head: str
+
+
 class Merge(BaseModel):
     source_revision: str
     target_revision: str

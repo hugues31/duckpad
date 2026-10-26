@@ -105,6 +105,7 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
   const [preview, setPreview] = useState<Json | null>(null);
   const [cell, setCell] = useState<Json | null>(null);
   const [modal, setModal] = useState<ModalState | null>(null);
+  const [gitVersion, setGitVersion] = useState(0);
   const [saving, setSaving] = useState(false);
   const [busy, setBusy] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(
@@ -524,27 +525,25 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
       }
     }
   }
-  async function compare(base: Snapshot) {
-    const comparison = await api(`/worktrees/${worktree}/merge`);
+  function showGit(
+    mode: "compare" | "branches" | "sync" = "compare",
+    commit?: string,
+    entity?: string,
+  ) {
+    if (!snapshot) return;
     setModal({
-      kind: "files",
-      title: t("mergeReview"),
-      description:
-        t("mergeHint") +
-        (comparison.conflicts.length
-          ? " · " + comparison.conflicts.join(", ")
-          : ""),
-      snapshot: base,
-      initialFiles: comparison.files,
-      save: async (files) => {
-        await api(
-          `/worktrees/${worktree}/merge`,
-          send({ ...comparison, files }),
-        );
+      kind: "git",
+      worktree,
+      role: snapshot.role,
+      mode,
+      commit,
+      entity,
+      onChanged: async () => {
+        setGitVersion((value) => value + 1);
         await refreshWorkspace();
-        setWorktree(comparison.target.id);
-        notify(t("mergeComplete"));
+        await load();
       },
+      onOpen: setWorktree,
     });
   }
   function resolveConflict(conflict: Json) {
@@ -601,14 +600,7 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
     });
   }
   async function showDiff(commit: string) {
-    const diff = await api(`/worktrees/${worktree}/diff/${commit}`);
-    setModal({
-      kind: "editor",
-      title: t("diff"),
-      value: diff.diff,
-      language: "diff",
-      readOnly: true,
-    });
+    showGit("compare", commit);
   }
 
   if (authenticated === null)
@@ -657,6 +649,8 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
           onNewProject={newProject}
           onWorktree={setWorktree}
           onNewBranch={() => newBranch()}
+          onGit={() => showGit("sync")}
+          gitVersion={gitVersion}
           onEnvironment={(value) => {
             setEnvironment(value);
             setCell(null);
@@ -754,7 +748,7 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
               active={active}
               canRun={!busy && !!bundle}
               onTab={setTab}
-              onMerge={() => safe(() => compare(snapshot))}
+              onMerge={() => showGit("branches")}
               onRun={() => run()}
               onStop={() =>
                 safe(async () => {
@@ -786,6 +780,7 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
                 worktree={worktree}
                 onDiff={(commit) => safe(() => showDiff(commit))}
                 onRevision={newBranch}
+                onCompare={() => showGit()}
               />
             ) : tab === "documentation" && bundle ? (
               <DocumentationPanel
@@ -969,6 +964,13 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
                       onRun={() => run(fullNode)}
                       onOpen={() => openComponent(node.id)}
                       onEditTemplate={editTemplate}
+                      onHistory={() =>
+                        showGit(
+                          "compare",
+                          undefined,
+                          `${path.length ? `component/${path[path.length - 1].definition}/` : ""}node/${node.id}`,
+                        )
+                      }
                       onClose={() => setInspectorOpen(false)}
                     />
                   ) : null}

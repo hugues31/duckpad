@@ -48,6 +48,54 @@ def bundle_to_files(bundle):
 
 def validate(bundle):
     errors = []
+    try:
+        if not all(
+            isinstance(bundle.get(key), dict) for key in ("flow", "templates", "components", "documentation")
+        ):
+            raise Problem("Project sections must be objects")
+        graphs = [
+            ("flow.json", bundle["flow"]),
+            *[(f"components/{key}.json", value) for key, value in bundle["components"].items()],
+        ]
+        for file, graph in graphs:
+            if not isinstance(graph, dict):
+                raise Problem(f"{file}: graph must be an object")
+            for collection in ("nodes", "edges"):
+                values = graph.get(collection, [])
+                if not isinstance(values, list) or any(
+                    not isinstance(v, dict) or not isinstance(v.get("id"), str) or not v["id"] for v in values
+                ):
+                    raise Problem(f"{file}: {collection} need stable string identifiers")
+                if len({v["id"] for v in values}) != len(values):
+                    raise Problem(f"{file}: {collection} identifiers must be unique")
+            for node in graph.get("nodes", []):
+                if bool(node.get("component")) == bool(node.get("template")):
+                    raise Problem(f"{file}: each node needs exactly one template or component")
+                if not isinstance(node.get("params", {}), dict):
+                    raise Problem(f"{file}: node parameters must be an object")
+            for definition in graph.get("parameters", {}).values():
+                for target in definition.get("targets", []):
+                    node = next((n for n in graph.get("nodes", []) if n["id"] == target["node"]), None)
+                    if node is None:
+                        raise Problem(f"{file}: exposed parameter target is missing")
+                    parameters = (
+                        bundle["components"][node["component"]].get("parameters", {})
+                        if node.get("component")
+                        else {
+                            p["name"]: p
+                            for p in parse_template(bundle["templates"][node["template"]])["parameters"]
+                        }
+                    )
+                    if target["param"] not in parameters:
+                        raise Problem(f"{file}: exposed parameter does not exist on its target")
+        # Validate unused reusable definitions too, including their boundary ports and cycles.
+        for key in bundle["components"]:
+            nodes, edges, _ = expand(
+                {**bundle, "flow": {"nodes": [{"id": "instance", "component": key}], "edges": []}}
+            )
+            topological(nodes, edges)
+    except (Problem, KeyError, TypeError, AttributeError, RecursionError) as error:
+        return [{"file": "flow.json", "message": str(error)}]
     for name, sql in bundle["templates"].items():
         try:
             parse_template(sql)

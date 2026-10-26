@@ -67,7 +67,7 @@ Select **Regional revenue**, choose the `report` output, then click a revenue ce
 - Use guided filter, join-key and aggregate forms, or edit their generated SQL expressions.
 - Preview, filter and sort results; explain valid cells with five contributions per page and complete counts.
 - Group nodes into nested components, expose parameters, and import independent copies between projects.
-- Save automatically to Git, inspect diffs, open isolated branches or historical revisions, and explicitly merge changes.
+- Save automatically with descriptive Git subjects, compare versions visually, review merges and synchronize project repositories explicitly.
 - Detect concurrent UI/file edits and resolve recoverable conflicts without losing either proposal.
 - Recompute manually, stop active SQL, retain stale previews after failure, and inspect durable execution history.
 - Configure reusable connections and environments outside project Git, with local, S3 and Oracle presets.
@@ -120,6 +120,7 @@ See the [contributing guide](CONTRIBUTING.md) before opening a pull request.
 - [Product specification](docs/SPEC.md)
 - [Release automation and publishing](docs/RELEASING.md)
 - [Multica issue workflow and preview deployment](docs/MULTICA.md)
+- [Visual Git comparisons, reviewed merges and synchronization](docs/GIT.md)
 - [Architecture and execution invariants](docs/ARCHITECTURE.md)
 - [Project files, templates and components](docs/AUTHORING.md)
 - [Lineage coverage and limitations](docs/LINEAGE.md)
