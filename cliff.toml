@@ -44,6 +44,7 @@ split_commits = false
 protect_breaking_commits = true
 commit_parsers = [
   { field = "breaking", pattern = "true", group = "0|Breaking changes" },
+  { field = "merge_commit", pattern = "true", skip = true },
   { message = "^feat", group = "1|Features" },
   { message = "^fix", group = "2|Fixes" },
   { message = "^perf", group = "3|Performance" },
