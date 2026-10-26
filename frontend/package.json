@@ -3,10 +3,15 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "build": "tsc -b && vite build",
     "check": "tsc -b",
+    "format": "prettier --write src e2e playwright.config.ts vite.config.ts",
+    "format:check": "prettier --check src e2e playwright.config.ts vite.config.ts",
     "test:e2e": "playwright test"
   },
   "dependencies": {
