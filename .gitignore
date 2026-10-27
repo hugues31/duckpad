@@ -24,3 +24,7 @@ website/public/demos/*.png
 .vscode/
 htmlcov/
 .mypy_cache/
+
+# Operator-owned workflow files must stay outside tracked history.
+/docs/MULTICA.md
+/scripts/preview.sh

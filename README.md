@@ -44,7 +44,7 @@ See the [quickstart](docs/QUICKSTART.md) for the complete first-run walkthrough.
 
 The [website and documentation guide](docs/WEBSITE.md) explains local preview,
 Playwright demo recording and GitHub Pages publishing. Developer checks live in
-[CONTRIBUTING.md](CONTRIBUTING.md); the private issue workflow is described in
-[docs/MULTICA.md](docs/MULTICA.md).
+[CONTRIBUTING.md](CONTRIBUTING.md). Private issue workflows and preview tooling
+are maintained in operator-owned configuration outside Git.
 
 **MIT licensed.** Built for the open-source community.
