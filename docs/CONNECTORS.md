@@ -4,6 +4,35 @@ A connector is a declarative setup definition. A connection is a named reusable 
 
 The instance-admin-only `PUT /api/catalog/connector` and `PUT /api/catalog/connection` endpoints accept those same JSON objects, so an administrator can submit declarative files without changing application code. Secret fields are masked in public catalog responses and execution records. Definition snapshots and non-secret settings used by each run remain in its history. Instance admins grant each project access to connections in **Project settings**. Members see only the names and capabilities of granted connections, not the global catalog.
 
+## Environments
+
+Instance admins manage environments in **Instance settings → Environments**.
+Each has a stable identifier, an editable label, a color, and a **Confirm every
+run** option. Existing installations retain their identifiers and connection
+values; `dev` defaults to no confirmation and `prod` defaults to confirmation.
+Labels and colors appear in the workspace selector and connection settings.
+Changing them does not change project Git history or invalidate results.
+
+New environments start with empty connection values. Configure them in
+**Connections** before running. Deleting an environment requires confirmation,
+removes its connection values and clears cached results, but preserves execution
+history. Active runs must finish or be stopped first. At least one environment
+must remain.
+
+The confirmation option applies to workspace pipeline and node launches. The
+dialog identifies the environment, project, branch and execution target;
+canceling it starts nothing. The server also checks the current option on every
+`entry_point: "ui"` launch and requires `confirmed: true` when enabled.
+Programmatic API launches remain non-interactive. This is an execution safeguard,
+not a replacement for project permissions.
+
+Administrators can create an environment with `POST /api/environments`
+(`id`, `label`, `color` as a six-digit hex color, `confirm_before_run` as a boolean),
+edit its settings with `PUT /api/environments/{id}`, or delete it with
+`DELETE /api/environments/{id}`. `/api/workspace` exposes `catalog.environment_details`
+alongside the existing identifier list. The legacy bulk `PUT /api/environments`
+endpoint continues to accept identifiers without replacing their metadata.
+
 ## Validated scope
 
 | Preset | Required operations | Recorded validation |

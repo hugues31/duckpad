@@ -22,7 +22,9 @@ test("dedicated pages support direct sign-in, refresh, history, new tabs and tra
   await page.getByRole("link", { name: "Environments", exact: true }).click();
   await expect(page).toHaveURL(/\/instance-settings\/environments$/);
   await page.reload();
-  await expect(page.getByLabel("Environments", { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Add environment", exact: true }),
+  ).toBeVisible();
   await page.goBack();
   await expect(page).toHaveURL(/\/instance-settings$/);
   await expect(page.getByLabel("Author name", { exact: true })).toBeVisible();

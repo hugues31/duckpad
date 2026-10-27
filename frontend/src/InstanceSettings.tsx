@@ -2,6 +2,7 @@ import { NavLink } from "react-router";
 import { settingsSections } from "./navigation";
 import { UsersPage } from "./Administration";
 import ConnectionsPanel from "./ConnectionsPanel";
+import EnvironmentsPanel from "./EnvironmentsPanel";
 import { useT } from "./i18n";
 import SSOSettings from "./SSOSettings";
 import type { Workspace } from "./types";
@@ -11,14 +12,12 @@ export default function InstanceSettings({
   workspace,
   refresh,
   onIdentity,
-  onEnvironments,
   onConnectorEditor,
 }: {
   section: string;
   workspace: Workspace;
   refresh: () => Promise<void>;
   onIdentity: (identity: { name: string; email: string }) => void;
-  onEnvironments: (names: string[]) => void;
   onConnectorEditor: (data: { title: string; value: string }) => void;
 }) {
   const t = useT();
@@ -84,31 +83,10 @@ export default function InstanceSettings({
       {section === "usersPermissions" && <UsersPage refresh={refresh} />}
       {section === "ssoSettings" && <SSOSettings />}
       {section === "environments" && (
-        <div className="settings-card">
-          <h2>{t("environments")}</h2>
-          <p className="muted">{t("instanceEnvironmentsHint")}</p>
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              const data = new FormData(e.currentTarget);
-              onEnvironments(
-                String(data.get("environments"))
-                  .split(",")
-                  .map((name) => name.trim())
-                  .filter(Boolean),
-              );
-            }}
-          >
-            <label className="field">
-              <span>{t("environments")}</span>
-              <input
-                name="environments"
-                defaultValue={workspace.catalog.environments.join(", ")}
-              />
-            </label>
-            <button className="button secondary">{t("save")}</button>
-          </form>
-        </div>
+        <EnvironmentsPanel
+          environments={workspace.catalog.environment_details}
+          refresh={refresh}
+        />
       )}
       {section === "connections" && (
         <ConnectionsPanel

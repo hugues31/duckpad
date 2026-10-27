@@ -75,6 +75,114 @@ def test_environment_names_are_validated_and_normalized(client):
     assert response.json()["environments"] == ["dev", "prod", "qa-1"]
 
 
+def test_environment_metadata_preserves_connections_and_survives_catalog_reload(app, client, worktree):
+    from duckpad.catalog import Catalog
+
+    store = app.state.services.store
+    original = client.get("/api/workspace").json()["catalog"]
+    assert [e["confirm_before_run"] for e in original["environment_details"]] == [False, True]
+    before = client.get(f"/api/worktrees/{worktree}").json()["commit"]
+    settings = {"label": " Production ", "color": "#123abc", "confirm_before_run": True}
+    response = client.put("/api/environments/prod", json=settings)
+    assert response.status_code == 200, response.text
+    environment = {**settings, "label": "Production", "id": "prod"}
+    assert response.json()["environment_details"][1] == environment
+    assert response.json()["connections"] == original["connections"]
+    assert client.get(f"/api/worktrees/{worktree}").json()["commit"] == before
+    assert Catalog(store).environment("prod") == environment
+    # Older clients can still send environment identifiers without losing metadata.
+    assert client.put("/api/environments", json=["dev", "prod"]).status_code == 200
+    assert Catalog(store).environment("prod") == environment
+
+
+def test_environment_creation_deletion_and_recreation_do_not_copy_secrets(app, client):
+    settings = {"id": "qa", "label": "Quality assurance", "color": "#345678", "confirm_before_run": True}
+    response = client.post("/api/environments", json=settings)
+    assert response.status_code == 200, response.text
+    assert response.json()["connections"][0]["environments"]["qa"] == {}
+    assert client.post("/api/environments", json=settings).status_code == 409
+    store = app.state.services.store
+    connection = store.get("connection", "local")
+    connection["environments"]["qa"] = {"root": "private-connection-value"}
+    store.put("connection", "local", connection)
+    store.put("run", "historic", {"environment": "qa"})
+    response = client.delete("/api/environments/qa")
+    assert response.status_code == 200
+    assert "qa" not in response.json()["environments"]
+    assert "qa" not in store.get("connection", "local")["environments"]
+    assert store.get("run", "historic")["environment"] == "qa"
+    assert client.delete("/api/environments/qa").status_code == 404
+    assert client.post("/api/environments", json=settings).status_code == 200
+    assert store.get("connection", "local")["environments"]["qa"] == {}
+    assert client.delete("/api/environments/qa").status_code == 200
+    assert client.delete("/api/environments/prod").status_code == 200
+    assert client.delete("/api/environments/dev").status_code == 409
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"id": "../escape"},
+        {"id": ""},
+        {"label": " "},
+        {"label": "x" * 81},
+        {"color": "red"},
+        {"color": "#12345g"},
+        {"confirm_before_run": "false"},
+    ],
+)
+def test_invalid_environment_settings_leave_catalog_unchanged(client, changes):
+    original = client.get("/api/workspace").json()["catalog"]
+    settings = {"id": "qa", "label": "QA", "color": "#abcdef", "confirm_before_run": False}
+    response = client.post("/api/environments", json={**settings, **changes})
+    assert response.status_code == 422, response.text
+    assert client.get("/api/workspace").json()["catalog"] == original
+
+
+def test_ui_runs_require_current_environment_confirmation_each_time(app, client, worktree):
+    from helpers import wait_run
+
+    store, engine = app.state.services.store, app.state.services.engine
+    body = {"environment": "prod", "entry_point": "ui"}
+    path = f"/api/worktrees/{worktree}/runs"
+    for _ in range(2):
+        count = len(store.all("run"))
+        response = client.post(path, json=body)
+        assert response.status_code == 409
+        assert response.json()["detail"]["confirmation_required"]["id"] == "prod"
+        assert len(store.all("run")) == count
+        assert not engine.active
+        response = client.post(path, json={**body, "confirmed": True})
+        assert response.status_code == 200, response.text
+        wait_run(store, response.json())
+    # Turning the option on affects already-open clients, even for a node run.
+    settings = {"label": "Development", "color": "#abcdef", "confirm_before_run": True}
+    assert client.put("/api/environments/dev", json=settings).status_code == 200
+    assert client.post(path, json={"entry_point": "ui", "node": "source"}).status_code == 409
+    assert (
+        client.put("/api/environments/dev", json={**settings, "confirm_before_run": False}).status_code == 200
+    )
+    response = client.post(path, json={"entry_point": "ui"})
+    assert response.status_code == 200
+    wait_run(store, response.json())
+    # Programmatic clients retain their explicit, non-interactive launch contract.
+    response = client.post(path, json={"environment": "prod"})
+    assert response.status_code == 200
+    wait_run(store, response.json())
+
+
+def test_deleting_environment_during_execution_keeps_configuration(app, client, worktree):
+    engine = app.state.services.engine
+    original = client.get("/api/workspace").json()["catalog"]
+    engine.active[worktree] = {"id": "active"}
+    try:
+        response = client.delete("/api/environments/prod")
+        assert response.status_code == 409
+        assert client.get("/api/workspace").json()["catalog"] == original
+    finally:
+        engine.active.clear()
+
+
 def test_library_lists_components_without_a_name(client, worktree):
     snapshot = client.get(f"/api/worktrees/{worktree}").json()
     files = {**snapshot["files"], "components/unnamed.json": '{"nodes": [], "edges": []}\n'}
