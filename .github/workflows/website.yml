@@ -70,7 +70,7 @@ jobs:
         with:
           name: duckpad-website
           path: website/dist/
-      - uses: actions/upload-pages-artifact@v4
+      - uses: actions/upload-pages-artifact@v5
         if: github.ref == 'refs/heads/main' && vars.PUBLISH_WEBSITE == 'true'
         with:
           path: website/dist/
