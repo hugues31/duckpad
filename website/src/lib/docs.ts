@@ -18,6 +18,11 @@ export const sections = [
         title: "Installation & accounts",
         description: "Set up an instance, invite your team and manage access.",
       },
+      {
+        slug: "sso",
+        title: "Single sign-on",
+        description: "Connect your identity provider with OpenID Connect.",
+      },
     ],
   },
   {
@@ -62,12 +67,6 @@ export const sections = [
         slug: "validation",
         title: "Validation & performance",
         description: "Measured results, reproducible checks and their scope.",
-      },
-      {
-        slug: "execution_service",
-        title: "Execution service",
-        description:
-          "The scheduling decision and the current execution contract.",
       },
       {
         slug: "website",

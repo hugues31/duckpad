@@ -1,4 +1,5 @@
 import { PasswordForm } from "./Administration";
+import SSOSettings from "./SSOSettings";
 import { useT } from "./i18n";
 import { PreferenceButtons, type Preferences } from "./preferences";
 import type { Workspace } from "./types";
@@ -55,7 +56,14 @@ export default function SettingsPage({
           </form>
         </div>
       )}
-      <PasswordForm onChanged={onPasswordChanged} />
+      {workspace.user.role === "admin" && <SSOSettings />}
+      {workspace.user.auth_method === "oidc" ? (
+        <div className="settings-card">
+          <p>{t("ssoPasswordManaged")}</p>
+        </div>
+      ) : (
+        <PasswordForm onChanged={onPasswordChanged} />
+      )}
       <div className="settings-card">
         <h2>{t("preferences")}</h2>
         <p className="muted">{t("localPreferences")}</p>

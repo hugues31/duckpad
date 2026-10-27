@@ -118,6 +118,9 @@ export function UsersPage({ refresh }: { refresh: () => Promise<unknown> }) {
                 <tr key={user.id}>
                   <td>
                     <strong>{user.username}</strong>
+                    {user.auth_method === "oidc" && (
+                      <small className="muted"> · SSO</small>
+                    )}
                   </td>
                   <td>
                     <RoleSelect
@@ -139,7 +142,12 @@ export function UsersPage({ refresh }: { refresh: () => Promise<unknown> }) {
                     <div className="row gap">
                       <button
                         className="button secondary small"
-                        disabled={busy}
+                        disabled={busy || user.auth_method === "oidc"}
+                        title={
+                          user.auth_method === "oidc"
+                            ? t("ssoPasswordManaged")
+                            : undefined
+                        }
                         onClick={() => open({ kind: "password", user })}
                       >
                         {t("resetPassword")}
