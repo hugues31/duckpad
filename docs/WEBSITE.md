@@ -6,6 +6,13 @@ self-hosted; videos load only on request. Navigation, content and links work
 without JavaScript. Motion respects `prefers-reduced-motion` and native page
 transitions progressively enhance supported browsers.
 
+The header's GitHub badge reads the repository's star count once per static
+build, using `GITHUB_TOKEN` when available. If GitHub is unreachable or rate
+limited, it keeps a working "Star" link without inventing a count. The badge
+needs no browser request. Homepage entrances and scroll reveals are progressive
+enhancements; reduced motion disables them, and content stays visible without
+JavaScript.
+
 ## Work on the site
 
 Use **Node.js 22.23.4+**. From the repository root:

@@ -2,6 +2,8 @@
 import "@fontsource-variable/manrope";
 import "../styles/global.css";
 import Mark from "../components/Mark.astro";
+import ThemeToggle from "../components/ThemeToggle.astro";
+import GitHubStars from "../components/GitHubStars.astro";
 import { url } from "../lib/docs";
 interface Props {
   title: string;
@@ -35,14 +37,16 @@ const canonical = Astro.site
     <link rel="icon" type="image/svg+xml" href={url("favicon.svg")} />
     <title>{title}</title>
     <script is:inline>
+      let theme;
       try {
-        const theme = localStorage.getItem("duckpad-site-theme");
-        document.documentElement.dataset.theme =
-          theme ||
-          (matchMedia("(prefers-color-scheme: dark)").matches
-            ? "dark"
-            : "light");
+        theme = localStorage.getItem("duckpad-site-theme");
       } catch {}
+      document.documentElement.dataset.theme =
+        theme === "light" || theme === "dark"
+          ? theme
+          : matchMedia("(prefers-color-scheme: dark)").matches
+            ? "dark"
+            : "light";
     </script>
   </head>
   <body class:list={[{ "docs-page": docs }]}>
@@ -65,18 +69,10 @@ const canonical = Astro.site
         <a href={url("releases/")} aria-current={releases ? "page" : undefined}>
           Releases
         </a>
-        <a href="https://github.com/hugues31/duckpad">
-          GitHub <span aria-hidden="true">↗</span>
-        </a>
+        <GitHubStars />
       </nav>
       <div class="header-actions">
-        <button
-          class="theme-toggle icon-button"
-          aria-label="Switch color theme"
-          title="Switch color theme"
-        >
-          <span aria-hidden="true">◐</span>
-        </button>
+        <ThemeToggle />
         <a class="button small" href={url("docs/quickstart/")}>
           Get started <span aria-hidden="true">↗</span>
         </a>
@@ -88,7 +84,7 @@ const canonical = Astro.site
             <a href={url("#workflow")}>Why Duckpad</a>
             <a href={url("docs/quickstart/")}>Documentation</a>
             <a href={url("releases/")}>Releases</a>
-            <a href="https://github.com/hugues31/duckpad">GitHub ↗</a>
+            <GitHubStars />
           </nav>
         </details>
       </div>
@@ -117,18 +113,6 @@ const canonical = Astro.site
       <small>Built with DuckDB. Made for the open-source community.</small>
     </footer>
     <script>
-      document
-        .querySelector<HTMLButtonElement>(".theme-toggle")
-        ?.addEventListener("click", () => {
-          const theme =
-            document.documentElement.dataset.theme === "dark"
-              ? "light"
-              : "dark";
-          document.documentElement.dataset.theme = theme;
-          try {
-            localStorage.setItem("duckpad-site-theme", theme);
-          } catch {}
-        });
       document
         .querySelectorAll<HTMLDetailsElement>(".mobile-nav")
         .forEach((menu) => {
