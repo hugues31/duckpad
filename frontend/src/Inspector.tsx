@@ -1,3 +1,4 @@
+import Select from "./Select";
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import {
   ArrowRight,
@@ -44,6 +45,7 @@ export default function Inspector({
   onRun,
   onOpen,
   onEditTemplate,
+  onHistory,
   onClose,
 }: {
   readOnly?: boolean;
@@ -67,6 +69,7 @@ export default function Inspector({
   onRun: () => void;
   onOpen: () => void;
   onEditTemplate: () => void;
+  onHistory: () => void;
   onClose: () => void;
 }) {
   const t = useT();
@@ -193,6 +196,9 @@ export default function Inspector({
           <Play size={16} />
         </button>
       </div>
+      <button className="button secondary small" onClick={onHistory}>
+        {t("elementHistory")}
+      </button>
       <div className="tabs inspector-tabs">
         {TABS.map(([key, Icon]) => (
           <button
@@ -238,7 +244,7 @@ export default function Inspector({
                   return (
                     <label className="field" key={port}>
                       <span>{port}</span>
-                      <select
+                      <Select
                         aria-label={port}
                         value={
                           edge ? `${edge.source}:${edge.sourceHandle}` : ""
@@ -260,7 +266,7 @@ export default function Inspector({
                               ),
                             ),
                           )}
-                      </select>
+                      </Select>
                     </label>
                   );
                 })}

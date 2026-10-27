@@ -7,7 +7,7 @@ Build local DuckDB pipelines on a visual canvas, inspect their results, and expl
 Requires **Python 3.11+ and Git** on `PATH`. Shared SQL execution also requires **Linux with Landlock ABI 2 or later** (Linux 5.19+ with Landlock enabled); unsupported hosts refuse execution rather than running without isolation. Release wheels include the frontend, Monaco and its workers; Node.js is not needed to run the installed application.
 
 ```sh
-pip install ./dist/duckpad-0.1.0-py3-none-any.whl
+pip install ./dist/duckpad-0.2.0-py3-none-any.whl
 duckpad start
 ```
 
@@ -20,6 +20,11 @@ duckpad start --home /path/to/my-instance --port 8765 --no-browser
 ```
 
 Only one backend may own an instance directory at a time. Use separate `--home` directories for independent instances. The default address is `127.0.0.1`. Behind an HTTPS reverse proxy, set `DUCKPAD_SECURE_COOKIES=1` so the session cookie is only sent over HTTPS.
+
+Successful GET requests used for background polling (workspace, resources, worktree
+snapshots, status, and generations) are logged at DEBUG. The default INFO level
+still shows other requests, including failed polling requests. Use
+`duckpad start --log-level debug` to include polling in the server logs.
 
 ## Accounts and project access
 
@@ -62,7 +67,7 @@ Select **Regional revenue**, choose the `report` output, then click a revenue ce
 - Use guided filter, join-key and aggregate forms, or edit their generated SQL expressions.
 - Preview, filter and sort results; explain valid cells with five contributions per page and complete counts.
 - Group nodes into nested components, expose parameters, and import independent copies between projects.
-- Save automatically to Git, inspect diffs, open isolated branches or historical revisions, and explicitly merge changes.
+- Save automatically with descriptive Git subjects, compare versions visually, review merges and synchronize project repositories explicitly.
 - Detect concurrent UI/file edits and resolve recoverable conflicts without losing either proposal.
 - Recompute manually, stop active SQL, retain stale previews after failure, and inspect durable execution history.
 - Configure reusable connections and environments outside project Git, with local, S3 and Oracle presets.
@@ -112,9 +117,11 @@ See the [contributing guide](CONTRIBUTING.md) before opening a pull request.
 
 ## Documentation
 
+- [Configure OIDC single sign-on](docs/SSO.md)
 - [Original MVP specification](docs/SPEC.md)
 - [Release automation and publishing](docs/RELEASING.md)
 - [Multica issue workflow and preview deployment](docs/MULTICA.md)
+- [Visual Git comparisons, reviewed merges and synchronization](docs/GIT.md)
 - [Architecture and execution invariants](docs/ARCHITECTURE.md)
 - [Project files, templates and components](docs/AUTHORING.md)
 - [Lineage coverage and limitations](docs/LINEAGE.md)

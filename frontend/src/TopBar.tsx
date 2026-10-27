@@ -1,3 +1,4 @@
+import Select from "./Select";
 import {
   Database,
   GitBranch,
@@ -9,6 +10,7 @@ import {
 } from "lucide-react";
 import AccountMenu from "./AccountMenu";
 import DuckMark from "./DuckMark";
+import GitSyncButton from "./GitSyncButton";
 import { useT } from "./i18n";
 import type { Preferences } from "./preferences";
 import ResourceMonitor from "./ResourceMonitor";
@@ -42,6 +44,8 @@ export default function TopBar({
   onNewProject,
   onWorktree,
   onNewBranch,
+  onGit,
+  gitVersion,
   onEnvironment,
   onSignOut,
 }: {
@@ -58,6 +62,8 @@ export default function TopBar({
   onNewProject: () => void;
   onWorktree: (worktree: string) => void;
   onNewBranch: () => void;
+  onGit: () => void;
+  gitVersion: number;
   onEnvironment: (environment: string) => void;
   onSignOut: () => void;
 }) {
@@ -105,7 +111,7 @@ export default function TopBar({
           </span>
           <div>
             <span className="eyebrow">{t("workspace")}</span>
-            <select
+            <Select
               aria-label={t("activeProject")}
               value={
                 snapshot?.worktree.project ||
@@ -125,7 +131,7 @@ export default function TopBar({
                   {p.name}
                 </option>
               ))}
-            </select>
+            </Select>
           </div>
           <button
             className="icon"
@@ -141,7 +147,7 @@ export default function TopBar({
           <>
             <div className="branch-picker">
               <GitBranch size={14} />
-              <select
+              <Select
                 aria-label={t("branch")}
                 value={worktree}
                 onChange={(e) => onWorktree(e.target.value)}
@@ -153,7 +159,7 @@ export default function TopBar({
                       {w.branch}
                     </option>
                   ))}
-              </select>
+              </Select>
               <button
                 className="icon"
                 title={t("newBranch")}
@@ -163,10 +169,16 @@ export default function TopBar({
                 <Plus size={13} />
               </button>
             </div>
+            <GitSyncButton
+              worktree={worktree}
+              commit={snapshot.commit}
+              version={gitVersion}
+              onClick={onGit}
+            />
             <span className="header-divider" />
             <label className="environment-picker">
               <span className={`env-dot ${environment}`} />
-              <select
+              <Select
                 aria-label={t("environment")}
                 value={environment}
                 onChange={(e) => onEnvironment(e.target.value)}
@@ -174,7 +186,7 @@ export default function TopBar({
                 {workspace?.catalog.environments.map((env: string) => (
                   <option key={env}>{env}</option>
                 ))}
-              </select>
+              </Select>
             </label>
           </>
         )}

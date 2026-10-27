@@ -1,3 +1,4 @@
+import Select from "./Select";
 import { useEffect, useRef, useState } from "react";
 import { useT } from "./i18n";
 import type { Json, Snapshot } from "./types";
@@ -48,7 +49,7 @@ export default function NodeDocumentation({
   }
   return (
     <>
-      <select
+      <Select
         value={kind}
         onChange={(e) => setKind(e.target.value)}
         aria-label={t("documentation")}
@@ -56,9 +57,9 @@ export default function NodeDocumentation({
         <option value="nodes">{t("nodeDocs")}</option>
         <option value="datasets">{t("datasetDocs")}</option>
         <option value="columns">{t("columnDocs")}</option>
-      </select>
+      </Select>
       {kind === "columns" && (
-        <select
+        <Select
           value={column}
           onChange={(e) => setColumn(e.target.value)}
           aria-label={t("chooseColumn")}
@@ -67,7 +68,7 @@ export default function NodeDocumentation({
           {preview?.columns.map((c: Json) => (
             <option key={c.name}>{c.name}</option>
           ))}
-        </select>
+        </Select>
       )}
       <textarea
         readOnly={snapshot.role === "reader"}

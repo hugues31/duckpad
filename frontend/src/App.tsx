@@ -5,11 +5,12 @@ import {
   useState,
   type CSSProperties,
 } from "react";
-import { AlertCircle, GitBranch, Loader2 } from "lucide-react";
+import { AlertCircle, Loader2 } from "lucide-react";
 import { api, ApiError, send, withQuery } from "./api";
 import { UsersPage, ProjectSettings } from "./Administration";
 import Canvas from "./Canvas";
 import CanvasHeader from "./CanvasHeader";
+import CodePanel from "./CodePanel";
 import ConnectionsPanel from "./ConnectionsPanel";
 import DocumentationPanel from "./DocumentationPanel";
 import DuckMark from "./DuckMark";
@@ -91,10 +92,12 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
   );
   const currentWorktree = useRef(worktree);
   currentWorktree.current = worktree;
+  const snapshotEpoch = useRef(0);
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [environment, setEnvironment] = useState("dev");
   const [area, setArea] = useState<Area>(worktree ? "pipelines" : "projects");
   const [tab, setTab] = useState<WorkspaceTab>("flow");
+  const [codeDirty, setCodeDirty] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
   const [path, setPath] = useState<PathPart[]>([]);
   const [selection, setSelection] = useState<string[]>([]);
@@ -102,6 +105,7 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
   const [preview, setPreview] = useState<Json | null>(null);
   const [cell, setCell] = useState<Json | null>(null);
   const [modal, setModal] = useState<ModalState | null>(null);
+  const [gitVersion, setGitVersion] = useState(0);
   const [saving, setSaving] = useState(false);
   const [busy, setBusy] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(
@@ -136,9 +140,11 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
   const load = useCallback(
     async (id = worktree) => {
       if (!id) return;
+      const epoch = snapshotEpoch.current;
       const value = await api<Snapshot>(`/worktrees/${id}`);
-      // Ignore a late response for a worktree that is no longer open.
-      if (id !== currentWorktree.current) return;
+      // Discard reads started before a save completed or the worktree changed.
+      if (id !== currentWorktree.current || epoch !== snapshotEpoch.current)
+        return;
       setSnapshot((old) =>
         old?.worktree.id === value.worktree.id &&
         old?.revision === value.revision &&
@@ -289,9 +295,11 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
         `/worktrees/${base.worktree.id}`,
         send({ revision: base.revision, bundle: value }, "PUT"),
       );
+      snapshotEpoch.current++;
       await load(base.worktree.id);
       return saved;
     } catch (e) {
+      snapshotEpoch.current++;
       await load(base.worktree.id);
       notify((e as Error).message, true);
       throw e;
@@ -501,41 +509,41 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
       },
     });
   }
-  function showFiles(base: Snapshot) {
+  async function saveFiles(files: Record<string, string>, base: Snapshot) {
+    if (!canEdit) throw new Error(t("readerNotice"));
+    setSaving(true);
+    try {
+      await api(
+        `/worktrees/${base.worktree.id}`,
+        send({ revision: base.revision, files }, "PUT"),
+      );
+    } finally {
+      try {
+        await load(base.worktree.id);
+      } finally {
+        setSaving(false);
+      }
+    }
+  }
+  function showGit(
+    mode: "compare" | "branches" | "sync" = "compare",
+    commit?: string,
+    entity?: string,
+  ) {
+    if (!snapshot) return;
     setModal({
-      kind: "files",
-      readOnly: !canEdit,
-      snapshot: base,
-      save: async (files) => {
-        await api(
-          `/worktrees/${worktree}`,
-          send({ revision: base.revision, files }, "PUT"),
-        );
+      kind: "git",
+      worktree,
+      role: snapshot.role,
+      mode,
+      commit,
+      entity,
+      onChanged: async () => {
+        setGitVersion((value) => value + 1);
+        await refreshWorkspace();
         await load();
       },
-    });
-  }
-  async function compare(base: Snapshot) {
-    const comparison = await api(`/worktrees/${worktree}/merge`);
-    setModal({
-      kind: "files",
-      title: t("mergeReview"),
-      description:
-        t("mergeHint") +
-        (comparison.conflicts.length
-          ? " · " + comparison.conflicts.join(", ")
-          : ""),
-      snapshot: base,
-      initialFiles: comparison.files,
-      save: async (files) => {
-        await api(
-          `/worktrees/${worktree}/merge`,
-          send({ ...comparison, files }),
-        );
-        await refreshWorkspace();
-        setWorktree(comparison.target.id);
-        notify(t("mergeComplete"));
-      },
+      onOpen: setWorktree,
     });
   }
   function resolveConflict(conflict: Json) {
@@ -592,14 +600,7 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
     });
   }
   async function showDiff(commit: string) {
-    const diff = await api(`/worktrees/${worktree}/diff/${commit}`);
-    setModal({
-      kind: "editor",
-      title: t("diff"),
-      value: diff.diff,
-      language: "diff",
-      readOnly: true,
-    });
+    showGit("compare", commit);
   }
 
   if (authenticated === null)
@@ -648,6 +649,8 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
           onNewProject={newProject}
           onWorktree={setWorktree}
           onNewBranch={() => newBranch()}
+          onGit={() => showGit("sync")}
+          gitVersion={gitVersion}
           onEnvironment={(value) => {
             setEnvironment(value);
             setCell(null);
@@ -740,12 +743,12 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
               onProjectSettings={() => setArea("projectSettings")}
               tab={tab}
               saving={saving}
+              dirty={codeDirty}
               branch={snapshot.worktree.branch}
               active={active}
               canRun={!busy && !!bundle}
               onTab={setTab}
-              onFiles={() => showFiles(snapshot)}
-              onMerge={() => safe(() => compare(snapshot))}
+              onMerge={() => showGit("branches")}
               onRun={() => run()}
               onStop={() =>
                 safe(async () => {
@@ -761,14 +764,23 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
               snapshot={snapshot}
               active={active}
               onResolve={() => resolveConflict(snapshot.conflicts[0])}
-              onViewFiles={() => showFiles(snapshot)}
+              onViewFiles={() => setTab("code")}
             />
-            {tab === "history" ? (
+            <CodePanel
+              key={worktree}
+              hidden={tab !== "code"}
+              readOnly={!canEdit}
+              snapshot={snapshot}
+              onSave={saveFiles}
+              onDirtyChange={setCodeDirty}
+            />
+            {tab === "code" ? null : tab === "history" ? (
               <HistoryPanel
                 readOnly={!canEdit}
                 worktree={worktree}
                 onDiff={(commit) => safe(() => showDiff(commit))}
                 onRevision={newBranch}
+                onCompare={() => showGit()}
               />
             ) : tab === "documentation" && bundle ? (
               <DocumentationPanel
@@ -836,13 +848,18 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
                       selected={selected}
                       onSelect={select}
                       onMove={(nodes) =>
-                        safe(() =>
-                          updateGraph((g) => {
-                            g.nodes = g.nodes.map(
-                              (n) => nodes.find((m) => m.id === n.id) || n,
-                            );
-                          }),
-                        )
+                        updateGraph((g) => {
+                          const positions = new Map(
+                            nodes.map((n) => [n.id, n.position]),
+                          );
+                          g.nodes = g.nodes.map((n) => ({
+                            ...n,
+                            position: positions.get(n.id) ?? n.position,
+                          }));
+                        }).catch((error) => {
+                          notify(error.message, true);
+                          throw error;
+                        })
                       }
                       onConnect={(connection) =>
                         safe(() =>
@@ -878,15 +895,7 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
                       }}
                       onData={setPreview}
                     />
-                  ) : (
-                    <div className="canvas-footer">
-                      <span>
-                        <GitBranch size={13} />
-                        {t("autoVersioned")}
-                      </span>
-                      <span>{t("selectionHint")}</span>
-                    </div>
-                  )}
+                  ) : null}
                 </main>
                 <div
                   className="inspector-layer"
@@ -955,6 +964,13 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
                       onRun={() => run(fullNode)}
                       onOpen={() => openComponent(node.id)}
                       onEditTemplate={editTemplate}
+                      onHistory={() =>
+                        showGit(
+                          "compare",
+                          undefined,
+                          `${path.length ? `component/${path[path.length - 1].definition}/` : ""}node/${node.id}`,
+                        )
+                      }
                       onClose={() => setInspectorOpen(false)}
                     />
                   ) : null}
@@ -979,7 +995,7 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
                 <p>{t("invalidHint")}</p>
                 <button
                   className="button primary"
-                  onClick={() => showFiles(snapshot)}
+                  onClick={() => setTab("code")}
                 >
                   {t("viewFiles")}
                 </button>
