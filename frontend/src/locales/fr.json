@@ -1,4 +1,8 @@
 {
+  "addConnectedNode": "Ajouter un nœud connecté",
+  "compatibleNodes": "Nœuds compatibles",
+  "noCompatibleNodes": "Aucun nœud compatible trouvé.",
+  "connectionPaletteHint": "↑ ↓ pour parcourir · Entrée pour ajouter · Échap pour annuler",
   "workspace": "Espace de travail",
   "resourceMonitor": "Utilisation des ressources",
   "resourceScope": "Machine serveur entière · 2 dernières minutes",
