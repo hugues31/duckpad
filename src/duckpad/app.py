@@ -89,7 +89,7 @@ def create_app(home: Path, watch=True):
     def authorize(request, user):
         parts = request.url.path.strip("/").split("/")
         route = parts[1] if len(parts) > 1 else ""
-        if route in ("users", "identity", "environments", "catalog", "resources", "sso"):
+        if route in ("users", "identity", "environments", "catalog", "resources", "sso", "extensions"):
             access.instance_admin(user)
         elif route == "projects" and len(parts) >= 3:
             access.require(user, parts[2], "reader" if request.method == "GET" else "admin")
@@ -251,6 +251,14 @@ def create_app(home: Path, watch=True):
     @app.put("/api/identity")
     def identity(data: schemas.Identity):
         return store.put("settings", "identity", data.model_dump())
+
+    @app.get("/api/extensions/settings")
+    def extension_settings():
+        return engine.extension_settings()
+
+    @app.put("/api/extensions/settings")
+    def save_extension_settings(data: schemas.ExtensionSettings):
+        return engine.configure_extensions(data.allow_unsigned_extensions)
 
     @app.get("/api/catalog")
     def get_catalog():

@@ -116,6 +116,12 @@ uv run python scripts/integration.py s3 --output docs/validation/s3.json
 
 Install Oracle Instant Client 19 or newer, Basic or Basic Light, compatible with the extension and platform. On Linux, make its shared libraries discoverable and install the platform's `libaio`/`libnsl` prerequisites. The extension build must match the exact DuckDB ABI. The application uses a private extension directory, so an unrelated unsigned developer extension in the user's global DuckDB cache cannot be loaded accidentally.
 
+OraDuck's GitHub release binaries are unsigned. To use a trusted release archive
+offline, an instance admin can enable **Allow unsigned extensions** under
+**Instance settings → General → DuckDB extensions**, then extract the matching
+binary into the instance cache. Follow the [OraDuck offline recipe](OFFLINE_EXTENSIONS.md#use-a-trusted-unsigned-release-oraduck).
+This opt-in does not replace Oracle Instant Client or binary compatibility checks.
+
 The preset creates a temporary secret with `TYPE oraduck`, `USER`, `PASSWORD` and `DSN`, then uses `ATTACH` for read-only access. Source nodes select a connection, schema and resource. Export nodes emit `COPY (SELECT ...) TO ... (FORMAT oraduck, CONNECTION ...)` targeting an existing Oracle table; the columns expression supports explicit mapping. The destination table must already exist and be compatible with the selected columns.
 
 Before each manual run, relevant attachments are recreated to refresh schema metadata. Materialized Duckpad results remain independent of those attachments. Export behavior is native OraDuck behavior: there is no hidden truncate, table recreation or extra write. The integration test compares native and generated exports, checks repeated appends, adds a source column and row between launches, then verifies refresh and cell lineage through the same logical connection.

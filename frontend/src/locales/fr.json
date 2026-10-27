@@ -455,5 +455,11 @@
   "deleteEnvironmentHint": "L’environnement et ses valeurs de connexion seront supprimés. L’historique est conservé. Arrêtez les exécutions en cours avant de supprimer.",
   "confirmRun": "Confirmer l’exécution",
   "confirmAndRun": "Confirmer et lancer",
-  "confirmRunHint": "Cet environnement demande confirmation avant chaque lancement. Démarrer l’exécution suivante ?"
+  "confirmRunHint": "Cet environnement demande confirmation avant chaque lancement. Démarrer l’exécution suivante ?",
+  "extensionSettings": "Extensions DuckDB",
+  "allowUnsignedExtensions": "Autoriser les extensions non signées",
+  "unsignedExtensionsHint": "Les extensions natives exécutent du code sur le serveur. Activez cette option uniquement pour des binaires de confiance ; elle désactive la vérification des signatures d’extensions pour cette instance.",
+  "extensionSettingsApplyHint": "Arrêtez les exécutions en cours avant de modifier cette option. Un changement enregistré efface les résultats actuels ; relancez vos pipelines. Aucun redémarrage du serveur n’est nécessaire.",
+  "saveExtensionSettings": "Enregistrer les paramètres d’extensions",
+  "extensionSettingsSaved": "Paramètres d’extensions enregistrés."
 }
