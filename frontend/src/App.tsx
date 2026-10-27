@@ -60,6 +60,8 @@ import ProjectDashboard from "./ProjectDashboard";
 import UserSettings from "./UserSettings";
 import { Toast, useToast } from "./Toast";
 import TopBar from "./TopBar";
+import InstanceSearch from "./Search";
+import { useSearchShortcut } from "./searchShortcuts";
 import type {
   Bundle,
   FlowNode,
@@ -143,6 +145,15 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
   const [codeDraftVersion, setCodeDraftVersion] = useState(0);
   const [documentationDraftVersion, setDocumentationDraftVersion] = useState(0);
   const [selected, setSelected] = useState<string | null>(null);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const openSearch = useCallback(() => setSearchOpen(true), []);
+  useSearchShortcut(authenticated && workspace ? "k" : undefined, openSearch);
+  const handledSearch = useRef("");
+  const [focusRequest, setFocusRequest] = useState<{
+    id: string;
+    key: string;
+  } | null>(null);
+  const expireSession = useCallback(() => setAuthenticated(false), []);
   const [path, setPath] = useState<PathPart[]>([]);
   const [selection, setSelection] = useState<string[]>([]);
   const [statuses, setStatuses] = useState<Statuses>(EMPTY_STATUSES);
@@ -235,6 +246,8 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
     setLastWorktree(worktree);
     setSnapshot(null);
     setSelected(null);
+    setFocusRequest(null);
+    handledSearch.current = "";
     setSelection([]);
     setPath([]);
     setCell(null);
@@ -296,6 +309,7 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
   }, [worktree, environment, authenticated, load]);
   useEffect(() => {
     if (!authenticated) {
+      setSearchOpen(false);
       setWorkspace(null);
       setSnapshot(null);
       setStatuses({ nodes: {}, active: null });
@@ -383,6 +397,7 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
   );
 
   const select = (id: string | null) => {
+    setFocusRequest(null);
     setSelected(id);
     setCell(null);
     setPreview(null);
@@ -392,6 +407,53 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
       if (!window.matchMedia(WIDE_LAYOUT).matches) setPaletteOpen(false);
     }
   };
+  useEffect(() => {
+    if (!snapshot?.bundle || area !== "pipelines" || tab !== "flow") return;
+    const target = new URLSearchParams(location.search).get("node");
+    if (handledSearch.current === location.key) return;
+    if (!target && !location.state?.searchResult) return;
+    handledSearch.current = location.key;
+    if (!target) {
+      setPath([]);
+      select(null);
+      return;
+    }
+    const ids = target.split("::");
+    const nextPath: PathPart[] = [];
+    let graph: Graph = snapshot.bundle.flow;
+    for (const instance of ids.slice(0, -1)) {
+      const parent = graph.nodes.find((n) => n.id === instance);
+      const definition =
+        parent?.component && snapshot.bundle.components[parent.component];
+      if (!parent?.component || !definition) {
+        notify(t("searchTargetMissing"), true);
+        return;
+      }
+      nextPath.push({
+        instance,
+        definition: parent.component,
+        label: parent.label || definition.name || instance,
+      });
+      graph = definition as Graph;
+    }
+    const id = ids[ids.length - 1];
+    if (!graph.nodes.some((node) => node.id === id)) {
+      notify(t("searchTargetMissing"), true);
+      return;
+    }
+    setPath(nextPath);
+    select(id);
+    setFocusRequest({ id, key: location.key });
+  }, [
+    snapshot,
+    area,
+    tab,
+    location.key,
+    location.search,
+    location.state,
+    notify,
+    t,
+  ]);
   async function saveBundle(value: Bundle, base = snapshot!) {
     if (!canEdit) throw new Error(t("readerNotice"));
     setSaving(true);
@@ -791,6 +853,7 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
               : "/projects"
           }
           onHelp={() => safe(showAbout)}
+          onSearch={openSearch}
           onOpenProject={openProject}
           onNewProject={newProject}
           onWorktree={setWorktree}
@@ -808,6 +871,14 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
             })
           }
         />
+        {searchOpen && workspace && (
+          <InstanceSearch
+            workspace={workspace}
+            environment={environment}
+            onClose={() => setSearchOpen(false)}
+            onExpired={expireSession}
+          />
+        )}
         {!workspace || area === "home" ? (
           <div className="startup" role="status" aria-label={t("loading")}>
             <Loader2 className="spin" />
@@ -1012,6 +1083,7 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
                         worktree + ":" + path.map((p) => p.instance).join("/")
                       }
                       selected={selected}
+                      focusRequest={focusRequest}
                       onSelect={select}
                       onMove={(nodes) =>
                         updateGraph((g) => {

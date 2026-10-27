@@ -21,6 +21,7 @@ from .components import group, import_definition
 from .example import create_example
 from .oidc import CALLBACK_PATH, OIDC, TRANSACTION_LIFETIME, OIDCSettings
 from .resources import resource_usage
+from .search import search_instance
 from .services import Services
 from .templates import parse_templates
 from .util import Problem, clean, uid
@@ -109,6 +110,7 @@ def create_app(home: Path, watch=True):
             "session",
             "logout",
             "workspace",
+            "search",
             "projects",
             "example",
             "library",
@@ -221,6 +223,14 @@ def create_app(home: Path, watch=True):
         return resource_usage()
 
     # Instance
+
+    @app.get("/api/search")
+    def search(
+        request: Request,
+        q: Annotated[str, Query(max_length=200)] = "",
+        limit: Annotated[int, Query(ge=1, le=100)] = 50,
+    ):
+        return search_instance(projects, access, request.state.user, q, limit)
 
     @app.get("/api/workspace")
     def workspace(request: Request):
