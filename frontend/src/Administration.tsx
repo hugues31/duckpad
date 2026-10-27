@@ -68,14 +68,13 @@ export function UsersPage({ refresh }: { refresh: () => Promise<unknown> }) {
     setModal(value);
   }
   return (
-    <section className="full-panel administration-page">
+    <section className="administration-page">
       <div className="administration-heading">
         <div>
-          <span className="eyebrow">{t("instance")}</span>
-          <h1>
+          <h2>
             <Users size={28} />
             {t("users")}
-          </h1>
+          </h2>
           <p className="muted">{t("usersDescription")}</p>
         </div>
         <button

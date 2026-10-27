@@ -51,10 +51,10 @@ See the [contributing guide](../CONTRIBUTING.md) for development checks.
 
 ## Accounts and project access
 
-The initial `admin` account manages the instance. Open **Users** to create individual
+The initial `admin` account manages the instance. Open **Instance settings → Users and permissions** to create individual
 accounts, reset passwords, change instance roles, or deactivate/reactivate accounts.
 Passwords require at least 12 characters. Users can change their own password in
-**Settings**; resets and deactivations revoke existing sessions.
+**Account menu → User settings**; resets and deactivations revoke existing sessions.
 
 - **Instance Admin** manages accounts, configuration, connections and every project.
 - **Instance Member** sees only their projects and can create private projects.

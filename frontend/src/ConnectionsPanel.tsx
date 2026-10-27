@@ -37,11 +37,10 @@ export default function ConnectionsPanel({
       },
     }));
   return (
-    <section className="full-panel">
+    <section>
       <div className="page-heading">
         <div>
-          <span className="eyebrow">{t("workspace")}</span>
-          <h1>{t("connections")}</h1>
+          <h2>{t("connections")}</h2>
           <p>{t("catalogHint")}</p>
         </div>
         <button

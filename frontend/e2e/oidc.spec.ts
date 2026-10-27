@@ -1,10 +1,5 @@
-import { test, expect, type Page } from "@playwright/test";
-import { signIn } from "./helpers";
-
-async function openSettings(page: Page) {
-  await page.getByRole("button", { name: "Account menu", exact: true }).click();
-  await page.getByRole("menuitem", { name: "Settings", exact: true }).click();
-}
+import { test, expect } from "@playwright/test";
+import { signIn, openInstanceSettings, openUserSettings } from "./helpers";
 
 test("configure OIDC, sign in through a signing provider, administer access and disable SSO", async ({
   page,
@@ -12,7 +7,7 @@ test("configure OIDC, sign in through a signing provider, administer access and 
   baseURL,
 }) => {
   await signIn(page);
-  await openSettings(page);
+  await openInstanceSettings(page, "Single sign-on (OIDC)");
   const settings = page.getByRole("region", { name: "Single sign-on (OIDC)" });
   await settings.getByLabel("Enable single sign-on", { exact: true }).check();
   await settings.getByLabel("Sign-in button label").fill("Test organization");
@@ -34,7 +29,7 @@ test("configure OIDC, sign in through a signing provider, administer access and 
     settings.getByLabel("Client secret", { exact: true }),
   ).toHaveValue("");
   await page.reload();
-  await openSettings(page);
+  await openInstanceSettings(page, "Single sign-on (OIDC)");
   await expect(
     settings.getByLabel("Enable single sign-on", { exact: true }),
   ).toBeChecked();
@@ -68,7 +63,7 @@ test("configure OIDC, sign in through a signing provider, administer access and 
     expect(
       (await (await member.request.get("/api/workspace")).json()).projects,
     ).toEqual([]);
-    await openSettings(member);
+    await openUserSettings(member);
     await expect(
       member.getByRole("region", { name: "Single sign-on (OIDC)" }),
     ).toHaveCount(0);
@@ -76,7 +71,7 @@ test("configure OIDC, sign in through a signing provider, administer access and 
       member.getByText("This account signs in through SSO.", { exact: false }),
     ).toBeVisible();
 
-    await page.getByRole("button", { name: "Users", exact: true }).click();
+    await openInstanceSettings(page, "Users and permissions");
     const row = page.getByRole("row").filter({ hasText: user.username });
     await expect(row).toContainText("SSO");
     await expect(
@@ -127,7 +122,7 @@ test("configure OIDC, sign in through a signing provider, administer access and 
       user.id,
     );
 
-    await openSettings(page);
+    await openInstanceSettings(page, "Single sign-on (OIDC)");
     await settings
       .getByLabel("Enable single sign-on", { exact: true })
       .uncheck();

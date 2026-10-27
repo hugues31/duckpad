@@ -1,6 +1,6 @@
 # Single sign-on with OpenID Connect
 
-Instance administrators can configure one OIDC provider in **Settings → Single
+Instance administrators can configure one OIDC provider in **Instance settings → Single
 sign-on (OIDC)**. Password sign-in remains available. Keep the local administrator
 credentials for recovery if the provider becomes unavailable.
 
