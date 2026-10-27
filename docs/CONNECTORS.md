@@ -73,10 +73,12 @@ already named `xlsx`. Connections and project grants are never added automatical
 New projects include both templates. Existing projects retain their versioned
 templates; create equivalent source/export templates through **New SQL template**
 or copy `load_xlsx` and `export_xlsx` from a new project's Code workspace.
-No Python spreadsheet dependency is needed. The signed extension is installed in
-the instance's extension cache on first use, requiring network access and a build
-compatible with the installed DuckDB version and processor. CSV/Parquet-only
-projects do not load it.
+No Python spreadsheet dependency is needed. When it is not built into the runtime
+or already cached, the signed extension is installed in the instance's extension
+cache on first use, requiring network access and a build compatible with the
+installed DuckDB version and processor. For disconnected deployments, follow the
+[offline extension guide](OFFLINE_EXTENSIONS.md) to provision the cache in advance.
+CSV/Parquet-only projects do not load it.
 
 Imports use native DuckDB inference: numbers generally become `DOUBLE`, while
 formatted dates, times and booleans retain their inferred types. Inconsistent cells
@@ -129,6 +131,10 @@ uv run python scripts/integration.py oracle --output docs/validation/oracle.json
 The script creates uniquely named disposable test tables and drops only those tables in its cleanup. Credentials are never included in its report. See the [OraDuck documentation](https://raw.githubusercontent.com/hugues31/oraduck/main/README.md) for deployment prerequisites.
 
 ## Add another connector
+
+For air-gapped instances, [prepare and verify an offline extension cache](OFFLINE_EXTENSIONS.md)
+before using connectors that need extensions. This applies to core and community
+extensions; the cache belongs to the backend instance, outside project Git.
 
 ```json
 {
