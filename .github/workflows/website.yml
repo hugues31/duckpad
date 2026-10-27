@@ -1,0 +1,96 @@
+name: Website and product demonstrations
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+  workflow_run:
+    workflows: [Release Duckpad]
+    types: [completed]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: website-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    name: Record, build and verify the documentation
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      pages: read
+    env:
+      ASTRO_TELEMETRY_DISABLED: '1'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.23.4'
+          cache: npm
+          cache-dependency-path: |
+            frontend/package-lock.json
+            website/package-lock.json
+      - uses: astral-sh/setup-uv@v7
+      - run: uv sync --locked --python 3.12
+      - run: npm ci --prefix frontend
+      - run: npm ci --prefix website
+      - run: npm run build --prefix frontend
+      - run: npm exec --prefix frontend -- playwright install --with-deps chromium
+      - name: Regenerate screenshots and the captioned walkthrough
+        run: npm run docs:capture --prefix frontend
+      - uses: actions/configure-pages@v5
+        id: pages
+        if: vars.PUBLISH_WEBSITE == 'true'
+      - name: Build static documentation
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          SITE_ORIGIN: ${{ steps.pages.outputs.origin }}
+          WEBSITE_BASE_PATH: ${{ vars.PUBLISH_WEBSITE == 'true' && format('{0}/', steps.pages.outputs.base_path) || '/duckpad/' }}
+        run: |
+          npm run format:check --prefix website
+          npm run check --prefix website
+          npm test --prefix website
+          npm run build --prefix website
+      - name: Check links, search, media and responsive navigation
+        env:
+          WEBSITE_BASE_PATH: ${{ vars.PUBLISH_WEBSITE == 'true' && format('{0}/', steps.pages.outputs.base_path) || '/duckpad/' }}
+        run: npm run docs:test --prefix frontend
+      - uses: actions/upload-artifact@v7
+        if: github.event_name == 'pull_request' || vars.PUBLISH_WEBSITE != 'true'
+        with:
+          name: duckpad-website
+          path: website/dist/
+      - uses: actions/upload-pages-artifact@v4
+        if: github.ref == 'refs/heads/main' && vars.PUBLISH_WEBSITE == 'true'
+        with:
+          path: website/dist/
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: documentation-browser-diagnostics
+          path: frontend/test-results/
+
+  deploy:
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && vars.PUBLISH_WEBSITE == 'true'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Publish the verified site
+        id: deployment
+        uses: actions/deploy-pages@v4
