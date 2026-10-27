@@ -14,7 +14,7 @@ from sqlglot.optimizer.qualify import qualify
 from .datasets import Dataset
 from .materialize import drop_relations, plan_materialization, publish_view
 from .sqlast import has_filtering_join, has_grouping_sets, is_volatile, sql
-from .util import digest, literal, qi
+from .util import Problem, digest, literal, qi
 
 
 class Coverage(Exception):
@@ -210,6 +210,8 @@ class TraceQuery:
             raise Coverage("Grouping sets, ROLLUP and CUBE provenance is not yet supported.")
         expressions = [unalias(e) for e in tree.expressions]
         target = expressions[column_index]
+        self.target = target
+        self.tree = tree
         self.expression = sql(target)
         output_names = [f"_dp_value_{i}" for i in range(len(expressions))]
         projections = [f"{sql(e)} AS {qi(n)}" for e, n in zip(expressions, output_names, strict=True)]
@@ -350,6 +352,108 @@ class TraceQuery:
             self.from_matched(conditions, matched, row_names),
             None,
         )
+
+    def describe(self, response):
+        """Describe the captured expression without inferring operations from equal values."""
+        target = getattr(self, "target", None)
+        if target is None:
+            return {"operation": self.kind, "formula": self.expression, "passthrough": False}
+
+        predicates = []
+        if self.tree.args.get("where"):
+            predicates.append(self.tree.args["where"].this)
+        predicates.extend(join.args["on"] for join in self.tree.args.get("joins", []) if join.args.get("on"))
+        predicates.extend(filtered.expression.this for filtered in target.find_all(exp.Filter))
+        aliases = {}
+        for column in self.tree.find_all(exp.Column):
+            if column.table:
+                aliases.setdefault(column.name, set()).add(column.table)
+
+        def display_column(node):
+            if isinstance(node, exp.Column):
+                data = self.sources.get(node.table)
+                return exp.column(
+                    self.original_column(data, node.name) if data else node.name,
+                    table=node.table if len(aliases.get(node.name, set())) > 1 else None,
+                )
+            return node
+
+        calculation = {
+            "operation": "expression",
+            "formula": sql(target.transform(display_column)),
+            "passthrough": isinstance(target, exp.Column)
+            and self.kind in {"projection", "filter", "join"}
+            and response["total"] == 1,
+        }
+        selection = [sql(predicate.transform(display_column)) for predicate in predicates]
+        group = self.tree.args.get("group")
+        if group and self.dataset.groups:
+            for expression, stored in zip(group.expressions, self.dataset.groups.values(), strict=True):
+                value = self.cursor.execute(
+                    f"SELECT {qi(stored)} FROM {qi(self.dataset.relation)} WHERE rowid=?", [self.row]
+                ).fetchone()[0]
+                try:
+                    comparison = "IS NULL" if value is None else f"= {literal(value)}"
+                    selection.append(f"{sql(expression.transform(display_column))} {comparison}")
+                except (Problem, ValueError):
+                    pass
+        if selection:
+            calculation["selection"] = selection
+        aggregate = target.this if isinstance(target, exp.Filter) else target
+        if isinstance(aggregate, (exp.Sum, exp.Avg, exp.Min, exp.Max, exp.Count)):
+            argument = aggregate.this
+            if isinstance(argument, (exp.Column, exp.Star)):
+                calculation["operation"] = aggregate.key
+            elif isinstance(aggregate, exp.Count) and isinstance(argument, exp.Distinct):
+                calculation["operation"] = "count_distinct"
+
+        # Only substitute uniquely identified operands of a scalar expression.
+        # Aggregates, windows, paginated operands and ambiguous self-joins keep their formula.
+        if (
+            target.find(exp.AggFunc, exp.Window)
+            or response["offset"]
+            or response["total"] != len(response["contributions"])
+        ):
+            return calculation
+        replacements = {}
+        for column in target.find_all(exp.Column):
+            data = self.sources.get(column.table)
+            if data is None:
+                return calculation
+            original = self.original_column(data, column.name)
+            inputs = [
+                item
+                for item in response["contributions"]
+                if item["dataset"] == data.id and item["column"] == original
+            ]
+            witness = self.dataset.witnesses.get(column.table)
+            if witness:
+                witnessed_row = self.cursor.execute(
+                    f"SELECT {qi(witness['column'])} FROM {qi(self.dataset.relation)} WHERE rowid=?",
+                    [self.row],
+                ).fetchone()[0]
+                inputs = [item for item in inputs if item["row"] == witnessed_row]
+                if witnessed_row is None:
+                    replacements[(column.table, column.name)] = exp.Null()
+                    continue
+            if len(inputs) != 1:
+                return calculation
+            value = self.cursor.execute(
+                f"SELECT {qi(column.name)} FROM {qi(data.relation)} WHERE rowid=?",
+                [inputs[0]["row"]],
+            ).fetchone()[0]
+            # Presentation metadata must not downgrade an otherwise valid explanation.
+            try:
+                replacements[(column.table, column.name)] = sqlglot.parse_one(literal(value), read="duckdb")
+            except (Problem, ValueError, sqlglot.errors.ParseError):
+                return calculation
+        evaluated = target.transform(
+            lambda node: (
+                replacements[(node.table, node.name)].copy() if isinstance(node, exp.Column) else node
+            )
+        )
+        calculation["evaluated"] = sql(evaluated)
+        return calculation
 
     def witness_filter(self, row_names):
         conditions = []

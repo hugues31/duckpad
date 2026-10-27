@@ -43,12 +43,14 @@ import {
   identifier,
   outputPorts,
   pathPrefix,
+  type NodeConnection,
   type PathPart,
 } from "./graph";
 import HistoryPanel from "./HistoryPanel";
 import { I18n, useT } from "./i18n";
 import Inspector from "./Inspector";
 import LineagePanel from "./LineagePanel";
+import type { Cell } from "./lineageGraph";
 import LoginPage from "./LoginPage";
 import ModalHost, { type ModalState } from "./ModalHost";
 import NodePalette, { type NodeKind } from "./NodePalette";
@@ -58,6 +60,8 @@ import ProjectDashboard from "./ProjectDashboard";
 import UserSettings from "./UserSettings";
 import { Toast, useToast } from "./Toast";
 import TopBar from "./TopBar";
+import InstanceSearch from "./Search";
+import { useSearchShortcut } from "./searchShortcuts";
 import type {
   Bundle,
   FlowNode,
@@ -141,11 +145,20 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
   const [codeDraftVersion, setCodeDraftVersion] = useState(0);
   const [documentationDraftVersion, setDocumentationDraftVersion] = useState(0);
   const [selected, setSelected] = useState<string | null>(null);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const openSearch = useCallback(() => setSearchOpen(true), []);
+  useSearchShortcut(authenticated && workspace ? "k" : undefined, openSearch);
+  const handledSearch = useRef("");
+  const [focusRequest, setFocusRequest] = useState<{
+    id: string;
+    key: string;
+  } | null>(null);
+  const expireSession = useCallback(() => setAuthenticated(false), []);
   const [path, setPath] = useState<PathPart[]>([]);
   const [selection, setSelection] = useState<string[]>([]);
   const [statuses, setStatuses] = useState<Statuses>(EMPTY_STATUSES);
   const [preview, setPreview] = useState<Json | null>(null);
-  const [cell, setCell] = useState<Json | null>(null);
+  const [cell, setCell] = useState<Cell | null>(null);
   const [modal, setModal] = useState<ModalState | null>(null);
   const [gitVersion, setGitVersion] = useState(0);
   const [saving, setSaving] = useState(false);
@@ -233,6 +246,8 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
     setLastWorktree(worktree);
     setSnapshot(null);
     setSelected(null);
+    setFocusRequest(null);
+    handledSearch.current = "";
     setSelection([]);
     setPath([]);
     setCell(null);
@@ -294,6 +309,7 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
   }, [worktree, environment, authenticated, load]);
   useEffect(() => {
     if (!authenticated) {
+      setSearchOpen(false);
       setWorkspace(null);
       setSnapshot(null);
       setStatuses({ nodes: {}, active: null });
@@ -381,6 +397,7 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
   );
 
   const select = (id: string | null) => {
+    setFocusRequest(null);
     setSelected(id);
     setCell(null);
     setPreview(null);
@@ -390,6 +407,53 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
       if (!window.matchMedia(WIDE_LAYOUT).matches) setPaletteOpen(false);
     }
   };
+  useEffect(() => {
+    if (!snapshot?.bundle || area !== "pipelines" || tab !== "flow") return;
+    const target = new URLSearchParams(location.search).get("node");
+    if (handledSearch.current === location.key) return;
+    if (!target && !location.state?.searchResult) return;
+    handledSearch.current = location.key;
+    if (!target) {
+      setPath([]);
+      select(null);
+      return;
+    }
+    const ids = target.split("::");
+    const nextPath: PathPart[] = [];
+    let graph: Graph = snapshot.bundle.flow;
+    for (const instance of ids.slice(0, -1)) {
+      const parent = graph.nodes.find((n) => n.id === instance);
+      const definition =
+        parent?.component && snapshot.bundle.components[parent.component];
+      if (!parent?.component || !definition) {
+        notify(t("searchTargetMissing"), true);
+        return;
+      }
+      nextPath.push({
+        instance,
+        definition: parent.component,
+        label: parent.label || definition.name || instance,
+      });
+      graph = definition as Graph;
+    }
+    const id = ids[ids.length - 1];
+    if (!graph.nodes.some((node) => node.id === id)) {
+      notify(t("searchTargetMissing"), true);
+      return;
+    }
+    setPath(nextPath);
+    select(id);
+    setFocusRequest({ id, key: location.key });
+  }, [
+    snapshot,
+    area,
+    tab,
+    location.key,
+    location.search,
+    location.state,
+    notify,
+    t,
+  ]);
   async function saveBundle(value: Bundle, base = snapshot!) {
     if (!canEdit) throw new Error(t("readerNotice"));
     setSaving(true);
@@ -427,14 +491,36 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
       x: 160 + ((graph?.nodes.length || 0) % 4) * 240,
       y: 120 + Math.floor((graph?.nodes.length || 0) / 4) * 210,
     },
+    connection?: NodeConnection,
   ) {
+    if (connection && !graph?.nodes.some((n) => n.id === connection.nodeId))
+      return;
     const created: FlowNode = {
       id: identifier(),
       ...(kind === "component" ? { component: id } : { template: id }),
       params: {},
       position,
     };
-    await updateGraph((g) => g.nodes.push(created));
+    await updateGraph((g) => {
+      g.nodes.push(created);
+      if (connection)
+        connectInput(
+          g,
+          connection.handleType === "source"
+            ? {
+                source: connection.nodeId,
+                sourceHandle: connection.handleId,
+                target: created.id,
+                targetHandle: connection.port,
+              }
+            : {
+                source: created.id,
+                sourceHandle: connection.port,
+                target: connection.nodeId,
+                targetHandle: connection.handleId,
+              },
+        );
+    });
     select(created.id);
   }
   async function removeNodes(ids: string[], edges: string[] = []) {
@@ -767,6 +853,7 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
               : "/projects"
           }
           onHelp={() => safe(showAbout)}
+          onSearch={openSearch}
           onOpenProject={openProject}
           onNewProject={newProject}
           onWorktree={setWorktree}
@@ -784,6 +871,14 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
             })
           }
         />
+        {searchOpen && workspace && (
+          <InstanceSearch
+            workspace={workspace}
+            environment={environment}
+            onClose={() => setSearchOpen(false)}
+            onExpired={expireSession}
+          />
+        )}
         {!workspace || area === "home" ? (
           <div className="startup" role="status" aria-label={t("loading")}>
             <Loader2 className="spin" />
@@ -981,12 +1076,14 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
                       edges={graph.edges}
                       parsed={snapshot.parsed_templates}
                       components={bundle.components}
+                      excludedComponents={path.map((part) => part.definition)}
                       statuses={statuses}
                       prefix={prefix}
                       viewKey={
                         worktree + ":" + path.map((p) => p.instance).join("/")
                       }
                       selected={selected}
+                      focusRequest={focusRequest}
                       onSelect={select}
                       onMove={(nodes) =>
                         updateGraph((g) => {
@@ -1010,8 +1107,8 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
                       onDelete={(nodes, edges) =>
                         safe(() => removeNodes(nodes, edges))
                       }
-                      onAdd={(kind, id, position) =>
-                        safe(() => addNode(kind, id, position))
+                      onAdd={(kind, id, position, connection) =>
+                        safe(() => addNode(kind, id, position, connection))
                       }
                       onOpen={openComponent}
                       onSelection={updateSelection}
@@ -1031,27 +1128,30 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
                       onClose={() => setPreviewOpen(false)}
                       onRun={() => run(fullNode)}
                       onExplain={(value) => {
-                        setCell(value);
-                        setInspectorOpen(true);
+                        setCell({
+                          dataset: value.dataset,
+                          row: value.row,
+                          column: value.column,
+                        });
                       }}
                       onData={setPreview}
                     />
                   ) : null}
                 </main>
+                {cell && (
+                  <LineagePanel
+                    worktree={worktree}
+                    environment={environment}
+                    cell={cell}
+                    onClose={() => setCell(null)}
+                  />
+                )}
                 <div
                   className="inspector-layer"
                   id="node-inspector"
                   hidden={!inspectorOpen}
                 >
-                  {cell ? (
-                    <LineagePanel
-                      key={worktree + environment}
-                      worktree={worktree}
-                      environment={environment}
-                      cell={cell}
-                      onClose={() => setCell(null)}
-                    />
-                  ) : node && definition ? (
+                  {node && definition ? (
                     <Inspector
                       readOnly={!canEdit}
                       key={worktree + fullNode}
