@@ -27,13 +27,15 @@ class Store:
             return json.loads(row[0]) if row else default
 
     def all(self, kind):
+        return [value for _, value in self.items(kind)]
+
+    def items(self, kind):
+        """Return (id, value) pairs of a kind, in insertion order."""
         with self.lock:
-            return [
-                json.loads(r[0])
-                for r in self.db.execute(
-                    "SELECT value FROM records WHERE kind=? ORDER BY rowid", (kind,)
-                ).fetchall()
-            ]
+            rows = self.db.execute(
+                "SELECT id, value FROM records WHERE kind=? ORDER BY rowid", (kind,)
+            ).fetchall()
+        return [(key, json.loads(value)) for key, value in rows]
 
     def put(self, kind, key, value):
         with self.lock, self.db:
