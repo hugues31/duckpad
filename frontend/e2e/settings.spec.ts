@@ -11,6 +11,20 @@ test("unsigned extension settings persist, report rejected changes and are trans
   ).json();
   try {
     await openInstanceSettings(page);
+    await expect(
+      page.getByRole("heading", { name: "DuckDB extensions", exact: true }),
+    ).toHaveCount(0);
+    await expect(
+      page.getByRole("checkbox", {
+        name: "Allow unsigned extensions",
+        exact: true,
+      }),
+    ).toHaveCount(0);
+    await openInstanceSettings(page, "Extensions");
+    await expect(page).toHaveURL(/\/instance-settings\/extensions$/);
+    await expect(
+      page.getByRole("link", { name: "Extensions", exact: true }),
+    ).toHaveAttribute("aria-current", "page");
     const checkbox = page.getByRole("checkbox", {
       name: "Allow unsigned extensions",
       exact: true,
@@ -55,7 +69,7 @@ test("unsigned extension settings persist, report rejected changes and are trans
     await expect(checkbox).not.toBeChecked();
     await openUserSettings(page);
     await page.getByLabel("Language", { exact: true }).selectOption("fr");
-    await page.goto("/instance-settings");
+    await page.goto("/instance-settings/extensions");
     await expect(
       page.getByRole("checkbox", {
         name: fr.allowUnsignedExtensions,

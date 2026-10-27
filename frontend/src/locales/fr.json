@@ -432,6 +432,7 @@
   "instanceSettings": "Paramètres de l’instance",
   "userSettings": "Paramètres utilisateur",
   "instanceGeneral": "Général",
+  "extensions": "Extensions",
   "usersPermissions": "Utilisateurs et permissions",
   "instanceSettingsDescription": "Configuration partagée par tous les projets et utilisateurs. Seuls les administrateurs de l’instance peuvent la modifier.",
   "userSettingsDescription": "Gérez vos préférences et la sécurité de votre compte.",

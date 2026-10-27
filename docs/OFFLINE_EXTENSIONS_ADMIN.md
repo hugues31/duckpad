@@ -5,8 +5,8 @@ This works across operating systems: only the binary must match the server.
 
 ## Download without a matching local runtime
 
-Read the server version and platform in **Instance settings → General → DuckDB
-extensions**, or through authenticated `GET /api/extensions/runtime`. Download
+Read the server version and platform in **Instance settings → Extensions**,
+or through authenticated `GET /api/extensions/runtime`. Download
 the file on any computer with Internet access. No extension is installed or
 executed on that computer.
 

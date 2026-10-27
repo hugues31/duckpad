@@ -6,7 +6,7 @@ does not need DuckDB, Python, Linux, or a prepared extension cache.
 
 ## Download, transfer, import
 
-1. Open **Instance settings → General → DuckDB extensions** as an administrator.
+1. Open **Instance settings → Extensions** as an administrator.
    Choose **DuckDB core** or **DuckDB community**, enter the extension name, and
    click **Download server binary** on a computer with Internet access.
    The link uses the **server's version and platform**, not your PC's.
@@ -36,7 +36,8 @@ on Windows. Use this same process for each extension your connectors need.
 
 Signed core and community imports keep signature verification enabled. Use
 **Custom / unsigned builds** only for a trusted binary outside those signing
-keys, after enabling **Allow unsigned extensions**. This setting is off by default.
+keys, after enabling **Allow unsigned extensions** in the same **Extensions** tab.
+This setting is off by default.
 
 See [download links, checks and troubleshooting](OFFLINE_EXTENSIONS_ADMIN.md)
 for manual downloads, API use and installation details.

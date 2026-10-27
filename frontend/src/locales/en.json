@@ -432,6 +432,7 @@
   "instanceSettings": "Instance settings",
   "userSettings": "User settings",
   "instanceGeneral": "General",
+  "extensions": "Extensions",
   "usersPermissions": "Users and permissions",
   "instanceSettingsDescription": "Shared configuration for all projects and users. Only instance administrators can make changes.",
   "userSettingsDescription": "Manage your preferences and account security.",

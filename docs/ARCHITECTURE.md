@@ -31,7 +31,7 @@ Settings follow the same instance, project and user boundaries as authorization:
 
 | Scope | Entry point | Settings and permissions |
 | --- | --- | --- |
-| Instance | **Instance settings** in the main navigation | User accounts and instance roles (member/admin), OIDC single sign-on, environment names, connections and connector definitions, and the shared Git author identity. Only instance administrators can configure these. |
+| Instance | **Instance settings** in the main navigation | User accounts and instance roles (member/admin), OIDC single sign-on, environment names, connections and connector definitions, DuckDB extension imports and unsigned policy, and the shared Git author identity. Only instance administrators can configure these. |
 | Project | **Project settings** in the open project's toolbar | Participants and project roles (reader/editor/admin), authorized connections, and project deletion. Project administrators manage participants; only instance administrators grant access to instance connections. Readers and editors can inspect their project's access without changing it. |
 | User | **Account menu → User settings** | Language, theme and the signed-in account's password. SSO accounts manage their password with the identity provider. |
 
@@ -55,7 +55,7 @@ active states, and opening in another tab. Titles and focus follow page changes.
 | --- | --- |
 | `/projects` | Project dashboard |
 | `/instance-settings` | Instance general settings, for instance administrators |
-| `/instance-settings/:section` | `users`, `sso`, `environments` or `connections` |
+| `/instance-settings/:section` | `users`, `sso`, `environments`, `connections` or `extensions` |
 | `/user-settings` | Preferences and password for the signed-in account |
 | `/projects/:projectId/settings` | Project settings with role-specific controls |
 | `/worktrees/:worktreeId/:tab` | Pipeline workspace: `flow`, `code`, `documentation` or `history` |

@@ -14,7 +14,7 @@ test("a Windows browser downloads for the Linux server and sees invalid import e
   const runtime = await (
     await page.request.get("/api/extensions/runtime")
   ).json();
-  await openInstanceSettings(page);
+  await openInstanceSettings(page, "Extensions");
   expect(await page.evaluate(() => navigator.userAgent)).toContain("Windows");
   await page.getByLabel("Extension name", { exact: true }).fill("httpfs");
   const link = page.getByRole("link", {
@@ -47,7 +47,7 @@ test("a Windows browser downloads for the Linux server and sees invalid import e
   ).toEqual(runtime.imports);
   await openUserSettings(page);
   await page.getByLabel("Language", { exact: true }).selectOption("fr");
-  await page.goto("/instance-settings");
+  await page.goto("/instance-settings/extensions");
   await expect(
     page.getByRole("heading", { name: fr.extensionDownloadStep }),
   ).toBeVisible();
@@ -60,7 +60,7 @@ test("successful imports refresh the list and rejected replacements remain visib
   page,
 }) => {
   await signIn(page);
-  await openInstanceSettings(page);
+  await openInstanceSettings(page, "Extensions");
   let imported = false;
   await page.route("**/api/extensions/import", async (route) => {
     expect(route.request().headers()["content-type"]).toContain(
