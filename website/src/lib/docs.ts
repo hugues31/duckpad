@@ -64,6 +64,12 @@ export const sections = [
           "How execution, isolation, persistence and lineage fit together.",
       },
       {
+        slug: "persistence",
+        title: "Settings persistence",
+        description:
+          "Where settings live and how existing data can evolve across upgrades.",
+      },
+      {
         slug: "validation",
         title: "Validation & performance",
         description: "Measured results, reproducible checks and their scope.",

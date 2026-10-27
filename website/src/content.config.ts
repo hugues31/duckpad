@@ -6,7 +6,7 @@ export const collections = {
     loader: glob({
       base: "../docs",
       pattern:
-        "{QUICKSTART,EXAMPLE,INSTALLATION,SSO,AUTHORING,LINEAGE,GIT,CONNECTORS,ARCHITECTURE,VALIDATION,WEBSITE}.md",
+        "{QUICKSTART,EXAMPLE,INSTALLATION,SSO,AUTHORING,LINEAGE,GIT,CONNECTORS,ARCHITECTURE,PERSISTENCE,VALIDATION,WEBSITE}.md",
       generateId: ({ entry }) => entry.replace(/\.md$/, "").toLowerCase(),
     }),
   }),

@@ -42,6 +42,10 @@ is an instance operation. Language and theme remain browser-local preferences,
 shared by accounts using that browser, and are not synchronized between devices.
 The account menu retains shortcuts for changing those preferences.
 
+See [settings persistence and migrations](PERSISTENCE.md) for the SQLite record
+layout, browser storage keys, existing compatibility conversions and a proposed
+approach to versioned upgrades.
+
 ## Save and capture
 
 A UI save carries a content revision. Three-way comparison uses that base, the current files (including pending external edits), and the proposal. Stable-ID objects and disjoint JSON fields merge; incompatible SQL/file changes become recoverable conflicts. Conflicts retain all three versions in SQLite. Resolution rechecks the current files before writing. A metadata-only conflict does not block computation; a computation conflict blocks dependent scopes, conservatively the whole graph if unreadable.
