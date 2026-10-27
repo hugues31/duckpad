@@ -8,6 +8,7 @@ import {
   Plus,
   Workflow,
   Settings2,
+  Search,
 } from "lucide-react";
 import AccountMenu from "./AccountMenu";
 import DuckMark from "./DuckMark";
@@ -16,6 +17,7 @@ import { useT } from "./i18n";
 import type { Preferences } from "./preferences";
 import ResourceMonitor from "./ResourceMonitor";
 import type { Snapshot, Workspace } from "./types";
+import { searchShortcutLabel } from "./searchShortcuts";
 
 const RAIL = [
   ["pipelines", Workflow],
@@ -39,6 +41,7 @@ export default function TopBar({
   gitVersion,
   onEnvironment,
   onSignOut,
+  onSearch,
 }: {
   area: Area;
   workspace: Workspace | null;
@@ -56,6 +59,7 @@ export default function TopBar({
   gitVersion: number;
   onEnvironment: (environment: string) => void;
   onSignOut: () => void;
+  onSearch: () => void;
 }) {
   const t = useT();
   const instanceAdmin = workspace?.user.role === "admin";
@@ -89,6 +93,16 @@ export default function TopBar({
             ),
           )}
         </div>
+        <button
+          className="rail-button"
+          title={`${t("instanceSearch")} (${searchShortcutLabel("k")})`}
+          aria-label={t("instanceSearch")}
+          aria-keyshortcuts="Control+K Meta+K"
+          onClick={onSearch}
+          disabled={!workspace}
+        >
+          <Search size={21} />
+        </button>
         <button className="rail-button" title={t("help")} onClick={onHelp}>
           <HelpCircle size={20} />
         </button>
