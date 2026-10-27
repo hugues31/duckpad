@@ -27,11 +27,7 @@ async function createProject(page: Page) {
     data: { revision: snapshot.revision, bundle: snapshot.bundle },
   });
   expect(response.ok()).toBeTruthy();
-  await page.evaluate(
-    (id) => localStorage.setItem("duckpad-worktree", id),
-    tree.id,
-  );
-  await page.reload();
+  await page.goto(`/worktrees/${tree.id}/flow`);
   await expect(
     page.getByRole("button", { name: "Git synchronization", exact: true }),
   ).toBeVisible();

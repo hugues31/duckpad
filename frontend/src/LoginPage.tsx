@@ -1,3 +1,5 @@
+import { useLocation, useNavigate } from "react-router";
+import { signInReturn, SSO_RETURN_KEY } from "./navigation";
 import { useEffect, useState } from "react";
 import { ArrowRight, Database, Loader2 } from "lucide-react";
 import { api, send } from "./api";
@@ -14,6 +16,8 @@ export default function LoginPage({
   onSuccess: () => void;
 }) {
   const t = useT();
+  const location = useLocation();
+  const navigate = useNavigate();
   const [username, setUsername] = useState("admin");
   const [password, setPassword] = useState("");
   const [provider, setProvider] = useState<{ label: string } | null>(null);
@@ -30,9 +34,9 @@ export default function LoginPage({
         /* Local sign-in remains available during discovery failures. */
       });
     if (new URLSearchParams(location.search).has("sso_error")) {
-      const url = new URL(location.href);
+      const url = new URL(window.location.href);
       url.searchParams.delete("sso_error");
-      history.replaceState(null, "", url.pathname + url.search + url.hash);
+      void navigate(url.pathname + url.search + url.hash, { replace: true });
     }
     return () => {
       live = false;
@@ -59,7 +63,17 @@ export default function LoginPage({
         )}
         {provider && (
           <div className="sso-login">
-            <a className="button secondary full large" href="/api/oidc/login">
+            <a
+              className="button secondary full large"
+              href="/api/oidc/login"
+              onClick={() => {
+                const target = signInReturn(
+                  location.pathname + location.search,
+                );
+                if (target) sessionStorage.setItem(SSO_RETURN_KEY, target);
+                else sessionStorage.removeItem(SSO_RETURN_KEY);
+              }}
+            >
               {t("ssoContinue")} {provider.label}
             </a>
             <p className="muted">{t("ssoLocalLogin")}</p>

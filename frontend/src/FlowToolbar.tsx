@@ -1,3 +1,6 @@
+import { Link } from "react-router";
+import { worktreeUrl, type WorkspaceTab } from "./navigation";
+export type { WorkspaceTab } from "./navigation";
 import {
   Activity,
   AlertCircle,
@@ -15,8 +18,6 @@ import {
 import { useT } from "./i18n";
 import type { Json, Snapshot } from "./types";
 
-export type WorkspaceTab = "flow" | "code" | "documentation" | "history";
-
 const TABS = [
   ["flow", Workflow],
   ["code", FileCode2],
@@ -26,27 +27,29 @@ const TABS = [
 
 export function FlowToolbar({
   readOnly,
-  onProjectSettings,
+  project,
+  worktree,
+  environment,
   tab,
   saving,
   dirty,
   branch,
   active,
   canRun,
-  onTab,
   onMerge,
   onRun,
   onStop,
 }: {
   readOnly: boolean;
-  onProjectSettings: () => void;
+  project: string;
+  worktree: string;
+  environment: string;
   tab: WorkspaceTab;
   saving: boolean;
   dirty: boolean;
   branch: string;
   active: Json | null;
   canRun: boolean;
-  onTab: (tab: WorkspaceTab) => void;
   onMerge: () => void;
   onRun: () => void;
   onStop: () => void;
@@ -56,22 +59,25 @@ export function FlowToolbar({
     <div className="flow-toolbar">
       <div className="tabs main-tabs">
         {TABS.map(([key, Icon]) => (
-          <button
+          <Link
+            to={worktreeUrl(worktree, key, environment)}
             key={key}
             className={tab === key ? "active" : ""}
-            aria-pressed={tab === key}
-            onClick={() => onTab(key)}
+            aria-current={tab === key ? "page" : undefined}
           >
             <Icon size={15} />
             {t(key)}
-          </button>
+          </Link>
         ))}
       </div>
       <div className="row gap">
-        <button className="button secondary small" onClick={onProjectSettings}>
+        <Link
+          className="button secondary small"
+          to={`/projects/${encodeURIComponent(project)}/settings`}
+        >
           <Settings2 size={14} />
           {t("projectSettings")}
-        </button>
+        </Link>
         <span className="save-status">
           {saving ? (
             <Loader2 size={13} className="spin" />

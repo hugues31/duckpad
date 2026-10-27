@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { NavLink } from "react-router";
+import { settingsSections } from "./navigation";
 import { UsersPage } from "./Administration";
 import ConnectionsPanel from "./ConnectionsPanel";
 import EnvironmentsPanel from "./EnvironmentsPanel";
@@ -6,28 +7,20 @@ import { useT } from "./i18n";
 import SSOSettings from "./SSOSettings";
 import type { Workspace } from "./types";
 
-const SECTIONS = [
-  "instanceGeneral",
-  "usersPermissions",
-  "ssoSettings",
-  "environments",
-  "connections",
-] as const;
-
 export default function InstanceSettings({
+  section,
   workspace,
   refresh,
   onIdentity,
   onConnectorEditor,
 }: {
+  section: string;
   workspace: Workspace;
   refresh: () => Promise<void>;
   onIdentity: (identity: { name: string; email: string }) => void;
   onConnectorEditor: (data: { title: string; value: string }) => void;
 }) {
   const t = useT();
-  const [section, setSection] =
-    useState<(typeof SECTIONS)[number]>("instanceGeneral");
   return (
     <section
       className="full-panel instance-settings"
@@ -40,15 +33,16 @@ export default function InstanceSettings({
         className="tabs settings-navigation"
         aria-label={t("instanceSettings")}
       >
-        {SECTIONS.map((key) => (
-          <button
+        {settingsSections.map(([slug, key]) => (
+          <NavLink
+            to={`/instance-settings${slug ? `/${slug}` : ""}`}
+            end
             key={key}
             className={section === key ? "active" : ""}
             aria-current={section === key ? "page" : undefined}
-            onClick={() => setSection(key)}
           >
             {t(key)}
-          </button>
+          </NavLink>
         ))}
       </nav>
       {section === "instanceGeneral" && (

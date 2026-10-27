@@ -24,11 +24,11 @@ export async function signIn(page: Page) {
 
 export async function openInstanceSettings(page: Page, section = "General") {
   await page
-    .getByRole("button", { name: "Instance settings", exact: true })
+    .getByRole("link", { name: "Instance settings", exact: true })
     .click();
   await page
     .getByRole("navigation", { name: "Instance settings", exact: true })
-    .getByRole("button", { name: section, exact: true })
+    .getByRole("link", { name: section, exact: true })
     .click();
 }
 

@@ -1,3 +1,4 @@
+import { Link } from "react-router";
 import { useEffect, useRef, useState } from "react";
 import { Check, LogOut, Settings2 } from "lucide-react";
 import { useT } from "./i18n";
@@ -6,12 +7,10 @@ import type { Preferences } from "./preferences";
 export default function AccountMenu({
   username,
   preferences: { language, setLanguage, theme, setTheme },
-  onSettings,
   onSignOut,
 }: {
   username: string;
   preferences: Preferences;
-  onSettings: () => void;
   onSignOut: () => void;
 }) {
   const t = useT();
@@ -25,7 +24,7 @@ export default function AccountMenu({
   };
   useEffect(() => {
     if (!open) return;
-    menu.current?.querySelector<HTMLButtonElement>("button")?.focus();
+    menu.current?.querySelector<HTMLElement>('[role^="menuitem"]')?.focus();
     const outside = (event: PointerEvent) => {
       if (!root.current?.contains(event.target as Node)) setOpen(false);
     };
@@ -69,10 +68,12 @@ export default function AccountMenu({
               return;
             event.preventDefault();
             const items = [
-              ...menu.current!.querySelectorAll<HTMLButtonElement>("button"),
+              ...menu.current!.querySelectorAll<HTMLElement>(
+                '[role^="menuitem"]',
+              ),
             ];
             const current = items.indexOf(
-              document.activeElement as HTMLButtonElement,
+              document.activeElement as HTMLElement,
             );
             const index =
               event.key === "Home"
@@ -127,17 +128,15 @@ export default function AccountMenu({
             </div>
           </div>
           <div className="account-actions">
-            <button
+            <Link
+              to="/user-settings"
               role="menuitem"
               tabIndex={-1}
-              onClick={() => {
-                close();
-                onSettings();
-              }}
+              onClick={close}
             >
               <Settings2 size={16} />
               {t("userSettings")}
-            </button>
+            </Link>
             <button
               role="menuitem"
               tabIndex={-1}
