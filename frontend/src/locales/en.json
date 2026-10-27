@@ -460,7 +460,6 @@
   "confirmRun": "Confirm execution",
   "confirmAndRun": "Confirm and run",
   "confirmRunHint": "This environment requires confirmation before every run. Start the following execution?",
-  "canvasSearch": "Find a node in this canvas…",
   "instanceSearch": "Search instance",
   "instanceSearchHint": "Find projects, open branches, and nodes by name or ID. Only projects you can access are searched.",
   "clearSearch": "Clear search",

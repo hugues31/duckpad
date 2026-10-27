@@ -57,7 +57,7 @@ test("canvas search finds labels and IDs, centers distant nodes and never saves 
   const { worktree, snapshot } = await fixture(page, "Canvas search workspace");
   await page.goto(`/worktrees/${worktree.id}/flow`);
   const search = page.getByRole("combobox", {
-    name: "Find a node in this canvas…",
+    name: "Find a node…",
   });
   await search.fill(" SHARED ");
   await expect(page.getByRole("listbox").getByRole("option")).toHaveCount(2);
@@ -111,7 +111,7 @@ test("canvas search finds labels and IDs, centers distant nodes and never saves 
   await page.evaluate(() => localStorage.setItem("duckpad-language", "fr"));
   await page.reload();
   await expect(
-    page.getByRole("combobox", { name: fr.canvasSearch }),
+    page.getByRole("combobox", { name: fr.searchNodes }),
   ).toBeVisible();
 });
 
@@ -150,9 +150,7 @@ test("instance search opens another branch and the correct nested instance, incl
   await expect(page.locator('.react-flow__node[data-id="metric"]')).toHaveClass(
     /selected/,
   );
-  await page
-    .getByRole("combobox", { name: "Find a node in this canvas…" })
-    .fill("metric");
+  await page.getByRole("combobox", { name: "Find a node…" }).fill("metric");
   await expect(page.getByRole("listbox").getByRole("option")).toHaveCount(1);
   await page
     .getByRole("button", { name: "Search instance", exact: true })
@@ -222,9 +220,7 @@ test("reader search excludes private projects and removes results when membershi
     await expect(
       reader.getByRole("button", { name: "Run pipeline", exact: true }),
     ).toBeDisabled();
-    await reader
-      .getByRole("combobox", { name: "Find a node in this canvas…" })
-      .fill("first");
+    await reader.getByRole("combobox", { name: "Find a node…" }).fill("first");
     await reader.getByRole("listbox").getByRole("option").click();
     await expect(
       reader.locator('.react-flow__node[data-id="first"]'),
@@ -321,4 +317,128 @@ test("instance search handles errors, ignores stale responses and keeps keyboard
   ).toBeFocused();
   await page.keyboard.press("Escape");
   await expect(dialog).toHaveCount(0);
+});
+
+test("search shortcuts focus the canvas and open global search from its navigation position", async ({
+  page,
+}) => {
+  await signIn(page);
+  const { worktree } = await fixture(page, "Keyboard search workspace");
+  await page.goto(`/worktrees/${worktree.id}/flow`);
+  await expect(page.locator(".flow-toolbar")).toBeFocused();
+  const nav = page.getByRole("navigation", { name: "Workspace", exact: true });
+  const global = nav.getByRole("button", {
+    name: "Search instance",
+    exact: true,
+  });
+  await nav
+    .getByRole("link", { name: "Instance settings", exact: true })
+    .focus();
+  await page.keyboard.press("Tab");
+  await expect(global).toBeFocused();
+  await expect(global).toHaveAttribute("aria-keyshortcuts", "Control+K Meta+K");
+  await page.keyboard.press("Tab");
+  await expect(
+    nav.getByRole("button", { name: "About Duckpad", exact: true }),
+  ).toBeFocused();
+
+  const canvas = page.getByRole("combobox", {
+    name: "Find a node…",
+    exact: true,
+  });
+  await expect(canvas).toHaveAttribute("aria-keyshortcuts", "Control+F Meta+F");
+  await page.keyboard.press("Control+f");
+  await expect(canvas).toBeFocused();
+  await canvas.fill("distant");
+  await page.keyboard.press("Meta+f");
+  expect(
+    await canvas.evaluate((input: HTMLInputElement) => [
+      input.selectionStart,
+      input.selectionEnd,
+    ]),
+  ).toEqual([0, 7]);
+  await canvas.fill("first");
+  await canvas.press("Enter");
+  await expect(page.locator('.react-flow__node[data-id="first"]')).toHaveClass(
+    /selected/,
+  );
+  for (const modifier of ["Control", "Meta"]) {
+    await global.focus();
+    await page.keyboard.press(`${modifier}+k`);
+    const dialog = page.getByRole("dialog", {
+      name: "Search instance",
+      exact: true,
+    });
+    await expect(dialog.getByRole("combobox")).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(dialog).toHaveCount(0);
+    await expect(global).toBeFocused();
+  }
+
+  await page.evaluate(() => localStorage.setItem("duckpad-language", "fr"));
+  await page.reload();
+  await expect(page.locator(".flow-toolbar")).toBeFocused();
+  await page.getByRole("link", { name: fr.flow, exact: true }).focus();
+  await page.keyboard.press("Control+f");
+  const frenchSearch = page.getByRole("combobox", {
+    name: fr.searchNodes,
+    exact: true,
+  });
+  await expect(frenchSearch).toBeFocused();
+  await expect(frenchSearch).toHaveAttribute("placeholder", fr.searchNodes);
+  await page.keyboard.press("Control+k");
+  await expect(
+    page.getByRole("dialog", { name: fr.instanceSearch }),
+  ).toBeVisible();
+});
+
+test("search shortcuts preserve editor, form and dialog keyboard behavior", async ({
+  page,
+}) => {
+  await signIn(page);
+  const { worktree } = await fixture(page, "Search shortcut boundaries");
+  await page.goto(`/worktrees/${worktree.id}/flow`);
+  const canvas = page.getByRole("combobox", {
+    name: "Find a node…",
+    exact: true,
+  });
+  const paletteInput = page.getByRole("textbox", {
+    name: "Find a node…",
+    exact: true,
+  });
+  await paletteInput.focus();
+  await page.keyboard.press("Control+k");
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await page.keyboard.press("Control+f");
+  await expect(canvas).not.toBeFocused();
+
+  await page
+    .getByRole("button", { name: "About Duckpad", exact: true })
+    .click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByRole("button", { name: "Close", exact: true }).focus();
+  await page.keyboard.press("Control+k");
+  await page.keyboard.press("Control+f");
+  await expect(page.getByRole("dialog")).toHaveCount(1);
+  await expect(
+    dialog.getByRole("button", { name: "Close", exact: true }),
+  ).toBeFocused();
+  await page.keyboard.press("Escape");
+
+  await page.getByRole("link", { name: "Code", exact: true }).click();
+  const editor = page.locator(".monaco-editor textarea").first();
+  await expect(editor).toBeVisible();
+  await editor.focus();
+  await page.keyboard.press("Control+f");
+  await expect(editor).toBeFocused();
+  await expect(
+    page.getByRole("dialog", { name: "Search instance", exact: true }),
+  ).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  await editor.focus();
+  await page.keyboard.press("Control+k");
+  await expect(
+    page.getByRole("dialog", { name: "Search instance", exact: true }),
+  ).toHaveCount(0);
+  await expect(editor).toBeFocused();
 });

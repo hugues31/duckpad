@@ -61,6 +61,7 @@ import UserSettings from "./UserSettings";
 import { Toast, useToast } from "./Toast";
 import TopBar from "./TopBar";
 import InstanceSearch from "./Search";
+import { useSearchShortcut } from "./searchShortcuts";
 import type {
   Bundle,
   FlowNode,
@@ -145,6 +146,8 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
   const [documentationDraftVersion, setDocumentationDraftVersion] = useState(0);
   const [selected, setSelected] = useState<string | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
+  const openSearch = useCallback(() => setSearchOpen(true), []);
+  useSearchShortcut(authenticated && workspace ? "k" : undefined, openSearch);
   const handledSearch = useRef("");
   const [focusRequest, setFocusRequest] = useState<{
     id: string;
@@ -850,7 +853,7 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
               : "/projects"
           }
           onHelp={() => safe(showAbout)}
-          onSearch={() => setSearchOpen(true)}
+          onSearch={openSearch}
           onOpenProject={openProject}
           onNewProject={newProject}
           onWorktree={setWorktree}

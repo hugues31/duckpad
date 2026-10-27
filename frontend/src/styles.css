@@ -2588,6 +2588,15 @@ small {
 .search-field input {
   min-width: 0;
 }
+.search-shortcut {
+  flex-shrink: 0;
+  padding: 2px 4px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--muted);
+  font: inherit;
+  font-size: 10px;
+}
 .search-dropdown {
   position: absolute;
   top: calc(100% + 5px);

@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { Loader2, Search, X } from "lucide-react";
 import { useNavigate } from "react-router";
 import { api, withQuery } from "./api";
@@ -6,6 +6,7 @@ import { useT } from "./i18n";
 import { Modal } from "./modals";
 import { worktreeUrl } from "./navigation";
 import type { Workspace } from "./types";
+import { searchShortcutLabel, useSearchShortcut } from "./searchShortcuts";
 
 export interface SearchOption {
   key: string;
@@ -23,6 +24,7 @@ export function SearchField({
   pending = false,
   message,
   autoFocus = false,
+  shortcut,
 }: {
   label: string;
   query: string;
@@ -32,12 +34,19 @@ export function SearchField({
   pending?: boolean;
   message?: string;
   autoFocus?: boolean;
+  shortcut?: "f";
 }) {
   const t = useT();
   const id = useId();
   const [active, setActive] = useState(0);
   const [open, setOpen] = useState(true);
   const input = useRef<HTMLInputElement>(null);
+  const focusSearch = useCallback(() => {
+    input.current?.focus();
+    input.current?.select();
+    setOpen(true);
+  }, []);
+  useSearchShortcut(shortcut, focusSearch);
   const list = useRef<HTMLDivElement>(null);
   const expanded = open && !!query.trim();
   const index = Math.min(active, Math.max(0, options.length - 1));
@@ -66,6 +75,10 @@ export function SearchField({
           autoFocus={autoFocus}
           role="combobox"
           aria-label={label}
+          aria-keyshortcuts={shortcut ? "Control+F Meta+F" : undefined}
+          title={
+            shortcut ? `${label} (${searchShortcutLabel(shortcut)})` : undefined
+          }
           placeholder={label}
           aria-autocomplete="list"
           aria-expanded={expanded}
@@ -102,6 +115,11 @@ export function SearchField({
             }
           }}
         />
+        {shortcut && (
+          <kbd className="search-shortcut" aria-hidden="true">
+            {searchShortcutLabel(shortcut)}
+          </kbd>
+        )}
         {query && (
           <button
             className="icon"

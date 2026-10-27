@@ -17,6 +17,7 @@ import { useT } from "./i18n";
 import type { Preferences } from "./preferences";
 import ResourceMonitor from "./ResourceMonitor";
 import type { Snapshot, Workspace } from "./types";
+import { searchShortcutLabel } from "./searchShortcuts";
 
 const RAIL = [
   ["pipelines", Workflow],
@@ -92,6 +93,16 @@ export default function TopBar({
             ),
           )}
         </div>
+        <button
+          className="rail-button"
+          title={`${t("instanceSearch")} (${searchShortcutLabel("k")})`}
+          aria-label={t("instanceSearch")}
+          aria-keyshortcuts="Control+K Meta+K"
+          onClick={onSearch}
+          disabled={!workspace}
+        >
+          <Search size={21} />
+        </button>
         <button className="rail-button" title={t("help")} onClick={onHelp}>
           <HelpCircle size={20} />
         </button>
@@ -137,15 +148,6 @@ export default function TopBar({
         </div>
       )}
       <div className="topbar-right">
-        <button
-          className="icon"
-          title={t("instanceSearch")}
-          aria-label={t("instanceSearch")}
-          onClick={onSearch}
-          disabled={!workspace}
-        >
-          <Search size={19} />
-        </button>
         {snapshot && area === "pipelines" && (
           <>
             <div className="branch-picker">
