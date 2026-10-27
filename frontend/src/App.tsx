@@ -565,8 +565,8 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
       createExample,
     });
   }
-  async function createExample() {
-    const result = await api("/example", send({}));
+  async function createExample(name?: string) {
+    const result = await api("/example", send({ name }));
     await refreshWorkspace();
     openProject(result.id);
   }

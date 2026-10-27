@@ -10,7 +10,7 @@ export default function NewProjectModal({
   onClose,
 }: {
   createEmpty: (name: string) => Promise<void>;
-  createExample: () => Promise<void>;
+  createExample: (name: string) => Promise<void>;
   onClose: () => void;
 }) {
   const t = useT();
@@ -23,7 +23,9 @@ export default function NewProjectModal({
   useEffect(() => {
     const opener = document.activeElement as HTMLElement | null;
     const dialog = form.current?.closest<HTMLElement>("[role=dialog]");
-    dialog?.querySelector<HTMLInputElement>("input:checked")?.focus();
+    dialog
+      ?.querySelector<HTMLInputElement>('input[name="project-name"]')
+      ?.focus();
     const trapFocus = (event: KeyboardEvent) => {
       if (event.key !== "Tab" || !dialog) return;
       const elements = Array.from(
@@ -60,17 +62,28 @@ export default function NewProjectModal({
         aria-busy={pending}
         onSubmit={async (event) => {
           event.preventDefault();
-          if (submitting.current || (template === "empty" && !name.trim()))
-            return;
+          if (submitting.current || !name.trim()) return;
           submitting.current = true;
           const created = await run(() =>
-            template === "empty" ? createEmpty(name.trim()) : createExample(),
+            template === "empty"
+              ? createEmpty(name.trim())
+              : createExample(name.trim()),
           );
           submitting.current = false;
           if (created) onClose();
         }}
       >
         <div className="modal-content new-project-content">
+          <label className="field">
+            <span>{t("name")}</span>
+            <input
+              name="project-name"
+              required
+              value={name}
+              disabled={pending}
+              onChange={(event) => setName(event.target.value)}
+            />
+          </label>
           <fieldset className="project-templates" disabled={pending}>
             <legend>{t("projectStartingPoint")}</legend>
             {(["empty", "example"] as const).map((value) => {
@@ -104,19 +117,6 @@ export default function NewProjectModal({
               );
             })}
           </fieldset>
-          {template === "empty" ? (
-            <label className="field">
-              <span>{t("name")}</span>
-              <input
-                required
-                value={name}
-                disabled={pending}
-                onChange={(event) => setName(event.target.value)}
-              />
-            </label>
-          ) : (
-            <p className="muted">{t("exampleProjectHint")}</p>
-          )}
           {error && (
             <div className="notice error" role="alert">
               {error}
@@ -132,10 +132,7 @@ export default function NewProjectModal({
           >
             {t("cancel")}
           </button>
-          <button
-            className="button primary"
-            disabled={pending || (template === "empty" && !name.trim())}
-          >
+          <button className="button primary" disabled={pending || !name.trim()}>
             {pending && <Loader2 className="spin" size={16} />}
             {t(pending ? "creatingProject" : "create")}
           </button>
