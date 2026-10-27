@@ -118,7 +118,7 @@ See the [contributing guide](CONTRIBUTING.md) before opening a pull request.
 ## Documentation
 
 - [Configure OIDC single sign-on](docs/SSO.md)
-- [Product specification](docs/SPEC.md)
+- [Original MVP specification](docs/SPEC.md)
 - [Release automation and publishing](docs/RELEASING.md)
 - [Multica issue workflow and preview deployment](docs/MULTICA.md)
 - [Visual Git comparisons, reviewed merges and synchronization](docs/GIT.md)
@@ -126,7 +126,6 @@ See the [contributing guide](CONTRIBUTING.md) before opening a pull request.
 - [Project files, templates and components](docs/AUTHORING.md)
 - [Lineage coverage and limitations](docs/LINEAGE.md)
 - [Connector setup and validated compatibility](docs/CONNECTORS.md)
-- [Execution-service prototype and scheduling decision](docs/EXECUTION_SERVICE.md)
 - [Validation results and performance reference](docs/VALIDATION.md)
 - [Security policy](SECURITY.md)
 
