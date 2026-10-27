@@ -118,6 +118,33 @@ def test_notes_cover_changes_since_previous_stable_including_prereleases(reposit
     assert text.count("## Duckpad") == 1
 
 
+@pytest.mark.parametrize("kind", ["feat", "fix"])
+def test_notes_omit_merge_summaries_and_keep_branch_changes(repository, tmp_path, kind):
+    repository("feat: previous release feature", "0.1.0", "v0.1.0")
+    git("checkout", "-b", "topic")
+    change = repository(f"{kind}(export): handle empty exports", "0.2.0")
+    breaking = repository(
+        "chore!: remove legacy export settings\n\nBREAKING CHANGE: Use the new export settings."
+    )
+    git("checkout", "main")
+    git("merge", "--no-ff", "topic", "-m", f"{kind}(export): handle empty exports (#42)")
+    merge = git("rev-parse", "HEAD")
+    # Squashed PRs have one parent and must remain visible, even with a PR suffix.
+    squash = repository("fix(export): preserve column names (#43)", tag="v0.2.0")
+
+    notes = tmp_path / "notes.md"
+    release.prepare_release("v0.2.0", "example/duckpad", notes)
+    text = notes.read_text()
+    assert text.count("Handle empty exports") == 1
+    assert f"/commit/{change}" in text
+    assert f"/commit/{breaking}" in text
+    assert "Use the new export settings." in text
+    assert "Preserve column names (#43)" in text and f"/commit/{squash}" in text
+    assert f"/commit/{merge}" not in text and "(#42)" not in text
+    assert "Previous release feature" not in text
+    assert "compare/v0.1.0...v0.2.0" in text
+
+
 def test_maintenance_only_release_has_explicit_empty_notes(repository, tmp_path):
     repository("feat: add canvas", "0.1.0", "v0.1.0")
     repository("chore: prepare release", "0.1.1", "v0.1.1")

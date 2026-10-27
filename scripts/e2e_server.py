@@ -3,16 +3,26 @@
 import os
 import re
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 
 import uvicorn
+from starlette.routing import Mount
 
 from duckpad.app import create_app
 from duckpad.util import Problem
 
+# A real signing provider is exposed only by this disposable test entry point.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tests"))
+from oidc_provider import Provider
+
+port = int(os.environ.get("DUCKPAD_E2E_PORT", "8766"))
+
 with tempfile.TemporaryDirectory(prefix="duckpad-e2e-") as directory:
     app = create_app(Path(directory))
+    provider = Provider(f"http://127.0.0.1:{port}/test-oidc")
+    app.router.routes.insert(0, Mount("/test-oidc", app=provider.application()))
     # Browser Git tests use real disposable bare repositories without credentials or a network service.
     # Only this test entry point replaces transport; production URL validation remains unchanged.
     network = app.state.services.projects.remotes.network
@@ -39,6 +49,4 @@ with tempfile.TemporaryDirectory(prefix="duckpad-e2e-") as directory:
 
     app.state.services.projects.remotes.network = disposable_transport
     app.state.access.update_user("admin", {"password": "duckpad-browser-test"})
-    uvicorn.run(
-        app, host="127.0.0.1", port=int(os.environ.get("DUCKPAD_E2E_PORT", "8766")), log_level="warning"
-    )
+    uvicorn.run(app, host="127.0.0.1", port=port, log_level="warning")
