@@ -43,6 +43,7 @@ import {
   identifier,
   outputPorts,
   pathPrefix,
+  type NodeConnection,
   type PathPart,
 } from "./graph";
 import HistoryPanel from "./HistoryPanel";
@@ -487,14 +488,36 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
       x: 160 + ((graph?.nodes.length || 0) % 4) * 240,
       y: 120 + Math.floor((graph?.nodes.length || 0) / 4) * 210,
     },
+    connection?: NodeConnection,
   ) {
+    if (connection && !graph?.nodes.some((n) => n.id === connection.nodeId))
+      return;
     const created: FlowNode = {
       id: identifier(),
       ...(kind === "component" ? { component: id } : { template: id }),
       params: {},
       position,
     };
-    await updateGraph((g) => g.nodes.push(created));
+    await updateGraph((g) => {
+      g.nodes.push(created);
+      if (connection)
+        connectInput(
+          g,
+          connection.handleType === "source"
+            ? {
+                source: connection.nodeId,
+                sourceHandle: connection.handleId,
+                target: created.id,
+                targetHandle: connection.port,
+              }
+            : {
+                source: created.id,
+                sourceHandle: connection.port,
+                target: connection.nodeId,
+                targetHandle: connection.handleId,
+              },
+        );
+    });
     select(created.id);
   }
   async function removeNodes(ids: string[], edges: string[] = []) {
@@ -1050,6 +1073,7 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
                       edges={graph.edges}
                       parsed={snapshot.parsed_templates}
                       components={bundle.components}
+                      excludedComponents={path.map((part) => part.definition)}
                       statuses={statuses}
                       prefix={prefix}
                       viewKey={
@@ -1080,8 +1104,8 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
                       onDelete={(nodes, edges) =>
                         safe(() => removeNodes(nodes, edges))
                       }
-                      onAdd={(kind, id, position) =>
-                        safe(() => addNode(kind, id, position))
+                      onAdd={(kind, id, position, connection) =>
+                        safe(() => addNode(kind, id, position, connection))
                       }
                       onOpen={openComponent}
                       onSelection={updateSelection}

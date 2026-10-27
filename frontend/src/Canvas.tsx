@@ -37,7 +37,8 @@ import {
 } from "lucide-react";
 import "@xyflow/react/dist/style.css";
 import { useT, templateLabel } from "./i18n";
-import { DRAG_TYPE } from "./graph";
+import { DRAG_TYPE, type NodeConnection } from "./graph";
+import ConnectionPalette from "./ConnectionPalette";
 import { layoutNodes } from "./graphLayout";
 import { SearchField } from "./Search";
 import type { NodeKind } from "./NodePalette";
@@ -138,6 +139,7 @@ interface CanvasProps {
   edges: FlowEdge[];
   parsed: Record<string, Json>;
   components: Record<string, Json>;
+  excludedComponents: string[];
   statuses: Statuses;
   prefix: string;
   viewKey: string;
@@ -151,6 +153,7 @@ interface CanvasProps {
     kind: NodeKind,
     id: string,
     position?: { x: number; y: number },
+    connection?: NodeConnection,
   ) => void;
   onOpen: (id: string) => void;
   onSelection: (ids: string[]) => void;
@@ -165,6 +168,15 @@ function CanvasInner(props: CanvasProps) {
   const lastFit = useRef("");
   const [query, setQuery] = useState("");
   const [focus, setFocus] = useState<{ id: string } | null>(null);
+  const [pendingConnection, setPendingConnection] = useState<{
+    endpoint: Omit<NodeConnection, "port">;
+    position: { x: number; y: number };
+    screen: { x: number; y: number };
+  } | null>(null);
+  const closeConnectionPalette = useCallback(
+    () => setPendingConnection(null),
+    [],
+  );
   useEffect(() => {
     const element = safeArea.current!;
     const measure = () => {
@@ -319,6 +331,13 @@ function CanvasInner(props: CanvasProps) {
     viewportTouched.current = true;
     fitGraph(target);
   }, [focus, initialized, frame, getNodes, fitGraph]);
+  useEffect(() => {
+    if (!pendingConnection) return;
+    const { nodeId, handleId, handleType } = pendingConnection.endpoint;
+    const origin = displayNodes.find((node) => node.id === nodeId);
+    const ports = origin?.data[handleType === "source" ? "outputs" : "inputs"];
+    if (props.readOnly || !ports?.includes(handleId)) closeConnectionPalette();
+  }, [displayNodes, props.readOnly, pendingConnection, closeConnectionPalette]);
   const [pendingMoves, setPendingMoves] = useState(
     new Map<string, { position: FlowNode["position"] }>(),
   );
@@ -473,6 +492,7 @@ function CanvasInner(props: CanvasProps) {
           if (event) {
             viewportTouched.current = true;
             setFocus(null);
+            closeConnectionPalette();
           }
         }}
         onNodeDragStart={() => {
@@ -493,6 +513,33 @@ function CanvasInner(props: CanvasProps) {
             : (connection: Connection) =>
                 props.onConnect(connection as Omit<FlowEdge, "id">)
         }
+        onConnectStart={closeConnectionPalette}
+        onConnectEnd={(event, connection) => {
+          if (
+            props.readOnly ||
+            connection.isValid ||
+            !connection.fromNode ||
+            !connection.fromHandle?.id
+          )
+            return;
+          const pointer =
+            "changedTouches" in event ? event.changedTouches[0] : event;
+          if (!pointer) return;
+          const screen = { x: pointer.clientX, y: pointer.clientY };
+          // Touch events retain the starting handle as their target.
+          const target = document.elementFromPoint(screen.x, screen.y);
+          if (!target?.classList.contains("react-flow__pane")) return;
+          viewportTouched.current = true;
+          setPendingConnection({
+            endpoint: {
+              nodeId: connection.fromNode.id,
+              handleId: connection.fromHandle.id,
+              handleType: connection.fromHandle.type,
+            },
+            position: screenToFlowPosition(screen),
+            screen,
+          });
+        }}
         onNodeDragStop={(_, __, moved) =>
           void persistPositions(
             moved.map((n) => ({
@@ -537,7 +584,9 @@ function CanvasInner(props: CanvasProps) {
         minZoom={0.1}
         maxZoom={1.8}
         connectionRadius={28}
-        deleteKeyCode={props.readOnly ? null : ["Backspace", "Delete"]}
+        deleteKeyCode={
+          props.readOnly || pendingConnection ? null : ["Backspace", "Delete"]
+        }
         selectionKeyCode="Shift"
         multiSelectionKeyCode="Shift"
         proOptions={{ hideAttribution: true }}
@@ -599,6 +648,23 @@ function CanvasInner(props: CanvasProps) {
           </div>
         )}
       </ReactFlow>
+      {pendingConnection && !props.readOnly && (
+        <ConnectionPalette
+          parsed={props.parsed}
+          components={props.components}
+          excludedComponents={props.excludedComponents}
+          handleType={pendingConnection.endpoint.handleType}
+          screen={pendingConnection.screen}
+          onClose={closeConnectionPalette}
+          onChoose={(kind, id, port) => {
+            props.onAdd(kind, id, pendingConnection.position, {
+              ...pendingConnection.endpoint,
+              port,
+            });
+            closeConnectionPalette();
+          }}
+        />
+      )}
     </>
   );
 }
