@@ -6,6 +6,7 @@ import re
 import secrets
 import time
 
+from .identity import account_identity
 from .util import Problem, uid
 
 SESSION_LIFETIME = 7 * 24 * 3600
@@ -133,3 +134,7 @@ class Auth:
 
     def logout(self, token):
         self.store.delete("session", session_key(token))
+
+    def commit_identity(self, user):
+        record = self.store.get("user", user["id"])
+        return record.get("commit_identity") or account_identity(record)

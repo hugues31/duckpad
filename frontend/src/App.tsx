@@ -868,13 +868,6 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
                 },
               })
             }
-            onIdentity={(identity) =>
-              safe(async () => {
-                await api("/identity", send(identity, "PUT"));
-                await refreshWorkspace();
-                notify(t("saved"));
-              })
-            }
           />
         ) : area === "userSettings" && workspace ? (
           <UserSettings
