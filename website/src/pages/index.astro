@@ -3,6 +3,7 @@ import Layout from "../layouts/Layout.astro";
 import Demo from "../components/Demo.astro";
 import FlowIllustration from "../components/FlowIllustration.astro";
 import TechnologyLogos from "../components/TechnologyLogos.astro";
+import "../styles/home.css";
 import { url } from "../lib/docs";
 ---
 
@@ -58,6 +59,7 @@ duckpad start</code></pre>
       id="demo"
       class="product-section wrap"
       aria-labelledby="demo-heading"
+      data-reveal
     >
       <div class="section-kicker">
         <span id="demo-heading">MEET YOUR NEW DATA WORKSPACE</span>
@@ -80,7 +82,7 @@ duckpad start</code></pre>
       </div>
     </section>
     <section id="workflow" class="workflow wrap">
-      <div class="section-heading">
+      <div class="section-heading" data-reveal>
         <p class="eyebrow">FROM INPUT TO INSIGHT</p>
         <h2>
           Less guesswork.
@@ -90,7 +92,7 @@ duckpad start</code></pre>
         <p>Keep the big picture and the small details in the same place.</p>
       </div>
       <div class="workflow-grid">
-        <a class="workflow-item" href={url("docs/authoring/")}>
+        <a class="workflow-item" href={url("docs/authoring/")} data-reveal>
           <span class="step-number">01 / COMPOSE</span>
           <h3>
             Think in steps.
@@ -104,7 +106,7 @@ duckpad start</code></pre>
           <code>SELECT * FROM your_next_idea</code>
           <span class="card-link">Explore pipelines ↗</span>
         </a>
-        <a class="workflow-item" href={url("docs/lineage/")}>
+        <a class="workflow-item" href={url("docs/lineage/")} data-reveal>
           <span class="step-number">02 / UNDERSTAND</span>
           <h3>
             Every number
@@ -124,7 +126,7 @@ duckpad start</code></pre>
           </div>
           <span class="card-link">Follow the lineage ↗</span>
         </a>
-        <a class="workflow-item" href={url("docs/git/")}>
+        <a class="workflow-item" href={url("docs/git/")} data-reveal>
           <span class="step-number">03 / ITERATE</span>
           <h3>
             Make a change.
@@ -144,7 +146,7 @@ duckpad start</code></pre>
       </div>
     </section>
     <section class="detail-section wrap">
-      <div class="detail-copy">
+      <div class="detail-copy" data-reveal>
         <p class="eyebrow">A CLEAR PATH BACK</p>
         <h2>
           “Where did this
@@ -166,7 +168,7 @@ duckpad start</code></pre>
           Explore lineage and its limits ↗
         </a>
       </div>
-      <figure class="lineage-image">
+      <figure class="lineage-image" data-reveal>
         <img
           src={url("demos/lineage.png")}
           alt="Duckpad lineage panel showing the original amount cells contributing to regional revenue"
@@ -180,7 +182,7 @@ duckpad start</code></pre>
       </figure>
     </section>
     <section class="open-section wrap">
-      <div>
+      <div data-reveal>
         <p class="eyebrow">YOUR WORK, IN YOUR HANDS</p>
         <h2>
           Small setup.
@@ -188,7 +190,7 @@ duckpad start</code></pre>
           Room for big ideas.
         </h2>
       </div>
-      <div class="open-details">
+      <div class="open-details" data-reveal>
         <p>
           Run Duckpad on infrastructure you control. Start with local files,
           reuse your logic as components, and configure connections for each
@@ -205,7 +207,7 @@ duckpad start</code></pre>
         </a>
       </div>
     </section>
-    <section class="start-section wrap">
+    <section class="start-section wrap" data-reveal>
       <div>
         <p class="eyebrow">YOUR NEXT GOOD IDEA STARTS HERE</p>
         <h2>
@@ -230,3 +232,43 @@ duckpad start</code></pre>
     </section>
   </main>
 </Layout>
+
+<script>
+  const motion = matchMedia("(prefers-reduced-motion: reduce)");
+  const sections = document.querySelectorAll<HTMLElement>("[data-reveal]");
+  let observer: IntersectionObserver | undefined;
+
+  const reveal = (section: HTMLElement) => {
+    delete section.dataset.revealPending;
+    observer?.unobserve(section);
+  };
+
+  const setupReveals = () => {
+    observer?.disconnect();
+    sections.forEach(reveal);
+    if (motion.matches || !("IntersectionObserver" in window)) return;
+
+    observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) reveal(entry.target as HTMLElement);
+        }
+      },
+      { threshold: 0.08 },
+    );
+    sections.forEach((section) => {
+      // Keep the initial viewport and restored scroll positions immediately readable.
+      if (section.getBoundingClientRect().top >= innerHeight) {
+        section.dataset.revealPending = "";
+        observer!.observe(section);
+      }
+    });
+  };
+
+  sections.forEach((section) => {
+    // Keyboard navigation must never land on an invisible link.
+    section.addEventListener("focusin", () => reveal(section));
+  });
+  motion.addEventListener("change", setupReveals);
+  setupReveals();
+</script>

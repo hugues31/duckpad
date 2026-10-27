@@ -12,8 +12,7 @@ visual pipelines, explore the results and trace a number all the way back to its
 source.
 
 [Website & docs](https://hugues31.github.io/duckpad/) ·
-[**Get started →**](https://hugues31.github.io/duckpad/docs/quickstart/) ·
-[Take the tour](docs/EXAMPLE.md) · [Contribute](CONTRIBUTING.md)
+[**Get started →**](https://hugues31.github.io/duckpad/docs/quickstart/)
 
 ![Duckpad: the Northstar pipeline and its revenue results](docs/images/workspace.png)
 

@@ -146,9 +146,14 @@ test("mobile navigation, theme persistence and reduced motion", async ({
     path: testInfo.outputPath("website-mobile.png"),
     fullPage: true,
   });
-  await page.getByLabel("Switch color theme").click();
+  const theme = page.getByRole("switch", { name: "Dark theme" });
+  await expect(theme).not.toBeChecked();
+  await theme.focus();
+  await page.keyboard.press("Space");
+  await expect(theme).toBeChecked();
   await page.reload();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  await expect(theme).toBeChecked();
   await page.getByLabel("Navigation menu").click();
   await page
     .getByRole("navigation", { name: "Mobile navigation", exact: true })

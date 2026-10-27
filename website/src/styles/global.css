@@ -175,16 +175,6 @@ h2 {
 .text-link:hover {
   color: var(--blue);
 }
-.icon-button {
-  display: grid;
-  place-items: center;
-  width: 40px;
-  height: 40px;
-  border: 1px solid var(--line);
-  border-radius: 50%;
-  background: transparent;
-  font-size: 22px;
-}
 .mobile-nav {
   display: none;
 }
@@ -892,7 +882,7 @@ pre {
     font-size: 12px;
   }
 }
-@media (max-width: 760px) {
+@media (max-width: 900px) {
   .desktop-nav {
     display: none;
   }
@@ -938,6 +928,8 @@ pre {
     padding: 10px;
     font-size: 14px;
   }
+}
+@media (max-width: 760px) {
   .hero {
     grid-template-columns: 1fr;
     padding-top: 45px;
