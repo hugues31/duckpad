@@ -25,6 +25,13 @@ async function run(page: Page) {
     (r) => r.url().endsWith("/runs") && r.request().method() === "POST",
   );
   await page.getByRole("button", { name: "Run pipeline", exact: true }).click();
+  if (
+    (await page.getByLabel("Environment", { exact: true }).inputValue()) ===
+    "prod"
+  )
+    await page
+      .getByRole("button", { name: "Confirm and run", exact: true })
+      .click();
   const result = await (await response).json();
   await expect
     .poll(

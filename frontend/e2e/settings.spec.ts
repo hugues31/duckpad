@@ -67,8 +67,10 @@ test("instance configuration is available without a project and separate from pe
     await expect(page.getByRole("status")).toContainText("All changes saved");
     await openInstanceSettings(page, "Environments");
     await page
-      .getByLabel("Environments", { exact: true })
-      .fill([...original.catalog.environments, "staging"].join(", "));
+      .getByRole("button", { name: "Add environment", exact: true })
+      .click();
+    await page.getByLabel("ID", { exact: true }).fill("staging");
+    await page.getByLabel("Label", { exact: true }).fill("staging");
     await page
       .getByRole("button", { name: "Save changes", exact: true })
       .click();

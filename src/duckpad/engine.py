@@ -258,13 +258,18 @@ class Engine:
             active = self.active.get(worktree)
         return {"nodes": result, "active": self.store.get("run", active["id"]) if active else None}
 
-    def launch(self, worktree_id, environment, target=None, entry_point="api"):
-        if environment not in self.store.get("settings", "environments", []):
-            raise Problem("Unknown environment")
+    def launch(self, worktree_id, environment, target=None, entry_point="api", *, confirmed=False):
         self.projects.get(worktree_id)
         run_id = uid("run_")
         token = {"id": run_id, "cancel": threading.Event(), "cursor": None}
         with self.lock:
+            settings = self.catalog.environment(environment)
+            if entry_point == "ui" and settings["confirm_before_run"] and not confirmed:
+                raise Problem(
+                    "Confirm this environment before running",
+                    409,
+                    {"confirmation_required": settings},
+                )
             if worktree_id in self.active:
                 raise Problem(
                     "This worktree already has an active execution. Wait or stop it before running again.",

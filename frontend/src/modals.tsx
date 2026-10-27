@@ -1,10 +1,67 @@
-import { lazy, Suspense, useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { X } from "lucide-react";
 import { useT } from "./i18n";
 import type { Json, Snapshot } from "./types";
 import { useAsyncAction } from "./useAsyncAction";
 
 const CodeEditor = lazy(() => import("./Editor"));
+
+export function ConfirmModal({
+  title,
+  children,
+  confirmLabel,
+  onConfirm,
+  onClose,
+}: {
+  title: string;
+  children: React.ReactNode;
+  confirmLabel: string;
+  onConfirm: () => Promise<void>;
+  onClose: () => void;
+}) {
+  const t = useT();
+  const { pending, error, run } = useAsyncAction();
+  const submitting = useRef(false);
+  return (
+    <Modal
+      title={title}
+      onClose={() => {
+        if (!submitting.current) onClose();
+      }}
+    >
+      <div className="modal-content">
+        {children}
+        {error && (
+          <div className="notice error" role="alert">
+            {error}
+          </div>
+        )}
+      </div>
+      <footer>
+        <button
+          autoFocus
+          className="button secondary"
+          disabled={pending}
+          onClick={onClose}
+        >
+          {t("cancel")}
+        </button>
+        <button
+          className="button primary"
+          disabled={pending}
+          onClick={async () => {
+            if (submitting.current) return;
+            submitting.current = true;
+            if (await run(onConfirm)) onClose();
+            submitting.current = false;
+          }}
+        >
+          {pending ? t("loading") : confirmLabel}
+        </button>
+      </footer>
+    </Modal>
+  );
+}
 
 export function Modal({
   title,

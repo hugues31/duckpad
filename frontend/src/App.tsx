@@ -348,6 +348,12 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
   useEffect(() => {
     if (!authenticated || !workspace) return;
     const frame = requestAnimationFrame(() => {
+      // Do not steal focus if the user already reached a control on the new page.
+      if (
+        document.activeElement !== document.body &&
+        !document.activeElement?.closest(".topbar")
+      )
+        return;
       const target = document.querySelector<HTMLElement>(
         "h1, .flow-toolbar, .empty-state",
       );
@@ -457,18 +463,44 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
     select(null);
   }
   async function run(target?: string) {
-    if (!canEdit) return;
-    setBusy(true);
+    if (!canEdit || busy) return;
+    const launch = async (confirmed = false) => {
+      setBusy(true);
+      try {
+        const result = await api(
+          `/worktrees/${worktree}/runs`,
+          send({ environment, node: target, entry_point: "ui", confirmed }),
+        );
+        if (currentWorktree.current === worktree)
+          setStatuses((old) => ({ ...old, active: result }));
+      } finally {
+        setBusy(false);
+      }
+    };
+    const confirm = (
+      settings: Workspace["catalog"]["environment_details"][number],
+    ) =>
+      setModal({
+        kind: "runConfirmation",
+        environment: settings,
+        target: `${snapshot?.bundle?.flow.name || ""} · ${snapshot?.worktree.branch || ""} · ${target || t("run")}`,
+        submit: () => launch(true),
+      });
+    const settings = workspace?.catalog.environment_details.find(
+      (item) => item.id === environment,
+    );
+    if (settings?.confirm_before_run) {
+      confirm(settings);
+      return;
+    }
     try {
-      const result = await api(
-        `/worktrees/${worktree}/runs`,
-        send({ environment, node: target, entry_point: "ui" }),
-      );
-      setStatuses((old) => ({ ...old, active: result }));
+      await launch();
     } catch (e) {
+      if (e instanceof ApiError && (e.detail as Json)?.confirmation_required) {
+        confirm((e.detail as Json).confirmation_required);
+        return;
+      }
       notify((e as Error).message, true);
-    } finally {
-      setBusy(false);
     }
   }
   function openProject(id: string) {
@@ -686,7 +718,7 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
     setModal({
       kind: "about",
       version: session.version,
-      duckdb: workspace?.catalog.duckdb_version,
+      duckdb: workspace?.catalog.duckdb_version || "",
     });
   }
   async function showDiff(commit: string) {
@@ -815,13 +847,6 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
             onIdentity={(identity) =>
               safe(async () => {
                 await api("/identity", send(identity, "PUT"));
-                await refreshWorkspace();
-                notify(t("saved"));
-              })
-            }
-            onEnvironments={(names) =>
-              safe(async () => {
-                await api("/environments", send(names, "PUT"));
                 await refreshWorkspace();
                 notify(t("saved"));
               })
