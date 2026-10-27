@@ -8,8 +8,8 @@ from .builtin_templates import BUILTINS
 from .util import literal
 
 
-def create_example(projects, catalog, private=False):
-    worktree = projects.create("Northstar analytics") if private else None
+def create_example(projects, catalog, private=False, name=None):
+    worktree = projects.create(name or "Northstar analytics") if private else None
     connection_id = "sample_" + worktree["project"] if worktree else "northstar"
     root = projects.store.home / "examples" / "northstar"
     if worktree:
@@ -271,7 +271,7 @@ EXCEPT SELECT customer_id FROM {{ source }} WHERE amount > 400;
     }
     bundle = {
         "flow": {
-            "name": "Northstar",
+            "name": name or "Northstar",
             "description": "From raw orders to explainable revenue",
             "nodes": nodes,
             "edges": edges,
@@ -287,4 +287,4 @@ EXCEPT SELECT customer_id FROM {{ source }} WHERE amount > 400;
         snapshot = projects.snapshot(worktree["id"])
         projects.write(worktree["id"], snapshot["revision"], bundle_to_files(bundle))
         return worktree
-    return projects.create("Northstar · Revenue operations", bundle)
+    return projects.create(name or "Northstar · Revenue operations", bundle)

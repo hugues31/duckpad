@@ -340,9 +340,11 @@ def create_app(home: Path, watch=True):
         return access.create(request.state.user, lambda: projects.create(data.name))
 
     @app.post("/api/example")
-    def example(request: Request):
+    def example(request: Request, data: schemas.NewExample | None = None):
         return access.create(
-            request.state.user, lambda: create_example(projects, catalog, private=True), sample=True
+            request.state.user,
+            lambda: create_example(projects, catalog, private=True, name=data.name if data else None),
+            sample=True,
         )
 
     @app.get("/api/users")

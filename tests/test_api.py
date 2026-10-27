@@ -34,6 +34,51 @@ def test_session_reports_the_packaged_version(client):
     )
 
 
+def test_named_example_populates_an_independent_project(client, worktree):
+    before = client.get(f"/api/worktrees/{worktree}").json()
+    response = client.post("/api/example", json={"name": "  Revenue lab  "})
+    assert response.status_code == 200, response.text
+    example = response.json()
+    snapshot = client.get(f"/api/worktrees/{example['id']}").json()
+    workspace = client.get("/api/workspace").json()
+    project = next(item for item in workspace["projects"] if item["id"] == example["project"])
+    assert project["name"] == snapshot["bundle"]["flow"]["name"] == "Revenue lab"
+    assert snapshot["bundle"]["flow"]["nodes"]
+    assert snapshot["bundle"]["components"]
+    connection = next(
+        item for item in workspace["catalog"]["connections"] if item["id"] == "sample_" + example["project"]
+    )
+    for environment in ("dev", "prod"):
+        folder = Path(connection["environments"][environment]["root"])
+        assert example["project"] in folder.parts
+        assert (folder / "orders.csv").is_file()
+        assert (folder / "customers.parquet").is_file()
+    unchanged = client.get(f"/api/worktrees/{worktree}").json()
+    assert unchanged["commit"] == before["commit"]
+    assert unchanged["bundle"]["flow"]["nodes"] == []
+
+
+@pytest.mark.parametrize("body", [None, {}])
+def test_example_shortcut_retains_its_default_name(client, body):
+    response = client.post("/api/example", json=body)
+    assert response.status_code == 200, response.text
+    project_id = response.json()["project"]
+    project = next(
+        item for item in client.get("/api/workspace").json()["projects"] if item["id"] == project_id
+    )
+    assert project["name"] == "Northstar analytics"
+
+
+@pytest.mark.parametrize("name", ["", "   ", 42, [], {}])
+def test_invalid_example_names_do_not_create_a_project(client, name):
+    before = client.get("/api/workspace").json()
+    response = client.post("/api/example", json={"name": name})
+    assert response.status_code == 422, response.text
+    after = client.get("/api/workspace").json()
+    assert after["projects"] == before["projects"]
+    assert after["catalog"]["connections"] == before["catalog"]["connections"]
+
+
 @pytest.mark.parametrize(
     ("method", "path", "body"),
     [

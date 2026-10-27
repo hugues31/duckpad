@@ -25,8 +25,9 @@ virtual environments and development from source.
 
 ## 2. Open the example
 
-Choose **Open example project** on the welcome screen. Keep the **dev**
-environment selected and click **Run pipeline**. Wait for the run to finish.
+Choose **New project** on the Projects page, enter a name, then choose
+**Start from an example → Create**. Keep the **dev** environment selected and
+click **Run pipeline**. Wait for the run to finish.
 This reads 120 orders and 12 customers, joins them and writes two local CSV reports.
 
 ![The Northstar pipeline and its revenue preview](images/workspace.png)

@@ -618,22 +618,24 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
   }
   function newProject() {
     setModal({
-      kind: "form",
-      title: t("newProject"),
-      fields: [{ key: "name", label: t("name") }],
-      submit: async (v) => {
-        const next = await api("/projects", send(v));
+      kind: "newProject",
+      createEmpty: async (name) => {
+        const next = await api("/projects", send({ name }));
         await refreshWorkspace();
         openProject(next.id);
       },
+      createExample,
     });
+  }
+  async function createExample(name?: string) {
+    const result = await api("/example", send({ name }));
+    await refreshWorkspace();
+    openProject(result.id);
   }
   async function openExample() {
     setBusy(true);
     try {
-      const result = await api("/example", send({}));
-      await refreshWorkspace();
-      openProject(result.id);
+      await createExample();
     } catch (e) {
       notify((e as Error).message, true);
     } finally {
