@@ -23,11 +23,13 @@ export function useT() {
 const builtinLabels: Record<string, string> = {
   load_csv: "Load CSV",
   load_parquet: "Load Parquet",
+  load_xlsx: "Load XLSX",
   load_oracle: "Load Oracle",
   join: "Join",
   filter: "Filter",
   aggregate: "Aggregate",
   export_csv: "Export CSV",
+  export_xlsx: "Export XLSX",
   export_oracle: "Export Oracle",
   sql: "SQL transform",
 };
