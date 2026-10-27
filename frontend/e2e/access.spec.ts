@@ -43,13 +43,9 @@ test("manage instance accounts, project participants and live reader access", as
       data: { name: "Shared access test" },
     })
   ).json();
-  await page.evaluate(
-    (id) => localStorage.setItem("duckpad-worktree", id),
-    worktree.id,
-  );
-  await page.reload();
+  await page.goto(`/worktrees/${worktree.id}/flow`);
   await page
-    .getByRole("button", { name: "Project settings", exact: true })
+    .getByRole("link", { name: "Project settings", exact: true })
     .click();
   await page.getByLabel("User", { exact: true }).selectOption(reader.id);
   await page.getByLabel("Project role", { exact: true }).selectOption("reader");
@@ -67,10 +63,10 @@ test("manage instance accounts, project participants and live reader access", as
   const readerPage = await readerContext.newPage();
   await login(readerPage, username, "reader-browser-password");
   await expect(
-    readerPage.getByRole("button", { name: "Instance settings", exact: true }),
+    readerPage.getByRole("link", { name: "Instance settings", exact: true }),
   ).toHaveCount(0);
   await readerPage
-    .getByRole("button", {
+    .getByRole("link", {
       name: "Open project: Shared access test",
       exact: true,
     })
@@ -83,7 +79,7 @@ test("manage instance accounts, project participants and live reader access", as
   ).toBeDisabled();
   await expect(readerPage.locator(".palette-item").first()).toBeDisabled();
   await readerPage
-    .getByRole("button", { name: "Documentation", exact: true })
+    .getByRole("link", { name: "Documentation", exact: true })
     .click();
   const documentation = readerPage.locator(".documentation-page");
   await expect(documentation.locator("textarea")).toHaveAttribute(
@@ -93,7 +89,7 @@ test("manage instance accounts, project participants and live reader access", as
   await expect(
     documentation.getByRole("button", { name: "Save changes", exact: true }),
   ).toBeDisabled();
-  await readerPage.getByRole("button", { name: "Code", exact: true }).click();
+  await readerPage.getByRole("link", { name: "Code", exact: true }).click();
   const files = readerPage.getByRole("region", { name: "Code", exact: true });
   await expect(
     files.getByRole("button", { name: "Save changes", exact: true }),
@@ -102,7 +98,7 @@ test("manage instance accounts, project participants and live reader access", as
   await expect(
     files.getByRole("button", { name: "Download ZIP", exact: true }),
   ).toBeEnabled();
-  await readerPage.getByRole("button", { name: "Flow", exact: true }).click();
+  await readerPage.getByRole("link", { name: "Flow", exact: true }).click();
   await page
     .getByLabel(`Project role · ${username}`, { exact: true })
     .selectOption("editor");
@@ -117,7 +113,7 @@ test("manage instance accounts, project participants and live reader access", as
   await dialog.getByRole("button", { name: "Confirm", exact: true }).click();
   await expect(
     readerPage.getByRole("heading", {
-      name: "Your first pipeline starts here.",
+      name: "Page unavailable",
       exact: true,
     }),
   ).toBeVisible();

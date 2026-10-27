@@ -5,6 +5,21 @@ import {
   useState,
   type CSSProperties,
 } from "react";
+import {
+  Link,
+  useBlocker,
+  useBeforeUnload,
+  useLocation,
+  useNavigate,
+} from "react-router";
+import {
+  usePageRoute,
+  worktreeUrl,
+  isWorktreePage,
+  signInReturn,
+  SSO_RETURN_KEY,
+} from "./navigation";
+import { Modal } from "./modals";
 import { AlertCircle, Loader2 } from "lucide-react";
 import { api, ApiError, send, withQuery } from "./api";
 import { ProjectSettings } from "./Administration";
@@ -42,7 +57,7 @@ import Preview from "./Preview";
 import ProjectDashboard from "./ProjectDashboard";
 import UserSettings from "./UserSettings";
 import { Toast, useToast } from "./Toast";
-import TopBar, { type Area } from "./TopBar";
+import TopBar from "./TopBar";
 import type {
   Bundle,
   FlowNode,
@@ -54,7 +69,6 @@ import type {
 } from "./types";
 import { PanelResizeHandle, usePanelSizes } from "./WorkspacePanels";
 
-const WORKTREE_KEY = "duckpad-worktree";
 const POLL_INTERVAL = 1000;
 /** Height of each banner stacked under the toolbar, in pixels. */
 const NOTICE_HEIGHT = 36;
@@ -87,17 +101,45 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
   const { message, notify, dismiss } = useToast();
   const [authenticated, setAuthenticated] = useState<boolean | null>(null);
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
-  const [worktree, setWorktree] = useState(
-    localStorage.getItem(WORKTREE_KEY) || "",
+  const route = usePageRoute();
+  const { area } = route;
+  const tab = route.tab || "flow";
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [signInDestination] = useState(() =>
+    signInReturn(sessionStorage.getItem(SSO_RETURN_KEY)),
   );
+  const [lastWorktree, setLastWorktree] = useState("");
+  const worktree =
+    route.worktreeId ||
+    (area === "projectSettings"
+      ? workspace?.projects.find((p) => p.id === route.projectId)?.main || ""
+      : "");
+  const environments: string[] = workspace?.catalog.environments || [];
+  const requestedEnvironment = new URLSearchParams(location.search).get(
+    "environment",
+  );
+  const environment =
+    requestedEnvironment && environments.includes(requestedEnvironment)
+      ? requestedEnvironment
+      : environments[0] || "dev";
+  const setWorktree = (id: string) => {
+    void navigate(worktreeUrl(id, tab, environment));
+  };
+  const setTab = (value: WorkspaceTab) => {
+    void navigate(worktreeUrl(worktree, value, environment));
+  };
+  const [loadError, setLoadError] = useState("");
   const currentWorktree = useRef(worktree);
   currentWorktree.current = worktree;
   const snapshotEpoch = useRef(0);
-  const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
-  const [environment, setEnvironment] = useState("dev");
-  const [area, setArea] = useState<Area>(worktree ? "pipelines" : "projects");
-  const [tab, setTab] = useState<WorkspaceTab>("flow");
+  const [snapshotState, setSnapshot] = useState<Snapshot | null>(null);
+  const snapshot =
+    snapshotState?.worktree.id === worktree ? snapshotState : null;
   const [codeDirty, setCodeDirty] = useState(false);
+  const [documentationDirty, setDocumentationDirty] = useState(false);
+  const [codeDraftVersion, setCodeDraftVersion] = useState(0);
+  const [documentationDraftVersion, setDocumentationDraftVersion] = useState(0);
   const [selected, setSelected] = useState<string | null>(null);
   const [path, setPath] = useState<PathPart[]>([]);
   const [selection, setSelection] = useState<string[]>([]);
@@ -145,6 +187,7 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
       // Discard reads started before a save completed or the worktree changed.
       if (id !== currentWorktree.current || epoch !== snapshotEpoch.current)
         return;
+      setLoadError("");
       setSnapshot((old) =>
         old?.worktree.id === value.worktree.id &&
         old?.revision === value.revision &&
@@ -158,26 +201,36 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
     [worktree],
   );
   useEffect(() => {
-    if (!authenticated) return;
-    refreshWorkspace()
-      .then((value) => {
-        if (!value.worktrees.some((w) => w.id === worktree)) {
-          setWorktree("");
-          localStorage.removeItem(WORKTREE_KEY);
-          setArea("projects");
-        }
-      })
-      .catch((e) => notify(e.message, true));
-  }, [authenticated]);
-  // Environments can be renamed in the settings; keep a configured one selected.
-  const environments: string[] = workspace?.catalog.environments || [];
+    if (authenticated)
+      void refreshWorkspace().catch((e) => notify(e.message, true));
+  }, [authenticated, refreshWorkspace, notify, location.key]);
   useEffect(() => {
-    if (environments.length && !environments.includes(environment))
-      setEnvironment(environments[0]);
-  }, [environments.join("|"), environment]);
+    if (!authenticated || area !== "home") return;
+    sessionStorage.removeItem(SSO_RETURN_KEY);
+    void navigate(signInDestination || "/projects", { replace: true });
+  }, [authenticated, area, navigate, signInDestination]);
   useEffect(() => {
+    if (
+      workspace &&
+      area === "pipelines" &&
+      requestedEnvironment &&
+      !environments.includes(requestedEnvironment)
+    ) {
+      void navigate(worktreeUrl(worktree, tab, environment), { replace: true });
+    }
+  }, [
+    workspace,
+    area,
+    worktree,
+    tab,
+    environment,
+    requestedEnvironment,
+    navigate,
+  ]);
+  useEffect(() => {
+    setLoadError("");
     if (!worktree || !authenticated) return;
-    localStorage.setItem(WORKTREE_KEY, worktree);
+    setLastWorktree(worktree);
     setSnapshot(null);
     setSelected(null);
     setSelection([]);
@@ -185,7 +238,12 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
     setCell(null);
     setPreview(null);
     setStatuses(EMPTY_STATUSES);
-    load(worktree).catch((e) => notify(e.message, true));
+    load(worktree).catch((e) => {
+      if (currentWorktree.current === worktree) {
+        if (e.status === 401) setAuthenticated(false);
+        else setLoadError(e.message);
+      }
+    });
   }, [worktree, authenticated]);
   useEffect(() => {
     if (!worktree || !authenticated) return;
@@ -211,8 +269,7 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
               setPreview(null);
               setModal(null);
               setStatuses(EMPTY_STATUSES);
-              setWorktree("");
-              setArea("pipelines");
+              setLoadError(t("routeUnavailable"));
               await refreshWorkspace();
             }
             throw e;
@@ -243,24 +300,70 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
       setModal(null);
       setCell(null);
       setPreview(null);
-      setArea("pipelines");
       return;
     }
     const timer = setInterval(() => {
-      refreshWorkspace()
-        .then((value) => {
-          if (
-            value.user.role !== "admin" &&
-            ["users", "connections"].includes(area)
-          )
-            setArea("pipelines");
-        })
-        .catch((e) => {
-          if (e.status === 401) setAuthenticated(false);
-        });
+      refreshWorkspace().catch((e) => {
+        if (e.status === 401) setAuthenticated(false);
+      });
     }, 5000);
     return () => clearInterval(timer);
-  }, [authenticated, refreshWorkspace, area]);
+  }, [authenticated, refreshWorkspace]);
+  const blocker = useBlocker(({ currentLocation, nextLocation }) => {
+    // Router history can advance before an unmounted editor's cleanup runs.
+    // Only drafts belonging to the page being left may block a transition.
+    if (!authenticated || !isWorktreePage(currentLocation.pathname, worktree))
+      return false;
+    const retainsCode = isWorktreePage(nextLocation.pathname, worktree);
+    return (
+      (codeDirty && !retainsCode) ||
+      (documentationDirty &&
+        currentLocation.pathname !== nextLocation.pathname) ||
+      (saving && currentLocation.pathname !== nextLocation.pathname)
+    );
+  });
+  useBeforeUnload(
+    useCallback(
+      (event: BeforeUnloadEvent) => {
+        if (codeDirty || documentationDirty || saving) event.preventDefault();
+      },
+      [codeDirty, documentationDirty, saving],
+    ),
+  );
+  useEffect(() => {
+    setModal(null);
+  }, [location.pathname]);
+  const pageTitle = t(
+    area === "pipelines"
+      ? tab
+      : area === "home"
+        ? "projects"
+        : area === "notFound"
+          ? "routeNotFound"
+          : area,
+  );
+  useEffect(() => {
+    document.title = `${pageTitle} · Duckpad`;
+  }, [pageTitle]);
+  useEffect(() => {
+    if (!authenticated || !workspace) return;
+    const frame = requestAnimationFrame(() => {
+      // Do not steal focus if the user already reached a control on the new page.
+      if (
+        document.activeElement !== document.body &&
+        !document.activeElement?.closest(".topbar")
+      )
+        return;
+      const target = document.querySelector<HTMLElement>(
+        "h1, .flow-toolbar, .empty-state",
+      );
+      if (target) {
+        target.tabIndex = -1;
+        target.focus({ preventScroll: true });
+      }
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [location.pathname, authenticated, !!workspace, !!snapshot]);
   const canEdit = snapshot?.role === "admin" || snapshot?.role === "editor";
   const instanceAdmin = workspace?.user.role === "admin";
   const bundle = snapshot?.bundle;
@@ -274,7 +377,7 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
   const active = statuses.active;
   const resultVersion = JSON.stringify(statuses.nodes);
   const project = workspace?.projects.find(
-    (p) => p.id === snapshot?.worktree.project,
+    (p) => p.id === (route.projectId || snapshot?.worktree.project),
   );
 
   const select = (id: string | null) => {
@@ -401,14 +504,7 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
     }
   }
   function openProject(id: string) {
-    setWorktree(id);
-    setArea("pipelines");
-    setTab("flow");
-    setPath([]);
-    setSelected(null);
-    setSelection([]);
-    setCell(null);
-    setPreview(null);
+    void navigate(worktreeUrl(id, "flow", environment));
   }
   function newBranch(revision = "") {
     setModal({
@@ -665,11 +761,11 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
           snapshot={snapshot}
           environment={environment}
           preferences={preferences}
-          onArea={setArea}
-          onHome={() => {
-            setArea("projects");
-            safe(refreshWorkspace);
-          }}
+          pipelineUrl={
+            workspace?.worktrees.some((w) => w.id === lastWorktree)
+              ? worktreeUrl(lastWorktree, "flow", environment)
+              : "/projects"
+          }
           onHelp={() => safe(showAbout)}
           onOpenProject={openProject}
           onNewProject={newProject}
@@ -678,7 +774,7 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
           onGit={() => showGit("sync")}
           gitVersion={gitVersion}
           onEnvironment={(value) => {
-            setEnvironment(value);
+            void navigate(worktreeUrl(worktree, tab, value));
             setCell(null);
           }}
           onSignOut={() =>
@@ -688,7 +784,33 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
             })
           }
         />
-        {area === "projectSettings" && project && workspace ? (
+        {!workspace || area === "home" ? (
+          <div className="startup" role="status" aria-label={t("loading")}>
+            <Loader2 className="spin" />
+          </div>
+        ) : area === "notFound" ||
+          (area === "instanceSettings" && !instanceAdmin) ||
+          (area === "projectSettings" && !project) ||
+          (area === "pipelines" &&
+            (!workspace.worktrees.some((w) => w.id === worktree) ||
+              loadError)) ? (
+          <main className="empty-state" tabIndex={-1}>
+            <AlertCircle size={32} />
+            <h1>
+              {t(area === "notFound" ? "routeNotFound" : "routeUnavailable")}
+            </h1>
+            <p>
+              {t(
+                area === "notFound"
+                  ? "routeNotFoundHint"
+                  : "routeUnavailableHint",
+              )}
+            </p>
+            <Link className="button primary" to="/projects">
+              {t("backToProjects")}
+            </Link>
+          </main>
+        ) : area === "projectSettings" && project ? (
           <ProjectSettings
             key={project.id}
             project={project.id}
@@ -696,12 +818,13 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
             refresh={refreshWorkspace}
             onDeleted={() => {
               setSnapshot(null);
-              setWorktree("");
-              setArea("pipelines");
+              void navigate("/projects", { replace: true });
             }}
           />
         ) : area === "instanceSettings" && workspace && instanceAdmin ? (
           <InstanceSettings
+            key={route.section}
+            section={route.section!}
             workspace={workspace}
             refresh={async () => {
               await refreshWorkspace();
@@ -740,7 +863,6 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
             <ProjectDashboard
               projects={workspace.projects}
               busy={busy}
-              onOpen={openProject}
               onCreate={newProject}
               onExample={openExample}
             />
@@ -757,14 +879,15 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
           <>
             <FlowToolbar
               readOnly={!canEdit}
-              onProjectSettings={() => setArea("projectSettings")}
+              project={snapshot.worktree.project}
+              worktree={worktree}
+              environment={environment}
               tab={tab}
               saving={saving}
               dirty={codeDirty}
               branch={snapshot.worktree.branch}
               active={active}
               canRun={!busy && !!bundle}
-              onTab={setTab}
               onMerge={() => showGit("branches")}
               onRun={() => run()}
               onStop={() =>
@@ -784,7 +907,7 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
               onViewFiles={() => setTab("code")}
             />
             <CodePanel
-              key={worktree}
+              key={`code:${worktree}:${codeDraftVersion}`}
               hidden={tab !== "code"}
               readOnly={!canEdit}
               snapshot={snapshot}
@@ -802,8 +925,9 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
             ) : tab === "documentation" && bundle ? (
               <DocumentationPanel
                 readOnly={!canEdit}
-                key={worktree}
+                key={`documentation:${worktree}:${documentationDraftVersion}`}
                 snapshot={snapshot}
+                onDirtyChange={setDocumentationDirty}
                 onSave={(text, base) =>
                   saveFrom(base, (value) => {
                     value.documentation.project = text;
@@ -1021,6 +1145,35 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
           </>
         )}
       </div>
+      {blocker.state === "blocked" && (
+        <Modal title={t("unsavedChanges")} onClose={() => blocker.reset()}>
+          <p>{t("leavePageHint")}</p>
+          <footer>
+            <button
+              className="button secondary"
+              autoFocus
+              onClick={() => blocker.reset()}
+            >
+              {t("stayOnPage")}
+            </button>
+            <button
+              className="button primary"
+              onClick={() => {
+                // Discard explicitly even if Back interrupts the route render.
+                if (!isWorktreePage(blocker.location.pathname, worktree)) {
+                  setCodeDraftVersion((value) => value + 1);
+                  setCodeDirty(false);
+                }
+                setDocumentationDraftVersion((value) => value + 1);
+                setDocumentationDirty(false);
+                blocker.proceed();
+              }}
+            >
+              {t("leavePage")}
+            </button>
+          </footer>
+        </Modal>
+      )}
       <Toast message={message} onDismiss={dismiss} />
       <ModalHost modal={modal} onClose={closeModal} />
     </div>

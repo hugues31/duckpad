@@ -7,11 +7,7 @@ async function project(page: Page) {
       data: { name: "Environment checks" },
     })
   ).json();
-  await page.evaluate(
-    (id) => localStorage.setItem("duckpad-worktree", id),
-    result.id,
-  );
-  await page.reload();
+  await page.goto(`/worktrees/${result.id}/flow`);
   return result.id as string;
 }
 
@@ -90,7 +86,7 @@ test("manage environment labels, colors, confirmation and selected-environment d
         .getByRole("button", { name: "Release candidate", exact: true }),
     ).toBeVisible();
     await page.getByRole("button", { name: "Cancel", exact: true }).click();
-    await page.getByRole("button", { name: "Pipelines", exact: true }).click();
+    await page.goto(`/worktrees/${worktree}/flow`);
     await page.getByLabel("Environment", { exact: true }).selectOption("qa_ui");
     await expect(page.locator(".environment-picker .select-value")).toHaveText(
       "Release candidate",
@@ -120,7 +116,7 @@ test("manage environment labels, colors, confirmation and selected-environment d
       .getByRole("button", { name: "Delete", exact: true })
       .click();
     await expect(card).toHaveCount(0);
-    await page.getByRole("button", { name: "Pipelines", exact: true }).click();
+    await page.getByRole("link", { name: "Pipelines", exact: true }).click();
     await expect(page.getByLabel("Environment", { exact: true })).toHaveValue(
       "dev",
     );

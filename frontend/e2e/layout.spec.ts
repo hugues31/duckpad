@@ -4,8 +4,7 @@ import fr from "../src/locales/fr.json" with { type: "json" };
 import { signIn } from "./helpers";
 
 async function openWorktree(page: Page, id: string) {
-  await page.evaluate((id) => localStorage.setItem("duckpad-worktree", id), id);
-  await page.reload();
+  await page.goto(`/worktrees/${id}/flow`);
   await expect(page.locator(".react-flow__controls")).toBeVisible();
 }
 

@@ -6,8 +6,10 @@ export default function DocumentationPanel({
   readOnly = false,
   snapshot,
   onSave,
+  onDirtyChange,
 }: {
   readOnly?: boolean;
+  onDirtyChange: (dirty: boolean) => void;
   snapshot: Snapshot;
   /** Save the text on top of the given revision; resolve to the saved snapshot. */
   onSave: (text: string, base: Snapshot) => Promise<Snapshot>;
@@ -26,7 +28,9 @@ export default function DocumentationPanel({
   const dirty = useRef(false);
   const edit = (value: string) => {
     latest.current = value;
-    dirty.current = true;
+    dirty.current =
+      value !== (base.current.bundle?.documentation.project || "");
+    onDirtyChange(dirty.current);
     setText(value);
   };
   useEffect(() => {
@@ -35,6 +39,7 @@ export default function DocumentationPanel({
     edit(snapshot.bundle?.documentation.project || "");
     dirty.current = false;
   }, [snapshot]);
+  useEffect(() => () => onDirtyChange(false), [onDirtyChange]);
   return (
     <section className="full-panel documentation-page">
       <span className="eyebrow">{t("documentation")}</span>
@@ -61,6 +66,7 @@ export default function DocumentationPanel({
               base.current = await onSave(saved, base.current);
               // Keep edits typed while the save was in flight.
               dirty.current = latest.current !== saved;
+              onDirtyChange(dirty.current);
               setMessage(t("saved"));
             } catch (e) {
               setMessage((e as Error).message);

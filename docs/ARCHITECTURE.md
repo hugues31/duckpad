@@ -42,6 +42,58 @@ is an instance operation. Language and theme remain browser-local preferences,
 shared by accounts using that browser, and are not synchronized between devices.
 The account menu retains shortcuts for changing those preferences.
 
+## Browser navigation
+
+The browser URL selects the page, settings section, worktree, and workspace tab.
+`navigation.ts` defines the routes; `main.tsx` installs React Router's
+`createBrowserRouter` and `RouterProvider`. `App.tsx` remains the persistent
+workspace layout and keeps the existing API client, polling, and save semantics.
+Page links use `Link` or `NavLink`, with browser history, keyboard navigation,
+active states, and opening in another tab. Titles and focus follow page changes.
+
+| URL | Destination |
+| --- | --- |
+| `/projects` | Project dashboard |
+| `/instance-settings` | Instance general settings, for instance administrators |
+| `/instance-settings/:section` | `users`, `sso`, `environments` or `connections` |
+| `/user-settings` | Preferences and password for the signed-in account |
+| `/projects/:projectId/settings` | Project settings with role-specific controls |
+| `/worktrees/:worktreeId/:tab` | Pipeline workspace: `flow`, `code`, `documentation` or `history` |
+
+After authentication, `/` redirects to `/projects`, except when completing a
+validated SSO return. There is no legacy navigation migration or worktree
+restoration from local storage. Unknown paths, sections, and tabs show a not-found
+screen. Deleted or inaccessible resources show an unavailable screen with a link
+to Projects. Backend authorization remains authoritative, including when access
+changes during a session.
+
+Worktree IDs identify branches without embedding branch names or filesystem
+paths. The optional `?environment=dev` selects a configured run environment;
+invalid names are replaced with the first configured environment. Changing the
+environment participates in browser history. Navigation never starts, cancels,
+or replays a pipeline run. Graph selection, panel sizes, modals, SQL drafts,
+credentials, and result data stay out of URLs. Theme and language remain browser
+preferences, and URL segments remain stable across translations.
+
+Local sign-in and session expiry preserve the requested URL. OIDC still uses
+its existing API callback and returns to `/`; the login page stores the validated
+internal destination in tab-scoped session storage for that round trip. Only
+known application paths and the environment selection are retained. External
+return destinations are rejected, and existing SSO error handling is preserved.
+
+Code drafts remain mounted across tabs within a worktree. `useBlocker` asks
+before navigation that would discard code or documentation drafts, including
+browser Back/Forward. Canceling keeps the edits; confirming discards them.
+`beforeunload` protects reloads and document exits. Pending responses from an old
+worktree cannot overwrite the current worktree's snapshot.
+
+FastAPI serves the frontend shell for direct application requests through its
+final fallback route. `/api` and `/api/*` retain authentication and API errors;
+`/assets` and the optional `/site` website are mounted before the fallback.
+Playwright covers navigation, authentication returns, history, draft protection,
+permissions, and translations. HTTP tests verify direct-entry fallback and the
+API, asset, and documentation boundaries.
+
 ## Save and capture
 
 A UI save carries a content revision. Three-way comparison uses that base, the current files (including pending external edits), and the proposal. Stable-ID objects and disjoint JSON fields merge; incompatible SQL/file changes become recoverable conflicts. Conflicts retain all three versions in SQLite. Resolution rechecks the current files before writing. A metadata-only conflict does not block computation; a computation conflict blocks dependent scopes, conservatively the whole graph if unreadable.

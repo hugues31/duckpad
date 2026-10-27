@@ -150,7 +150,7 @@ test("project administrators manage their project and password without instance 
       member.getByRole("navigation", { name: "Workspace", exact: true }),
     ).toBeVisible();
     await expect(
-      member.getByRole("button", { name: "Instance settings", exact: true }),
+      member.getByRole("link", { name: "Instance settings", exact: true }),
     ).toHaveCount(0);
     await openUserSettings(member);
     await expect(member.getByLabel("Language", { exact: true })).toBeVisible();
@@ -180,13 +180,9 @@ test("project administrators manage their project and password without instance 
         data: { name: "Scoped project" },
       })
     ).json();
-    await member.evaluate(
-      (id) => localStorage.setItem("duckpad-worktree", id),
-      worktree.id,
-    );
-    await member.reload();
+    await member.goto(`/worktrees/${worktree.id}/flow`);
     await member
-      .getByRole("button", { name: "Project settings", exact: true })
+      .getByRole("link", { name: "Project settings", exact: true })
       .click();
     await expect(
       member.getByRole("heading", { name: "Project settings", exact: true }),
@@ -204,7 +200,7 @@ test("project administrators manage their project and password without instance 
       }),
     ).toHaveCount(0);
     await expect(
-      member.getByRole("button", { name: "Instance settings", exact: true }),
+      member.getByRole("link", { name: "Instance settings", exact: true }),
     ).toHaveCount(0);
     await expect(member.getByLabel("Branch", { exact: true })).toHaveCount(0);
     await expect(member.getByLabel("Environment", { exact: true })).toHaveCount(
@@ -212,9 +208,15 @@ test("project administrators manage their project and password without instance 
     );
     expect((await member.request.get("/api/users")).status()).toBe(403);
     expect((await member.request.get("/api/sso")).status()).toBe(403);
-    await member
-      .getByRole("button", { name: "Pipelines", exact: true })
-      .click();
+    await member.goto("/instance-settings/users");
+    await expect(
+      member.getByRole("heading", { name: "Page unavailable", exact: true }),
+    ).toBeVisible();
+    await member.goBack();
+    await expect(
+      member.getByRole("heading", { name: "Project settings", exact: true }),
+    ).toBeVisible();
+    await member.getByRole("link", { name: "Pipelines", exact: true }).click();
     await expect(member.getByLabel("Branch", { exact: true })).toBeVisible();
     await expect(
       member.getByRole("button", { name: "Run pipeline", exact: true }),
