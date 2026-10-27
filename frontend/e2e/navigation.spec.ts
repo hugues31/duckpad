@@ -27,7 +27,10 @@ test("dedicated pages support direct sign-in, refresh, history, new tabs and tra
   ).toBeVisible();
   await page.goBack();
   await expect(page).toHaveURL(/\/instance-settings$/);
-  await expect(page.getByLabel("Author name", { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Git author", exact: true }),
+  ).toBeVisible();
+  await expect(page.getByLabel("Author name", { exact: true })).toHaveCount(0);
   await page.goBack();
   await expect(page).toHaveURL(/\/user-settings$/);
   await page.goForward();
