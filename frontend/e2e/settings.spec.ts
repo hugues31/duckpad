@@ -34,6 +34,12 @@ test("instance configuration is available without a project and separate from pe
     page.getByRole("heading", { name: "Paramètres utilisateur", exact: true }),
   ).toBeVisible();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  await expect(
+    page.getByLabel("Langue", { exact: true }).locator(".select-value"),
+  ).toHaveText("Français");
+  await expect(
+    page.getByLabel("Thème", { exact: true }).locator(".select-value"),
+  ).toHaveText("Sombre");
   await page.getByLabel("Langue", { exact: true }).selectOption("en");
   await page.reload();
   await openUserSettings(page);
