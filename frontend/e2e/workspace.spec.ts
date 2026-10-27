@@ -64,24 +64,23 @@ test("complete example, ordered outputs, nested components, lineage pagination a
   await page
     .getByRole("button", { name: /Explain this value: revenue, rows 1,/ })
     .click();
-  await expect(
-    page.getByText("Complete explanation", { exact: true }),
-  ).toBeVisible();
-  await page.locator(".lineage-panel .contribution").first().click();
-  await expect(page.locator(".lineage-panel")).toContainText(
-    "27 contributions",
+  await expect(page.locator(".lineage-card.calculation")).toHaveCount(1);
+  await expect(page.locator(".lineage-dialog")).toContainText(
+    "Sum of 27 contributing values",
     { ignoreCase: true },
   );
   await expect(
-    page.locator(".lineage-panel .contribution").first(),
+    page.locator(".lineage-dialog .lineage-card.is-source").first(),
   ).toContainText("amount");
   await page
-    .locator(".lineage-panel")
+    .locator(".lineage-dialog")
     .getByRole("button", { name: "Next", exact: true })
     .click();
-  await expect(page.locator(".lineage-panel .pager")).toContainText("10 / 27");
+  await expect(page.locator(".lineage-dialog .lineage-page")).toContainText(
+    "6–10 / 27",
+  );
   await page
-    .locator(".lineage-panel")
+    .locator(".lineage-dialog")
     .getByTitle("Close", { exact: true })
     .click();
   await page
@@ -319,14 +318,19 @@ test("an open lineage explanation is interrupted when its generation is recalcul
   await page
     .getByRole("button", { name: /Explain this value: revenue, rows 1,/ })
     .click();
-  await expect(
-    page.getByText("Complete explanation", { exact: true }),
-  ).toBeVisible();
-  await run(page);
-  await expect(page.locator(".lineage-panel")).toContainText(
+  await expect(page.locator(".lineage-dialog")).toContainText(
+    "Sum of 27 contributing values",
+  );
+  const worktree = new URL(page.url()).pathname.split("/")[2];
+  await page.request.post(`/api/worktrees/${worktree}/runs`, {
+    data: { environment: "dev" },
+  });
+  await expect(page.locator(".lineage-dialog")).toContainText(
     "This exploration was interrupted",
   );
-  await expect(page.locator(".lineage-panel .contribution")).toHaveCount(0);
+  await expect(
+    page.locator(".lineage-dialog .lineage-card.is-source"),
+  ).toHaveCount(0);
 });
 
 test("connection capabilities constrain source and export forms without a project commit", async ({
@@ -494,7 +498,9 @@ test("glass panels overlay the full canvas and fitting keeps nodes reachable", a
   await page
     .getByRole("button", { name: "Toggle node library", exact: true })
     .click();
-  await page.getByLabel("Find a node…", { exact: true }).fill("Filter");
+  await page
+    .getByRole("textbox", { name: "Find a node…", exact: true })
+    .fill("Filter");
   await expect(page.locator(".palette-item")).toHaveCount(1);
   await page
     .getByRole("button", { name: "Toggle data preview", exact: true })

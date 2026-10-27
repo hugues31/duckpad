@@ -34,12 +34,30 @@ This reads 120 orders and 12 customers, joins them and writes two local CSV repo
 Select **Regional revenue** on the canvas and choose **report** in the output
 selector. The table shows the calculated revenue for each region.
 
+Use **Find a node…** to search the current graph by label, ID or
+template. Choose a result with the mouse or the arrow keys and Enter to select
+and center it. Inside a component, this searches that component's nodes.
+
+**Search instance** in the top bar finds projects, open branches and placed nodes
+across projects you can read, including nodes inside nested components. Results
+show their project, branch and component path; selecting one opens that location.
+Search uses saved project metadata, never SQL, parameter values, connection
+secrets or result rows. It does not change the project or run a pipeline.
+
+Press **Ctrl+F** (**⌘F** on macOS) to focus canvas search, or **Ctrl+K** (**⌘K**)
+to open instance search. These shortcuts leave text editors, other form fields
+and open dialogs in control of their keys.
+
 ## 3. Explain a number
 
-Click a **revenue** cell in the result table. The lineage panel shows the
-calculation and its contributing values. Open the first contribution to move
-through the rank step into the aggregate, then inspect the original **amount**
-cells. Use **Next** to page through groups of five contributions.
+Click a **revenue** cell in the result table. A large modal connects the original
+**amount** cells to the sum that produced the selected revenue. Unchanged values
+pass straight through, leaving only source cells and meaningful calculations.
+
+The calculation shows `SUM(amount)`, its result and the full number of
+contributing values. Use **Next** to display the next five inputs. Open a card's
+details to inspect the SQL or the context that selected its rows. Pan and zoom
+the graph as needed; press Escape to return to the result table.
 
 ![The original amounts behind a regional revenue total](images/lineage.png)
 
