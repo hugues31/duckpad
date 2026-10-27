@@ -4,6 +4,22 @@ from fastapi.testclient import TestClient
 from duckpad.app import create_app
 
 
+def test_documentation_mount_preserves_application_and_api_boundaries(tmp_path, monkeypatch):
+    static = tmp_path / "static"
+    (static / "site" / "docs" / "quickstart").mkdir(parents=True)
+    (static / "site" / "index.html").write_text("Duckpad website")
+    (static / "site" / "docs" / "quickstart" / "index.html").write_text("Quickstart guide")
+    (static / "index.html").write_text("Duckpad application")
+    monkeypatch.setattr("duckpad.app.STATIC", static)
+    app = create_app(tmp_path / "instance", watch=False)
+    with TestClient(app) as client:
+        assert client.get("/site/").text == "Duckpad website"
+        assert client.get("/site/docs/quickstart/").text == "Quickstart guide"
+        assert client.get("/site/missing/").status_code == 404
+        assert client.get("/").text == "Duckpad application"
+        assert client.get("/api/session").status_code == 401
+
+
 @pytest.mark.parametrize(
     ("secure", "scheme", "session_status"),
     [("0", "http", 200), ("1", "http", 401), ("0", "https", 200), ("1", "https", 200)],
