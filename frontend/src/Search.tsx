@@ -139,7 +139,7 @@ export function SearchField({
               ? t("loading")
               : message ||
                 (options.length
-                  ? `${options.length} ${t("searchResults")}`
+                  ? `${t("searchResults")}: ${options.length}`
                   : t("noSearchResults"))}
           </p>
         </div>
