@@ -18,6 +18,19 @@ class NewProject(BaseModel):
     name: str = "Untitled project"
 
 
+class NewExample(BaseModel):
+    name: str | None = None
+
+    @field_validator("name")
+    @classmethod
+    def project_name(cls, value):
+        if value is not None:
+            value = value.strip()
+            if not value:
+                raise ValueError("Project name must not be empty")
+        return value
+
+
 class Save(BaseModel):
     """A UI save: raw files, or a bundle serialized to files, based on an editing revision."""
 

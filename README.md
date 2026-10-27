@@ -36,7 +36,8 @@ duckpad start
 
 SQL execution requires Linux with Landlock ABI 2+ (Linux 5.19+ with Landlock
 enabled). Open the printed local address and sign in with the initial admin
-password from the terminal. Choose **Open example project**, then **Run pipeline**.
+password from the terminal. Choose **New project**, enter a name, then choose
+**Start from an example → Create** and **Run pipeline**.
 
 The package includes the interface; Node.js is only needed for development.
 See the [quickstart](docs/QUICKSTART.md) for the complete first-run walkthrough.
