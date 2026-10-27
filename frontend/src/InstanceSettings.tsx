@@ -82,7 +82,7 @@ export default function InstanceSettings({
         </div>
       )}
       {section === "usersPermissions" && <UsersPage refresh={refresh} />}
-      {section === "instanceGeneral" && <ExtensionSettings />}
+      {section === "extensions" && <ExtensionSettings />}
       {section === "ssoSettings" && <SSOSettings />}
       {section === "environments" && (
         <EnvironmentsPanel

@@ -13,6 +13,7 @@ export const settingsSections = [
   ["sso", "ssoSettings"],
   ["environments", "environments"],
   ["connections", "connections"],
+  ["extensions", "extensions"],
 ] as const;
 export type Area =
   | "home"
