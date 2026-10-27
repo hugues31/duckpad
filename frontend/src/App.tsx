@@ -49,6 +49,7 @@ import HistoryPanel from "./HistoryPanel";
 import { I18n, useT } from "./i18n";
 import Inspector from "./Inspector";
 import LineagePanel from "./LineagePanel";
+import type { Cell } from "./lineageGraph";
 import LoginPage from "./LoginPage";
 import ModalHost, { type ModalState } from "./ModalHost";
 import NodePalette, { type NodeKind } from "./NodePalette";
@@ -153,7 +154,7 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
   const [selection, setSelection] = useState<string[]>([]);
   const [statuses, setStatuses] = useState<Statuses>(EMPTY_STATUSES);
   const [preview, setPreview] = useState<Json | null>(null);
-  const [cell, setCell] = useState<Json | null>(null);
+  const [cell, setCell] = useState<Cell | null>(null);
   const [modal, setModal] = useState<ModalState | null>(null);
   const [gitVersion, setGitVersion] = useState(0);
   const [saving, setSaving] = useState(false);
@@ -1100,27 +1101,30 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
                       onClose={() => setPreviewOpen(false)}
                       onRun={() => run(fullNode)}
                       onExplain={(value) => {
-                        setCell(value);
-                        setInspectorOpen(true);
+                        setCell({
+                          dataset: value.dataset,
+                          row: value.row,
+                          column: value.column,
+                        });
                       }}
                       onData={setPreview}
                     />
                   ) : null}
                 </main>
+                {cell && (
+                  <LineagePanel
+                    worktree={worktree}
+                    environment={environment}
+                    cell={cell}
+                    onClose={() => setCell(null)}
+                  />
+                )}
                 <div
                   className="inspector-layer"
                   id="node-inspector"
                   hidden={!inspectorOpen}
                 >
-                  {cell ? (
-                    <LineagePanel
-                      key={worktree + environment}
-                      worktree={worktree}
-                      environment={environment}
-                      cell={cell}
-                      onClose={() => setCell(null)}
-                    />
-                  ) : node && definition ? (
+                  {node && definition ? (
                     <Inspector
                       readOnly={!canEdit}
                       key={worktree + fullNode}
