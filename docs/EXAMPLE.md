@@ -2,6 +2,10 @@
 
 Choose **Open example project** from the welcome screen. The example also remains available from the project menu. It creates its own local inputs and an instance connection named Northstar; no credentials or external database are needed.
 
+New to Duckpad? Follow the [quickstart](QUICKSTART.md) to install it and run your
+first pipeline. The website version of this guide includes a captioned recording
+of the steps below, regenerated from the application with Playwright.
+
 ## Explore the pipeline
 
 1. Run the pipeline in `dev`. Orders reads 120 CSV rows and Customers reads 12 Parquet rows. Enrich orders performs a customer join.
@@ -14,11 +18,22 @@ Choose **Open example project** from the welcome screen. The example also remain
 
 ## Explain a value
 
+![Source amounts contributing to regional revenue](images/lineage.png)
+
 Select Regional revenue and its `report` output. Click a revenue cell. Follow the rank step's contribution into the aggregate, then inspect the original amount cells. Use Next to move through pages of five; the displayed total represents the full search, regardless of the preview row limit.
 
 For a distinct customer count, the first level contains customer-value groups and the number of source rows in each. Expanding a group preserves repeated purchases as separate cells. For a maximum, tied maximum cells appear first; Show evaluation context reveals the examined group.
 
 Documentation is available on the project tab and the selected node's Documentation tab, including dataset and column descriptions.
+
+## Inspect the SQL
+
+Open the **Code** tab and select `templates/sql.sql` in the project file tree.
+The editor gives you access to the SQL and structured files behind the canvas.
+Edits to a shared definition affect its instances in the current branch; use an
+isolated working branch when experimenting.
+
+![The project file tree and SQL editor](images/code.png)
 
 ## Compare configurations
 
