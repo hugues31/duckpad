@@ -23,6 +23,12 @@ export const sections = [
         title: "Single sign-on",
         description: "Connect your identity provider with OpenID Connect.",
       },
+      {
+        slug: "offline_extensions",
+        title: "Offline extensions",
+        description:
+          "Prepare and verify DuckDB extensions for air-gapped instances.",
+      },
     ],
   },
   {
