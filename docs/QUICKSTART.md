@@ -36,10 +36,12 @@ selector. The table shows the calculated revenue for each region.
 
 ## 3. Explain a number
 
-Click a **revenue** cell in the result table. The lineage panel shows the
-calculation and its contributing values. Open the first contribution to move
-through the rank step into the aggregate, then inspect the original **amount**
-cells. Use **Next** to page through groups of five contributions.
+Click a **revenue** cell in the result table. The lineage timeline follows the
+rank step into the aggregate automatically, keeping the selected value visible.
+Choose an **amount** to follow its path to the original source row. Use **Next**
+to page through groups of five contributions, or select an earlier timeline step
+to explore another input. **Play this path** animates the explored steps from the
+source toward the selected value; use **Pause** to inspect a step.
 
 ![The original amounts behind a regional revenue total](images/lineage.png)
 

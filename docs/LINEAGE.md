@@ -2,7 +2,11 @@
 
 Lineage explains the materialized execution, not today's external resource. A result identifies its execution, dataset generation, column and stable storage row. Sorting or filtering the preview does not change those identities or restrict the provenance search.
 
-The explorer separates contributing value cells from selection/evaluation context and shows the calculation expression and referenced tables. Every cell remains navigable, including identical values from different rows. Results are paged in groups of five with an exact total. Source cells terminate the traversal; nested components retain instance-qualified paths.
+The explorer keeps the selected value visible above a timeline running backward to its inputs. Steps with a single contributing cell are followed automatically; at a branch, choose an input to continue to its source. Select any earlier step to explore a different input. The timeline shows one explored path, not every branch of an aggregate or join.
+
+Each step describes its operation in plain language, with the expression available under **View calculation**. **Why these rows?** separates selection/evaluation context from contributing cells. Distinct value groups open their original rows without adding a fictitious calculation step. Every cell remains navigable, including identical values from different rows. Results are paged in groups of five with an exact total. Source cells terminate the traversal; nested components retain instance-qualified paths.
+
+**Play this path** highlights the explored steps in creation order, from the earliest input toward the selected value. Pause or select a step to inspect it, then resume; replay after reaching the result. Playback never executes the pipeline or implies that one chosen contribution is the entire calculation. Reduced-motion preferences disable movement while preserving the step highlights.
 
 ## Validated baseline
 
