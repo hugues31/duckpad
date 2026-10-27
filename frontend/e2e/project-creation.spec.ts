@@ -26,6 +26,11 @@ test("new project offers empty and independent example projects from the dashboa
   await signIn(page);
   await page.getByRole("button", { name: "New project", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "New project", exact: true });
+  const name = dialog.getByLabel("Name", { exact: true });
+  await expect(name).toBeFocused();
+  const nameBounds = await name.boundingBox();
+  const typeBounds = await dialog.getByRole("group").boundingBox();
+  expect(nameBounds!.y + nameBounds!.height).toBeLessThan(typeBounds!.y);
   await expect(
     dialog.getByRole("radio", { name: "Empty project" }),
   ).toBeChecked();
@@ -41,10 +46,20 @@ test("new project offers empty and independent example projects from the dashboa
   expect(before.bundle.flow.nodes).toEqual([]);
 
   await page.getByRole("button", { name: "New project", exact: true }).click();
+  await name.fill("   ");
   await dialog.getByRole("radio", { name: "Start from an example" }).check();
-  await expect(dialog.getByLabel("Name", { exact: true })).toHaveCount(0);
+  await expect(
+    dialog.getByRole("button", { name: "Create", exact: true }),
+  ).toBeDisabled();
+  await name.fill("  Revenue lab  ");
   const first = await createFromDialog(page, "example");
   expect(first.project).not.toBe(blank.project);
+  await page.reload();
+  await expect(page.getByLabel("Active project")).toContainText("Revenue lab");
+  const example = await (
+    await page.request.get(`/api/worktrees/${first.id}`)
+  ).json();
+  expect(example.bundle.flow.name).toBe("Revenue lab");
   await expect(
     page.locator(".react-flow__node").filter({
       has: page.getByText("Regional revenue", { exact: true }),
@@ -75,6 +90,7 @@ test("new project offers empty and independent example projects from the dashboa
     }),
   ).toBeVisible();
   await page.getByRole("button", { name: "New project", exact: true }).click();
+  await name.fill("Second revenue lab");
   await dialog.getByRole("radio", { name: "Start from an example" }).check();
   const second = await createFromDialog(page, "example");
   expect(second.project).not.toBe(first.project);
@@ -84,10 +100,15 @@ test("new project offers empty and independent example projects from the dashboa
   expect(after.commit).toBe(before.commit);
   expect(after.bundle.flow.nodes).toEqual([]);
   const workspace = await (await page.request.get("/api/workspace")).json();
-  for (const project of [blank, first, second])
+  for (const [project, name] of [
+    [blank, "Blank project"],
+    [first, "Revenue lab"],
+    [second, "Second revenue lab"],
+  ] as const)
     expect(
       workspace.projects.some(
-        (item: { id: string }) => item.id === project.project,
+        (item: { id: string; name: string }) =>
+          item.id === project.project && item.name === name,
       ),
     ).toBeTruthy();
 });
@@ -116,6 +137,7 @@ test("project creation preserves drafts on errors and prevents duplicate submiss
   const name = dialog.getByLabel("Name", { exact: true });
   await name.fill("Retry project");
   await dialog.getByRole("radio", { name: "Start from an example" }).check();
+  await expect(name).toHaveValue("Retry project");
   await dialog.getByRole("radio", { name: "Empty project" }).check();
   await expect(name).toHaveValue("Retry project");
   await dialog.getByRole("button", { name: "Create", exact: true }).click();
@@ -136,6 +158,7 @@ test("project creation preserves drafts on errors and prevents duplicate submiss
   await createFromDialog(page, "projects");
 
   await page.getByRole("button", { name: "New project", exact: true }).click();
+  await name.fill("Retry example");
   await dialog.getByRole("radio", { name: "Start from an example" }).check();
   await page.route("**/api/example", (route) =>
     route.fulfill({
@@ -145,6 +168,7 @@ test("project creation preserves drafts on errors and prevents duplicate submiss
   );
   await dialog.getByRole("button", { name: "Create", exact: true }).click();
   await expect(dialog.getByRole("alert")).toHaveText("Example unavailable");
+  await expect(name).toHaveValue("Retry example");
   await expect(
     dialog.getByRole("radio", { name: "Start from an example" }),
   ).toBeChecked();
@@ -168,6 +192,9 @@ test("the chooser supports keyboard navigation, French and dark mode on a phone"
   const opener = page.getByRole("button", { name: fr.newProject, exact: true });
   await opener.click();
   const dialog = page.getByRole("dialog", { name: fr.newProject, exact: true });
+  await expect(dialog.getByLabel(fr.name, { exact: true })).toBeFocused();
+  await dialog.getByLabel(fr.name, { exact: true }).fill("Mobile revenue lab");
+  await page.keyboard.press("Tab");
   await expect(
     dialog.getByRole("radio", { name: fr.emptyProject }),
   ).toBeFocused();
@@ -175,7 +202,7 @@ test("the chooser supports keyboard navigation, French and dark mode on a phone"
   await expect(
     dialog.getByRole("radio", { name: fr.fromExample }),
   ).toBeChecked();
-  await expect(dialog).toContainText(fr.exampleProjectHint);
+  await expect(dialog).toContainText(fr.exampleDescription);
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   const bounds = await dialog.boundingBox();
   expect(bounds!.x).toBeGreaterThanOrEqual(0);

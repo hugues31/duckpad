@@ -2114,10 +2114,6 @@ small {
   display: grid;
   gap: 22px;
 }
-.new-project-content > p {
-  margin: 0;
-  line-height: 1.6;
-}
 .project-templates {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 185px), 1fr));

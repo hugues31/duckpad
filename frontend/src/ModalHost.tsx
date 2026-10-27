@@ -18,7 +18,7 @@ export type ModalState =
   | {
       kind: "newProject";
       createEmpty: (name: string) => Promise<void>;
-      createExample: () => Promise<void>;
+      createExample: (name: string) => Promise<void>;
     }
   | {
       kind: "runConfirmation";
