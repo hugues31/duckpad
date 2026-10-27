@@ -15,6 +15,17 @@ PARAMETER_TYPES = ("text", "number", "boolean", "file")
 # Catalog identifiers and environment names.
 NAME = re.compile(r"[A-Za-z][\w-]*")
 
+XLSX_PRESET = {
+    "id": "xlsx",
+    "name": "Excel (XLSX)",
+    "description": "Read worksheets and export XLSX workbooks on this computer.",
+    "parameters": [{"name": "root", "type": "text", "default": ""}],
+    "extensions": [{"name": "excel"}],
+    "init_sql": "",
+    "capabilities": ["read", "write"],
+    "compatibility": "Requires the matching DuckDB excel extension. Validated with DuckDB 2.0.0 on Linux x86_64, including isolated execution. Legacy .xls files are not supported.",
+}
+
 PRESETS = [
     {
         "id": "local",
@@ -26,6 +37,7 @@ PRESETS = [
         "capabilities": ["read", "write"],
         "compatibility": "Validated on DuckDB 2.0.0, Linux x86_64, with native CSV and Parquet. Other DuckDB versions and platforms require validation.",
     },
+    XLSX_PRESET,
     {
         "id": "s3",
         "name": "Amazon S3",
@@ -92,6 +104,12 @@ class Catalog:
             )
             store.put("settings", "environments", ["dev", "prod"])
             store.put("settings", "catalog_initialized", True)
+        # Upgrade existing catalogs once without replacing administrator definitions
+        # or recreating a preset that an administrator later deletes.
+        if not store.get("settings", "xlsx_connector_initialized"):
+            if not store.get("connector", "xlsx"):
+                store.put("connector", "xlsx", XLSX_PRESET)
+            store.put("settings", "xlsx_connector_initialized", True)
         for connection in store.all("connection"):
             if "secret_fields" not in connection:
                 definition = store.get("connector", connection["connector"], {})

@@ -19,6 +19,17 @@ SELECT * FROM read_csv({{ file }}, delim={{ delimiter }}, header={{ header }}, t
 -- @output result
 SELECT * FROM read_parquet({{ file }});
 """,
+    "load_xlsx": """-- @label Load XLSX
+-- @description Read an XLSX worksheet. Leave sheet blank to use the first sheet; all_varchar preserves mixed columns as text.
+-- @kind source
+-- @param connection: connection = "xlsx"
+-- @param file: file(connection) = "workbook.xlsx"
+-- @param sheet: text = ""
+-- @param header: boolean = true
+-- @param all_varchar: boolean = false
+-- @output result
+SELECT * FROM read_xlsx({{ file }}, sheet={{ sheet }}, header={{ header }}, all_varchar={{ all_varchar }});
+""",
     "load_oracle": """-- @label Load Oracle
 -- @kind source
 -- @param connection: connection = "oracle"
@@ -57,6 +68,16 @@ SELECT {{ groups }}, {{ measures }} FROM {{ source }} GROUP BY {{ groups }};
 -- @param delimiter: text = ","
 -- @param header: boolean = true
 COPY {{ source }} TO {{ destination }} (FORMAT CSV, HEADER {{ header }}, DELIMITER {{ delimiter }});
+""",
+    "export_xlsx": """-- @label Export XLSX
+-- @description Write a single-sheet XLSX workbook, replacing the destination on each run.
+-- @kind export
+-- @input source
+-- @param connection: connection = "xlsx"
+-- @param destination: destination(connection) = "export.xlsx"
+-- @param sheet: text = "Sheet1"
+-- @param header: boolean = true
+COPY {{ source }} TO {{ destination }} (FORMAT XLSX, SHEET {{ sheet }}, HEADER {{ header }});
 """,
     "export_oracle": """-- @label Export Oracle
 -- @kind export
