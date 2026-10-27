@@ -19,6 +19,7 @@ from .auth import SESSION_LIFETIME, Auth
 from .bundle import bundle_to_files
 from .components import group, import_definition
 from .example import create_example
+from .identity import commit_author
 from .oidc import CALLBACK_PATH, OIDC, TRANSACTION_LIFETIME, OIDCSettings
 from .resources import resource_usage
 from .search import search_instance
@@ -90,7 +91,7 @@ def create_app(home: Path, watch=True):
     def authorize(request, user):
         parts = request.url.path.strip("/").split("/")
         route = parts[1] if len(parts) > 1 else ""
-        if route in ("users", "identity", "environments", "catalog", "resources", "sso", "extensions"):
+        if route in ("users", "environments", "catalog", "resources", "sso", "extensions"):
             access.instance_admin(user)
         elif route == "projects" and len(parts) >= 3:
             access.require(user, parts[2], "reader" if request.method == "GET" else "admin")
@@ -141,7 +142,9 @@ def create_app(home: Path, watch=True):
                     raise Problem("Cross-origin writes are not allowed", 403)
         except Problem as error:
             return problem_response(error)
-        response = await call_next(request)
+        user = getattr(request.state, "user", None)
+        with commit_author(auth.commit_identity(user) if user else None):
+            response = await call_next(request)
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = (
             "no-referrer" if request.url.path.startswith("/api/oidc/") else "same-origin"
@@ -253,14 +256,7 @@ def create_app(home: Path, watch=True):
                 "environments": store.get("settings", "environments"),
                 "environment_details": catalog.environments(),
             },
-            "identity": store.get(
-                "settings", "identity", {"name": "Duckpad user", "email": "admin@duckpad.local"}
-            ),
         }
-
-    @app.put("/api/identity")
-    def identity(data: schemas.Identity):
-        return store.put("settings", "identity", data.model_dump())
 
     @app.get("/api/extensions/settings")
     def extension_settings():

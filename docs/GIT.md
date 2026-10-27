@@ -4,6 +4,26 @@ Duckpad versions project definitions automatically. Git synchronization applies 
 each project managed inside Duckpad. Results, uploaded source data, connection
 credentials, exports and databases remain outside its declarative repository.
 
+## Commit authors
+
+Project creation, saves, imports, conflict resolutions and reviewed merges record
+both the Git author and committer from the authenticated account. Concurrent
+sessions keep separate identities. The shared author setting and `/api/identity`
+endpoint have been removed; existing commits keep their original attribution.
+
+Local accounts use their username and a stable technical address,
+`<account-id>@users.duckpad.invalid`. SSO accounts use the name (or preferred
+username) and verified email from the validated ID token, refreshed on sign-in.
+If those claims are missing or invalid, Duckpad falls back to the account's
+username and technical address. Provider claims never change account linkage,
+which still uses issuer and subject. Git author information is part of the project
+history and travels with it when pushed to a remote.
+
+File edits outside Duckpad have no authenticated actor. The watcher and any
+pending external edits finalized before a save or run use
+`Duckpad external changes <external@duckpad.invalid>`, rather than attributing
+them to whichever account happened to make the next request.
+
 ## Compare versions
 
 Open **Git synchronization** beside the branch selector, or **Compare versions**

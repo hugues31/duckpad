@@ -194,7 +194,6 @@ def test_project_role_matrix_and_cross_project_import(instance, role):
         ("GET", "/extensions/runtime", None),
         ("POST", "/extensions/import", {}),
         ("PUT", "/extensions/settings", {"allow_unsigned_extensions": True}),
-        ("PUT", "/identity", {}),
         ("PUT", "/environments", ["dev"]),
         ("POST", "/environments", {}),
         ("PUT", "/environments/prod", {}),

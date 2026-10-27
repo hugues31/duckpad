@@ -10,11 +10,6 @@ class Login(BaseModel):
     password: str
 
 
-class Identity(BaseModel):
-    name: str = Field(min_length=1)
-    email: str = Field(min_length=1)
-
-
 class ExtensionSettings(BaseModel):
     allow_unsigned_extensions: StrictBool
 

@@ -67,6 +67,25 @@ test("configure OIDC, sign in through a signing provider, administer access and 
     expect(
       (await (await member.request.get("/api/workspace")).json()).projects,
     ).toEqual([]);
+    const project = await (
+      await member.request.post("/api/projects", {
+        data: { name: "SSO authorship" },
+      })
+    ).json();
+    const history = await (
+      await member.request.get(`/api/worktrees/${project.id}/history`)
+    ).json();
+    // The test provider supplies preferred_username=admin; the account remains distinct.
+    expect(history[0].author).toBe("admin");
+    expect(user.username).not.toBe("admin");
+    const diff = await (
+      await member.request.get(`/api/worktrees/${project.id}/diff/HEAD`)
+    ).json();
+    expect(diff.diff).toContain(`admin <${user.id}@users.duckpad.invalid>`);
+    // Remove this account's project before testing account deactivation below.
+    expect(
+      (await member.request.delete(`/api/projects/${project.project}`)).ok(),
+    ).toBeTruthy();
     await openUserSettings(member);
     await expect(
       member.getByRole("region", { name: "Single sign-on (OIDC)" }),
