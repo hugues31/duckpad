@@ -1,3 +1,4 @@
+import Select from "./Select";
 import { useCallback, useEffect, useState } from "react";
 import { Plus, Shield, Trash2, Users } from "lucide-react";
 import { api, send } from "./api";
@@ -20,7 +21,7 @@ function RoleSelect({
 }) {
   const t = useT();
   return (
-    <select
+    <Select
       aria-label={label}
       value={value}
       disabled={disabled}
@@ -33,7 +34,7 @@ function RoleSelect({
           </option>
         ),
       )}
-    </select>
+    </Select>
   );
 }
 
@@ -117,6 +118,9 @@ export function UsersPage({ refresh }: { refresh: () => Promise<unknown> }) {
                 <tr key={user.id}>
                   <td>
                     <strong>{user.username}</strong>
+                    {user.auth_method === "oidc" && (
+                      <small className="muted"> · SSO</small>
+                    )}
                   </td>
                   <td>
                     <RoleSelect
@@ -138,7 +142,12 @@ export function UsersPage({ refresh }: { refresh: () => Promise<unknown> }) {
                     <div className="row gap">
                       <button
                         className="button secondary small"
-                        disabled={busy}
+                        disabled={busy || user.auth_method === "oidc"}
+                        title={
+                          user.auth_method === "oidc"
+                            ? t("ssoPasswordManaged")
+                            : undefined
+                        }
                         onClick={() => open({ kind: "password", user })}
                       >
                         {t("resetPassword")}
@@ -226,14 +235,14 @@ export function UsersPage({ refresh }: { refresh: () => Promise<unknown> }) {
                   </label>
                   <label className="field">
                     <span>{t("instanceRole")}</span>
-                    <select
+                    <Select
                       aria-label={t("instanceRole")}
                       name="role"
                       defaultValue="member"
                     >
                       <option value="member">{t("role_member")}</option>
                       <option value="admin">{t("role_admin")}</option>
-                    </select>
+                    </Select>
                   </label>
                 </>
               )}
@@ -381,7 +390,7 @@ export function ProjectSettings({
           >
             <label className="field">
               <span>{t("user")}</span>
-              <select
+              <Select
                 aria-label={t("user")}
                 name="user"
                 required
@@ -395,11 +404,11 @@ export function ProjectSettings({
                     {u.username}
                   </option>
                 ))}
-              </select>
+              </Select>
             </label>
             <label className="field">
               <span>{t("projectRole")}</span>
-              <select
+              <Select
                 aria-label={t("projectRole")}
                 name="role"
                 defaultValue="reader"
@@ -409,7 +418,7 @@ export function ProjectSettings({
                     {t(`role_${role}`)}
                   </option>
                 ))}
-              </select>
+              </Select>
             </label>
             <button
               className="button primary"

@@ -1,3 +1,4 @@
+import Select from "./Select";
 import { useEffect, useState } from "react";
 import {
   ChevronLeft,
@@ -130,7 +131,7 @@ export default function Preview({
           <Database size={15} />
           <strong>{t("preview")}</strong>
           {ports.length > 1 && (
-            <select
+            <Select
               aria-label={t("output")}
               value={port}
               onChange={(e) => {
@@ -141,7 +142,7 @@ export default function Preview({
               {ports.map((p) => (
                 <option key={p}>{p}</option>
               ))}
-            </select>
+            </Select>
           )}
           {data && (
             <span className={`badge ${data.status}`}>{t(data.status)}</span>
@@ -181,7 +182,7 @@ export default function Preview({
                 </button>
               )}
             </div>
-            <select
+            <Select
               aria-label={t("filterColumn")}
               value={filterColumn}
               onChange={(e) => setFilterColumn(e.target.value)}
@@ -189,9 +190,9 @@ export default function Preview({
               {data.columns.map((c: Json) => (
                 <option key={c.name}>{c.name}</option>
               ))}
-            </select>
+            </Select>
             <span className="spacer" />
-            <select
+            <Select
               aria-label={t("rowLimit")}
               value={limit}
               onChange={(e) => {
@@ -204,7 +205,7 @@ export default function Preview({
                   {n} {t("rows")}
                 </option>
               ))}
-            </select>
+            </Select>
           </div>
           {data.error && <div className="inline-error">{data.error}</div>}
           <div className="data-scroll">

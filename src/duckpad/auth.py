@@ -49,7 +49,10 @@ class Auth:
 
     @staticmethod
     def public(user):
-        return {key: user[key] for key in ("id", "username", "role", "active")}
+        result = {key: user[key] for key in ("id", "username", "role", "active")}
+        if user.get("oidc"):
+            result["auth_method"] = "oidc"
+        return result
 
     def create_user(self, username, password, role="member"):
         if not isinstance(username, str) or not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9_.-]{0,63}", username):
@@ -81,9 +84,9 @@ class Auth:
             (u for u in self.store.all("user") if u["username"].casefold() == username.casefold()), None
         )
         # Run the same password derivation for unknown and disabled accounts.
-        record = user or {"salt": "00" * 32, "hash": "00" * 64}
+        record = user if user and not user.get("oidc") else {"salt": "00" * 32, "hash": "00" * 64}
         valid = hmac.compare_digest(self.hash_password(password[:1024], record["salt"]), record["hash"])
-        if not user or not user["active"] or not valid or len(password) > 1024:
+        if not user or user.get("oidc") or not user["active"] or not valid or len(password) > 1024:
             raise Problem("Invalid username or password", 401)
         token = secrets.token_urlsafe(32)
         with self.store.lock:
@@ -117,9 +120,14 @@ class Auth:
             or session["expires"] < time.time()
             or not user
             or not user["active"]
-            or session.get("credential") != user["hash"]
             or session.get("version", 0) != user.get("session_version", 0)
         ):
+            raise Problem("Authentication required", 401)
+        if user.get("oidc"):
+            config = self.store.get("settings", "oidc", {})
+            if not config.get("enabled") or session.get("oidc_revision") != config.get("revision"):
+                raise Problem("Authentication required", 401)
+        elif session.get("credential") != user["hash"]:
             raise Problem("Authentication required", 401)
         return self.public(user)
 

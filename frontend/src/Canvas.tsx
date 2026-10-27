@@ -5,6 +5,7 @@ import {
   Handle,
   MiniMap,
   MarkerType,
+  Panel,
   Position,
   ReactFlow,
   ReactFlowProvider,
@@ -32,10 +33,12 @@ import {
   Circle,
   Sparkles,
   Maximize,
+  Workflow,
 } from "lucide-react";
 import "@xyflow/react/dist/style.css";
 import { useT, templateLabel } from "./i18n";
 import { DRAG_TYPE } from "./graph";
+import { layoutNodes } from "./graphLayout";
 import type { NodeKind } from "./NodePalette";
 import type { FlowEdge, FlowNode, Json, Statuses } from "./types";
 
@@ -139,7 +142,7 @@ interface CanvasProps {
   viewKey: string;
   selected: string | null;
   onSelect: (id: string | null) => void;
-  onMove: (nodes: FlowNode[]) => void;
+  onMove: (nodes: FlowNode[]) => Promise<void>;
   onConnect: (edge: Omit<FlowEdge, "id">) => void;
   onDelete: (nodes: string[], edges: string[]) => void;
   onAdd: (
@@ -182,23 +185,26 @@ function CanvasInner(props: CanvasProps) {
     measure();
     return () => observer.disconnect();
   }, []);
-  const fitGraph = useCallback(() => {
-    if (!initialized || !frame.width || !frame.height) return;
-    // Frame the unobscured area while keeping the graph surface behind every panel.
-    const viewport = getViewportForBounds(
-      getNodesBounds(getNodes()),
-      frame.width,
-      frame.height,
-      0.1,
-      1,
-      0.12,
-    );
-    void setViewport({
-      ...viewport,
-      x: viewport.x + frame.x,
-      y: viewport.y + frame.y,
-    });
-  }, [initialized, frame, getNodes, setViewport]);
+  const fitGraph = useCallback(
+    (graphNodes = getNodes()) => {
+      if (!initialized || !frame.width || !frame.height) return;
+      // Frame the unobscured area while keeping the graph surface behind every panel.
+      const viewport = getViewportForBounds(
+        getNodesBounds(graphNodes),
+        frame.width,
+        frame.height,
+        0.1,
+        1,
+        0.12,
+      );
+      void setViewport({
+        ...viewport,
+        x: viewport.x + frame.x,
+        y: viewport.y + frame.y,
+      });
+    },
+    [initialized, frame, getNodes, setViewport],
+  );
   const displayNodes = useMemo(
     () =>
       props.nodes.map((node) => {
@@ -282,6 +288,9 @@ function CanvasInner(props: CanvasProps) {
     ],
   );
   const [nodes, setNodes] = useState<Node<Json>[]>(displayNodes);
+  const [pendingMoves, setPendingMoves] = useState(
+    new Map<string, { position: FlowNode["position"] }>(),
+  );
   const previousSelected = useRef(props.selected);
   useEffect(() => {
     const selectionChanged = previousSelected.current !== props.selected;
@@ -292,14 +301,16 @@ function CanvasInner(props: CanvasProps) {
         return {
           ...old,
           ...node,
-          position: old?.dragging ? old.position : node.position,
+          position: old?.dragging
+            ? old.position
+            : (pendingMoves.get(node.id)?.position ?? node.position),
           selected: selectionChanged
             ? node.selected
             : (old?.selected ?? node.selected),
         };
       }),
     );
-  }, [displayNodes, props.selected]);
+  }, [displayNodes, props.selected, pendingMoves]);
   useEffect(() => {
     if (!initialized || !frame.width || !frame.height) return;
     const layout = [
@@ -349,6 +360,46 @@ function CanvasInner(props: CanvasProps) {
   );
   const changes = (changes: NodeChange<Node<Json>>[]) =>
     setNodes((current) => applyNodeChanges(changes, current));
+  const persistPositions = async (moved: FlowNode[]) => {
+    const pending = new Map(
+      moved.map((node) => [node.id, { position: node.position }]),
+    );
+    // Keep local positions through both the write and its snapshot refresh.
+    setPendingMoves((current) => new Map([...current, ...pending]));
+    setNodes((current) =>
+      current.map((node) => ({
+        ...node,
+        position: pending.get(node.id)?.position ?? node.position,
+      })),
+    );
+    try {
+      await props.onMove(moved);
+    } catch {
+      // The workspace reports the error and refreshes the saved graph.
+    } finally {
+      setPendingMoves((current) => {
+        const next = new Map(current);
+        for (const [id, move] of pending) {
+          // An earlier save must not discard a more recent local move.
+          if (next.get(id) === move) next.delete(id);
+        }
+        return next;
+      });
+    }
+  };
+  const arrangeGraph = () => {
+    if (props.readOnly || !initialized || !nodes.length) return;
+    const arranged = layoutNodes(getNodes(), props.edges);
+    const positions = new Map(arranged.map((node) => [node.id, node.position]));
+    void persistPositions(
+      props.nodes.map((node) => ({
+        ...node,
+        position: positions.get(node.id)!,
+      })),
+    );
+    viewportTouched.current = false;
+    fitGraph(arranged);
+  };
   return (
     <>
       <div className="canvas-safe-area" ref={safeArea} aria-hidden="true" />
@@ -378,7 +429,7 @@ function CanvasInner(props: CanvasProps) {
                 props.onConnect(connection as Omit<FlowEdge, "id">)
         }
         onNodeDragStop={(_, __, moved) =>
-          props.onMove(
+          void persistPositions(
             moved.map((n) => ({
               ...props.nodes.find((x) => x.id === n.id)!,
               position: n.position,
@@ -426,27 +477,43 @@ function CanvasInner(props: CanvasProps) {
         multiSelectionKeyCode="Shift"
         proOptions={{ hideAttribution: true }}
       >
-        <Controls
-          showInteractive={false}
-          showFitView={false}
-          onZoomIn={() => {
-            viewportTouched.current = true;
-          }}
-          onZoomOut={() => {
-            viewportTouched.current = true;
-          }}
-        >
-          <ControlButton
-            onClick={() => {
-              viewportTouched.current = false;
-              fitGraph();
+        <Panel position="bottom-left" className="canvas-control-groups">
+          <Controls
+            showInteractive={false}
+            showFitView={false}
+            onZoomIn={() => {
+              viewportTouched.current = true;
             }}
-            title={t("fitView")}
-            aria-label={t("fitView")}
+            onZoomOut={() => {
+              viewportTouched.current = true;
+            }}
           >
-            <Maximize />
-          </ControlButton>
-        </Controls>
+            <ControlButton
+              onClick={() => {
+                viewportTouched.current = false;
+                fitGraph();
+              }}
+              title={t("fitView")}
+              aria-label={t("fitView")}
+            >
+              <Maximize />
+            </ControlButton>
+          </Controls>
+          <div
+            className="canvas-layout-controls"
+            role="group"
+            aria-label={t("autoLayout")}
+          >
+            <ControlButton
+              onClick={arrangeGraph}
+              disabled={props.readOnly || !initialized || !nodes.length}
+              title={t("autoLayout")}
+              aria-label={t("autoLayout")}
+            >
+              <Workflow style={{ fill: "none" }} />
+            </ControlButton>
+          </div>
+        </Panel>
         <MiniMap
           pannable
           zoomable

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "duckpad"
-version = "0.1.0"
+version = "0.2.0"
 description = "A local SQL canvas with reproducible execution and cell lineage"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -34,6 +34,9 @@ dependencies = [
     "psutil>=7.2",
     # DuckDB needs pytz to return TIMESTAMP WITH TIME ZONE values to Python.
     "pytz>=2024.1",
+    "authlib>=1.9.1,<2",
+    "httpx2>=2.4,<3",
+    "joserfc>=1.7.7,<2",
 ]
 
 [project.urls]

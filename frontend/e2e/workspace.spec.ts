@@ -182,8 +182,19 @@ test("Git branch creation, isolated edits and explicit merge", async ({
   await expect(page.getByRole("dialog")).toBeVisible();
   await page
     .getByRole("dialog")
-    .getByRole("button", { name: "Save changes", exact: true })
+    .getByRole("button", { name: "Review merge", exact: true })
     .click();
+  await page
+    .getByRole("button", { name: "Apply reviewed merge", exact: true })
+    .click();
+  await expect(page.getByRole("dialog")).toContainText("Branch merged");
+  await page.keyboard.press("Escape");
+  const mainWorktree = await page
+    .getByLabel("Branch", { exact: true })
+    .locator("option")
+    .filter({ hasText: /^main$/ })
+    .getAttribute("value");
+  await page.getByLabel("Branch", { exact: true }).selectOption(mainWorktree!);
   await expect(page.getByLabel("Branch", { exact: true })).toContainText(
     "main",
   );
