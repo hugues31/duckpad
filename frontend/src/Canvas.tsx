@@ -462,7 +462,8 @@ function CanvasInner(props: CanvasProps) {
         }}
       >
         <SearchField
-          label={t("canvasSearch")}
+          label={t("searchNodes")}
+          shortcut="f"
           query={query}
           onQuery={setQuery}
           options={matches.map((node) => ({
