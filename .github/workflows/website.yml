@@ -48,7 +48,7 @@ jobs:
       - run: npm exec --prefix frontend -- playwright install --with-deps chromium
       - name: Regenerate screenshots and the captioned walkthrough
         run: npm run docs:capture --prefix frontend
-      - uses: actions/configure-pages@v5
+      - uses: actions/configure-pages@v6
         id: pages
         if: vars.PUBLISH_WEBSITE == 'true'
       - name: Build static documentation
