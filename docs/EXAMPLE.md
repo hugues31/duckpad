@@ -20,9 +20,9 @@ of the steps below, regenerated from the application with Playwright.
 
 ![Source amounts contributing to regional revenue](images/lineage.png)
 
-Select Regional revenue and its `report` output. Click a revenue cell. Follow the rank step's contribution into the aggregate, then inspect the original amount cells. Use Next to move through pages of five; the displayed total represents the full search, regardless of the preview row limit.
+Select Regional revenue and its `report` output. Click a revenue cell. The calculation modal connects source amounts directly to the aggregate, collapsing the rank projection and other steps that merely carry the value forward. Use Next to display another five inputs; the exact total covers all contributions, regardless of the preview row limit.
 
-For a distinct customer count, the first level contains customer-value groups and the number of source rows in each. Expanding a group preserves repeated purchases as separate cells. For a maximum, tied maximum cells appear first; Show evaluation context reveals the examined group.
+For a distinct customer count, value-group cards show the count of original rows. Open a group to see its source cells. Repeated purchases remain separate cells. For a maximum, all tied extrema are shown; calculation details expose the full examined group as row-selection context.
 
 Documentation is available on the project tab and the selected node's Documentation tab, including dataset and column descriptions.
 
