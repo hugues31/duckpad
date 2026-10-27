@@ -1,5 +1,89 @@
 import { expect, test } from "@playwright/test";
 import { openInstanceSettings, openUserSettings, signIn } from "./helpers";
+import fr from "../src/locales/fr.json" with { type: "json" };
+
+test("unsigned extension settings persist, report rejected changes and are translated", async ({
+  page,
+}) => {
+  await signIn(page);
+  const original = await (
+    await page.request.get("/api/extensions/settings")
+  ).json();
+  try {
+    await openInstanceSettings(page);
+    await expect(
+      page.getByRole("heading", { name: "DuckDB extensions", exact: true }),
+    ).toHaveCount(0);
+    await expect(
+      page.getByRole("checkbox", {
+        name: "Allow unsigned extensions",
+        exact: true,
+      }),
+    ).toHaveCount(0);
+    await openInstanceSettings(page, "Extensions");
+    await expect(page).toHaveURL(/\/instance-settings\/extensions$/);
+    await expect(
+      page.getByRole("link", { name: "Extensions", exact: true }),
+    ).toHaveAttribute("aria-current", "page");
+    const checkbox = page.getByRole("checkbox", {
+      name: "Allow unsigned extensions",
+      exact: true,
+    });
+    const save = page.getByRole("button", {
+      name: "Save extension settings",
+      exact: true,
+    });
+    await expect(checkbox).not.toBeChecked();
+    await checkbox.check();
+    await save.click();
+    await expect(page.getByRole("status")).toContainText(
+      "Extension settings saved.",
+    );
+    await page.reload();
+    await expect(checkbox).toBeChecked();
+    await page.route("**/api/extensions/settings", async (route) => {
+      if (route.request().method() === "PUT") {
+        await route.fulfill({
+          status: 409,
+          json: {
+            error: "Stop active executions before changing extension settings",
+          },
+        });
+      } else await route.continue();
+    });
+    await checkbox.uncheck();
+    await save.click();
+    await expect(page.getByRole("alert")).toContainText(
+      "Stop active executions",
+    );
+    expect(
+      (await (await page.request.get("/api/extensions/settings")).json())
+        .allow_unsigned_extensions,
+    ).toBe(true);
+    await page.unroute("**/api/extensions/settings");
+    await save.click();
+    await expect(page.getByRole("status")).toContainText(
+      "Extension settings saved.",
+    );
+    await page.reload();
+    await expect(checkbox).not.toBeChecked();
+    await openUserSettings(page);
+    await page.getByLabel("Language", { exact: true }).selectOption("fr");
+    await page.goto("/instance-settings/extensions");
+    await expect(
+      page.getByRole("checkbox", {
+        name: fr.allowUnsignedExtensions,
+        exact: true,
+      }),
+    ).not.toBeChecked();
+    await expect(
+      page.getByRole("button", { name: fr.saveExtensionSettings, exact: true }),
+    ).toBeVisible();
+  } finally {
+    await page.unroute("**/api/extensions/settings");
+    await page.request.put("/api/extensions/settings", { data: original });
+  }
+});
 
 test("instance configuration is available without a project and separate from personal settings", async ({
   page,

@@ -23,6 +23,12 @@ export const sections = [
         title: "Single sign-on",
         description: "Connect your identity provider with OpenID Connect.",
       },
+      {
+        slug: "offline_extensions",
+        title: "Offline extensions",
+        description:
+          "Download on any computer and import binaries for your offline server.",
+      },
     ],
   },
   {
@@ -57,6 +63,12 @@ export const sections = [
   {
     label: "Under the hood",
     pages: [
+      {
+        slug: "offline_extensions_admin",
+        title: "Extension import details",
+        description:
+          "Download server binaries, verify imports and troubleshoot loading.",
+      },
       {
         slug: "architecture",
         title: "Architecture",

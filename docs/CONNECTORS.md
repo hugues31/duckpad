@@ -73,10 +73,12 @@ already named `xlsx`. Connections and project grants are never added automatical
 New projects include both templates. Existing projects retain their versioned
 templates; create equivalent source/export templates through **New SQL template**
 or copy `load_xlsx` and `export_xlsx` from a new project's Code workspace.
-No Python spreadsheet dependency is needed. The signed extension is installed in
-the instance's extension cache on first use, requiring network access and a build
-compatible with the installed DuckDB version and processor. CSV/Parquet-only
-projects do not load it.
+No Python spreadsheet dependency is needed. When it is not built into the runtime
+or already cached, the signed extension is installed in the instance's extension
+cache on first use, requiring network access and a build compatible with the
+installed DuckDB version and processor. For disconnected deployments, follow the
+[offline extension guide](OFFLINE_EXTENSIONS.md) to download and import its binary.
+CSV/Parquet-only projects do not load it.
 
 Imports use native DuckDB inference: numbers generally become `DOUBLE`, while
 formatted dates, times and booleans retain their inferred types. Inconsistent cells
@@ -114,6 +116,10 @@ uv run python scripts/integration.py s3 --output docs/validation/s3.json
 
 Install Oracle Instant Client 19 or newer, Basic or Basic Light, compatible with the extension and platform. On Linux, make its shared libraries discoverable and install the platform's `libaio`/`libnsl` prerequisites. The extension build must match the exact DuckDB ABI. The application uses a private extension directory, so an unrelated unsigned developer extension in the user's global DuckDB cache cannot be loaded accidentally.
 
+OraDuck is available signed from the community repository. Leave **Allow unsigned
+extensions** disabled for its signed binary. On an offline server, use the
+[standard extension import](OFFLINE_EXTENSIONS.md), as for any other extension.
+
 The preset creates a temporary secret with `TYPE oraduck`, `USER`, `PASSWORD` and `DSN`, then uses `ATTACH` for read-only access. Source nodes select a connection, schema and resource. Export nodes emit `COPY (SELECT ...) TO ... (FORMAT oraduck, CONNECTION ...)` targeting an existing Oracle table; the columns expression supports explicit mapping. The destination table must already exist and be compatible with the selected columns.
 
 Before each manual run, relevant attachments are recreated to refresh schema metadata. Materialized Duckpad results remain independent of those attachments. Export behavior is native OraDuck behavior: there is no hidden truncate, table recreation or extra write. The integration test compares native and generated exports, checks repeated appends, adds a source column and row between launches, then verifies refresh and cell lineage through the same logical connection.
@@ -129,6 +135,10 @@ uv run python scripts/integration.py oracle --output docs/validation/oracle.json
 The script creates uniquely named disposable test tables and drops only those tables in its cleanup. Credentials are never included in its report. See the [OraDuck documentation](https://raw.githubusercontent.com/hugues31/oraduck/main/README.md) for deployment prerequisites.
 
 ## Add another connector
+
+For air-gapped instances, [download and import extensions](OFFLINE_EXTENSIONS.md)
+before using connectors that need extensions. This applies to core and community
+extensions; the cache belongs to the backend instance, outside project Git.
 
 ```json
 {

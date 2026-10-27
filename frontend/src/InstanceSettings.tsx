@@ -3,6 +3,7 @@ import { settingsSections } from "./navigation";
 import { UsersPage } from "./Administration";
 import ConnectionsPanel from "./ConnectionsPanel";
 import EnvironmentsPanel from "./EnvironmentsPanel";
+import ExtensionSettings from "./ExtensionSettings";
 import { useT } from "./i18n";
 import SSOSettings from "./SSOSettings";
 import type { Workspace } from "./types";
@@ -50,6 +51,7 @@ export default function InstanceSettings({
         </div>
       )}
       {section === "usersPermissions" && <UsersPage refresh={refresh} />}
+      {section === "extensions" && <ExtensionSettings />}
       {section === "ssoSettings" && <SSOSettings />}
       {section === "environments" && (
         <EnvironmentsPanel

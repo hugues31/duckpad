@@ -45,6 +45,7 @@ See the [quickstart](docs/QUICKSTART.md) for the complete first-run walkthrough.
 
 [Installation & accounts](docs/INSTALLATION.md) · [Pipelines & SQL](docs/AUTHORING.md) ·
 [Single sign-on](docs/SSO.md) · [Version control](docs/GIT.md) · [Connections](docs/CONNECTORS.md) ·
+[Offline extensions](docs/OFFLINE_EXTENSIONS.md) ·
 [Architecture](docs/ARCHITECTURE.md) · [Validation](docs/VALIDATION.md) ·
 [Releases](docs/RELEASING.md) · [Security](SECURITY.md)
 

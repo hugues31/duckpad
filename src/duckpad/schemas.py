@@ -10,6 +10,10 @@ class Login(BaseModel):
     password: str
 
 
+class ExtensionSettings(BaseModel):
+    allow_unsigned_extensions: StrictBool
+
+
 class NewProject(BaseModel):
     name: str = "Untitled project"
 
