@@ -11,11 +11,11 @@ Apply it to every change, even when it is not explicitly invoked.
 
 ## Multica development
 
-Follow [the Multica workflow](docs/MULTICA.md) for issues handled through Multica.
+Follow the operator-provided workflow for issues handled through Multica.
 Use a dedicated branch and pull request for every issue, deploy and verify its
 preview, then wait for the designated human reviewer's explicit approval before merging into `main` and
 publishing the merge to GitHub. Never interpret ticket creation or a successful
-check as merge approval. Use `bash scripts/preview.sh` for Duckpad previews.
+check as merge approval. Use the operator-provided deployment tooling for previews.
 
 Keep private infrastructure details outside this public repository. Never include
 personal domains, preview URLs, server names, deployment identifiers, or credentials
