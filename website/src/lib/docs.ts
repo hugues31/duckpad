@@ -27,7 +27,7 @@ export const sections = [
         slug: "offline_extensions",
         title: "Offline extensions",
         description:
-          "Prepare and verify DuckDB extensions for air-gapped instances.",
+          "Extract a prepared extension cache and restart Duckpad offline.",
       },
     ],
   },
@@ -63,6 +63,12 @@ export const sections = [
   {
     label: "Under the hood",
     pages: [
+      {
+        slug: "offline_extensions_admin",
+        title: "Prepare an extension cache",
+        description:
+          "Build signed offline bundles and troubleshoot extension loading.",
+      },
       {
         slug: "architecture",
         title: "Architecture",
