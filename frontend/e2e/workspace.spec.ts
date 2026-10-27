@@ -64,10 +64,7 @@ test("complete example, ordered outputs, nested components, lineage pagination a
   await page
     .getByRole("button", { name: /Explain this value: revenue, rows 1,/ })
     .click();
-  await expect(
-    page.getByText("Complete explanation", { exact: true }),
-  ).toBeVisible();
-  await page.locator(".lineage-panel .contribution").first().click();
+  await expect(page.locator(".lineage-timeline .lineage-step")).toHaveCount(2);
   await expect(page.locator(".lineage-panel")).toContainText(
     "27 contributions",
     { ignoreCase: true },
@@ -319,9 +316,9 @@ test("an open lineage explanation is interrupted when its generation is recalcul
   await page
     .getByRole("button", { name: /Explain this value: revenue, rows 1,/ })
     .click();
-  await expect(
-    page.getByText("Complete explanation", { exact: true }),
-  ).toBeVisible();
+  await expect(page.locator(".lineage-panel")).toContainText(
+    "27 contributions",
+  );
   await run(page);
   await expect(page.locator(".lineage-panel")).toContainText(
     "This exploration was interrupted",

@@ -125,13 +125,12 @@ test("record a real pipeline, source lineage and SQL workspace", async ({
     );
     await click(page, revenue);
     await expect(
-      page.getByText("Complete explanation", { exact: true }),
+      page.getByRole("list", { name: "Value creation timeline" }),
     ).toBeVisible();
     await page.waitForTimeout(1200);
     caption(
-      "Follow a contribution into the aggregate and its original source amounts.",
+      "The timeline follows the calculation back to its contributing amounts.",
     );
-    await click(page, page.locator(".lineage-panel .contribution").first());
     await expect(page.locator(".lineage-panel")).toContainText(
       "27 contributions",
       { ignoreCase: true },
