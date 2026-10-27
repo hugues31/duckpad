@@ -66,7 +66,6 @@ export interface Workspace {
     connections: Json[];
     duckdb_version?: string;
   };
-  identity: Json;
 }
 export interface Environment {
   id: string;

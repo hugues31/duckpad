@@ -14,6 +14,7 @@ from .bundle import bundle_to_files, files_to_bundle, is_declarative, validate
 from .comparison import commit_message
 from .components import reconcile_documentation
 from .git_workspace import GitWorkspace
+from .identity import SYSTEM_IDENTITY, current_identity, git_environment
 from .merge import merge_files
 from .remote import Remotes
 from .templates import parse_template
@@ -21,7 +22,6 @@ from .util import Problem, atomic_write, digest, dumps, inside, now, uid
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_IDENTITY = {"name": "Duckpad user", "email": "admin@duckpad.local"}
 HISTORY_LENGTH = 100
 # The watcher polls files every WATCH_INTERVAL and commits a batch after QUIET_PERIOD without changes.
 WATCH_INTERVAL = 0.1
@@ -50,11 +50,11 @@ class Projects:
         self.remotes = Remotes(self.versioning)
 
     def identity(self):
-        """The Git author recorded for UI and external saves."""
-        return self.store.get("settings", "identity", DEFAULT_IDENTITY)
+        """The request's account, or the system for changes made outside a request."""
+        return current_identity.get() or SYSTEM_IDENTITY
 
-    def git(self, path, *args, check=True):
-        identity = self.identity()
+    def git(self, path, *args, check=True, identity=None):
+        identity = identity or self.identity()
         command = [
             "git",
             "-c",
@@ -65,7 +65,7 @@ class Projects:
             str(path),
             *args,
         ]
-        result = subprocess.run(command, capture_output=True, text=True)
+        result = subprocess.run(command, capture_output=True, text=True, env=git_environment(identity))
         if result.returncode and check:
             raise Problem(result.stderr.strip() or result.stdout.strip())
         return result.stdout.strip()
@@ -175,7 +175,16 @@ class Projects:
             )
             if head:
                 message = commit_message(previous_files, self.read_files({"path": str(path)}), context)
-            self.git(path, "commit", "--only", "-m", message, "--", *paths)
+            self.git(
+                path,
+                "commit",
+                "--only",
+                "-m",
+                message,
+                "--",
+                *paths,
+                identity=SYSTEM_IDENTITY if context == "external" else None,
+            )
         return self.git(path, "rev-parse", "HEAD")
 
     def revision_files(self, path, commit):

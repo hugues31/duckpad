@@ -58,13 +58,18 @@ test("instance configuration is available without a project and separate from pe
       page.getByLabel("Current password", { exact: true }),
     ).toHaveCount(0);
     await expect(page.getByLabel("Theme", { exact: true })).toHaveCount(0);
-    await page
-      .getByLabel("Author name", { exact: true })
-      .fill("Shared pipeline author");
-    await page
-      .getByRole("button", { name: "Save changes", exact: true })
-      .click();
-    await expect(page.getByRole("status")).toContainText("All changes saved");
+    await expect(page.getByLabel("Author name", { exact: true })).toHaveCount(
+      0,
+    );
+    await expect(page.getByLabel("Author email", { exact: true })).toHaveCount(
+      0,
+    );
+    await expect(
+      page.getByText(
+        "Project changes are committed with the signed-in account",
+        { exact: false },
+      ),
+    ).toBeVisible();
     await openInstanceSettings(page, "Environments");
     await page
       .getByRole("button", { name: "Add environment", exact: true })
@@ -103,8 +108,8 @@ test("instance configuration is available without a project and separate from pe
       page.getByLabel("Enable single sign-on", { exact: true }),
     ).toBeVisible();
     await openInstanceSettings(page);
-    await expect(page.getByLabel("Author name", { exact: true })).toHaveValue(
-      "Shared pipeline author",
+    await expect(page.getByLabel("Author name", { exact: true })).toHaveCount(
+      0,
     );
     await page.setViewportSize({ width: 800, height: 900 });
     const navigation = page.getByRole("navigation", {
@@ -121,7 +126,6 @@ test("instance configuration is available without a project and separate from pe
       fullPage: true,
     });
   } finally {
-    await page.request.put("/api/identity", { data: original.identity });
     await page.request.put("/api/environments", {
       data: original.catalog.environments,
     });
