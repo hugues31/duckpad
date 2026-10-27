@@ -824,6 +824,79 @@ small {
   min-height: 0;
   overflow: hidden;
 }
+.connection-palette {
+  position: fixed;
+  z-index: 80;
+  width: min(330px, calc(100vw - 16px));
+  max-height: calc(100dvh - 16px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+}
+.connection-palette-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+}
+.connection-palette .search {
+  flex-shrink: 0;
+  margin: 0 12px 8px;
+}
+.connection-palette .search:focus-within {
+  border-color: var(--accent);
+}
+.connection-palette-list {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  max-height: 260px;
+  padding: 0 6px;
+}
+.connection-palette-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 9px 12px;
+  border-radius: 6px;
+  text-align: left;
+}
+.connection-palette-item[aria-selected="true"],
+.connection-palette-item:hover {
+  background: var(--accent-soft);
+}
+.connection-palette-item > svg {
+  flex-shrink: 0;
+  color: var(--accent);
+}
+.connection-palette-item > span {
+  min-width: 0;
+}
+.connection-palette-item strong,
+.connection-palette-item small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.connection-palette-item small {
+  margin-top: 3px;
+  color: var(--muted);
+}
+.connection-palette-empty,
+.connection-palette-hint {
+  margin: 0;
+  padding: 12px 14px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.connection-palette-hint {
+  border-top: 1px solid var(--border);
+}
 .palette {
   position: absolute;
   z-index: 20;
