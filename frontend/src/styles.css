@@ -754,13 +754,12 @@ small {
   padding: 6px;
 }
 .env-dot {
+  display: inline-block;
+  flex-shrink: 0;
   height: 6px;
   width: 6px;
   background: var(--accent);
   border-radius: 50%;
-}
-.env-dot.prod {
-  background: #c99550;
 }
 .language-button {
   font-size: 10px;
@@ -1891,6 +1890,9 @@ small {
   color: var(--muted);
 }
 .env-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   font-size: 9px;
   border: 1px solid var(--border);
   background: var(--surface-alt);
@@ -1898,6 +1900,68 @@ small {
   padding: 4px 7px;
   color: var(--muted);
   margin-top: 8px;
+}
+.environment-list {
+  display: grid;
+  gap: 12px;
+}
+.environment-card {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.environment-card > .env-dot {
+  height: 12px;
+  width: 12px;
+}
+.environment-card .grow {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.environment-card code {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.environment-policy {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.field .environment-color {
+  width: 72px;
+  height: 40px;
+  padding: 4px;
+  cursor: pointer;
+}
+.environment-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 600;
+}
+.environment-toggle input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+}
+@media (max-width: 600px) {
+  .environment-card {
+    gap: 10px;
+    padding: 14px;
+    flex-wrap: wrap;
+  }
+  .environment-card .grow {
+    flex-basis: 65%;
+  }
 }
 .section-heading {
   margin-bottom: 20px;

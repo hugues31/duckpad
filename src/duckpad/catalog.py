@@ -111,8 +111,62 @@ class Catalog:
             "connectors": self.store.all("connector"),
             "connections": connections,
             "environments": self.store.get("settings", "environments"),
+            "environment_details": self.environments(),
             "duckdb_version": duckdb.__version__,
         }
+
+    def environments(self):
+        details = self.store.get("settings", "environment_details", {})
+        return [
+            details.get(
+                name,
+                {
+                    "id": name,
+                    "label": name,
+                    "color": "#e05252" if name == "prod" else "#31a878",
+                    "confirm_before_run": name == "prod",
+                },
+            )
+            for name in self.store.get("settings", "environments", [])
+        ]
+
+    def environment(self, identity):
+        for environment in self.environments():
+            if environment["id"] == identity:
+                return environment
+        raise Problem("Unknown environment", 404)
+
+    def save_environment(self, data, *, create=False):
+        identity = data["id"]
+        names = self.store.get("settings", "environments", [])
+        if create and identity in names:
+            raise Problem("An environment with this identifier already exists", 409)
+        if not create:
+            self.environment(identity)
+        details = self.store.get("settings", "environment_details", {})
+        details[identity] = data
+        self.store.put("settings", "environment_details", details)
+        if create:
+            self.store.put("settings", "environments", [*names, identity])
+            for connection in self.store.all("connection"):
+                connection["environments"][identity] = {}
+                self.store.put("connection", connection["id"], connection)
+
+    def validate_environment_deletion(self, identity):
+        self.environment(identity)
+        if len(self.environments()) == 1:
+            raise Problem("Keep at least one environment", 409)
+
+    def delete_environment(self, identity):
+        self.validate_environment_deletion(identity)
+        names = [item["id"] for item in self.environments() if item["id"] != identity]
+        details = self.store.get("settings", "environment_details", {})
+        details.pop(identity, None)
+        self.store.put("settings", "environments", names)
+        self.store.put("settings", "environment_details", details)
+        for connection in self.store.all("connection"):
+            connection["environments"].pop(identity, None)
+            self.store.put("connection", connection["id"], connection)
 
     def save(self, kind, data):
         if kind not in KINDS:
