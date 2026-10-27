@@ -1,6 +1,6 @@
 # Northstar example tour
 
-Choose **Open example project** from the welcome screen. The example also remains available from the project menu. It creates its own local inputs and an instance connection named Northstar; no credentials or external database are needed.
+Choose **New project → Start from an example → Create** on the Projects page or use the **New project** button beside the active project selector. This creates an independent Northstar analytics project, even when other projects already exist. It creates its own local inputs and a connection named Northstar; no credentials or external database are needed. The **Open example project** shortcut is also available when the project list is empty.
 
 New to Duckpad? Follow the [quickstart](QUICKSTART.md) to install it and run your
 first pipeline. The website version of this guide includes a captioned recording
