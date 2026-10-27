@@ -18,7 +18,7 @@ from pathlib import Path
 import duckdb
 
 from duckpad.services import Services
-from duckpad.util import literal
+from duckpad.util import Problem, literal
 
 QUERY = """SELECT h3_is_valid_cell(h3_latlng_to_cell(48.8566, 2.3522, 9)) AS valid,
                   h3_get_resolution(h3_latlng_to_cell(48.8566, 2.3522, 9)) AS resolution"""
@@ -45,10 +45,11 @@ def verify_loaded(db):
     return row[3]
 
 
-def verify_duckpad(home, cache, isolated):
+def verify_duckpad(home, cache, isolated, allow_unsigned=False):
     instance = Services.open(home, enforce_access=isolated)
     try:
         shutil.copytree(cache, home / "extensions")
+        instance.engine.configure_extensions(allow_unsigned)
         instance.catalog.save(
             "connector",
             {
@@ -97,6 +98,20 @@ def verify_duckpad(home, cache, isolated):
             assert run["status"] == "success", run.get("error")
             result = instance.engine.preview(worktree_id, "dev", "source")
             assert [row["values"] for row in result["rows"]] == [[True, 9]], result
+            if allow_unsigned:
+                instance.engine.configure_extensions(False)
+                try:
+                    context = instance.engine.context(worktree_id, "dev", create=True)
+                    captured, _ = instance.catalog.capture(["h3"], "dev")
+                    instance.catalog.prepare(context.db, captured)
+                except (duckdb.Error, Problem) as error:
+                    if "signature" not in str(error).lower():
+                        raise AssertionError(
+                            "Disabling unsigned extensions must reject the binary"
+                        ) from error
+                else:
+                    raise AssertionError("Unsigned extension remained usable after disabling the option")
+                instance.engine.configure_extensions(True)
         finally:
             instance.close()
 
@@ -172,10 +187,15 @@ def verify(source_cache):
                 )
         report["checks"].append("bare_community_binary_without_install_metadata_rejected")
 
+        unsigned_cache = root / "unsigned"
+        shutil.copytree(tampered_cache, unsigned_cache)
+        (unsigned_cache / relative).with_suffix(".duckdb_extension.info").unlink()
         for isolated in (False, True):
             mode = "isolated_worker" if isolated else "embedded"
             verify_duckpad(root / mode, cache, isolated)
             report["checks"].append(f"duckpad_{mode}_pipeline_after_two_reopens")
+            verify_duckpad(root / (mode + "-unsigned"), unsigned_cache, isolated, allow_unsigned=True)
+            report["checks"].append(f"duckpad_{mode}_unsigned_opt_in_restart_and_revocation")
     return report
 
 

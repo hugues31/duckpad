@@ -157,6 +157,7 @@ def serve(descriptor):
             ":memory:",
             config={
                 "extension_directory": policy["extensions"],
+                "allow_unsigned_extensions": policy.get("allow_unsigned_extensions", False),
                 "allow_persistent_secrets": False,
                 "allow_unredacted_secrets": False,
                 "autoload_known_extensions": False,

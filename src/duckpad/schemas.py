@@ -15,6 +15,10 @@ class Identity(BaseModel):
     email: str = Field(min_length=1)
 
 
+class ExtensionSettings(BaseModel):
+    allow_unsigned_extensions: StrictBool
+
+
 class NewProject(BaseModel):
     name: str = "Untitled project"
 

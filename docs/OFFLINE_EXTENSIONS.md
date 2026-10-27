@@ -2,8 +2,9 @@
 
 Duckpad can use extensions in an air-gapped environment. Prepare a matching,
 signed extension cache on a connected machine, transfer it into the instance's
-`extensions` directory, and restart Duckpad. No product change is needed for this
-workflow. The procedure below was verified with DuckDB **2.0.0**, Linux
+`extensions` directory, and restart Duckpad. Administrators can also opt in to
+trusted unsigned binaries, such as OraDuck's GitHub release. The signed-cache
+procedure below was verified with DuckDB **2.0.0**, Linux
 `linux_amd64`, and the signed **H3** community extension, including Duckpad's
 isolated SQL worker with networking disabled.
 
@@ -13,6 +14,53 @@ prepare wheels and system packages on a compatible connected machine first;
 install Python packages with `pip install --no-index --find-links /path/to/wheels
 duckpad==<release>`. A Duckpad wheel does not bundle every DuckDB extension or
 third-party client library.
+
+## Use a trusted unsigned release (OraDuck)
+
+In **Instance settings → General → DuckDB extensions**, enable **Allow unsigned
+extensions** and click **Save extension settings**. This option is off by default,
+is restricted to instance administrators, and persists across server restarts.
+It applies to connector setup, embedded execution and isolated SQL workers.
+
+The option disables DuckDB's extension signature checks for the entire instance.
+Native extensions run server-side code; enable it only for binaries you trust.
+Changing it requires stopping active runs and clears current results so new
+databases use the selected policy. The setting itself needs no server restart.
+Disabling it also closes databases that have already loaded unsigned extensions.
+
+For a fresh OraDuck installation on Linux x86-64 with DuckDB 2.0.0:
+
+1. Download `oraduck-repository.tar.gz` from the
+   [OraDuck v0.4.0 release](https://github.com/hugues31/oraduck/releases/tag/v0.4.0)
+   on a connected machine, then transfer it to the backend. This release contains
+   unsigned binaries, as described in [OraDuck's offline instructions](https://github.com/hugues31/oraduck#offline-github-release).
+2. Enable the option above, stop Duckpad, and extract the binary into its cache:
+
+   ```sh
+   export DUCKPAD_INSTANCE=/path/to/instance
+   mkdir -p "$DUCKPAD_INSTANCE/extensions"
+   tar --no-same-owner -xzf oraduck-repository.tar.gz -C "$DUCKPAD_INSTANCE/extensions"
+   gzip -d "$DUCKPAD_INSTANCE/extensions/v2.0.0/linux_amd64/oraduck.duckdb_extension.gz"
+   duckpad start --home "$DUCKPAD_INSTANCE" --no-browser
+   ```
+
+Run these commands as the backend service user. If OraDuck is already installed,
+back up and remove its old binary and `.info` file before replacing it. The
+`.tar.gz` archive contains individual `.gz` files: the inner binary must also be
+decompressed. Adapt the version/platform directory to the target runtime.
+No `.info` file is required for this unsigned-file workflow. Keep the standard
+Oracle connector definition; it loads the cached binary by name.
+
+Oracle Instant Client and its system libraries must still be installed, and the
+binary must support the target CPU. This option does not bypass version/platform
+checks. The GitHub archive's signature rejection was reproduced; actual OraDuck
+loading on the test machine encountered `SIGILL` with both signed and unsigned
+builds. The opt-in mechanism is verified below with H3, not an Oracle connection.
+
+Administrators can also read or update the option through
+`GET /api/extensions/settings` and `PUT /api/extensions/settings` with
+`{"allow_unsigned_extensions": true}` (or `false`). A change during an active
+execution returns HTTP 409 without changing the policy or interrupting the run.
 
 ## Identify the target runtime
 
@@ -94,8 +142,8 @@ Oracle Instant Client. See [connector prerequisites](CONNECTORS.md).
 **Keep the `.info` files.** In the tested DuckDB 2.0 runtime, H3 loaded with its
 community installation metadata, while `INSTALL '/path/to/h3.duckdb_extension'`
 and direct-path `LOAD` of the bare binary failed signature verification. A copied
-cache preserves the repository provenance needed by this installation. Do not
-disable signature checking to work around missing metadata. Custom repositories
+cache preserves the repository provenance needed by this installation. Keep
+signature checks enabled for this signed-cache workflow. Custom repositories
 with organization-specific signing keys also require their trust configuration;
 this guide validates the built-in community repository, not custom signing keys.
 
@@ -227,25 +275,20 @@ The [recorded report](../docs/validation/offline-extensions.json) covers:
   part of the bundle.
 - Duckpad's embedded engine and isolated worker both execute an H3 pipeline after
   reopening their instances twice.
+- A copy of H3 with a deliberately invalid signature and no `.info` file runs in
+  both modes only after administrator opt-in. The option survives reopening the
+  instance; disabling it rejects the binary again in newly created databases.
 
 These results validate extension distribution and local execution, not remote S3
 or Oracle access. Those connectors still need access to their data services on
 the permitted internal network. No disconnected Oracle integration was run.
 
 The test machine's older x86-64 CPU could run the provisioned DuckDB 2.0 runtime
-and H3, but published `httpfs`, `tpch` and `inet` binaries terminated on `LOAD`
+and H3, but published `httpfs`, `tpch`, `inet` and `oraduck` binaries terminated on `LOAD`
 with `SIGILL`. A matching version/platform and valid signature do not guarantee
 compatible CPU instructions. Validate the actual binary on the target hardware;
 an offline cache or a Duckpad UI cannot repair a native CPU incompatibility.
 
-## Is a Duckpad feature needed?
-
-The existing cache, connector declarations and project grants cover the verified
-workflow. An upload screen would add a second installation path without removing
-the need to match binaries, preserve trust metadata and provision system
-libraries, so this change adds documentation and a reproducible check only.
-
-If repeated deployments show a need, a small administrator command that reports
-the runtime/platform, cache location and failed `LOAD` reason would be useful.
-An explicit offline mode could suppress Duckpad's download fallback. Neither is
-required to use the tested procedure, and neither is implemented here.
+The administrator option supports trusted unsigned release archives without a
+separate upload interface. Cache provisioning, native library installation and
+network restrictions remain operator responsibilities.

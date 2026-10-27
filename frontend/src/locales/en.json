@@ -455,5 +455,11 @@
   "deleteEnvironmentHint": "This removes the environment and its connection values. Execution history is kept. Stop active runs before deleting.",
   "confirmRun": "Confirm execution",
   "confirmAndRun": "Confirm and run",
-  "confirmRunHint": "This environment requires confirmation before every run. Start the following execution?"
+  "confirmRunHint": "This environment requires confirmation before every run. Start the following execution?",
+  "extensionSettings": "DuckDB extensions",
+  "allowUnsignedExtensions": "Allow unsigned extensions",
+  "unsignedExtensionsHint": "Native extensions run code on the server. Enable this only for binaries you trust; it disables extension signature checks for this instance.",
+  "extensionSettingsApplyHint": "Stop active runs before changing this option. Saving a change clears current results; run your pipelines again. No server restart is needed.",
+  "saveExtensionSettings": "Save extension settings",
+  "extensionSettingsSaved": "Extension settings saved."
 }
