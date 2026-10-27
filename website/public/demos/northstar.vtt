@@ -1,0 +1,25 @@
+WEBVTT
+
+00:00:00.000 --> 00:00:01.733
+Northstar: a complete pipeline with local CSV and Parquet data.
+
+00:00:01.733 --> 00:00:09.220
+Run the pipeline. DuckDB computes each step and its outputs.
+
+00:00:09.220 --> 00:00:15.435
+Select Regional revenue to inspect the report output.
+
+00:00:15.435 --> 00:00:19.747
+Click a revenue value to see the calculation and its contributions.
+
+00:00:19.747 --> 00:00:24.456
+Follow a contribution into the aggregate and its original source amounts.
+
+00:00:24.456 --> 00:00:31.766
+Page through all contributing cells, five at a time.
+
+00:00:31.766 --> 00:00:38.205
+Open Code to inspect the SQL and project files behind the visual flow.
+
+00:00:38.205 --> 00:00:41.607
+Your data, your logic, your workspace. Start with the Northstar tour.

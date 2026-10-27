@@ -1,0 +1,310 @@
+.modal.wide:has(.git-workspace) {
+  width: min(1500px, 97vw);
+  max-width: 97vw;
+  height: 94dvh;
+  max-height: 94dvh;
+  display: flex;
+  flex-direction: column;
+}
+.git-workspace {
+  min-height: 0;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+}
+.git-tabs,
+.git-controls,
+.git-legend {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.git-tabs {
+  padding: 8px 20px;
+  border-bottom: 1px solid var(--border);
+}
+.git-tabs button {
+  padding: 9px 12px;
+  border-radius: 7px;
+}
+.git-tabs button.active,
+.change-row.active {
+  background: var(--accent-soft);
+  color: var(--text);
+  outline: 1px solid var(--accent);
+}
+.git-content {
+  overflow: auto;
+  min-height: 0;
+  flex: 1;
+  padding: 16px 20px;
+}
+.git-workspace input:not([type="checkbox"]):not([type="radio"]) {
+  padding: 7px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  min-width: 0;
+  max-width: 100%;
+}
+.git-workspace label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.git-workspace code,
+.git-workspace pre,
+.git-workspace small {
+  overflow-wrap: anywhere;
+}
+.git-workspace pre {
+  white-space: pre-wrap;
+}
+.git-revisions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto auto;
+  align-items: start;
+  gap: 12px;
+  margin-bottom: 15px;
+}
+.git-revisions label {
+  display: grid;
+  gap: 6px;
+}
+.git-revisions small {
+  color: var(--muted);
+  font-size: 11px;
+}
+.git-history,
+.git-impact,
+.git-sync-panel details {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  margin: 12px 0;
+}
+.git-history summary,
+.git-impact summary,
+.git-sync-panel summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.git-history[open] {
+  max-height: 320px;
+  overflow: auto;
+}
+.git-commit {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+}
+.git-commit > div {
+  flex: 1;
+  min-width: 0;
+}
+.git-commit small,
+.change-row small {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+  margin-top: 4px;
+}
+.git-legend {
+  color: var(--muted);
+  font-size: 12px;
+  margin: 14px 0;
+}
+.comparison-body {
+  display: flex;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.change-list {
+  flex-shrink: 0;
+  width: 255px;
+  min-width: 170px;
+  max-width: 45%;
+  max-height: 760px;
+  overflow: auto;
+  resize: horizontal;
+  padding: 8px;
+  border-right: 1px solid var(--border);
+}
+.change-row {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 12px;
+  border-radius: 6px;
+  margin-bottom: 5px;
+  overflow-wrap: anywhere;
+}
+.change-added {
+  border-left: 3px solid #2c946a;
+}
+.change-removed {
+  border-left: 3px dashed #d85f64;
+}
+.change-modified {
+  border-left: 3px solid #bd8b2a;
+}
+.change-unchanged {
+  opacity: 0.65;
+}
+.comparison-detail {
+  flex: 1;
+  min-width: 0;
+}
+.git-scope {
+  padding: 8px 12px;
+}
+.comparison-graph {
+  height: 310px;
+  min-height: 180px;
+  position: relative;
+  resize: vertical;
+  overflow: hidden;
+  border-block: 1px solid var(--border);
+}
+.comparison-node {
+  color: var(--text) !important;
+  background: var(--surface) !important;
+  width: 170px !important;
+}
+.comparison-focus {
+  position: absolute;
+  right: 10px;
+  top: 10px;
+  z-index: 5;
+}
+.comparison-inspector {
+  padding: 12px;
+  min-height: 180px;
+}
+.comparison-inspector h3 {
+  font-size: 15px;
+  margin: 4px 0;
+}
+.comparison-values {
+  width: 100%;
+  table-layout: fixed;
+  font-size: 12px;
+  border-collapse: collapse;
+}
+.comparison-values th,
+.comparison-values td {
+  padding: 8px;
+  border: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+.comparison-values th:first-child {
+  width: 20%;
+}
+.comparison-values pre {
+  margin: 0;
+  max-height: 250px;
+  overflow: auto;
+}
+.git-wiring,
+.git-conflict-values {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.git-wiring section {
+  min-width: 0;
+}
+.git-sync-summary {
+  padding: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.git-sync-summary .badge {
+  margin-left: 12px;
+}
+.git-sync-summary p {
+  margin: 10px 0;
+}
+.git-conflict {
+  margin: 12px 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.git-conflict legend {
+  padding: 0 6px;
+  overflow-wrap: anywhere;
+}
+.git-conflict-values {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.git-conflict-values label {
+  display: block;
+  min-width: 0;
+}
+.git-conflict-values pre {
+  max-height: 200px;
+  overflow: auto;
+  font-size: 12px;
+  background: var(--surface);
+  padding: 10px;
+  border-radius: 6px;
+}
+.git-review-panel > .git-controls,
+.publication-review > button {
+  margin-top: 16px;
+}
+.git-workspace button:focus-visible,
+.git-workspace input:focus-visible,
+.git-workspace select:focus-visible,
+.git-workspace summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+@media (max-width: 800px) {
+  .git-content {
+    padding: 12px;
+  }
+  .git-tabs {
+    gap: 3px;
+    padding-inline: 8px;
+  }
+  .git-revisions {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+  .comparison-body {
+    flex-direction: column;
+  }
+  .change-list {
+    width: 100%;
+    max-width: 100%;
+    max-height: 180px;
+    resize: none;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+  .git-conflict-values,
+  .git-wiring {
+    grid-template-columns: 1fr;
+  }
+  .git-controls label {
+    flex-wrap: wrap;
+  }
+  .git-commit {
+    flex-wrap: wrap;
+  }
+  .git-commit > div {
+    flex-basis: 100%;
+  }
+  .git-status-button span {
+    display: none;
+  }
+}

@@ -1,0 +1,29 @@
+---
+import Layout from "../../layouts/Layout.astro";
+import { sections, url } from "../../lib/docs";
+---
+
+<Layout
+  title="Documentation — Duckpad"
+  description="Learn to build, run and understand your data pipelines with Duckpad."
+  docs
+>
+  <main id="main" class="wrap prose" style="padding-block: 60px">
+    <p class="eyebrow">THE FIELD GUIDE</p>
+    <h1>Make yourself at home.</h1>
+    <p>Start with a working example, then explore the details.</p>
+    {sections.map((section) => (
+      <section>
+        <h2>{section.label}</h2>
+        <ul>
+          {section.pages.map((page) => (
+            <li>
+              <a href={url(`docs/${page.slug}/`)}>{page.title}</a> —{" "}
+              {page.description}
+            </li>
+          ))}
+        </ul>
+      </section>
+    ))}
+  </main>
+</Layout>
