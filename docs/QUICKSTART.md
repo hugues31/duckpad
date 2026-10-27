@@ -36,12 +36,14 @@ selector. The table shows the calculated revenue for each region.
 
 ## 3. Explain a number
 
-Click a **revenue** cell in the result table. The lineage timeline follows the
-rank step into the aggregate automatically, keeping the selected value visible.
-Choose an **amount** to follow its path to the original source row. Use **Next**
-to page through groups of five contributions, or select an earlier timeline step
-to explore another input. **Play this path** animates the explored steps from the
-source toward the selected value; use **Pause** to inspect a step.
+Click a **revenue** cell in the result table. A large modal connects the original
+**amount** cells to the sum that produced the selected revenue. Unchanged values
+pass straight through, leaving only source cells and meaningful calculations.
+
+The calculation shows `SUM(amount)`, its result and the full number of
+contributing values. Use **Next** to display the next five inputs. Open a card's
+details to inspect the SQL or the context that selected its rows. Pan and zoom
+the graph as needed; press Escape to return to the result table.
 
 ![The original amounts behind a regional revenue total](images/lineage.png)
 

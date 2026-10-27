@@ -125,18 +125,18 @@ test("record a real pipeline, source lineage and SQL workspace", async ({
     );
     await click(page, revenue);
     await expect(
-      page.getByRole("list", { name: "Value creation timeline" }),
+      page.getByRole("dialog", { name: "How this value was calculated" }),
     ).toBeVisible();
     await page.waitForTimeout(1200);
     caption(
-      "The timeline follows the calculation back to its contributing amounts.",
+      "The graph connects source amounts to the calculation, skipping unchanged values.",
     );
-    await expect(page.locator(".lineage-panel")).toContainText(
-      "27 contributions",
+    await expect(page.locator(".lineage-dialog")).toContainText(
+      "Sum of 27 contributing values",
       { ignoreCase: true },
     );
     await expect(
-      page.locator(".lineage-panel .contribution").first(),
+      page.locator(".lineage-dialog .lineage-card.is-source").first(),
     ).toContainText("amount");
     await page.waitForTimeout(1400);
     await page.screenshot({
@@ -147,16 +147,16 @@ test("record a real pipeline, source lineage and SQL workspace", async ({
     await click(
       page,
       page
-        .locator(".lineage-panel")
+        .locator(".lineage-dialog")
         .getByRole("button", { name: "Next", exact: true }),
     );
-    await expect(page.locator(".lineage-panel .pager")).toContainText(
-      "10 / 27",
+    await expect(page.locator(".lineage-dialog .lineage-page")).toContainText(
+      "6–10 / 27",
     );
     await page.waitForTimeout(1400);
     await click(
       page,
-      page.locator(".lineage-panel").getByTitle("Close", { exact: true }),
+      page.locator(".lineage-dialog").getByTitle("Close", { exact: true }),
     );
     caption(
       "Open Code to inspect the SQL and project files behind the visual flow.",

@@ -1,137 +1,337 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import {
+  ReactFlow,
+  Background,
+  Controls,
+  Handle,
+  Position,
+  useReactFlow,
+  useStore,
+  type Node,
+  type NodeProps,
+} from "@xyflow/react";
 import {
   AlertTriangle,
-  ArrowUp,
+  ArrowRight,
   ChevronLeft,
   ChevronRight,
   Database,
   GitBranch,
+  Layers,
   Loader2,
-  Pause,
-  Play,
   X,
 } from "lucide-react";
 import { api, send, withQuery } from "./api";
 import { formatValue } from "./graph";
-import type { Json } from "./types";
 import { useT } from "./i18n";
+import {
+  arrangeLineage,
+  buildLineageGraph,
+  cellId,
+  requestId,
+  type Cell,
+  type Entry,
+  type Explanation,
+  type Query,
+} from "./lineageGraph";
 import "./lineage.css";
 
-type Cell = { dataset: string; row: number; column: string; node?: string };
-type Input = Cell & {
-  value: unknown;
-  source: boolean;
-  port: string;
-  node: string;
-};
-type Query = Cell & { offset?: number; group?: string; context?: boolean };
-type Explanation = Cell & {
-  value: unknown;
-  kind?: string;
-  expression?: string;
-  complete: boolean;
-  warnings: string[];
-  total: number;
-  page_size: number;
-  contributions: Input[];
-  context_total: number;
-  groups?: { key: string; value: unknown; rows: number }[];
-};
-type Step = {
-  query: Query;
-  result: Explanation;
-  page: Explanation;
-  context: boolean;
-};
-type Request = {
-  prefix: Step[];
-  query: Query;
-  replace?: Step;
-  context: boolean;
-};
 type Props = {
   worktree: string;
   environment: string;
-  cell: Json;
+  cell: Cell;
   onClose: () => void;
 };
-
-const identity = (cell: Cell) =>
-  JSON.stringify([cell.dataset, cell.row, cell.column]);
+type Graph = Awaited<ReturnType<typeof buildLineageGraph>>;
+type CardData = {
+  entry: Entry;
+  root: boolean;
+  disabled: boolean;
+  select: (id: string) => void;
+  page: (id: string, values: Partial<Query>) => void;
+  expand: () => void;
+};
+type CardNode = Node<CardData, "lineage">;
+const nodeTypes = { lineage: CalculationCard };
 const operationKeys: Record<string, string> = {
-  source: "lineageSource",
-  projection: "lineageCalculation",
-  aggregate: "lineageAggregate",
-  distinct_groups: "lineageDistinct",
-  distinct: "lineageDistinct",
-  filter: "lineageFilter",
-  join: "lineageJoin",
-  window: "lineageWindow",
-  union: "lineageUnion",
-  intersect: "lineageIntersect",
-  except: "lineageExcept",
+  sum: "lineageSum",
+  avg: "lineageAverage",
+  min: "lineageMinimum",
+  max: "lineageMaximum",
+  count: "lineageCount",
+  count_distinct: "lineageDistinctCount",
 };
 
-// A new cell is a new exploration, including when the previous one was interrupted.
+function CalculationCard({ data }: NodeProps<CardNode>) {
+  const t = useT();
+  const { entry, disabled } = data;
+  const { result, query, group } = entry;
+  const source = result.kind === "source" && !entry.deferred;
+  const operation = result.calculation?.operation || "expression";
+  let formula =
+    result.calculation?.evaluated ||
+    result.calculation?.formula ||
+    result.expression;
+  if (
+    (operation === "sum" || operation === "avg") &&
+    result.total > 0 &&
+    result.total === result.contributions.length &&
+    result.contributions.every(
+      (input) =>
+        typeof input.value === "number" && Number.isFinite(input.value),
+    ) &&
+    !query.offset &&
+    query.group === undefined
+  ) {
+    const values = result.contributions
+      .map((input) => formatValue(input.value))
+      .join(" + ");
+    formula = operation === "sum" ? values : `(${values}) / ${result.total}`;
+  }
+  const offset = query.offset || 0;
+  return (
+    <article
+      className={`lineage-card ${source ? "is-source" : "calculation"} ${data.root ? "root" : ""}`}
+      aria-label={`${result.column}: ${formatValue(result.value)}`}
+    >
+      {!source && !group && (
+        <Handle type="target" position={Position.Left} isConnectable={false} />
+      )}
+      {!data.root && (
+        <Handle type="source" position={Position.Right} isConnectable={false} />
+      )}
+      <div className="lineage-card-kind">
+        {source ? (
+          <Database size={14} />
+        ) : group ? (
+          <Layers size={14} />
+        ) : (
+          <GitBranch size={14} />
+        )}
+        {t(
+          entry.deferred
+            ? "lineageEarlierValue"
+            : source
+              ? "lineageSource"
+              : group
+                ? "lineageValueGroup"
+                : !result.complete
+                  ? "partial"
+                  : operationKeys[operation] || "lineageCalculation",
+        )}
+        {data.root && <span>{t("lineageSelectedValue")}</span>}
+      </div>
+      <div className="lineage-card-value">
+        <strong>{result.column}</strong>
+        <span>=</span>
+        <b title={formatValue(result.value)}>{formatValue(result.value)}</b>
+      </div>
+      {source ? (
+        <div className="lineage-source-location">
+          {result.node?.split("::").at(-1)} · {t("lineageRow")} {result.row + 1}
+        </div>
+      ) : entry.deferred ? (
+        <button
+          className="text-button nodrag"
+          disabled={disabled}
+          onClick={data.expand}
+        >
+          {t("lineageExpand")}
+        </button>
+      ) : group ? (
+        <button
+          className="text-button nodrag"
+          disabled={disabled}
+          onClick={() =>
+            data.page(group.parent, { group: group.key, offset: 0 })
+          }
+        >
+          {t("lineageShowRows")} · {group.rows}
+          <ArrowRight size={13} />
+        </button>
+      ) : (
+        <>
+          {formula && (
+            <div
+              className="lineage-equation"
+              title={`${formula} = ${formatValue(result.value)}`}
+            >
+              {formula} = <strong>{formatValue(result.value)}</strong>
+            </div>
+          )}
+          {!!result.calculation?.selection?.length && (
+            <p className="lineage-card-condition">
+              {result.calculation.selection.join(" · ")}
+            </p>
+          )}
+          {!result.complete ? (
+            <p className="lineage-card-warning">
+              <AlertTriangle size={14} />
+              {t("lineageLimitedHint")}
+            </p>
+          ) : (
+            <p className="lineage-card-reason">
+              {query.group !== undefined ? (
+                <>
+                  {t("lineageRowsFor")}{" "}
+                  <strong>{formatValue(result.group)}</strong>
+                </>
+              ) : result.total === 0 ? (
+                t("lineageNoInputs")
+              ) : operationKeys[operation] ? (
+                <>
+                  {t(`${operationKeys[operation]}Reason`).replace(
+                    "{count}",
+                    String(
+                      operation === "count" || operation === "count_distinct"
+                        ? result.value
+                        : result.total,
+                    ),
+                  )}
+                </>
+              ) : result.total ? (
+                t("lineageInputsReason")
+              ) : (
+                t("lineageNoInputs")
+              )}
+            </p>
+          )}
+          {query.group !== undefined && (
+            <button
+              className="text-button nodrag"
+              disabled={disabled}
+              onClick={() =>
+                data.page(entry.id, { group: undefined, offset: 0 })
+              }
+            >
+              <ChevronLeft size={12} />
+              {t("lineageAllGroups")}
+            </button>
+          )}
+          {result.total > result.page_size && (
+            <div className="lineage-page nodrag">
+              <button
+                className="icon"
+                aria-label={t("previous")}
+                disabled={disabled || offset === 0}
+                onClick={() =>
+                  data.page(entry.id, {
+                    offset: Math.max(0, offset - result.page_size),
+                  })
+                }
+              >
+                <ChevronLeft size={14} />
+              </button>
+              <span>
+                {offset + 1}–{Math.min(offset + result.page_size, result.total)}{" "}
+                / {result.total}{" "}
+                {t(result.groups ? "valueGroups" : "contributions")}
+              </span>
+              <button
+                className="icon"
+                aria-label={t("next")}
+                disabled={disabled || offset + result.page_size >= result.total}
+                onClick={() =>
+                  data.page(entry.id, { offset: offset + result.page_size })
+                }
+              >
+                <ChevronRight size={14} />
+              </button>
+            </div>
+          )}
+        </>
+      )}
+      {!group && !entry.deferred && (
+        <button
+          className="lineage-details-button nodrag"
+          disabled={disabled}
+          onClick={() => data.select(entry.id)}
+        >
+          {t(source ? "lineageSourceDetails" : "lineageCalculationDetails")}
+        </button>
+      )}
+    </article>
+  );
+}
+
+function FitGraph({ version }: { version: Graph }) {
+  const { fitView } = useReactFlow();
+  const width = useStore((state) => state.width);
+  const height = useStore((state) => state.height);
+  useEffect(() => {
+    const frame = requestAnimationFrame(
+      () => void fitView({ padding: 0.16, maxZoom: 1, duration: 0 }),
+    );
+    return () => cancelAnimationFrame(frame);
+  }, [fitView, version, width, height]);
+  return null;
+}
+
 export default function LineagePanel(props: Props) {
   return (
-    <LineageJourney
+    <LineageDialog
       key={JSON.stringify([
         props.worktree,
         props.environment,
-        identity(props.cell as Cell),
+        cellId(props.cell),
       ])}
       {...props}
     />
   );
 }
 
-function LineageJourney({ worktree, environment, cell, onClose }: Props) {
+function LineageDialog({ worktree, environment, cell, onClose }: Props) {
   const t = useT();
-  const [steps, setSteps] = useState<Step[]>([]);
-  const [active, setActive] = useState(0);
-  const [request, setRequest] = useState<Request>({
-    prefix: [],
-    query: cell as Cell,
-    context: false,
-  });
+  const titleId = useId();
+  const dialog = useRef<HTMLDialogElement>(null);
+  const stopped = useRef(false);
+  const cache = useRef(new Map<string, Explanation>());
+  const controller = useRef<AbortController | null>(null);
+  const [graph, setGraph] = useState<Graph | null>(null);
+  const [pages, setPages] = useState<Record<string, Partial<Query>>>({});
+  const [budget, setBudget] = useState(60);
+  const [revision, setRevision] = useState(0);
   const [pending, setPending] = useState(true);
   const [error, setError] = useState("");
   const [interrupted, setInterrupted] = useState(false);
-  const [playing, setPlaying] = useState(false);
-  const controller = useRef<AbortController | null>(null);
-  const stopped = useRef(false);
-  const activeCard = useRef<HTMLLIElement | null>(null);
-  const timelineBody = useRef<HTMLDivElement | null>(null);
+  const [selected, setSelected] = useState<string | null>(null);
 
   useEffect(() => {
-    let live = true;
-    let timer: number | undefined;
+    const opener = document.activeElement as HTMLElement | null;
+    const element = dialog.current!;
+    element.showModal();
+    return () => {
+      element.close();
+      opener?.focus({ preventScroll: true });
+    };
+  }, []);
+
+  useEffect(() => {
     const abort = new AbortController();
+    let timer: number | undefined;
     const verify = async () => {
       try {
-        const state = await api(
+        const result = await api(
           withQuery(`/worktrees/${worktree}/generations/${cell.dataset}`, {
             environment,
           }),
           { signal: abort.signal },
         );
-        if (live && !state.valid) {
+        if (!abort.signal.aborted && !result.valid) {
           stopped.current = true;
           controller.current?.abort();
           setInterrupted(true);
-          setPlaying(false);
           setPending(false);
           return;
         }
       } catch {
-        // Retry transient failures while this exploration is open.
+        /* Retry temporary verification failures. */
       }
-      if (live) timer = window.setTimeout(verify, 500);
+      if (!abort.signal.aborted) timer = window.setTimeout(verify, 500);
     };
     void verify();
     return () => {
-      live = false;
       abort.abort();
       clearTimeout(timer);
     };
@@ -143,456 +343,377 @@ function LineageJourney({ worktree, environment, cell, onClose }: Props) {
     controller.current = abort;
     setPending(true);
     setError("");
-    const load = async () => {
-      let path = request.prefix;
-      let query = request.query;
-      const seen = new Set(path.map((step) => identity(step.query)));
-      try {
-        // Follow only unambiguous inputs. Branches always remain the user's choice.
-        for (let count = 0; count < 20; count++) {
-          const result = await api<Explanation>(
-            `/worktrees/${worktree}/lineage`,
-            {
-              ...send({ ...query, environment }),
-              signal: abort.signal,
-            },
-          );
-          if (abort.signal.aborted || stopped.current) return;
-          const step: Step = {
-            query,
-            result: result.complete
-              ? (request.replace?.result ?? result)
-              : result,
-            page: result,
-            context: request.context,
-          };
-          path = [...path, step];
-          setSteps(path);
-          setActive(path.length - 1);
-          seen.add(identity(query));
-          const input = result.contributions[0];
-          if (
-            request.replace ||
-            !result.complete ||
-            result.kind === "source" ||
-            result.total !== 1 ||
-            !input ||
-            result.groups ||
-            seen.has(identity(input))
-          )
-            break;
-          query = {
-            dataset: input.dataset,
-            row: input.row,
-            column: input.column,
-            node: input.node,
-          };
-        }
-      } catch (e) {
-        if (!abort.signal.aborted && !stopped.current)
-          setError((e as Error).message);
-      } finally {
-        if (!abort.signal.aborted && !stopped.current) setPending(false);
-      }
+    const read = async (query: Query) => {
+      if (abort.signal.aborted) throw new DOMException("Aborted", "AbortError");
+      const key = requestId(query);
+      const saved = cache.current.get(key);
+      if (saved) return saved;
+      const result = await api<Explanation>(`/worktrees/${worktree}/lineage`, {
+        ...send({ ...query, environment }),
+        signal: abort.signal,
+      });
+      if (abort.signal.aborted || stopped.current)
+        throw new DOMException("Aborted", "AbortError");
+      cache.current.set(key, result);
+      return result;
     };
-    void load();
+    void buildLineageGraph(cell, pages, read, budget)
+      .then((result) => {
+        if (!abort.signal.aborted && !stopped.current) setGraph(result);
+      })
+      .catch((e) => {
+        if (!abort.signal.aborted && !stopped.current) setError(e.message);
+      })
+      .finally(() => {
+        if (!abort.signal.aborted && !stopped.current) setPending(false);
+      });
     return () => abort.abort();
-  }, [worktree, environment, request]);
+  }, [worktree, environment, cell, pages, budget, revision]);
 
-  useEffect(() => {
-    if (!playing) return;
-    const timer = window.setTimeout(() => {
-      if (active > 0) setActive(active - 1);
-      else setPlaying(false);
-    }, 1800);
-    return () => clearTimeout(timer);
-  }, [playing, active]);
+  const nodes = useMemo(
+    () =>
+      arrangeLineage<CardNode>(
+        (graph?.entries || []).map((entry) => ({
+          id: entry.id,
+          type: "lineage",
+          position: { x: 0, y: 0 },
+          width: 330,
+          style: { pointerEvents: "auto" },
+          height:
+            entry.result.kind === "source" || entry.group || entry.deferred
+              ? 132
+              : 260,
+          data: {
+            entry,
+            root: graph?.root === entry.id,
+            disabled: pending,
+            select: setSelected,
+            page: (id, values) => {
+              setPending(true);
+              setPages((current) => ({
+                ...current,
+                [id]: { ...current[id], ...values },
+              }));
+            },
+            expand: () => setBudget((value) => value + 60),
+          },
+        })),
+        graph?.edges || [],
+      ),
+    [graph, pending],
+  );
+  const active = graph?.entries.find((entry) => entry.id === selected);
 
-  useEffect(() => {
-    const body = timelineBody.current;
-    const card = activeCard.current;
-    if (!body || !card || pending) return;
-    // Scroll only the timeline; scrollIntoView can also move the fixed inspector header.
-    const top =
-      card.getBoundingClientRect().top -
-      body.getBoundingClientRect().top +
-      body.scrollTop;
-    const visibleHeight =
-      card.offsetHeight <= body.clientHeight
-        ? card.offsetHeight
-        : card.querySelector("button")!.offsetHeight;
-    const bottom = top + visibleHeight;
-    if (top < body.scrollTop) body.scrollTop = top;
-    else if (bottom > body.scrollTop + body.clientHeight)
-      body.scrollTop = bottom - body.clientHeight;
-  }, [playing, active, pending]);
-
-  const root = steps[0]?.result;
-  const selected = steps[active];
-  const disabled = pending || interrupted;
-  const select = (index: number) => {
-    setPlaying(false);
-    setActive(index);
-  };
-  const follow = (input: Input) => {
-    setPlaying(false);
-    setPending(true);
-    const prefix = steps.slice(0, active + 1);
-    setSteps(prefix);
-    setRequest({
-      prefix,
-      query: {
-        dataset: input.dataset,
-        row: input.row,
-        column: input.column,
-        node: input.node,
-      },
-      context: selected.context || !!selected.query.context,
-    });
-  };
-  const changePage = (values: Partial<Query>) => {
-    setPlaying(false);
-    setPending(true);
-    const prefix = steps.slice(0, active);
-    setRequest({
-      prefix,
-      query: { ...selected.query, ...values },
-      replace: selected,
-      context: selected.context,
-    });
-  };
-  const operation = (result: Explanation) =>
-    t(
-      !result.complete
-        ? "partial"
-        : operationKeys[result.kind || ""] || "lineageCalculation",
-    );
-
-  return (
-    <aside className="inspector lineage-panel" aria-label={t("lineage")}>
-      <div className="inspector-title">
-        <span className="row gap">
-          <GitBranch size={18} />
-          {t("lineage")}
-        </span>
+  return createPortal(
+    <dialog
+      ref={dialog}
+      className="lineage-dialog"
+      aria-labelledby={titleId}
+      onKeyDown={(event) => {
+        if (event.key !== "Tab") return;
+        const controls = [
+          ...event.currentTarget.querySelectorAll<HTMLElement>(
+            'button:not(:disabled), select:not(:disabled), [tabindex="0"]',
+          ),
+        ].filter((element) => element.getClientRects().length > 0);
+        const first = controls[0];
+        const last = controls.at(-1);
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last?.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first?.focus();
+        }
+      }}
+      onCancel={(event) => {
+        event.preventDefault();
+        onClose();
+      }}
+      onMouseDown={(event) => {
+        if (event.target !== event.currentTarget) return;
+        const bounds = event.currentTarget.getBoundingClientRect();
+        if (
+          event.clientX < bounds.left ||
+          event.clientX > bounds.right ||
+          event.clientY < bounds.top ||
+          event.clientY > bounds.bottom
+        )
+          onClose();
+      }}
+    >
+      <header className="lineage-header">
+        <div>
+          <h2 id={titleId}>{t("lineageDialogTitle")}</h2>
+          <div className="lineage-selected">
+            {cell.column}
+            {graph && (
+              <>
+                {" "}
+                = <strong>{formatValue(graph.original.value)}</strong>
+              </>
+            )}
+            <span>
+              {" "}
+              · {t("lineageRow")} {cell.row + 1}
+            </span>
+          </div>
+        </div>
         <button
           className="icon"
-          title={t("close")}
           aria-label={t("close")}
+          title={t("close")}
+          onClick={onClose}
+          autoFocus
+        >
+          <X size={20} />
+        </button>
+      </header>
+      {interrupted ? (
+        <div className="notice warning lineage-message" role="alert">
+          {t("lineageInterrupted")}
+        </div>
+      ) : (
+        <>
+          <div className="lineage-legend">
+            <span>
+              <Database size={14} />
+              {t("lineageSource")}
+            </span>
+            <ArrowRight size={16} />
+            <span>
+              <GitBranch size={14} />
+              {t("lineageCalculations")}
+            </span>
+            <ArrowRight size={16} />
+            <span>{t("lineageSelectedValue")}</span>
+          </div>
+          {error && (
+            <div className="notice error" role="alert">
+              {error}
+              <button
+                className="text-button"
+                onClick={() => setRevision((value) => value + 1)}
+              >
+                {t("retry")}
+              </button>
+            </div>
+          )}
+          <div className="lineage-workspace">
+            <div className="lineage-graph" aria-label={t("lineageGraph")}>
+              {graph && (
+                <ReactFlow
+                  nodes={nodes}
+                  edges={graph.edges}
+                  nodeTypes={nodeTypes}
+                  nodesDraggable={false}
+                  nodesFocusable={false}
+                  edgesFocusable={false}
+                  ariaLabelConfig={{
+                    "controls.ariaLabel": t("canvasControls"),
+                    "controls.zoomIn.ariaLabel": t("zoomIn"),
+                    "controls.zoomOut.ariaLabel": t("zoomOut"),
+                    "controls.fitView.ariaLabel": t("fitView"),
+                  }}
+                  nodesConnectable={false}
+                  elementsSelectable={false}
+                  minZoom={0.15}
+                  maxZoom={1.6}
+                  fitView
+                  fitViewOptions={{ padding: 0.16, maxZoom: 1 }}
+                  proOptions={{ hideAttribution: true }}
+                >
+                  <Background gap={22} size={1} />
+                  <Controls showInteractive={false} />
+                  <FitGraph version={graph} />
+                </ReactFlow>
+              )}
+              {pending && (
+                <div className="lineage-loading" role="status">
+                  <Loader2 className="spin" size={18} />
+                  {t("lineageLoading")}
+                </div>
+              )}
+            </div>
+            {active && (
+              <CalculationDetails
+                key={active.id}
+                entry={active}
+                worktree={worktree}
+                environment={environment}
+                onClose={() => setSelected(null)}
+              />
+            )}
+          </div>
+        </>
+      )}
+    </dialog>,
+    document.body,
+  );
+}
+
+function CalculationDetails({
+  entry,
+  worktree,
+  environment,
+  onClose,
+}: {
+  entry: Entry;
+  worktree: string;
+  environment: string;
+  onClose: () => void;
+}) {
+  const t = useT();
+  const selections = [entry.result, ...entry.hidden].filter(
+    (step) => step.context_total > 0,
+  );
+  const [selection, setSelection] = useState(0);
+  const [offset, setOffset] = useState(0);
+  const [page, setPage] = useState<Explanation | null>(null);
+  const [error, setError] = useState("");
+  const [pending, setPending] = useState(false);
+  const current = selections[selection];
+  useEffect(() => {
+    if (!current) return;
+    const abort = new AbortController();
+    setPending(true);
+    setError("");
+    setPage(null);
+    void api<Explanation>(`/worktrees/${worktree}/lineage`, {
+      ...send({
+        dataset: current.dataset,
+        row: current.row,
+        column: current.column,
+        environment,
+        context: true,
+        offset,
+      }),
+      signal: abort.signal,
+    })
+      .then((result) => {
+        if (!abort.signal.aborted) setPage(result);
+      })
+      .catch((e) => {
+        if (!abort.signal.aborted) setError(e.message);
+      })
+      .finally(() => {
+        if (!abort.signal.aborted) setPending(false);
+      });
+    return () => abort.abort();
+  }, [
+    worktree,
+    environment,
+    current?.dataset,
+    current?.row,
+    current?.column,
+    offset,
+  ]);
+  return (
+    <aside
+      className="lineage-details"
+      aria-label={t("lineageCalculationDetails")}
+    >
+      <div className="row spread">
+        <h3>{entry.result.column}</h3>
+        <button
+          className="icon"
+          aria-label={t("lineageCloseDetails")}
           onClick={onClose}
         >
-          <X size={18} />
+          <X size={16} />
         </button>
       </div>
-      <div className="lineage-overview">
-        <p className="lineage-intro">{t("lineageIntro")}</p>
-        {root && (
-          <div className="value-card lineage-result">
-            <span className="eyebrow">{t("lineageSelectedValue")}</span>
-            <strong>{formatValue(root.value)}</strong>
-            <span>
-              {root.column}{" "}
-              <span className="muted">
-                · {t("lineageRow")} {root.row + 1}
-              </span>
-            </span>
-          </div>
-        )}
-        {!interrupted && steps.length > 1 && (
-          <div className="lineage-playback">
-            <button
-              className="button secondary small"
-              disabled={disabled || !!error}
-              onClick={() => {
-                if (playing) setPlaying(false);
-                else {
-                  if (active === 0) setActive(steps.length - 1);
-                  setPlaying(true);
-                }
-              }}
-            >
-              {playing ? <Pause size={14} /> : <Play size={14} />}
-              {t(playing ? "lineagePause" : "lineagePlay")}
-            </button>
-            <span className="muted small" role="status">
-              {t("lineageStep")} {steps.length - active} / {steps.length}
-            </span>
-            <p>{t("lineagePlaybackHint")}</p>
-          </div>
-        )}
-      </div>
-      <div className="lineage-body" ref={timelineBody}>
-        {interrupted ? (
-          <div className="notice warning" role="alert">
-            {t("lineageInterrupted")}
-          </div>
-        ) : (
-          <>
-            <ol
-              className={`lineage-timeline ${playing ? "is-playing" : ""}`}
-              aria-label={t("lineageTimeline")}
-            >
-              {steps.map((step, index) => {
-                const result = step.result;
-                const page = step.page;
-                const expanded = active === index;
-                const source = result.kind === "source";
-                const context = !!step.query.context;
-                const offset = step.query.offset || 0;
-                const location =
-                  step.query.node ||
-                  (source ? result.contributions[0]?.node : undefined);
-                return (
-                  <li
-                    key={identity(step.query) + index}
-                    ref={expanded ? activeCard : undefined}
-                    className={`lineage-step ${expanded ? "is-active" : ""} ${source ? "is-source" : ""}`}
+      <p>
+        {entry.result.node} · {entry.result.port} · {t("lineageRow")}{" "}
+        {entry.result.row + 1}
+      </p>
+      {entry.result.expression && (
+        <pre className="expression">{entry.result.expression}</pre>
+      )}
+      {entry.result.warnings.map((warning) => (
+        <p className="notice warning" key={warning}>
+          {warning}
+        </p>
+      ))}
+      {!!selections.length && (
+        <>
+          <h4>{t("lineageSelection")}</h4>
+          <p>{t("lineageContextHint")}</p>
+          {selections.length > 1 && (
+            <label>
+              {t("lineageSelectionStep")}
+              <select
+                value={selection}
+                onChange={(event) => {
+                  setSelection(Number(event.target.value));
+                  setOffset(0);
+                }}
+              >
+                {selections.map((step, index) => (
+                  <option key={cellId(step)} value={index}>
+                    {step.node?.split("::").at(-1)} · {step.column}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          {current?.calculation?.selection?.map((condition) => (
+            <pre className="expression" key={condition}>
+              {condition}
+            </pre>
+          ))}
+          {pending && <p role="status">{t("loading")}</p>}
+          {error && <p role="alert">{error}</p>}
+          {page && (
+            <>
+              <table>
+                <thead>
+                  <tr>
+                    <th>{t("lineageInput")}</th>
+                    <th>{t("lineageValue")}</th>
+                    <th>{t("lineageRow")}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {page.contributions.map((item) => (
+                    <tr key={cellId(item)}>
+                      <td>{item.column}</td>
+                      <td>{formatValue(item.value)}</td>
+                      <td>{item.row + 1}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {page.total > page.page_size && (
+                <div className="lineage-page">
+                  <button
+                    className="icon"
+                    aria-label={t("previous")}
+                    disabled={!offset}
+                    onClick={() =>
+                      setOffset(Math.max(0, offset - page.page_size))
+                    }
                   >
-                    <button
-                      className="lineage-step-heading"
-                      disabled={disabled}
-                      aria-expanded={expanded}
-                      aria-current={expanded ? "step" : undefined}
-                      onClick={() => select(index)}
-                    >
-                      <span className="lineage-marker">
-                        {source ? <Database size={13} /> : index + 1}
-                      </span>
-                      <span className="lineage-step-label">
-                        <span className="lineage-operation">
-                          {operation(result)}
-                        </span>
-                        <strong>{result.column}</strong>
-                      </span>
-                      <span
-                        className="lineage-step-value"
-                        title={formatValue(result.value)}
-                      >
-                        {formatValue(result.value)}
-                      </span>
-                    </button>
-                    {expanded && (
-                      <div className="lineage-step-detail">
-                        <p className="lineage-location">
-                          {location && `${location.split("::").at(-1)} · `}
-                          {t("lineageRow")} {result.row + 1}
-                        </p>
-                        {step.context && (
-                          <p className="notice warning">
-                            {t("lineageContextPath")}
-                          </p>
-                        )}
-                        {result.warnings.map((warning) => (
-                          <p className="notice warning" key={warning}>
-                            <AlertTriangle size={14} /> {warning}
-                          </p>
-                        ))}
-                        {source ? (
-                          <p className="lineage-source-note">
-                            <Database size={15} />
-                            {t("lineageSourceHint")}
-                          </p>
-                        ) : (
-                          <>
-                            <p className="lineage-explanation">
-                              {t(
-                                !result.complete
-                                  ? "lineageLimitedHint"
-                                  : operationKeys[result.kind || ""]
-                                    ? `${operationKeys[result.kind!]}Hint`
-                                    : "lineageCalculationHint",
-                              )}
-                            </p>
-                            {result.expression && (
-                              <details className="lineage-formula">
-                                <summary>{t("lineageFormula")}</summary>
-                                <pre className="expression">
-                                  {result.expression}
-                                </pre>
-                              </details>
-                            )}
-                            {!!result.context_total && (
-                              <button
-                                className="text-button lineage-context-toggle"
-                                disabled={disabled}
-                                onClick={() =>
-                                  changePage({
-                                    context: !context,
-                                    group: undefined,
-                                    offset: 0,
-                                  })
-                                }
-                              >
-                                {t(
-                                  context
-                                    ? "showContributors"
-                                    : "lineageShowContext",
-                                )}{" "}
-                                <span>({result.context_total})</span>
-                              </button>
-                            )}
-                            {context && (
-                              <p className="notice warning">
-                                {t("lineageContextHint")}
-                              </p>
-                            )}
-                            {step.query.group !== undefined && (
-                              <button
-                                className="text-button small"
-                                disabled={disabled}
-                                onClick={() =>
-                                  changePage({ group: undefined, offset: 0 })
-                                }
-                              >
-                                <ChevronLeft size={14} />
-                                {t("lineageAllGroups")}
-                              </button>
-                            )}
-                            {page.total > 0 && (
-                              <div className="lineage-input-heading">
-                                <strong>
-                                  {page.total.toLocaleString()}{" "}
-                                  {t(
-                                    context
-                                      ? "lineageContextValues"
-                                      : page.groups
-                                        ? "valueGroups"
-                                        : "contributions",
-                                  )}
-                                </strong>
-                                <p>
-                                  {t(
-                                    page.groups
-                                      ? "lineageChooseGroup"
-                                      : "lineageChooseInput",
-                                  )}
-                                </p>
-                              </div>
-                            )}
-                            {page.groups?.map((group) => (
-                              <button
-                                key={group.key}
-                                className="contribution"
-                                disabled={disabled}
-                                onClick={() =>
-                                  changePage({ group: group.key, offset: 0 })
-                                }
-                              >
-                                <span className="contribution-value">
-                                  {formatValue(group.value)}
-                                </span>
-                                <span>
-                                  {group.rows} {t("inputRows")}
-                                </span>
-                                <ChevronRight size={14} />
-                              </button>
-                            ))}
-                            {page.contributions.map((input, i) => (
-                              <button
-                                key={identity(input) + i}
-                                className="contribution"
-                                disabled={disabled}
-                                onClick={() => follow(input)}
-                              >
-                                <span
-                                  className="contribution-value"
-                                  title={formatValue(input.value)}
-                                >
-                                  {formatValue(input.value)}
-                                </span>
-                                <span>
-                                  <strong>{input.column}</strong>
-                                  <small>
-                                    {input.node.split("::").at(-1)} ·{" "}
-                                    {t("lineageRow")} {input.row + 1}
-                                  </small>
-                                </span>
-                                <ChevronRight size={14} />
-                              </button>
-                            ))}
-                            {page.total > page.page_size && (
-                              <div className="row spread pager">
-                                <button
-                                  className="button secondary small"
-                                  disabled={disabled || !offset}
-                                  onClick={() =>
-                                    changePage({
-                                      offset: Math.max(
-                                        0,
-                                        offset - page.page_size,
-                                      ),
-                                    })
-                                  }
-                                >
-                                  <ChevronLeft size={14} />
-                                  {t("previous")}
-                                </button>
-                                <span className="muted small">
-                                  {Math.min(
-                                    offset + page.page_size,
-                                    page.total,
-                                  )}{" "}
-                                  / {page.total}
-                                </span>
-                                <button
-                                  className="button secondary small"
-                                  disabled={
-                                    disabled ||
-                                    offset + page.page_size >= page.total
-                                  }
-                                  onClick={() =>
-                                    changePage({
-                                      offset: offset + page.page_size,
-                                    })
-                                  }
-                                >
-                                  {t("next")}
-                                  <ChevronRight size={14} />
-                                </button>
-                              </div>
-                            )}
-                            {page.complete && page.total === 0 && (
-                              <p className="muted small">
-                                {t(
-                                  context
-                                    ? "lineageNoContext"
-                                    : "lineageNoInputs",
-                                )}
-                              </p>
-                            )}
-                          </>
-                        )}
-                      </div>
-                    )}
-                    {index < steps.length - 1 && (
-                      <span className="lineage-connector" aria-hidden="true">
-                        <ArrowUp size={12} />
-                      </span>
-                    )}
-                  </li>
-                );
-              })}
-            </ol>
-            {pending && (
-              <div className="lineage-loading" role="status">
-                <Loader2 className="spin" size={16} />
-                {t("lineageLoading")}
-              </div>
-            )}
-            {error && (
-              <div className="notice error" role="alert">
-                {error}
-                <button
-                  className="text-button"
-                  onClick={() => setRequest({ ...request })}
-                >
-                  {t("retry")}
-                </button>
-              </div>
-            )}
-          </>
-        )}
-      </div>
+                    <ChevronLeft size={14} />
+                  </button>
+                  <span>
+                    {offset + 1}–{Math.min(offset + page.page_size, page.total)}{" "}
+                    / {page.total}
+                  </span>
+                  <button
+                    className="icon"
+                    aria-label={t("next")}
+                    disabled={offset + page.page_size >= page.total}
+                    onClick={() => setOffset(offset + page.page_size)}
+                  >
+                    <ChevronRight size={14} />
+                  </button>
+                </div>
+              )}
+            </>
+          )}
+        </>
+      )}
     </aside>
   );
 }
