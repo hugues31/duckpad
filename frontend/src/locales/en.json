@@ -1,4 +1,8 @@
 {
+  "addConnectedNode": "Add a connected node",
+  "compatibleNodes": "Compatible nodes",
+  "noCompatibleNodes": "No compatible nodes found.",
+  "connectionPaletteHint": "↑ ↓ to browse · Enter to add · Esc to cancel",
   "workspace": "Workspace",
   "resourceMonitor": "Resource usage",
   "resourceScope": "Entire server machine · last 2 minutes",

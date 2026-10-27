@@ -10,6 +10,14 @@ import type {
 /** MIME type of palette items dragged onto the canvas. */
 export const DRAG_TYPE = "application/duckpad";
 
+/** The existing endpoint and the chosen port of a node created from a drag. */
+export interface NodeConnection {
+  nodeId: string;
+  handleId: string;
+  handleType: "source" | "target";
+  port: string;
+}
+
 export const identifier = (prefix = "node") =>
   prefix + "_" + crypto.randomUUID().replaceAll("-", "").slice(0, 12);
 
