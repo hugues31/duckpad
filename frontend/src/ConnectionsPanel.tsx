@@ -80,11 +80,14 @@ export default function ConnectionsPanel({
               )?.name || connection.connector}
             </span>
             <div className="row gap">
-              {Object.keys(connection.environments).map((e) => (
-                <span key={e} className="env-badge">
-                  {e}
-                </span>
-              ))}
+              {catalog.environment_details
+                .filter((e) => e.id in connection.environments)
+                .map((e) => (
+                  <span key={e.id} className="env-badge">
+                    <span className="env-dot" style={{ background: e.color }} />
+                    {e.label}
+                  </span>
+                ))}
             </div>
             <Settings2 size={16} className="card-corner" />
           </button>
@@ -210,15 +213,16 @@ export default function ConnectionsPanel({
                 </Select>
               </label>
               <div className="tabs">
-                {catalog.environments.map((e: string) => (
+                {catalog.environment_details.map((e) => (
                   <button
                     type="button"
-                    key={e}
-                    className={e === env ? "active" : ""}
-                    aria-pressed={e === env}
-                    onClick={() => setEnv(e)}
+                    key={e.id}
+                    className={e.id === env ? "active" : ""}
+                    aria-pressed={e.id === env}
+                    onClick={() => setEnv(e.id)}
                   >
-                    {e}
+                    <span className="env-dot" style={{ background: e.color }} />
+                    {e.label}
                   </button>
                 ))}
               </div>

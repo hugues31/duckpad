@@ -175,14 +175,23 @@ export default function TopBar({
             />
             <span className="header-divider" />
             <label className="environment-picker">
-              <span className={`env-dot ${environment}`} />
+              <span
+                className="env-dot"
+                style={{
+                  background: workspace?.catalog.environment_details.find(
+                    (item) => item.id === environment,
+                  )?.color,
+                }}
+              />
               <Select
                 aria-label={t("environment")}
                 value={environment}
                 onChange={(e) => onEnvironment(e.target.value)}
               >
-                {workspace?.catalog.environments.map((env: string) => (
-                  <option key={env}>{env}</option>
+                {workspace?.catalog.environment_details.map((env) => (
+                  <option key={env.id} value={env.id}>
+                    {env.label}
+                  </option>
                 ))}
               </Select>
             </label>

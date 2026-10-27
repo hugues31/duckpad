@@ -237,7 +237,12 @@ def create_app(home: Path, watch=True):
             "worktrees": [w for w in store.all("worktree") if w["project"] in ids],
             "catalog": catalog.public()
             if user["role"] == "admin"
-            else {"connectors": [], "connections": [], "environments": store.get("settings", "environments")},
+            else {
+                "connectors": [],
+                "connections": [],
+                "environments": store.get("settings", "environments"),
+                "environment_details": catalog.environments(),
+            },
             "identity": store.get(
                 "settings", "identity", {"name": "Duckpad user", "email": "admin@duckpad.local"}
             ),
@@ -270,6 +275,26 @@ def create_app(home: Path, watch=True):
         with projects.lock, engine.lock:
             engine.reset_catalog()
             catalog.set_environments(data)
+        return catalog.public()
+
+    @app.post("/api/environments")
+    def create_environment(data: schemas.NewEnvironment):
+        with projects.lock, engine.lock:
+            catalog.save_environment(data.model_dump(), create=True)
+        return catalog.public()
+
+    @app.put("/api/environments/{identity}")
+    def update_environment(identity: str, data: schemas.EnvironmentSettings):
+        with projects.lock, engine.lock:
+            catalog.save_environment({**data.model_dump(), "id": identity})
+        return catalog.public()
+
+    @app.delete("/api/environments/{identity}")
+    def delete_environment(identity: str):
+        with projects.lock, engine.lock:
+            catalog.validate_environment_deletion(identity)
+            engine.reset_catalog()
+            catalog.delete_environment(identity)
         return catalog.public()
 
     @app.post("/api/worktrees/{worktree}/uploads")
@@ -544,7 +569,7 @@ def create_app(home: Path, watch=True):
     @app.post("/api/worktrees/{worktree}/runs")
     def launch(worktree: str, data: schemas.Launch):
         entry_point = "ui" if data.entry_point == "ui" else "api"
-        return engine.launch(worktree, data.environment, data.node, entry_point)
+        return engine.launch(worktree, data.environment, data.node, entry_point, confirmed=data.confirmed)
 
     @app.get("/api/runs")
     def runs(request: Request, worktree: str | None = None):
