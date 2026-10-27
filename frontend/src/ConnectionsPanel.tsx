@@ -81,7 +81,13 @@ export default function ConnectionsPanel({
             </span>
             <div className="row gap">
               {catalog.environment_details
-                .filter((e) => e.id in connection.environments)
+                .filter((e) =>
+                  Object.values(connection.environments[e.id] ?? {}).some(
+                    (value) =>
+                      value != null &&
+                      (typeof value !== "string" || value.trim() !== ""),
+                  ),
+                )
                 .map((e) => (
                   <span key={e.id} className="env-badge">
                     <span className="env-dot" style={{ background: e.color }} />
