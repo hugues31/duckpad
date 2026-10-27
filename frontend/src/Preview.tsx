@@ -1,3 +1,4 @@
+import Select from "./Select";
 import { useEffect, useState } from "react";
 import {
   ChevronLeft,
@@ -8,26 +9,34 @@ import {
   Search,
   X,
 } from "lucide-react";
-import { api, formatValue, type Json } from "./types";
+import { api } from "./api";
+import { formatValue } from "./graph";
+import type { Json } from "./types";
 import { useT } from "./i18n";
 
 export default function Preview({
+  readOnly = false,
   worktree,
   environment,
   node,
   ports,
   version,
   active,
+  hidden,
+  onClose,
   onRun,
   onExplain,
   onData,
 }: {
+  readOnly?: boolean;
   worktree: string;
   environment: string;
   node: string;
   ports: string[];
   version: string;
   active: boolean;
+  hidden: boolean;
+  onClose: () => void;
   onRun: () => void;
   onExplain: (cell: Json) => void;
   onData: (data: Json | null) => void;
@@ -111,13 +120,18 @@ export default function Preview({
     debounced,
   ]);
   return (
-    <section className="preview-panel" aria-label={t("preview")}>
+    <section
+      className="preview-panel"
+      id="data-preview"
+      aria-label={t("preview")}
+      hidden={hidden}
+    >
       <div className="preview-header">
         <div className="row gap">
           <Database size={15} />
           <strong>{t("preview")}</strong>
           {ports.length > 1 && (
-            <select
+            <Select
               aria-label={t("output")}
               value={port}
               onChange={(e) => {
@@ -128,24 +142,29 @@ export default function Preview({
               {ports.map((p) => (
                 <option key={p}>{p}</option>
               ))}
-            </select>
+            </Select>
           )}
           {data && (
             <span className={`badge ${data.status}`}>{t(data.status)}</span>
           )}
           {loading && <Loader2 size={14} className="spin" />}
         </div>
-        {data && (
-          <span className="muted small">
-            {data.count.toLocaleString()} {t("rows")} · {data.columns.length}{" "}
-            {t("columns")}
-          </span>
-        )}
+        <div className="row gap">
+          {data && (
+            <span className="muted small">
+              {data.count.toLocaleString()} {t("rows")} · {data.columns.length}{" "}
+              {t("columns")}
+            </span>
+          )}
+          <button className="icon" title={t("hidePreview")} onClick={onClose}>
+            <X size={15} />
+          </button>
+        </div>
       </div>
       {data ? (
         <>
           <div className="preview-tools">
-            <div className="search compact">
+            <div className="search">
               <Search size={13} />
               <input
                 aria-label={t("filterRows")}
@@ -163,7 +182,7 @@ export default function Preview({
                 </button>
               )}
             </div>
-            <select
+            <Select
               aria-label={t("filterColumn")}
               value={filterColumn}
               onChange={(e) => setFilterColumn(e.target.value)}
@@ -171,9 +190,9 @@ export default function Preview({
               {data.columns.map((c: Json) => (
                 <option key={c.name}>{c.name}</option>
               ))}
-            </select>
+            </Select>
             <span className="spacer" />
-            <select
+            <Select
               aria-label={t("rowLimit")}
               value={limit}
               onChange={(e) => {
@@ -186,7 +205,7 @@ export default function Preview({
                   {n} {t("rows")}
                 </option>
               ))}
-            </select>
+            </Select>
           </div>
           {data.error && <div className="inline-error">{data.error}</div>}
           <div className="data-scroll">
@@ -286,11 +305,11 @@ export default function Preview({
           <Database size={25} />
           <div>
             <strong>{error || t("noResult")}</strong>
-            <p>{t("noResultHint")}</p>
+            <p>{t(readOnly ? "readerNoResult" : "noResultHint")}</p>
           </div>
           <button
             className="button secondary small"
-            disabled={active}
+            disabled={readOnly || active}
             onClick={onRun}
           >
             <Play size={13} />
