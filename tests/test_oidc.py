@@ -13,6 +13,7 @@ from oidc_provider import Provider
 import duckpad.oidc as oidc_module
 from duckpad.app import create_app
 from duckpad.auth import Auth, session_key
+from duckpad.identity import account_identity
 from duckpad.logging import PollingAccessFilter
 from duckpad.store import Store
 
@@ -107,6 +108,65 @@ def test_real_signed_flow_creates_member_and_preserves_identity(instance):
     assert client.get("/api/session").json() == user
     assert len(app.state.auth.store.all("user")) == 2
     assert "test-access-token" not in str(app.state.auth.store.items("session"))
+
+
+@pytest.mark.parametrize(
+    ("claims", "name", "email"),
+    [
+        (
+            {"name": "Alex Example", "email": "alex@example.com", "email_verified": True},
+            "Alex Example",
+            "alex@example.com",
+        ),
+        ({"name": "Alex", "email": "admin@example.com", "email_verified": False}, "Alex", None),
+        ({"email": "admin@example.com", "email_verified": "true"}, "admin", None),
+        (
+            {"name": "Alex\n<Example>\x1f", "email": "bad\n@example.com", "email_verified": True},
+            "Alex Example",
+            None,
+        ),
+        ({"name": [], "preferred_username": None, "email": {}, "email_verified": True}, None, None),
+    ],
+)
+def test_verified_sso_profile_drives_commit_identity_and_refreshes(instance, claims, name, email):
+    app, client, provider, _ = instance
+    configure(client)
+    client.post("/api/logout")
+    provider.claims = claims
+    assert complete(client, provider).headers["location"] == "/"
+    user = client.get("/api/session").json()
+    worktree = client.post("/api/projects", json={"name": "SSO project"}).json()
+    projects = app.state.services.projects
+    expected = {"name": name or user["username"], "email": email or account_identity(user)["email"]}
+    fields = projects.git(worktree["path"], "show", "-s", "--format=%an%n%ae%n%cn%n%ce").splitlines()
+    assert fields == [expected["name"], expected["email"]] * 2
+    # Metadata survives reloading auth and is not exposed in the account directory.
+    assert Auth(app.state.auth.store).commit_identity(user) == expected
+    assert "commit_identity" not in user
+    original = projects.snapshot(worktree["id"])["commit"]
+    client.post("/api/logout")
+    provider.claims = {"name": "Updated name", "email": "new@example.com", "email_verified": True}
+    assert complete(client, provider).headers["location"] == "/"
+    assert client.get("/api/session").json()["id"] == user["id"]
+    snapshot = client.get(f"/api/worktrees/{worktree['id']}").json()
+    snapshot["bundle"]["flow"]["description"] = "Updated by SSO"
+    response = client.put(
+        f"/api/worktrees/{worktree['id']}",
+        json={
+            "revision": snapshot["revision"],
+            "bundle": snapshot["bundle"],
+            "identity": {"name": "Forged", "email": "forged@example.com"},
+        },
+    )
+    assert response.status_code == 200, response.text
+    assert (
+        projects.git(worktree["path"], "show", "-s", "--format=%an%n%ae%n%cn%n%ce").splitlines()
+        == ["Updated name", "new@example.com"] * 2
+    )
+    assert projects.git(worktree["path"], "show", "-s", "--format=%an%n%ae", original).splitlines() == [
+        expected["name"],
+        expected["email"],
+    ]
 
 
 @pytest.mark.parametrize(
