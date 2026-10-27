@@ -1,0 +1,180 @@
+---
+import Layout from "../layouts/Layout.astro";
+import { renderReleaseNotes } from "../lib/release-markdown";
+import { getReleases, releasesURL, releaseURL } from "../lib/releases";
+
+const releases = await Promise.all(
+  (await getReleases()).map(async (release) => {
+    const id = `release-${encodeURIComponent(release.tag)}`;
+    return {
+      ...release,
+      html: await renderReleaseNotes(release, id),
+      id,
+    };
+  }),
+);
+const date = new Intl.DateTimeFormat("en", {
+  dateStyle: "long",
+  timeZone: "UTC",
+});
+const latest = releases.find((release) => !release.prerelease)?.tag;
+---
+
+<Layout
+  title="Release notes — Duckpad"
+  description="New features, fixes and improvements in every Duckpad release."
+  releases
+>
+  <main id="main" class="wrap releases-page">
+    <header class="releases-intro">
+      <p class="eyebrow">THE CHANGELOG</p>
+      <h1>What’s new in Duckpad.</h1>
+      <p>New features, fixes and improvements, version by version.</p>
+      <a class="text-link" href={releasesURL}>
+        All releases on GitHub ↗
+      </a>
+    </header>
+    <nav class="release-index" aria-label="Versions">
+      {releases.map((release) => (
+        <a href={`#${release.id}`}>{release.tag}</a>
+      ))}
+    </nav>
+    <div class="release-list">
+      {releases.map((release, index) => (
+        <article
+          class="release-entry"
+          id={release.id}
+          aria-labelledby={`${release.id}-title`}
+        >
+          <header class="release-meta">
+            <time datetime={release.publishedAt}>
+              {date.format(new Date(release.publishedAt))}
+            </time>
+            <h2 id={`${release.id}-title`}>
+              <a href={`#${release.id}`}>{release.tag}</a>
+            </h2>
+            {release.prerelease ? (
+              <span class="release-badge">Pre-release</span>
+            ) : (
+              release.tag === latest && (
+                <span class="release-badge">Latest release</span>
+              )
+            )}
+          </header>
+          <details class="release-notes" open={index === 0}>
+            <summary>
+              Release notes <span aria-hidden="true">↗</span>
+            </summary>
+            {release.body ? (
+              <div class="prose release-body" set:html={release.html} />
+            ) : (
+              <p>No notes were included with this release.</p>
+            )}
+            <a class="text-link" href={releaseURL(release)}>
+              Release and downloads on GitHub ↗
+            </a>
+          </details>
+        </article>
+      ))}
+      {!releases.length && (
+        <p>No releases have been published yet. Check back soon.</p>
+      )}
+    </div>
+  </main>
+</Layout>
+
+<style>
+  .releases-page {
+    padding-block: 70px 90px;
+    max-width: 1000px;
+  }
+  .releases-intro {
+    max-width: 650px;
+  }
+  h1 {
+    font-size: clamp(36px, 5vw, 58px);
+    line-height: 1.1;
+    letter-spacing: -0.055em;
+    margin: 20px 0;
+  }
+  .releases-intro > p:not(.eyebrow) {
+    color: var(--muted);
+    line-height: 1.8;
+    margin-bottom: 22px;
+  }
+  .text-link {
+    color: var(--blue);
+    font-size: 12px;
+    font-weight: 650;
+  }
+  .release-index {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin: 35px 0 45px;
+  }
+  .release-index a {
+    padding: 8px 14px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    font-size: 12px;
+    background: var(--surface);
+  }
+  .release-entry {
+    display: grid;
+    grid-template-columns: 180px minmax(0, 1fr);
+    gap: 36px;
+    padding-block: 35px;
+    border-top: 1px solid var(--line);
+    scroll-margin-top: 30px;
+  }
+  .release-meta time {
+    color: var(--muted);
+    font-size: 11px;
+  }
+  .release-meta h2 {
+    font-size: 30px;
+    margin: 13px 0;
+  }
+  .release-badge {
+    display: inline-block;
+    padding: 5px 9px;
+    font-size: 10px;
+    font-weight: 650;
+    color: var(--blue);
+    background: var(--soft);
+    border-radius: 4px;
+  }
+  .release-notes {
+    min-width: 0;
+  }
+  .release-notes > summary {
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 650;
+    padding: 0 0 20px;
+  }
+  .release-notes > summary span {
+    float: right;
+    color: var(--blue);
+  }
+  .release-body {
+    overflow-wrap: anywhere;
+  }
+  .release-body :global(h3) {
+    font-size: 18px;
+    margin-top: 30px;
+  }
+  .release-body :global(li p) {
+    margin-bottom: 10px;
+  }
+  @media (max-width: 650px) {
+    .releases-page {
+      padding-top: 40px;
+    }
+    .release-entry {
+      grid-template-columns: 1fr;
+      gap: 24px;
+    }
+  }
+</style>
