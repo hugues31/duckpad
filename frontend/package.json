@@ -10,9 +10,11 @@
     "dev": "vite --host 127.0.0.1",
     "build": "tsc -b && vite build",
     "check": "tsc -b",
-    "format": "prettier --write src e2e playwright.config.ts vite.config.ts",
-    "format:check": "prettier --check src e2e playwright.config.ts vite.config.ts",
-    "test:e2e": "playwright test"
+    "format": "prettier --write src e2e docs playwright*.config.ts vite.config.ts",
+    "format:check": "prettier --check src e2e docs playwright*.config.ts vite.config.ts",
+    "test:e2e": "playwright test",
+    "docs:capture": "playwright test --config playwright.docs.config.ts",
+    "docs:test": "playwright test --config playwright.site.config.ts"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",
@@ -23,6 +25,7 @@
     "react-dom": "^19.0.0"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.11.1",
     "@playwright/test": "^1.56.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
