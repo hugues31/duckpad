@@ -28,6 +28,7 @@ export default function UserSettings({
         <label className="field">
           <span>{t("language")}</span>
           <Select
+            key={preferences.language}
             aria-label={t("language")}
             value={preferences.language}
             onChange={(e) =>
@@ -41,6 +42,7 @@ export default function UserSettings({
         <label className="field">
           <span>{t("theme")}</span>
           <Select
+            key={preferences.language}
             aria-label={t("theme")}
             value={preferences.theme}
             onChange={(e) => preferences.setTheme(e.target.value as Theme)}
