@@ -59,8 +59,20 @@ export interface Workspace {
   };
   projects: Project[];
   worktrees: Json[];
-  catalog: Json;
+  catalog: {
+    environments: string[];
+    environment_details: Environment[];
+    connectors: Json[];
+    connections: Json[];
+    duckdb_version?: string;
+  };
   identity: Json;
+}
+export interface Environment {
+  id: string;
+  label: string;
+  color: string;
+  confirm_before_run: boolean;
 }
 export interface Statuses {
   nodes: Record<string, Json>;
