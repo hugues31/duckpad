@@ -8,6 +8,7 @@ import {
   Plus,
   Workflow,
   Settings2,
+  Search,
 } from "lucide-react";
 import AccountMenu from "./AccountMenu";
 import DuckMark from "./DuckMark";
@@ -39,6 +40,7 @@ export default function TopBar({
   gitVersion,
   onEnvironment,
   onSignOut,
+  onSearch,
 }: {
   area: Area;
   workspace: Workspace | null;
@@ -56,6 +58,7 @@ export default function TopBar({
   gitVersion: number;
   onEnvironment: (environment: string) => void;
   onSignOut: () => void;
+  onSearch: () => void;
 }) {
   const t = useT();
   const instanceAdmin = workspace?.user.role === "admin";
@@ -134,6 +137,15 @@ export default function TopBar({
         </div>
       )}
       <div className="topbar-right">
+        <button
+          className="icon"
+          title={t("instanceSearch")}
+          aria-label={t("instanceSearch")}
+          onClick={onSearch}
+          disabled={!workspace}
+        >
+          <Search size={19} />
+        </button>
         {snapshot && area === "pipelines" && (
           <>
             <div className="branch-picker">

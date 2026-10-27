@@ -39,6 +39,7 @@ import "@xyflow/react/dist/style.css";
 import { useT, templateLabel } from "./i18n";
 import { DRAG_TYPE } from "./graph";
 import { layoutNodes } from "./graphLayout";
+import { SearchField } from "./Search";
 import type { NodeKind } from "./NodePalette";
 import type { FlowEdge, FlowNode, Json, Statuses } from "./types";
 
@@ -141,6 +142,7 @@ interface CanvasProps {
   prefix: string;
   viewKey: string;
   selected: string | null;
+  focusRequest?: { id: string; key: string } | null;
   onSelect: (id: string | null) => void;
   onMove: (nodes: FlowNode[]) => Promise<void>;
   onConnect: (edge: Omit<FlowEdge, "id">) => void;
@@ -161,6 +163,8 @@ function CanvasInner(props: CanvasProps) {
   const [frame, setFrame] = useState({ x: 0, y: 0, width: 0, height: 0 });
   const viewportTouched = useRef(false);
   const lastFit = useRef("");
+  const [query, setQuery] = useState("");
+  const [focus, setFocus] = useState<{ id: string } | null>(null);
   useEffect(() => {
     const element = safeArea.current!;
     const measure = () => {
@@ -288,6 +292,33 @@ function CanvasInner(props: CanvasProps) {
     ],
   );
   const [nodes, setNodes] = useState<Node<Json>[]>(displayNodes);
+  const matches = useMemo(() => {
+    const terms = query.trim().toLocaleLowerCase().split(/\s+/);
+    if (!query.trim()) return [];
+    return displayNodes.filter((node, index) => {
+      const source = props.nodes[index];
+      const text = [
+        node.id,
+        node.data.label,
+        t(node.data.kind),
+        source.template,
+        source.component,
+      ]
+        .join(" ")
+        .toLocaleLowerCase();
+      return terms.every((term) => text.includes(term));
+    });
+  }, [query, displayNodes, props.nodes, t]);
+  useEffect(() => {
+    if (props.focusRequest) setFocus({ id: props.focusRequest.id });
+  }, [props.focusRequest]);
+  useEffect(() => {
+    if (!focus || !initialized || !frame.width || !frame.height) return;
+    const target = getNodes().filter((node) => node.id === focus.id);
+    if (!target.length) return;
+    viewportTouched.current = true;
+    fitGraph(target);
+  }, [focus, initialized, frame, getNodes, fitGraph]);
   const [pendingMoves, setPendingMoves] = useState(
     new Map<string, { position: FlowNode["position"] }>(),
   );
@@ -403,6 +434,33 @@ function CanvasInner(props: CanvasProps) {
   return (
     <>
       <div className="canvas-safe-area" ref={safeArea} aria-hidden="true" />
+      <div
+        className="canvas-search"
+        style={{
+          left: frame.x,
+          top: frame.y,
+          width: Math.min(300, Math.max(0, frame.width)),
+        }}
+      >
+        <SearchField
+          label={t("canvasSearch")}
+          query={query}
+          onQuery={setQuery}
+          options={matches.map((node) => ({
+            key: node.id,
+            label: node.data.label,
+            detail: `${t(node.data.kind)} · ${node.id}`,
+          }))}
+          onSelect={(index) => {
+            const id = matches[index].id;
+            props.onSelect(id);
+            setNodes((nodes) =>
+              nodes.map((node) => ({ ...node, selected: node.id === id })),
+            );
+            setFocus({ id });
+          }}
+        />
+      </div>
       <ReactFlow
         nodesDraggable={!props.readOnly}
         nodesConnectable={!props.readOnly}
@@ -412,15 +470,22 @@ function CanvasInner(props: CanvasProps) {
         nodeTypes={nodeTypes}
         onNodesChange={changes}
         onMoveStart={(event) => {
-          if (event) viewportTouched.current = true;
+          if (event) {
+            viewportTouched.current = true;
+            setFocus(null);
+          }
         }}
         onNodeDragStart={() => {
           viewportTouched.current = true;
         }}
         onNodeClick={(event, node) => {
+          setFocus(null);
           if (!event.shiftKey) props.onSelect(node.id);
         }}
-        onPaneClick={() => props.onSelect(null)}
+        onPaneClick={() => {
+          setFocus(null);
+          props.onSelect(null);
+        }}
         onNodeDoubleClick={(_, node) => props.onOpen(node.id)}
         onConnect={
           props.readOnly
