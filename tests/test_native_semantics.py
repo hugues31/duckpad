@@ -1,6 +1,6 @@
 import duckdb
 import pytest
-from test_lineage import pipeline
+from helpers import pipeline
 
 from duckpad.util import clean
 
