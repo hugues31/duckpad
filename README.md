@@ -1,12 +1,19 @@
 # Duckpad
 
+[![Tests](https://github.com/hugues31/duckpad/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/hugues31/duckpad/actions/workflows/ci.yml)
+[![PyPI version](https://img.shields.io/pypi/v/duckpad.svg)](https://pypi.org/project/duckpad/)
+[![Python versions](https://img.shields.io/pypi/pyversions/duckpad.svg)](https://pypi.org/project/duckpad/)
+[![License: MIT](https://img.shields.io/github/license/hugues31/duckpad.svg)](LICENSE)
+
 ### See the flow. Trust the result.
 
 An open-source SQL workspace powered by **DuckDB 2.0**. Turn scattered data into
 visual pipelines, explore the results and trace a number all the way back to its
 source.
 
-[**Get started →**](docs/QUICKSTART.md) · [Take the tour](docs/EXAMPLE.md) · [Contribute](CONTRIBUTING.md)
+[Website & docs](https://hugues31.github.io/duckpad/) ·
+[**Get started →**](https://hugues31.github.io/duckpad/docs/quickstart/) ·
+[Take the tour](docs/EXAMPLE.md) · [Contribute](CONTRIBUTING.md)
 
 ![Duckpad: the Northstar pipeline and its revenue results](docs/images/workspace.png)
 
