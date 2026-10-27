@@ -136,7 +136,7 @@ export default function AccountMenu({
               }}
             >
               <Settings2 size={16} />
-              {t("settings")}
+              {t("userSettings")}
             </button>
             <button
               role="menuitem"

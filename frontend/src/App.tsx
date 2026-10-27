@@ -7,11 +7,11 @@ import {
 } from "react";
 import { AlertCircle, Loader2 } from "lucide-react";
 import { api, ApiError, send, withQuery } from "./api";
-import { UsersPage, ProjectSettings } from "./Administration";
+import { ProjectSettings } from "./Administration";
 import Canvas from "./Canvas";
 import CanvasHeader from "./CanvasHeader";
 import CodePanel from "./CodePanel";
-import ConnectionsPanel from "./ConnectionsPanel";
+import InstanceSettings from "./InstanceSettings";
 import DocumentationPanel from "./DocumentationPanel";
 import DuckMark from "./DuckMark";
 import ErrorBoundary from "./ErrorBoundary";
@@ -40,7 +40,7 @@ import NodePalette, { type NodeKind } from "./NodePalette";
 import { usePreferences, type Preferences } from "./preferences";
 import Preview from "./Preview";
 import ProjectDashboard from "./ProjectDashboard";
-import SettingsPage from "./SettingsPage";
+import UserSettings from "./UserSettings";
 import { Toast, useToast } from "./Toast";
 import TopBar, { type Area } from "./TopBar";
 import type {
@@ -662,9 +662,7 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
             })
           }
         />
-        {area === "users" && workspace && instanceAdmin ? (
-          <UsersPage refresh={refreshWorkspace} />
-        ) : area === "projectSettings" && project && workspace ? (
+        {area === "projectSettings" && project && workspace ? (
           <ProjectSettings
             key={project.id}
             project={project.id}
@@ -676,13 +674,13 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
               setArea("pipelines");
             }}
           />
-        ) : area === "connections" && workspace && instanceAdmin ? (
-          <ConnectionsPanel
+        ) : area === "instanceSettings" && workspace && instanceAdmin ? (
+          <InstanceSettings
             workspace={workspace}
             refresh={async () => {
               await refreshWorkspace();
             }}
-            onEditor={(data) =>
+            onConnectorEditor={(data) =>
               setModal({
                 kind: "editor",
                 title: data.title,
@@ -697,12 +695,6 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
                 },
               })
             }
-          />
-        ) : area === "settings" && workspace ? (
-          <SettingsPage
-            onPasswordChanged={() => setAuthenticated(false)}
-            workspace={workspace}
-            preferences={preferences}
             onIdentity={(identity) =>
               safe(async () => {
                 await api("/identity", send(identity, "PUT"));
@@ -717,6 +709,12 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
                 notify(t("saved"));
               })
             }
+          />
+        ) : area === "userSettings" && workspace ? (
+          <UserSettings
+            onPasswordChanged={() => setAuthenticated(false)}
+            workspace={workspace}
+            preferences={preferences}
           />
         ) : area === "projects" || !worktree ? (
           workspace ? (
