@@ -1,3 +1,5 @@
+import { Link } from "react-router";
+import { worktreeUrl } from "./navigation";
 import {
   ArrowRight,
   FolderOpen,
@@ -12,13 +14,11 @@ import type { Project } from "./types";
 export default function ProjectDashboard({
   projects,
   busy,
-  onOpen,
   onCreate,
   onExample,
 }: {
   projects: Project[];
   busy: boolean;
-  onOpen: (id: string) => void;
   onCreate: () => void;
   onExample: () => void;
 }) {
@@ -43,10 +43,10 @@ export default function ProjectDashboard({
           <ul className="project-grid" aria-label={t("projects")}>
             {projects.map((project) => (
               <li key={project.id}>
-                <button
+                <Link
+                  to={worktreeUrl(project.main)}
                   className="project-card"
                   aria-label={`${t("openProject")}: ${project.name}`}
-                  onClick={() => onOpen(project.main)}
                 >
                   <span className="project-card-icon">
                     <Layers size={22} />
@@ -60,7 +60,7 @@ export default function ProjectDashboard({
                     {t("openProject")}
                     <ArrowRight size={16} />
                   </span>
-                </button>
+                </Link>
               </li>
             ))}
           </ul>

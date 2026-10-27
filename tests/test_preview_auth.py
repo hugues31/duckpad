@@ -10,6 +10,8 @@ def test_documentation_mount_preserves_application_and_api_boundaries(tmp_path, 
     (static / "site" / "index.html").write_text("Duckpad website")
     (static / "site" / "docs" / "quickstart" / "index.html").write_text("Quickstart guide")
     (static / "index.html").write_text("Duckpad application")
+    (static / "assets").mkdir()
+    (static / "assets" / "app.js").write_text("// Application asset")
     monkeypatch.setattr("duckpad.app.STATIC", static)
     app = create_app(tmp_path / "instance", watch=False)
     with TestClient(app) as client:
@@ -17,7 +19,20 @@ def test_documentation_mount_preserves_application_and_api_boundaries(tmp_path, 
         assert client.get("/site/docs/quickstart/").text == "Quickstart guide"
         assert client.get("/site/missing/").status_code == 404
         assert client.get("/").text == "Duckpad application"
+        for path in (
+            "/user-settings",
+            "/instance-settings/environments",
+            "/projects/project-example/settings",
+            "/worktrees/worktree-example/code?environment=prod",
+        ):
+            assert client.get(path).text == "Duckpad application"
+        assert client.get("/assets/app.js").text == "// Application asset"
+        assert client.get("/assets/missing.js").status_code == 404
         assert client.get("/api/session").status_code == 401
+        assert client.get("/api/missing").status_code == 401
+        client.post("/api/login", json={"password": app.state.auth.initial_password})
+        assert client.get("/api/missing").status_code == 404
+        assert client.get("/api").status_code == 404
 
 
 @pytest.mark.parametrize(

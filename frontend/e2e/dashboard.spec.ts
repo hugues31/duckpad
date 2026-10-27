@@ -45,10 +45,10 @@ test("empty dashboard creates and opens a project, then lists it from the Duckpa
     page.getByRole("button", { name: "Run pipeline", exact: true }),
   ).toBeVisible();
   await page
-    .getByRole("button", { name: "Duckpad — Projects", exact: true })
+    .getByRole("link", { name: "Duckpad — Projects", exact: true })
     .click();
   await expect(
-    page.getByRole("button", {
+    page.getByRole("link", {
       name: "Open project: Dashboard creation",
       exact: true,
     }),
@@ -72,11 +72,11 @@ test("dashboard lists projects once, opens their main branch and supports keyboa
       data: { name: "experiment/dashboard" },
     },
   );
-  expect(branch.ok()).toBeTruthy();
+  expect(branch.ok(), await branch.text()).toBeTruthy();
   await page
-    .getByRole("button", { name: "Duckpad — Projects", exact: true })
+    .getByRole("link", { name: "Duckpad — Projects", exact: true })
     .click();
-  const firstCard = page.getByRole("button", {
+  const firstCard = page.getByRole("link", {
     name: "Open project: Dashboard first",
     exact: true,
   });
@@ -89,9 +89,9 @@ test("dashboard lists projects once, opens their main branch and supports keyboa
   await page
     .getByLabel("Branch", { exact: true })
     .selectOption((await branch.json()).id);
-  await page.getByRole("button", { name: "History", exact: true }).click();
+  await page.getByRole("link", { name: "History", exact: true }).click();
   await page
-    .getByRole("button", { name: "Duckpad — Projects", exact: true })
+    .getByRole("link", { name: "Duckpad — Projects", exact: true })
     .click();
   await firstCard.click();
   await expect(page.getByLabel("Branch", { exact: true })).toHaveValue(
@@ -100,9 +100,9 @@ test("dashboard lists projects once, opens their main branch and supports keyboa
   await expect(page.locator(".react-flow")).toBeVisible();
   await openInstanceSettings(page, "Connections");
   await page
-    .getByRole("button", { name: "Duckpad — Projects", exact: true })
+    .getByRole("link", { name: "Duckpad — Projects", exact: true })
     .click();
-  const secondCard = page.getByRole("button", {
+  const secondCard = page.getByRole("link", {
     name: "Open project: Dashboard second",
     exact: true,
   });
@@ -124,7 +124,7 @@ test("late snapshots cannot replace the project opened from the dashboard", asyn
   const first = await createProject(page, "Delayed project");
   const second = await createProject(page, "Current project");
   await page
-    .getByRole("button", { name: "Duckpad — Projects", exact: true })
+    .getByRole("link", { name: "Duckpad — Projects", exact: true })
     .click();
   const snapshot = await (
     await page.request.get(`/api/worktrees/${first.id}`)
@@ -139,14 +139,14 @@ test("late snapshots cannot replace the project opened from the dashboard", asyn
   });
   const pending = page.waitForRequest(`**/api/worktrees/${first.id}`);
   await page
-    .getByRole("button", { name: "Open project: Delayed project", exact: true })
+    .getByRole("link", { name: "Open project: Delayed project", exact: true })
     .click();
   await pending;
   await page
-    .getByRole("button", { name: "Duckpad — Projects", exact: true })
+    .getByRole("link", { name: "Duckpad — Projects", exact: true })
     .click();
   await page
-    .getByRole("button", { name: "Open project: Current project", exact: true })
+    .getByRole("link", { name: "Open project: Current project", exact: true })
     .click();
   await expect(page.getByLabel("Active project")).toHaveValue(second.project);
   await expect(
@@ -171,7 +171,7 @@ test("dashboard cards fit on a phone and remain usable in French and dark mode",
     "Dashboard project with a very long name for the monthly revenue transformation";
   const project = await createProject(page, name);
   await page
-    .getByRole("button", { name: "Duckpad — Projects", exact: true })
+    .getByRole("link", { name: "Duckpad — Projects", exact: true })
     .click();
   await page.locator(".account .avatar").click();
   await page
@@ -183,7 +183,7 @@ test("dashboard cards fit on a phone and remain usable in French and dark mode",
     page.getByRole("heading", { name: fr.projects, exact: true }),
   ).toBeVisible();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
-  const card = page.getByRole("button", {
+  const card = page.getByRole("link", {
     name: `${fr.openProject}: ${name}`,
     exact: true,
   });

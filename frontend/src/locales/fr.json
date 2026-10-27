@@ -430,5 +430,12 @@
   "instanceSettingsDescription": "Configuration partagée par tous les projets et utilisateurs. Seuls les administrateurs de l’instance peuvent la modifier.",
   "userSettingsDescription": "Gérez vos préférences et la sécurité de votre compte.",
   "instanceIdentityHint": "Identité partagée pour les commits Git automatiques de tous les projets de cette instance.",
-  "instanceEnvironmentsHint": "Noms des environnements disponibles pour tous les projets et connexions. Séparez les noms par des virgules."
+  "instanceEnvironmentsHint": "Noms des environnements disponibles pour tous les projets et connexions. Séparez les noms par des virgules.",
+  "routeNotFound": "Page introuvable",
+  "routeNotFoundHint": "Cette adresse ne correspond à aucune page.",
+  "routeUnavailable": "Page indisponible",
+  "routeUnavailableHint": "Cette page n’existe plus ou vous n’y avez pas accès.",
+  "leavePageHint": "Vous avez des modifications non enregistrées. Quitter cette page et les abandonner ?",
+  "stayOnPage": "Rester sur cette page",
+  "leavePage": "Abandonner et quitter"
 }

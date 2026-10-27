@@ -43,7 +43,7 @@ test("configure OIDC, sign in through a signing provider, administer access and 
   const context = await browser.newContext({ baseURL });
   try {
     const member = await context.newPage();
-    await member.goto("/");
+    await member.goto("/user-settings");
     await member
       .getByRole("link", {
         name: "Continue with Test organization",
@@ -56,6 +56,10 @@ test("configure OIDC, sign in through a signing provider, administer access and 
     await member.getByRole("link", { name: "Approve test sign-in" }).click();
     await expect(
       member.getByRole("navigation", { name: "Workspace", exact: true }),
+    ).toBeVisible();
+    await expect(member).toHaveURL(/\/user-settings$/);
+    await expect(
+      member.getByRole("heading", { name: "User settings", exact: true }),
     ).toBeVisible();
     const user = await (await member.request.get("/api/session")).json();
     expect(user.role).toBe("member");

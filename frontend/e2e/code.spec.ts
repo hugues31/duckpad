@@ -8,12 +8,8 @@ async function openCode(page: Page) {
   const response = await page.request.post("/api/example", { data: {} });
   expect(response.ok()).toBeTruthy();
   const worktree = await response.json();
-  await page.evaluate(
-    (id) => localStorage.setItem("duckpad-worktree", id),
-    worktree.id,
-  );
-  await page.reload();
-  await page.getByRole("button", { name: "Code", exact: true }).click();
+  await page.goto(`/worktrees/${worktree.id}/flow`);
+  await page.getByRole("link", { name: "Code", exact: true }).click();
   await expect(page.locator(".code-workspace .monaco-editor")).toBeVisible();
   return {
     worktree,
@@ -38,7 +34,7 @@ test("Code has a keyboard file tree, preserves drafts across files and tabs, sav
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   const { worktree, snapshot } = await openCode(page);
-  await expect(page.locator(".main-tabs button")).toHaveText([
+  await expect(page.locator(".main-tabs a")).toHaveText([
     "Flow",
     "Code",
     "Documentation",
@@ -79,8 +75,8 @@ test("Code has a keyboard file tree, preserves drafts across files and tabs, sav
   await expect(page.locator(".code-editor-body")).toContainText(
     "Saved from the Code tab",
   );
-  await page.getByRole("button", { name: "Flow", exact: true }).click();
-  await page.getByRole("button", { name: "Code", exact: true }).click();
+  await page.getByRole("link", { name: "Flow", exact: true }).click();
+  await page.getByRole("link", { name: "Code", exact: true }).click();
   await expect(page.locator(".code-editor-body")).toContainText(
     "Saved from the Code tab",
   );
@@ -116,7 +112,7 @@ test("Code has a keyboard file tree, preserves drafts across files and tabs, sav
   expect(bytes.subarray(0, 4).toString("hex")).toBe("504b0304");
   expect(bytes.length).toBeGreaterThan(100);
   await page.reload();
-  await page.getByRole("button", { name: "Code", exact: true }).click();
+  await page.getByRole("link", { name: "Code", exact: true }).click();
   await page
     .getByRole("treeitem", { name: "templates/sql.sql", exact: true })
     .click();
@@ -133,18 +129,18 @@ test("invalid project files remain editable in Code and can be repaired", async 
   await editCode(page, "invalid JSON");
   await page.getByRole("button", { name: "Save changes", exact: true }).click();
   await expect(page.locator(".banner.error")).toBeVisible();
-  await page.getByRole("button", { name: "Flow", exact: true }).click();
+  await page.getByRole("link", { name: "Flow", exact: true }).click();
   await page
     .locator(".banner.error")
     .getByRole("button", { name: "Open files" })
     .click();
   await expect(
-    page.getByRole("button", { name: "Code", exact: true }),
-  ).toHaveAttribute("aria-pressed", "true");
+    page.getByRole("link", { name: "Code", exact: true }),
+  ).toHaveAttribute("aria-current", "page");
   await editCode(page, snapshot.files["flow.json"]);
   await page.getByRole("button", { name: "Save changes", exact: true }).click();
   await expect(page.locator(".banner.error")).toHaveCount(0);
-  await page.getByRole("button", { name: "Flow", exact: true }).click();
+  await page.getByRole("link", { name: "Flow", exact: true }).click();
   await expect(page.locator(".react-flow__node").first()).toBeVisible();
 });
 
@@ -204,7 +200,7 @@ test("Code is localized and keeps the tree beside Monaco at a narrow width", asy
   await page
     .getByRole("menuitemradio", { name: "French", exact: true })
     .click();
-  await expect(page.locator(".main-tabs button")).toHaveText([
+  await expect(page.locator(".main-tabs a")).toHaveText([
     fr.flow,
     fr.code,
     fr.documentation,
