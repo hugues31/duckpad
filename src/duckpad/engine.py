@@ -13,6 +13,7 @@ from .bundle import bundle_to_files, files_to_bundle, topological
 from .catalog import redact
 from .components import expand, in_subtree
 from .datasets import Context, Dataset
+from .extensions import MAX_UPLOAD_BYTES, database_config, install, runtime
 from .materialize import drop_dataset, drop_relations, plan_materialization, publish_view
 from .templates import compile_template, executable_sql
 from .util import Problem, clean, digest, now, qi, uid
@@ -109,6 +110,7 @@ class Engine:
             if self.contexts[key].db is None and (create or not self.access):
                 extensions = self.store.home / "extensions"
                 extensions.mkdir(exist_ok=True)
+                config = {**database_config(extensions), **self.extension_settings()}
                 if self.access:
                     from .sandbox import Database
 
@@ -128,12 +130,14 @@ class Engine:
                     # Provision only trusted administrator-declared extensions,
                     # before giving the worker read-only access to their cache.
                     if any(c["definition"].get("extensions") for c in captured.values()):
-                        with duckdb.connect(config={"extension_directory": str(extensions)}) as setup:
+                        with duckdb.connect(config=config) as setup:
                             self.catalog.prepare(setup, captured)
                     database = Database(
                         {
                             "captured": captured,
                             "extensions": str(extensions),
+                            "allow_unsigned_extensions": config["allow_unsigned_extensions"],
+                            "offline_extensions": self.store.get("settings", "offline_extensions", {}),
                             "read_paths": [str(p) for p in roots],
                             "write_paths": [str(p) for p in [*writable, directory]],
                             "temporary": str(temporary),
@@ -143,9 +147,49 @@ class Engine:
                         }
                     )
                 else:
-                    database = duckdb.connect(":memory:", config={"extension_directory": str(extensions)})
+                    database = duckdb.connect(":memory:", config=config)
                 self.contexts[key].db = database
             return self.contexts[key]
+
+    def extension_settings(self):
+        return {"allow_unsigned_extensions": self.store.get("settings", "allow_unsigned_extensions", False)}
+
+    def extension_runtime(self):
+        version, platform = runtime()
+        return {
+            "version": version,
+            "platform": platform,
+            "max_upload_bytes": MAX_UPLOAD_BYTES,
+            "imports": list(self.store.get("settings", "offline_extensions", {}).values()),
+        }
+
+    def import_extension(self, filename, source, stream):
+        with self.projects.lock, self.lock:
+            if self.active:
+                raise Problem("Stop active executions before importing extensions", 409)
+            entry = install(
+                self.store.home / "extensions",
+                filename,
+                source,
+                stream,
+                self.extension_settings()["allow_unsigned_extensions"],
+                self.reset_catalog,
+            )
+            installed = self.store.get("settings", "offline_extensions", {})
+            installed[entry["name"]] = entry
+            self.store.put("settings", "offline_extensions", installed)
+            return self.extension_runtime()
+
+    def configure_extensions(self, allow_unsigned):
+        with self.projects.lock, self.lock:
+            if self.extension_settings()["allow_unsigned_extensions"] == allow_unsigned:
+                return self.extension_settings()
+            if self.active:
+                raise Problem("Stop active executions before changing extension settings", 409)
+            # Loaded native code cannot be unloaded from a live DuckDB instance.
+            self.reset_catalog()
+            self.store.put("settings", "allow_unsigned_extensions", allow_unsigned)
+            return self.extension_settings()
 
     def capture(self, worktree, references, environment):
         if self.access:

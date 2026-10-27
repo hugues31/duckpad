@@ -6,10 +6,10 @@ import os
 import zipfile
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 from urllib.parse import urlparse
 
-from fastapi import FastAPI, File, Query, Request, UploadFile
+from fastapi import FastAPI, File, Form, Query, Request, UploadFile
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
@@ -91,7 +91,7 @@ def create_app(home: Path, watch=True):
     def authorize(request, user):
         parts = request.url.path.strip("/").split("/")
         route = parts[1] if len(parts) > 1 else ""
-        if route in ("users", "environments", "catalog", "resources", "sso"):
+        if route in ("users", "environments", "catalog", "resources", "sso", "extensions"):
             access.instance_admin(user)
         elif route == "projects" and len(parts) >= 3:
             access.require(user, parts[2], "reader" if request.method == "GET" else "admin")
@@ -257,6 +257,25 @@ def create_app(home: Path, watch=True):
                 "environment_details": catalog.environments(),
             },
         }
+
+    @app.get("/api/extensions/settings")
+    def extension_settings():
+        return engine.extension_settings()
+
+    @app.put("/api/extensions/settings")
+    def save_extension_settings(data: schemas.ExtensionSettings):
+        return engine.configure_extensions(data.allow_unsigned_extensions)
+
+    @app.get("/api/extensions/runtime")
+    def extension_runtime():
+        return engine.extension_runtime()
+
+    @app.post("/api/extensions/import")
+    def import_extension(
+        file: Annotated[UploadFile, File()],
+        source: Annotated[Literal["core", "community", "unsigned"], Form()],
+    ):
+        return engine.import_extension(file.filename, source, file.file)
 
     @app.get("/api/catalog")
     def get_catalog():
