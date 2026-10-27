@@ -16,6 +16,7 @@ from joserfc.jwk import KeySet
 from pydantic import BaseModel, ConfigDict, Field, SecretStr
 
 from .auth import SESSION_LIFETIME, session_key
+from .identity import oidc_identity
 from .util import Problem, uid
 
 CALLBACK_PATH = "/api/oidc/callback"
@@ -274,9 +275,11 @@ class OIDC:
                     "active": True,
                     "oidc": identity,
                 }
-                self.store.put("user", user["id"], user)
             if not user["active"]:
                 raise Problem("Account is inactive")
+            # Refresh attribution on every verified sign-in; account linkage still uses issuer/sub.
+            user["commit_identity"] = oidc_identity(user, claims)
+            self.store.put("user", user["id"], user)
             token = secrets.token_urlsafe(32)
             self.auth._purge_expired(time.time())
             self.store.put(

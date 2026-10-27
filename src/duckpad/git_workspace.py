@@ -1,6 +1,5 @@
 """Frozen comparisons and reviewed Git integration for project repositories."""
 
-import os
 import subprocess
 import tempfile
 import threading
@@ -9,6 +8,7 @@ from pathlib import Path
 
 from .bundle import files_to_bundle, is_declarative, validate
 from .comparison import compare_files
+from .identity import git_environment
 from .merge import merge_files
 from .util import Problem, digest, now, uid
 
@@ -377,7 +377,7 @@ class GitWorkspace:
                 str(path),
                 *args,
             ],
-            env={**os.environ, **(env or {})},
+            env={**git_environment(identity), **(env or {})},
             input=input,
             text=True,
             capture_output=True,
@@ -405,7 +405,12 @@ class GitWorkspace:
             "--stdin",
         ]
         with subprocess.Popen(
-            command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True
+            command,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            env=git_environment(identity),
         ) as transaction:
             watchdog = threading.Timer(30, transaction.kill)
             watchdog.start()
