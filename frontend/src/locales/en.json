@@ -460,7 +460,7 @@
   "instanceSearch": "Search instance",
   "instanceSearchHint": "Find projects, open branches, and nodes by name or ID. Only projects you can access are searched.",
   "clearSearch": "Clear search",
-  "searchResults": "results",
+  "searchResults": "Results",
   "noSearchResults": "No matching results",
   "searchMore": "More matches available. Refine your search.",
   "searchIncomplete": "Some project files could not be searched.",

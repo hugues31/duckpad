@@ -460,7 +460,7 @@
   "instanceSearch": "Rechercher dans l’instance",
   "instanceSearchHint": "Trouvez des projets, branches ouvertes et nœuds par nom ou identifiant. Seuls les projets auxquels vous avez accès sont recherchés.",
   "clearSearch": "Effacer la recherche",
-  "searchResults": "résultats",
+  "searchResults": "Résultats",
   "noSearchResults": "Aucun résultat correspondant",
   "searchMore": "D’autres résultats sont disponibles. Affinez votre recherche.",
   "searchIncomplete": "Certains fichiers de projet n’ont pas pu être recherchés.",
