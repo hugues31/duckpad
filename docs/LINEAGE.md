@@ -2,11 +2,13 @@
 
 Lineage explains the materialized execution, not today's external resource. A result identifies its execution, dataset generation, column and stable storage row. Sorting or filtering the preview does not change those identities or restrict the provenance search.
 
-The explorer keeps the selected value visible above a timeline running backward to its inputs. Steps with a single contributing cell are followed automatically; at a branch, choose an input to continue to its source. Select any earlier step to explore a different input. The timeline shows one explored path, not every branch of an aggregate or join.
+Clicking a cell opens a large modal with a dependency graph: source cells on the left, calculations on the right. The selected value appears compactly in the header. All inputs on the current page are traced automatically; shared source cells appear once, connected to each calculation that uses them.
 
-Each step describes its operation in plain language, with the expression available under **View calculation**. **Why these rows?** separates selection/evaluation context from contributing cells. Distinct value groups open their original rows without adding a fictitious calculation step. Every cell remains navigable, including identical values from different rows. Results are paged in groups of five with an exact total. Source cells terminate the traversal; nested components retain instance-qualified paths.
+Calculation cards show the expression, its captured operand values when they can be bound unambiguously, and the result. For example, `amount * 2` becomes `10 * 2 = 20`. Small sums and averages show their complete numeric equation. Larger aggregates show their formula, the full contribution count and an explicit range for the five displayed inputs; a page is never presented as the entire calculation. Distinct value groups open their original rows while preserving the selected count.
 
-**Play this path** highlights the explored steps in creation order, from the earliest input toward the selected value. Pause or select a step to inspect it, then resume; replay after reaching the result. Playback never executes the pipeline or implies that one chosen contribution is the entire calculation. Reduced-motion preferences disable movement while preserving the step highlights.
+An unchanged column passed through a projection, filter or join does not add a calculation node. This is determined from the parsed expression, not from equal values: `amount * 1` remains a calculation. Row-selection context from the collapsed steps stays available in source and calculation details. Coverage limits are explicit; source values, constants and unsupported steps terminate traversal.
+
+Pan and zoom to explore the graph. Automatic tracing has a request budget; an unexplored value offers **Trace earlier inputs** to continue. Escape closes the dialog and restores keyboard focus to the selected cell. Recalculation interrupts all graph requests and navigation.
 
 ## Validated baseline
 

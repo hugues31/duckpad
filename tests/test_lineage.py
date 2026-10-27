@@ -199,3 +199,67 @@ def test_binary_group_keys_are_explained(services, tmp_path):
     result = lineage.explain(worktree, "dev", preview["id"], 0, "total")
     assert result["complete"], result
     assert result["total"] == 3
+
+
+@pytest.mark.parametrize(
+    ("query", "passthrough", "evaluated", "value"),
+    [
+        ("SELECT value AS result FROM {{ source }} WHERE id=1", True, "10", 10),
+        ("SELECT value * 1 AS result FROM {{ source }} WHERE id=1", False, "10 * 1", 10),
+        ("SELECT value * 2 + id AS result FROM {{ source }} WHERE id=1", False, "10 * 2 + 1", 21),
+        ("SELECT 0 AS result FROM {{ source }} WHERE id=1", False, "0", 0),
+    ],
+)
+def test_calculation_description_uses_the_expression_and_captured_operands(
+    services, tmp_path, query, passthrough, evaluated, value
+):
+    worktree, preview, lineage = pipeline(services, tmp_path, query)
+    result = lineage.explain(worktree, "dev", preview["id"], 0, "result")
+    assert result["complete"], result
+    assert result["value"] == value
+    assert result["calculation"]["passthrough"] is passthrough
+    assert result["calculation"]["evaluated"] == evaluated
+
+
+def test_aggregate_description_does_not_present_one_page_as_the_whole_calculation(services, tmp_path):
+    worktree, preview, lineage = pipeline(services, tmp_path, "SELECT SUM(value) AS total FROM {{ source }}")
+    result = lineage.explain(worktree, "dev", preview["id"], 0, "total")
+    assert result["total"] == 9 and len(result["contributions"]) == 5
+    assert result["calculation"] == {"operation": "sum", "formula": "SUM(value)", "passthrough": False}
+
+
+def test_compound_aggregate_does_not_claim_to_sum_the_raw_input_values(services, tmp_path):
+    worktree, preview, lineage = pipeline(
+        services, tmp_path, "SELECT SUM(value * 2) AS total FROM {{ source }} WHERE grp='A'"
+    )
+    result = lineage.explain(worktree, "dev", preview["id"], 0, "total")
+    assert result["value"] == 100
+    assert result["calculation"] == {
+        "operation": "expression",
+        "formula": "SUM(value * 2)",
+        "passthrough": False,
+        "selection": ["grp = 'A'"],
+    }
+
+
+def test_self_join_operands_use_the_captured_side_instead_of_matching_values(services, tmp_path):
+    worktree, preview, lineage = pipeline(
+        services,
+        tmp_path,
+        "SELECT a.value - b.value AS difference FROM {{ source }} a JOIN {{ source }} b ON b.id=a.id+1 WHERE a.id=1",
+    )
+    result = lineage.explain(worktree, "dev", preview["id"], 0, "difference")
+    assert result["complete"], result
+    assert result["value"] == -10
+    assert result["calculation"]["formula"] == "a.value - b.value"
+    assert result["calculation"]["evaluated"] == "10 - 20"
+
+
+def test_group_selection_is_read_from_the_executed_row(services, tmp_path):
+    worktree, preview, lineage = pipeline(
+        services, tmp_path, "SELECT grp, SUM(value) AS total FROM {{ source }} GROUP BY grp ORDER BY grp"
+    )
+    first = lineage.explain(worktree, "dev", preview["id"], 0, "total")
+    second = lineage.explain(worktree, "dev", preview["id"], 1, "total")
+    assert first["calculation"]["selection"] == ["grp = 'A'"]
+    assert second["calculation"]["selection"] == ["grp = 'B'"]

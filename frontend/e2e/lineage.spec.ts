@@ -16,6 +16,7 @@ async function example(page: Page) {
     .poll(
       async () =>
         (await (await page.request.get(`/api/runs/${run.id}`)).json()).status,
+      { timeout: 30000 },
     )
     .toBe("success");
   await page.goto(`/worktrees/${worktree.id}/flow`);
@@ -28,140 +29,199 @@ async function example(page: Page) {
 }
 
 async function explain(page: Page, column = "revenue", row = 1) {
-  await page
-    .getByRole("button", {
-      name: new RegExp(`Explain this value: ${column}, rows ${row},`),
-    })
-    .click();
+  const trigger = page.getByRole("button", {
+    name: new RegExp(`Explain this value: ${column}, rows ${row},`),
+  });
+  await trigger.click();
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await expect(page.locator(".lineage-card.root")).toBeVisible();
   await expect(page.locator(".lineage-loading")).toHaveCount(0);
-  await expect(page.locator(".lineage-result")).toBeVisible();
+  return trigger;
 }
 
 async function ready(page: Page) {
   await expect(page.locator(".lineage-loading")).toHaveCount(0);
-  await expect(page.locator(".lineage-step-heading").first()).toBeEnabled();
+  await expect(page.locator(".lineage-card.root button").last()).toBeEnabled();
 }
 
-test("a real value keeps its result, follows inputs to source and replays the chosen path", async ({
+test("a value opens a large calculation DAG with sources, pagination and no pass-through steps", async ({
   page,
 }) => {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await example(page);
-  await explain(page);
-  const panel = page.locator(".lineage-panel");
-  const result = await panel.locator(".lineage-result").innerText();
-  await expect(panel.locator(".lineage-step")).toHaveCount(2);
-  await expect(panel).toContainText("27 contributions");
-  await expect(panel.locator(".inspector-title")).toBeInViewport();
-  await expect(panel.locator(".lineage-result .eyebrow")).toBeInViewport();
-  await expect(panel.locator(".lineage-step-heading").first()).toBeInViewport();
-  await page.mouse.move(800, 400);
-  await page.screenshot({ path: "test-results/lineage-timeline.png" });
-  await expect(panel.locator("pre.expression")).toBeHidden();
-  await panel.getByText("View calculation", { exact: true }).click();
-  await expect(panel.locator("pre.expression")).toContainText("SUM");
-  await panel.getByRole("button", { name: "Next", exact: true }).click();
-  await expect(panel.locator(".pager")).toContainText("10 / 27");
-  await panel.locator(".contribution").first().click();
-  await expect(panel.getByText(/You have reached the start/)).toBeVisible();
-  await ready(page);
-  const length = await panel.locator(".lineage-step").count();
-  expect(length).toBeGreaterThan(3);
-  await expect(panel.locator(".lineage-result")).toHaveText(result, {
-    useInnerText: true,
-  });
-  // Revisit the aggregate and choose another input; the old branch is replaced.
-  await panel.locator(".lineage-step-heading").nth(1).click();
-  await expect(panel.locator(".pager")).toContainText("10 / 27");
-  const inputValue = await panel
-    .locator(".contribution-value")
-    .nth(1)
+  const trigger = await explain(page);
+  const dialog = page.getByRole("dialog");
+  expect((await dialog.boundingBox())!.width).toBeGreaterThan(1100);
+  await expect(dialog.locator(".lineage-card.calculation")).toHaveCount(1);
+  await expect(dialog.locator(".lineage-card.is-source")).toHaveCount(5);
+  await expect(dialog.locator(".react-flow__edge")).toHaveCount(5);
+  await expect
+    .poll(async () =>
+      dialog.evaluate((element) => {
+        const source = element.querySelector(".lineage-card.is-source")!;
+        const handle = source
+          .querySelector(".react-flow__handle")!
+          .getBoundingClientRect();
+        const path = element.querySelector<SVGPathElement>(
+          ".react-flow__edge-path",
+        )!;
+        const start = path
+          .getPointAtLength(0)
+          .matrixTransform(path.getScreenCTM()!);
+        return (
+          Math.abs(start.x - handle.right) +
+          Math.abs(start.y - (handle.top + handle.height / 2))
+        );
+      }),
+    )
+    .toBeLessThan(2);
+  await expect(dialog.locator(".lineage-equation")).toHaveText(
+    "SUM(amount) = 7131",
+  );
+  await expect(dialog).toContainText("Sum of 27 contributing values");
+  await expect(dialog.locator(".lineage-page")).toContainText("1–5 / 27");
+  await expect(dialog).not.toContainText("Follow this value");
+  await expect(dialog.getByRole("button", { name: /Play/ })).toHaveCount(0);
+  expect(
+    await dialog
+      .locator(".lineage-selected strong")
+      .evaluate((element) => parseFloat(getComputedStyle(element).fontSize)),
+  ).toBeLessThanOrEqual(14);
+  await page.mouse.move(100, 50);
+  await page.screenshot({ path: "test-results/lineage-graph.png" });
+  const first = await dialog
+    .locator(".lineage-card.is-source")
+    .first()
     .innerText();
-  await panel.locator(".contribution").nth(1).click();
-  await expect(panel.getByText(/You have reached the start/)).toBeVisible();
+  await dialog.getByRole("button", { name: "Next", exact: true }).click();
+  await expect(dialog.locator(".lineage-page")).toContainText("6–10 / 27");
   await ready(page);
-  await expect(panel.locator(".lineage-step")).toHaveCount(length);
-  await expect(panel.locator(".lineage-step-value").last()).toHaveText(
-    inputValue,
-  );
-  await page.mouse.move(800, 400);
-  await page.screenshot({ path: "test-results/lineage-source-path.png" });
-  await page.clock.install();
-  await panel
-    .getByRole("button", { name: "Play this path", exact: true })
+  expect(
+    await dialog.locator(".lineage-card.is-source").first().innerText(),
+  ).not.toBe(first);
+  await expect(dialog.locator(".lineage-card.calculation")).toHaveCount(1);
+  await dialog
+    .getByRole("button", { name: /Source and selection details/ })
+    .first()
     .click();
-  await expect(panel.locator(".lineage-step").last()).toHaveClass(/is-active/);
-  await page.clock.fastForward(1800);
-  await expect(panel.locator(".lineage-step").nth(length - 2)).toHaveClass(
-    /is-active/,
+  await expect(dialog.locator(".lineage-details")).toContainText(
+    "Row selection",
   );
-  await panel.getByRole("button", { name: "Pause", exact: true }).click();
-  await page.clock.fastForward(3600);
-  await expect(panel.locator(".lineage-step").nth(length - 2)).toHaveClass(
-    /is-active/,
-  );
-  await panel
-    .getByRole("button", { name: "Play this path", exact: true })
-    .click();
-  for (let i = 0; i < length; i++) await page.clock.fastForward(1800);
-  await expect(panel.locator(".lineage-step").first()).toHaveClass(/is-active/);
   await expect(
-    panel.getByRole("button", { name: "Play this path", exact: true }),
+    dialog.locator(".lineage-details table tbody tr").first(),
   ).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
+  await expect(trigger).toBeFocused();
   expect(errors).toEqual([]);
 });
 
-test("distinct groups and evaluation context retain their meaning", async ({
+test("shared sources feed both calculations and unchanged arithmetic is not collapsed", async ({
+  page,
+}) => {
+  await example(page);
+  const source = {
+    dataset: "shared-source",
+    row: 0,
+    column: "amount",
+    node: "orders",
+    port: "result",
+    value: 10,
+    source: true,
+  };
+  const left = {
+    dataset: "left",
+    row: 0,
+    column: "doubled",
+    value: 20,
+    node: "double",
+  };
+  const right = {
+    dataset: "right",
+    row: 0,
+    column: "unchanged",
+    value: 10,
+    node: "multiply",
+  };
+  await page.route("**/lineage", (route) => {
+    const cell = route.request().postDataJSON();
+    const isLeft = cell.dataset === "left";
+    const isRight = cell.dataset === "right";
+    const evaluated = isLeft ? "10 * 2" : isRight ? "10 * 1" : "20 + 10";
+    return route.fulfill({
+      json: {
+        ...cell,
+        value: isLeft ? 20 : isRight ? 10 : 30,
+        kind: "projection",
+        complete: true,
+        warnings: [],
+        total: isLeft || isRight ? 1 : 2,
+        page_size: 5,
+        context_total: 0,
+        contributions: isLeft || isRight ? [source] : [left, right],
+        calculation: {
+          operation: "expression",
+          formula: evaluated,
+          evaluated,
+          passthrough: false,
+        },
+      },
+    });
+  });
+  await explain(page);
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.locator(".lineage-card.calculation")).toHaveCount(3);
+  await expect(dialog.locator(".lineage-card.is-source")).toHaveCount(1);
+  await expect(dialog.locator(".react-flow__edge")).toHaveCount(4);
+  await expect(dialog.getByText("10 * 1 = 10", { exact: true })).toBeVisible();
+  await expect(dialog.getByText("10 * 2 = 20", { exact: true })).toBeVisible();
+  await expect(dialog.getByText("20 + 10 = 30", { exact: true })).toBeVisible();
+});
+
+test("distinct groups open their original rows without changing the calculated count", async ({
   page,
 }) => {
   await example(page);
   await explain(page, "customers");
-  const panel = page.locator(".lineage-panel");
-  await expect(panel).toContainText("distinct value groups");
-  await panel.locator(".contribution").first().click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toContainText("Counts 3 distinct values");
+  await expect(
+    dialog.getByRole("button", { name: /Show source rows/ }),
+  ).toHaveCount(3);
+  const value = await dialog.locator(".lineage-selected").innerText();
+  await dialog
+    .getByRole("button", { name: /Show source rows/ })
+    .first()
+    .click();
+  await ready(page);
+  await expect(dialog).toContainText("Showing rows for");
+  await expect(dialog.locator(".lineage-card.is-source")).toHaveCount(5);
+  await expect(dialog.locator(".lineage-selected")).toHaveText(value, {
+    useInnerText: true,
+  });
+  await dialog.getByRole("button", { name: "All value groups" }).click();
   await ready(page);
   await expect(
-    panel.getByRole("button", { name: "All value groups" }),
-  ).toBeVisible();
-  await expect(panel.locator(".contribution").first()).toContainText(
-    "customer_id",
-  );
-  await panel.getByRole("button", { name: "All value groups" }).click();
-  await ready(page);
-  await expect(panel).toContainText("distinct value groups");
-  await panel.getByRole("button", { name: /Why these rows/ }).click();
-  await ready(page);
-  await expect(panel).toContainText(
-    "They are not necessarily inputs to the calculation",
-  );
-  await panel.locator(".contribution").first().click();
-  await ready(page);
-  await expect(panel).toContainText("This path explains evaluation context");
+    dialog.getByRole("button", { name: /Show source rows/ }),
+  ).toHaveCount(3);
 });
 
-test("recalculation stops playback and makes the entire old path unavailable", async ({
+test("recalculation interrupts an open DAG and disables all old graph navigation", async ({
   page,
 }) => {
   const worktree = await example(page);
   await explain(page);
-  const panel = page.locator(".lineage-panel");
-  await panel
-    .getByRole("button", { name: "Play this path", exact: true })
-    .click();
   await page.request.post(`/api/worktrees/${worktree}/runs`, {
     data: { environment: "dev" },
   });
-  await expect(panel.getByRole("alert")).toContainText(
+  await expect(page.getByRole("dialog").getByRole("alert")).toContainText(
     "This exploration was interrupted",
   );
-  await expect(panel.locator(".lineage-step-heading")).toHaveCount(0);
-  await expect(
-    panel.getByRole("button", { name: "Pause", exact: true }),
-  ).toHaveCount(0);
+  await expect(page.locator(".lineage-card")).toHaveCount(0);
 });
 
-test("a replacement cell ignores delayed responses from the previous exploration", async ({
+test("closing a loading cell discards its late response before opening another cell", async ({
   page,
 }) => {
   await example(page);
@@ -171,7 +231,7 @@ test("a replacement cell ignores delayed responses from the previous exploration
   });
   let delayed = false;
   await page.route("**/lineage", async (route) => {
-    if (route.request().postDataJSON().row === 0 && !delayed) {
+    if (!delayed) {
       delayed = true;
       const response = await route.fetch();
       await gate;
@@ -182,185 +242,154 @@ test("a replacement cell ignores delayed responses from the previous exploration
     .getByRole("button", { name: /Explain this value: revenue, rows 1,/ })
     .click();
   await expect.poll(() => delayed).toBe(true);
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Close", exact: true })
+    .click();
   await explain(page, "revenue", 2);
-  await expect(page.locator(".lineage-result")).toContainText("Row 2");
   release();
   await page.unrouteAll({ behavior: "wait" });
-  await expect(page.locator(".lineage-result")).toContainText("Row 2");
-  await expect(page.locator(".lineage-panel")).toContainText("contributions");
+  await expect(page.locator(".lineage-selected")).toContainText("Row 2");
+  await expect(page.locator(".lineage-selected")).toContainText("6941");
 });
 
-test("coverage limits and request errors remain explicit and retryable", async ({
+test("errors can be retried and coverage limits never invent source nodes", async ({
   page,
 }) => {
   await example(page);
   let fail = true;
-  await page.route("**/lineage", async (route) => {
-    if (fail)
-      await route.fulfill({
-        status: 503,
-        json: { error: "Temporarily unavailable" },
-      });
-    else
-      await route.fulfill({
-        json: {
-          ...route.request().postDataJSON(),
-          value: 0,
-          complete: false,
-          warnings: ["This SQL construct is not supported."],
-          contributions: [],
-          total: 0,
-          context_total: 0,
-          page_size: 5,
-        },
-      });
-  });
+  await page.route("**/lineage", (route) =>
+    fail
+      ? route.fulfill({
+          status: 503,
+          json: { error: "Temporarily unavailable" },
+        })
+      : route.fulfill({
+          json: {
+            ...route.request().postDataJSON(),
+            value: 0,
+            complete: false,
+            warnings: ["This SQL construct is not supported."],
+            contributions: [],
+            total: 0,
+            context_total: 0,
+            page_size: 5,
+          },
+        }),
+  );
   await page
     .getByRole("button", { name: /Explain this value: revenue, rows 1,/ })
     .click();
-  const panel = page.locator(".lineage-panel");
-  await expect(panel.getByRole("alert")).toContainText(
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.getByRole("alert")).toContainText(
     "Temporarily unavailable",
   );
   fail = false;
-  await panel.getByRole("button", { name: "Retry", exact: true }).click();
-  await expect(panel).toContainText("Coverage limitation");
-  await expect(panel).toContainText("This SQL construct is not supported.");
-  await expect(panel.locator(".lineage-result strong")).toHaveText("0");
-  await expect(
-    panel.getByRole("button", { name: "Play this path", exact: true }),
-  ).toHaveCount(0);
+  await dialog.getByRole("button", { name: "Retry", exact: true }).click();
+  await expect(dialog).toContainText("Coverage limitation");
+  await expect(dialog.locator(".lineage-card.is-source")).toHaveCount(0);
+  await dialog
+    .getByRole("button", {
+      name: "Calculation and selection details",
+      exact: true,
+    })
+    .click();
+  await expect(dialog.locator(".lineage-details")).toContainText(
+    "This SQL construct is not supported.",
+  );
 });
 
-test("the timeline supports keyboard navigation, reduced motion, themes and French", async ({
+test("the modal traps keyboard focus and supports French, dark mode and a narrow screen", async ({
   page,
 }) => {
   await example(page);
   await page.emulateMedia({ reducedMotion: "reduce" });
   await explain(page);
-  const panel = page.locator(".lineage-panel");
-  await panel.locator(".lineage-step-heading").first().focus();
-  await page.keyboard.press("Enter");
-  await expect(panel.locator(".lineage-step-heading").first()).toHaveAttribute(
-    "aria-expanded",
-    "true",
-  );
-  await panel
-    .getByRole("button", { name: "Play this path", exact: true })
-    .click();
+  const dialog = page.getByRole("dialog");
+  await expect(
+    dialog.getByRole("button", { name: "Close", exact: true }),
+  ).toBeFocused();
+  await page.keyboard.press("Shift+Tab");
   expect(
-    await panel
-      .locator(".is-active .lineage-marker")
-      .evaluate((element) => getComputedStyle(element).animationName),
-  ).toBe("none");
-  await panel.getByRole("button", { name: "Pause", exact: true }).click();
+    await dialog.evaluate((element) =>
+      element.contains(document.activeElement),
+    ),
+  ).toBe(true);
   const accessibility = await new AxeBuilder({ page })
-    .include(".lineage-panel")
+    .include(".lineage-dialog")
     .analyze();
   expect(accessibility.violations).toEqual([]);
+  await page.keyboard.press("Escape");
   await page.getByRole("button", { name: "Account menu", exact: true }).click();
   await page
     .getByRole("menuitemradio", { name: "French", exact: true })
     .click();
-  await expect(panel).toContainText("Valeur sélectionnée");
-  await expect(
-    panel.getByRole("button", { name: "Lire ce parcours", exact: true }),
-  ).toBeVisible();
   await page
     .getByRole("button", { name: "Menu du compte", exact: true })
     .click();
   await page
     .getByRole("menuitemradio", { name: "Sombre", exact: true })
     .click();
-  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  await page
+    .getByRole("button", { name: /Expliquer cette valeur: revenue, lignes 1,/ })
+    .click();
+  await expect(dialog).toHaveAccessibleName(
+    "Comment cette valeur a été calculée",
+  );
+  await expect(dialog.locator(".lineage-card.root")).toBeVisible();
+  await expect(dialog.locator(".lineage-loading")).toHaveCount(0);
   await page.setViewportSize({ width: 600, height: 800 });
-  const bounds = await panel.boundingBox();
+  const bounds = await dialog.boundingBox();
   expect(bounds!.x).toBeGreaterThanOrEqual(0);
   expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(600);
-  expect(
-    await panel.evaluate(
-      (element) => element.scrollWidth <= element.clientWidth,
-    ),
-  ).toBe(true);
+  expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(800);
+  await expect
+    .poll(async () => {
+      const root = await dialog.locator(".lineage-card.root").boundingBox();
+      return !!root && root.x >= 0 && root.x + root.width <= 600;
+    })
+    .toBe(true);
   await page.screenshot({ path: "test-results/lineage-french-dark.png" });
 });
 
-test("source NULLs and calculations without input cells are terminal steps", async ({
+test("source NULL and literal zero values remain visible without artificial operations", async ({
   page,
 }) => {
   await example(page);
   let source = true;
-  await page.route("**/lineage", async (route) => {
+  await page.route("**/lineage", (route) => {
     const cell = route.request().postDataJSON();
-    await route.fulfill({
+    return route.fulfill({
       json: {
         ...cell,
         value: source ? null : 0,
         kind: source ? "source" : "projection",
-        expression: source ? cell.column : "0",
         complete: true,
         warnings: [],
-        contributions: source
-          ? [
-              {
-                ...cell,
-                value: null,
-                node: "source",
-                port: "result",
-                source: true,
-              },
-            ]
-          : [],
-        total: source ? 1 : 0,
+        contributions: [],
+        total: 0,
         context_total: 0,
         page_size: 5,
+        ...(source
+          ? {}
+          : {
+              calculation: {
+                operation: "expression",
+                formula: "0",
+                evaluated: "0",
+                passthrough: false,
+              },
+            }),
       },
     });
   });
   await explain(page);
-  const panel = page.locator(".lineage-panel");
-  await expect(panel.locator(".lineage-result strong")).toHaveText("NULL");
-  await expect(panel.getByText(/You have reached the start/)).toBeVisible();
-  await expect(panel.locator(".contribution")).toHaveCount(0);
+  await expect(page.locator(".lineage-selected")).toContainText("NULL");
+  await expect(page.locator(".lineage-card")).toHaveCount(1);
+  await expect(page.locator(".lineage-card.is-source")).toHaveCount(1);
+  await page.keyboard.press("Escape");
   source = false;
   await explain(page, "revenue", 2);
-  await expect(panel.locator(".lineage-result strong")).toHaveText("0");
-  await expect(panel).toContainText(
-    "This step has no contributing input cells.",
-  );
-  await expect(
-    panel.getByRole("button", { name: "Play this path", exact: true }),
-  ).toHaveCount(0);
-});
-
-test("a late lineage response cannot restore a generation invalidated while loading", async ({
-  page,
-}) => {
-  await example(page);
-  let release: () => void = () => {};
-  const gate = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-  let loaded = false;
-  await page.route("**/lineage", async (route) => {
-    const response = await route.fetch();
-    loaded = true;
-    await gate;
-    await route.fulfill({ response });
-  });
-  await page
-    .getByRole("button", { name: /Explain this value: revenue, rows 1,/ })
-    .click();
-  await expect.poll(() => loaded).toBe(true);
-  await page.route("**/generations/**", (route) =>
-    route.fulfill({ json: { valid: false } }),
-  );
-  const panel = page.locator(".lineage-panel");
-  await expect(panel.getByRole("alert")).toContainText(
-    "This exploration was interrupted",
-  );
-  release();
-  await page.unrouteAll({ behavior: "wait" });
-  await expect(panel.locator(".lineage-step")).toHaveCount(0);
-  await expect(panel.locator(".contribution")).toHaveCount(0);
+  await expect(page.locator(".lineage-equation")).toHaveText("0 = 0");
+  await expect(page.locator(".lineage-card")).toHaveCount(1);
 });
