@@ -1931,6 +1931,15 @@ small {
 .settings-page {
   max-width: none;
 }
+.settings-navigation {
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--border);
+  margin: 22px 0 28px;
+}
+.instance-settings .administration-page {
+  padding: 0;
+  overflow: visible;
+}
 .settings-card {
   max-width: 540px;
   padding: 25px;
@@ -3002,7 +3011,8 @@ option {
   gap: 24px;
   margin-bottom: 24px;
 }
-.administration-heading h1 {
+.administration-heading h1,
+.administration-heading h2 {
   display: flex;
   align-items: center;
   gap: 12px;

@@ -25,6 +25,23 @@ An instance contains `instance.sqlite`, a private extension cache, `projects/`, 
 
 Each project repository versions `flow.json`, `documentation.json`, `templates/*.sql`, and `components/*.json`. Results, source data and export files are outside that versioned definition set. Connector definitions and environment settings have no configuration-version history. Historical project code always uses the current instance catalog when explicitly run.
 
+## Settings scopes
+
+Settings follow the same instance, project and user boundaries as authorization:
+
+| Scope | Entry point | Settings and permissions |
+| --- | --- | --- |
+| Instance | **Instance settings** in the main navigation | User accounts and instance roles (member/admin), OIDC single sign-on, environment names, connections and connector definitions, and the shared Git author identity. Only instance administrators can configure these. |
+| Project | **Project settings** in the open project's toolbar | Participants and project roles (reader/editor/admin), authorized connections, and project deletion. Project administrators manage participants; only instance administrators grant access to instance connections. Readers and editors can inspect their project's access without changing it. |
+| User | **Account menu → User settings** | Language, theme and the signed-in account's password. SSO accounts manage their password with the identity provider. |
+
+Instance configuration applies across projects. Selecting a branch or run
+environment belongs to the pipeline workspace and does not edit that configuration.
+Project membership assigns existing accounts; creating or deactivating an account
+is an instance operation. Language and theme remain browser-local preferences,
+shared by accounts using that browser, and are not synchronized between devices.
+The account menu retains shortcuts for changing those preferences.
+
 ## Save and capture
 
 A UI save carries a content revision. Three-way comparison uses that base, the current files (including pending external edits), and the proposal. Stable-ID objects and disjoint JSON fields merge; incompatible SQL/file changes become recoverable conflicts. Conflicts retain all three versions in SQLite. Resolution rechecks the current files before writing. A metadata-only conflict does not block computation; a computation conflict blocks dependent scopes, conservatively the whole graph if unreadable.

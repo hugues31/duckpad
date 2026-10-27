@@ -143,7 +143,7 @@
   "language": "Langue",
   "english": "Anglais",
   "french": "Français",
-  "localPreferences": "Le thème et la langue sont enregistrés dans ce navigateur, indépendamment des projets.",
+  "localPreferences": "Le thème et la langue sont enregistrés dans ce navigateur et partagés par les comptes qui l’utilisent.",
   "gitHistory": "Historique Git",
   "runHistory": "Historique d’exécution",
   "noHistory": "Aucune exécution",
@@ -422,5 +422,13 @@
   "ssoPasswordManaged": "Ce compte utilise le SSO. Gérez son mot de passe auprès du fournisseur d’identité.",
   "ssoFailed": "La connexion SSO a échoué ou expiré. Réessayez, ou utilisez votre compte local pour vérifier la configuration SSO.",
   "ssoContinue": "Continuer avec",
-  "ssoLocalLogin": "Ou se connecter avec un compte local"
+  "ssoLocalLogin": "Ou se connecter avec un compte local",
+  "instanceSettings": "Paramètres de l’instance",
+  "userSettings": "Paramètres utilisateur",
+  "instanceGeneral": "Général",
+  "usersPermissions": "Utilisateurs et permissions",
+  "instanceSettingsDescription": "Configuration partagée par tous les projets et utilisateurs. Seuls les administrateurs de l’instance peuvent la modifier.",
+  "userSettingsDescription": "Gérez vos préférences et la sécurité de votre compte.",
+  "instanceIdentityHint": "Identité partagée pour les commits Git automatiques de tous les projets de cette instance.",
+  "instanceEnvironmentsHint": "Noms des environnements disponibles pour tous les projets et connexions. Séparez les noms par des virgules."
 }

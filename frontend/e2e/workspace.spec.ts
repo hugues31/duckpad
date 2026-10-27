@@ -828,9 +828,11 @@ test("account menu owns preferences and signs out only on an explicit action", a
   await expect(page.getByRole("menu")).toHaveCount(0);
   expect(logouts).toBe(0);
   await avatar.click();
-  await page.getByRole("menuitem", { name: "Settings", exact: true }).click();
+  await page
+    .getByRole("menuitem", { name: "User settings", exact: true })
+    .click();
   await expect(
-    page.getByRole("heading", { name: "Settings", exact: true }),
+    page.getByRole("heading", { name: "User settings", exact: true }),
   ).toBeVisible();
   await avatar.click();
   await page.getByRole("menuitem", { name: "Sign out", exact: true }).click();
