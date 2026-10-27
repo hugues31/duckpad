@@ -21,3 +21,20 @@ export async function signIn(page: Page) {
   await page.goto("/");
   await submitLogin(page);
 }
+
+export async function openInstanceSettings(page: Page, section = "General") {
+  await page
+    .getByRole("button", { name: "Instance settings", exact: true })
+    .click();
+  await page
+    .getByRole("navigation", { name: "Instance settings", exact: true })
+    .getByRole("button", { name: section, exact: true })
+    .click();
+}
+
+export async function openUserSettings(page: Page) {
+  await page.getByRole("button", { name: "Account menu", exact: true }).click();
+  await page
+    .getByRole("menuitem", { name: "User settings", exact: true })
+    .click();
+}

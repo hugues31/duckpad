@@ -1,6 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
 import fr from "../src/locales/fr.json" with { type: "json" };
-import { submitLogin } from "./helpers";
+import { submitLogin, openInstanceSettings } from "./helpers";
 
 async function signIn(page: Page) {
   await page.goto("/");
@@ -98,7 +98,7 @@ test("dashboard lists projects once, opens their main branch and supports keyboa
     first.id,
   );
   await expect(page.locator(".react-flow")).toBeVisible();
-  await page.getByRole("button", { name: "Connections", exact: true }).click();
+  await openInstanceSettings(page, "Connections");
   await page
     .getByRole("button", { name: "Duckpad — Projects", exact: true })
     .click();

@@ -1,30 +1,61 @@
-import { PasswordForm } from "./Administration";
-import SSOSettings from "./SSOSettings";
+import { useState } from "react";
+import { UsersPage } from "./Administration";
+import ConnectionsPanel from "./ConnectionsPanel";
 import { useT } from "./i18n";
-import { PreferenceButtons, type Preferences } from "./preferences";
+import SSOSettings from "./SSOSettings";
 import type { Workspace } from "./types";
 
-export default function SettingsPage({
+const SECTIONS = [
+  "instanceGeneral",
+  "usersPermissions",
+  "ssoSettings",
+  "environments",
+  "connections",
+] as const;
+
+export default function InstanceSettings({
   workspace,
-  preferences,
+  refresh,
   onIdentity,
   onEnvironments,
-  onPasswordChanged,
+  onConnectorEditor,
 }: {
-  onPasswordChanged: () => void;
   workspace: Workspace;
-  preferences: Preferences;
+  refresh: () => Promise<void>;
   onIdentity: (identity: { name: string; email: string }) => void;
   onEnvironments: (names: string[]) => void;
+  onConnectorEditor: (data: { title: string; value: string }) => void;
 }) {
   const t = useT();
+  const [section, setSection] =
+    useState<(typeof SECTIONS)[number]>("instanceGeneral");
   return (
-    <section className="full-panel settings-page">
-      <span className="eyebrow">{t("workspace")}</span>
-      <h1>{t("settings")}</h1>
-      {workspace.user.role === "admin" && (
+    <section
+      className="full-panel instance-settings"
+      aria-labelledby="instance-settings-heading"
+    >
+      <span className="eyebrow">{t("instance")}</span>
+      <h1 id="instance-settings-heading">{t("instanceSettings")}</h1>
+      <p className="muted">{t("instanceSettingsDescription")}</p>
+      <nav
+        className="tabs settings-navigation"
+        aria-label={t("instanceSettings")}
+      >
+        {SECTIONS.map((key) => (
+          <button
+            key={key}
+            className={section === key ? "active" : ""}
+            aria-current={section === key ? "page" : undefined}
+            onClick={() => setSection(key)}
+          >
+            {t(key)}
+          </button>
+        ))}
+      </nav>
+      {section === "instanceGeneral" && (
         <div className="settings-card">
           <h2>{t("identity")}</h2>
+          <p className="muted">{t("instanceIdentityHint")}</p>
           <form
             onSubmit={(e) => {
               e.preventDefault();
@@ -56,24 +87,12 @@ export default function SettingsPage({
           </form>
         </div>
       )}
-      {workspace.user.role === "admin" && <SSOSettings />}
-      {workspace.user.auth_method === "oidc" ? (
-        <div className="settings-card">
-          <p>{t("ssoPasswordManaged")}</p>
-        </div>
-      ) : (
-        <PasswordForm onChanged={onPasswordChanged} />
-      )}
-      <div className="settings-card">
-        <h2>{t("preferences")}</h2>
-        <p className="muted">{t("localPreferences")}</p>
-        <div className="row gap">
-          <PreferenceButtons preferences={preferences} />
-        </div>
-      </div>
-      {workspace.user.role === "admin" && (
+      {section === "usersPermissions" && <UsersPage refresh={refresh} />}
+      {section === "ssoSettings" && <SSOSettings />}
+      {section === "environments" && (
         <div className="settings-card">
           <h2>{t("environments")}</h2>
+          <p className="muted">{t("instanceEnvironmentsHint")}</p>
           <form
             onSubmit={(e) => {
               e.preventDefault();
@@ -96,6 +115,13 @@ export default function SettingsPage({
             <button className="button secondary">{t("save")}</button>
           </form>
         </div>
+      )}
+      {section === "connections" && (
+        <ConnectionsPanel
+          workspace={workspace}
+          refresh={refresh}
+          onEditor={onConnectorEditor}
+        />
       )}
     </section>
   );

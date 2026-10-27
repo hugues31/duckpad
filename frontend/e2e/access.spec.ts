@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
+import { openInstanceSettings } from "./helpers";
 
 async function login(
   page: Page,
@@ -20,7 +21,7 @@ test("manage instance accounts, project participants and live reader access", as
 }) => {
   await login(page);
   const username = `reader-${Date.now()}`;
-  await page.getByRole("button", { name: "Users", exact: true }).click();
+  await openInstanceSettings(page, "Users and permissions");
   await expect(
     page.getByRole("heading", { name: "Users", exact: true }),
   ).toBeVisible();
@@ -66,7 +67,7 @@ test("manage instance accounts, project participants and live reader access", as
   const readerPage = await readerContext.newPage();
   await login(readerPage, username, "reader-browser-password");
   await expect(
-    readerPage.getByRole("button", { name: "Users", exact: true }),
+    readerPage.getByRole("button", { name: "Instance settings", exact: true }),
   ).toHaveCount(0);
   await readerPage
     .getByRole("button", {
@@ -120,7 +121,7 @@ test("manage instance accounts, project participants and live reader access", as
       exact: true,
     }),
   ).toBeVisible();
-  await page.getByRole("button", { name: "Users", exact: true }).click();
+  await openInstanceSettings(page, "Users and permissions");
   await row.getByRole("button", { name: "Deactivate", exact: true }).click();
   await dialog.getByRole("button", { name: "Deactivate", exact: true }).click();
   await expect(row).toContainText("Inactive");
@@ -138,7 +139,7 @@ test("last administrator protection is visible in the management screen", async 
   page,
 }) => {
   await login(page);
-  await page.getByRole("button", { name: "Users", exact: true }).click();
+  await openInstanceSettings(page, "Users and permissions");
   await page
     .getByLabel("Instance role · admin", { exact: true })
     .selectOption("member");

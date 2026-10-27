@@ -1,12 +1,11 @@
 import Select from "./Select";
 import {
-  Database,
   GitBranch,
   HelpCircle,
   Layers,
   Plus,
   Workflow,
-  Users,
+  Settings2,
 } from "lucide-react";
 import AccountMenu from "./AccountMenu";
 import DuckMark from "./DuckMark";
@@ -19,15 +18,13 @@ import type { Snapshot, Workspace } from "./types";
 export type Area =
   | "projects"
   | "pipelines"
-  | "connections"
-  | "settings"
-  | "users"
+  | "instanceSettings"
+  | "userSettings"
   | "projectSettings";
 
 const RAIL = [
   ["pipelines", Workflow],
-  ["connections", Database],
-  ["users", Users],
+  ["instanceSettings", Settings2],
 ] as const;
 
 export default function TopBar({
@@ -70,6 +67,7 @@ export default function TopBar({
   const t = useT();
   const instanceAdmin = workspace?.user.role === "admin";
   const canEdit = snapshot?.role === "admin" || snapshot?.role === "editor";
+  const projectArea = area === "pipelines" || area === "projectSettings";
   return (
     <header className="topbar">
       <nav className="rail" aria-label={t("workspace")}>
@@ -102,7 +100,7 @@ export default function TopBar({
           <HelpCircle size={20} />
         </button>
       </nav>
-      {area === "projects" ? (
+      {!projectArea ? (
         <div className="dashboard-brand">Duckpad</div>
       ) : (
         <div className="project-picker">
@@ -143,7 +141,7 @@ export default function TopBar({
         </div>
       )}
       <div className="topbar-right">
-        {snapshot && area !== "projects" && (
+        {snapshot && area === "pipelines" && (
           <>
             <div className="branch-picker">
               <GitBranch size={14} />
@@ -194,7 +192,7 @@ export default function TopBar({
         <AccountMenu
           username={workspace?.user.username || ""}
           preferences={preferences}
-          onSettings={() => onArea("settings")}
+          onSettings={() => onArea("userSettings")}
           onSignOut={onSignOut}
         />
       </div>
