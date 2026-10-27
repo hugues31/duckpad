@@ -2,7 +2,7 @@
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, StrictBool, field_validator, model_validator
 
 
 class Login(BaseModel):
@@ -101,6 +101,24 @@ class Launch(BaseModel):
     environment: str = "dev"
     node: str | None = None
     entry_point: str | None = None
+    confirmed: StrictBool = False
+
+
+class EnvironmentSettings(BaseModel):
+    label: str = Field(min_length=1, max_length=80)
+    color: str = Field(pattern=r"^#[0-9a-fA-F]{6}$")
+    confirm_before_run: StrictBool = False
+
+    @field_validator("label")
+    @classmethod
+    def clean_label(cls, value):
+        if not value.strip():
+            raise ValueError("Provide an environment label")
+        return value.strip()
+
+
+class NewEnvironment(EnvironmentSettings):
+    id: str = Field(pattern=r"^[a-zA-Z][a-zA-Z0-9_-]*$", max_length=64)
 
 
 class Explain(BaseModel):

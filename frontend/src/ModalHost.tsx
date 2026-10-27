@@ -4,15 +4,22 @@ import GitWorkspace from "./GitWorkspace";
 import { useT } from "./i18n";
 import {
   EditorModal,
+  ConfirmModal,
   FileModal,
   FormModal,
   Modal,
   type FormField,
 } from "./modals";
-import type { Json, Snapshot } from "./types";
+import type { Environment, Json, Snapshot } from "./types";
 
 /** Every dialog of the workspace, with the actions it triggers. */
 export type ModalState =
+  | {
+      kind: "runConfirmation";
+      environment: Environment;
+      target: string;
+      submit: () => Promise<void>;
+    }
   | {
       kind: "git";
       worktree: string;
@@ -66,6 +73,26 @@ export default function ModalHost({
 }) {
   const t = useT();
   switch (modal?.kind) {
+    case "runConfirmation":
+      return (
+        <ConfirmModal
+          title={t("confirmRun")}
+          confirmLabel={t("confirmAndRun")}
+          onConfirm={modal.submit}
+          onClose={onClose}
+        >
+          <div className="row gap">
+            <span
+              className="env-dot"
+              style={{ background: modal.environment.color }}
+            />
+            <strong>{modal.environment.label}</strong>
+            <code>{modal.environment.id}</code>
+          </div>
+          <p>{t("confirmRunHint")}</p>
+          <p>{modal.target}</p>
+        </ConfirmModal>
+      );
     case "git":
       return <GitWorkspace {...modal} onClose={onClose} />;
     case "form":
