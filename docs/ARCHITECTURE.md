@@ -42,6 +42,104 @@ is an instance operation. Language and theme remain browser-local preferences,
 shared by accounts using that browser, and are not synchronized between devices.
 The account menu retains shortcuts for changing those preferences.
 
+## Browser navigation proposal
+
+Dedicated pages should have browser URLs, starting with `/instance-settings`,
+`/user-settings` and `/projects`. This would make pages bookmarkable, allow links
+to open the intended screen after sign-in, and make refresh and browser
+Back/Forward follow navigation. This is a proposed migration; client-side routing
+is not implemented yet.
+
+### Current behavior
+
+`App.tsx` selects pages with `area` and workspace tabs with `tab` in React state.
+`TopBar.tsx`, `AccountMenu.tsx` and `FlowToolbar.tsx` change that state through
+callbacks. `InstanceSettings.tsx` has its own local section state. None of those
+transitions updates the URL. Reloading restores the worktree from local storage,
+but loses the chosen page, tab and settings section.
+
+FastAPI already serves the frontend shell for non-API paths through the final
+route in `app.py`. A direct request to `/instance-settings` therefore loads the
+application, but React does not interpret that path. `/api` and `/api/*` retain
+their API behavior, and `/assets` and the optional `/site` website are mounted
+before the fallback. Preserve those boundaries and verify them in the packaged
+application as well as the development server.
+
+### Router choice
+
+Use React Router with `createBrowserRouter` and `RouterProvider`, retaining the
+existing Vite build, FastAPI service and `api.ts` calls. Its
+[Data mode](https://reactrouter.com/start/data/installation) can host a small route
+table without first migrating fetching and saving to route loaders and actions.
+Use `Link` or `NavLink` for page navigation so links support keyboard use, active
+states and opening in another tab. See the
+[navigation guide](https://reactrouter.com/start/declarative/navigating).
+
+The reason to choose Data mode over a plain `BrowserRouter` is draft protection:
+React Router's [mode comparison](https://reactrouter.com/start/modes) lists
+`useBlocker` for Data and Framework modes. `CodePanel.tsx` currently retains drafts
+when hidden between workspace tabs and uses `beforeunload` for document exits.
+Route changes must preserve those drafts or ask before discarding them.
+[`useBlocker`](https://reactrouter.com/api/hooks/useBlocker) handles navigation
+within the application; retain `beforeunload` for reloads and document exits.
+
+Keeping local state would leave the navigation problem unresolved. A custom
+History API wrapper would avoid a dependency but require maintaining matching,
+history transitions, links and draft blocking. Hash routing would avoid server
+fallback requirements, but that fallback already exists and clean paths match
+the intended URLs. A framework migration or server rendering is unnecessary for
+this scope. Adding one routing dependency is justified by these behaviors;
+select and lock a compatible stable release during implementation.
+
+### Proposed routes and state
+
+| URL | Destination |
+| --- | --- |
+| `/projects` | Project dashboard |
+| `/instance-settings` | Instance general settings, for instance administrators |
+| `/instance-settings/:section` | `users`, `sso`, `environments` or `connections` |
+| `/user-settings` | Preferences and password for the signed-in account |
+| `/projects/:projectId/settings` | Project settings with the existing role-specific controls |
+| `/worktrees/:worktreeId/:tab` | Pipeline workspace: `flow`, `code`, `documentation` or `history` |
+
+Keep `/` as an entry point: after authentication and workspace loading, replace
+it with the last accessible worktree's flow URL or `/projects`. Explicit URLs
+take precedence over local storage. A deleted or inaccessible worktree should
+show an unavailable state with a link to Projects, rather than silently opening
+a different project. Unknown paths and unsupported section or tab names should
+show a not-found screen.
+
+Worktree IDs identify branches without embedding branch names or filesystem
+paths. An optional `?environment=dev` can select a validated run environment;
+changes should be reversible through history. Keep graph selection, panel sizes,
+modals, SQL drafts, credentials and result data out of URLs. Theme and language
+remain browser preferences, and URL segments remain stable across translations.
+
+### Migration and acceptance
+
+1. Add the router and a persistent authenticated workspace layout. Make the URL
+   the source of truth for migrated pages, avoiding a second synchronized `area`
+   state. First expose the dashboard and instance/user settings, with a temporary
+   `/pipelines` route for the existing editor. Preserve drafts across page changes
+   or guard transitions that would discard them, including browser Back/Forward.
+2. Add settings subsections and explicit project/worktree routes. Derive project
+   context from the authorized worktree, preserve the editor across workspace tab
+   changes, and retain the existing stale-response checks during worktree loads.
+   Replace the temporary pipeline route with a redirect to the selected worktree
+   or dashboard. Navigation must never launch, cancel or replay a pipeline run.
+3. Preserve the destination through local sign-in and session expiry. OIDC
+   currently returns to `/`; store a validated internal return path for that
+   round trip and consume it after sign-in. Keep OAuth callbacks under `/api`,
+   preserve `sso_error` handling, and reject external return destinations. Check
+   instance/project permissions after loading and when access changes; backend
+   authorization remains authoritative.
+4. Extend Playwright coverage for URL changes, direct entry, reload, Back/Forward,
+   new tabs, sign-in return paths, empty workspaces, denied/deleted resources and
+   unknown routes. Verify draft preservation and canceled navigation, route-aware
+   focus and page titles, translated labels with stable URLs, and no execution
+   side effects. Add HTTP checks for frontend fallback, missing assets and API
+   authentication/404 behavior, and keep the existing OIDC tests passing.
+
 ## Save and capture
 
 A UI save carries a content revision. Three-way comparison uses that base, the current files (including pending external edits), and the proposal. Stable-ID objects and disjoint JSON fields merge; incompatible SQL/file changes become recoverable conflicts. Conflicts retain all three versions in SQLite. Resolution rechecks the current files before writing. A metadata-only conflict does not block computation; a computation conflict blocks dependent scopes, conservatively the whole graph if unreadable.
