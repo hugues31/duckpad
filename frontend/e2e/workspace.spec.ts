@@ -13,11 +13,7 @@ async function sample(page: Page) {
     const result = await (
       await page.request.post("/api/example", { data: {} })
     ).json();
-    await page.evaluate(
-      (id) => localStorage.setItem("duckpad-worktree", id),
-      result.id,
-    );
-    await page.reload();
+    await page.goto(`/worktrees/${result.id}/flow`);
   } else
     await page.getByRole("button", { name: "Open example project" }).click();
   await expect(
@@ -104,9 +100,7 @@ test("theme and language persist without a project commit and environments have 
 }) => {
   await sample(page);
   await run(page);
-  const worktree = await page.evaluate(() =>
-    localStorage.getItem("duckpad-worktree"),
-  );
+  const worktree = new URL(page.url()).pathname.split("/")[2];
   const before = await (
     await page.request.get("/api/worktrees/" + worktree)
   ).json();
@@ -169,7 +163,7 @@ test("Git branch creation, isolated edits and explicit merge", async ({
     page.getByRole("button", { name: "Compare & merge", exact: true }),
   ).toBeVisible();
   await page
-    .getByRole("button", { name: "Documentation", exact: true })
+    .getByRole("link", { name: "Documentation", exact: true })
     .first()
     .click();
   await page
@@ -198,7 +192,7 @@ test("Git branch creation, isolated edits and explicit merge", async ({
   await expect(page.getByLabel("Branch", { exact: true })).toContainText(
     "main",
   );
-  await page.getByRole("button", { name: "History", exact: true }).click();
+  await page.getByRole("link", { name: "History", exact: true }).click();
   await page.getByRole("button", { name: "Git history", exact: true }).click();
   await expect(page.locator(".history-row").first()).toContainText(
     "merge test/browser-branch",
@@ -271,9 +265,7 @@ test("conflicting parameter edits survive reload and can be resolved explicitly"
     .locator(".inspector")
     .getByRole("textbox", { name: /status/ });
   await status.fill("refunded");
-  const worktree = await page.evaluate(() =>
-    localStorage.getItem("duckpad-worktree"),
-  );
+  const worktree = new URL(page.url()).pathname.split("/")[2];
   const snapshot = await (
     await page.request.get("/api/worktrees/" + worktree)
   ).json();
@@ -334,9 +326,7 @@ test("connection capabilities constrain source and export forms without a projec
   page,
 }) => {
   await sample(page);
-  const worktree = await page.evaluate(() =>
-    localStorage.getItem("duckpad-worktree"),
-  );
+  const worktree = new URL(page.url()).pathname.split("/")[2];
   const before = await (
     await page.request.get("/api/worktrees/" + worktree)
   ).json();
@@ -852,9 +842,7 @@ test("three panel dividers resize, persist and preserve manual canvas navigation
       .filter({ hasText: "Regional revenue" })
       .click();
   await select();
-  const worktree = await page.evaluate(() =>
-    localStorage.getItem("duckpad-worktree"),
-  );
+  const worktree = new URL(page.url()).pathname.split("/")[2];
   const before = await (
     await page.request.get("/api/worktrees/" + worktree)
   ).json();
@@ -940,9 +928,7 @@ test("selected nodes show incoming and outgoing flow, with larger usable sockets
   page,
 }) => {
   await sample(page);
-  const worktree = await page.evaluate(() =>
-    localStorage.getItem("duckpad-worktree"),
-  );
+  const worktree = new URL(page.url()).pathname.split("/")[2];
   const snapshot = await (
     await page.request.get("/api/worktrees/" + worktree)
   ).json();
@@ -1021,9 +1007,7 @@ test("project documentation saves repeatedly without an edit conflict", async ({
   page,
 }) => {
   await sample(page);
-  await page
-    .getByRole("button", { name: "Documentation", exact: true })
-    .click();
+  await page.getByRole("link", { name: "Documentation", exact: true }).click();
   const panel = page.locator(".documentation-page");
   for (const text of ["First revision", "Second revision"]) {
     await panel.locator(".project-documentation").fill(text);
@@ -1037,9 +1021,7 @@ test("project documentation saves repeatedly without an edit conflict", async ({
     expect((await saved).ok()).toBe(true);
   }
   await expect(page.locator(".banner.warning")).toHaveCount(0);
-  const worktree = await page.evaluate(() =>
-    localStorage.getItem("duckpad-worktree"),
-  );
+  const worktree = new URL(page.url()).pathname.split("/")[2];
   const snapshot = await (
     await page.request.get(`/api/worktrees/${worktree}`)
   ).json();
@@ -1051,15 +1033,11 @@ test("documentation waits for its refreshed revision and preserves edits during 
   page,
 }) => {
   await sample(page);
-  await page
-    .getByRole("button", { name: "Documentation", exact: true })
-    .click();
+  await page.getByRole("link", { name: "Documentation", exact: true }).click();
   const panel = page.locator(".documentation-page");
   const editor = panel.locator(".project-documentation");
   const button = panel.getByRole("button");
-  const worktree = await page.evaluate(() =>
-    localStorage.getItem("duckpad-worktree"),
-  );
+  const worktree = new URL(page.url()).pathname.split("/")[2];
   let releaseRefresh!: () => void;
   const refreshGate = new Promise<void>((resolve) => {
     releaseRefresh = resolve;
@@ -1126,11 +1104,7 @@ test("runs use a configured environment after the environments are renamed", asy
     await page.request.put("/api/environments", {
       data: ["staging", "prod"],
     });
-    await page.evaluate(
-      (id) => localStorage.setItem("duckpad-worktree", id),
-      project.id,
-    );
-    await page.reload();
+    await page.goto(`/worktrees/${project.id}/flow`);
     const launched = page.waitForResponse(
       (r) => r.url().endsWith("/runs") && r.request().method() === "POST",
     );

@@ -82,7 +82,7 @@ test("record a real pipeline, source lineage and SQL workspace", async ({
   page.on("pageerror", (error) => errors.push(error.message));
   try {
     caption("Northstar: a complete pipeline with local CSV and Parquet data.");
-    await page.goto("/");
+    await page.goto(setup.url());
     await expect(page.locator(".react-flow__node")).toHaveCount(9);
     await page.waitForTimeout(1200);
     caption("Run the pipeline. DuckDB computes each step and its outputs.");
@@ -162,7 +162,7 @@ test("record a real pipeline, source lineage and SQL workspace", async ({
     caption(
       "Open Code to inspect the SQL and project files behind the visual flow.",
     );
-    await click(page, page.getByRole("button", { name: "Code", exact: true }));
+    await click(page, page.getByRole("link", { name: "Code", exact: true }));
     await expect(page.locator(".code-workspace .monaco-editor")).toBeVisible();
     await click(
       page,
@@ -179,7 +179,7 @@ test("record a real pipeline, source lineage and SQL workspace", async ({
     caption(
       "Your data, your logic, your workspace. Start with the Northstar tour.",
     );
-    await click(page, page.getByRole("button", { name: "Flow", exact: true }));
+    await click(page, page.getByRole("link", { name: "Flow", exact: true }));
     await page.waitForTimeout(1500);
     expect(errors).toEqual([]);
     const end = (Date.now() - start) / 1000;

@@ -1,3 +1,5 @@
+import { Link } from "react-router";
+import type { Area } from "./navigation";
 import Select from "./Select";
 import {
   GitBranch,
@@ -15,13 +17,6 @@ import type { Preferences } from "./preferences";
 import ResourceMonitor from "./ResourceMonitor";
 import type { Snapshot, Workspace } from "./types";
 
-export type Area =
-  | "projects"
-  | "pipelines"
-  | "instanceSettings"
-  | "userSettings"
-  | "projectSettings";
-
 const RAIL = [
   ["pipelines", Workflow],
   ["instanceSettings", Settings2],
@@ -34,8 +29,7 @@ export default function TopBar({
   snapshot,
   environment,
   preferences,
-  onArea,
-  onHome,
+  pipelineUrl,
   onHelp,
   onOpenProject,
   onNewProject,
@@ -52,8 +46,7 @@ export default function TopBar({
   snapshot: Snapshot | null;
   environment: string;
   preferences: Preferences;
-  onArea: (area: Area) => void;
-  onHome: () => void;
+  pipelineUrl: string;
   onHelp: () => void;
   onOpenProject: (worktree: string) => void;
   onNewProject: () => void;
@@ -71,28 +64,28 @@ export default function TopBar({
   return (
     <header className="topbar">
       <nav className="rail" aria-label={t("workspace")}>
-        <button
+        <Link
+          to="/projects"
           className="brand-button"
           title="Duckpad"
           aria-label={t("backToProjects")}
           aria-current={area === "projects" ? "page" : undefined}
-          onClick={onHome}
         >
           <DuckMark size={30} />
-        </button>
+        </Link>
         <div className="rail-main">
           {RAIL.filter(([key]) => key === "pipelines" || instanceAdmin).map(
             ([key, Icon]) => (
-              <button
+              <Link
+                to={key === "pipelines" ? pipelineUrl : "/instance-settings"}
                 key={key}
                 className={`rail-button ${area === key ? "active" : ""}`}
                 title={t(key)}
                 aria-label={t(key)}
                 aria-current={area === key ? "page" : undefined}
-                onClick={() => onArea(key)}
               >
                 <Icon size={21} />
-              </button>
+              </Link>
             ),
           )}
         </div>
@@ -192,7 +185,6 @@ export default function TopBar({
         <AccountMenu
           username={workspace?.user.username || ""}
           preferences={preferences}
-          onSettings={() => onArea("userSettings")}
           onSignOut={onSignOut}
         />
       </div>
