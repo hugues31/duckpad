@@ -45,11 +45,17 @@ def verify_loaded(db):
     return row[3]
 
 
-def verify_duckpad(home, cache, isolated, allow_unsigned=False):
+def verify_duckpad(home, cache, isolated, allow_unsigned=False, import_file=None):
     instance = Services.open(home, enforce_access=isolated)
     try:
-        shutil.copytree(cache, home / "extensions")
         instance.engine.configure_extensions(allow_unsigned)
+        if import_file:
+            with import_file.open("rb") as stream:
+                instance.engine.import_extension(
+                    "h3.duckdb_extension.gz", "unsigned" if allow_unsigned else "community", stream
+                )
+        else:
+            shutil.copytree(cache, home / "extensions")
         instance.catalog.save(
             "connector",
             {

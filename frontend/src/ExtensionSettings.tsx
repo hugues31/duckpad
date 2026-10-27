@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api, send } from "./api";
 import { useT } from "./i18n";
 import { useAsyncAction } from "./useAsyncAction";
+import ExtensionImport from "./ExtensionImport";
 
 type Configuration = { allow_unsigned_extensions: boolean };
 
@@ -26,6 +27,8 @@ export default function ExtensionSettings() {
   return (
     <section className="settings-card" aria-label={t("extensionSettings")}>
       <h2>{t("extensionSettings")}</h2>
+      <ExtensionImport />
+      <h3>{t("extensionUnsigned")}</h3>
       <p className="muted">{t("unsignedExtensionsHint")}</p>
       {error && (
         <div className="notice error" role="alert">

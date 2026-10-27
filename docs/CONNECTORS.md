@@ -77,7 +77,7 @@ No Python spreadsheet dependency is needed. When it is not built into the runtim
 or already cached, the signed extension is installed in the instance's extension
 cache on first use, requiring network access and a build compatible with the
 installed DuckDB version and processor. For disconnected deployments, follow the
-[offline extension guide](OFFLINE_EXTENSIONS.md) to provision the cache in advance.
+[offline extension guide](OFFLINE_EXTENSIONS.md) to download and import its binary.
 CSV/Parquet-only projects do not load it.
 
 Imports use native DuckDB inference: numbers generally become `DOUBLE`, while
@@ -116,11 +116,9 @@ uv run python scripts/integration.py s3 --output docs/validation/s3.json
 
 Install Oracle Instant Client 19 or newer, Basic or Basic Light, compatible with the extension and platform. On Linux, make its shared libraries discoverable and install the platform's `libaio`/`libnsl` prerequisites. The extension build must match the exact DuckDB ABI. The application uses a private extension directory, so an unrelated unsigned developer extension in the user's global DuckDB cache cannot be loaded accidentally.
 
-OraDuck is available signed from the community repository and as
-`oraduck-signed-repository.tar.gz` in its GitHub release. Leave **Allow unsigned
-extensions** disabled. For an offline Duckpad instance, follow the
-[short cache installation guide](OFFLINE_EXTENSIONS.md); it explains which archive
-can be extracted directly into the instance directory.
+OraDuck is available signed from the community repository. Leave **Allow unsigned
+extensions** disabled for its signed binary. On an offline server, use the
+[standard extension import](OFFLINE_EXTENSIONS.md), as for any other extension.
 
 The preset creates a temporary secret with `TYPE oraduck`, `USER`, `PASSWORD` and `DSN`, then uses `ATTACH` for read-only access. Source nodes select a connection, schema and resource. Export nodes emit `COPY (SELECT ...) TO ... (FORMAT oraduck, CONNECTION ...)` targeting an existing Oracle table; the columns expression supports explicit mapping. The destination table must already exist and be compatible with the selected columns.
 
@@ -138,7 +136,7 @@ The script creates uniquely named disposable test tables and drops only those ta
 
 ## Add another connector
 
-For air-gapped instances, [prepare and verify an offline extension cache](OFFLINE_EXTENSIONS.md)
+For air-gapped instances, [download and import extensions](OFFLINE_EXTENSIONS.md)
 before using connectors that need extensions. This applies to core and community
 extensions; the cache belongs to the backend instance, outside project Git.
 

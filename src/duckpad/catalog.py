@@ -331,11 +331,17 @@ class Catalog:
             }
         return captured, secrets
 
-    def prepare(self, db, captured):
+    def prepare(self, db, captured, offline=None):
+        if offline is None:
+            offline = self.store.get("settings", "offline_extensions", {}) if self else {}
         for connection in captured.values():
             definition = connection["definition"]
             for ext in definition.get("extensions", []):
                 name = ext["name"]
+                if name in offline:
+                    # Imported files never fall back to a network install when loading fails.
+                    db.execute(f"LOAD {qi(name)} FROM {qi(offline[name]['repository'])}")
+                    continue
                 try:
                     db.execute(f"LOAD {qi(name)}")
                 except duckdb.Error:

@@ -461,5 +461,21 @@
   "unsignedExtensionsHint": "Les extensions natives exécutent du code sur le serveur. Activez cette option uniquement pour des binaires de confiance ; elle désactive la vérification des signatures d’extensions pour cette instance.",
   "extensionSettingsApplyHint": "Arrêtez les exécutions en cours avant de modifier cette option. Un changement enregistré efface les résultats actuels ; relancez vos pipelines. Aucun redémarrage du serveur n’est nécessaire.",
   "saveExtensionSettings": "Enregistrer les paramètres d’extensions",
-  "extensionSettingsSaved": "Paramètres d’extensions enregistrés."
+  "extensionSettingsSaved": "Paramètres d’extensions enregistrés.",
+  "extensionDownloadStep": "1. Télécharger pour ce serveur",
+  "extensionDownloadHint": "Utilisez n’importe quel ordinateur connecté à Internet, y compris Windows ou macOS. Le téléchargement cible le serveur Duckpad ; DuckDB n’est pas nécessaire sur l’ordinateur de téléchargement.",
+  "extensionServerRuntime": "Version et plateforme du serveur",
+  "extensionSource": "Source de l’extension",
+  "extensionCore": "DuckDB officiel",
+  "extensionCommunity": "Communauté DuckDB",
+  "extensionUnsigned": "Versions personnalisées / non signées",
+  "extensionName": "Nom de l’extension",
+  "extensionDownload": "Télécharger le binaire du serveur",
+  "extensionCustomHint": "Obtenez un binaire compatible auprès de son éditeur. Activez les extensions non signées ci-dessous avant d’importer une version non signée.",
+  "extensionImportStep": "2. Importer le fichier téléchargé",
+  "extensionImportHint": "Choisissez un fichier .duckdb_extension ou .duckdb_extension.gz (64 Mio maximum). Duckpad le vérifie localement, sans accès Internet. Arrêtez les exécutions en cours ; l’import remplace cette extension et efface les résultats actuels. Aucun redémarrage du serveur n’est nécessaire.",
+  "extensionFile": "Fichier d’extension",
+  "extensionImport": "Importer l’extension",
+  "extensionImported": "Extension importée. Configurez sa connexion et lancez votre pipeline pour la vérifier sur ce serveur.",
+  "extensionImportedList": "Extensions importées"
 }
