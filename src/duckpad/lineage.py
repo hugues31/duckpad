@@ -65,6 +65,8 @@ class Lineage:
             "request": request_id,
             "dataset": dataset_id,
             "execution": dataset.run,
+            "node": dataset.node,
+            "port": dataset.port,
             "row": row,
             "column": column,
             "complete": True,
@@ -143,6 +145,8 @@ class Lineage:
                         for data in tracer.sources.values()
                     ],
                 )
+                if not context_values:
+                    response["calculation"] = tracer.describe(response)
             if (
                 canceled.is_set()
                 or dataset.status != "valid"
