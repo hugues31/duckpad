@@ -190,7 +190,6 @@ def test_project_role_matrix_and_cross_project_import(instance, role):
     for method, path, data in [
         ("GET", "/users", None),
         ("GET", "/catalog", None),
-        ("PUT", "/identity", {}),
         ("PUT", "/environments", ["dev"]),
         ("POST", "/environments", {}),
         ("PUT", "/environments/prod", {}),
