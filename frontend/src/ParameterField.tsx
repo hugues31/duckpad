@@ -113,7 +113,7 @@ export default function ParameterField({
           {t("upload")}
           <input
             type="file"
-            accept=".csv,.parquet,.tsv"
+            accept=".csv,.parquet,.tsv,.xlsx"
             aria-label={t("upload")}
             onChange={async (e) => {
               const input = e.currentTarget;
