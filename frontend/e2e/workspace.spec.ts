@@ -498,7 +498,9 @@ test("glass panels overlay the full canvas and fitting keeps nodes reachable", a
   await page
     .getByRole("button", { name: "Toggle node library", exact: true })
     .click();
-  await page.getByLabel("Find a node…", { exact: true }).fill("Filter");
+  await page
+    .getByRole("textbox", { name: "Find a node…", exact: true })
+    .fill("Filter");
   await expect(page.locator(".palette-item")).toHaveCount(1);
   await page
     .getByRole("button", { name: "Toggle data preview", exact: true })
