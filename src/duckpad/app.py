@@ -1,15 +1,17 @@
 """Authenticated FastAPI endpoints for the local workspace."""
 
+import io
 import json
 import os
+import zipfile
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Annotated, Any
 from urllib.parse import urlparse
 
-from fastapi import FastAPI, File, Request, UploadFile
+from fastapi import FastAPI, File, Query, Request, UploadFile
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from . import __version__, schemas
@@ -17,12 +19,15 @@ from .auth import SESSION_LIFETIME, Auth
 from .bundle import bundle_to_files
 from .components import group, import_definition
 from .example import create_example
+from .oidc import CALLBACK_PATH, OIDC, TRANSACTION_LIFETIME, OIDCSettings
 from .resources import resource_usage
 from .services import Services
 from .templates import parse_templates
 from .util import Problem, clean, uid
 
 SESSION_COOKIE = "duckpad_session"
+OIDC_COOKIE = "duckpad_oidc"
+PUBLIC_API_PATHS = {"/api/login", "/api/oidc/provider", "/api/oidc/login", CALLBACK_PATH}
 SAFE_METHODS = ("GET", "HEAD", "OPTIONS")
 UPLOAD_CHUNK = 1024 * 1024
 STATIC = Path(__file__).parent / "static"
@@ -39,10 +44,26 @@ def session_token(request: Request):
     )
 
 
+def secure_cookies(request):
+    return os.environ.get("DUCKPAD_SECURE_COOKIES") == "1" or request.url.scheme == "https"
+
+
+def set_session_cookie(response, request, token):
+    response.set_cookie(
+        SESSION_COOKIE,
+        token,
+        httponly=True,
+        samesite="lax",
+        max_age=SESSION_LIFETIME,
+        secure=secure_cookies(request),
+    )
+
+
 def create_app(home: Path, watch=True):
     services = Services.open(home, enforce_access=True)
     store, projects, catalog, engine = services.store, services.projects, services.catalog, services.engine
     auth = Auth(store)
+    oidc = OIDC(store, auth)
     access = engine.access
 
     @asynccontextmanager
@@ -62,12 +83,13 @@ def create_app(home: Path, watch=True):
     )
     app.state.services = services
     app.state.auth = auth
+    app.state.oidc = oidc
     app.state.access = access
 
     def authorize(request, user):
         parts = request.url.path.strip("/").split("/")
         route = parts[1] if len(parts) > 1 else ""
-        if route in ("users", "identity", "environments", "catalog", "resources"):
+        if route in ("users", "identity", "environments", "catalog", "resources", "sso"):
             access.instance_admin(user)
         elif route == "projects" and len(parts) >= 3:
             access.require(user, parts[2], "reader" if request.method == "GET" else "admin")
@@ -76,6 +98,8 @@ def create_app(home: Path, watch=True):
         elif route == "worktrees" and len(parts) >= 3:
             read = request.method == "GET" or (request.method == "POST" and parts[3:] == ["lineage"])
             access.worktree(user, parts[2], "reader" if read else "editor")
+            if parts[3:] == ["git", "remote"] and request.method == "PUT":
+                access.worktree(user, parts[2], "admin")
         elif route in ("runs", "conflicts") and len(parts) >= 3:
             record = store.get("run" if route == "runs" else "conflict", parts[2])
             if not record:
@@ -106,7 +130,7 @@ def create_app(home: Path, watch=True):
     @app.middleware("http")
     async def authentication(request: Request, call_next):
         try:
-            if request.url.path.startswith("/api/") and request.url.path != "/api/login":
+            if request.url.path.startswith("/api/") and request.url.path not in PUBLIC_API_PATHS:
                 request.state.user = auth.check(session_token(request))
                 authorize(request, request.state.user)
             if request.method not in SAFE_METHODS:
@@ -117,7 +141,9 @@ def create_app(home: Path, watch=True):
             return problem_response(error)
         response = await call_next(request)
         response.headers["X-Content-Type-Options"] = "nosniff"
-        response.headers["Referrer-Policy"] = "same-origin"
+        response.headers["Referrer-Policy"] = (
+            "no-referrer" if request.url.path.startswith("/api/oidc/") else "same-origin"
+        )
         response.headers["X-Frame-Options"] = "DENY"
         if request.url.path.startswith("/api/"):
             response.headers["Cache-Control"] = "no-store"
@@ -129,13 +155,53 @@ def create_app(home: Path, watch=True):
     def login(data: schemas.Login, request: Request):
         token = auth.login(data.username, data.password, request.client.host if request.client else "local")
         response = JSONResponse(auth.check(token))
+        auth.logout(session_token(request))
+        set_session_cookie(response, request, token)
+        return response
+
+    @app.get("/api/sso")
+    def sso_settings():
+        return oidc.public_settings()
+
+    @app.put("/api/sso")
+    def save_sso_settings(data: OIDCSettings):
+        return oidc.save(data)
+
+    @app.get("/api/oidc/provider")
+    def sso_provider():
+        config = oidc.settings()
+        return {"label": config["label"]} if config["enabled"] else None
+
+    @app.get("/api/oidc/login")
+    def sso_login(request: Request):
+        try:
+            url, browser = oidc.start()
+        except Problem:
+            return RedirectResponse("/?sso_error=failed", status_code=303)
+        response = RedirectResponse(url, status_code=303)
         response.set_cookie(
-            SESSION_COOKIE,
-            token,
+            OIDC_COOKIE,
+            browser,
             httponly=True,
-            samesite="strict",
-            max_age=SESSION_LIFETIME,
-            secure=os.environ.get("DUCKPAD_SECURE_COOKIES") == "1" or request.url.scheme == "https",
+            samesite="lax",
+            max_age=TRANSACTION_LIFETIME,
+            path="/api/oidc",
+            secure=secure_cookies(request),
+        )
+        return response
+
+    @app.get(CALLBACK_PATH)
+    def sso_callback(request: Request):
+        try:
+            token = oidc.finish(request.query_params, request.cookies.get(OIDC_COOKIE))
+            auth.logout(session_token(request))
+            response = RedirectResponse("/", status_code=303)
+            set_session_cookie(response, request, token)
+        except Problem:
+            # Provider error details and tokens must not reach the browser or logs.
+            response = RedirectResponse("/?sso_error=failed", status_code=303)
+        response.delete_cookie(
+            OIDC_COOKIE, path="/api/oidc", secure=secure_cookies(request), httponly=True, samesite="lax"
         )
         return response
 
@@ -152,13 +218,7 @@ def create_app(home: Path, watch=True):
 
     @app.get("/api/resources")
     def resources():
-        with engine.lock:
-            workers = [
-                context.db.process.pid
-                for context in engine.contexts.values()
-                if context.db and hasattr(context.db, "process") and context.db.process.poll() is None
-            ]
-        return resource_usage(workers)
+        return resource_usage()
 
     # Instance
 
@@ -250,6 +310,8 @@ def create_app(home: Path, watch=True):
     @app.post("/api/password")
     def change_password(data: dict, request: Request):
         user = store.get("user", request.state.user["id"])
+        if user.get("oidc"):
+            raise Problem("SSO accounts authenticate with their identity provider")
         import hmac
 
         if not hmac.compare_digest(
@@ -337,13 +399,93 @@ def create_app(home: Path, watch=True):
         proposal = data.files if data.files is not None else bundle_to_files(data.bundle)
         return projects.write(worktree, data.revision, proposal)
 
+    @app.get("/api/worktrees/{worktree}/archive.zip")
+    def download_project(worktree: str):
+        snapshot = projects.snapshot(worktree, committed=True)
+        output = io.BytesIO()
+        with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+            for name, content in sorted(snapshot["files"].items()):
+                archive.writestr(name, content)
+        return Response(
+            output.getvalue(),
+            media_type="application/zip",
+            headers={"Content-Disposition": 'attachment; filename="duckpad-project.zip"'},
+        )
+
     @app.post("/api/conflicts/{conflict}/resolve")
     def resolve_conflict(conflict: str, data: schemas.Resolution):
         return projects.resolve(conflict, data.choice, data.files)
 
     @app.get("/api/worktrees/{worktree}/history")
-    def history(worktree: str):
-        return projects.history(worktree)
+    def history(
+        worktree: str, offset: int = Query(default=0, ge=0), limit: int = Query(default=100, ge=1, le=100)
+    ):
+        return projects.versioning.history(worktree, offset=offset, limit=limit)["items"]
+
+    @app.get("/api/worktrees/{worktree}/git/history")
+    def git_history(
+        worktree: str,
+        ref: str = "HEAD",
+        offset: int = Query(default=0, ge=0),
+        limit: int = Query(default=50, ge=1, le=100),
+        entity: str | None = None,
+    ):
+        return projects.versioning.history(worktree, ref, offset, limit, entity)
+
+    @app.get("/api/worktrees/{worktree}/git/compare")
+    def git_compare(worktree: str, a: str = "HEAD", b: str = "working"):
+        return projects.versioning.compare(worktree, a, b)
+
+    @app.get("/api/worktrees/{worktree}/git/branches")
+    def git_branches(worktree: str):
+        return projects.versioning.branches(worktree)
+
+    @app.post("/api/worktrees/{worktree}/git/open")
+    def git_open(worktree: str, data: schemas.NewBranch):
+        return projects.versioning.open_branch(worktree, data.name)
+
+    @app.post("/api/worktrees/{worktree}/git/cleanup")
+    def git_cleanup(worktree: str, data: schemas.BranchCleanup):
+        with projects.lock, engine.lock:
+            if data.remove_worktree in engine.active:
+                raise Problem("Stop the worktree's execution before removing it", 409)
+            return projects.versioning.cleanup(
+                worktree, data.remove_worktree, data.integrated_worktree, data.expected_head
+            )
+
+    @app.post("/api/worktrees/{worktree}/git/reviews")
+    def git_review(worktree: str, data: schemas.GitReview):
+        return projects.versioning.prepare(worktree, data.source)
+
+    @app.post("/api/worktrees/{worktree}/git/reviews/{review}")
+    def git_choices(worktree: str, review: str, data: schemas.GitChoices):
+        return projects.versioning.proposal(worktree, review, data.choices)
+
+    @app.post("/api/worktrees/{worktree}/git/reviews/{review}/apply")
+    def git_apply(worktree: str, review: str, data: schemas.GitApply):
+        return projects.versioning.apply(worktree, review, data.choices, data.proposal_revision)
+
+    @app.get("/api/worktrees/{worktree}/git/remote")
+    def git_remote(worktree: str):
+        return projects.remotes.status(worktree)
+
+    @app.put("/api/worktrees/{worktree}/git/remote")
+    def git_configure(worktree: str, data: schemas.RemoteConfiguration):
+        return projects.remotes.configure(worktree, data.url, data.remote_branch, data.config_revision)
+
+    @app.post("/api/worktrees/{worktree}/git/fetch")
+    def git_fetch(worktree: str, data: schemas.RemoteState):
+        return projects.remotes.fetch(worktree, data.config_revision)
+
+    @app.post("/api/worktrees/{worktree}/git/pull")
+    def git_pull(worktree: str, data: schemas.RemoteHeads):
+        return projects.remotes.pull(worktree, data.config_revision, data.local_head, data.remote_head)
+
+    @app.post("/api/worktrees/{worktree}/git/push")
+    def git_push(worktree: str, data: schemas.RemoteHeads):
+        return projects.remotes.push(
+            worktree, data.config_revision, data.local_head, data.remote_head, data.recreate
+        )
 
     @app.get("/api/worktrees/{worktree}/diff/{commit}")
     def diff(worktree: str, commit: str):
@@ -387,7 +529,9 @@ def create_app(home: Path, watch=True):
             data.id,
             {"project": source["worktree"]["project"], "commit": source["commit"]},
         )
-        result = projects.write(worktree, data.revision, bundle_to_files(bundle))
+        result = projects.write(
+            worktree, data.revision, bundle_to_files(bundle), "feat(project): import definition"
+        )
         result["imported"] = key
         return result
 

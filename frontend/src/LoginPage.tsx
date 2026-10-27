@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ArrowRight, Database, Loader2 } from "lucide-react";
 import { api, send } from "./api";
 import DuckMark from "./DuckMark";
@@ -16,6 +16,28 @@ export default function LoginPage({
   const t = useT();
   const [username, setUsername] = useState("admin");
   const [password, setPassword] = useState("");
+  const [provider, setProvider] = useState<{ label: string } | null>(null);
+  const [ssoError] = useState(() =>
+    new URLSearchParams(location.search).has("sso_error"),
+  );
+  useEffect(() => {
+    let live = true;
+    api<{ label: string } | null>("/oidc/provider")
+      .then((value) => {
+        if (live) setProvider(value);
+      })
+      .catch(() => {
+        /* Local sign-in remains available during discovery failures. */
+      });
+    if (new URLSearchParams(location.search).has("sso_error")) {
+      const url = new URL(location.href);
+      url.searchParams.delete("sso_error");
+      history.replaceState(null, "", url.pathname + url.search + url.hash);
+    }
+    return () => {
+      live = false;
+    };
+  }, []);
   const { pending, error, run } = useAsyncAction();
   return (
     <div className="login-page">
@@ -30,6 +52,19 @@ export default function LoginPage({
         <span className="eyebrow">{t("localDataWorkspace")}</span>
         <h1>{t("signIn")}</h1>
         <p>{t("loginDescription")}</p>
+        {ssoError && (
+          <div className="notice error" role="alert">
+            {t("ssoFailed")}
+          </div>
+        )}
+        {provider && (
+          <div className="sso-login">
+            <a className="button secondary full large" href="/api/oidc/login">
+              {t("ssoContinue")} {provider.label}
+            </a>
+            <p className="muted">{t("ssoLocalLogin")}</p>
+          </div>
+        )}
         <form
           onSubmit={(e) => {
             e.preventDefault();
