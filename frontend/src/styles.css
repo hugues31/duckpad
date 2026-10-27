@@ -2110,6 +2110,70 @@ small {
   margin: 24px 0 0;
   font-size: 12px;
 }
+.new-project-content {
+  display: grid;
+  gap: 22px;
+}
+.new-project-content > p {
+  margin: 0;
+  line-height: 1.6;
+}
+.project-templates {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 185px), 1fr));
+  gap: 12px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.project-templates legend {
+  margin-bottom: 18px;
+  line-height: 1.5;
+}
+.project-template {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  cursor: pointer;
+}
+.project-template:has(:checked) {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+.project-template:has(:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+.project-template:has(:disabled) {
+  cursor: wait;
+  opacity: 0.65;
+}
+.project-template input {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  margin: 0;
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+}
+.project-template > svg {
+  color: var(--accent);
+}
+.project-template strong {
+  font-size: 14px;
+  line-height: 1.4;
+}
+.project-template > span {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
 .modal-backdrop {
   position: fixed;
   inset: 0;
