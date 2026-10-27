@@ -339,10 +339,12 @@ test("the modal traps keyboard focus and supports French, dark mode and a narrow
   await expect(dialog.locator(".lineage-card.root")).toBeVisible();
   await expect(dialog.locator(".lineage-loading")).toHaveCount(0);
   await page.setViewportSize({ width: 600, height: 800 });
-  const bounds = await dialog.boundingBox();
-  expect(bounds!.x).toBeGreaterThanOrEqual(0);
-  expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(600);
-  expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(800);
+  await expect(async () => {
+    const bounds = await dialog.boundingBox();
+    expect(bounds!.x).toBeGreaterThanOrEqual(0);
+    expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(600);
+    expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(800);
+  }).toPass({ timeout: 10000 });
   await expect
     .poll(async () => {
       const root = await dialog.locator(".lineage-card.root").boundingBox();
