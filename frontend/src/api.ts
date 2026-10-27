@@ -85,3 +85,17 @@ export async function uploadFile(
   if (!response.ok) throw await readError(response);
   return (await response.json()).path;
 }
+
+/** Import a server-platform extension without the backend downloading anything. */
+export async function importExtension(file: File, source: string) {
+  const form = new FormData();
+  form.append("file", file);
+  form.append("source", source);
+  const response = await fetch("/api/extensions/import", {
+    method: "POST",
+    body: form,
+    credentials: "same-origin",
+  });
+  if (!response.ok) throw await readError(response);
+  return response.json();
+}

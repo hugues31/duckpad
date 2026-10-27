@@ -27,7 +27,7 @@ export const sections = [
         slug: "offline_extensions",
         title: "Offline extensions",
         description:
-          "Extract a prepared extension cache and restart Duckpad offline.",
+          "Download on any computer and import binaries for your offline server.",
       },
     ],
   },
@@ -65,9 +65,9 @@ export const sections = [
     pages: [
       {
         slug: "offline_extensions_admin",
-        title: "Prepare an extension cache",
+        title: "Extension import details",
         description:
-          "Build signed offline bundles and troubleshoot extension loading.",
+          "Download server binaries, verify imports and troubleshoot loading.",
       },
       {
         slug: "architecture",

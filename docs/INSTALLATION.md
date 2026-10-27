@@ -30,9 +30,9 @@ duckpad start --home /path/to/my-instance --port 8765 --no-browser
 
 Only one backend may own an instance directory at a time. Use separate `--home` directories for independent instances. The default address is `127.0.0.1`. Behind an HTTPS reverse proxy, set `DUCKPAD_SECURE_COOKIES=1` so the session cookie is only sent over HTTPS.
 
-For air-gapped deployments, provision the backend's
-[offline extension cache](OFFLINE_EXTENSIONS.md) before running connectors that
-need downloadable DuckDB extensions.
+For air-gapped deployments, [download extensions on any connected computer and
+import them into Duckpad](OFFLINE_EXTENSIONS.md) before running connectors that
+need them.
 
 Successful GET requests used for background polling (workspace, resources, worktree
 snapshots, status, and generations) are logged at DEBUG. The default INFO level

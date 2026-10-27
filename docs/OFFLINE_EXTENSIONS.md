@@ -1,63 +1,42 @@
 # DuckDB extensions without Internet access
 
-Install a prepared extension cache once, then use your usual Duckpad connections.
-**OraDuck is available signed**; keep **Allow unsigned extensions** disabled for
-this procedure.
+**Download on any connected computer, then import the file into Duckpad.**
+A Windows PC can download extensions for a Linux server. The downloading computer
+does not need DuckDB, Python, Linux, or a prepared extension cache.
 
-## Quick install: extract the cache and restart
+## Download, transfer, import
 
-1. Obtain `duckpad-extensions.tar.gz`, prepared for the backend's DuckDB version
-   and platform using the [one-time preparation recipe](OFFLINE_EXTENSIONS_ADMIN.md#prepare-a-cache-archive).
-2. Stop Duckpad. As the backend service user, extract the archive into the
-   **instance directory** and restart:
+1. Open **Instance settings → General → DuckDB extensions** as an administrator.
+   Choose **DuckDB core** or **DuckDB community**, enter the extension name, and
+   click **Download server binary** on a computer with Internet access.
+   The link uses the **server's version and platform**, not your PC's.
+2. Transfer the downloaded file if necessary. In the same settings panel, choose
+   the matching source, select the `.duckdb_extension.gz` or `.duckdb_extension`
+   file, and click **Import extension**. Keep the original filename.
+3. Configure the connector and connection under **Instance settings → Connections**,
+   grant the connection to the project, and run your pipeline.
 
-   ```sh
-   export DUCKPAD_INSTANCE=/path/to/instance
-   tar --no-same-owner -xzf duckpad-extensions.tar.gz -C "$DUCKPAD_INSTANCE"
-   duckpad start --home "$DUCKPAD_INSTANCE" --no-browser
-   ```
+Duckpad decompresses the file, checks its version, platform and signature, and
+installs it locally. **The server needs no Internet connection or restart.**
+The browser must be able to reach Duckpad to upload the file.
 
-3. Configure the connection in **Instance settings → Connections**, grant it to
-   the project, and run the pipeline. For Oracle, use the existing Oracle preset.
+For example, a Windows browser connected to a Linux x86-64 server running DuckDB
+2.0.0 receives a link containing `v2.0.0/linux_amd64`, even though the browser runs
+on Windows. Use this same process for each extension your connectors need.
 
-The instance directory is the one passed to `--home`; the default is
-`$XDG_DATA_HOME/duckpad` or `~/.local/share/duckpad`. In a container, extract into
-the persistent volume used by that instance. Back up an existing cache before
-replacing it.
+## Before importing
 
-The prepared archive contains `extensions/`, so extraction puts files here:
+- Stop active runs. A successful import replaces that extension for the instance
+  and clears current results; run your pipelines again.
+- Files may be up to **64 MiB** (256 MiB after decompression). A `.gz` file can be
+  imported directly. For a `.tar.gz` or `.zip` release, extract it on any computer
+  and select the binary for the server's version and platform.
+- Import extension dependencies separately. Native client libraries and CPU
+  compatibility still depend on the server; see [connector prerequisites](CONNECTORS.md).
 
-```text
-<instance>/extensions/v2.0.0/linux_amd64/
-├── oraduck.duckdb_extension
-└── oraduck.duckdb_extension.info
-```
+Signed core and community imports keep signature verification enabled. Use
+**Custom / unsigned builds** only for a trusted binary outside those signing
+keys, after enabling **Allow unsigned extensions**. This setting is off by default.
 
-Keep the binary and its `.info` file together. **Extract the archive:** Duckpad
-does not automatically unpack a `.tar.gz` dropped into a folder.
-
-## Which OraDuck download?
-
-The [OraDuck v0.4.0 release](https://github.com/hugues31/oraduck/releases/tag/v0.4.0)
-now offers **`oraduck-signed-repository.tar.gz`** and its `.sha256` checksum.
-The original `oraduck-repository.tar.gz` remains unsigned.
-
-The signed GitHub archive is a **DuckDB repository**, containing compressed
-binaries and signing keys. It is not the prepared Duckpad cache used above:
-extracting it into `extensions/` is insufficient. For Duckpad's standard Oracle
-connector, prepare the cache once with `INSTALL oraduck FROM community`, as shown
-in the [administrator recipe](OFFLINE_EXTENSIONS_ADMIN.md#prepare-a-cache-archive).
-
-Oracle Instant Client 19+ and its system libraries must also be installed on the
-backend. See [Oracle prerequisites](CONNECTORS.md#oracle--oraduck).
-
-## Other extensions and troubleshooting
-
-The same cache method works for other signed extensions. Match DuckDB's version
-and platform, preserve installation metadata, and restart after replacing files.
-See [preparation, checks and troubleshooting](OFFLINE_EXTENSIONS_ADMIN.md).
-
-For a trusted unsigned custom build, an administrator can enable
-**Instance settings → General → DuckDB extensions → Allow unsigned extensions**.
-This disables signature checks for the instance; changing it requires stopping
-active runs and clears current results. It is unnecessary for signed OraDuck.
+See [download links, checks and troubleshooting](OFFLINE_EXTENSIONS_ADMIN.md)
+for manual downloads, API use and installation details.

@@ -157,6 +157,7 @@ def serve(descriptor):
             ":memory:",
             config={
                 "extension_directory": policy["extensions"],
+                "extension_repository_directory": str(Path(policy["extensions"]) / "repository-definitions"),
                 "allow_unsigned_extensions": policy.get("allow_unsigned_extensions", False),
                 "allow_persistent_secrets": False,
                 "allow_unredacted_secrets": False,
@@ -168,7 +169,7 @@ def serve(descriptor):
             },
         )
         # Only administrator-authored connection setup runs before the lock.
-        Catalog.prepare(None, db, policy["captured"])
+        Catalog.prepare(None, db, policy["captured"], policy.get("offline_extensions", {}))
         allowed = [str(Path(p).resolve()) + "/" for p in policy["read_paths"] + policy["write_paths"]]
         allowed += policy["remote_paths"]
         db.execute("SET allowed_directories = [" + ",".join(literal(p) for p in allowed) + "]")
