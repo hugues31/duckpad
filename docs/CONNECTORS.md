@@ -38,6 +38,7 @@ endpoint continues to accept identifiers without replacing their metadata.
 | Preset | Required operations | Recorded validation |
 | --- | --- | --- |
 | Local files | CSV and Parquet read; CSV export | DuckDB 2.0.0, Python 3.13.12, Linux x86_64; unit/native-equivalence tests, browser example and million-row benchmark |
+| Excel (XLSX) | Read a selected worksheet; export a single-sheet workbook | DuckDB 2.0.0 with matching `excel`, Linux x86_64; embedded and isolated execution, uploads, types, lineage, repeated export and environment separation |
 | S3 | CSV and Parquet read; CSV export | DuckDB 2.0.0 with matching `httpfs`, Linux x86_64; Moto S3 emulator on localhost; repeated native destination replacement |
 | Oracle | Read attached tables; export to an existing table with OraDuck | DuckDB 2.0.0, signed community OraDuck 0.4.0, Oracle 19.3, Oracle Instant Client 19.32, Linux x86_64 |
 
@@ -50,6 +51,53 @@ These are the tested combinations, not claims that every newer DuckDB or operati
 The `local` connection is available in `dev` and `prod` and supports an optional root directory. CSV exposes header, delimiter and a JSON type-override map; `{}` retains native inference. Parquet uses native types. Absolute paths must fall within the project's resources/exports or an explicitly granted local connection root. Roots must exclude instance metadata and other projects. Uploads are scoped to the active project. Relative default exports resolve under `exports/<worktree>/<environment>/` when no connection root is set.
 
 Single-file CSV `COPY` follows DuckDB's native replacement behavior on a second run. Duckpad does not add an overwrite option, rename files, or ask for an existence-based confirmation.
+
+## Excel (XLSX)
+
+The `xlsx` preset loads DuckDB's `excel` extension and supports local `.xlsx`
+workbooks. It is added to existing catalogs once, preserving any custom definition
+already named `xlsx`. Connections and project grants are never added automatically.
+
+1. In **Instance settings → Connections**, create a connection with identifier
+   `xlsx` and connector **Excel (XLSX)**. Configure an optional `root` directory for
+   each environment; leave it blank for project uploads and default exports.
+2. Grant the connection to your project in **Project settings**. A connection with
+   another identifier also works; select it in each XLSX node.
+3. In a new project, add **Load XLSX**, upload a workbook or enter its path, then
+   choose a worksheet with `sheet`. Leave `sheet` blank for the first worksheet.
+   `header=true` treats the first row as column names; turn it off for headerless
+   sheets. `all_varchar=true` reads mixed columns as text instead of inferring types.
+4. Connect a result to **Export XLSX**, choose a destination and sheet name, and
+   run the pipeline. `header` controls whether column names are written.
+
+New projects include both templates. Existing projects retain their versioned
+templates; create equivalent source/export templates through **New SQL template**
+or copy `load_xlsx` and `export_xlsx` from a new project's Code workspace.
+No Python spreadsheet dependency is needed. The signed extension is installed in
+the instance's extension cache on first use, requiring network access and a build
+compatible with the installed DuckDB version and processor. CSV/Parquet-only
+projects do not load it.
+
+Imports use native DuckDB inference: numbers generally become `DOUBLE`, while
+formatted dates, times and booleans retain their inferred types. Inconsistent cells
+fail the node; Duckpad does not silently discard conversion errors. Empty cells
+become nulls. Without an explicit range, DuckDB infers the table and stops at an
+empty row. For sheets with title rows or gaps, edit the source SQL to add options
+such as `range='A3:F100'` and `stop_at_empty=false` to `read_xlsx`.
+
+Exports replace the entire destination workbook on every run, including any
+existing sheets. They create one sheet of values; formatting, formulas and other
+workbook features are not preserved. Excel's numeric representation can lose
+precision for large integers and decimals; cast these to text before exporting
+when exact digits matter. Legacy `.xls`, encrypted workbooks, formula recalculation
+and remote XLSX storage are outside this connector's validated scope.
+
+Uploads, local roots, environment-specific destinations and project permissions
+follow the same rules as local CSV/Parquet. Source lineage identifies the imported
+dataset row and column, not an Excel cell address. Missing files, missing sheets
+and malformed workbooks report execution errors and retain the last result as
+stale. See the [DuckDB Excel extension documentation](https://duckdb.org/docs/stable/core_extensions/excel.html)
+for native format behavior and limits.
 
 ## S3
 
