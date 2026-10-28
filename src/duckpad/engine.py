@@ -12,10 +12,11 @@ import duckdb
 from .bundle import bundle_to_files, files_to_bundle, topological
 from .catalog import redact
 from .components import expand, in_subtree
+from .data_preparation import PREPARATION_TYPES
 from .datasets import Context, Dataset
 from .extensions import MAX_UPLOAD_BYTES, database_config, install, runtime
 from .materialize import drop_dataset, drop_relations, plan_materialization, publish_view
-from .templates import compile_template, executable_sql
+from .templates import base_type, compile_template, executable_sql
 from .util import Problem, clean, digest, now, qi, uid
 
 logger = logging.getLogger(__name__)
@@ -534,6 +535,11 @@ class Engine:
                     # A dead worker has already discarded its tables.
                     pass
             message = redact(str(error), secrets)
+            preparation = {base_type(p["type"]) for p in node["parsed"]["parameters"]} & PREPARATION_TYPES
+            if preparation:
+                message += "\nCheck the configured source columns and output types. Conversions must be valid for every value."
+                if "value_cleaning" in preparation:
+                    message += " Date text must match its format (for example %d/%m/%Y); null replacements must match the resulting type (YYYY-MM-DD for DATE)."
             state.update(status="canceled" if execution.canceled else "failed", error=message)
             with context.lock:
                 context.errors[key] = message
@@ -577,6 +583,7 @@ class Engine:
             physical,
             execution.captured,
             directory,
+            input_schemas={port: data.columns for port, data in input_datasets.items()},
         )
         state["statements"] = statements
         self._persist(run, execution.secrets)
@@ -813,6 +820,15 @@ class Engine:
             for port in node["parsed"]["inputs"]:
                 if port not in inputs:
                     raise Problem(f"Connect input {port} before compiling")
+            input_schemas = {}
+            context = self.contexts.get((worktree, environment))
+            if context:
+                with context.lock:
+                    for edge in edges:
+                        if edge["target"] == key:
+                            dataset = context.outputs.get(edge["source"], {}).get(edge["sourceHandle"])
+                            if dataset:
+                                input_schemas[edge["targetHandle"]] = dataset.columns
             statements = compile_template(
                 node["parsed"],
                 node.get("params", {}),
@@ -820,6 +836,7 @@ class Engine:
                 {p: "output_" + p for p in node["parsed"]["outputs"]},
                 captured,
                 self.exports(worktree, environment),
+                input_schemas=input_schemas,
             )
             for statement in statements:
                 statement["sql"] = redact(statement["sql"], secrets)
