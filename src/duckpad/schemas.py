@@ -82,6 +82,15 @@ class RemoteHeads(RemoteState):
     recreate: bool = False
 
 
+class GitConsent(BaseModel):
+    url: str = Field(max_length=2048)
+
+
+class GitHosts(BaseModel):
+    known_hosts: str = Field(max_length=256 * 1024)
+    prefixes: list[str] = Field(default_factory=list, max_length=100)
+
+
 class BranchCleanup(BaseModel):
     remove_worktree: str
     integrated_worktree: str

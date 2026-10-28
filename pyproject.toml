@@ -37,6 +37,8 @@ dependencies = [
     "authlib>=1.9.1,<2",
     "httpx2>=2.4,<3",
     "joserfc>=1.7.7,<2",
+    # Ed25519 account keys and validation of trusted SSH host keys.
+    "cryptography>=44",
 ]
 
 [project.urls]

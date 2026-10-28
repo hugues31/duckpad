@@ -4,6 +4,7 @@ import { UsersPage } from "./Administration";
 import ConnectionsPanel from "./ConnectionsPanel";
 import EnvironmentsPanel from "./EnvironmentsPanel";
 import ExtensionSettings from "./ExtensionSettings";
+import GitHostsSettings from "./GitHostsSettings";
 import { useT } from "./i18n";
 import SSOSettings from "./SSOSettings";
 import type { Workspace } from "./types";
@@ -53,6 +54,7 @@ export default function InstanceSettings({
       {section === "usersPermissions" && <UsersPage refresh={refresh} />}
       {section === "extensions" && <ExtensionSettings />}
       {section === "ssoSettings" && <SSOSettings />}
+      {section === "gitHosts" && <GitHostsSettings />}
       {section === "environments" && (
         <EnvironmentsPanel
           environments={workspace.catalog.environment_details}

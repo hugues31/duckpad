@@ -63,6 +63,13 @@ export function ConfirmModal({
   );
 }
 
+/** The visible dialog opened last, which receives keyboard dismissal and focus cycling. */
+export function topDialog() {
+  return [...document.querySelectorAll<HTMLElement>('[role="dialog"]')]
+    .filter((dialog) => dialog.getClientRects().length > 0)
+    .at(-1);
+}
+
 export function Modal({
   title,
   children,
@@ -75,9 +82,10 @@ export function Modal({
   wide?: boolean;
 }) {
   const t = useT();
+  const dialog = useRef<HTMLElement>(null);
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape" && topDialog() === dialog.current) onClose();
     };
     document.addEventListener("keydown", key);
     return () => document.removeEventListener("keydown", key);
@@ -90,6 +98,7 @@ export function Modal({
       }}
     >
       <section
+        ref={dialog}
         role="dialog"
         aria-modal="true"
         aria-label={title}
