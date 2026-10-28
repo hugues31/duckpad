@@ -12,6 +12,11 @@
   --accent: #1559df;
   --accent-hover: #1048ba;
   --accent-soft: #dbe7ff;
+  --accent-glow: #2b6be8;
+  --accent-depth: #1241aa;
+  --accent-gradient:
+    radial-gradient(ellipse at 18% 20%, var(--accent-glow), transparent 55%),
+    radial-gradient(ellipse at 85% 80%, var(--accent-depth), transparent 60%);
   --edge: #92929e;
   --glass: #ffffff8c;
   --glass-border: #71717a40;
@@ -32,6 +37,8 @@
   --accent: #63a5ff;
   --accent-hover: #90bfff;
   --accent-soft: #233c61;
+  --accent-glow: #97c3ff;
+  --accent-depth: #4d8ce5;
   --edge: #92929e;
   --glass: #1c1c1ea6;
   --glass-border: #a1a1aa40;
@@ -283,13 +290,31 @@ small {
     border-color 0.15s;
 }
 .button.primary {
-  background: var(--accent);
+  background-color: var(--accent);
+  background-image: var(--accent-gradient);
+  background-size: 180% 180%;
+  background-position:
+    0% 0%,
+    100% 100%;
   color: white;
   border: 1px solid transparent;
   box-shadow: 0 2px 3px #18181b10;
+  transition:
+    background-position 600ms ease,
+    box-shadow 150ms ease;
 }
-.button.primary:hover {
-  background: var(--accent-hover);
+.button.primary:not(:disabled):not([aria-disabled="true"]):hover {
+  box-shadow: 0 3px 8px #18181b24;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .button.primary:not(:disabled):not([aria-disabled="true"]):is(
+      :hover,
+      :focus-visible
+    ) {
+    background-position:
+      100% 100%,
+      0% 0%;
+  }
 }
 [data-theme="dark"] .button.primary {
   color: #081a33;
@@ -2025,6 +2050,26 @@ small {
   letter-spacing: -0.04em;
   margin: 8px 0;
 }
+.dashboard-heading h1,
+.login-card h1 {
+  color: var(--accent);
+}
+@supports (background-clip: text) {
+  .dashboard-heading h1,
+  .login-card h1 {
+    background-color: var(--accent);
+    background-image: var(--accent-gradient);
+    background-clip: text;
+    color: transparent;
+  }
+}
+@media (forced-colors: active), print {
+  .dashboard-heading h1,
+  .login-card h1 {
+    background: none;
+    color: inherit;
+  }
+}
 .dashboard-heading p {
   margin: 0;
   color: var(--muted);
@@ -2487,6 +2532,37 @@ small {
   font-weight: 600;
   font-size: 12px;
   margin-bottom: 12px;
+}
+
+.column-preparation {
+  padding: 10px;
+}
+.preparation-row {
+  margin: 12px 0;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  min-width: 0;
+}
+.preparation-row legend {
+  font-size: 12px;
+  padding: 0 5px;
+}
+.preparation-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 8px 0;
+}
+.preparation-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0;
+  font-size: 12px;
+}
+.preparation-toggle input {
+  width: auto;
 }
 .query-builder .measure-form {
   border-top: 1px solid var(--border);

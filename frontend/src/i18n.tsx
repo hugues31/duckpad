@@ -28,6 +28,8 @@ const builtinLabels: Record<string, string> = {
   join: "Join",
   filter: "Filter",
   aggregate: "Aggregate",
+  select_columns: "Select columns",
+  clean_values: "Clean values",
   export_csv: "Export CSV",
   export_xlsx: "Export XLSX",
   export_oracle: "Export Oracle",
