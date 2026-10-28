@@ -359,9 +359,31 @@ def compile_template(template, params, inputs, physical_outputs, connections, di
                 "query": query,
                 "sql": f"CREATE TABLE {qi(physical)} AS {query}" if output else query,
                 "bindings": used,
+                **file_export(tree, resources),
             }
         )
         if output:
             values[output] = qi(physical)
             allowed.add(qi(physical))
     return statements
+
+
+def file_export(tree, resources):
+    """Recognize a single local CSV/XLSX COPY to a declared destination."""
+    if not isinstance(tree, exp.Copy) or tree.args.get("kind"):
+        return {}
+    files = tree.args.get("files", [])
+    options = {p.name.upper(): p.args.get("expression") for p in tree.args.get("params", [])}
+    format_name = options.get("FORMAT")
+    format_name = format_name.name.lower() if format_name is not None else ""
+    if (
+        format_name not in ("csv", "xlsx")
+        or len(files) != 1
+        or not isinstance(files[0], exp.Literal)
+        or not files[0].is_string
+        or files[0].sql(dialect="duckdb") not in resources
+        or URI.match(files[0].this)
+        or set(options) - {"FORMAT", "HEADER", "DELIMITER", "SHEET"}
+    ):
+        return {}
+    return {"export_file": {"path": files[0].this, "format": format_name}}

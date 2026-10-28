@@ -6,16 +6,18 @@ import threading
 import time
 from contextlib import suppress
 from dataclasses import dataclass, field
+from pathlib import Path
 
 import duckdb
 
+from .artifacts import Artifacts
 from .bundle import bundle_to_files, files_to_bundle, topological
 from .catalog import redact
 from .components import expand, in_subtree
 from .datasets import Context, Dataset
 from .extensions import MAX_UPLOAD_BYTES, database_config, install, runtime
 from .materialize import drop_dataset, drop_relations, plan_materialization, publish_view
-from .templates import compile_template, executable_sql
+from .templates import URI, compile_template, executable_sql
 from .util import Problem, clean, digest, now, qi, uid
 
 logger = logging.getLogger(__name__)
@@ -83,6 +85,8 @@ class Engine:
         self.access = access
         self.store, self.projects, self.catalog = store, projects, catalog
         self.lock = threading.RLock()
+        self.export_lock = threading.Lock()
+        self.artifacts = Artifacts(store)
         self.contexts, self.active = {}, {}
         self.threads = []
         for run in store.all("run"):
@@ -96,7 +100,7 @@ class Engine:
                         node["status"] = "interrupted"
                         if node.get("kind") == "export":
                             node["external_outcome"] = "unknown"
-                store.put("run", run["id"], run)
+                self._persist(run, [])
 
     def context(self, worktree, environment, create=False):
         """The live DuckDB context of an existing worktree in a configured environment."""
@@ -345,6 +349,11 @@ class Engine:
             fingerprints = self.fingerprints(bundle, environment, captured)
             context = self.context(worktree_id, environment, create=True)
             affected = reachable(scope, edges, upstream=False)
+            for key in affected - scope:
+                identity = digest([worktree_id, environment, key])
+                previous = self.store.get("export_result", identity)
+                if previous:
+                    self.store.put("export_result", identity, {**previous, "status": "stale"})
             with context.lock:
                 self.cancel_lineage(context, affected)
                 for dataset in context.datasets.values():
@@ -368,6 +377,7 @@ class Engine:
                         "status": "pending",
                         "label": nodes[n].get("label", n),
                         "kind": nodes[n]["parsed"]["kind"],
+                        "fingerprint": fingerprints[n],
                     }
                     for n in order
                 },
@@ -433,6 +443,19 @@ class Engine:
             return value
 
         self.store.put("run", run["id"], sanitize(run))
+        for key, state in run["nodes"].items():
+            if state.get("kind") == "export":
+                self.store.put(
+                    "export_result",
+                    digest([run["worktree"], run["environment"], key]),
+                    {
+                        **{k: state.get(k) for k in ("status", "fingerprint", "artifact")},
+                        **{k: run[k] for k in ("worktree", "environment", "commit", "started")},
+                        "node": key,
+                        "run": run["id"],
+                        "run_status": run["status"],
+                    },
+                )
         context = self.contexts.get((run["worktree"], run["environment"]))
         if context:
             with context.lock:
@@ -585,8 +608,30 @@ class Engine:
             if execution.canceled:
                 raise Problem("Execution canceled")
             if not statement["output"]:
-                state["external_started"] = True
-                cursor.execute(statement["sql"], statement["bindings"])
+                # Serialize file writes and capture across worktrees sharing a destination.
+                with self.export_lock:
+                    if execution.canceled:
+                        raise Problem("Execution canceled")
+                    state["external_started"] = True
+                    cursor.execute(statement["sql"], statement["bindings"])
+                    if len(statements) == 1 and statement.get("export_file"):
+                        roots = [directory]
+                        if self.access:
+                            _, writable = self.access.local_roots(run["project"], execution.captured)
+                            roots.extend(writable)
+                        else:
+                            roots.extend(
+                                Path(c["values"]["root"]).resolve()
+                                for c in execution.captured.values()
+                                if c["values"].get("root")
+                            )
+                        try:
+                            state["artifact"] = self.artifacts.capture(
+                                statement["export_file"], run, key, roots
+                            )
+                        except OSError:
+                            # The external export succeeded even if its download copy is unavailable.
+                            state["artifact"] = None
                 state["external_outcome"] = "completed"
                 continue
             table = statement["table"]
@@ -674,6 +719,70 @@ class Engine:
     def exports(self, worktree, environment):
         """Default directory for relative export destinations."""
         return self.store.home / "exports" / worktree / environment
+
+    def export_result(self, worktree, environment, node):
+        """Describe only the current export attempt in this exact execution context."""
+        self.catalog.environment(environment)
+        with self.projects.lock, self.lock:
+            snapshot = self.projects.snapshot(worktree)
+            if not snapshot["bundle"]:
+                return {"status": "stale"}
+            nodes, edges, _ = expand(snapshot["bundle"], tolerant=True)
+            definition = nodes.get(node)
+            if not definition:
+                raise Problem("Node not found", 404)
+            if definition.get("template") not in ("export_csv", "export_xlsx"):
+                return {"status": "unsupported"}
+            destination = definition.get("params", {}).get("destination", "")
+            if URI.match(str(destination)):
+                return {"status": "unsupported"}
+            result = self.store.get("export_result", digest([worktree, environment, node]))
+            if not result:
+                return {"status": "not_run"}
+            public = {k: result[k] for k in ("run", "commit", "started", "status")}
+            active = self.active.get(worktree)
+            if active and active["id"] == result["run"]:
+                return {**public, "status": "running"}
+            if result["status"] != "success":
+                return {**public, "status": "stale" if result["status"] == "stale" else "failed"}
+            if self.access:
+                references = [
+                    ref
+                    for key in reachable({node}, edges, upstream=True)
+                    for ref in connection_references(nodes[key])
+                ]
+                try:
+                    self.access.connections(snapshot["worktree"]["project"], references)
+                except Problem:
+                    return {**public, "status": "stale"}
+            current = self.fingerprints(snapshot["bundle"], environment)
+            if current.get(node) != result["fingerprint"]:
+                return {**public, "status": "stale"}
+            if result["run_status"] in ("canceled", "interrupted"):
+                return {**public, "status": "failed"}
+            try:
+                with self.artifacts.open(
+                    result.get("artifact") or "", worktree, environment, node, result["run"]
+                ) as (_, record):
+                    return {
+                        **public,
+                        **{k: record[k] for k in ("filename", "size", "media_type")},
+                        "status": "available",
+                    }
+            except Problem:
+                return {**public, "status": "missing"}
+
+    def open_export(self, worktree, environment, node, run):
+        """Validate the selected run and pin its private artifact before streaming."""
+        with self.projects.lock, self.lock:
+            result = self.export_result(worktree, environment, node)
+            if result.get("run") != run or result["status"] != "available":
+                raise Problem(
+                    "Export is unavailable. Refresh the result or run the export again.",
+                    404 if result["status"] == "missing" else 409,
+                )
+            record = self.store.get("export_result", digest([worktree, environment, node]))
+            return self.artifacts.open(record["artifact"], worktree, environment, node, run)
 
     def generation_valid(self, worktree, environment, dataset_id):
         """Whether a result generation is still current, so a lineage view may keep using it."""

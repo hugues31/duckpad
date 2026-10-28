@@ -2,7 +2,9 @@
 
 The **Code** tab, between **Flow** and **Documentation**, displays the worktree's declarative files in a folder tree beside the Monaco editor. Select a file to edit its SQL or JSON, then choose **Save changes**. Drafts are retained when switching files or workspace tabs. Editing files in an external editor is also supported. Every completed save is versioned, including invalid SQL or JSON. Corrections create later commits. Inspect errors and fix the current files; Duckpad never runs an earlier valid graph silently.
 
-Choose **Download ZIP** in the Code tab to export the selected branch's saved `flow.json`, `documentation.json`, SQL templates and component definitions, preserving their relative paths. Save or discard pending edits before downloading. The archive excludes Git history, datasets, execution results and instance connection settings. Project readers can browse and download these files; editing requires an editor or administrator role.
+Choose **Download project ZIP** in the Code tab to export the selected branch's saved `flow.json`, `documentation.json`, SQL templates and component definitions, preserving their relative paths. Save or discard pending edits before downloading. The archive excludes Git history, datasets, execution results and instance connection settings. Project readers can browse and download these files; editing requires an editor or administrator role.
+
+After running **Export CSV** or **Export XLSX**, select the export node and choose **Download exported data** in its inspector. The file contains the entire executed export, including its delimiter, headers and worksheet name. The inspector identifies the execution and environment. Changing inputs or settings, rerunning upstream nodes, or a failed execution requires another successful export before downloading. Missing files also require a rerun. Downloads are private to project members, survive a backend restart, and use a saved copy of the exported bytes so later writes to the destination cannot replace that execution's result. Oracle and remote-storage destinations do not offer this action.
 
 ## SQL template contract
 

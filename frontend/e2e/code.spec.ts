@@ -68,7 +68,7 @@ test("Code has a keyboard file tree, preserves drafts across files and tabs, sav
     snapshot.files["templates/sql.sql"] + "\n-- Saved from the Code tab\n";
   await editCode(page, edited);
   await expect(
-    page.getByRole("button", { name: "Download ZIP" }),
+    page.getByRole("button", { name: "Download project ZIP" }),
   ).toBeDisabled();
   await tree.getByRole("treeitem", { name: "flow.json", exact: true }).click();
   await sql.click();
@@ -97,7 +97,7 @@ test("Code has a keyboard file tree, preserves drafts across files and tabs, sav
   ).toBeTruthy();
   await page.getByRole("button", { name: "Save changes", exact: true }).click();
   await expect(
-    page.getByRole("button", { name: "Download ZIP" }),
+    page.getByRole("button", { name: "Download project ZIP" }),
   ).toBeEnabled();
   const saved = await (
     await page.request.get(`/api/worktrees/${worktree.id}`)
@@ -105,7 +105,7 @@ test("Code has a keyboard file tree, preserves drafts across files and tabs, sav
   expect(saved.files["templates/sql.sql"]).toBe(edited);
   expect(saved.bundle.documentation.project).toBe("Concurrent documentation");
   const download = page.waitForEvent("download");
-  await page.getByRole("button", { name: "Download ZIP" }).click();
+  await page.getByRole("button", { name: "Download project ZIP" }).click();
   const archive = await download;
   expect(archive.suggestedFilename()).toBe("duckpad-project.zip");
   const bytes = await readFile((await archive.path())!);
@@ -182,13 +182,13 @@ test("conflicting saves preserve the draft and download failures can be retried"
       json: { error: "Download temporarily unavailable" },
     }),
   );
-  await page.getByRole("button", { name: "Download ZIP" }).click();
+  await page.getByRole("button", { name: "Download project ZIP" }).click();
   await expect(
     page.locator(".code-workspace").getByRole("alert"),
   ).toContainText("Download temporarily unavailable");
   await page.unroute("**/archive.zip");
   const download = page.waitForEvent("download");
-  await page.getByRole("button", { name: "Download ZIP" }).click();
+  await page.getByRole("button", { name: "Download project ZIP" }).click();
   expect(await (await download).failure()).toBeNull();
 });
 
