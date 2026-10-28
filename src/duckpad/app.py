@@ -63,8 +63,8 @@ def set_session_cookie(response, request, token):
     )
 
 
-def create_app(home: Path, watch=True):
-    services = Services.open(home, enforce_access=True)
+def create_app(home: Path, watch=True, *, trusted_local=False):
+    services = Services.open(home, enforce_access=True, trusted_local=trusted_local)
     store, projects, catalog, engine = services.store, services.projects, services.catalog, services.engine
     auth = Auth(store)
     oidc = OIDC(store, auth)

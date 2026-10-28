@@ -31,7 +31,7 @@ jobs:
       - run: uv run pytest -q
 
   windows-projects:
-    name: Project files on Windows
+    name: Windows projects and trusted local execution
     runs-on: windows-latest
     timeout-minutes: 10
     steps:
@@ -43,8 +43,7 @@ jobs:
           python-version: '3.12'
       - uses: astral-sh/setup-uv@v7
       - run: uv sync --locked --python 3.12
-      # Project creation and persistence do not require the Linux SQL sandbox.
-      - run: uv run pytest -q tests/test_project_paths.py
+      - run: uv run pytest -q tests/test_project_paths.py tests/test_trusted_local.py
 
   browser:
     name: Frontend, browser tests and package

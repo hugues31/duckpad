@@ -2,7 +2,7 @@
 
 ## Start
 
-Requires **Python 3.11+ and Git** on `PATH`. Shared SQL execution also requires **Linux with Landlock ABI 2 or later** (Linux 5.19+ with Landlock enabled); unsupported hosts refuse execution rather than running without isolation. Release wheels include the frontend, Monaco and its workers; Node.js is not needed to run the installed application.
+Requires **Python 3.11+ and Git** on `PATH`. The default isolated SQL mode also requires **Linux with Landlock ABI 2 or later** (Linux 5.19+ with Landlock enabled); unsupported hosts refuse execution rather than automatically running without isolation. For a trusted Windows workstation, explicitly select [trusted local mode](#trusted-local-mode). Release wheels include the frontend, Monaco and its workers; Node.js is not needed to run the installed application.
 
 ```sh
 pip install duckpad
@@ -38,6 +38,29 @@ Successful GET requests used for background polling (workspace, resources, workt
 snapshots, status, and generations) are logged at DEBUG. The default INFO level
 still shows other requests, including failed polling requests. Use
 `duckpad start --log-level debug` to include polling in the server logs.
+
+## Trusted local mode
+
+For your own trusted projects on a single-user Windows workstation, run:
+
+```sh
+duckpad start --trusted-local
+```
+
+This mode uses DuckDB directly in the application process, without Landlock or
+the Linux SQL worker. It supports the normal pipeline, preview, lineage and
+export workflow. The terminal prints a notice at startup. The option applies
+only to that launch; include it again after restarting.
+
+Authentication, API project permissions and connection grants still apply, but
+SQL and extensions run with your operating-system permissions. There is no OS
+isolation between SQL, your files, other projects and Duckpad's instance data.
+Only run projects and extensions you trust. Do not share this instance or expose
+it through a reverse proxy, tunnel or port forwarding.
+
+The CLI accepts only `127.0.0.1` (the default), `localhost` or `::1` as `--host`
+with this option. Keep the default isolated mode for shared deployments. A
+missing sandbox never enables trusted mode automatically.
 
 ## Develop from source
 

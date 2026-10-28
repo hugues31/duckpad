@@ -8,13 +8,19 @@ exports. You do not need an external database account.
 
 You need **Python 3.11+** and **Git**. The package includes the interface;
 you do not need Node.js or a source checkout.
-SQL execution requires **Linux with Landlock ABI 2 or later** (Linux 5.19+ with
-Landlock enabled). A Linux container or VM must also expose this capability.
+The default isolated SQL mode requires **Linux with Landlock ABI 2 or later**
+(Linux 5.19+ with Landlock enabled). A Linux container or VM must also expose
+this capability.
 
 ```sh
 pip install duckpad
 duckpad start
 ```
+
+On a trusted, single-user Windows workstation, use `duckpad start --trusted-local`
+instead. This explicit mode runs SQL without OS isolation, with your user
+permissions. Use only trusted projects and keep the instance private to your
+computer. See [trusted local mode](INSTALLATION.md#trusted-local-mode).
 
 Open the local address printed in the terminal, normally `http://127.0.0.1:8765`.
 Sign in as **admin** using the password printed once on first launch. Save it
@@ -87,7 +93,8 @@ workflow.
 ## If something gets in the way
 
 - **An unsupported sandbox error:** check that the Linux kernel exposes Landlock
-  ABI 2+. Duckpad refuses SQL execution without its isolation boundary.
+  ABI 2+. For your own trusted Windows workstation, restart with `--trusted-local`;
+  shared instances must keep the isolation boundary.
 - **An instance is already running:** stop the original process or use a different
   `--home` directory and `--port` for a second instance.
 - **A blank or stale preview after restart:** run the pipeline again. Execution
