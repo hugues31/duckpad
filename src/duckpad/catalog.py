@@ -5,7 +5,26 @@ import re
 
 import duckdb
 
+from .templates import IDENTIFIER, REFERENCE
 from .util import Problem, digest, literal, qi
+
+MASK = "••••"
+KINDS = ("connector", "connection")
+RESERVED_PARAMETERS = {"alias", "secret_name"}
+PARAMETER_TYPES = ("text", "number", "boolean", "file")
+# Catalog identifiers and environment names.
+NAME = re.compile(r"[A-Za-z][\w-]*")
+
+XLSX_PRESET = {
+    "id": "xlsx",
+    "name": "Excel (XLSX)",
+    "description": "Read worksheets and export XLSX workbooks on this computer.",
+    "parameters": [{"name": "root", "type": "text", "default": ""}],
+    "extensions": [{"name": "excel"}],
+    "init_sql": "",
+    "capabilities": ["read", "write"],
+    "compatibility": "Requires the matching DuckDB excel extension. Validated with DuckDB 2.0.0 on Linux x86_64, including isolated execution. Legacy .xls files are not supported.",
+}
 
 PRESETS = [
     {
@@ -18,6 +37,7 @@ PRESETS = [
         "capabilities": ["read", "write"],
         "compatibility": "Validated on DuckDB 2.0.0, Linux x86_64, with native CSV and Parquet. Other DuckDB versions and platforms require validation.",
     },
+    XLSX_PRESET,
     {
         "id": "s3",
         "name": "Amazon S3",
@@ -52,6 +72,18 @@ PRESETS = [
 ]
 
 
+def secret_names(definition):
+    """Names of a connector's parameters that must never be displayed or recorded."""
+    return {p["name"] for p in definition.get("parameters", []) if p.get("secret")}
+
+
+def redact(text, secrets):
+    """Mask secret values, including their SQL-escaped form, in displayed text."""
+    for value in sorted((str(v) for v in secrets if v is not None and str(v)), key=len, reverse=True):
+        text = text.replace(value, MASK).replace(value.replace("'", "''"), MASK)
+    return text
+
+
 class Catalog:
     def __init__(self, store):
         self.store = store
@@ -72,103 +104,186 @@ class Catalog:
             )
             store.put("settings", "environments", ["dev", "prod"])
             store.put("settings", "catalog_initialized", True)
+        # Upgrade existing catalogs once without replacing administrator definitions
+        # or recreating a preset that an administrator later deletes.
+        if not store.get("settings", "xlsx_connector_initialized"):
+            if not store.get("connector", "xlsx"):
+                store.put("connector", "xlsx", XLSX_PRESET)
+            store.put("settings", "xlsx_connector_initialized", True)
         for connection in store.all("connection"):
             if "secret_fields" not in connection:
                 definition = store.get("connector", connection["connector"], {})
-                connection["secret_fields"] = [
-                    p["name"] for p in definition.get("parameters", []) if p.get("secret")
-                ]
+                connection["secret_fields"] = sorted(secret_names(definition))
                 store.put("connection", connection["id"], connection)
-
-    def redact(self, text, secrets):
-        for value in sorted((str(v) for v in secrets if v is not None and str(v)), key=len, reverse=True):
-            text = text.replace(value, "••••").replace(value.replace("'", "''"), "••••")
-        return text
 
     def public(self):
         connections = copy.deepcopy(self.store.all("connection"))
         for connection in connections:
             definition = self.store.get("connector", connection["connector"], {})
-            secret_names = set(connection.pop("secret_fields", [])) | {
-                p["name"] for p in definition.get("parameters", []) if p.get("secret")
-            }
+            hidden = set(connection.pop("secret_fields", [])) | secret_names(definition)
             for values in connection["environments"].values():
-                for name in secret_names:
+                for name in hidden:
                     if values.get(name):
-                        values[name] = "••••"
+                        values[name] = MASK
         return {
             "connectors": self.store.all("connector"),
             "connections": connections,
             "environments": self.store.get("settings", "environments"),
+            "environment_details": self.environments(),
             "duckdb_version": duckdb.__version__,
         }
 
-    def save(self, kind, data):
-        if not re.fullmatch(r"[a-zA-Z][\w-]*", data.get("id", "")):
+    def environments(self):
+        details = self.store.get("settings", "environment_details", {})
+        return [
+            details.get(
+                name,
+                {
+                    "id": name,
+                    "label": name,
+                    "color": "#e05252" if name == "prod" else "#31a878",
+                    "confirm_before_run": name == "prod",
+                },
+            )
+            for name in self.store.get("settings", "environments", [])
+        ]
+
+    def environment(self, identity):
+        for environment in self.environments():
+            if environment["id"] == identity:
+                return environment
+        raise Problem("Unknown environment", 404)
+
+    def save_environment(self, data, *, create=False):
+        identity = data["id"]
+        names = self.store.get("settings", "environments", [])
+        if create and identity in names:
+            raise Problem("An environment with this identifier already exists", 409)
+        if not create:
+            self.environment(identity)
+        details = self.store.get("settings", "environment_details", {})
+        details[identity] = data
+        self.store.put("settings", "environment_details", details)
+        if create:
+            self.store.put("settings", "environments", [*names, identity])
+            for connection in self.store.all("connection"):
+                connection["environments"][identity] = {}
+                self.store.put("connection", connection["id"], connection)
+
+    def validate_environment_deletion(self, identity):
+        self.environment(identity)
+        if len(self.environments()) == 1:
+            raise Problem("Keep at least one environment", 409)
+
+    def delete_environment(self, identity):
+        self.validate_environment_deletion(identity)
+        names = [item["id"] for item in self.environments() if item["id"] != identity]
+        details = self.store.get("settings", "environment_details", {})
+        details.pop(identity, None)
+        self.store.put("settings", "environments", names)
+        self.store.put("settings", "environment_details", details)
+        for connection in self.store.all("connection"):
+            connection["environments"].pop(identity, None)
+            self.store.put("connection", connection["id"], connection)
+
+    def save(self, kind, data, *, create=None, before_change=None):
+        """Validate and prepare the edit before resetting execution state or writing."""
+        if kind not in KINDS:
+            raise Problem("Unknown catalog entity", 404)
+        if not NAME.fullmatch(str(data.get("id", ""))):
             raise Problem(
                 "Use an identifier starting with a letter and containing letters, numbers, hyphens or underscores"
             )
         if kind == "connection":
-            definition = self.store.get("connector", data["connector"])
+            previous = self.store.get("connection", data["id"])
+            if create is True and previous is not None:
+                raise Problem(
+                    "A connection with this identifier already exists", 409, {"code": "connection_exists"}
+                )
+            if create is False and previous is None:
+                raise Problem("Connection does not exist", 404, {"code": "connection_missing"})
+            # Omitting create preserves the upsert contract for existing API clients.
+            previous = previous or {"environments": {}}
+            definition = self.store.get("connector", data.get("connector"))
             if not definition:
                 raise Problem("Connector definition does not exist")
-            previous = self.store.get("connection", data["id"], {"environments": {}})
-            data["secret_fields"] = sorted(
-                set(previous.get("secret_fields", []))
-                | {p["name"] for p in definition.get("parameters", []) if p.get("secret")}
-            )
+            if not isinstance(data.get("environments"), dict):
+                raise Problem("A connection needs settings for each environment")
+            if previous.get("connector") != data["connector"]:
+                names = {parameter["name"] for parameter in definition.get("parameters", [])}
+                data["environments"] = {
+                    env: {key: value for key, value in values.items() if key in names}
+                    for env, values in data["environments"].items()
+                }
+            data["secret_fields"] = sorted(set(previous.get("secret_fields", [])) | secret_names(definition))
             for env, values in data["environments"].items():
-                for parameter in definition.get("parameters", []):
-                    key = parameter["name"]
-                    if parameter.get("secret") and values.get(key) == "••••":
+                for key in secret_names(definition):
+                    if values.get(key) == MASK:
                         values[key] = previous["environments"].get(env, {}).get(key, "")
-        elif kind == "connector":
+        else:
             self.validate_definition(data)
-            names = [p["name"] for p in data.get("parameters", [])]
-            if len(names) != len(set(names)) or any(not re.fullmatch(r"[a-zA-Z_]\w*", n) for n in names):
-                raise Problem("Connector parameter names must be unique identifiers")
-            for ext in data.get("extensions", []):
-                if not re.fullmatch(r"[a-zA-Z_]\w*", ext["name"]):
-                    raise Problem("Invalid extension name")
+        if before_change is not None:
+            before_change()
         self.store.put(kind, data["id"], data)
         self.on_change()
+
+    def delete(self, kind, identity, *, before_change=None):
+        if kind not in KINDS:
+            raise Problem("Unknown catalog entity", 404)
+        if before_change is not None:
+            before_change()
+        self.store.delete(kind, identity)
+        self.on_change()
+
+    def set_environments(self, names, *, before_change=None):
+        names = list(dict.fromkeys(name.strip() for name in names))
+        if not names or not all(NAME.fullmatch(name) for name in names):
+            raise Problem(
+                "Provide at least one environment name starting with a letter and containing "
+                "letters, numbers, hyphens or underscores"
+            )
+        if before_change is not None:
+            before_change()
+        self.store.put("settings", "environments", names)
 
     def validate_definition(self, definition):
         fingerprint = digest(definition)
         if fingerprint in self._validated:
             return
         parameters = definition.get("parameters", [])
-        reserved = {"alias", "secret_name"}
+        names = [parameter.get("name", "") for parameter in parameters]
+        if len(names) != len(set(names)):
+            raise Problem("Connector parameter names must be unique")
         for parameter in parameters:
             name, kind = parameter.get("name", ""), parameter.get("type", "text")
-            if name in reserved or not re.fullmatch(r"[A-Za-z_]\w*", name):
+            if name in RESERVED_PARAMETERS or not IDENTIFIER.fullmatch(name):
                 raise Problem("Connector parameters must be identifiers other than alias and secret_name")
-            if kind not in ("text", "number", "boolean", "file") and not re.fullmatch(
-                r"choice\([^()]+\)", kind
-            ):
+            if kind not in PARAMETER_TYPES and not re.fullmatch(r"choice\([^()]+\)", kind):
                 raise Problem(f"Unsupported connector parameter type: {kind}")
         if not set(definition.get("capabilities", [])) <= {"read", "write"}:
             raise Problem("Connector capabilities must be read and/or write")
         for extension in definition.get("extensions", []):
-            if not re.fullmatch(r"[A-Za-z_]\w*", extension.get("name", "")):
+            if not IDENTIFIER.fullmatch(extension.get("name", "")):
                 raise Problem("Invalid extension name")
-        sql = re.sub(r"--[^\n]*|/\*.*?\*/", "", definition.get("init_sql", ""), flags=re.S)
-        names = {p["name"] for p in parameters} | reserved
-        for key in re.findall(r"{{\s*(\w+)\s*}}", sql):
-            if key not in names:
+        sql = re.sub(r"--[^\n]*|/\*.*?\*/", "", definition.get("init_sql", ""), flags=re.DOTALL)
+        declared = set(names) | RESERVED_PARAMETERS
+        for key in REFERENCE.findall(sql):
+            if key not in declared:
                 raise Problem(f"Undeclared connector parameter: {key}")
-        sample = re.sub(r"{{\s*(\w+)\s*}}", lambda m: qi(m[1]) if m[1] in reserved else "'value'", sql)
+        sample = REFERENCE.sub(lambda m: qi(m[1]) if m[1] in RESERVED_PARAMETERS else "'value'", sql)
         try:
             with duckdb.connect() as db:
                 statements = db.extract_statements(sample)
             for statement in statements:
                 query = statement.query.strip().rstrip(";").strip()
                 if statement.type == duckdb.StatementType.ATTACH:
-                    if not re.search(r'\bAS\s+"alias"(?:\s*\(|$)', query, re.I):
+                    if not re.search(r'\bAS\s+"alias"(?:\s*\(|$)', query, re.IGNORECASE):
                         raise Problem("ATTACH must use the assigned {{ alias }}")
                 elif statement.type == duckdb.StatementType.CREATE:
                     if not re.match(
-                        r'^CREATE\s+OR\s+REPLACE\s+TEMPORARY\s+SECRET\s+"secret_name"\s*\(', query, re.I
+                        r'^CREATE\s+OR\s+REPLACE\s+TEMPORARY\s+SECRET\s+"secret_name"\s*\(',
+                        query,
+                        re.IGNORECASE,
                     ):
                         raise Problem("Connection setup may only create an assigned temporary secret")
                 elif statement.type == duckdb.StatementType.LOAD:
@@ -211,13 +326,12 @@ class Catalog:
                     raise Problem(f"Connection {reference}: {name} requires a number")
                 if kind == "boolean" and not isinstance(values[name], bool):
                     raise Problem(f"Connection {reference}: {name} requires a boolean")
-                if kind.startswith("choice(") and values[name] not in kind[7:-1].split("|"):
+                if kind.startswith("choice(") and values[name] not in kind.removeprefix("choice(")[:-1].split(
+                    "|"
+                ):
                     raise Problem(f"Connection {reference}: invalid choice for {name}")
-            public_values = {
-                k: v
-                for k, v in values.items()
-                if k not in {p["name"] for p in definition.get("parameters", []) if p.get("secret")}
-            }
+            hidden = secret_names(definition)
+            public_values = {k: v for k, v in values.items() if k not in hidden}
             captured[reference] = {
                 "definition": definition,
                 "values": values,
@@ -238,11 +352,17 @@ class Catalog:
             }
         return captured, secrets
 
-    def prepare(self, db, captured):
+    def prepare(self, db, captured, offline=None):
+        if offline is None:
+            offline = self.store.get("settings", "offline_extensions", {}) if self else {}
         for connection in captured.values():
             definition = connection["definition"]
             for ext in definition.get("extensions", []):
                 name = ext["name"]
+                if name in offline:
+                    # Imported files never fall back to a network install when loading fails.
+                    db.execute(f"LOAD {qi(name)} FROM {qi(offline[name]['repository'])}")
+                    continue
                 try:
                     db.execute(f"LOAD {qi(name)}")
                 except duckdb.Error:
@@ -262,7 +382,7 @@ class Catalog:
 
             def replace(match, connection=connection, values=values, types=types):
                 key = match[1].strip()
-                if key in ("alias", "secret_name"):
+                if key in RESERVED_PARAMETERS:
                     return qi(connection[key])
                 if key not in values:
                     raise Problem(f"Undeclared connector parameter: {key}")
@@ -273,6 +393,6 @@ class Catalog:
                     raise Problem(f"{key} requires a boolean")
                 return literal(value)
 
-            sql = re.sub(r"{{\s*(\w+)\s*}}", replace, definition.get("init_sql", ""))
+            sql = REFERENCE.sub(replace, definition.get("init_sql", ""))
             if sql.strip():
                 db.execute(sql)
