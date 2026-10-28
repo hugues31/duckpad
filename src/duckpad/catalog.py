@@ -186,7 +186,8 @@ class Catalog:
             connection["environments"].pop(identity, None)
             self.store.put("connection", connection["id"], connection)
 
-    def save(self, kind, data):
+    def save(self, kind, data, *, before_change=None):
+        """Validate and prepare the edit before resetting execution state or writing."""
         if kind not in KINDS:
             raise Problem("Unknown catalog entity", 404)
         if not NAME.fullmatch(str(data.get("id", ""))):
@@ -207,22 +208,28 @@ class Catalog:
                         values[key] = previous["environments"].get(env, {}).get(key, "")
         else:
             self.validate_definition(data)
+        if before_change is not None:
+            before_change()
         self.store.put(kind, data["id"], data)
         self.on_change()
 
-    def delete(self, kind, identity):
+    def delete(self, kind, identity, *, before_change=None):
         if kind not in KINDS:
             raise Problem("Unknown catalog entity", 404)
+        if before_change is not None:
+            before_change()
         self.store.delete(kind, identity)
         self.on_change()
 
-    def set_environments(self, names):
+    def set_environments(self, names, *, before_change=None):
         names = list(dict.fromkeys(name.strip() for name in names))
         if not names or not all(NAME.fullmatch(name) for name in names):
             raise Problem(
                 "Provide at least one environment name starting with a letter and containing "
                 "letters, numbers, hyphens or underscores"
             )
+        if before_change is not None:
+            before_change()
         self.store.put("settings", "environments", names)
 
     def validate_definition(self, definition):

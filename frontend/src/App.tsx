@@ -1160,14 +1160,14 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
                       connections={connections}
                       statuses={statuses}
                       preview={preview}
-                      onSave={async (updated, base) => {
-                        await saveFrom(base, (value) => {
+                      onSave={(updated, base) =>
+                        saveFrom(base, (value) => {
                           const target = graphAt(value, path);
                           target.nodes = target.nodes.map((n) =>
                             n.id === updated.id ? updated : n,
                           );
-                        });
-                      }}
+                        })
+                      }
                       onSaveDocumentation={async (change, base) => {
                         await saveFrom(base, (value) =>
                           change(value.documentation),
