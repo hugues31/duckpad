@@ -12,9 +12,12 @@ Security fixes are released for the latest published version.
 
 ## Deployment model
 
-Duckpad is designed as a single-user workspace that listens on `127.0.0.1` by default.
+Duckpad listens on `127.0.0.1` by default. An instance serves individual accounts with instance roles (member or administrator) and private projects with reader, editor and administrator roles, which the server checks on every request.
 
-- All API routes except login require a session; the administrator password is shown once, at the first start.
+- All API routes except login and the single sign-on handshake require a session; the initial administrator password is shown once, at the first start.
+- Every account can create projects and administers the projects it creates.
 - Connections and their secrets are stored in the instance directory, which is created with owner-only permissions. Keep that directory private.
-- SQL templates and connector definitions run with the permissions of the Duckpad process. Only import projects and connectors that you trust.
-- Before exposing Duckpad on a network, put it behind an HTTPS reverse proxy and set `DUCKPAD_SECURE_COOKIES=1`.
+- Project SQL runs in isolated worker processes limited to the project's files and authorized connections. Connector definitions and DuckDB extensions are administrator-installed code that runs with the permissions of the Duckpad process. Only import projects, connectors and extensions that you trust.
+- Network Git uses the server's credential helper or SSH keys, and each project administrator chooses the project's origin. Grant those credentials access only to repositories that every account may read and publish to.
+- With single sign-on, enable **Create member accounts on first SSO sign-in** only when every identity that your provider accepts for this client may use the instance.
+- Before exposing Duckpad on a network, put it behind an HTTPS reverse proxy and set `DUCKPAD_SECURE_COOKIES=1`. When the proxy runs on another host or container, set `FORWARDED_ALLOW_IPS` to its address so that login throttling applies to each client instead of the proxy as a whole.
