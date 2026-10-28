@@ -105,10 +105,10 @@ class Engine:
 
     def context(self, worktree, environment, create=False):
         """The live DuckDB context of an existing worktree in a configured environment."""
-        self.projects.get(worktree)
-        if environment not in self.store.get("settings", "environments", []):
-            raise Problem("Unknown environment", 404)
         with self.lock:
+            self.projects.get(worktree)
+            if environment not in self.store.get("settings", "environments", []):
+                raise Problem("Unknown environment", 404)
             key = (worktree, environment)
             if key not in self.contexts or getattr(self.contexts[key].db, "closed", False):
                 self.contexts[key] = Context(*key, db=None)
@@ -215,10 +215,18 @@ class Engine:
                 raise Problem(
                     "Stop active executions before changing project connections or deleting the project", 409
                 )
+            for worktree in worktrees:
+                self.discard_worktree(worktree)
+
+    def discard_worktree(self, worktree):
+        """Release every environment context, even after its worktree was removed."""
+        with self.lock:
+            if worktree in self.active:
+                raise Problem("Stop the worktree's execution before removing it", 409)
             for key, context in list(self.contexts.items()):
-                if context.worktree in worktrees:
+                if context.worktree == worktree:
                     with context.lock:
-                        self.cancel_lineage(context, {d.node for d in context.datasets.values()})
+                        self.cancel_lineage(context)
                         if context.db:
                             context.db.close()
                         del self.contexts[key]
@@ -268,23 +276,27 @@ class Engine:
             return {}
 
     def invalidate(self, worktree=None):
-        with self.lock:
-            contexts = list(self.contexts.values())
-        for context in contexts:
-            if worktree and context.worktree != worktree:
-                continue
-            fingerprints = self._current_fingerprints(context.worktree, context.environment)
-            with context.lock:
-                changed = set()
-                for dataset in context.datasets.values():
-                    if fingerprints.get(dataset.node) != dataset.fingerprint:
-                        dataset.status = "stale"
-                        changed.add(dataset.node)
-                self.cancel_lineage(context, changed)
+        with self.projects.lock:
+            with self.lock:
+                contexts = list(self.contexts.values())
+            for context in contexts:
+                if worktree and context.worktree != worktree:
+                    continue
+                if not self.store.get("worktree", context.worktree):
+                    self.discard_worktree(context.worktree)
+                    continue
+                fingerprints = self._current_fingerprints(context.worktree, context.environment)
+                with context.lock:
+                    changed = set()
+                    for dataset in context.datasets.values():
+                        if fingerprints.get(dataset.node) != dataset.fingerprint:
+                            dataset.status = "stale"
+                            changed.add(dataset.node)
+                    self.cancel_lineage(context, changed)
 
-    def cancel_lineage(self, context, affected):
+    def cancel_lineage(self, context, affected=None):
         for request in list(context.lineage.values()):
-            if request["nodes"] & affected:
+            if affected is None or request["nodes"] & affected:
                 request["canceled"].set()
                 request["cursor"].interrupt()
 
