@@ -18,6 +18,7 @@ from .data_preparation import PREPARATION_TYPES
 from .datasets import Context, Dataset
 from .extensions import MAX_UPLOAD_BYTES, database_config, install, runtime
 from .materialize import drop_dataset, drop_relations, plan_materialization, publish_view
+from .native import Cursor as NativeCursor
 from .templates import URI, base_type, compile_template, executable_sql
 from .util import Problem, clean, digest, now, qi, uid
 
@@ -481,6 +482,8 @@ class Engine:
         started = time.monotonic()
         try:
             execution.cursor = context.db.cursor()
+            if not self.isolated:
+                execution.cursor = NativeCursor(execution.cursor)
             execution.token["cursor"] = execution.cursor
             run["status"] = "running"
             self._persist(run, secrets)
