@@ -287,9 +287,9 @@ def create_app(home: Path, watch=True):
         return catalog.public()
 
     @app.put("/api/catalog/{kind}")
-    def save_catalog(kind: str, data: dict[str, Any]):
+    def save_catalog(kind: str, data: dict[str, Any], create: bool | None = None):
         with projects.lock, engine.lock:
-            catalog.save(kind, data, before_change=engine.reset_catalog)
+            catalog.save(kind, data, create=create, before_change=engine.reset_catalog)
         return catalog.public()
 
     @app.delete("/api/catalog/{kind}/{identity}")
