@@ -114,11 +114,14 @@ def test_unknown_worktrees_and_environments_are_not_found(client, worktree):
     assert client.get(f"/api/worktrees/{worktree}/status?environment=prod").status_code == 200
 
 
-def test_removed_routes_are_not_registered(app):
-    routes = {(method, route.path) for route in app.routes for method in getattr(route, "methods", [])}
-    assert ("PUT", "/api/environments") not in routes
-    assert ("GET", "/api/worktrees/{worktree}/merge") not in routes
-    assert ("POST", "/api/worktrees/{worktree}/merge") not in routes
+def test_removed_apis_reject_requests_without_changing_state(client, worktree):
+    catalog = client.get("/api/catalog").json()
+    snapshot = client.get(f"/api/worktrees/{worktree}").json()
+    assert client.put("/api/environments", json=["replacement"]).status_code == 405
+    assert client.get(f"/api/worktrees/{worktree}/merge").status_code == 404
+    assert client.post(f"/api/worktrees/{worktree}/merge", json={}).status_code == 405
+    assert client.get("/api/catalog").json() == catalog
+    assert client.get(f"/api/worktrees/{worktree}").json() == snapshot
 
 
 def test_connection_creation_rejects_duplicates_without_overwriting_secrets(app, client):
