@@ -1,23 +1,31 @@
-"""Explicit, bounded network Git with installation-owned configuration and leases."""
+"""Explicit, bounded network Git with per-account credentials and leases."""
 
 import os
 import re
+import shlex
+import shutil
 import subprocess
+import tempfile
+import time
+from pathlib import Path
 from urllib.parse import urlsplit
 
 from .bundle import files_to_bundle, validate
+from .git_credentials import SCP_URL, GitCredentials, transport
 from .util import Problem, digest, now, uid
 
 NETWORK_TIMEOUT = 30
+# Server-wide Git and SSH settings, agents and helpers must never authenticate network Git.
+INHERITED_GIT_VARIABLES = {"GIT_SSL_CAINFO", "GIT_SSL_CAPATH"}
 
 
 def validate_url(value):
-    message = (
-        "Use a credential-free HTTPS or SSH repository URL. Configure authentication on the Duckpad server."
-    )
+    message = "Use a credential-free HTTPS or SSH repository URL."
     if not isinstance(value, str) or len(value) > 2048 or any(c.isspace() for c in value):
         raise Problem(message)
-    if re.fullmatch(r"[A-Za-z0-9_.-]+@[A-Za-z0-9.-]+:[A-Za-z0-9_./~-]+", value):
+    if value.startswith("-") or "@-" in value or "//-" in value:
+        raise Problem(message)
+    if SCP_URL.fullmatch(value):
         return value
     try:
         url = urlsplit(value)
@@ -42,12 +50,70 @@ def validate_url(value):
     return value
 
 
+def network_environment(home, ssh_command):
+    """Environment of one network Git process, isolated from the server account's credentials."""
+    env = {
+        key: value
+        for key, value in os.environ.items()
+        if not key.startswith(("GIT_", "SSH_", "GCM_")) or key in INHERITED_GIT_VARIABLES
+    }
+    env.update(
+        # A private HOME hides ~/.gitconfig, ~/.git-credentials and ~/.netrc from Git and curl.
+        HOME=home,
+        XDG_CONFIG_HOME=home,
+        GIT_CONFIG_NOSYSTEM="1",
+        GIT_CONFIG_GLOBAL=os.devnull,
+        GIT_TERMINAL_PROMPT="0",
+        GIT_ASKPASS="",
+        SSH_ASKPASS_REQUIRE="never",
+        GCM_INTERACTIVE="Never",
+        GIT_SSH_COMMAND=ssh_command,
+        GIT_SSH_VARIANT="ssh",
+        # Kerberos must never authenticate with the server account's tickets or keytab.
+        KRB5CCNAME=f"FILE:{home}/no-kerberos-ticket",
+        KRB5_CLIENT_KTNAME=os.devnull,
+        # Error classification reads Git's English messages.
+        LC_ALL="C",
+    )
+    env.pop("SSH_AUTH_SOCK", None)
+    return env
+
+
+def ssh_command(identity, known_hosts):
+    # -F /dev/null skips the user and system SSH configuration, including Host aliases and proxies.
+    options = [
+        "IdentitiesOnly=yes",
+        "IdentityAgent=none",
+        f"UserKnownHostsFile={known_hosts}",
+        f"GlobalKnownHostsFile={os.devnull}",
+        "StrictHostKeyChecking=yes",
+        "UpdateHostKeys=no",
+        "BatchMode=yes",
+        "PreferredAuthentications=publickey",
+        "GSSAPIAuthentication=no",
+        "HostbasedAuthentication=no",
+        "ControlPath=none",
+        "ConnectTimeout=10",
+    ]
+    command = ["ssh", "-F", os.devnull, "-i", str(identity)]
+    for option in options:
+        command += ["-o", option]
+    return shlex.join(command)
+
+
 class Remotes:
     def __init__(self, workspace):
         self.workspace = workspace
         self.projects = workspace.projects
         self.store = workspace.store
         self.git = workspace.git
+        self.credentials = GitCredentials(self.store)
+        self.temporary = self.store.home / "git-network"
+        self.temporary.mkdir(mode=0o700, exist_ok=True)
+        # Key copies of an operation interrupted by a crash must not outlive a restart.
+        for leftover in self.temporary.iterdir():
+            if leftover.stat().st_mtime < time.time() - 4 * NETWORK_TIMEOUT:
+                shutil.rmtree(leftover, ignore_errors=True)
 
     def config(self, worktree):
         return self.store.get(
@@ -76,9 +142,11 @@ class Remotes:
                 raise Problem("Remote configuration changed. Reload before saving.", 409)
             if url:
                 validate_url(url)
+                self.credentials.check_origin(url)
                 self.git(worktree["path"], "check-ref-format", "refs/heads/" + remote_branch)
             changed = (url or None) != config["url"]
             if changed:
+                self.credentials.forget_project(worktree["project"])
                 for branch in config["mappings"]:
                     for key in ("remote", "merge"):
                         self.git(
@@ -120,53 +188,63 @@ class Remotes:
             )
             return self.status(worktree_id)
 
-    def network(self, path, *args):
-        env = {
-            **os.environ,
-            "GIT_TERMINAL_PROMPT": "0",
-            "GCM_INTERACTIVE": "Never",
-            "GIT_SSH_COMMAND": "ssh -oBatchMode=yes -oConnectTimeout=10 -oStrictHostKeyChecking=yes",
-        }
-        command = [
-            "git",
-            "-c",
+    def network(self, path, *args, key=None):
+        """Run network Git with the given account key for SSH, or without credentials for HTTPS."""
+        allowed = "ssh" if key else "https"
+        settings = [
             "core.hooksPath=/dev/null",
-            "-c",
-            "protocol.file.allow=never",
-            "-c",
-            "protocol.ext.allow=never",
-            "-c",
+            "core.askPass=",
+            "credential.helper=",
+            # Without this, HTTPS retries a 401 with an empty user name, enabling Kerberos login.
+            "http.emptyAuth=false",
+            # Exactly one transport: SSH with the account key, or anonymous HTTPS.
+            "protocol.allow=never",
+            f"protocol.{allowed}.allow=always",
             "http.followRedirects=false",
-            "-c",
             "http.lowSpeedLimit=1000",
-            "-c",
             "http.lowSpeedTime=15",
-            "-c",
             "fetch.fsckObjects=true",
-            "-C",
-            str(path),
-            *args,
         ]
-        try:
-            result = subprocess.run(command, env=env, text=True, capture_output=True, timeout=NETWORK_TIMEOUT)
-        except subprocess.TimeoutExpired as error:
-            raise Problem(
-                "Git network operation timed out. Check server connectivity, then fetch again.", 504
-            ) from error
+        # The private key exists only in a private temporary directory for this one process.
+        with tempfile.TemporaryDirectory(dir=self.temporary) as directory:
+            identity, known_hosts = Path(directory, "identity"), Path(directory, "known_hosts")
+            known_hosts.write_text(self.credentials.known_hosts(), encoding="utf-8")
+            if key:
+                with os.fdopen(os.open(identity, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "w") as stream:
+                    stream.write(key)
+            command = ["git", *(f for s in settings for f in ("-c", s)), "-C", str(path), *args]
+            env = network_environment(directory, ssh_command(identity, known_hosts))
+            try:
+                result = subprocess.run(
+                    command, env=env, text=True, capture_output=True, timeout=NETWORK_TIMEOUT
+                )
+            except subprocess.TimeoutExpired as error:
+                raise Problem(
+                    "Git network operation timed out. Check server connectivity, then fetch again.", 504
+                ) from error
         if result.returncode:
             text = result.stderr.lower()
+            if "host key verification" in text or "host key for" in text:
+                raise Problem(
+                    "The Git host's SSH key does not match this instance's trusted hosts. Ask an instance "
+                    "administrator to check the Git hosts settings.",
+                    502,
+                )
             if any(
                 word in text
                 for word in (
                     "authentication",
                     "permission denied",
                     "could not read username",
-                    "host key verification",
                     "repository not found",
                 )
             ):
                 raise Problem(
-                    "Git authentication failed. Ask the server operator to configure repository access and trusted SSH hosts, then fetch again.",
+                    "Git authentication failed. Add your Duckpad SSH public key to your account on the Git "
+                    "host, check that it can access this repository, then try again."
+                    if key
+                    else "This HTTPS repository requires authentication. Duckpad reads only public "
+                    "repositories over HTTPS; use an SSH origin with your personal key.",
                     502,
                 )
             if any(word in text for word in ("stale info", "rejected", "non-fast-forward")):
@@ -239,12 +317,24 @@ class Remotes:
                 "behind": behind,
                 "checked": config.get("checked"),
                 "pending": pending,
+                "transport": transport(config["url"]),
             }
 
-    def fetch(self, worktree_id, expected):
+    def consent(self, worktree_id, user, url):
+        """Record that this account allows its key to be used for the origin URL that it saw."""
+        with self.projects.lock:
+            worktree = self.projects.get(worktree_id)
+            config = self.config(worktree)
+            if not config["url"] or url != config["url"]:
+                raise Problem("Origin changed. Review the new URL before confirming.", 409)
+            self.credentials.consent(user["id"], worktree["project"], url)
+            return {"url": url}
+
+    def fetch(self, worktree_id, expected, user=None):
         with self.projects.lock:
             worktree = self.projects.get(worktree_id)
             config = self.checked_config(worktree, expected)
+            key = self.credentials.credentials(user, worktree["project"], config["url"])
             self.network(
                 worktree["path"],
                 "fetch",
@@ -255,6 +345,7 @@ class Remotes:
                 "--",
                 config["url"],
                 "+refs/heads/*:refs/remotes/origin/*",
+                key=key,
             )
             refs = self.git(
                 worktree["path"], "for-each-ref", "--format=%(refname)", "refs/remotes/origin/"
@@ -284,10 +375,11 @@ class Remotes:
                 raise Problem("No fetched upstream branch. Fetch or choose a branch mapping.", 409)
             return self.workspace.prepare(worktree_id, status["remote_ref"], digest(config))
 
-    def push(self, worktree_id, expected, local_head, remote_head, recreate=False):
+    def push(self, worktree_id, expected, local_head, remote_head, recreate=False, user=None):
         with self.projects.lock:
             worktree = self.projects.get(worktree_id)
             config = self.checked_config(worktree, expected)
+            key = self.credentials.credentials(user, worktree["project"], config["url"])
             status = self.status(worktree_id)
             head, files = self.workspace.clean(worktree)
             if not config.get("checked") or not status["remote_branch"]:
@@ -310,7 +402,7 @@ class Remotes:
             if errors:
                 raise Problem("Fix project definitions before publishing", 422, errors)
             ref = "refs/heads/" + status["remote_branch"]
-            actual = self.network(worktree["path"], "ls-remote", "--refs", "--", config["url"], ref)
+            actual = self.network(worktree["path"], "ls-remote", "--refs", "--", config["url"], ref, key=key)
             actual_head = actual.split()[0] if actual else None
             if actual_head != remote_head:
                 raise Problem("Remote head changed. Fetch and review before publishing.", 409)
@@ -326,6 +418,7 @@ class Remotes:
                 "--",
                 config["url"],
                 f"{local_head}:{ref}",
+                key=key,
             )
             self.git(worktree["path"], "update-ref", status["remote_ref"], local_head)
             config.update(

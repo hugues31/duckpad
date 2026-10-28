@@ -519,6 +519,7 @@ version = "0.4.0"
 source = { editable = "." }
 dependencies = [
     { name = "authlib" },
+    { name = "cryptography" },
     { name = "duckdb" },
     { name = "fastapi" },
     { name = "filelock" },
@@ -548,6 +549,7 @@ integration = [
 [package.metadata]
 requires-dist = [
     { name = "authlib", specifier = ">=1.9.1,<2" },
+    { name = "cryptography", specifier = ">=44" },
     { name = "duckdb", specifier = ">=2.0" },
     { name = "fastapi", specifier = ">=0.115" },
     { name = "filelock", specifier = ">=3.18" },

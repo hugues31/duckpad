@@ -11,6 +11,7 @@ export const settingsSections = [
   ["", "instanceGeneral"],
   ["users", "usersPermissions"],
   ["sso", "ssoSettings"],
+  ["git-hosts", "gitHosts"],
   ["environments", "environments"],
   ["connections", "connections"],
   ["extensions", "extensions"],

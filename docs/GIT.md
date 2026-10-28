@@ -93,11 +93,11 @@ shared configuration, outside versioned project files. Disconnecting origin keep
 local work and commits. External edits to origin's URL require reviewing and
 saving its configuration again in Duckpad.
 
-Use HTTPS without credentials (for example `https://example.com/team/project.git`)
-or SSH (`git@example.com:team/project.git` or
-`ssh://git@example.com/team/project.git`). Passwords, tokens, URL query strings and
-unsupported transports are rejected. Network Git runs on the Duckpad server and
-uses its configured credential helper or SSH keys and trusted hosts. Authentication
+Use SSH (`git@example.com:team/project.git` or
+`ssh://git@example.com/team/project.git`) or HTTPS without credentials (for example
+`https://example.com/team/project.git`). Passwords, tokens, URL query strings,
+`.` or `..` path segments and unsupported transports are rejected, and the origin
+must be allowed by the instance's [Git hosts](#network-credentials). Authentication
 errors never echo raw Git output. Each network operation has a 30-second limit.
 
 1. **Fetch** updates remote-tracking references and the last successful check. It
@@ -123,9 +123,69 @@ repository. These checks do not inspect data sources or run project SQL.
 
 Readers can inspect authorized comparisons, history and synchronization state.
 Project editors can create/open branches, fetch, review/apply integration, publish
-and clean up integrated work. Configuring/disconnecting origin or changing its
+and clean up integrated work; they fetch and publish with their own SSH key. Configuring/disconnecting origin or changing its
 mapping requires project administrator access. Instance administrators retain their
 existing access to projects. All permissions are checked by the server.
+
+## Network credentials
+
+Network Git never uses the credentials of the server account. Fetch, `ls-remote`
+and push run with the SSH key of the account that triggers them for SSH origins,
+and without any credentials for HTTPS origins, which therefore reach only public
+repositories.
+
+**Account SSH keys.** Every account, local or SSO, can generate an ed25519 key pair
+in **User settings → SSH key for Git**. Duckpad shows only the public key and its
+SHA256 fingerprint: add the public key to your account on the Git host, such as
+Bitbucket, GitHub or GitLab. The private key is stored in the instance database
+like connection secrets; the API never returns it and Duckpad never logs it.
+**Regenerate key** replaces the pair, so the previous key stops working at once,
+and **Delete key** removes it. Deactivating an account deletes its key, and a
+reactivated account must generate a new one. Duckpad does not import personal
+private keys. Without a key, fetching or publishing over SSH reports an error that
+links to User settings.
+
+**Isolated execution.** For each operation, Duckpad writes the key to a temporary
+file with mode 0600 in a private directory of the instance and runs SSH with
+`-F /dev/null -i <key> -o IdentitiesOnly=yes -o IdentityAgent=none
+-o UserKnownHostsFile=<instance known_hosts> -o GlobalKnownHostsFile=/dev/null
+-o StrictHostKeyChecking=yes -o BatchMode=yes`. There is no fallback to `~/.ssh`,
+an SSH agent, Kerberos or the server's SSH configuration. Git itself runs without
+system or global configuration, with an empty credential helper, a private `HOME`
+(so no `~/.gitconfig`, `~/.git-credentials` or `~/.netrc`), no Kerberos ticket
+cache or keytab, no empty-user HTTPS authentication retry and exactly one allowed
+transport. The temporary directory is deleted when the operation ends, and copies
+left by a crash are removed when Duckpad starts.
+
+**Trusted Git hosts.** In **Instance settings → Git hosts**, instance administrators
+list trusted SSH host keys in `known_hosts` format, one `host key-type key` line per
+key. Write `[host]:port` for a port other than 22; wildcards, hashed host names and
+markers are not supported. Get the keys with `ssh-keyscan` or from your provider,
+and compare their fingerprints with the ones that it publishes. Optional allowed
+origin prefixes end with `/` or `:`, for example `git@bitbucket.org:my-workspace/`.
+An origin is allowed when:
+
+- for SSH, its host and port have a trusted key and, if prefixes exist, the URL
+  starts with one of them;
+- for HTTPS, the URL starts with an allowed prefix. HTTPS always needs one.
+
+Duckpad refuses to save an origin outside these rules, and refuses to fetch or
+publish when the saved origin is no longer allowed.
+
+**Consent bound to the URL.** Before the first use of their key for a project's
+origin, and again after every origin change, a user confirms the exact URL that
+Duckpad displays. The consent records the account, the project and the URL.
+Without it, fetch and push are refused with a 409 response whose
+`detail.consent_required.url` lets the interface ask for confirmation. Changing
+the origin forgets every consent of the project, even when an earlier URL comes
+back. A project administrator therefore cannot point origin to an editor's private
+repository and read it through the editor's key without the editor seeing the URL.
+
+Roles are unchanged: project administrators configure origin; editors fetch,
+review and publish. Keys, trusted hosts and consents are instance metadata,
+outside project files. Per-project read-only deploy keys for automation and
+per-user HTTPS tokens are not supported yet. On Bitbucket Cloud, repository access
+keys are read-only, so publishing requires the user's key on their own account.
 
 ## Automatic commit subjects
 
@@ -147,7 +207,10 @@ Backend tests exercise semantic categories, nested scopes, immutable comparisons
 commit subjects, actual merge parents, pagination, stale reviews, role enforcement,
 dirty work, divergence, concurrent remote advancement, remote deletion/recreation,
 invalid imports, unsafe ancestry and sanitized network failures. Git integration
-tests use disposable bare repositories. Browser tests cover comparison, field
-conflict resolution, synchronization, stale responses and narrow layouts. Their
-disposable server replaces only the network transport with local bare repositories;
-production authentication and real network reachability remain operator settings.
+tests use disposable bare repositories. An end-to-end test runs real SSH against a
+disposable OpenSSH server while a server key, an SSH agent, global Git settings and
+a credential helper are present, and checks that only the account key reaches the
+server. Browser tests cover comparison, field conflict resolution, synchronization,
+account keys, trusted hosts, origin consent, stale responses and narrow layouts.
+Their disposable server replaces only the network transport with local bare
+repositories; URL validation, trusted hosts, account keys and consent stay active.

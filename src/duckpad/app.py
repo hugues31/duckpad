@@ -69,6 +69,7 @@ def create_app(home: Path, watch=True):
     auth = Auth(store)
     oidc = OIDC(store, auth)
     access = engine.access
+    credentials = projects.remotes.credentials
 
     @asynccontextmanager
     async def lifespan(app):
@@ -93,7 +94,7 @@ def create_app(home: Path, watch=True):
     def authorize(request, user):
         parts = request.url.path.strip("/").split("/")
         route = parts[1] if len(parts) > 1 else ""
-        if route in ("users", "environments", "catalog", "resources", "sso", "extensions"):
+        if route in ("users", "environments", "catalog", "resources", "sso", "extensions", "git-hosts"):
             access.instance_admin(user)
         elif route == "projects" and len(parts) >= 3:
             access.require(user, parts[2], "reader" if request.method == "GET" else "admin")
@@ -119,6 +120,7 @@ def create_app(home: Path, watch=True):
             "library",
             "runs",
             "password",
+            "ssh-key",
         ):
             raise Problem("Not found", 404)
 
@@ -375,6 +377,27 @@ def create_app(home: Path, watch=True):
         access.update_user(user["id"], {"password": data.get("password")})
         return {"ok": True}
 
+    @app.get("/api/ssh-key")
+    def ssh_key(request: Request):
+        return credentials.public_key(request.state.user["id"])
+
+    @app.post("/api/ssh-key")
+    def generate_ssh_key(request: Request):
+        return credentials.generate_key(request.state.user)
+
+    @app.delete("/api/ssh-key")
+    def delete_ssh_key(request: Request):
+        credentials.delete_key(request.state.user["id"])
+        return {"ok": True}
+
+    @app.get("/api/git-hosts")
+    def git_hosts():
+        return credentials.public_hosts()
+
+    @app.put("/api/git-hosts")
+    def save_git_hosts(data: schemas.GitHosts):
+        return credentials.save_hosts(data.known_hosts, data.prefixes)
+
     @app.get("/api/projects/{project}/settings")
     def project_settings(project: str, request: Request):
         role = access.role(request.state.user, project)
@@ -425,6 +448,7 @@ def create_app(home: Path, watch=True):
             engine.reset_project(project)
             projects.delete(project)
             store.delete("access", project)
+            credentials.forget_project(project)
         return {"ok": True}
 
     @app.get("/api/library")
@@ -530,18 +554,27 @@ def create_app(home: Path, watch=True):
     def git_configure(worktree: str, data: schemas.RemoteConfiguration):
         return projects.remotes.configure(worktree, data.url, data.remote_branch, data.config_revision)
 
+    @app.post("/api/worktrees/{worktree}/git/consent")
+    def git_consent(worktree: str, data: schemas.GitConsent, request: Request):
+        return projects.remotes.consent(worktree, request.state.user, data.url)
+
     @app.post("/api/worktrees/{worktree}/git/fetch")
-    def git_fetch(worktree: str, data: schemas.RemoteState):
-        return projects.remotes.fetch(worktree, data.config_revision)
+    def git_fetch(worktree: str, data: schemas.RemoteState, request: Request):
+        return projects.remotes.fetch(worktree, data.config_revision, request.state.user)
 
     @app.post("/api/worktrees/{worktree}/git/pull")
     def git_pull(worktree: str, data: schemas.RemoteHeads):
         return projects.remotes.pull(worktree, data.config_revision, data.local_head, data.remote_head)
 
     @app.post("/api/worktrees/{worktree}/git/push")
-    def git_push(worktree: str, data: schemas.RemoteHeads):
+    def git_push(worktree: str, data: schemas.RemoteHeads, request: Request):
         return projects.remotes.push(
-            worktree, data.config_revision, data.local_head, data.remote_head, data.recreate
+            worktree,
+            data.config_revision,
+            data.local_head,
+            data.remote_head,
+            data.recreate,
+            request.state.user,
         )
 
     @app.get("/api/worktrees/{worktree}/diff/{commit}")

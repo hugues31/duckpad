@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { api, send, withQuery } from "./api";
+import { createPortal } from "react-dom";
+import { Link } from "react-router";
+import { ApiError, api, send, withQuery } from "./api";
 import ComparisonView from "./ComparisonView";
 import { useT } from "./i18n";
-import { Modal } from "./modals";
+import { ConfirmModal, Modal, topDialog } from "./modals";
 import Select from "./Select";
 import type { Json } from "./types";
 import "./git.css";
@@ -63,6 +65,11 @@ export default function GitWorkspace({
   const [recreate, setRecreate] = useState(false);
   const [integrated, setIntegrated] = useState<Json | null>(null);
   const [error, setError] = useState("");
+  const [keyRequired, setKeyRequired] = useState(false);
+  const [consent, setConsent] = useState<{
+    url: string;
+    retry: () => Promise<void>;
+  } | null>(null);
   const [pending, setPending] = useState(false);
   const [comparing, setComparing] = useState(false);
   const [retry, setRetry] = useState(0);
@@ -81,9 +88,11 @@ export default function GitWorkspace({
     const previous = document.activeElement as HTMLElement | null;
     const dialog = root.current?.closest<HTMLElement>("[role=dialog]");
     const key = (event: KeyboardEvent) => {
-      if (event.key !== "Tab" || !dialog) return;
+      // A nested confirmation, rendered after this dialog, keeps the focus inside it.
+      const active = topDialog() ?? dialog;
+      if (event.key !== "Tab" || !active) return;
       const controls = [
-        ...dialog.querySelectorAll<HTMLElement>(
+        ...active.querySelectorAll<HTMLElement>(
           'button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex="0"]',
         ),
       ].filter((el) => el.getClientRects().length);
@@ -204,6 +213,7 @@ export default function GitWorkspace({
   const run = async (action: () => Promise<void>) => {
     setPending(true);
     setError("");
+    setKeyRequired(false);
     try {
       await action();
     } catch (e) {
@@ -212,6 +222,21 @@ export default function GitWorkspace({
       if (live.current) setPending(false);
     }
   };
+  /** Fetch and push use the account's SSH key, which needs consent for the displayed origin. */
+  const network = (action: () => Promise<void>) =>
+    run(async () => {
+      try {
+        await action();
+      } catch (e) {
+        const detail = e instanceof ApiError ? (e.detail as Json) : null;
+        if (detail?.consent_required && live.current) {
+          setConsent({ url: detail.consent_required.url, retry: action });
+          return;
+        }
+        if (detail?.ssh_key_required && live.current) setKeyRequired(true);
+        throw e;
+      }
+    });
   const setRemoteResult = async (result: Json) => {
     if (live.current) {
       setRemote(result);
@@ -319,14 +344,24 @@ export default function GitWorkspace({
         {error && (
           <div role="alert" className="notice error">
             {error}{" "}
-            <button
-              className="button secondary small"
-              onClick={() =>
-                tab === "compare" ? setRetry((v) => v + 1) : run(reload)
-              }
-            >
-              {t("retry")}
-            </button>
+            {keyRequired ? (
+              <Link
+                className="button secondary small"
+                to="/user-settings"
+                onClick={onClose}
+              >
+                {t("openUserSettings")}
+              </Link>
+            ) : (
+              <button
+                className="button secondary small"
+                onClick={() =>
+                  tab === "compare" ? setRetry((v) => v + 1) : run(reload)
+                }
+              >
+                {t("retry")}
+              </button>
+            )}
           </div>
         )}
         {pending && (
@@ -680,7 +715,7 @@ export default function GitWorkspace({
               </div>
               <details open={!remote.url}>
                 <summary>{t("remoteConfiguration")}</summary>
-                <p>{t("serverGitAuthentication")}</p>
+                <p>{t("gitAuthenticationHint")}</p>
                 <form
                   className="git-controls"
                   onSubmit={(e) => {
@@ -706,7 +741,7 @@ export default function GitWorkspace({
                     {t("repositoryUrl")}{" "}
                     <input
                       required
-                      placeholder="https://example.com/team/project.git"
+                      placeholder="git@git.example.com:team/project.git"
                       disabled={role !== "admin"}
                       value={url}
                       onChange={(e) => setUrl(e.target.value)}
@@ -768,7 +803,7 @@ export default function GitWorkspace({
                   className="button primary"
                   disabled={pending || !canEdit || !remote.url}
                   onClick={() =>
-                    run(async () =>
+                    network(async () =>
                       setRemoteResult(
                         await api<Json>(
                           `${base}/fetch`,
@@ -860,7 +895,7 @@ export default function GitWorkspace({
                       (publication.state === "remote_deleted" && !recreate)
                     }
                     onClick={() =>
-                      run(async () =>
+                      network(async () =>
                         setRemoteResult(
                           await api<Json>(
                             `${base}/push`,
@@ -1026,6 +1061,23 @@ export default function GitWorkspace({
           )}
         </div>
       </div>
+      {consent &&
+        createPortal(
+          <ConfirmModal
+            title={t("confirmGitOrigin")}
+            confirmLabel={t("useSshKeyForOrigin")}
+            onConfirm={async () => {
+              await api(`${base}/consent`, send({ url: consent.url }));
+              void network(consent.retry);
+            }}
+            onClose={() => setConsent(null)}
+          >
+            <p>{t("gitConsentDescription")}</p>
+            <code className="git-consent-url">{consent.url}</code>
+            <p className="muted">{t("gitConsentRenewal")}</p>
+          </ConfirmModal>,
+          document.body,
+        )}
     </Modal>
   );
 }
