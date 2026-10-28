@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
+from helpers import wait_run
 
 import duckpad
 from duckpad.app import SESSION_COOKIE, create_app
@@ -207,6 +208,157 @@ def test_connection_switch_filters_parameters_in_every_environment(app, client, 
         assert saved["environments"] == expected
         connection = next(c for c in response.json()["connections"] if c["id"] == "switch_connector")
         assert connection["environments"] == expected
+
+
+@pytest.fixture
+def executed_projects(app, client):
+    worktrees = []
+    for name in ("Edited project", "Other project"):
+        worktree = client.post("/api/projects", json={"name": name}).json()
+        path = f"/api/worktrees/{worktree['id']}"
+        snapshot = client.get(path).json()
+        bundle = snapshot["bundle"]
+        bundle["templates"]["source"] = "-- @kind source\n-- @output result\nSELECT 42 AS value;"
+        bundle["templates"]["double"] = (
+            "-- @input source\n-- @output result\nSELECT value * 2 AS value FROM {{ source }};"
+        )
+        bundle["flow"]["nodes"] = [
+            {"id": "source", "template": "source", "params": {}},
+            {"id": "double", "template": "double", "params": {}},
+        ]
+        bundle["flow"]["edges"] = [
+            {
+                "id": "edge",
+                "source": "source",
+                "sourceHandle": "result",
+                "target": "double",
+                "targetHandle": "source",
+            }
+        ]
+        response = client.put(path, json={"revision": snapshot["revision"], "bundle": bundle})
+        assert response.status_code == 200, response.text
+        response = client.post(path + "/runs", json={"environment": "dev"})
+        assert response.status_code == 200, response.text
+        assert wait_run(app.state.services.store, response.json())["status"] == "success"
+        preview = client.get(path + "/preview/double").json()
+        assert preview["status"] == "valid"
+        assert preview["rows"][0]["values"] == [84]
+        worktrees.append(worktree)
+    return worktrees
+
+
+def admin_state(app, client, worktrees):
+    """Include unredacted storage and every computed node, not just public metadata."""
+    state = {
+        kind: app.state.services.store.items(kind)
+        for kind in ("connector", "connection", "settings", "access")
+    }
+    for worktree in worktrees:
+        for suffix in ("status", "preview/source", "preview/double"):
+            path = f"/api/worktrees/{worktree['id']}/{suffix}"
+            response = client.get(path)
+            assert response.status_code == 200, response.text
+            state[path] = response.json()
+    return state
+
+
+def assert_rejected_admin_edit(app, client, worktrees, method, path, body, status):
+    before = admin_state(app, client, worktrees)
+    response = client.request(method, path, json=body)
+    assert response.status_code == status, response.text
+    assert admin_state(app, client, worktrees) == before
+
+
+@pytest.mark.parametrize(
+    ("identity", "create", "status"), [("local", "true", 409), ("missing", "false", 404)]
+)
+def test_rejected_connection_save_intent_preserves_results(
+    app, client, executed_projects, identity, create, status
+):
+    body = {
+        "id": identity,
+        "name": "Rejected connection",
+        "connector": "local",
+        "environments": {"dev": {"root": ""}},
+    }
+    assert_rejected_admin_edit(
+        app, client, executed_projects, "PUT", f"/api/catalog/connection?create={create}", body, status
+    )
+
+
+@pytest.mark.parametrize(
+    ("kind", "body", "status"),
+    [
+        ("unknown", {"id": "local"}, 404),
+        ("connector", {"id": "../invalid"}, 400),
+        ("connector", {"id": "local", "init_sql": "ATTACH"}, 400),
+        ("connector", {"id": "local", "init_sql": "SELECT 1"}, 400),
+        ("connector", {"id": "local", "parameters": [{"name": "alias"}]}, 400),
+        ("connection", {"id": "local", "connector": "missing", "environments": {}}, 400),
+        ("connection", {"id": "local", "connector": "local"}, 400),
+        ("connector", [], 422),
+    ],
+)
+def test_invalid_catalog_save_preserves_results(app, client, executed_projects, kind, body, status):
+    assert_rejected_admin_edit(app, client, executed_projects, "PUT", f"/api/catalog/{kind}", body, status)
+
+
+def test_invalid_catalog_deletion_preserves_results(app, client, executed_projects):
+    assert_rejected_admin_edit(
+        app, client, executed_projects, "DELETE", "/api/catalog/unknown/local", None, 404
+    )
+
+
+@pytest.mark.parametrize(("body", "status"), [([], 400), (["dev", "../invalid"], 400), ({}, 422)])
+def test_invalid_environment_list_preserves_results(app, client, executed_projects, body, status):
+    assert_rejected_admin_edit(app, client, executed_projects, "PUT", "/api/environments", body, status)
+
+
+@pytest.mark.parametrize(
+    "body", [{}, {"connections": "local"}, {"connections": ["local", "missing"]}, {"connections": [1]}]
+)
+def test_invalid_connection_grants_preserve_results(app, client, executed_projects, body):
+    path = f"/api/projects/{executed_projects[0]['project']}/connections"
+    assert_rejected_admin_edit(app, client, executed_projects, "PUT", path, body, 400)
+
+
+@pytest.mark.parametrize(
+    ("method", "path", "body"),
+    [
+        ("PUT", "/api/catalog/connector", {"id": "local", "name": "Updated", "init_sql": ""}),
+        ("DELETE", "/api/catalog/connection/local", None),
+        ("PUT", "/api/environments", ["dev", "qa"]),
+        ("PUT", "/api/projects/{project}/connections", {"connections": []}),
+    ],
+)
+@pytest.mark.parametrize("active", [False, True])
+def test_admin_edits_reset_results_only_when_idle(app, client, executed_projects, method, path, body, active):
+    worktree = executed_projects[0]
+    engine = app.state.services.engine
+    path = path.format(project=worktree["project"])
+    if active:
+        engine.active[worktree["id"]] = {"id": "active"}
+        try:
+            assert_rejected_admin_edit(app, client, executed_projects, method, path, body, 409)
+        finally:
+            engine.active.clear()
+    else:
+        before = admin_state(app, client, executed_projects)
+        response = client.request(method, path, json=body)
+        assert response.status_code == 200, response.text
+        assert any(
+            app.state.services.store.items(kind) != before[kind]
+            for kind in ("connector", "connection", "settings", "access")
+        )
+        affected = executed_projects[:1] if path.startswith("/api/projects/") else executed_projects
+        for item in affected:
+            base = f"/api/worktrees/{item['id']}"
+            assert client.get(base + "/status").json()["nodes"] == {}
+            assert client.get(base + "/preview/double").status_code == 404
+        if len(affected) == 1:
+            for suffix in ("status", "preview/source", "preview/double"):
+                path = f"/api/worktrees/{executed_projects[1]['id']}/{suffix}"
+                assert client.get(path).json() == before[path]
 
 
 def test_environment_metadata_preserves_connections_and_survives_catalog_reload(app, client, worktree):
