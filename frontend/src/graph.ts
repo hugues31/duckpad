@@ -18,8 +18,16 @@ export interface NodeConnection {
   port: string;
 }
 
-export const identifier = (prefix = "node") =>
-  prefix + "_" + crypto.randomUUID().replaceAll("-", "").slice(0, 12);
+export const identifier = (prefix = "node") => {
+  // getRandomValues also works on HTTP origins where randomUUID is unavailable.
+  const suffix =
+    typeof crypto.randomUUID === "function"
+      ? crypto.randomUUID().replaceAll("-", "").slice(0, 12)
+      : Array.from(crypto.getRandomValues(new Uint8Array(6)), (byte) =>
+          byte.toString(16).padStart(2, "0"),
+        ).join("");
+  return prefix + "_" + suffix;
+};
 
 export const formatValue = (value: any) =>
   value === null
