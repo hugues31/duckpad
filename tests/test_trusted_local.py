@@ -3,6 +3,8 @@
 import csv
 import io
 import sys
+import threading
+from concurrent.futures import ThreadPoolExecutor
 
 import duckdb
 import pytest
@@ -10,7 +12,9 @@ from fastapi.testclient import TestClient
 from helpers import wait_until
 
 from duckpad import cli
+from duckpad import engine as engine_module
 from duckpad.app import create_app
+from duckpad.native import Cursor as NativeCursor
 from duckpad.util import Problem
 
 
@@ -152,6 +156,85 @@ def test_trusted_mode_cancels_native_sql_and_can_run_again(local):
         == 200
     )
     execute(app, client, worktree)
+
+
+def test_trusted_mode_preserves_cancellation_before_native_execute(local, monkeypatch):
+    app, client = local
+    engine = app.state.services.engine
+    worktree = client.post("/api/projects", json={"name": "Cancel before native execution"}).json()["id"]
+    endpoint = f"/api/worktrees/{worktree}"
+    snapshot = client.get(endpoint).json()
+    snapshot["bundle"]["templates"]["slow"] = (
+        "-- @kind source\n-- @output result\nSELECT SUM(random()) AS value FROM range(10000000000);"
+    )
+    snapshot["bundle"]["flow"]["nodes"] = [{"id": "source", "template": "slow", "params": {}}]
+    assert (
+        client.put(
+            endpoint, json={"revision": snapshot["revision"], "bundle": snapshot["bundle"]}
+        ).status_code
+        == 200
+    )
+    planned, proceed = threading.Event(), threading.Event()
+    original = engine_module.plan_materialization
+
+    def hold(*args, **kwargs):
+        plan = original(*args, **kwargs)
+        planned.set()
+        assert proceed.wait(10)
+        return plan
+
+    monkeypatch.setattr(engine_module, "plan_materialization", hold)
+    run = client.post(endpoint + "/runs", json={}).json()
+    try:
+        assert planned.wait(10)
+        assert client.post(f"/api/runs/{run['id']}/cancel").status_code == 200
+        proceed.set()
+        assert engine.wait(run["id"], timeout=5)["status"] == "canceled"
+        assert not engine.active
+        assert client.get(endpoint + "/preview/source").status_code == 404
+    finally:
+        # Release the original implementation's long query after a failed assertion.
+        proceed.set()
+        engine.cancel(run["id"])
+        engine.wait(run["id"], timeout=30)
+    snapshot = client.get(endpoint).json()
+    snapshot["bundle"]["templates"]["slow"] = "-- @kind source\n-- @output result\nSELECT 42 AS value;"
+    assert (
+        client.put(
+            endpoint, json={"revision": snapshot["revision"], "bundle": snapshot["bundle"]}
+        ).status_code
+        == 200
+    )
+    execute(app, client, worktree)
+
+
+def test_native_cancellation_survives_an_interrupt_lost_during_query_start():
+    entered, first_interrupt, stopped = threading.Event(), threading.Event(), threading.Event()
+
+    class StartingQuery:
+        def execute(self, query, parameters):
+            entered.set()
+            assert first_interrupt.wait(5)
+            # Model DuckDB clearing an interrupt while preparing its statement.
+            assert stopped.wait(5)
+            raise duckdb.InterruptException("Interrupted after query startup")
+
+        def interrupt(self):
+            if first_interrupt.is_set():
+                stopped.set()
+            else:
+                first_interrupt.set()
+
+    cursor = NativeCursor(StartingQuery())
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        query = pool.submit(cursor.execute, "SELECT 42")
+        assert entered.wait(5)
+        cursor.interrupt()
+        with pytest.raises(duckdb.InterruptException, match="after query startup"):
+            query.result(timeout=5)
+    cursor.interrupt()
+    with pytest.raises(duckdb.InterruptException, match="Execution canceled"):
+        cursor.execute("SELECT 43")
 
 
 def test_trusted_mode_retains_api_project_permissions(local):
