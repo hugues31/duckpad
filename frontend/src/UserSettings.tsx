@@ -2,6 +2,7 @@ import { PasswordForm } from "./Administration";
 import { useT, type Language } from "./i18n";
 import type { Preferences } from "./preferences";
 import Select from "./Select";
+import SSHKeySettings from "./SSHKeySettings";
 import type { Theme, Workspace } from "./types";
 
 export default function UserSettings({
@@ -60,6 +61,7 @@ export default function UserSettings({
       ) : (
         <PasswordForm onChanged={onPasswordChanged} />
       )}
+      <SSHKeySettings />
     </section>
   );
 }

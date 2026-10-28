@@ -4,6 +4,7 @@ import threading
 from pathlib import Path
 
 from .auth import Auth
+from .git_credentials import KEY_KIND
 from .util import Problem
 
 LEVELS = {"reader": 1, "editor": 2, "admin": 3}
@@ -110,6 +111,9 @@ class Access:
             for project in self.store.all("project"):
                 self.validate_admins(self.record(project["id"])["members"], users)
             self.store.put("user", identity, user)
+            if not user["active"]:
+                # The account's SSH key must never authenticate again, even after reactivation.
+                self.store.delete(KEY_KIND, identity)
         return Auth.public(user)
 
     def member(self, project, identity, role):

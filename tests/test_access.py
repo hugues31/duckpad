@@ -37,6 +37,9 @@ ROUTE_ACCESS = {
         "POST /api/projects",
         "POST /api/example",
         "POST /api/password",
+        "GET /api/ssh-key",
+        "POST /api/ssh-key",
+        "DELETE /api/ssh-key",
     ],
     READER: [
         "GET /api/projects/{project}/settings",
@@ -66,6 +69,7 @@ ROUTE_ACCESS = {
         "POST /api/worktrees/{worktree}/git/reviews",
         "POST /api/worktrees/{worktree}/git/reviews/{review}",
         "POST /api/worktrees/{worktree}/git/reviews/{review}/apply",
+        "POST /api/worktrees/{worktree}/git/consent",
         "POST /api/worktrees/{worktree}/git/fetch",
         "POST /api/worktrees/{worktree}/git/pull",
         "POST /api/worktrees/{worktree}/git/push",
@@ -102,6 +106,8 @@ ROUTE_ACCESS = {
         "POST /api/users",
         "PATCH /api/users/{identity}",
         "PUT /api/projects/{project}/connections",
+        "GET /api/git-hosts",
+        "PUT /api/git-hosts",
     ],
 }
 AUTHORIZATION_ERRORS = {
@@ -236,6 +242,7 @@ def test_project_role_matrix_and_cross_project_import(instance, role):
         response = request(client, headers, "POST", f"/worktrees/{worktree}/{suffix}", json={})
         assert response.status_code in ((403,) if role == "reader" else (409, 422))
     remote = request(client, headers, "GET", f"/worktrees/{worktree}/git/remote").json()
+    app.state.services.projects.remotes.credentials.save_hosts("", ["https://example.invalid/"])
     response = request(
         client,
         headers,
