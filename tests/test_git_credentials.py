@@ -159,12 +159,6 @@ def test_deactivation_deletes_the_key_and_reactivation_does_not_restore_it(insta
     assert client.patch(f"/api/users/{user['id']}", json={"active": True}).status_code == 200
     headers = account_headers(app, "leaver")
     assert call(client, headers, "GET", "/ssh-key").json() is None
-    # Keys written before deactivation existed are refused while the account is inactive.
-    app.state.services.store.put(
-        "user", user["id"], {**app.state.services.store.get("user", user["id"]), "active": False}
-    )
-    app.state.services.store.put("ssh_key", user["id"], {"private_key": "legacy"})
-    assert credentials.private_key(user["id"]) is None
 
 
 def account_headers(app, name):

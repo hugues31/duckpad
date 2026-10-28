@@ -289,7 +289,7 @@ def create_app(home: Path, watch=True, *, trusted_local=False):
         return catalog.public()
 
     @app.put("/api/catalog/{kind}")
-    def save_catalog(kind: str, data: dict[str, Any], create: bool | None = None):
+    def save_catalog(kind: str, data: dict[str, Any], create: bool = False):
         with projects.lock, engine.lock:
             catalog.save(kind, data, create=create, before_change=engine.reset_catalog)
         return catalog.public()
@@ -298,12 +298,6 @@ def create_app(home: Path, watch=True, *, trusted_local=False):
     def delete_catalog(kind: str, identity: str):
         with projects.lock, engine.lock:
             catalog.delete(kind, identity, before_change=engine.reset_catalog)
-        return catalog.public()
-
-    @app.put("/api/environments")
-    def environments(data: list[str]):
-        with projects.lock, engine.lock:
-            catalog.set_environments(data, before_change=engine.reset_catalog)
         return catalog.public()
 
     @app.post("/api/environments")
@@ -584,14 +578,6 @@ def create_app(home: Path, watch=True, *, trusted_local=False):
     @app.post("/api/worktrees/{worktree}/branches")
     def branch(worktree: str, data: schemas.NewBranch):
         return projects.branch(worktree, data.name, data.revision)
-
-    @app.get("/api/worktrees/{worktree}/merge")
-    def compare(worktree: str):
-        return projects.merge_preview(worktree)
-
-    @app.post("/api/worktrees/{worktree}/merge")
-    def merge(worktree: str, data: schemas.Merge):
-        return projects.merge(worktree, data.source_revision, data.target_revision, data.files)
 
     @app.post("/api/worktrees/{worktree}/group")
     def group_nodes(worktree: str, data: schemas.Group):

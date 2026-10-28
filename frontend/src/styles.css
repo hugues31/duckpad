@@ -2371,37 +2371,6 @@ small {
 .code-workspace > .notice {
   margin: 10px 20px;
 }
-.file-editor {
-  display: flex;
-  min-height: 400px;
-}
-.file-editor nav {
-  width: 205px;
-  flex-shrink: 0;
-  border-right: 1px solid var(--border);
-  background: var(--surface-alt);
-  padding: 10px;
-  overflow: auto;
-}
-.file-editor nav button {
-  display: block;
-  padding: 10px;
-  width: 100%;
-  font-size: 10px;
-  text-align: left;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  border-radius: 5px;
-  white-space: nowrap;
-  color: var(--muted);
-}
-.file-editor nav button.active {
-  background: var(--surface);
-  color: var(--accent);
-}
-.file-editor > section {
-  min-width: 0;
-}
 .conflict-comparison {
   display: flex;
   gap: 20px;

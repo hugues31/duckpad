@@ -92,7 +92,7 @@ def test_trusted_mode_prepares_connections_and_enforces_connection_grants(local,
     assert client.put("/api/catalog/connector", json=connector).status_code == 200
     assert (
         client.put(
-            "/api/catalog/connection",
+            "/api/catalog/connection?create=true",
             json={
                 "id": "prepared",
                 "name": "Prepared",

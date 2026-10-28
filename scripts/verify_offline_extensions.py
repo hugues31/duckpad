@@ -70,6 +70,7 @@ def verify_duckpad(home, cache, isolated, allow_unsigned=False, import_file=None
         instance.catalog.save(
             "connection",
             {"id": "h3", "name": "Offline H3", "connector": "h3", "environments": {"dev": {}}},
+            create=True,
         )
         worktree = instance.projects.create(
             "Offline extension verification",

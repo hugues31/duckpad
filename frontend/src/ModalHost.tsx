@@ -6,12 +6,11 @@ import { useT } from "./i18n";
 import {
   EditorModal,
   ConfirmModal,
-  FileModal,
   FormModal,
   Modal,
   type FormField,
 } from "./modals";
-import type { Environment, Json, Snapshot } from "./types";
+import type { Environment, Json } from "./types";
 
 /** Every dialog of the workspace, with the actions it triggers. */
 export type ModalState =
@@ -51,15 +50,6 @@ export type ModalState =
       language?: string;
       readOnly?: boolean;
       save?: (text: string) => Promise<void>;
-    }
-  | {
-      kind: "files";
-      readOnly?: boolean;
-      snapshot: Snapshot;
-      title?: string;
-      description?: string;
-      initialFiles?: Record<string, string>;
-      save: (files: Record<string, string>) => Promise<void>;
     }
   | {
       kind: "conflict";
@@ -121,18 +111,6 @@ export default function ModalHost({
           value={modal.value}
           language={modal.language}
           readOnly={modal.readOnly}
-          onSave={modal.save}
-          onClose={onClose}
-        />
-      );
-    case "files":
-      return (
-        <FileModal
-          readOnly={modal.readOnly}
-          title={modal.title}
-          description={modal.description}
-          snapshot={modal.snapshot}
-          initialFiles={modal.initialFiles}
           onSave={modal.save}
           onClose={onClose}
         />
