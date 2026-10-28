@@ -82,7 +82,13 @@ export default function Inspector({
   const [sqlMode, setSqlMode] = useState<"current" | "executed">("current");
   const [compiled, setCompiled] = useState<Json[]>([]);
   const [error, setError] = useState("");
-  const [schemas, setSchemas] = useState<Record<string, string[]>>({});
+  const [inputColumns, setInputColumns] = useState<Record<string, Json[]>>({});
+  const schemas = Object.fromEntries(
+    Object.entries(inputColumns).map(([port, columns]) => [
+      port,
+      columns.map((column) => column.name as string),
+    ]),
+  );
   // Column suggestions come from the materialized inputs; refresh them when results change.
   useEffect(() => {
     let live = true;
@@ -100,16 +106,13 @@ export default function Inspector({
                 { environment, port: edge.sourceHandle, limit: 1 },
               ),
             );
-            return [
-              edge.targetHandle,
-              result.columns.map((c: Json) => c.name),
-            ] as const;
+            return [edge.targetHandle, result.columns as Json[]] as const;
           } catch {
             return [edge.targetHandle, []] as const;
           }
         }),
     ).then((entries) => {
-      if (live) setSchemas(Object.fromEntries(entries));
+      if (live) setInputColumns(Object.fromEntries(entries));
     });
     return () => {
       live = false;
@@ -306,6 +309,7 @@ export default function Inspector({
                 }
                 onBlur={persist}
                 connections={connections}
+                columns={inputColumns[parameter.type?.match(/\((\w+)\)/)?.[1]]}
                 schemas={
                   schemas[parameter.type?.match(/\((\w+)\)/)?.[1]] ||
                   Object.values(schemas).flat()
