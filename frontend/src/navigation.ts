@@ -1,4 +1,9 @@
-import { matchRoutes, useMatches, type RouteObject } from "react-router";
+import {
+  matchRoutes,
+  redirect,
+  useMatches,
+  type RouteObject,
+} from "react-router";
 
 export const workspaceTabs = [
   "flow",
@@ -8,7 +13,6 @@ export const workspaceTabs = [
 ] as const;
 export type WorkspaceTab = (typeof workspaceTabs)[number];
 export const settingsSections = [
-  ["", "instanceGeneral"],
   ["users", "usersPermissions"],
   ["sso", "ssoSettings"],
   ["git-hosts", "gitHosts"],
@@ -37,8 +41,12 @@ export const pageRoutes: RouteObject[] = [
   { index: true, handle: { area: "home" }, Component: EmptyRoute },
   page("projects", { area: "projects" }),
   page("user-settings", { area: "userSettings" }),
+  {
+    ...page("instance-settings", { area: "instanceSettings" }),
+    loader: () => redirect("/instance-settings/users"),
+  },
   ...settingsSections.map(([slug, section]) =>
-    page(`instance-settings${slug ? `/${slug}` : ""}`, {
+    page(`instance-settings/${slug}`, {
       area: "instanceSettings",
       section,
     }),

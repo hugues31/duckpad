@@ -18,7 +18,7 @@ test("dedicated pages support direct sign-in, refresh, history, new tabs and tra
   await page
     .getByRole("link", { name: "Instance settings", exact: true })
     .click();
-  await expect(page).toHaveURL(/\/instance-settings$/);
+  await expect(page).toHaveURL(/\/instance-settings\/users$/);
   await page.getByRole("link", { name: "Environments", exact: true }).click();
   await expect(page).toHaveURL(/\/instance-settings\/environments$/);
   await page.reload();
@@ -26,15 +26,15 @@ test("dedicated pages support direct sign-in, refresh, history, new tabs and tra
     page.getByRole("button", { name: "Add environment", exact: true }),
   ).toBeVisible();
   await page.goBack();
-  await expect(page).toHaveURL(/\/instance-settings$/);
+  await expect(page).toHaveURL(/\/instance-settings\/users$/);
   await expect(
-    page.getByRole("heading", { name: "Git author", exact: true }),
+    page.getByRole("heading", { name: "Users", exact: true }),
   ).toBeVisible();
   await expect(page.getByLabel("Author name", { exact: true })).toHaveCount(0);
   await page.goBack();
   await expect(page).toHaveURL(/\/user-settings$/);
   await page.goForward();
-  await expect(page).toHaveURL(/\/instance-settings$/);
+  await expect(page).toHaveURL(/\/instance-settings\/users$/);
   await page.getByRole("button", { name: "Account menu", exact: true }).click();
   const popup = context.waitForEvent("page");
   await page
@@ -196,7 +196,7 @@ test("unsaved code and documentation guard links and browser history without los
   await guard
     .getByRole("button", { name: "Discard and leave", exact: true })
     .click();
-  await expect(page).toHaveURL(/\/instance-settings$/);
+  await expect(page).toHaveURL(/\/instance-settings\/users$/);
   await page.goBack();
   await expect(page.locator(".project-documentation")).not.toHaveValue(
     "Unsaved documentation",

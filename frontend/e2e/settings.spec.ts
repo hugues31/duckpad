@@ -149,11 +149,11 @@ test("instance configuration is available without a project and separate from pe
       0,
     );
     await expect(
-      page.getByText(
-        "Project changes are committed with the signed-in account",
-        { exact: false },
-      ),
+      page.getByRole("heading", { name: "Users", exact: true }),
     ).toBeVisible();
+    await expect(
+      page.getByRole("link", { name: "General", exact: true }),
+    ).toHaveCount(0);
     await openInstanceSettings(page, "Environments");
     await page
       .getByRole("button", { name: "Add environment", exact: true })
