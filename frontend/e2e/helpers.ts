@@ -22,7 +22,10 @@ export async function signIn(page: Page) {
   await submitLogin(page);
 }
 
-export async function openInstanceSettings(page: Page, section = "General") {
+export async function openInstanceSettings(
+  page: Page,
+  section = "Users and permissions",
+) {
   await page
     .getByRole("link", { name: "Instance settings", exact: true })
     .click();
