@@ -1955,25 +1955,16 @@ small {
   display: block;
   max-width: 650px;
 }
-.settings-page {
-  max-width: none;
-}
-.settings-navigation {
-  flex-wrap: wrap;
-  border-bottom: 1px solid var(--border);
-  margin: 22px 0 28px;
-}
 .instance-settings .administration-page {
   padding: 0;
   overflow: visible;
 }
 .settings-card {
-  max-width: 540px;
+  min-width: 0;
   padding: 25px;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 9px;
-  margin: 20px 0;
 }
 .settings-card h2 {
   font-size: 17px;
@@ -3227,8 +3218,7 @@ option {
   align-items: center;
   gap: 12px;
 }
-.administration-page .settings-card {
-  max-width: 1100px;
+.administration-search + .settings-card {
   margin-top: 24px;
 }
 .administration-table {

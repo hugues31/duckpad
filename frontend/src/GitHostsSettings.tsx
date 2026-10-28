@@ -72,44 +72,46 @@ export default function GitHostsSettings() {
           }}
         >
           <fieldset disabled={pending} className="git-hosts-fields">
-            <label className="field">
-              <span>{t("trustedHostKeys")}</span>
-              <textarea
-                className="code-input"
-                rows={6}
-                spellCheck={false}
-                aria-label={t("trustedHostKeys")}
-                aria-describedby="trusted-host-keys-hint"
-                placeholder="git.example.com ssh-ed25519 AAAAC3Nz…"
-                value={knownHosts}
-                onChange={(e) => {
-                  setKnownHosts(e.target.value);
-                  setSaved(false);
-                }}
-              />
-              <small className="muted" id="trusted-host-keys-hint">
-                {t("trustedHostKeysHint")}
-              </small>
-            </label>
-            <label className="field">
-              <span>{t("allowedOriginPrefixes")}</span>
-              <textarea
-                className="code-input"
-                rows={3}
-                spellCheck={false}
-                aria-label={t("allowedOriginPrefixes")}
-                aria-describedby="allowed-origin-prefixes-hint"
-                placeholder="git@git.example.com:team/"
-                value={prefixes}
-                onChange={(e) => {
-                  setPrefixes(e.target.value);
-                  setSaved(false);
-                }}
-              />
-              <small className="muted" id="allowed-origin-prefixes-hint">
-                {t("allowedOriginPrefixesHint")}
-              </small>
-            </label>
+            <div className="settings-fields">
+              <label className="field">
+                <span>{t("trustedHostKeys")}</span>
+                <textarea
+                  className="code-input"
+                  rows={6}
+                  spellCheck={false}
+                  aria-label={t("trustedHostKeys")}
+                  aria-describedby="trusted-host-keys-hint"
+                  placeholder="git.example.com ssh-ed25519 AAAAC3Nz…"
+                  value={knownHosts}
+                  onChange={(e) => {
+                    setKnownHosts(e.target.value);
+                    setSaved(false);
+                  }}
+                />
+                <small className="muted" id="trusted-host-keys-hint">
+                  {t("trustedHostKeysHint")}
+                </small>
+              </label>
+              <label className="field">
+                <span>{t("allowedOriginPrefixes")}</span>
+                <textarea
+                  className="code-input"
+                  rows={3}
+                  spellCheck={false}
+                  aria-label={t("allowedOriginPrefixes")}
+                  aria-describedby="allowed-origin-prefixes-hint"
+                  placeholder="git@git.example.com:team/"
+                  value={prefixes}
+                  onChange={(e) => {
+                    setPrefixes(e.target.value);
+                    setSaved(false);
+                  }}
+                />
+                <small className="muted" id="allowed-origin-prefixes-hint">
+                  {t("allowedOriginPrefixesHint")}
+                </small>
+              </label>
+            </div>
             <button className="button primary">
               {t(pending ? "saving" : "saveGitHosts")}
             </button>

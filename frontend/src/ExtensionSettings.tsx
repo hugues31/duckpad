@@ -25,53 +25,61 @@ export default function ExtensionSettings() {
     };
   }, [setError]);
   return (
-    <section className="settings-card" aria-label={t("extensionSettings")}>
+    <section aria-label={t("extensionSettings")}>
       <h2>{t("extensionSettings")}</h2>
-      <ExtensionImport />
-      <h3>{t("extensionUnsigned")}</h3>
-      <p className="muted">{t("unsignedExtensionsHint")}</p>
-      {error && (
-        <div className="notice error" role="alert">
-          {error}
+      <div className="settings-grid">
+        <div className="settings-card">
+          <ExtensionImport />
         </div>
-      )}
-      {!config ? (
-        <p>{t("loading")}</p>
-      ) : (
-        <form
-          onSubmit={(event) => {
-            event.preventDefault();
-            setSaved(false);
-            void run(async () => {
-              setConfig(
-                await api<Configuration>(
-                  "/extensions/settings",
-                  send(config, "PUT"),
-                ),
-              );
-              setSaved(true);
-            });
-          }}
-        >
-          <label className="check-row">
-            <input
-              type="checkbox"
-              checked={config.allow_unsigned_extensions}
-              disabled={pending}
-              onChange={(event) => {
-                setConfig({ allow_unsigned_extensions: event.target.checked });
+        <div className="settings-card">
+          <h3>{t("extensionUnsigned")}</h3>
+          <p className="muted">{t("unsignedExtensionsHint")}</p>
+          {error && (
+            <div className="notice error" role="alert">
+              {error}
+            </div>
+          )}
+          {!config ? (
+            <p>{t("loading")}</p>
+          ) : (
+            <form
+              onSubmit={(event) => {
+                event.preventDefault();
                 setSaved(false);
+                void run(async () => {
+                  setConfig(
+                    await api<Configuration>(
+                      "/extensions/settings",
+                      send(config, "PUT"),
+                    ),
+                  );
+                  setSaved(true);
+                });
               }}
-            />
-            {t("allowUnsignedExtensions")}
-          </label>
-          <p className="muted">{t("extensionSettingsApplyHint")}</p>
-          <button className="button primary" disabled={pending}>
-            {t("saveExtensionSettings")}
-          </button>
-          {saved && <p role="status">{t("extensionSettingsSaved")}</p>}
-        </form>
-      )}
+            >
+              <label className="check-row">
+                <input
+                  type="checkbox"
+                  checked={config.allow_unsigned_extensions}
+                  disabled={pending}
+                  onChange={(event) => {
+                    setConfig({
+                      allow_unsigned_extensions: event.target.checked,
+                    });
+                    setSaved(false);
+                  }}
+                />
+                {t("allowUnsignedExtensions")}
+              </label>
+              <p className="muted">{t("extensionSettingsApplyHint")}</p>
+              <button className="button primary" disabled={pending}>
+                {t("saveExtensionSettings")}
+              </button>
+              {saved && <p role="status">{t("extensionSettingsSaved")}</p>}
+            </form>
+          )}
+        </div>
+      </div>
     </section>
   );
 }
