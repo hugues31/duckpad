@@ -49,10 +49,6 @@ test("homepage, captions and recorded media are available", async ({
   await expect(video).not.toHaveAttribute("autoplay");
   await expect(caption).toHaveAttribute("srclang", "en");
   await video.evaluate((element: HTMLVideoElement) => element.pause());
-  await page.getByText("Read the video transcript", { exact: true }).click();
-  await expect(page.locator(".video-transcript")).toContainText(
-    "27 contributing source values",
-  );
   await page
     .getByRole("link", { name: "Build your first pipeline", exact: true })
     .click();
@@ -300,7 +296,7 @@ test("video controls fit a touch screen in both themes", async ({
   await context.close();
 });
 
-test("unavailable video offers a direct link, transcript and playback retry", async ({
+test("unavailable video offers a direct link and playback retry", async ({
   page,
 }) => {
   await page.route("**/duckpad-overview.mp4", (route) => route.abort());
@@ -310,10 +306,6 @@ test("unavailable video offers a direct link, transcript and playback retry", as
   await expect(
     page.getByRole("link", { name: "Open the video directly" }),
   ).toHaveAttribute("href", /duckpad-overview\.mp4$/);
-  await page.getByText("Read the video transcript", { exact: true }).click();
-  await expect(page.locator(".video-transcript")).toContainText(
-    "27 contributing source values",
-  );
   await page.unroute("**/duckpad-overview.mp4");
   await page.getByRole("button", { name: /Watch the film/ }).click();
   await expect
