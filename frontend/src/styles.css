@@ -3343,7 +3343,8 @@ fieldset.palette-bottom {
     flex-direction: column;
   }
 }
-.sso-fields {
+.sso-fields,
+.git-hosts-fields {
   border: 0;
   padding: 0;
   margin: 0;
@@ -3390,4 +3391,41 @@ a.button {
 .export-download {
   padding: 12px 16px 0;
   overflow-wrap: anywhere;
+}
+.settings-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+}
+.ssh-public-key {
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 11px;
+  word-break: break-all;
+  resize: none;
+}
+.ssh-key-details {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 6px 14px;
+  margin: 14px 0 0;
+  font-size: 12px;
+}
+.ssh-key-details dt {
+  color: var(--muted);
+}
+.ssh-key-details dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.git-host-keys code,
+.git-consent-url {
+  overflow-wrap: anywhere;
+}
+.git-consent-url {
+  display: block;
+  margin: 12px 0;
+  padding: 10px 12px;
+  border-radius: 6px;
+  background: var(--surface-alt);
 }

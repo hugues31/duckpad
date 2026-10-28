@@ -331,8 +331,10 @@ def local_remote(project, tmp_path, monkeypatch):
     remote = tmp_path / "remote.git"
     subprocess.run(["git", "init", "--bare", "-b", "main", str(remote)], check=True, capture_output=True)
     url = "https://example.invalid/project.git"
+    projects.remotes.credentials.save_hosts("", ["https://example.invalid/"])
 
-    def network(path, *args):
+    def network(path, *args, key=None):
+        assert key is None
         argv = [str(remote) if arg == url else arg for arg in args]
         result = subprocess.run(["git", "-C", str(path), *argv], capture_output=True, text=True, timeout=10)
         if result.returncode:
@@ -408,11 +410,11 @@ def test_remote_divergence_race_dirty_state_and_configuration_changes(local_remo
     network = projects.remotes.network
 
     # Advance between ls-remote and receive-pack: the exact-head lease must reject it.
-    def race(path, *args):
+    def race(path, *args, key=None):
         if args[0] == "push":
             edit(projects, other, lambda b: b["documentation"].update(project="Concurrent remote"))
             projects.git(other["path"], "push", str(remote), "HEAD:main")
-        return network(path, *args)
+        return network(path, *args, key=key)
 
     monkeypatch.setattr(projects.remotes, "network", race)
     with pytest.raises(Problem, match="rejected"):
@@ -489,8 +491,11 @@ def test_network_errors_never_echo_authentication_material(project, monkeypatch)
         )
 
     monkeypatch.setattr(subprocess, "run", failure)
-    with pytest.raises(Problem, match="authentication failed") as caught:
+    with pytest.raises(Problem, match="requires authentication") as caught:
         projects.remotes.network(main["path"], "ls-remote", "https://example.com/repo")
+    assert "secret" not in str(caught.value)
+    with pytest.raises(Problem, match="authentication failed") as caught:
+        projects.remotes.network(main["path"], "ls-remote", "git@example.com:repo", key="private")
     assert "secret" not in str(caught.value)
 
     def timeout(*args, **kwargs):

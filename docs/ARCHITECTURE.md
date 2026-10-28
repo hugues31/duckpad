@@ -10,6 +10,7 @@ Duckpad has a Python API process serving a compiled React application and isolat
 | `services.py` | Wiring of the instance services shared by the API, tests and scripts |
 | `store.py`, `catalog.py` | SQLite records, environments, reusable connections, typed connector setup and secret redaction |
 | `projects.py`, `bundle.py`, `merge.py` | Git worktrees, revision capture, external-save batching and durable conflict proposals; declarative file layout and validation; three-way merge |
+| `git_workspace.py`, `remote.py`, `git_credentials.py` | Branches and reviewed merges; bounded fetch and leased push in an isolated Git and SSH environment; per-account SSH keys, trusted Git hosts and URL-bound consent |
 | `templates.py`, `builtin_templates.py`, `components.py` | Typed SQL compilation, read/write contracts, built-in templates, recursive expansion, parameter exposure, independent imports |
 | `engine.py`, `datasets.py`, `materialize.py` | Admission, immutable execution configuration, DuckDB ownership, cancellation, output publication and invalidation |
 | `lineage.py`, `trace.py`, `sqlast.py` | Lineage requests and their cancellation; SQLGlot normalization and targeted provenance queries over materialized dependencies |
@@ -21,7 +22,7 @@ The frontend in `frontend/src` mirrors this split: `api.ts` is the only HTTP cli
 
 ## Files and data
 
-An instance contains `instance.sqlite`, a private extension cache, `projects/`, separate `worktrees/`, uploads, example source files and `exports/<worktree>/<environment>/`. The database file is created with mode 0600 and the instance directory with mode 0700. Secrets are instance configuration; no project file contains resolved credentials. SQLite user records contain scrypt hashes and salts, never plaintext passwords. Sessions are stored by token hash, identify their owner and expire after seven days. A session also records the credential and revocation version; resetting a password or deactivating an account invalidates its sessions, including after reactivation.
+An instance contains `instance.sqlite`, a private extension cache, `projects/`, separate `worktrees/`, uploads, example source files and `exports/<worktree>/<environment>/`. The database file is created with mode 0600 and the instance directory with mode 0700. Secrets are instance configuration; no project file contains resolved credentials. SQLite user records contain scrypt hashes and salts, never plaintext passwords. Sessions are stored by token hash, identify their owner and expire after seven days. A session also records the credential and revocation version; resetting a password or deactivating an account invalidates its sessions, including after reactivation. Account SSH private keys, trusted Git host keys and origin consents are records of the same database; deactivating an account deletes its key. Network Git copies a key to a 0600 file under `git-network/` only for the duration of one operation.
 
 Each project repository versions `flow.json`, `documentation.json`, `templates/*.sql`, and `components/*.json`. Results, source data and export files are outside that versioned definition set. Connector definitions and environment settings have no configuration-version history. Historical project code always uses the current instance catalog when explicitly run.
 
@@ -31,9 +32,9 @@ Settings follow the same instance, project and user boundaries as authorization:
 
 | Scope | Entry point | Settings and permissions |
 | --- | --- | --- |
-| Instance | **Instance settings** in the main navigation | User accounts and instance roles (member/admin), OIDC single sign-on, environment names, connections and connector definitions, and DuckDB extension imports and unsigned policy. Only instance administrators can configure these. |
+| Instance | **Instance settings** in the main navigation | User accounts and instance roles (member/admin), OIDC single sign-on, trusted Git hosts and origin prefixes, environment names, connections and connector definitions, and DuckDB extension imports and unsigned policy. Only instance administrators can configure these. |
 | Project | **Project settings** in the open project's toolbar | Participants and project roles (reader/editor/admin), authorized connections, and project deletion. Project administrators manage participants; only instance administrators grant access to instance connections. Readers and editors can inspect their project's access without changing it. |
-| User | **Account menu → User settings** | Language, theme and the signed-in account's password. SSO accounts manage their password with the identity provider. |
+| User | **Account menu → User settings** | Language, theme, the signed-in account's password and its SSH key for Git. SSO accounts manage their password with the identity provider. |
 
 Instance configuration applies across projects. Selecting a branch or run
 environment belongs to the pipeline workspace and does not edit that configuration.
@@ -140,7 +141,7 @@ Duckpad's workers, CPU affinity or container quotas. In containers, the operatin
 system counters exposed by the runtime determine visibility. Missing metrics are
 shown as unavailable, and CPU sampling resumes after two valid snapshots.
 
-The main endpoint groups are `/session`, `/workspace`, `/projects`, `/example`, `/worktrees`, `/catalog`, `/environments`, `/runs`, `/conflicts`, `/library`, `/users`, `/password` and `/resources`. Uploads use `/worktrees/{id}/uploads` and are stored under `resources/<project>/`. Request bodies are validated; invalid requests receive a 422 response in the same `{"error", "detail"}` format as other failures. A worktree exposes definition snapshots and saves, branch/merge history, compiled SQL, status, previews, lineage and manual run launch. See the route definitions in `src/duckpad/app.py` for request shapes. APIs use the same services as the interface; there is no second runner or separate editor state.
+The main endpoint groups are `/session`, `/workspace`, `/projects`, `/example`, `/worktrees`, `/catalog`, `/environments`, `/runs`, `/conflicts`, `/library`, `/users`, `/password`, `/ssh-key`, `/git-hosts` and `/resources`. Uploads use `/worktrees/{id}/uploads` and are stored under `resources/<project>/`. Request bodies are validated; invalid requests receive a 422 response in the same `{"error", "detail"}` format as other failures. A worktree exposes definition snapshots and saves, branch/merge history, compiled SQL, status, previews, lineage and manual run launch. See the route definitions in `src/duckpad/app.py` for request shapes. APIs use the same services as the interface; there is no second runner or separate editor state.
 
 ## Authorization and execution isolation
 
@@ -151,6 +152,12 @@ change files, create branches, import definitions, cancel runs or upload files.
 Imports also require read access to their source project. Workspace, library and
 execution lists filter private resources before returning them. Last-admin checks
 and membership/account writes share a lock, including concurrent demotions.
+
+Network Git acts as the requesting account. Fetch and push over SSH use that
+account's key, only for an origin allowed by the instance's trusted Git hosts and
+confirmed by that account for the project's current URL; HTTPS runs without
+credentials. The server account's SSH keys, agent and Git credentials are never
+used. See [Git synchronization](GIT.md#network-credentials).
 
 SQL runs in a separate process per worktree/environment. The worker receives only
 the project's authorized connection configuration and communicates through a
