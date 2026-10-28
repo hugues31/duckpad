@@ -299,14 +299,12 @@ export default function Inspector({
                 worktree={snapshot.worktree.id}
                 parameter={parameter}
                 value={draft.params?.[parameter.name] ?? parameter.default}
-                onChange={(value) =>
-                  update({
-                    params: {
-                      ...draftRef.current.params,
-                      [parameter.name]: value,
-                    },
-                  })
-                }
+                onChange={(value) => {
+                  const params = { ...draftRef.current.params };
+                  if (value === undefined) delete params[parameter.name];
+                  else params[parameter.name] = value;
+                  update({ params });
+                }}
                 onBlur={persist}
                 connections={connections}
                 columns={inputColumns[parameter.type?.match(/\((\w+)\)/)?.[1]]}
