@@ -107,6 +107,12 @@ class Projects:
                 for record in self.store.all(kind):
                     if record.get("worktree") in {w["id"] for w in worktrees}:
                         self.store.delete(kind, record["id"])
+            for kind in ("artifact", "export_result"):
+                for identity, record in self.store.items(kind):
+                    if record.get("worktree") in {w["id"] for w in worktrees}:
+                        if kind == "artifact":
+                            (self.store.home / "artifacts" / identity).unlink(missing_ok=True)
+                        self.store.delete(kind, identity)
             self.store.delete("project", project_id)
             for worktree in worktrees:
                 shutil.rmtree(worktree["path"], ignore_errors=True)

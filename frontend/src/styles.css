@@ -3311,3 +3311,7 @@ a.button {
 .account-menu a {
   cursor: pointer;
 }
+.export-download {
+  padding: 12px 16px 0;
+  overflow-wrap: anywhere;
+}
