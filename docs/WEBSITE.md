@@ -75,6 +75,11 @@ it and a poster in `docs/images/duckpad-overview.jpg`. The player includes a
 descriptive transcript and loads media only when requested. The README links its
 poster to the homepage player.
 
+The film alternates real light and dark theme recordings. Its narration stays in
+one continuous take, with shots and captions aligned to the voice. The captured
+palette item and recorded drag events restore the browser's drag preview in the
+composite; the node itself is created by the application on drop.
+
 The editable production project, source recordings and repeatable capture
 scripts are maintained privately outside this repository. For a product-film
 update, regenerate the affected shots there, review the complete render and
