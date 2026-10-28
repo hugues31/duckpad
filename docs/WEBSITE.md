@@ -72,8 +72,10 @@ production with real application footage, a composited dimensional cursor,
 American English narration and music generated with ElevenLabs. It lives at
 `website/public/demos/duckpad-overview.mp4`, with English WebVTT captions beside
 it and a poster in `docs/images/duckpad-overview.jpg`. The player includes a
-descriptive transcript and loads media only when requested. The README links its
-poster to the homepage player.
+descriptive transcript and loads media only when requested. Its custom controls
+provide keyboard-accessible playback, seeking, volume, English captions and
+fullscreen, with touch-sized buttons on mobile. Without JavaScript, native video
+controls remain available. The README links its poster to the homepage player.
 
 The film alternates real light and dark theme recordings. Its narration stays in
 one continuous take, with shots and captions aligned to the voice. The captured
