@@ -1,4 +1,5 @@
 import Select from "./Select";
+import ColumnPreparation from "./ColumnPreparation";
 import { useId, useState } from "react";
 import { FileUp } from "lucide-react";
 import { uploadFile } from "./api";
@@ -12,6 +13,7 @@ export default function ParameterField({
   onBlur,
   connections,
   schemas,
+  columns,
   worktree,
 }: {
   parameter: Json;
@@ -20,6 +22,7 @@ export default function ParameterField({
   onBlur?: () => void;
   connections: Json[];
   schemas?: string[];
+  columns?: Json[];
   worktree?: string;
 }) {
   const t = useT();
@@ -29,6 +32,16 @@ export default function ParameterField({
   const type = parameter.type || "text";
   const base = type.split(/[<(]/)[0];
   if (base === "secret") return null;
+  if (["column_selection", "value_cleaning"].includes(base))
+    return (
+      <ColumnPreparation
+        kind={base}
+        value={value}
+        columns={columns || []}
+        onChange={onChange}
+        onBlur={onBlur}
+      />
+    );
   return (
     <label className="field">
       <span>
