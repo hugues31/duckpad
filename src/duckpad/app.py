@@ -289,22 +289,19 @@ def create_app(home: Path, watch=True):
     @app.put("/api/catalog/{kind}")
     def save_catalog(kind: str, data: dict[str, Any]):
         with projects.lock, engine.lock:
-            engine.reset_catalog()
-            catalog.save(kind, data)
+            catalog.save(kind, data, before_change=engine.reset_catalog)
         return catalog.public()
 
     @app.delete("/api/catalog/{kind}/{identity}")
     def delete_catalog(kind: str, identity: str):
         with projects.lock, engine.lock:
-            engine.reset_catalog()
-            catalog.delete(kind, identity)
+            catalog.delete(kind, identity, before_change=engine.reset_catalog)
         return catalog.public()
 
     @app.put("/api/environments")
     def environments(data: list[str]):
         with projects.lock, engine.lock:
-            engine.reset_catalog()
-            catalog.set_environments(data)
+            catalog.set_environments(data, before_change=engine.reset_catalog)
         return catalog.public()
 
     @app.post("/api/environments")
@@ -417,8 +414,9 @@ def create_app(home: Path, watch=True):
     @app.put("/api/projects/{project}/connections")
     def project_connections(project: str, data: dict):
         with projects.lock, engine.lock:
-            engine.reset_project(project)
-            access.grant_connections(project, data.get("connections"))
+            access.grant_connections(
+                project, data.get("connections"), before_change=lambda: engine.reset_project(project)
+            )
         return {"ok": True}
 
     @app.delete("/api/projects/{project}")
