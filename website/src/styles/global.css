@@ -14,7 +14,7 @@
   --blue: #1858de;
   --blue-gradient:
     radial-gradient(ellipse at 18% 20%, #2b6be8, transparent 55%),
-    radial-gradient(ellipse at 85% 80%, #1749b7, transparent 60%);
+    radial-gradient(ellipse at 85% 80%, #1241aa, transparent 60%);
   --heading-gradient: var(--blue-gradient);
   --soft: #edf2ff;
   --code: #162032;
@@ -28,8 +28,8 @@
   --line: #303e50;
   --blue: #8db4ff;
   --heading-gradient:
-    radial-gradient(ellipse at 18% 20%, #aac9ff, transparent 55%),
-    radial-gradient(ellipse at 85% 80%, #74a4f5, transparent 60%);
+    radial-gradient(ellipse at 18% 20%, #b0cdff, transparent 55%),
+    radial-gradient(ellipse at 85% 80%, #6c9ded, transparent 60%);
   --soft: #202e47;
   --code: #0c131e;
   color: var(--ink);

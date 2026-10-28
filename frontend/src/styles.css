@@ -13,7 +13,7 @@
   --accent-hover: #1048ba;
   --accent-soft: #dbe7ff;
   --accent-glow: #2b6be8;
-  --accent-depth: #1749b7;
+  --accent-depth: #1241aa;
   --accent-gradient:
     radial-gradient(ellipse at 18% 20%, var(--accent-glow), transparent 55%),
     radial-gradient(ellipse at 85% 80%, var(--accent-depth), transparent 60%);
@@ -37,8 +37,8 @@
   --accent: #63a5ff;
   --accent-hover: #90bfff;
   --accent-soft: #233c61;
-  --accent-glow: #90bfff;
-  --accent-depth: #5594ee;
+  --accent-glow: #97c3ff;
+  --accent-depth: #4d8ce5;
   --edge: #92929e;
   --glass: #1c1c1ea6;
   --glass-border: #a1a1aa40;
