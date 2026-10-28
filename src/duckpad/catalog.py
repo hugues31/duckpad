@@ -12,19 +12,8 @@ MASK = "••••"
 KINDS = ("connector", "connection")
 RESERVED_PARAMETERS = {"alias", "secret_name"}
 PARAMETER_TYPES = ("text", "number", "boolean", "file")
-# Catalog identifiers and environment names.
+# Catalog identifiers.
 NAME = re.compile(r"[A-Za-z][\w-]*")
-
-XLSX_PRESET = {
-    "id": "xlsx",
-    "name": "Excel (XLSX)",
-    "description": "Read worksheets and export XLSX workbooks on this computer.",
-    "parameters": [{"name": "root", "type": "text", "default": ""}],
-    "extensions": [{"name": "excel"}],
-    "init_sql": "",
-    "capabilities": ["read", "write"],
-    "compatibility": "Requires the matching DuckDB excel extension. Validated with DuckDB 2.0.0 on Linux x86_64, including isolated execution. Legacy .xls files are not supported.",
-}
 
 PRESETS = [
     {
@@ -37,7 +26,16 @@ PRESETS = [
         "capabilities": ["read", "write"],
         "compatibility": "Validated on DuckDB 2.0.0, Linux x86_64, with native CSV and Parquet. Other DuckDB versions and platforms require validation.",
     },
-    XLSX_PRESET,
+    {
+        "id": "xlsx",
+        "name": "Excel (XLSX)",
+        "description": "Read worksheets and export XLSX workbooks on this computer.",
+        "parameters": [{"name": "root", "type": "text", "default": ""}],
+        "extensions": [{"name": "excel"}],
+        "init_sql": "",
+        "capabilities": ["read", "write"],
+        "compatibility": "Requires the matching DuckDB excel extension. Validated with DuckDB 2.0.0 on Linux x86_64, including isolated execution. Legacy .xls files are not supported.",
+    },
     {
         "id": "s3",
         "name": "Amazon S3",

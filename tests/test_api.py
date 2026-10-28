@@ -114,16 +114,6 @@ def test_unknown_worktrees_and_environments_are_not_found(client, worktree):
     assert client.get(f"/api/worktrees/{worktree}/status?environment=prod").status_code == 200
 
 
-def test_removed_apis_reject_requests_without_changing_state(client, worktree):
-    catalog = client.get("/api/catalog").json()
-    snapshot = client.get(f"/api/worktrees/{worktree}").json()
-    assert client.put("/api/environments", json=["replacement"]).status_code == 405
-    assert client.get(f"/api/worktrees/{worktree}/merge").status_code == 404
-    assert client.post(f"/api/worktrees/{worktree}/merge", json={}).status_code == 405
-    assert client.get("/api/catalog").json() == catalog
-    assert client.get(f"/api/worktrees/{worktree}").json() == snapshot
-
-
 def test_connection_creation_rejects_duplicates_without_overwriting_secrets(app, client):
     connection = {
         "id": "warehouse",

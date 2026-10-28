@@ -98,10 +98,7 @@ admin cannot grant connections or promote an instance admin. Readers can copy da
 they can see; read access is not an extraction restriction.
 
 Memberships, password hashes and connection grants remain in instance SQLite,
-outside project Git. Older instance layouts are not migrated. Start with a fresh
-instance directory when upgrading from an incompatible release; recreate accounts,
-connections and project grants explicitly. Project repositories must contain both
-`flow.json` and `documentation.json`.
+outside project Git.
 See [authorization and execution isolation](ARCHITECTURE.md#authorization-and-execution-isolation)
 for deployment requirements and file access boundaries.
 
