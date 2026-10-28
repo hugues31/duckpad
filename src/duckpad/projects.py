@@ -129,7 +129,7 @@ class Projects:
         path = Path(worktree["path"])
         names = ["flow.json", "documentation.json"]
         names += [
-            str(p.relative_to(path))
+            p.relative_to(path).as_posix()
             for folder, pattern in [("templates", "*.sql"), ("components", "*.json")]
             for p in sorted((path / folder).glob(pattern))
         ]
