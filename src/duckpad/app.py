@@ -4,17 +4,19 @@ import io
 import json
 import os
 import zipfile
-from contextlib import asynccontextmanager
+from contextlib import ExitStack, asynccontextmanager
 from pathlib import Path
 from typing import Annotated, Any, Literal
-from urllib.parse import urlparse
+from urllib.parse import quote, urlparse
 
 from fastapi import FastAPI, File, Form, Query, Request, UploadFile
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.background import BackgroundTask
 
 from . import __version__, schemas
+from .artifacts import CHUNK_SIZE
 from .auth import SESSION_LIFETIME, Auth
 from .bundle import bundle_to_files
 from .components import group, import_definition
@@ -149,7 +151,10 @@ def create_app(home: Path, watch=True):
         response.headers["Referrer-Policy"] = (
             "no-referrer" if request.url.path.startswith("/api/oidc/") else "same-origin"
         )
-        response.headers["X-Frame-Options"] = "DENY"
+        # The inspector uses a same-origin frame for native attachment downloads and JSON errors.
+        response.headers["X-Frame-Options"] = (
+            "SAMEORIGIN" if getattr(request.scope.get("route"), "name", "") == "download_export" else "DENY"
+        )
         if request.url.path.startswith("/api/"):
             response.headers["Cache-Control"] = "no-store"
         return response
@@ -627,6 +632,34 @@ def create_app(home: Path, watch=True):
     @app.get("/api/worktrees/{worktree}/compile/{node}")
     def compile_sql(worktree: str, node: str, environment: str = "dev"):
         return engine.compile(worktree, environment, node)
+
+    @app.get("/api/worktrees/{worktree}/exports/{node}")
+    def export_result(worktree: str, node: str, environment: str = "dev"):
+        return engine.export_result(worktree, environment, node)
+
+    @app.get("/api/worktrees/{worktree}/exports/{node}/download")
+    def download_export(worktree: str, node: str, run: str, environment: str = "dev"):
+        opened = ExitStack()
+        stream, record = opened.enter_context(engine.open_export(worktree, environment, node, run))
+
+        def chunks():
+            try:
+                while chunk := stream.read(CHUNK_SIZE):
+                    yield chunk
+            finally:
+                opened.close()
+
+        return StreamingResponse(
+            chunks(),
+            media_type=record["media_type"],
+            headers={
+                "Content-Disposition": "attachment; filename*=UTF-8''" + quote(record["filename"], safe=""),
+                "Content-Length": str(record["size"]),
+                "Cache-Control": "no-store",
+                "X-Content-Type-Options": "nosniff",
+            },
+            background=BackgroundTask(opened.close),
+        )
 
     @app.get("/api/worktrees/{worktree}/preview/{node}")
     def preview(

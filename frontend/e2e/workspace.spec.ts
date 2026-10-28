@@ -322,15 +322,26 @@ test("an open lineage explanation is interrupted when its generation is recalcul
     "Sum of 27 contributing values",
   );
   const worktree = new URL(page.url()).pathname.split("/")[2];
-  await page.request.post(`/api/worktrees/${worktree}/runs`, {
+  const response = await page.request.post(`/api/worktrees/${worktree}/runs`, {
     data: { environment: "dev" },
   });
+  expect(response.ok()).toBeTruthy();
+  const execution = await response.json();
   await expect(page.locator(".lineage-dialog")).toContainText(
     "This exploration was interrupted",
   );
   await expect(
     page.locator(".lineage-dialog .lineage-card.is-source"),
   ).toHaveCount(0);
+  // Catalog changes in later tests must not race this background execution.
+  await expect
+    .poll(
+      async () =>
+        (await (await page.request.get(`/api/runs/${execution.id}`)).json())
+          .status,
+      { timeout: 30000 },
+    )
+    .toBe("success");
 });
 
 test("connection capabilities constrain source and export forms without a project commit", async ({
