@@ -24,17 +24,18 @@ class Auth:
         self.store = store
         self.initial_password = None
         if not store.all("user"):
-            record = store.get("auth", "admin")
-            if not record:
-                self.initial_password = secrets.token_urlsafe(18)
-                record = self.credentials(self.initial_password)
+            self.initial_password = secrets.token_urlsafe(18)
             store.put(
                 "user",
                 "admin",
-                {"id": "admin", "username": "admin", "role": "admin", "active": True, **record},
+                {
+                    "id": "admin",
+                    "username": "admin",
+                    "role": "admin",
+                    "active": True,
+                    **self.credentials(self.initial_password),
+                },
             )
-        # Pre-account sessions have no owner and must not survive the migration.
-        store.delete("auth", "admin")
         self.attempts = {}
 
     @staticmethod
@@ -115,13 +116,13 @@ class Auth:
 
     def check(self, token):
         session = self.store.get("session", session_key(token))
-        user = self.store.get("user", session.get("user", "")) if session else None
+        user = self.store.get("user", session["user"]) if session else None
         if (
             not session
             or session["expires"] < time.time()
             or not user
             or not user["active"]
-            or session.get("version", 0) != user.get("session_version", 0)
+            or session["version"] != user.get("session_version", 0)
         ):
             raise Problem("Authentication required", 401)
         if user.get("oidc"):

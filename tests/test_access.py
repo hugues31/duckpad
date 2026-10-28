@@ -1,8 +1,6 @@
-"""Authorization, migration, revocation and SQL isolation acceptance tests."""
+"""Authorization, revocation and SQL isolation acceptance tests."""
 
-import hashlib
 import re
-import secrets
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -12,9 +10,6 @@ from fastapi.testclient import TestClient
 from helpers import wait_run
 
 from duckpad.app import create_app
-from duckpad.auth import Auth
-from duckpad.projects import Projects
-from duckpad.store import Store
 from duckpad.util import Problem
 
 PASSWORD = "individual-test-password"
@@ -51,7 +46,6 @@ ROUTE_ACCESS = {
         "GET /api/worktrees/{worktree}/git/branches",
         "GET /api/worktrees/{worktree}/git/remote",
         "GET /api/worktrees/{worktree}/diff/{commit}",
-        "GET /api/worktrees/{worktree}/merge",
         "GET /api/worktrees/{worktree}/status",
         "GET /api/worktrees/{worktree}/compile/{node}",
         "GET /api/worktrees/{worktree}/exports/{node}",
@@ -74,7 +68,6 @@ ROUTE_ACCESS = {
         "POST /api/worktrees/{worktree}/git/pull",
         "POST /api/worktrees/{worktree}/git/push",
         "POST /api/worktrees/{worktree}/branches",
-        "POST /api/worktrees/{worktree}/merge",
         "POST /api/worktrees/{worktree}/group",
         "POST /api/worktrees/{worktree}/import",
         "POST /api/worktrees/{worktree}/runs",
@@ -98,7 +91,6 @@ ROUTE_ACCESS = {
         "GET /api/catalog",
         "PUT /api/catalog/{kind}",
         "DELETE /api/catalog/{kind}/{identity}",
-        "PUT /api/environments",
         "POST /api/environments",
         "PUT /api/environments/{identity}",
         "DELETE /api/environments/{identity}",
@@ -147,24 +139,23 @@ def own_project(app, client, headers, name="Private"):
     return response.json()
 
 
-def test_legacy_password_and_projects_migrate_once(tmp_path):
-    home = tmp_path / "old"
-    store = Store(home)
-    salt = secrets.token_hex(32)
-    store.put("auth", "admin", {"salt": salt, "hash": Auth.hash_password(PASSWORD, salt)})
-    store.put("session", hashlib.sha256(b"legacy").hexdigest(), {"expires": 9999999999})
-    worktree = Projects(store).create("Legacy")
-    store.close()
+def test_accounts_memberships_and_grants_survive_restart(tmp_path):
+    home = tmp_path / "instance"
+    app = create_app(home, watch=False)
+    with TestClient(app) as client:
+        password = app.state.auth.initial_password
+        assert client.post("/api/login", json={"password": password}).status_code == 200
+        owner, headers = account(app, "owner")
+        worktree = own_project(app, client, headers)
+        settings_path = "/projects/" + worktree["project"] + "/settings"
+        settings = request(client, headers, "GET", settings_path).json()
+        assert settings["members"][0]["id"] == owner["id"]
+        assert settings["connections"] == ["local"]
     app = create_app(home, watch=False)
     with TestClient(app) as client:
         assert app.state.auth.initial_password is None
-        assert client.get("/api/session", headers={"authorization": "Bearer legacy"}).status_code == 401
-        assert client.post("/api/login", json={"password": PASSWORD}).status_code == 200
-        assert (
-            client.get("/api/projects/" + worktree["project"] + "/settings").json()["members"][0]["role"]
-            == "admin"
-        )
-        assert app.state.auth.store.get("auth", "admin") is None
+        assert client.post("/api/login", json={"password": password}).status_code == 200
+        assert request(client, headers, "GET", settings_path).json() == settings
 
 
 def test_private_discovery_and_all_direct_resource_routes(instance):
@@ -192,7 +183,6 @@ def test_private_discovery_and_all_direct_resource_routes(instance):
         ("GET", f"/worktrees/{worktree['id']}/compile/source"),
         ("GET", f"/worktrees/{worktree['id']}/preview/source"),
         ("GET", f"/worktrees/{worktree['id']}/generations/private"),
-        ("GET", f"/worktrees/{worktree['id']}/merge"),
         ("GET", f"/projects/{worktree['project']}/settings"),
         ("GET", f"/runs/{run['id']}"),
         ("GET", f"/runs?worktree={worktree['id']}"),
@@ -297,7 +287,6 @@ def test_project_role_matrix_and_cross_project_import(instance, role):
         ("GET", "/extensions/runtime", None),
         ("POST", "/extensions/import", {}),
         ("PUT", "/extensions/settings", {"allow_unsigned_extensions": True}),
-        ("PUT", "/environments", ["dev"]),
         ("POST", "/environments", {}),
         ("PUT", "/environments/prod", {}),
         ("DELETE", "/environments/prod", None),
@@ -549,6 +538,7 @@ def test_read_only_connection_root_cannot_be_written_through_another_connection(
             "connector": "read_only",
             "environments": {"dev": {"root": str(root)}},
         },
+        create=True,
     )
     app.state.access.grant_connections(worktree["project"], ["local", "source_files"])
     cursor = engine.context(worktree["id"], "dev", create=True).db.cursor()

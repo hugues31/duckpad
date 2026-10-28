@@ -31,7 +31,7 @@ def files_to_bundle(files):
                 for n, text in files.items()
                 if n.startswith("components/") and n.endswith(".json")
             },
-            "documentation": json.loads(files.get("documentation.json", "{}")),
+            "documentation": json.loads(files["documentation.json"]),
         }
     except (ValueError, KeyError) as error:
         raise Problem(f"Cannot read declarative project files: {error}") from error

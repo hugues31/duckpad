@@ -46,6 +46,7 @@ def connect(catalog, roots):
             "connector": "xlsx",
             "environments": {env: {"root": str(root)} for env, root in roots.items()},
         },
+        create=True,
     )
 
 
@@ -75,19 +76,15 @@ def replace_source(instance, worktree, **params):
     instance.projects.write(worktree, snapshot["revision"], bundle_to_files(bundle))
 
 
-@pytest.mark.parametrize("custom", [False, True])
-def test_existing_catalog_receives_xlsx_once_without_overwriting_customizations(tmp_path, custom):
+def test_fresh_catalog_includes_xlsx_and_preserves_customizations_on_restart(tmp_path):
     store = Store(tmp_path)
     try:
-        store.put("settings", "catalog_initialized", True)
-        store.put("settings", "environments", ["qa"])
-        definition = {**XLSX_PRESET, "name": "Custom spreadsheets"} if custom else XLSX_PRESET
-        if custom:
-            store.put("connector", "xlsx", definition)
+        catalog = Catalog(store)
+        assert store.get("connector", "xlsx") == XLSX_PRESET
+        definition = {**XLSX_PRESET, "name": "Custom spreadsheets"}
+        catalog.save("connector", definition)
         Catalog(store)
         assert store.get("connector", "xlsx") == definition
-        assert store.get("settings", "environments") == ["qa"]
-        assert store.all("connection") == []
         store.delete("connector", "xlsx")
         Catalog(store)
         assert store.get("connector", "xlsx") is None
@@ -193,7 +190,7 @@ def test_xlsx_api_upload_requires_grant_and_blocks_outside_files(tmp_path, excel
     with TestClient(app) as client:
         client.post("/api/login", json={"password": app.state.auth.initial_password})
         connection = {"id": "xlsx", "name": "Workbooks", "connector": "xlsx", "environments": {"dev": {}}}
-        assert client.put("/api/catalog/connection", json=connection).status_code == 200
+        assert client.put("/api/catalog/connection?create=true", json=connection).status_code == 200
         worktree = client.post("/api/projects", json={"name": "XLSX uploads"}).json()
         identity = worktree["id"]
         source = workbook(tmp_path / "outside.xlsx")

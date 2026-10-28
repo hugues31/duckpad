@@ -194,8 +194,7 @@ the operating system.
 
 The default local connection covers only each project's resources and exports.
 Additional local roots must exist and exclude the instance directory, its ancestors
-and other projects. Legacy unrestricted paths require explicit connection roots;
-existing results are not recomputed during migration or read requests. Sample
+and other projects. Existing results are not recomputed during read requests. Sample
 projects receive their own input directories and connection grants. Users may
 upload source files from the node inspector. Read-only roots stay read-only at the
 OS layer even if SQL uses a different declared connection.

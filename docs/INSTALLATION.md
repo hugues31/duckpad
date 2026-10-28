@@ -97,9 +97,11 @@ admins choose the connections authorized for each project on this screen. A proj
 admin cannot grant connections or promote an instance admin. Readers can copy data
 they can see; read access is not an extraction restriction.
 
-Existing installations preserve the original administrator password and assign
-legacy projects to that account. Old sessions require a new sign-in. Memberships,
-password hashes and connection grants remain in instance SQLite, outside project Git.
+Memberships, password hashes and connection grants remain in instance SQLite,
+outside project Git. Older instance layouts are not migrated. Start with a fresh
+instance directory when upgrading from an incompatible release; recreate accounts,
+connections and project grants explicitly. Project repositories must contain both
+`flow.json` and `documentation.json`.
 See [authorization and execution isolation](ARCHITECTURE.md#authorization-and-execution-isolation)
 for deployment requirements and file access boundaries.
 

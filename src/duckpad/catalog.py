@@ -100,27 +100,30 @@ class Catalog:
                     "name": "Local workspace",
                     "connector": "local",
                     "environments": {"dev": {"root": ""}, "prod": {"root": ""}},
+                    "secret_fields": [],
                 },
             )
             store.put("settings", "environments", ["dev", "prod"])
+            store.put(
+                "settings",
+                "environment_details",
+                {
+                    name: {
+                        "id": name,
+                        "label": name,
+                        "color": "#e05252" if name == "prod" else "#31a878",
+                        "confirm_before_run": name == "prod",
+                    }
+                    for name in ("dev", "prod")
+                },
+            )
             store.put("settings", "catalog_initialized", True)
-        # Upgrade existing catalogs once without replacing administrator definitions
-        # or recreating a preset that an administrator later deletes.
-        if not store.get("settings", "xlsx_connector_initialized"):
-            if not store.get("connector", "xlsx"):
-                store.put("connector", "xlsx", XLSX_PRESET)
-            store.put("settings", "xlsx_connector_initialized", True)
-        for connection in store.all("connection"):
-            if "secret_fields" not in connection:
-                definition = store.get("connector", connection["connector"], {})
-                connection["secret_fields"] = sorted(secret_names(definition))
-                store.put("connection", connection["id"], connection)
 
     def public(self):
         connections = copy.deepcopy(self.store.all("connection"))
         for connection in connections:
             definition = self.store.get("connector", connection["connector"], {})
-            hidden = set(connection.pop("secret_fields", [])) | secret_names(definition)
+            hidden = set(connection.pop("secret_fields")) | secret_names(definition)
             for values in connection["environments"].values():
                 for name in hidden:
                     if values.get(name):
@@ -134,19 +137,8 @@ class Catalog:
         }
 
     def environments(self):
-        details = self.store.get("settings", "environment_details", {})
-        return [
-            details.get(
-                name,
-                {
-                    "id": name,
-                    "label": name,
-                    "color": "#e05252" if name == "prod" else "#31a878",
-                    "confirm_before_run": name == "prod",
-                },
-            )
-            for name in self.store.get("settings", "environments", [])
-        ]
+        details = self.store.get("settings", "environment_details")
+        return [details[name] for name in self.store.get("settings", "environments")]
 
     def environment(self, identity):
         for environment in self.environments():
@@ -156,12 +148,12 @@ class Catalog:
 
     def save_environment(self, data, *, create=False):
         identity = data["id"]
-        names = self.store.get("settings", "environments", [])
+        names = self.store.get("settings", "environments")
         if create and identity in names:
             raise Problem("An environment with this identifier already exists", 409)
         if not create:
             self.environment(identity)
-        details = self.store.get("settings", "environment_details", {})
+        details = self.store.get("settings", "environment_details")
         details[identity] = data
         self.store.put("settings", "environment_details", details)
         if create:
@@ -178,7 +170,7 @@ class Catalog:
     def delete_environment(self, identity):
         self.validate_environment_deletion(identity)
         names = [item["id"] for item in self.environments() if item["id"] != identity]
-        details = self.store.get("settings", "environment_details", {})
+        details = self.store.get("settings", "environment_details")
         details.pop(identity, None)
         self.store.put("settings", "environments", names)
         self.store.put("settings", "environment_details", details)
@@ -186,7 +178,7 @@ class Catalog:
             connection["environments"].pop(identity, None)
             self.store.put("connection", connection["id"], connection)
 
-    def save(self, kind, data, *, create=None, before_change=None):
+    def save(self, kind, data, *, create=False, before_change=None):
         """Validate and prepare the edit before resetting execution state or writing."""
         if kind not in KINDS:
             raise Problem("Unknown catalog entity", 404)
@@ -196,14 +188,13 @@ class Catalog:
             )
         if kind == "connection":
             previous = self.store.get("connection", data["id"])
-            if create is True and previous is not None:
+            if create and previous is not None:
                 raise Problem(
                     "A connection with this identifier already exists", 409, {"code": "connection_exists"}
                 )
-            if create is False and previous is None:
+            if not create and previous is None:
                 raise Problem("Connection does not exist", 404, {"code": "connection_missing"})
-            # Omitting create preserves the upsert contract for existing API clients.
-            previous = previous or {"environments": {}}
+            previous = previous or {"environments": {}, "secret_fields": []}
             definition = self.store.get("connector", data.get("connector"))
             if not definition:
                 raise Problem("Connector definition does not exist")
@@ -215,7 +206,7 @@ class Catalog:
                     env: {key: value for key, value in values.items() if key in names}
                     for env, values in data["environments"].items()
                 }
-            data["secret_fields"] = sorted(set(previous.get("secret_fields", [])) | secret_names(definition))
+            data["secret_fields"] = sorted(set(previous["secret_fields"]) | secret_names(definition))
             for env, values in data["environments"].items():
                 for key in secret_names(definition):
                     if values.get(key) == MASK:
@@ -234,17 +225,6 @@ class Catalog:
             before_change()
         self.store.delete(kind, identity)
         self.on_change()
-
-    def set_environments(self, names, *, before_change=None):
-        names = list(dict.fromkeys(name.strip() for name in names))
-        if not names or not all(NAME.fullmatch(name) for name in names):
-            raise Problem(
-                "Provide at least one environment name starting with a letter and containing "
-                "letters, numbers, hyphens or underscores"
-            )
-        if before_change is not None:
-            before_change()
-        self.store.put("settings", "environments", names)
 
     def validate_definition(self, definition):
         fingerprint = digest(definition)

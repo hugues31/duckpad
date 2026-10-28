@@ -97,12 +97,6 @@ class BranchCleanup(BaseModel):
     expected_head: str
 
 
-class Merge(BaseModel):
-    source_revision: str
-    target_revision: str
-    files: dict[str, str]
-
-
 class Group(BaseModel):
     revision: str
     nodes: list[str]
