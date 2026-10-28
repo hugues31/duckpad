@@ -506,9 +506,11 @@ def create_app(home: Path, watch=True):
         with projects.lock, engine.lock:
             if data.remove_worktree in engine.active:
                 raise Problem("Stop the worktree's execution before removing it", 409)
-            return projects.versioning.cleanup(
+            result = projects.versioning.cleanup(
                 worktree, data.remove_worktree, data.integrated_worktree, data.expected_head
             )
+            engine.discard_worktree(data.remove_worktree)
+            return result
 
     @app.post("/api/worktrees/{worktree}/git/reviews")
     def git_review(worktree: str, data: schemas.GitReview):
