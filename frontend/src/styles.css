@@ -2488,6 +2488,37 @@ small {
   font-size: 12px;
   margin-bottom: 12px;
 }
+
+.column-preparation {
+  padding: 10px;
+}
+.preparation-row {
+  margin: 12px 0;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  min-width: 0;
+}
+.preparation-row legend {
+  font-size: 12px;
+  padding: 0 5px;
+}
+.preparation-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 8px 0;
+}
+.preparation-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0;
+  font-size: 12px;
+}
+.preparation-toggle input {
+  width: auto;
+}
 .query-builder .measure-form {
   border-top: 1px solid var(--border);
   padding-top: 10px;
