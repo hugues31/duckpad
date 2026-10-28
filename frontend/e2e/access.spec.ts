@@ -96,7 +96,7 @@ test("manage instance accounts, project participants and live reader access", as
   ).toBeDisabled();
   await expect(files.locator(".monaco-editor")).toBeVisible();
   await expect(
-    files.getByRole("button", { name: "Download ZIP", exact: true }),
+    files.getByRole("button", { name: "Download project ZIP", exact: true }),
   ).toBeEnabled();
   await readerPage.getByRole("link", { name: "Flow", exact: true }).click();
   await page

@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import { execFileSync } from "node:child_process";
 import { expect, test } from "@playwright/test";
 import { openInstanceSettings, signIn } from "./helpers";
@@ -120,6 +121,23 @@ test("configure Excel, upload a worksheet and export it through the canvas", asy
     expect(preview.rows.map((row: any) => row.values[2])).toEqual([
       12.5, 20, 7.5,
     ]);
+
+    const downloadButton = inspector.getByRole("button", {
+      name: "Download exported data",
+      exact: true,
+    });
+    await expect(downloadButton).toBeEnabled();
+    const pendingDownload = page.waitForEvent("download");
+    await downloadButton.click();
+    const downloaded = await pendingDownload;
+    expect(downloaded.suggestedFilename()).toBe("export.xlsx");
+    const bytes = await readFile((await downloaded.path())!);
+    snapshot = await (await page.request.get(endpoint)).json();
+    const exportedFile = await page.request.get(
+      `${endpoint}/exports/${snapshot.bundle.flow.nodes.find((node: any) => node.template === "export_xlsx")!.id}/download?run=${run.id}&environment=dev`,
+    );
+    expect(exportedFile.ok()).toBeTruthy();
+    expect(bytes.equals(await exportedFile.body())).toBeTruthy();
 
     // Re-read the exported workbook through the same isolated API worker.
     snapshot = await (await page.request.get(endpoint)).json();
