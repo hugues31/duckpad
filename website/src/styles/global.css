@@ -12,6 +12,10 @@
   --muted: #5c6675;
   --line: #dce1e9;
   --blue: #1858de;
+  --blue-gradient:
+    radial-gradient(ellipse at 18% 20%, #2b6be8, transparent 55%),
+    radial-gradient(ellipse at 85% 80%, #1241aa, transparent 60%);
+  --heading-gradient: var(--blue-gradient);
   --soft: #edf2ff;
   --code: #162032;
   color-scheme: light;
@@ -23,6 +27,9 @@
   --muted: #a7b4c9;
   --line: #303e50;
   --blue: #8db4ff;
+  --heading-gradient:
+    radial-gradient(ellipse at 18% 20%, #b0cdff, transparent 55%),
+    radial-gradient(ellipse at 85% 80%, #6c9ded, transparent 60%);
   --soft: #202e47;
   --code: #0c131e;
   color: var(--ink);
@@ -144,18 +151,27 @@ h2 {
   gap: 28px;
   padding: 17px 24px;
   border-radius: 7px;
-  background: #226bff;
+  background-color: #1559df;
+  background-image: var(--blue-gradient);
+  background-size: 180% 180%;
+  background-position:
+    0% 0%,
+    100% 100%;
   color: white;
   font-size: 14px;
   font-weight: 750;
   transition:
-    background 0.2s,
+    background-position 600ms ease,
     transform 0.2s;
   line-height: 1.4;
 }
-.button:hover {
-  background: #1556df;
-  transform: translateY(-2px);
+@media (prefers-reduced-motion: no-preference) {
+  .button:is(:hover, :focus-visible) {
+    background-position:
+      100% 100%,
+      0% 0%;
+    transform: translateY(-2px);
+  }
 }
 .button.small {
   font-size: 12px;
@@ -229,8 +245,27 @@ h2 {
   white-space: nowrap;
 }
 .hero h1 span,
-.detail-copy h2 span {
+.detail-copy h2 span,
+.prose h1 {
   color: var(--blue);
+}
+@supports (background-clip: text) {
+  .hero h1 span,
+  .detail-copy h2 span,
+  .prose h1 {
+    background-color: var(--blue);
+    background-image: var(--heading-gradient);
+    background-clip: text;
+    color: transparent;
+  }
+}
+@media (forced-colors: active), print {
+  .hero h1 span,
+  .detail-copy h2 span,
+  .prose h1 {
+    background: none;
+    color: inherit;
+  }
 }
 .hero-description {
   max-width: 440px;
@@ -534,7 +569,8 @@ h2 {
   border-radius: 4px;
 }
 .start-section {
-  background: #226bff;
+  background-color: #1559df;
+  background-image: var(--blue-gradient);
   color: white;
   padding-block: 70px;
   display: flex;
