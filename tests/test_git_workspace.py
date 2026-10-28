@@ -1,10 +1,15 @@
 import copy
 import json
 import subprocess
+import threading
 from pathlib import Path
+from unittest.mock import Mock
 
+import duckdb
 import pytest
+from fastapi.testclient import TestClient
 
+from duckpad.app import create_app
 from duckpad.bundle import bundle_to_files
 from duckpad.comparison import commit_message, compare_files
 from duckpad.components import group
@@ -291,6 +296,100 @@ def test_non_main_destination_and_protected_cleanup(project):
     projects.versioning.cleanup(main["id"], feature["id"], target["id"], review["source_head"])
     assert not Path(feature["path"]).exists()
     assert projects.store.get("worktree", feature["id"]) is None
+
+
+@pytest.mark.parametrize("execute", [False, True])
+def test_cleanup_releases_engine_contexts_and_catalog_remains_writable(tmp_path, execute):
+    app = create_app(tmp_path / "instance", watch=False)
+    with TestClient(app) as client:
+        client.post("/api/login", json={"password": app.state.auth.initial_password})
+        services = app.state.services
+        projects, engine = services.projects, services.engine
+        main = client.post("/api/projects", json={"name": "Cleanup"}).json()
+        edit(projects, main, lambda b: b.update(bundle()))
+        feature = projects.branch(main["id"], "feature")
+        for environment in ("dev", "prod"):
+            response = client.get(f"/api/worktrees/{feature['id']}/status?environment={environment}")
+            assert response.status_code == 200
+        if execute:
+            run = engine.launch(feature["id"], "dev")
+            assert engine.wait(run["id"])["status"] == "success"
+        contexts = [context for context in engine.contexts.values() if context.worktree == feature["id"]]
+        database = engine.context(feature["id"], "dev").db
+        retained = engine.context(main["id"], "dev")
+        edit(projects, feature, lambda b: b["documentation"].update(project="Ready"))
+        review = projects.versioning.prepare(main["id"], "refs/heads/feature")
+        apply(projects, review)
+        cleanup = {
+            "remove_worktree": feature["id"],
+            "integrated_worktree": main["id"],
+            "expected_head": review["source_head"],
+        }
+        # A rejected cleanup must preserve its contexts and any running SQL worker.
+        response = client.post(
+            f"/api/worktrees/{main['id']}/git/cleanup", json={**cleanup, "expected_head": "outdated"}
+        )
+        assert response.status_code == 409
+        assert all(engine.contexts[(c.worktree, c.environment)] is c for c in contexts)
+        if database:
+            assert database.process.poll() is None
+            canceled = threading.Event()
+            cursor = Mock(wraps=database.cursor())
+            engine.context(feature["id"], "dev").lineage["pending"] = {
+                "nodes": {"total"},
+                "canceled": canceled,
+                "cursor": cursor,
+            }
+        engine.active[feature["id"]] = {"id": "pending"}
+        try:
+            response = client.post(f"/api/worktrees/{main['id']}/git/cleanup", json=cleanup)
+            assert response.status_code == 409
+            assert all(engine.contexts[(c.worktree, c.environment)] is c for c in contexts)
+        finally:
+            engine.active.pop(feature["id"])
+        response = client.post(f"/api/worktrees/{main['id']}/git/cleanup", json=cleanup)
+        assert response.status_code == 200, response.text
+        assert not any(c.worktree == feature["id"] for c in engine.contexts.values())
+        assert engine.context(main["id"], "dev") is retained
+        if database:
+            assert canceled.is_set()
+            cursor.interrupt.assert_called_once_with()
+            assert database.closed
+            assert database.process.poll() is not None
+        assert client.get(f"/api/worktrees/{feature['id']}/status").status_code == 404
+        response = client.put(
+            "/api/catalog/connector", json={"id": "cleanup_test", "name": "Cleanup test", "init_sql": ""}
+        )
+        assert response.status_code == 200, response.text
+        assert services.store.get("connector", "cleanup_test")["name"] == "Cleanup test"
+        assert client.delete("/api/catalog/connector/cleanup_test").status_code == 200
+        assert services.store.get("connector", "cleanup_test") is None
+
+
+@pytest.mark.parametrize("operation", ["save", "delete"])
+def test_catalog_invalidation_discards_orphaned_worktree_contexts(project, services, operation):
+    projects, main = project
+    store, _, catalog, engine = services
+    connector = {"id": "cleanup_test", "name": "Cleanup test", "init_sql": ""}
+    catalog.save("connector", connector)
+    feature = projects.branch(main["id"], "feature")
+    engine.statuses(feature["id"], "dev")
+    context = engine.context(feature["id"], "dev")
+    edit(projects, feature, lambda b: b["documentation"].update(project="Ready"))
+    review = projects.versioning.prepare(main["id"], "refs/heads/feature")
+    apply(projects, review)
+    # Bypass the HTTP cleanup hook to exercise defensive invalidation of an orphan.
+    projects.versioning.cleanup(main["id"], feature["id"], main["id"], review["source_head"])
+    engine.reset_catalog()
+    if operation == "save":
+        catalog.save("connector", {**connector, "name": "Updated"})
+        assert store.get("connector", "cleanup_test")["name"] == "Updated"
+    else:
+        catalog.delete("connector", "cleanup_test")
+        assert store.get("connector", "cleanup_test") is None
+    assert not any(c.worktree == feature["id"] for c in engine.contexts.values())
+    with pytest.raises(duckdb.ConnectionException, match="closed"):
+        context.db.execute("SELECT 1")
 
 
 @pytest.mark.parametrize(

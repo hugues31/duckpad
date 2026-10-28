@@ -21,6 +21,12 @@ SELECT COUNT(*) AS orders, SUM(amount) AS revenue FROM {{ orders }};
 
 Inputs, parameters and outputs have one shared namespace. Identifiers must be unique. Each output names exactly one query ending with a semicolon. Later blocks may read earlier outputs; self and forward references fail validation. Both outputs above are published together, or neither replaces the previous result set.
 
+Numeric and list fields preserve the text you type until you leave the field or
+save. Clearing a numeric field removes its override, so the template, component,
+or connector default applies. Without a default, the parameter remains required.
+Comma-separated lists trim spaces around each item and preserve spaces within
+items: `New York, Paris` becomes `["New York", "Paris"]`.
+
 | Parameter declaration | Value contract |
 | --- | --- |
 | `text`, `number`, `boolean` | Scalar DuckDB bindings; do not quote the placeholder |
