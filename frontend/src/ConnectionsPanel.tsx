@@ -1,5 +1,6 @@
 import Select from "./Select";
-import { useState } from "react";
+import { useRef, useState } from "react";
+import ParameterInput from "./ParameterInput";
 import { Database, KeyRound, Plus, Settings2 } from "lucide-react";
 import { api, ApiError, send } from "./api";
 import { useT } from "./i18n";
@@ -17,8 +18,13 @@ export default function ConnectionsPanel({
   onEditor: (data: { title: string; value: string }) => void;
 }) {
   const t = useT();
-  const [selected, setSelected] = useState<Json | null>(null);
   const [creating, setCreating] = useState(false);
+  const [selected, setSelectedState] = useState<Json | null>(null);
+  const selectedRef = useRef<Json | null>(null);
+  const setSelected = (value: Json | null) => {
+    selectedRef.current = value;
+    setSelectedState(value);
+  };
   const { catalog } = workspace;
   const [chosenEnvironment, setEnv] = useState("");
   // Environments can be renamed in the settings; fall back to the first one.
@@ -29,14 +35,19 @@ export default function ConnectionsPanel({
   const definition = catalog.connectors.find(
     (c: Json) => c.id === selected?.connector,
   );
-  const changeValue = (name: string, value: any) =>
-    setSelected((old) => ({
+  const changeValue = (name: string, value: any) => {
+    const old = selectedRef.current!;
+    const values = { ...old.environments?.[env] };
+    if (value === undefined) delete values[name];
+    else values[name] = value;
+    setSelected({
       ...old,
       environments: {
-        ...old!.environments,
-        [env]: { ...old!.environments?.[env], [name]: value },
+        ...old.environments,
+        [env]: values,
       },
-    }));
+    });
+  };
   return (
     <section>
       <div className="page-heading">
@@ -169,11 +180,20 @@ export default function ConnectionsPanel({
             onSubmit={(e) => {
               e.preventDefault();
               if (saving) return;
+              // Enter can submit a form while a parameter still has focus.
+              const active = document.activeElement;
+              if (
+                active instanceof HTMLElement &&
+                e.currentTarget.contains(active)
+              )
+                active.blur();
+              if (!e.currentTarget.reportValidity()) return;
               void run(async () => {
-                const data = structuredClone(selected);
+                const data = structuredClone(selectedRef.current!);
                 for (const environment of Object.keys(data.environments)) {
                   for (const parameter of definition?.parameters || []) {
                     if (
+                      parameter.type !== "number" &&
                       data.environments[environment][parameter.name] ===
                         undefined &&
                       parameter.default !== undefined
@@ -283,7 +303,10 @@ export default function ConnectionsPanel({
                 ))}
               </div>
               {definition?.parameters.map((p: Json) => (
-                <label className="field" key={p.name}>
+                <label
+                  className="field"
+                  key={`${selected.connector}:${env}:${p.name}`}
+                >
                   <span>
                     {p.secret && <KeyRound size={12} />} {p.name}
                   </span>
@@ -302,29 +325,26 @@ export default function ConnectionsPanel({
                       <option value="true">true</option>
                       <option value="false">false</option>
                     </Select>
+                  ) : p.type === "number" ? (
+                    <ParameterInput
+                      kind="number"
+                      disabled={saving}
+                      secret={p.secret}
+                      value={
+                        selected.environments?.[env]?.[p.name] ?? p.default
+                      }
+                      onChange={(value) => changeValue(p.name, value)}
+                    />
                   ) : (
                     <input
                       disabled={saving}
-                      type={
-                        p.secret
-                          ? "password"
-                          : p.type === "number"
-                            ? "number"
-                            : "text"
-                      }
+                      type={p.secret ? "password" : "text"}
                       value={
                         selected.environments?.[env]?.[p.name] ??
                         p.default ??
                         ""
                       }
-                      onChange={(e) =>
-                        changeValue(
-                          p.name,
-                          p.type === "number"
-                            ? Number(e.target.value)
-                            : e.target.value,
-                        )
-                      }
+                      onChange={(e) => changeValue(p.name, e.target.value)}
                     />
                   )}
                 </label>
