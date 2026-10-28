@@ -1,11 +1,13 @@
 """Authorization, migration, revocation and SQL isolation acceptance tests."""
 
 import hashlib
+import re
 import secrets
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pytest
+from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 from helpers import wait_run
 
@@ -16,6 +18,100 @@ from duckpad.store import Store
 from duckpad.util import Problem
 
 PASSWORD = "individual-test-password"
+PUBLIC, SESSION, READER, EDITOR, PROJECT_ADMIN, INSTANCE_ADMIN = range(6)
+# The minimum access level of every API route. Classify each new route here.
+ROUTE_ACCESS = {
+    PUBLIC: [
+        "POST /api/login",
+        "GET /api/oidc/provider",
+        "GET /api/oidc/login",
+        "GET /api/oidc/callback",
+    ],
+    SESSION: [
+        "POST /api/logout",
+        "GET /api/session",
+        "GET /api/search",
+        "GET /api/workspace",
+        "GET /api/library",
+        "GET /api/runs",
+        "POST /api/projects",
+        "POST /api/example",
+        "POST /api/password",
+    ],
+    READER: [
+        "GET /api/projects/{project}/settings",
+        "GET /api/worktrees/{worktree}",
+        "GET /api/worktrees/{worktree}/archive.zip",
+        "GET /api/worktrees/{worktree}/history",
+        "GET /api/worktrees/{worktree}/git/history",
+        "GET /api/worktrees/{worktree}/git/compare",
+        "GET /api/worktrees/{worktree}/git/branches",
+        "GET /api/worktrees/{worktree}/git/remote",
+        "GET /api/worktrees/{worktree}/diff/{commit}",
+        "GET /api/worktrees/{worktree}/merge",
+        "GET /api/worktrees/{worktree}/status",
+        "GET /api/worktrees/{worktree}/compile/{node}",
+        "GET /api/worktrees/{worktree}/exports/{node}",
+        "GET /api/worktrees/{worktree}/exports/{node}/download",
+        "GET /api/worktrees/{worktree}/preview/{node}",
+        "GET /api/worktrees/{worktree}/generations/{identity}",
+        "POST /api/worktrees/{worktree}/lineage",
+        "GET /api/runs/{run}",
+    ],
+    EDITOR: [
+        "PUT /api/worktrees/{worktree}",
+        "POST /api/worktrees/{worktree}/uploads",
+        "POST /api/worktrees/{worktree}/git/open",
+        "POST /api/worktrees/{worktree}/git/cleanup",
+        "POST /api/worktrees/{worktree}/git/reviews",
+        "POST /api/worktrees/{worktree}/git/reviews/{review}",
+        "POST /api/worktrees/{worktree}/git/reviews/{review}/apply",
+        "POST /api/worktrees/{worktree}/git/fetch",
+        "POST /api/worktrees/{worktree}/git/pull",
+        "POST /api/worktrees/{worktree}/git/push",
+        "POST /api/worktrees/{worktree}/branches",
+        "POST /api/worktrees/{worktree}/merge",
+        "POST /api/worktrees/{worktree}/group",
+        "POST /api/worktrees/{worktree}/import",
+        "POST /api/worktrees/{worktree}/runs",
+        "POST /api/conflicts/{conflict}/resolve",
+        "POST /api/runs/{run}/cancel",
+    ],
+    PROJECT_ADMIN: [
+        "PUT /api/projects/{project}/members/{identity}",
+        "DELETE /api/projects/{project}/members/{identity}",
+        "DELETE /api/projects/{project}",
+        "PUT /api/worktrees/{worktree}/git/remote",
+    ],
+    INSTANCE_ADMIN: [
+        "GET /api/sso",
+        "PUT /api/sso",
+        "GET /api/resources",
+        "GET /api/extensions/settings",
+        "PUT /api/extensions/settings",
+        "GET /api/extensions/runtime",
+        "POST /api/extensions/import",
+        "GET /api/catalog",
+        "PUT /api/catalog/{kind}",
+        "DELETE /api/catalog/{kind}/{identity}",
+        "PUT /api/environments",
+        "POST /api/environments",
+        "PUT /api/environments/{identity}",
+        "DELETE /api/environments/{identity}",
+        "GET /api/users",
+        "POST /api/users",
+        "PATCH /api/users/{identity}",
+        "PUT /api/projects/{project}/connections",
+    ],
+}
+AUTHORIZATION_ERRORS = {
+    "Authentication required",
+    "Project not found",
+    "Worktree not found",
+    "Resource not found",
+    "Your project role does not allow this action",
+    "Instance administrator access required",
+}
 
 
 @pytest.fixture
@@ -204,6 +300,62 @@ def test_project_role_matrix_and_cross_project_import(instance, role):
             request(client, headers, method, path, **({"json": data} if data is not None else {})).status_code
             == 403
         )
+
+
+def test_every_api_route_requires_its_classified_access_level(instance):
+    app, client = instance
+    routes = {
+        (method, route.path)
+        for route in app.routes
+        if isinstance(route, APIRoute) and route.path.startswith("/api/")
+        for method in route.methods
+    }
+    levels = {tuple(entry.split()): level for level, entries in ROUTE_ACCESS.items() for entry in entries}
+    assert routes == set(levels)
+    _, owner_headers = account(app, "owner")
+    worktree = own_project(app, client, owner_headers)
+    # Deleting a project must not remove the one that the other routes probe.
+    disposable = own_project(app, client, owner_headers, "Disposable")
+    actors = [{"cookie": ""}, account(app, "outsider")[1]]
+    for role in ("reader", "editor"):
+        user, headers = account(app, role)
+        for project in (worktree, disposable):
+            app.state.access.member(project["project"], user["id"], role)
+        actors.append(headers)
+    admin = app.state.auth.login("admin", app.state.auth.initial_password, peer="probe")
+    actors += [owner_headers, {"authorization": "Bearer " + admin}]
+    store, engine = app.state.services.store, app.state.services.engine
+    run = wait_run(store, engine.launch(worktree["id"], "dev"))
+    store.put("conflict", "probe", {"id": "probe", "worktree": worktree["id"]})
+    values = {
+        "project": worktree["project"],
+        "worktree": worktree["id"],
+        "run": run["id"],
+        "conflict": "probe",
+        "kind": "connection",
+        "commit": "HEAD",
+    }
+    # Logging out revokes the probing session, so it is probed last.
+    for (method, path), level in sorted(levels.items(), key=lambda item: (item[0][1] == "/api/logout", item)):
+        ids = {**values, "project": disposable["project"]} if path == "/api/projects/{project}" else values
+        url = re.sub(r"\{(\w+)\}", lambda match, ids=ids: ids.get(match[1], "missing"), path)
+        # An unknown environment keeps the permitted launch probe from starting a run.
+        body = {"environment": "missing"} if path.endswith("/runs") else {}
+        # Probe each lower level, then the minimum level; higher levels may change state.
+        for rank, headers in enumerate(actors[: level + 1]):
+            response = client.request(
+                method,
+                url,
+                headers={"cookie": "", **headers},
+                json=None if method == "GET" else body,
+                follow_redirects=False,
+            )
+            try:
+                error = response.json().get("error")
+            except (ValueError, AttributeError):
+                error = None
+            denied = response.status_code in (401, 403, 404) and error in AUTHORIZATION_ERRORS
+            assert denied == (rank < level), (method, path, rank, response.status_code, error)
 
 
 def test_revocation_deactivation_password_reset_and_last_admin(instance):

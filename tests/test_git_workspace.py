@@ -463,6 +463,23 @@ def test_unsupported_files_in_ancestry_are_never_synchronized(local_remote):
             push(projects, main, state)
 
 
+def test_commit_diff_shows_only_project_definitions(project):
+    projects, main = project
+    template = Path(main["path"], "templates", "orders.sql")
+    template.write_text(template.read_text().replace("SELECT 1 AS amount", "SELECT 2 AS amount"))
+    Path(main["path"], "secret.txt").write_text("private value")
+    projects.git(main["path"], "add", "secret.txt", "templates/orders.sql")
+    projects.git(main["path"], "commit", "-m", "chore: external commit")
+    diff = projects.diff(main["id"], "HEAD")
+    assert "chore: external commit" in diff and "+SELECT 2 AS amount;" in diff
+    assert "secret.txt" not in diff and "private value" not in diff
+    Path(main["path"], "secret.txt").write_text("another private value")
+    projects.git(main["path"], "commit", "-am", "chore: change only an external file")
+    diff = projects.diff(main["id"], "HEAD")
+    assert diff.startswith("commit ") and "chore: change only an external file" in diff
+    assert "diff --git" not in diff and "private value" not in diff
+
+
 def test_network_errors_never_echo_authentication_material(project, monkeypatch):
     projects, main = project
 
