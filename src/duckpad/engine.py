@@ -82,8 +82,10 @@ def run_outcome(statuses, canceled):
 
 
 class Engine:
-    def __init__(self, store, projects, catalog, access=None):
+    def __init__(self, store, projects, catalog, access=None, *, trusted_local=False):
         self.access = access
+        # API authorization is independent of the explicitly selected SQL execution mode.
+        self.isolated = access is not None and not trusted_local
         self.store, self.projects, self.catalog = store, projects, catalog
         self.lock = threading.RLock()
         self.export_lock = threading.Lock()
@@ -116,7 +118,7 @@ class Engine:
                 extensions = self.store.home / "extensions"
                 extensions.mkdir(exist_ok=True)
                 config = {**database_config(extensions), **self.extension_settings()}
-                if self.access:
+                if self.isolated:
                     from .sandbox import Database
 
                     project = self.projects.get(worktree)["project"]
@@ -590,7 +592,7 @@ class Engine:
         for reference in connection_references(node):
             if reference not in execution.prepared:
                 try:
-                    if not self.access:
+                    if not self.isolated:
                         self.catalog.prepare(execution.cursor, {reference: execution.captured[reference]})
                     execution.prepared[reference] = None
                 except Exception as error:

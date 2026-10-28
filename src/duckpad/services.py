@@ -20,10 +20,16 @@ class Services:
     lineage: Lineage
 
     @classmethod
-    def open(cls, home: Path, *, enforce_access=False):
+    def open(cls, home: Path, *, enforce_access=False, trusted_local=False):
         store = Store(home)
         projects, catalog = Projects(store), Catalog(store)
-        engine = Engine(store, projects, catalog, access=Access(store) if enforce_access else None)
+        engine = Engine(
+            store,
+            projects,
+            catalog,
+            access=Access(store) if enforce_access else None,
+            trusted_local=trusted_local,
+        )
         # Definition and connection edits mark dependent results stale.
         projects.on_change = engine.invalidate
         catalog.on_change = engine.invalidate
