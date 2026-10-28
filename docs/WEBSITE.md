@@ -67,6 +67,29 @@ deleting release notes, run the website workflow with `workflow_dispatch`.
 
 ## Regenerate the demonstrations
 
+The homepage's one-minute product film is a separately edited HyperFrames
+production with real application footage, a composited dimensional cursor,
+American English narration and music generated with ElevenLabs. It lives at
+`website/public/demos/duckpad-overview.mp4`, with English WebVTT captions beside
+it and a poster in `docs/images/duckpad-overview.jpg`. The player loads media
+only when requested. Its custom controls provide keyboard-accessible playback,
+seeking, volume, English captions and
+fullscreen, with touch-sized buttons on mobile. Without JavaScript, native video
+controls remain available. The README links its poster to the homepage player.
+
+The film alternates real light and dark theme recordings. Its narration stays in
+one continuous take, with shots and captions aligned to the voice. The captured
+palette item and recorded drag events restore the browser's drag preview in the
+composite; the node itself is created by the application on drop.
+
+The editable production project, source recordings and repeatable capture
+scripts are maintained privately outside this repository. For a product-film
+update, regenerate the affected shots there, review the complete render and
+replace the MP4, captions and poster together. Keep media free of credentials
+and private infrastructure. The automated recorder below updates
+the Northstar tutorial on the example guide; it does not overwrite the edited
+homepage film.
+
 The recorder drives the **real Duckpad application**, using the built-in Northstar
 fixtures and a disposable local instance. It checks the pipeline result and
 lineage before saving media. A visible pointer follows mouse movement and clicks.

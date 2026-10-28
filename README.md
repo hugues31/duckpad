@@ -14,7 +14,10 @@ source.
 [Website & docs](https://hugues31.github.io/duckpad/) ·
 [**Get started →**](https://hugues31.github.io/duckpad/docs/quickstart/)
 
-![Duckpad: the Northstar pipeline and its revenue results](docs/images/workspace.png)
+[![Watch Duckpad in one minute: build visual pipelines and version your work](docs/images/duckpad-overview.jpg)](https://hugues31.github.io/duckpad/#demo)
+
+[**Watch the one-minute overview →**](https://hugues31.github.io/duckpad/#demo)
+English narration, captions and transcript.
 
 - **Compose visually.** Connect sources, joins and reusable components. Use guided
   forms or write SQL in the integrated editor.
