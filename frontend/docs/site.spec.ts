@@ -41,9 +41,17 @@ test("homepage, captions and recorded media are available", async ({
     .poll(() =>
       video.evaluate((element: HTMLVideoElement) => element.videoWidth),
     )
-    .toBe(1440);
+    .toBe(1920);
+  expect(
+    await video.evaluate((element: HTMLVideoElement) => element.duration),
+  ).toBeCloseTo(60, 0);
+  await expect(video).toHaveAttribute("preload", "none");
+  await expect(video).not.toHaveAttribute("autoplay");
+  await expect(caption).toHaveAttribute("srclang", "en");
   await video.evaluate((element: HTMLVideoElement) => element.pause());
-  await page.getByRole("link", { name: "Build your first pipeline" }).click();
+  await page
+    .getByRole("link", { name: "Build your first pipeline", exact: true })
+    .click();
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(
     "Your first pipeline",
   );
@@ -99,6 +107,215 @@ test("all documentation routes, internal links, fragments and images resolve", a
         );
     }
   }
+});
+
+test("custom video controls support keyboard playback, seeking, audio, captions and fullscreen", async ({
+  page,
+}, testInfo) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  const mediaRequests: string[] = [];
+  page.on("request", (request) => {
+    if (request.url().endsWith(".mp4")) mediaRequests.push(request.url());
+  });
+  await page.goto("./");
+  const player = page.locator("[data-product-video]");
+  const video = player.locator("video");
+  await expect(player).toHaveAttribute("data-enhanced", "true");
+  expect(
+    await video.evaluate((element: HTMLVideoElement) => element.controls),
+  ).toBe(false);
+  expect(mediaRequests).toEqual([]);
+  await player.scrollIntoViewIfNeeded();
+  await player.screenshot({ path: testInfo.outputPath("video-poster.png") });
+
+  const cover = player.getByRole("button", { name: /Watch the film/ });
+  await cover.focus();
+  await page.keyboard.press("Enter");
+  const pause = player.getByRole("button", {
+    name: "Pause video",
+    exact: true,
+  });
+  await expect(pause).toBeFocused();
+  await expect
+    .poll(() =>
+      video.evaluate((element: HTMLVideoElement) => element.currentTime),
+    )
+    .toBeGreaterThan(0);
+  await page.keyboard.press("Space");
+  await expect(
+    player.getByRole("button", { name: "Play video", exact: true }),
+  ).toBeFocused();
+  expect(
+    await video.evaluate((element: HTMLVideoElement) => element.paused),
+  ).toBe(true);
+
+  const progress = player.getByRole("slider", { name: "Video progress" });
+  await progress.fill("25");
+  await expect
+    .poll(() =>
+      video.evaluate((element: HTMLVideoElement) => element.currentTime),
+    )
+    .toBeCloseTo(25, 1);
+  await expect(progress).toHaveAttribute("aria-valuetext", "0:25 of 1:00");
+  await progress.focus();
+  await page.keyboard.press("ArrowRight");
+  await expect
+    .poll(() =>
+      video.evaluate((element: HTMLVideoElement) => element.currentTime),
+    )
+    .toBeGreaterThan(25);
+
+  const captions = player.getByRole("button", { name: "English captions" });
+  await expect(captions).toHaveAttribute("aria-pressed", "true");
+  await captions.click();
+  expect(
+    await video.evaluate(
+      (element: HTMLVideoElement) => element.textTracks[0].mode,
+    ),
+  ).toBe("disabled");
+  await captions.click();
+  await expect
+    .poll(() =>
+      video.evaluate(
+        (element: HTMLVideoElement) => element.textTracks[0].cues?.length,
+      ),
+    )
+    .toBeGreaterThan(0);
+  expect(
+    await video.evaluate(
+      (element: HTMLVideoElement) => element.textTracks[0].mode,
+    ),
+  ).toBe("showing");
+
+  await player
+    .getByRole("slider", { name: "Volume", exact: true })
+    .fill("0.35");
+  expect(
+    await video.evaluate((element: HTMLVideoElement) => element.volume),
+  ).toBeCloseTo(0.35);
+  await player.getByRole("button", { name: "Mute video", exact: true }).click();
+  expect(
+    await video.evaluate((element: HTMLVideoElement) => element.muted),
+  ).toBe(true);
+  await player
+    .getByRole("button", { name: "Unmute video", exact: true })
+    .click();
+  expect(
+    await video.evaluate((element: HTMLVideoElement) => element.muted),
+  ).toBe(false);
+  expect(
+    await video.evaluate((element: HTMLVideoElement) => element.volume),
+  ).toBeCloseTo(0.35);
+
+  await player.getByRole("button", { name: "Enter fullscreen" }).click();
+  await expect
+    .poll(() =>
+      player.evaluate((element) => document.fullscreenElement === element),
+    )
+    .toBe(true);
+  await expect(
+    player.getByRole("button", { name: "Exit fullscreen" }),
+  ).toBeVisible();
+  await player.getByRole("button", { name: "Exit fullscreen" }).click();
+  await expect
+    .poll(() => page.evaluate(() => document.fullscreenElement === null))
+    .toBe(true);
+  expect(
+    (
+      await new AxeBuilder({ page })
+        .include("[data-product-video]")
+        .withTags(["wcag2a", "wcag2aa", "wcag21aa"])
+        .analyze()
+    ).violations,
+  ).toEqual([]);
+  await player.screenshot({ path: testInfo.outputPath("video-controls.png") });
+
+  await progress.fill("59.7");
+  await player.getByRole("button", { name: "Play video", exact: true }).click();
+  await expect(
+    player.getByRole("button", { name: /Watch again/ }),
+  ).toBeVisible();
+  await player.getByRole("button", { name: /Watch again/ }).click();
+  await expect(pause).toBeVisible();
+  await expect
+    .poll(() =>
+      video.evaluate((element: HTMLVideoElement) => element.currentTime),
+    )
+    .toBeLessThan(5);
+});
+
+test("video controls fit a touch screen in both themes", async ({
+  browser,
+  baseURL,
+}, testInfo) => {
+  const context = await browser.newContext({
+    baseURL,
+    viewport: { width: 360, height: 780 },
+    isMobile: true,
+    hasTouch: true,
+    reducedMotion: "reduce",
+  });
+  const page = await context.newPage();
+  await page.goto("./");
+  const player = page.locator("[data-product-video]");
+  await player.scrollIntoViewIfNeeded();
+  await player.screenshot({
+    path: testInfo.outputPath("video-mobile-light.png"),
+  });
+  await player.getByRole("button", { name: /Watch the film/ }).tap();
+  await expect
+    .poll(() =>
+      player
+        .locator("video")
+        .evaluate((element: HTMLVideoElement) => element.currentTime),
+    )
+    .toBeGreaterThan(0);
+  await player.getByRole("button", { name: "Pause video" }).tap();
+  await player.getByRole("button", { name: "English captions" }).tap();
+  await expect(
+    player.getByRole("button", { name: "English captions" }),
+  ).toHaveAttribute("aria-pressed", "false");
+  await page.getByRole("switch", { name: "Dark theme" }).tap();
+  await player.scrollIntoViewIfNeeded();
+  await player.screenshot({
+    path: testInfo.outputPath("video-mobile-dark.png"),
+  });
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
+  for (const button of await player.getByRole("button").all()) {
+    if (!(await button.isVisible())) continue;
+    const bounds = (await button.boundingBox())!;
+    expect(bounds.width).toBeGreaterThanOrEqual(44);
+    expect(bounds.height).toBeGreaterThanOrEqual(44);
+    expect(bounds.x).toBeGreaterThanOrEqual(0);
+    expect(bounds.x + bounds.width).toBeLessThanOrEqual(360);
+  }
+  await context.close();
+});
+
+test("unavailable video offers a direct link and playback retry", async ({
+  page,
+}) => {
+  await page.route("**/duckpad-overview.mp4", (route) => route.abort());
+  await page.goto("./");
+  await page.getByRole("button", { name: /Watch the film/ }).click();
+  await expect(page.locator(".video-message")).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "Open the video directly" }),
+  ).toHaveAttribute("href", /duckpad-overview\.mp4$/);
+  await page.unroute("**/duckpad-overview.mp4");
+  await page.getByRole("button", { name: /Watch the film/ }).click();
+  await expect
+    .poll(() =>
+      page
+        .locator("video")
+        .evaluate((element: HTMLVideoElement) => element.currentTime),
+    )
+    .toBeGreaterThan(0);
+  await expect(page.locator(".video-message")).not.toBeVisible();
 });
 
 test("search uses guide content, handles no results and supports the keyboard", async ({
@@ -183,6 +400,10 @@ test("content and documentation navigation remain usable without JavaScript", as
   });
   const page = await context.newPage();
   await page.goto("./");
+  await expect(page.locator("video")).toHaveAttribute("controls", "");
+  await expect(
+    page.getByRole("group", { name: "Video controls" }),
+  ).not.toBeVisible();
   await page.getByRole("link", { name: "Build your first pipeline" }).click();
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(
     "Your first pipeline",
