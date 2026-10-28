@@ -340,198 +340,207 @@ export function ProjectSettings({
       (u: Json) => !settings.members.some((m: Json) => m.id === u.id),
     ) || [];
   return (
-    <section className="full-panel administration-page">
-      <div className="administration-heading">
-        <div>
-          <span className="eyebrow">
-            {settings?.project.name || t("project")}
-          </span>
-          <h1>
-            <Shield size={28} />
-            {t("projectSettings")}
-          </h1>
-          <p className="muted">{t("projectAccessHint")}</p>
-        </div>
-        {settings && (
-          <span className="access-badge active">
-            {t(`role_${settings.role}`)}
-          </span>
-        )}
-      </div>
-      {error && (
-        <div className="notice error" role="alert">
-          {error}
-        </div>
-      )}
-      <div className="role-guide">
-        {["reader", "editor", "admin"].map((role) => (
-          <div key={role}>
-            <strong>{t(`role_${role}`)}</strong>
-            <p>{t(`project_${role}_hint`)}</p>
+    <section className="full-panel administration-page project-settings">
+      <div className="settings-container">
+        <div className="administration-heading">
+          <div>
+            <span className="eyebrow">
+              {settings?.project.name || t("project")}
+            </span>
+            <h1>
+              <Shield size={28} />
+              {t("projectSettings")}
+            </h1>
+            <p className="muted">{t("projectAccessHint")}</p>
           </div>
-        ))}
-      </div>
-      <div className="settings-card">
-        <h2>{t("participants")}</h2>
-        {admin && (
-          <form
-            className="member-form"
-            onSubmit={(e) => {
-              e.preventDefault();
-              const data = new FormData(e.currentTarget);
-              void act(() =>
-                api(
-                  `/projects/${project}/members/${data.get("user")}`,
-                  send({ role: data.get("role") }, "PUT"),
-                ),
-              );
-            }}
-          >
-            <label className="field">
-              <span>{t("user")}</span>
-              <Select
-                aria-label={t("user")}
-                name="user"
-                required
-                disabled={!available.length}
-              >
-                <option value="">
-                  {t(available.length ? "chooseUser" : "noAvailableUsers")}
-                </option>
-                {available.map((u: Json) => (
-                  <option key={u.id} value={u.id}>
-                    {u.username}
-                  </option>
-                ))}
-              </Select>
-            </label>
-            <label className="field">
-              <span>{t("projectRole")}</span>
-              <Select
-                aria-label={t("projectRole")}
-                name="role"
-                defaultValue="reader"
-              >
-                {["reader", "editor", "admin"].map((role) => (
-                  <option key={role} value={role}>
-                    {t(`role_${role}`)}
-                  </option>
-                ))}
-              </Select>
-            </label>
-            <button
-              className="button primary"
-              disabled={busy || !available.length}
-            >
-              <Plus size={16} />
-              {t("addParticipant")}
-            </button>
-          </form>
-        )}
-        <div className="administration-table">
-          <table>
-            <thead>
-              <tr>
-                <th>{t("username")}</th>
-                <th>{t("projectRole")}</th>
-                <th>{t("actions")}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {settings?.members.map((member: Json) => (
-                <tr key={member.id}>
-                  <td>
-                    <strong>{member.username}</strong>
-                    {!member.active && (
-                      <small className="muted"> · {t("accountInactive")}</small>
-                    )}
-                  </td>
-                  <td>
-                    <RoleSelect
-                      label={`${t("projectRole")} · ${member.username}`}
-                      value={member.role}
-                      disabled={!admin || busy || !member.active}
-                      onChange={(role) =>
-                        act(() =>
-                          api(
-                            `/projects/${project}/members/${member.id}`,
-                            send({ role }, "PUT"),
-                          ),
-                        )
-                      }
-                    />
-                  </td>
-                  <td>
-                    {admin && (
-                      <button
-                        className="text-button danger"
-                        disabled={busy}
-                        onClick={() =>
-                          setConfirmation({ kind: "remove", member })
-                        }
-                      >
-                        <Trash2 size={14} />
-                        {t("removeAccess")}
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          {settings && (
+            <span className="access-badge active">
+              {t(`role_${settings.role}`)}
+            </span>
+          )}
         </div>
-        <p className="muted small">{t("lastAdminHint")}</p>
-      </div>
-      {workspace.user.role === "admin" && (
-        <div className="settings-card">
-          <h2>{t("authorizedConnections")}</h2>
-          <p className="muted">{t("authorizedConnectionsHint")}</p>
-          <div className="connection-grants">
-            {workspace.catalog.connections.map((c: Json) => (
-              <label key={c.id}>
-                <input
-                  type="checkbox"
-                  checked={connections.includes(c.id)}
-                  onChange={(e) =>
-                    setConnections(
-                      e.target.checked
-                        ? [...connections, c.id]
-                        : connections.filter((id) => id !== c.id),
+        {error && (
+          <div className="notice error" role="alert">
+            {error}
+          </div>
+        )}
+        <div className="role-guide">
+          {["reader", "editor", "admin"].map((role) => (
+            <div key={role}>
+              <strong>{t(`role_${role}`)}</strong>
+              <p>{t(`project_${role}_hint`)}</p>
+            </div>
+          ))}
+        </div>
+        <div className="project-settings-grid">
+          <div className="settings-card">
+            <h2>{t("participants")}</h2>
+            {admin && (
+              <form
+                className="member-form"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  const data = new FormData(e.currentTarget);
+                  void act(() =>
+                    api(
+                      `/projects/${project}/members/${data.get("user")}`,
+                      send({ role: data.get("role") }, "PUT"),
+                    ),
+                  );
+                }}
+              >
+                <label className="field">
+                  <span>{t("user")}</span>
+                  <Select
+                    aria-label={t("user")}
+                    name="user"
+                    required
+                    disabled={!available.length}
+                  >
+                    <option value="">
+                      {t(available.length ? "chooseUser" : "noAvailableUsers")}
+                    </option>
+                    {available.map((u: Json) => (
+                      <option key={u.id} value={u.id}>
+                        {u.username}
+                      </option>
+                    ))}
+                  </Select>
+                </label>
+                <label className="field">
+                  <span>{t("projectRole")}</span>
+                  <Select
+                    aria-label={t("projectRole")}
+                    name="role"
+                    defaultValue="reader"
+                  >
+                    {["reader", "editor", "admin"].map((role) => (
+                      <option key={role} value={role}>
+                        {t(`role_${role}`)}
+                      </option>
+                    ))}
+                  </Select>
+                </label>
+                <button
+                  className="button primary"
+                  disabled={busy || !available.length}
+                >
+                  <Plus size={16} />
+                  {t("addParticipant")}
+                </button>
+              </form>
+            )}
+            <div className="administration-table">
+              <table>
+                <thead>
+                  <tr>
+                    <th>{t("username")}</th>
+                    <th>{t("projectRole")}</th>
+                    <th>{t("actions")}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {settings?.members.map((member: Json) => (
+                    <tr key={member.id}>
+                      <td>
+                        <strong>{member.username}</strong>
+                        {!member.active && (
+                          <small className="muted">
+                            {" "}
+                            · {t("accountInactive")}
+                          </small>
+                        )}
+                      </td>
+                      <td>
+                        <RoleSelect
+                          label={`${t("projectRole")} · ${member.username}`}
+                          value={member.role}
+                          disabled={!admin || busy || !member.active}
+                          onChange={(role) =>
+                            act(() =>
+                              api(
+                                `/projects/${project}/members/${member.id}`,
+                                send({ role }, "PUT"),
+                              ),
+                            )
+                          }
+                        />
+                      </td>
+                      <td>
+                        {admin && (
+                          <button
+                            className="text-button danger"
+                            disabled={busy}
+                            onClick={() =>
+                              setConfirmation({ kind: "remove", member })
+                            }
+                          >
+                            <Trash2 size={14} />
+                            {t("removeAccess")}
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p className="muted small">{t("lastAdminHint")}</p>
+          </div>
+          <div className="project-settings-secondary">
+            {workspace.user.role === "admin" && (
+              <div className="settings-card">
+                <h2>{t("authorizedConnections")}</h2>
+                <p className="muted">{t("authorizedConnectionsHint")}</p>
+                <div className="connection-grants">
+                  {workspace.catalog.connections.map((c: Json) => (
+                    <label key={c.id}>
+                      <input
+                        type="checkbox"
+                        checked={connections.includes(c.id)}
+                        onChange={(e) =>
+                          setConnections(
+                            e.target.checked
+                              ? [...connections, c.id]
+                              : connections.filter((id) => id !== c.id),
+                          )
+                        }
+                      />
+                      {c.name}
+                    </label>
+                  ))}
+                </div>
+                <button
+                  className="button secondary"
+                  disabled={busy}
+                  onClick={() =>
+                    act(() =>
+                      api(
+                        `/projects/${project}/connections`,
+                        send({ connections }, "PUT"),
+                      ),
                     )
                   }
-                />
-                {c.name}
-              </label>
-            ))}
+                >
+                  {t("saveConnections")}
+                </button>
+              </div>
+            )}
+            {admin && (
+              <div className="settings-card danger-zone">
+                <h2>{t("deleteProject")}</h2>
+                <p className="muted">{t("deleteProjectHint")}</p>
+                <button
+                  className="button secondary danger"
+                  onClick={() => setConfirmation({ kind: "delete" })}
+                >
+                  {t("deleteProject")}
+                </button>
+              </div>
+            )}
           </div>
-          <button
-            className="button secondary"
-            disabled={busy}
-            onClick={() =>
-              act(() =>
-                api(
-                  `/projects/${project}/connections`,
-                  send({ connections }, "PUT"),
-                ),
-              )
-            }
-          >
-            {t("saveConnections")}
-          </button>
         </div>
-      )}
-      {admin && (
-        <div className="settings-card danger-zone">
-          <h2>{t("deleteProject")}</h2>
-          <p className="muted">{t("deleteProjectHint")}</p>
-          <button
-            className="button secondary danger"
-            onClick={() => setConfirmation({ kind: "delete" })}
-          >
-            {t("deleteProject")}
-          </button>
-        </div>
-      )}
+      </div>
       {confirmation && (
         <Modal
           title={t(
