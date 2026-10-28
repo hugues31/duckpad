@@ -273,7 +273,7 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
           ),
           load(worktree).catch(async (e) => {
             // Only a denied snapshot means project access was revoked. A status
-            // request can return 404 while a renamed environment is refreshing.
+            // request can return 404 while a deleted environment is refreshing.
             if (
               live &&
               e instanceof ApiError &&

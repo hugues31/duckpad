@@ -27,7 +27,7 @@ export default function ConnectionsPanel({
   };
   const { catalog } = workspace;
   const [chosenEnvironment, setEnv] = useState("");
-  // Environments can be renamed in the settings; fall back to the first one.
+  // Environments can be deleted in the settings; fall back to the first one.
   const env = catalog.environments.includes(chosenEnvironment)
     ? chosenEnvironment
     : catalog.environments[0];
