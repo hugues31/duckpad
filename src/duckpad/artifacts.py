@@ -69,6 +69,10 @@ class Artifacts:
                 shutil.copyfileobj(source, output, CHUNK_SIZE)
                 if signature(os.fstat(source.fileno())) != before:
                     raise OSError("Export changed while being captured")
+            # Use the same metadata API as open(): Windows stat and fstat can
+            # report different ctime values for an unchanged file.
+            with open_regular(destination) as captured:
+                captured_signature = signature(os.fstat(captured.fileno()))
             filename = re.sub(r"[\x00-\x1f\x7f/\\]", "_", path.name)
             extension = "." + spec["format"]
             if not filename.lower().endswith(extension):
@@ -83,7 +87,7 @@ class Artifacts:
                 "filename": filename,
                 "media_type": MEDIA_TYPES[spec["format"]],
                 "size": before[2],
-                "signature": signature(destination.stat()),
+                "signature": captured_signature,
             }
             self.store.put("artifact", identity, record)
             return identity
