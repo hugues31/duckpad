@@ -34,9 +34,12 @@ async function openSync(page: Page, worktree: string) {
 }
 
 async function configureOrigin(page: Page, dialog: any, url: string) {
+  const save = dialog.getByRole("button", { name: "Save configuration" });
+  // Wait for the preceding remote reload before editing its controlled inputs.
+  await expect(save).toBeEnabled();
   await dialog.getByLabel("Repository URL").fill(url);
   await dialog.getByLabel("Remote branch", { exact: true }).fill("main");
-  await dialog.getByRole("button", { name: "Save configuration" }).click();
+  await save.click();
 }
 
 test("instance administrators trust SSH host keys and origin prefixes", async ({
