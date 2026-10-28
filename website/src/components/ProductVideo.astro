@@ -142,46 +142,6 @@ import "../styles/product-video.css";
     English narration · Real app footage, edited for pace{" "}
     <a href={url("docs/quickstart/")}>Build your first pipeline ↗</a>
   </figcaption>
-  <details class="video-transcript">
-    <summary>Read the video transcript</summary>
-    <div>
-      <p>
-        Your next pipeline starts with a drag. Meet Duckpad. An open-source
-        workspace for people who work with data.
-      </p>
-      <p>
-        Drop a step onto the canvas. Connect your sources. Shape the flow. Use
-        simple controls to filter, join, and transform. Or open the SQL when you
-        want to go deeper.
-      </p>
-      <p>
-        <em>On screen:</em> A Filter node is dragged into the Northstar
-        pipeline, connected to Orders, and configured to keep amounts greater
-        than 100. The Code workspace shows the SQL behind a transformation.
-      </p>
-      <p>
-        Run with DuckDB, then explore the result right where you built it.
-        Wonder where a number came from? Click it. Follow the calculation, all
-        the way back to the source. Turn useful steps into reusable components.
-      </p>
-      <p>
-        <em>On screen:</em> The Regional revenue report shows a value of 7,131.
-        Clicking it opens a lineage graph with its 27 contributing source
-        values. A nested component reveals the filter and aggregation it
-        contains.
-      </p>
-      <p>
-        And keep your work versioned with Git. Review what changed. Explore a
-        branch. Build with the confidence to go back. From the first connection
-        to a result you can explain. Duckpad. See the flow. Trust the result.
-      </p>
-      <p>
-        <em>On screen:</em> Git history and version comparison lead into
-        creating an independent working branch. The film closes with “Build your
-        first pipeline.”
-      </p>
-    </div>
-  </details>
 </figure>
 
 <script>
@@ -190,24 +150,3 @@ import "../styles/product-video.css";
     .querySelectorAll<HTMLElement>("[data-product-video]")
     .forEach(enhanceProductVideo);
 </script>
-
-<style>
-  .video-transcript {
-    border-top: 1px solid var(--line);
-    padding: 15px 18px;
-    color: var(--ink);
-    font-size: 14px;
-    line-height: 1.7;
-  }
-  summary {
-    cursor: pointer;
-    font-weight: 700;
-  }
-  .video-transcript > div {
-    max-width: 75ch;
-    margin: 18px auto 0;
-  }
-  .video-transcript p + p {
-    margin-top: 14px;
-  }
-</style>
