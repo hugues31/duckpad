@@ -53,6 +53,20 @@ SELECT {{ columns }} FROM {{ left }} AS l {{ join_type }} JOIN {{ right }} AS r 
 -- @output result
 SELECT * FROM {{ source }} WHERE {{ condition }};
 """,
+    "select_columns": """-- @label Select columns
+-- @description Keep, rename, reorder and convert columns. Invalid conversions fail without replacing previous results.
+-- @input source
+-- @param columns: column_selection(source) = []
+-- @output result
+SELECT {{ columns }} FROM {{ source }};
+""",
+    "clean_values": """-- @label Clean values
+-- @description Trim text, parse dates, then fill nulls in the resulting type. Other columns are preserved.
+-- @input source
+-- @param columns: value_cleaning(source) = []
+-- @output result
+SELECT {{ columns }} FROM {{ source }};
+""",
     "aggregate": """-- @label Aggregate
 -- @input source
 -- @param groups: expressions = "region"

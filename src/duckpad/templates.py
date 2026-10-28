@@ -7,6 +7,7 @@ from pathlib import Path
 import sqlglot
 from sqlglot import exp
 
+from .data_preparation import PREPARATION_TYPES, render_preparation
 from .util import Problem, literal, qi
 
 REFERENCE = re.compile(r"{{\s*(\w+)\s*}}")
@@ -31,6 +32,7 @@ PARAMETER_TYPES = {
     "expressions",
     "schema",
     "list",
+    *PREPARATION_TYPES,
 }
 # Types whose argument names the connection parameter that resolves them.
 CONNECTION_BOUND = {"file", "destination", "secret"}
@@ -113,6 +115,8 @@ def validate_interface(template):
         raise Problem("Port and parameter identifiers must contain letters, numbers or underscores")
     for parameter in template["parameters"]:
         kind, argument = base_type(parameter["type"]), type_argument(parameter["type"])
+        if kind in PREPARATION_TYPES and argument not in template["inputs"]:
+            raise Problem(f"Parameter {parameter['name']} must reference a declared input port")
         if kind not in CONNECTION_BOUND or (argument is None and kind != "secret"):
             continue
         if argument is None or parameters.get(argument, {}).get("type") != "connection":
@@ -184,11 +188,13 @@ def connection_for(connections, reference):
     return connections[reference]
 
 
-def render_parameter(template, parameter, parameters, connections, directory):
+def render_parameter(template, parameter, parameters, connections, directory, input_schemas=None):
     """Return the SQL text of a structural parameter, or None for a bound scalar value."""
     name, type_name = parameter["name"], parameter["type"]
     kind, argument = base_type(type_name), type_argument(type_name)
     value = parameters[name]
+    if kind in PREPARATION_TYPES:
+        return render_preparation(kind, value, (input_schemas or {}).get(argument))
     if kind == "connection":
         connection = connection_for(connections, value)
         capability = "write" if template["kind"] == "export" else "read"
@@ -323,14 +329,14 @@ def is_local_table(table, local_names):
     )
 
 
-def compile_template(template, params, inputs, physical_outputs, connections, directory):
+def compile_template(template, params, inputs, physical_outputs, connections, directory, input_schemas=None):
     values, bindings = dict(inputs), {}
     parameters = {p["name"]: params.get(p["name"], p.get("default")) for p in template["parameters"]}
     for parameter in template["parameters"]:
         name = parameter["name"]
         if parameters[name] is None:
             raise Problem(f"Parameter {name} is required")
-        rendered = render_parameter(template, parameter, parameters, connections, directory)
+        rendered = render_parameter(template, parameter, parameters, connections, directory, input_schemas)
         if rendered is None:
             bindings[name] = parameters[name]
             values[name] = "$" + name
