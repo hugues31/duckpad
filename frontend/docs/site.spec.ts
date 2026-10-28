@@ -41,9 +41,21 @@ test("homepage, captions and recorded media are available", async ({
     .poll(() =>
       video.evaluate((element: HTMLVideoElement) => element.videoWidth),
     )
-    .toBe(1440);
+    .toBe(1920);
+  expect(
+    await video.evaluate((element: HTMLVideoElement) => element.duration),
+  ).toBeCloseTo(60, 0);
+  await expect(video).toHaveAttribute("preload", "none");
+  await expect(video).not.toHaveAttribute("autoplay");
+  await expect(caption).toHaveAttribute("srclang", "en");
   await video.evaluate((element: HTMLVideoElement) => element.pause());
-  await page.getByRole("link", { name: "Build your first pipeline" }).click();
+  await page.getByText("Read the video transcript", { exact: true }).click();
+  await expect(page.locator(".video-transcript")).toContainText(
+    "27 contributing source values",
+  );
+  await page
+    .getByRole("link", { name: "Build your first pipeline", exact: true })
+    .click();
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(
     "Your first pipeline",
   );

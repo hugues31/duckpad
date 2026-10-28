@@ -16,6 +16,7 @@ release-notes.md
 .multica/
 website/.astro/
 website/public/demos/*.png
+website/public/demos/*.jpg
 .env
 .env.*
 !.env.example
