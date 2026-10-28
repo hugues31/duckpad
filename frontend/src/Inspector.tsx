@@ -293,13 +293,12 @@ export default function Inspector({
                 parameter={parameter}
                 value={draft.params?.[parameter.name] ?? parameter.default}
                 onChange={(value) =>
-                  update((current) => ({
-                    ...current,
-                    params: {
-                      ...current.params,
-                      [parameter.name]: value,
-                    },
-                  }))
+                  update((current) => {
+                    const params = { ...current.params };
+                    if (value === undefined) delete params[parameter.name];
+                    else params[parameter.name] = value;
+                    return { ...current, params };
+                  })
                 }
                 onBlur={persist}
                 connections={connections}

@@ -1,5 +1,6 @@
 import Select from "./Select";
 import ColumnPreparation from "./ColumnPreparation";
+import ParameterInput from "./ParameterInput";
 import { useId, useState } from "react";
 import { FileUp } from "lucide-react";
 import { uploadFile } from "./api";
@@ -85,12 +86,11 @@ export default function ParameterField({
             <option key={x}>{x}</option>
           ))}
         </Select>
-      ) : base === "list" ? (
-        <input
-          value={Array.isArray(value) ? value.join(", ") : value || ""}
-          onChange={(e) =>
-            onChange(e.target.value.split(",").map((x) => x.trim()))
-          }
+      ) : base === "list" || base === "number" ? (
+        <ParameterInput
+          kind={base}
+          value={value}
+          onChange={onChange}
           onBlur={onBlur}
         />
       ) : base === "expressions" ||
@@ -109,13 +109,9 @@ export default function ParameterField({
         />
       ) : (
         <input
-          type={base === "number" ? "number" : "text"}
+          type="text"
           value={value ?? ""}
-          onChange={(e) =>
-            onChange(
-              base === "number" ? Number(e.target.value) : e.target.value,
-            )
-          }
+          onChange={(e) => onChange(e.target.value)}
           onBlur={onBlur}
           list={base === "column" && schemas ? columnList : undefined}
         />

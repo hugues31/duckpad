@@ -1,4 +1,5 @@
 {
+  "invalidNumber": "Enter a finite number.",
   "addConnectedNode": "Add a connected node",
   "compatibleNodes": "Compatible nodes",
   "noCompatibleNodes": "No compatible nodes found.",
