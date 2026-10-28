@@ -9,6 +9,33 @@ from duckpad.lineage import Lineage
 from duckpad.util import Problem
 
 
+def test_absent_numeric_connection_values_use_defaults_without_overriding_explicit_zero(services):
+    store, _, catalog, _ = services
+    definition = {
+        "id": "numeric",
+        "parameters": [{"name": "port", "type": "number", "default": 5432}],
+        "capabilities": ["read"],
+        "init_sql": "",
+    }
+    catalog.save("connector", definition)
+    catalog.save(
+        "connection",
+        {
+            "id": "numeric",
+            "name": "Numeric connection",
+            "connector": "numeric",
+            "environments": {"dev": {}, "prod": {"port": 0}},
+        },
+    )
+    assert catalog.capture(["numeric"], "dev")[0]["numeric"]["values"]["port"] == 5432
+    assert catalog.capture(["numeric"], "prod")[0]["numeric"]["values"]["port"] == 0
+    assert store.get("connection", "numeric")["environments"]["dev"] == {}
+    definition["parameters"][0].pop("default")
+    catalog.save("connector", definition)
+    with pytest.raises(Problem, match="requires port"):
+        catalog.capture(["numeric"], "dev")
+
+
 def test_declarative_attached_connector_native_insert_and_environment_capture(services, tmp_path):
     store, projects, catalog, engine = services
     paths = {}

@@ -1,4 +1,5 @@
 {
+  "invalidNumber": "Saisissez un nombre fini.",
   "addConnectedNode": "Ajouter un nœud connecté",
   "compatibleNodes": "Nœuds compatibles",
   "noCompatibleNodes": "Aucun nœud compatible trouvé.",
