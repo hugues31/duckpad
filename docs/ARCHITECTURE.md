@@ -170,15 +170,27 @@ by the kernel. DuckDB external access is then disabled with explicit allowed pat
 auto-installation/loading of extensions and unredacted/persistent secrets are
 disabled, and its configuration is locked before user SQL executes.
 
-This requires Landlock ABI 2+ on Linux x86-64 or arm64, including inside containers.
-A missing or blocked sandbox causes an explicit execution error; there is no
-unrestricted fallback. Workers use two DuckDB threads and a 512 MB memory limit.
+This default mode requires Landlock ABI 2+ on Linux x86-64 or arm64, including
+inside containers. A missing or blocked sandbox causes an explicit execution
+error; there is no automatic unrestricted fallback. Workers use two DuckDB
+threads and a 512 MB memory limit.
 Connection extensions remain trusted administrator-installed code. Approved remote
 connections carry the privileges of their configured service credentials; operators
 must scope those credentials and any network egress policy accordingly. This does
 not provide tenant resource quotas or a complete hostile-code hosting boundary.
 See the [DuckDB security guidance](https://duckdb.org/docs/current/operations_manual/securing_duckdb/overview)
 and [Linux Landlock API](https://docs.kernel.org/userspace-api/landlock.html).
+
+The explicit `--trusted-local` startup option selects in-process DuckDB execution
+for a single trusted user, including on Windows. It retains HTTP authentication,
+API authorization, connection grants and template validation, but skips the SQL
+worker and its OS and DuckDB sandbox configuration. Connections are prepared
+lazily in the native cursor for each run, as for trusted service clients. SQL and
+extensions have the application's OS permissions; this mode provides no SQL
+isolation between projects or from instance metadata. The CLI requires a loopback
+bind and prints a startup notice. It is not suitable for shared deployments or
+access through a proxy or tunnel. The option is not persisted or inferred from
+the operating system.
 
 The default local connection covers only each project's resources and exports.
 Additional local roots must exist and exclude the instance directory, its ancestors

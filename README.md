@@ -34,8 +34,13 @@ pip install duckpad
 duckpad start
 ```
 
-SQL execution requires Linux with Landlock ABI 2+ (Linux 5.19+ with Landlock
-enabled). Open the printed local address and sign in with the initial admin
+The default isolated SQL mode requires Linux with Landlock ABI 2+ (Linux 5.19+
+with Landlock enabled). For trusted, single-user use on Windows, start with
+`duckpad start --trusted-local`. This explicit mode runs SQL with your operating
+system's permissions and only allows a loopback bind; use trusted projects and
+do not share the instance. See [installation](docs/INSTALLATION.md#trusted-local-mode).
+
+Open the printed local address and sign in with the initial admin
 password from the terminal. Choose **New project**, enter a name, then choose
 **Start from an example → Create** and **Run pipeline**.
 
