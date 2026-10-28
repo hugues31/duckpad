@@ -4,6 +4,16 @@ A connector is a declarative setup definition. A connection is a named reusable 
 
 The instance-admin-only `PUT /api/catalog/connector` and `PUT /api/catalog/connection` endpoints accept those same JSON objects, so an administrator can submit declarative files without changing application code. Secret fields are masked in public catalog responses and execution records. Definition snapshots and non-secret settings used by each run remain in its history. Instance admins grant each project access to connections in **Project settings**. Members see only the names and capabilities of granted connections, not the global catalog.
 
+Connection identifiers are fixed after creation; edit the display name to rename
+a connection without changing project references. The editor rejects duplicate
+identifiers and updates to connections that have been deleted. Changing connectors
+keeps only parameters declared by the selected connector, in every environment.
+
+For explicit creation, use `PUT /api/catalog/connection?create=true` (409 if the
+identifier exists). For updates, use `?create=false` (404 if it does not exist).
+Omitting `create` retains the legacy create-or-replace behavior for existing API
+clients. Masked secrets in an update retain their stored values.
+
 ## Environments
 
 Instance admins manage environments in **Instance settings → Environments**.

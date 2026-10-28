@@ -1,4 +1,5 @@
 {
+  "invalidNumber": "Enter a finite number.",
   "addConnectedNode": "Add a connected node",
   "compatibleNodes": "Compatible nodes",
   "noCompatibleNodes": "No compatible nodes found.",
@@ -134,6 +135,9 @@
   "deleteNode": "Remove node",
   "edit": "Edit",
   "newConnection": "New connection",
+  "connectionIdentifierHint": "Stable identifier used by projects. It cannot be changed after creation.",
+  "connectionAlreadyExists": "A connection with this identifier already exists. Choose another identifier.",
+  "connectionMissing": "This connection no longer exists. Close this form and create a new connection.",
   "connector": "Connector",
   "connectorDefinitions": "Connector definitions",
   "newConnector": "New connector definition",

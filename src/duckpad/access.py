@@ -136,11 +136,13 @@ class Access:
         if any(ref not in allowed for ref in references):
             raise Problem("Connection is not authorized for this project", 403)
 
-    def grant_connections(self, project, references):
+    def grant_connections(self, project, references, *, before_change=None):
         if not isinstance(references, list) or any(
             not isinstance(r, str) or not self.store.get("connection", r) for r in references
         ):
             raise Problem("Choose existing connections")
+        if before_change is not None:
+            before_change()
         with self.store.lock:
             record = self.record(project)
             record["connections"] = list(dict.fromkeys(references))

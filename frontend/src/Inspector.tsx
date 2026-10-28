@@ -1,5 +1,5 @@
 import Select from "./Select";
-import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import {
   ArrowRight,
   BookOpen,
@@ -17,6 +17,7 @@ import NodeDocumentation from "./NodeDocumentation";
 import ExportDownload from "./ExportDownload";
 import ParameterField from "./ParameterField";
 import QueryBuilder from "./QueryBuilder";
+import { useRevisionDraft } from "./useRevisionDraft";
 import type { FlowEdge, FlowNode, Json, Snapshot, Statuses } from "./types";
 
 const CodeEditor = lazy(() => import("./Editor"));
@@ -60,7 +61,7 @@ export default function Inspector({
   connections: Json[];
   statuses: Statuses;
   preview: Json | null;
-  onSave: (node: FlowNode, base: Snapshot) => Promise<void>;
+  onSave: (node: FlowNode, base: Snapshot) => Promise<Snapshot>;
   onSaveDocumentation: (
     change: (documentation: Json) => void,
     base: Snapshot,
@@ -75,10 +76,11 @@ export default function Inspector({
 }) {
   const t = useT();
   const [tab, setTab] = useState<(typeof TABS)[number][0]>("parameters");
-  const [draft, setDraft] = useState(node);
-  const dirty = useRef(false);
-  const base = useRef(snapshot);
-  const draftRef = useRef(node);
+  const {
+    draft,
+    update,
+    persist: saveDraft,
+  } = useRevisionDraft(node, snapshot, onSave);
   const [sqlMode, setSqlMode] = useState<"current" | "executed">("current");
   const [compiled, setCompiled] = useState<Json[]>([]);
   const [error, setError] = useState("");
@@ -118,27 +120,13 @@ export default function Inspector({
       live = false;
     };
   }, [graphEdges, fullNode, environment, statuses, snapshot.worktree.id]);
-  useEffect(() => {
-    if (!dirty.current) {
-      setDraft(node);
-      draftRef.current = node;
-      base.current = snapshot;
-    }
-  }, [node, snapshot]);
-  const update = (patch: Partial<FlowNode>) => {
-    if (!dirty.current) base.current = snapshot;
-    dirty.current = true;
-    draftRef.current = { ...draftRef.current, ...patch };
-    setDraft(draftRef.current);
-  };
   const persist = async () => {
-    if (dirty.current && !readOnly) {
-      try {
-        await onSave(draftRef.current, base.current);
-        dirty.current = false;
-      } catch (e) {
-        setError((e as Error).message);
-      }
+    if (readOnly) return;
+    setError("");
+    try {
+      await saveDraft();
+    } catch (e) {
+      setError((e as Error).message);
     }
   };
   useEffect(() => {
@@ -233,7 +221,9 @@ export default function Inspector({
               <span>{t("nodeLabel")}</span>
               <input
                 value={draft.label || ""}
-                onChange={(e) => update({ label: e.target.value })}
+                onChange={(e) =>
+                  update((current) => ({ ...current, label: e.target.value }))
+                }
                 onBlur={persist}
               />
             </label>
@@ -290,7 +280,10 @@ export default function Inspector({
               kind={node.template || ""}
               schemas={schemas}
               onApply={(values) =>
-                update({ params: { ...draftRef.current.params, ...values } })
+                update((current) => ({
+                  ...current,
+                  params: { ...current.params, ...values },
+                }))
               }
             />
             {parameters.map((parameter: Json) => (
@@ -300,11 +293,11 @@ export default function Inspector({
                 parameter={parameter}
                 value={draft.params?.[parameter.name] ?? parameter.default}
                 onChange={(value) =>
-                  update({
-                    params: {
-                      ...draftRef.current.params,
-                      [parameter.name]: value,
-                    },
+                  update((current) => {
+                    const params = { ...current.params };
+                    if (value === undefined) delete params[parameter.name];
+                    else params[parameter.name] = value;
+                    return { ...current, params };
                   })
                 }
                 onBlur={persist}
