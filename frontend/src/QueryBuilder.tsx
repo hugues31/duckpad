@@ -1,3 +1,4 @@
+import Select from "./Select";
 import { useState } from "react";
 import { useT } from "./i18n";
 import type { Json } from "./types";
@@ -37,7 +38,7 @@ export default function QueryBuilder({
   ) => (
     <label className="field">
       <span>{label}</span>
-      <select
+      <Select
         aria-label={label}
         value={selected}
         onChange={(e) => change(e.target.value)}
@@ -46,7 +47,7 @@ export default function QueryBuilder({
         {names.map((name) => (
           <option key={name}>{name}</option>
         ))}
-      </select>
+      </Select>
     </label>
   );
   if (!["filter", "aggregate", "join"].includes(kind)) return null;
@@ -59,7 +60,7 @@ export default function QueryBuilder({
           {choose(t("column"), column, setColumn, columns)}
           <label className="field">
             <span>{t("operator")}</span>
-            <select
+            <Select
               aria-label={t("operator")}
               value={operator}
               onChange={(e) => setOperator(e.target.value)}
@@ -77,7 +78,7 @@ export default function QueryBuilder({
               ].map((op) => (
                 <option key={op}>{op}</option>
               ))}
-            </select>
+            </Select>
           </label>
           {!operator.includes("NULL") && (
             <label className="field">
@@ -117,7 +118,7 @@ export default function QueryBuilder({
         <>
           <label className="field">
             <span>{t("groupBy")}</span>
-            <select
+            <Select
               multiple
               value={groups}
               onChange={(e) =>
@@ -132,13 +133,13 @@ export default function QueryBuilder({
               {columns.map((name) => (
                 <option key={name}>{name}</option>
               ))}
-            </select>
+            </Select>
           </label>
           {measures.map((measure, index) => (
             <div className="measure-form" key={index}>
               <label className="field">
                 <span>{t("function")}</span>
-                <select
+                <Select
                   value={measure.function}
                   onChange={(e) =>
                     setMeasures(
@@ -153,7 +154,7 @@ export default function QueryBuilder({
                       <option key={fn}>{fn}</option>
                     ),
                   )}
-                </select>
+                </Select>
               </label>
               {choose(
                 t("column"),

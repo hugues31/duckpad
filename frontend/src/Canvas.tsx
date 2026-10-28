@@ -1,15 +1,18 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Background,
-  BackgroundVariant,
   Controls,
+  ControlButton,
   Handle,
   MiniMap,
+  MarkerType,
+  Panel,
   Position,
   ReactFlow,
   ReactFlowProvider,
   useReactFlow,
-  useStore,
+  useNodesInitialized,
+  getNodesBounds,
+  getViewportForBounds,
   type Connection,
   type NodeProps,
   type Node,
@@ -17,7 +20,6 @@ import {
   applyNodeChanges,
 } from "@xyflow/react";
 import {
-  Database,
   FileInput,
   GitMerge,
   Filter,
@@ -30,10 +32,17 @@ import {
   Loader2,
   Circle,
   Sparkles,
+  Maximize,
+  Workflow,
 } from "lucide-react";
 import "@xyflow/react/dist/style.css";
 import { useT, templateLabel } from "./i18n";
-import { type Json, type FlowNode, type FlowEdge } from "./types";
+import { DRAG_TYPE, type NodeConnection } from "./graph";
+import ConnectionPalette from "./ConnectionPalette";
+import { layoutNodes } from "./graphLayout";
+import { SearchField } from "./Search";
+import type { NodeKind } from "./NodePalette";
+import type { FlowEdge, FlowNode, Json, Statuses } from "./types";
 
 export const nodeIcon = (key: string) =>
   key.includes("export")
@@ -63,9 +72,15 @@ function PipelineNode({ data, selected }: NodeProps<Node<Json>>) {
   const Icon = nodeIcon(data.icon);
   const Status = statusIcon(data.status);
   const source = data.kind === "source";
+  const portPosition = (index: number, count: number) => {
+    const spacing = Math.min(24, 72 / Math.max(1, count - 1));
+    const top = 48 + (index - (count - 1) / 2) * spacing;
+    const inset = source ? 27 : 75 - Math.sqrt(48 ** 2 - (top - 48) ** 2);
+    return { top, inset };
+  };
   return (
     <div
-      className={`pipeline-node ${source ? "source-node" : "round-node"} ${data.kind} ${selected ? "is-selected" : ""} status-${data.status}`}
+      className={`pipeline-node ${source ? "source-node" : "round-node"} ${data.kind} ${selected ? "is-selected" : ""}`}
     >
       <div className="node-shape">
         <Icon size={27} strokeWidth={1.6} />
@@ -88,7 +103,10 @@ function PipelineNode({ data, selected }: NodeProps<Node<Json>>) {
           type="target"
           position={Position.Left}
           id={port}
-          style={{ top: source ? 32 + i * 32 : 37 + i * 32 }}
+          style={{
+            top: portPosition(i, data.inputs.length).top,
+            left: portPosition(i, data.inputs.length).inset,
+          }}
           title={port}
           aria-label={`${t("inputs")}: ${port}`}
         >
@@ -101,7 +119,10 @@ function PipelineNode({ data, selected }: NodeProps<Node<Json>>) {
           type="source"
           position={Position.Right}
           id={port}
-          style={{ top: source ? 32 + i * 32 : 25 + i * 22 }}
+          style={{
+            top: portPosition(i, data.outputs.length).top,
+            right: portPosition(i, data.outputs.length).inset,
+          }}
           title={port}
           aria-label={`${t("output")}: ${port}`}
         >
@@ -112,32 +133,94 @@ function PipelineNode({ data, selected }: NodeProps<Node<Json>>) {
   );
 }
 const nodeTypes = { pipeline: PipelineNode };
-export interface CanvasProps {
+interface CanvasProps {
+  readOnly?: boolean;
   nodes: FlowNode[];
   edges: FlowEdge[];
   parsed: Record<string, Json>;
   components: Record<string, Json>;
-  statuses: Json;
+  excludedComponents: string[];
+  statuses: Statuses;
   prefix: string;
   viewKey: string;
   selected: string | null;
+  focusRequest?: { id: string; key: string } | null;
   onSelect: (id: string | null) => void;
-  onMove: (nodes: FlowNode[]) => void;
-  onConnect: (c: Connection) => void;
+  onMove: (nodes: FlowNode[]) => Promise<void>;
+  onConnect: (edge: Omit<FlowEdge, "id">) => void;
   onDelete: (nodes: string[], edges: string[]) => void;
   onAdd: (
-    kind: string,
+    kind: NodeKind,
     id: string,
     position?: { x: number; y: number },
+    connection?: NodeConnection,
   ) => void;
   onOpen: (id: string) => void;
   onSelection: (ids: string[]) => void;
 }
 function CanvasInner(props: CanvasProps) {
   const t = useT();
-  const { fitView, screenToFlowPosition } = useReactFlow();
-  const width = useStore((state) => state.width);
-  const height = useStore((state) => state.height);
+  const { getNodes, setViewport, screenToFlowPosition } = useReactFlow();
+  const initialized = useNodesInitialized();
+  const safeArea = useRef<HTMLDivElement>(null);
+  const [frame, setFrame] = useState({ x: 0, y: 0, width: 0, height: 0 });
+  const viewportTouched = useRef(false);
+  const lastFit = useRef("");
+  const [query, setQuery] = useState("");
+  const [focus, setFocus] = useState<{ id: string } | null>(null);
+  const [pendingConnection, setPendingConnection] = useState<{
+    endpoint: Omit<NodeConnection, "port">;
+    position: { x: number; y: number };
+    screen: { x: number; y: number };
+  } | null>(null);
+  const closeConnectionPalette = useCallback(
+    () => setPendingConnection(null),
+    [],
+  );
+  useEffect(() => {
+    const element = safeArea.current!;
+    const measure = () => {
+      const next = {
+        x: element.offsetLeft,
+        y: element.offsetTop,
+        width: element.clientWidth,
+        height: element.clientHeight,
+      };
+      setFrame((previous) =>
+        Object.keys(next).every(
+          (key) =>
+            previous[key as keyof typeof next] ===
+            next[key as keyof typeof next],
+        )
+          ? previous
+          : next,
+      );
+    };
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    measure();
+    return () => observer.disconnect();
+  }, []);
+  const fitGraph = useCallback(
+    (graphNodes = getNodes()) => {
+      if (!initialized || !frame.width || !frame.height) return;
+      // Frame the unobscured area while keeping the graph surface behind every panel.
+      const viewport = getViewportForBounds(
+        getNodesBounds(graphNodes),
+        frame.width,
+        frame.height,
+        0.1,
+        1,
+        0.12,
+      );
+      void setViewport({
+        ...viewport,
+        x: viewport.x + frame.x,
+        y: viewport.y + frame.y,
+      });
+    },
+    [initialized, frame, getNodes, setViewport],
+  );
   const displayNodes = useMemo(
     () =>
       props.nodes.map((node) => {
@@ -221,25 +304,77 @@ function CanvasInner(props: CanvasProps) {
     ],
   );
   const [nodes, setNodes] = useState<Node<Json>[]>(displayNodes);
-  useEffect(
-    () =>
-      setNodes((previous) =>
-        displayNodes.map((node) => ({
-          ...node,
-          selected:
-            previous.find((old) => old.id === node.id)?.selected ??
-            node.selected,
-        })),
-      ),
-    [displayNodes],
-  );
+  const matches = useMemo(() => {
+    const terms = query.trim().toLocaleLowerCase().split(/\s+/);
+    if (!query.trim()) return [];
+    return displayNodes.filter((node, index) => {
+      const source = props.nodes[index];
+      const text = [
+        node.id,
+        node.data.label,
+        t(node.data.kind),
+        source.template,
+        source.component,
+      ]
+        .join(" ")
+        .toLocaleLowerCase();
+      return terms.every((term) => text.includes(term));
+    });
+  }, [query, displayNodes, props.nodes, t]);
   useEffect(() => {
-    const timeout = setTimeout(
-      () => fitView({ padding: 0.12, maxZoom: 1 }),
-      100,
+    if (props.focusRequest) setFocus({ id: props.focusRequest.id });
+  }, [props.focusRequest]);
+  useEffect(() => {
+    if (!focus || !initialized || !frame.width || !frame.height) return;
+    const target = getNodes().filter((node) => node.id === focus.id);
+    if (!target.length) return;
+    viewportTouched.current = true;
+    fitGraph(target);
+  }, [focus, initialized, frame, getNodes, fitGraph]);
+  useEffect(() => {
+    if (!pendingConnection) return;
+    const { nodeId, handleId, handleType } = pendingConnection.endpoint;
+    const origin = displayNodes.find((node) => node.id === nodeId);
+    const ports = origin?.data[handleType === "source" ? "outputs" : "inputs"];
+    if (props.readOnly || !ports?.includes(handleId)) closeConnectionPalette();
+  }, [displayNodes, props.readOnly, pendingConnection, closeConnectionPalette]);
+  const [pendingMoves, setPendingMoves] = useState(
+    new Map<string, { position: FlowNode["position"] }>(),
+  );
+  const previousSelected = useRef(props.selected);
+  useEffect(() => {
+    const selectionChanged = previousSelected.current !== props.selected;
+    previousSelected.current = props.selected;
+    setNodes((previous) =>
+      displayNodes.map((node) => {
+        const old = previous.find((item) => item.id === node.id);
+        return {
+          ...old,
+          ...node,
+          position: old?.dragging
+            ? old.position
+            : (pendingMoves.get(node.id)?.position ?? node.position),
+          selected: selectionChanged
+            ? node.selected
+            : (old?.selected ?? node.selected),
+        };
+      }),
     );
-    return () => clearTimeout(timeout);
-  }, [props.viewKey, width, height, fitView]);
+  }, [displayNodes, props.selected, pendingMoves]);
+  useEffect(() => {
+    if (!initialized || !frame.width || !frame.height) return;
+    const layout = [
+      frame.x,
+      frame.y,
+      frame.width,
+      frame.height,
+      props.nodes.length,
+    ].join(":");
+    if (lastFit.current === layout) return;
+    lastFit.current = layout;
+    // Polls and node measurements must never undo a user's pan or zoom.
+    if (!viewportTouched.current) fitGraph();
+  }, [initialized, frame, props.nodes.length, fitGraph]);
   const selectionChanged = useCallback(
     ({ nodes }: { nodes: Node<Json>[] }) =>
       props.onSelection(nodes.map((n) => n.id)),
@@ -247,106 +382,296 @@ function CanvasInner(props: CanvasProps) {
   );
   const edges = useMemo(
     () =>
-      props.edges.map((e) => ({
-        ...e,
-        type: "smoothstep",
-        animated: !!props.statuses.active,
-        style: { stroke: "#a4b7c3", strokeWidth: 1.6 },
-      })),
-    [props.edges, !!props.statuses.active],
+      props.edges.map((e) => {
+        const connected = nodes.some(
+          (n) => n.selected && (n.id === e.source || n.id === e.target),
+        );
+        const highlighted = connected || !!props.statuses.active;
+        return {
+          ...e,
+          type: "smoothstep",
+          animated: highlighted,
+          className: connected ? "node-connected" : undefined,
+          markerEnd: highlighted
+            ? {
+                type: MarkerType.ArrowClosed,
+                color: "var(--accent)",
+                width: 14,
+                height: 14,
+              }
+            : undefined,
+          style: {
+            stroke: highlighted ? "var(--accent)" : "var(--edge)",
+            strokeWidth: highlighted ? 2.3 : 1.8,
+          },
+        };
+      }),
+    [props.edges, nodes, !!props.statuses.active],
   );
   const changes = (changes: NodeChange<Node<Json>>[]) =>
     setNodes((current) => applyNodeChanges(changes, current));
-  return (
-    <ReactFlow
-      nodes={nodes}
-      edges={edges}
-      nodeTypes={nodeTypes}
-      onNodesChange={changes}
-      onNodeClick={(_, node) => props.onSelect(node.id)}
-      onPaneClick={() => props.onSelect(null)}
-      onNodeDoubleClick={(_, node) => props.onOpen(node.id)}
-      onConnect={props.onConnect}
-      onNodeDragStop={(_, __, moved) =>
-        props.onMove(
-          moved.map((n) => ({
-            ...props.nodes.find((x) => x.id === n.id)!,
-            position: n.position,
-          })),
-        )
-      }
-      onDelete={({ nodes, edges }) =>
-        props.onDelete(
-          nodes.map((n) => n.id),
-          edges.map((e) => e.id),
-        )
-      }
-      onSelectionChange={selectionChanged}
-      onDragOver={(event) => {
-        event.preventDefault();
-        event.dataTransfer.dropEffect = "move";
-      }}
-      onDrop={(event) => {
-        event.preventDefault();
-        try {
-          const value = JSON.parse(
-            event.dataTransfer.getData("application/duckpad"),
-          );
-          props.onAdd(
-            value.kind,
-            value.id,
-            screenToFlowPosition({ x: event.clientX, y: event.clientY }),
-          );
-        } catch {}
-      }}
-      fitView
-      ariaLabelConfig={{
-        "controls.ariaLabel": t("canvasControls"),
-        "controls.zoomIn.ariaLabel": t("zoomIn"),
-        "controls.zoomOut.ariaLabel": t("zoomOut"),
-        "controls.fitView.ariaLabel": t("fitView"),
-        "minimap.ariaLabel": t("minimap"),
-      }}
-      fitViewOptions={{ padding: 0.12, maxZoom: 1 }}
-      minZoom={0.25}
-      maxZoom={1.8}
-      deleteKeyCode={["Backspace", "Delete"]}
-      selectionKeyCode="Shift"
-      multiSelectionKeyCode="Shift"
-      proOptions={{ hideAttribution: true }}
-    >
-      <Background
-        variant={BackgroundVariant.Dots}
-        gap={22}
-        size={1}
-        color="var(--grid)"
-      />
-      <Controls showInteractive={false} />
-      <MiniMap
-        pannable
-        zoomable
-        nodeColor={(n) =>
-          n.data.kind === "source"
-            ? "#a8d9ca"
-            : n.data.kind === "component"
-              ? "#bdc3f3"
-              : "#c5d1dd"
+  const persistPositions = async (moved: FlowNode[]) => {
+    const pending = new Map(
+      moved.map((node) => [node.id, { position: node.position }]),
+    );
+    // Keep local positions through both the write and its snapshot refresh.
+    setPendingMoves((current) => new Map([...current, ...pending]));
+    setNodes((current) =>
+      current.map((node) => ({
+        ...node,
+        position: pending.get(node.id)?.position ?? node.position,
+      })),
+    );
+    try {
+      await props.onMove(moved);
+    } catch {
+      // The workspace reports the error and refreshes the saved graph.
+    } finally {
+      setPendingMoves((current) => {
+        const next = new Map(current);
+        for (const [id, move] of pending) {
+          // An earlier save must not discard a more recent local move.
+          if (next.get(id) === move) next.delete(id);
         }
-        maskColor="var(--minimap-mask)"
-      />
-      {!nodes.length && (
-        <div className="canvas-empty">
-          <Sparkles size={30} />
-          <h2>{t("noNodes")}</h2>
-          <p>{t("noNodesHint")}</p>
-        </div>
+        return next;
+      });
+    }
+  };
+  const arrangeGraph = () => {
+    if (props.readOnly || !initialized || !nodes.length) return;
+    const arranged = layoutNodes(getNodes(), props.edges);
+    const positions = new Map(arranged.map((node) => [node.id, node.position]));
+    void persistPositions(
+      props.nodes.map((node) => ({
+        ...node,
+        position: positions.get(node.id)!,
+      })),
+    );
+    viewportTouched.current = false;
+    fitGraph(arranged);
+  };
+  return (
+    <>
+      <div className="canvas-safe-area" ref={safeArea} aria-hidden="true" />
+      <div
+        className="canvas-search"
+        style={{
+          left: frame.x,
+          top: frame.y,
+          width: Math.min(300, Math.max(0, frame.width)),
+        }}
+      >
+        <SearchField
+          label={t("searchNodes")}
+          shortcut="f"
+          query={query}
+          onQuery={setQuery}
+          options={matches.map((node) => ({
+            key: node.id,
+            label: node.data.label,
+            detail: `${t(node.data.kind)} · ${node.id}`,
+          }))}
+          onSelect={(index) => {
+            const id = matches[index].id;
+            props.onSelect(id);
+            setNodes((nodes) =>
+              nodes.map((node) => ({ ...node, selected: node.id === id })),
+            );
+            setFocus({ id });
+          }}
+        />
+      </div>
+      <ReactFlow
+        nodesDraggable={!props.readOnly}
+        nodesConnectable={!props.readOnly}
+        edgesReconnectable={!props.readOnly}
+        nodes={nodes}
+        edges={edges}
+        nodeTypes={nodeTypes}
+        onNodesChange={changes}
+        onMoveStart={(event) => {
+          if (event) {
+            viewportTouched.current = true;
+            setFocus(null);
+            closeConnectionPalette();
+          }
+        }}
+        onNodeDragStart={() => {
+          viewportTouched.current = true;
+        }}
+        onNodeClick={(event, node) => {
+          setFocus(null);
+          if (!event.shiftKey) props.onSelect(node.id);
+        }}
+        onPaneClick={() => {
+          setFocus(null);
+          props.onSelect(null);
+        }}
+        onNodeDoubleClick={(_, node) => props.onOpen(node.id)}
+        onConnect={
+          props.readOnly
+            ? undefined
+            : (connection: Connection) =>
+                props.onConnect(connection as Omit<FlowEdge, "id">)
+        }
+        onConnectStart={closeConnectionPalette}
+        onConnectEnd={(event, connection) => {
+          if (
+            props.readOnly ||
+            connection.isValid ||
+            !connection.fromNode ||
+            !connection.fromHandle?.id
+          )
+            return;
+          const pointer =
+            "changedTouches" in event ? event.changedTouches[0] : event;
+          if (!pointer) return;
+          const screen = { x: pointer.clientX, y: pointer.clientY };
+          // Touch events retain the starting handle as their target.
+          const target = document.elementFromPoint(screen.x, screen.y);
+          if (!target?.classList.contains("react-flow__pane")) return;
+          viewportTouched.current = true;
+          setPendingConnection({
+            endpoint: {
+              nodeId: connection.fromNode.id,
+              handleId: connection.fromHandle.id,
+              handleType: connection.fromHandle.type,
+            },
+            position: screenToFlowPosition(screen),
+            screen,
+          });
+        }}
+        onNodeDragStop={(_, __, moved) =>
+          void persistPositions(
+            moved.map((n) => ({
+              ...props.nodes.find((x) => x.id === n.id)!,
+              position: n.position,
+            })),
+          )
+        }
+        onDelete={({ nodes, edges }) =>
+          !props.readOnly &&
+          props.onDelete(
+            nodes.map((n) => n.id),
+            edges.map((e) => e.id),
+          )
+        }
+        onSelectionChange={selectionChanged}
+        onDragOver={(event) => {
+          event.preventDefault();
+          event.dataTransfer.dropEffect = "move";
+        }}
+        onDrop={(event) => {
+          if (props.readOnly) return;
+          event.preventDefault();
+          try {
+            const value = JSON.parse(event.dataTransfer.getData(DRAG_TYPE));
+            props.onAdd(
+              value.kind,
+              value.id,
+              screenToFlowPosition({ x: event.clientX, y: event.clientY }),
+            );
+          } catch {
+            // Ignore drops that are not palette items.
+          }
+        }}
+        ariaLabelConfig={{
+          "controls.ariaLabel": t("canvasControls"),
+          "controls.zoomIn.ariaLabel": t("zoomIn"),
+          "controls.zoomOut.ariaLabel": t("zoomOut"),
+          "controls.fitView.ariaLabel": t("fitView"),
+          "minimap.ariaLabel": t("minimap"),
+        }}
+        minZoom={0.1}
+        maxZoom={1.8}
+        connectionRadius={28}
+        deleteKeyCode={
+          props.readOnly || pendingConnection ? null : ["Backspace", "Delete"]
+        }
+        selectionKeyCode="Shift"
+        multiSelectionKeyCode="Shift"
+        proOptions={{ hideAttribution: true }}
+      >
+        <Panel position="bottom-left" className="canvas-control-groups">
+          <Controls
+            showInteractive={false}
+            showFitView={false}
+            onZoomIn={() => {
+              viewportTouched.current = true;
+            }}
+            onZoomOut={() => {
+              viewportTouched.current = true;
+            }}
+          >
+            <ControlButton
+              onClick={() => {
+                viewportTouched.current = false;
+                fitGraph();
+              }}
+              title={t("fitView")}
+              aria-label={t("fitView")}
+            >
+              <Maximize />
+            </ControlButton>
+          </Controls>
+          <div
+            className="canvas-layout-controls"
+            role="group"
+            aria-label={t("autoLayout")}
+          >
+            <ControlButton
+              onClick={arrangeGraph}
+              disabled={props.readOnly || !initialized || !nodes.length}
+              title={t("autoLayout")}
+              aria-label={t("autoLayout")}
+            >
+              <Workflow style={{ fill: "none" }} />
+            </ControlButton>
+          </div>
+        </Panel>
+        <MiniMap
+          pannable
+          zoomable
+          nodeColor={(n) =>
+            n.data.kind === "source"
+              ? "#4a8aff"
+              : n.data.kind === "component"
+                ? "#9d91df"
+                : "#a4a4ac"
+          }
+          maskColor="var(--minimap-mask)"
+        />
+        {!nodes.length && (
+          <div className="canvas-empty">
+            <Sparkles size={30} />
+            <h2>{t("noNodes")}</h2>
+            <p>{t("noNodesHint")}</p>
+          </div>
+        )}
+      </ReactFlow>
+      {pendingConnection && !props.readOnly && (
+        <ConnectionPalette
+          parsed={props.parsed}
+          components={props.components}
+          excludedComponents={props.excludedComponents}
+          handleType={pendingConnection.endpoint.handleType}
+          screen={pendingConnection.screen}
+          onClose={closeConnectionPalette}
+          onChoose={(kind, id, port) => {
+            props.onAdd(kind, id, pendingConnection.position, {
+              ...pendingConnection.endpoint,
+              port,
+            });
+            closeConnectionPalette();
+          }}
+        />
       )}
-    </ReactFlow>
+    </>
   );
 }
 export default function Canvas(props: CanvasProps) {
   return (
-    <ReactFlowProvider>
+    <ReactFlowProvider key={props.viewKey}>
       <CanvasInner {...props} />
     </ReactFlowProvider>
   );
