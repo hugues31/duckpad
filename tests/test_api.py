@@ -121,6 +121,95 @@ def test_environment_names_are_validated_and_normalized(client):
     assert response.json()["environments"] == ["dev", "prod", "qa-1"]
 
 
+def test_connection_creation_rejects_duplicates_without_overwriting_secrets(app, client):
+    connection = {
+        "id": "warehouse",
+        "name": "Warehouse",
+        "connector": "oracle",
+        "environments": {
+            "dev": {"user": "reader", "password": "dev-secret", "dsn": "dev-db"},
+            "prod": {"user": "reader", "password": "prod-secret", "dsn": "prod-db"},
+        },
+    }
+    created = client.put("/api/catalog/connection?create=true", json=connection)
+    assert created.status_code == 200, created.text
+    store = app.state.services.store
+    original = store.get("connection", "warehouse")
+    duplicate = {**connection, "name": "Replacement", "environments": {"dev": {"password": "new-secret"}}}
+    response = client.put("/api/catalog/connection?create=true", json=duplicate)
+    assert response.status_code == 409, response.text
+    assert response.json()["detail"]["code"] == "connection_exists"
+    assert store.get("connection", "warehouse") == original
+    assert client.get("/api/catalog").json() == created.json()
+
+    public = next(c for c in created.json()["connections"] if c["id"] == "warehouse")
+    assert public["environments"]["dev"]["password"] == "••••"
+    assert public["environments"]["prod"]["password"] == "••••"
+    public["name"] = "Renamed warehouse"
+    updated = client.put("/api/catalog/connection?create=false", json=public)
+    assert updated.status_code == 200, updated.text
+    assert store.get("connection", "warehouse") == {**original, "name": "Renamed warehouse"}
+    public["environments"]["prod"]["password"] = "rotated-secret"
+    assert client.put("/api/catalog/connection?create=false", json=public).status_code == 200
+    saved = store.get("connection", "warehouse")
+    assert saved["environments"]["prod"]["password"] == "rotated-secret"
+    assert saved["environments"]["dev"]["password"] == "dev-secret"
+
+
+def test_connection_update_rejects_unknown_identifiers(app, client):
+    original = client.get("/api/catalog").json()
+    connection = {**original["connections"][0], "id": "missing"}
+    response = client.put("/api/catalog/connection?create=false", json=connection)
+    assert response.status_code == 404, response.text
+    assert response.json()["detail"]["code"] == "connection_missing"
+    assert app.state.services.store.get("connection", "missing") is None
+    assert client.get("/api/catalog").json() == original
+
+
+def test_connection_legacy_put_can_still_create_and_update(app, client):
+    connection = {
+        "id": "legacy",
+        "name": "Legacy client",
+        "connector": "oracle",
+        "environments": {"dev": {"password": "original-secret"}},
+    }
+    assert client.put("/api/catalog/connection", json=connection).status_code == 200
+    connection["name"] = "Updated by legacy client"
+    connection["environments"]["dev"]["password"] = "••••"
+    assert client.put("/api/catalog/connection", json=connection).status_code == 200
+    saved = app.state.services.store.get("connection", "legacy")
+    assert saved["name"] == connection["name"]
+    assert saved["environments"]["dev"]["password"] == "original-secret"
+
+
+@pytest.mark.parametrize("query", ["", "?create=false"])
+def test_connection_switch_filters_parameters_in_every_environment(app, client, query):
+    connection = {
+        "id": "switch_connector",
+        "name": "Switch connector",
+        "connector": "s3",
+        "environments": {
+            env: {"key_id": f"{env}-key", "secret": f"{env}-secret", "region": f"{env}-region"}
+            for env in ("dev", "prod")
+        },
+    }
+    assert client.put("/api/catalog/connection?create=true", json=connection).status_code == 200
+    public = client.get("/api/catalog").json()
+    connection = next(c for c in public["connections"] if c["id"] == "switch_connector")
+    connection["connector"] = "local"
+    for env, values in connection["environments"].items():
+        values["root"] = f"data/{env}"
+    expected = {env: {"root": f"data/{env}"} for env in ("dev", "prod")}
+    for connector in ("local", "xlsx"):
+        connection["connector"] = connector
+        response = client.put("/api/catalog/connection" + query, json=connection)
+        assert response.status_code == 200, response.text
+        saved = app.state.services.store.get("connection", "switch_connector")
+        assert saved["environments"] == expected
+        connection = next(c for c in response.json()["connections"] if c["id"] == "switch_connector")
+        assert connection["environments"] == expected
+
+
 @pytest.fixture
 def executed_projects(app, client):
     worktrees = []
@@ -178,6 +267,23 @@ def assert_rejected_admin_edit(app, client, worktrees, method, path, body, statu
     response = client.request(method, path, json=body)
     assert response.status_code == status, response.text
     assert admin_state(app, client, worktrees) == before
+
+
+@pytest.mark.parametrize(
+    ("identity", "create", "status"), [("local", "true", 409), ("missing", "false", 404)]
+)
+def test_rejected_connection_save_intent_preserves_results(
+    app, client, executed_projects, identity, create, status
+):
+    body = {
+        "id": identity,
+        "name": "Rejected connection",
+        "connector": "local",
+        "environments": {"dev": {"root": ""}},
+    }
+    assert_rejected_admin_edit(
+        app, client, executed_projects, "PUT", f"/api/catalog/connection?create={create}", body, status
+    )
 
 
 @pytest.mark.parametrize(

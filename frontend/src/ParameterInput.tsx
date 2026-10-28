@@ -5,12 +5,14 @@ import { useT } from "./i18n";
 export default function ParameterInput({
   kind,
   secret = false,
+  disabled = false,
   value,
   onChange,
   onBlur,
 }: {
   kind: "number" | "list";
   secret?: boolean;
+  disabled?: boolean;
   value: any;
   onChange: (value: any) => void;
   onBlur?: () => void;
@@ -19,6 +21,7 @@ export default function ParameterInput({
   const [draft, setDraft] = useState<string | null>(null);
   return (
     <input
+      disabled={disabled}
       type={secret ? "password" : "text"}
       inputMode={kind === "number" ? "decimal" : undefined}
       value={draft ?? (Array.isArray(value) ? value.join(", ") : (value ?? ""))}

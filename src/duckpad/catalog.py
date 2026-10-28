@@ -186,7 +186,7 @@ class Catalog:
             connection["environments"].pop(identity, None)
             self.store.put("connection", connection["id"], connection)
 
-    def save(self, kind, data, *, before_change=None):
+    def save(self, kind, data, *, create=None, before_change=None):
         """Validate and prepare the edit before resetting execution state or writing."""
         if kind not in KINDS:
             raise Problem("Unknown catalog entity", 404)
@@ -195,12 +195,26 @@ class Catalog:
                 "Use an identifier starting with a letter and containing letters, numbers, hyphens or underscores"
             )
         if kind == "connection":
+            previous = self.store.get("connection", data["id"])
+            if create is True and previous is not None:
+                raise Problem(
+                    "A connection with this identifier already exists", 409, {"code": "connection_exists"}
+                )
+            if create is False and previous is None:
+                raise Problem("Connection does not exist", 404, {"code": "connection_missing"})
+            # Omitting create preserves the upsert contract for existing API clients.
+            previous = previous or {"environments": {}}
             definition = self.store.get("connector", data.get("connector"))
             if not definition:
                 raise Problem("Connector definition does not exist")
             if not isinstance(data.get("environments"), dict):
                 raise Problem("A connection needs settings for each environment")
-            previous = self.store.get("connection", data["id"], {"environments": {}})
+            if previous.get("connector") != data["connector"]:
+                names = {parameter["name"] for parameter in definition.get("parameters", [])}
+                data["environments"] = {
+                    env: {key: value for key, value in values.items() if key in names}
+                    for env, values in data["environments"].items()
+                }
             data["secret_fields"] = sorted(set(previous.get("secret_fields", [])) | secret_names(definition))
             for env, values in data["environments"].items():
                 for key in secret_names(definition):
