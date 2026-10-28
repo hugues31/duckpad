@@ -24,7 +24,7 @@ The frontend in `frontend/src` mirrors this split: `api.ts` is the only HTTP cli
 
 An instance contains `instance.sqlite`, a private extension cache, `projects/`, separate `worktrees/`, uploads, example source files and `exports/<worktree>/<environment>/`. The database file is created with mode 0600 and the instance directory with mode 0700. Secrets are instance configuration; no project file contains resolved credentials. SQLite user records contain scrypt hashes and salts, never plaintext passwords. Sessions are stored by token hash, identify their owner and expire after seven days. A session also records the credential and revocation version; resetting a password or deactivating an account invalidates its sessions, including after reactivation. Account SSH private keys, trusted Git host keys and origin consents are records of the same database; deactivating an account deletes its key. Network Git copies a key to a 0600 file under `git-network/` only for the duration of one operation; copies left by a crash are removed at startup.
 
-Each project repository versions `flow.json`, `documentation.json`, `templates/*.sql`, and `components/*.json`. Results, source data and export files are outside that versioned definition set. Connector definitions and environment settings have no configuration-version history. Historical project code always uses the current instance catalog when explicitly run.
+Each project repository versions `flow.json`, `documentation.json`, `templates/*.sql`, and `components/*.json`; `flow.json` and `documentation.json` are required. Results, source data and export files are outside that versioned definition set. Connector definitions and environment settings have no configuration-version history. Historical project code always uses the current instance catalog when explicitly run.
 
 ## Settings scopes
 
@@ -62,8 +62,7 @@ active states, and opening in another tab. Titles and focus follow page changes.
 | `/worktrees/:worktreeId/:tab` | Pipeline workspace: `flow`, `code`, `documentation` or `history` |
 
 After authentication, `/` redirects to `/projects`, except when completing a
-validated SSO return. There is no legacy navigation migration or worktree
-restoration from local storage. Unknown paths, sections, and tabs show a not-found
+validated SSO return. There is no worktree restoration from local storage. Unknown paths, sections, and tabs show a not-found
 screen. Deleted or inaccessible resources show an unavailable screen with a link
 to Projects. Backend authorization remains authoritative, including when access
 changes during a session.

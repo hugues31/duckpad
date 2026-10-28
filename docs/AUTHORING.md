@@ -111,6 +111,4 @@ The reusable parameter types are `column_selection(input_port)` and
 `date_format`, and `replacement`; omitting a setting disables that operation.
 The **SQL** tab shows the generated query. **Edit template** remains available
 for custom SQL, including replacing a structured parameter with `expressions`
-when a free-form projection is needed. Existing project templates are not
-rewritten automatically; copy these template definitions from a new project
-through Code to add them to an older project.
+when a free-form projection is needed.

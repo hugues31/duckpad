@@ -13,11 +13,13 @@ from xlsx_fixture import workbook
 from duckpad.app import create_app
 from duckpad.builtin_templates import BUILTINS
 from duckpad.bundle import bundle_to_files
-from duckpad.catalog import XLSX_PRESET, Catalog
+from duckpad.catalog import PRESETS, Catalog
 from duckpad.services import Services
 from duckpad.store import Store
 from duckpad.templates import compile_template, parse_template
 from duckpad.util import Problem
+
+XLSX_PRESET = next(preset for preset in PRESETS if preset["id"] == "xlsx")
 
 
 @pytest.fixture(scope="module")
