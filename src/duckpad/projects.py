@@ -400,7 +400,16 @@ class Projects:
     def diff(self, worktree_id, commit):
         path = self.get(worktree_id)["path"]
         resolved = self.git(path, "rev-parse", "--verify", "--end-of-options", f"{commit}^{{commit}}")
-        return self.git(path, "show", "--format=fuller", resolved, "--")
+        header = self.git(path, "show", "-s", "--format=fuller", resolved, "--")
+        # Fetched or externally committed history can contain any file; show only project definitions.
+        changed = self.git(
+            path, "diff-tree", "-r", "-m", "--root", "--no-commit-id", "--name-only", "-z", resolved
+        )
+        paths = sorted({name for name in changed.split("\0") if is_declarative(name)})
+        if not paths:
+            return header
+        patch = self.git(path, "show", "--format=", resolved, "--", *(":(literal)" + name for name in paths))
+        return header + "\n\n" + patch if patch else header
 
     def branch(self, worktree_id, name, revision=None):
         with self.lock:
