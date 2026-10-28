@@ -1,17 +1,26 @@
 """Per-account SSH keys, trusted Git hosts, URL-bound consent and isolated network Git."""
 
+import datetime
+import ipaddress
 import os
 import shlex
+import ssl
 import subprocess
+import threading
+import time
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 import pytest
-from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric import ed25519
+from cryptography import x509
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import ec, ed25519
+from cryptography.x509.oid import NameOID
 from fastapi.testclient import TestClient
 
 from duckpad.app import create_app
 from duckpad.git_credentials import parse_known_hosts, validate_prefix
+from duckpad.services import Services
 from duckpad.util import Problem
 
 PASSWORD = "individual-test-password"
@@ -366,6 +375,7 @@ def test_network_git_isolates_server_credentials(team, monkeypatch, tmp_path):
     for option in [
         "IdentitiesOnly=yes",
         "IdentityAgent=none",
+        "GSSAPIAuthentication=no",
         f"GlobalKnownHostsFile={os.devnull}",
         "StrictHostKeyChecking=yes",
         "BatchMode=yes",
@@ -376,8 +386,89 @@ def test_network_git_isolates_server_credentials(team, monkeypatch, tmp_path):
     assert env["HOME"] == str(seen["identity"].parent) and env["GIT_SSL_CAINFO"] == "/etc/company-ca.pem"
     settings = [command[i + 1] for i, value in enumerate(command) if value == "-c"]
     assert {"credential.helper=", "protocol.allow=never", "protocol.ssh.allow=always"} <= set(settings)
+    assert env["KRB5CCNAME"].startswith("FILE:" + env["HOME"]) and env["KRB5_CLIENT_KTNAME"] == os.devnull
 
     remotes.network(path, "ls-remote", "--", "https://public.example.com/repo.git")
     settings = [seen["command"][i + 1] for i, value in enumerate(seen["command"]) if value == "-c"]
     assert "protocol.https.allow=always" in settings and "protocol.ssh.allow=always" not in settings
     assert seen["key"] is None
+
+
+def tls_certificate(directory):
+    key = ec.generate_private_key(ec.SECP256R1())
+    name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "127.0.0.1")])
+    now = datetime.datetime.now(datetime.UTC)
+    certificate = (
+        x509.CertificateBuilder()
+        .subject_name(name)
+        .issuer_name(name)
+        .public_key(key.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(now - datetime.timedelta(days=1))
+        .not_valid_after(now + datetime.timedelta(days=1))
+        .add_extension(
+            x509.SubjectAlternativeName([x509.IPAddress(ipaddress.ip_address("127.0.0.1"))]), False
+        )
+        .sign(key, hashes.SHA256())
+    )
+    cert, private = directory / "cert.pem", directory / "key.pem"
+    cert.write_bytes(certificate.public_bytes(serialization.Encoding.PEM))
+    private.write_bytes(
+        key.private_bytes(
+            serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8, serialization.NoEncryption()
+        )
+    )
+    return cert, private
+
+
+def test_https_never_retries_with_server_authentication(team, monkeypatch, tmp_path):
+    """A 401 offering Negotiate must not trigger a retry that could use the server's Kerberos ticket."""
+    app, _, worktree, _, _, _ = team
+    cert, private = tls_certificate(tmp_path)
+    requests = []
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            requests.append(self.headers.get("Authorization"))
+            self.send_response(401)
+            self.send_header("WWW-Authenticate", "Negotiate")
+            self.send_header("WWW-Authenticate", 'Basic realm="git"')
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+
+        def log_message(self, *args):
+            pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    context.load_cert_chain(cert, private)
+    server.socket = context.wrap_socket(server.socket, server_side=True)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        monkeypatch.setenv("GIT_SSL_CAINFO", str(cert))
+        remotes = app.state.services.projects.remotes
+        del remotes.network
+        path = app.state.services.store.get("worktree", worktree["id"])["path"]
+        url = f"https://127.0.0.1:{server.server_address[1]}/team/repo.git"
+        with pytest.raises(Problem, match="requires authentication"):
+            remotes.network(path, "ls-remote", "--", url)
+        assert requests == [None]
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_key_copies_left_by_a_crash_are_removed_at_startup(tmp_path):
+    home = tmp_path / "instance"
+    services = Services.open(home)
+    folder = services.projects.remotes.temporary
+    services.close()
+    stale, recent = folder / "tmpstale", folder / "tmprecent"
+    for directory in (stale, recent):
+        directory.mkdir()
+        (directory / "identity").write_text("private")
+    old = time.time() - 3600
+    os.utime(stale, (old, old))
+    services = Services.open(home)
+    services.close()
+    assert not stale.exists() and recent.exists()

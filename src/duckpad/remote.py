@@ -3,8 +3,10 @@
 import os
 import re
 import shlex
+import shutil
 import subprocess
 import tempfile
+import time
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -67,6 +69,9 @@ def network_environment(home, ssh_command):
         GCM_INTERACTIVE="Never",
         GIT_SSH_COMMAND=ssh_command,
         GIT_SSH_VARIANT="ssh",
+        # Kerberos must never authenticate with the server account's tickets or keytab.
+        KRB5CCNAME=f"FILE:{home}/no-kerberos-ticket",
+        KRB5_CLIENT_KTNAME=os.devnull,
         # Error classification reads Git's English messages.
         LC_ALL="C",
     )
@@ -85,6 +90,8 @@ def ssh_command(identity, known_hosts):
         "UpdateHostKeys=no",
         "BatchMode=yes",
         "PreferredAuthentications=publickey",
+        "GSSAPIAuthentication=no",
+        "HostbasedAuthentication=no",
         "ControlPath=none",
         "ConnectTimeout=10",
     ]
@@ -101,6 +108,12 @@ class Remotes:
         self.store = workspace.store
         self.git = workspace.git
         self.credentials = GitCredentials(self.store)
+        self.temporary = self.store.home / "git-network"
+        self.temporary.mkdir(mode=0o700, exist_ok=True)
+        # Key copies of an operation interrupted by a crash must not outlive a restart.
+        for leftover in self.temporary.iterdir():
+            if leftover.stat().st_mtime < time.time() - 4 * NETWORK_TIMEOUT:
+                shutil.rmtree(leftover, ignore_errors=True)
 
     def config(self, worktree):
         return self.store.get(
@@ -182,6 +195,8 @@ class Remotes:
             "core.hooksPath=/dev/null",
             "core.askPass=",
             "credential.helper=",
+            # Without this, HTTPS retries a 401 with an empty user name, enabling Kerberos login.
+            "http.emptyAuth=false",
             # Exactly one transport: SSH with the account key, or anonymous HTTPS.
             "protocol.allow=never",
             f"protocol.{allowed}.allow=always",
@@ -191,9 +206,7 @@ class Remotes:
             "fetch.fsckObjects=true",
         ]
         # The private key exists only in a private temporary directory for this one process.
-        home = self.store.home / "git-network"
-        home.mkdir(mode=0o700, exist_ok=True)
-        with tempfile.TemporaryDirectory(dir=home) as directory:
+        with tempfile.TemporaryDirectory(dir=self.temporary) as directory:
             identity, known_hosts = Path(directory, "identity"), Path(directory, "known_hosts")
             known_hosts.write_text(self.credentials.known_hosts(), encoding="utf-8")
             if key:

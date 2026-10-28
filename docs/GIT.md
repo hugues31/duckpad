@@ -150,10 +150,12 @@ file with mode 0600 in a private directory of the instance and runs SSH with
 `-F /dev/null -i <key> -o IdentitiesOnly=yes -o IdentityAgent=none
 -o UserKnownHostsFile=<instance known_hosts> -o GlobalKnownHostsFile=/dev/null
 -o StrictHostKeyChecking=yes -o BatchMode=yes`. There is no fallback to `~/.ssh`,
-an SSH agent or the server's SSH configuration. Git itself runs without system or
-global configuration, with an empty credential helper, a private `HOME` (so no
-`~/.gitconfig`, `~/.git-credentials` or `~/.netrc`) and exactly one allowed
-transport. The temporary directory is deleted when the operation ends.
+an SSH agent, Kerberos or the server's SSH configuration. Git itself runs without
+system or global configuration, with an empty credential helper, a private `HOME`
+(so no `~/.gitconfig`, `~/.git-credentials` or `~/.netrc`), no Kerberos ticket
+cache or keytab, no empty-user HTTPS authentication retry and exactly one allowed
+transport. The temporary directory is deleted when the operation ends, and copies
+left by a crash are removed when Duckpad starts.
 
 **Trusted Git hosts.** In **Instance settings → Git hosts**, instance administrators
 list trusted SSH host keys in `known_hosts` format, one `host key-type key` line per
