@@ -114,13 +114,6 @@ def test_unknown_worktrees_and_environments_are_not_found(client, worktree):
     assert client.get(f"/api/worktrees/{worktree}/status?environment=prod").status_code == 200
 
 
-def test_environment_names_are_validated_and_normalized(client):
-    assert client.put("/api/environments", json=["dev", "../../escape"]).status_code == 400
-    assert client.put("/api/environments", json=[]).status_code == 400
-    response = client.put("/api/environments", json=[" dev ", "prod", "dev", "qa-1"])
-    assert response.json()["environments"] == ["dev", "prod", "qa-1"]
-
-
 def test_connection_creation_rejects_duplicates_without_overwriting_secrets(app, client):
     connection = {
         "id": "warehouse",
@@ -156,30 +149,15 @@ def test_connection_creation_rejects_duplicates_without_overwriting_secrets(app,
     assert saved["environments"]["dev"]["password"] == "dev-secret"
 
 
-def test_connection_update_rejects_unknown_identifiers(app, client):
+@pytest.mark.parametrize("query", ["", "?create=false"])
+def test_connection_update_rejects_unknown_identifiers(app, client, query):
     original = client.get("/api/catalog").json()
     connection = {**original["connections"][0], "id": "missing"}
-    response = client.put("/api/catalog/connection?create=false", json=connection)
+    response = client.put("/api/catalog/connection" + query, json=connection)
     assert response.status_code == 404, response.text
     assert response.json()["detail"]["code"] == "connection_missing"
     assert app.state.services.store.get("connection", "missing") is None
     assert client.get("/api/catalog").json() == original
-
-
-def test_connection_legacy_put_can_still_create_and_update(app, client):
-    connection = {
-        "id": "legacy",
-        "name": "Legacy client",
-        "connector": "oracle",
-        "environments": {"dev": {"password": "original-secret"}},
-    }
-    assert client.put("/api/catalog/connection", json=connection).status_code == 200
-    connection["name"] = "Updated by legacy client"
-    connection["environments"]["dev"]["password"] = "••••"
-    assert client.put("/api/catalog/connection", json=connection).status_code == 200
-    saved = app.state.services.store.get("connection", "legacy")
-    assert saved["name"] == connection["name"]
-    assert saved["environments"]["dev"]["password"] == "original-secret"
 
 
 @pytest.mark.parametrize("query", ["", "?create=false"])
@@ -309,9 +287,9 @@ def test_invalid_catalog_deletion_preserves_results(app, client, executed_projec
     )
 
 
-@pytest.mark.parametrize(("body", "status"), [([], 400), (["dev", "../invalid"], 400), ({}, 422)])
-def test_invalid_environment_list_preserves_results(app, client, executed_projects, body, status):
-    assert_rejected_admin_edit(app, client, executed_projects, "PUT", "/api/environments", body, status)
+@pytest.mark.parametrize("body", [[], {}, {"id": "../invalid"}])
+def test_invalid_environment_creation_preserves_results(app, client, executed_projects, body):
+    assert_rejected_admin_edit(app, client, executed_projects, "POST", "/api/environments", body, 422)
 
 
 @pytest.mark.parametrize(
@@ -327,7 +305,6 @@ def test_invalid_connection_grants_preserve_results(app, client, executed_projec
     [
         ("PUT", "/api/catalog/connector", {"id": "local", "name": "Updated", "init_sql": ""}),
         ("DELETE", "/api/catalog/connection/local", None),
-        ("PUT", "/api/environments", ["dev", "qa"]),
         ("PUT", "/api/projects/{project}/connections", {"connections": []}),
     ],
 )
@@ -375,9 +352,6 @@ def test_environment_metadata_preserves_connections_and_survives_catalog_reload(
     assert response.json()["environment_details"][1] == environment
     assert response.json()["connections"] == original["connections"]
     assert client.get(f"/api/worktrees/{worktree}").json()["commit"] == before
-    assert Catalog(store).environment("prod") == environment
-    # Older clients can still send environment identifiers without losing metadata.
-    assert client.put("/api/environments", json=["dev", "prod"]).status_code == 200
     assert Catalog(store).environment("prod") == environment
 
 

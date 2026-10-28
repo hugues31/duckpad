@@ -99,7 +99,7 @@ class Engine:
                 run["error"] = (
                     "The backend stopped before completion was confirmed. Manual recomputation is required."
                 )
-                for node in run.get("nodes", {}).values():
+                for node in run["nodes"].values():
                     if node["status"] == "running":
                         node["status"] = "interrupted"
                         if node.get("kind") == "export":
@@ -110,7 +110,7 @@ class Engine:
         """The live DuckDB context of an existing worktree in a configured environment."""
         with self.lock:
             self.projects.get(worktree)
-            if environment not in self.store.get("settings", "environments", []):
+            if environment not in self.store.get("settings", "environments"):
                 raise Problem("Unknown environment", 404)
             key = (worktree, environment)
             if key not in self.contexts or getattr(self.contexts[key].db, "closed", False):

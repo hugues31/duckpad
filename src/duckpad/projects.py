@@ -441,18 +441,3 @@ class Projects:
             self.store.put("worktree", key, result)
             self.observed[key] = self.read_files(result)
             return result
-
-    def merge_preview(self, worktree_id):
-        """Compatibility for local callers; all applications still require the frozen review."""
-        source = self.get(worktree_id)
-        project = self.store.get("project", source["project"])
-        review = self.versioning.prepare(project["main"], "refs/heads/" + source["branch"])
-        return {**review, "source_revision": review["id"], "target_revision": review["target_head"]}
-
-    def merge(self, worktree_id, source_revision, target_revision, files):
-        source = self.get(worktree_id)
-        project = self.store.get("project", source["project"])
-        review = self.versioning.review(project["main"], source_revision)
-        if review["target_head"] != target_revision or review["source_worktree"] != worktree_id:
-            raise Problem("Branches changed; compare again before merging", 409)
-        return self.versioning.apply(project["main"], source_revision, {}, digest(files))

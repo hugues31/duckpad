@@ -232,7 +232,7 @@ test("connection numbers use defaults after clearing and commit focused drafts o
   ).toBe(true);
   expect(
     (
-      await page.request.put("/api/catalog/connection", {
+      await page.request.put("/api/catalog/connection?create=true", {
         data: {
           id,
           name: "Numeric connection",
