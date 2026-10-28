@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { X } from "lucide-react";
 import { useT } from "./i18n";
-import type { Json, Snapshot } from "./types";
+import type { Json } from "./types";
 import { useAsyncAction } from "./useAsyncAction";
 
 const CodeEditor = lazy(() => import("./Editor"));
@@ -239,74 +239,6 @@ export function FormModal({
           </button>
         </footer>
       </form>
-    </Modal>
-  );
-}
-
-export function FileModal({
-  readOnly = false,
-  snapshot,
-  onSave,
-  onClose,
-  title,
-  description,
-  initialFiles,
-}: {
-  readOnly?: boolean;
-  snapshot: Snapshot;
-  onSave: (files: Record<string, string>) => Promise<void>;
-  onClose: () => void;
-  title?: string;
-  description?: string;
-  initialFiles?: Record<string, string>;
-}) {
-  const t = useT();
-  const [files, setFiles] = useState(initialFiles || snapshot.files);
-  const [selected, setSelected] = useState(Object.keys(files)[0]);
-  const { pending, error, run } = useAsyncAction();
-  return (
-    <Modal title={title || t("rawFiles")} onClose={onClose} wide>
-      <p className="modal-description">{description || t("fileHint")}</p>
-      <div className="file-editor">
-        <nav>
-          {Object.keys(files)
-            .sort()
-            .map((name) => (
-              <button
-                key={name}
-                onClick={() => setSelected(name)}
-                className={selected === name ? "active" : ""}
-                aria-pressed={selected === name}
-              >
-                {name}
-              </button>
-            ))}
-        </nav>
-        <Suspense fallback={<p>{t("loading")}</p>}>
-          <CodeEditor
-            readOnly={readOnly}
-            value={files[selected] || ""}
-            onChange={(text) => setFiles({ ...files, [selected]: text })}
-            language={selected.endsWith(".sql") ? "sql" : "json"}
-            height="470px"
-          />
-        </Suspense>
-      </div>
-      {error && <div className="notice error">{error}</div>}
-      <footer>
-        <button className="button secondary" onClick={onClose}>
-          {t("cancel")}
-        </button>
-        <button
-          className="button primary"
-          disabled={readOnly || pending}
-          onClick={async () => {
-            if (await run(() => onSave(files))) onClose();
-          }}
-        >
-          {t(pending ? "saving" : "save")}
-        </button>
-      </footer>
     </Modal>
   );
 }
