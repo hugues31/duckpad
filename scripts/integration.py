@@ -76,6 +76,7 @@ def oracle(home):
                 "connector": "oracle",
                 "environments": {"dev": values, "prod": values},
             },
+            create=True,
         )
         templates = dict(BUILTINS)
         templates["calculate"] = (
@@ -204,6 +205,7 @@ def s3(home):
                 "connector": "s3",
                 "environments": {"dev": values, "prod": values},
             },
+            create=True,
         )
         bundle = {
             "flow": {

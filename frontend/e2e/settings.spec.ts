@@ -96,7 +96,6 @@ test("instance configuration is available without a project and separate from pe
     });
   });
   await signIn(page);
-  const original = await (await page.request.get("/api/workspace")).json();
   await openUserSettings(page);
   await expect(
     page.getByRole("heading", { name: "User settings", exact: true }),
@@ -210,9 +209,7 @@ test("instance configuration is available without a project and separate from pe
       fullPage: true,
     });
   } finally {
-    await page.request.put("/api/environments", {
-      data: original.catalog.environments,
-    });
+    await page.request.delete("/api/environments/staging");
   }
 });
 

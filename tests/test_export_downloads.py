@@ -93,7 +93,7 @@ def test_contents_options_and_response_metadata(instance, export_excel_cache, fo
     if format_name == "xlsx":
         shutil.copytree(export_excel_cache, services.store.home / "extensions")
         client.put(
-            "/api/catalog/connection",
+            "/api/catalog/connection?create=true",
             json={"id": "xlsx", "name": "Sheets", "connector": "xlsx", "environments": {"dev": {}}},
         )
     worktree, endpoint = create(

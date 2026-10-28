@@ -361,7 +361,7 @@ test("connection capabilities constrain source and export forms without a projec
       init_sql: "",
     },
   });
-  await page.request.put("/api/catalog/connection", {
+  await page.request.put("/api/catalog/connection?create=true", {
     data: {
       id: "read_only_files",
       name: "Read only files",
@@ -1117,7 +1117,7 @@ test("documentation waits for its refreshed revision and preserves edits during 
   expect(writes).toBe(2);
 });
 
-test("runs use a configured environment after the environments are renamed", async ({
+test("runs use a configured environment after the selected environment is deleted", async ({
   page,
 }) => {
   await signIn(page);
@@ -1125,10 +1125,10 @@ test("runs use a configured environment after the environments are renamed", asy
     await page.request.post("/api/projects", { data: { name: "Renamed" } })
   ).json();
   try {
-    await page.request.put("/api/environments", {
-      data: ["staging", "prod"],
-    });
-    await page.goto(`/worktrees/${project.id}/flow`);
+    expect((await page.request.delete("/api/environments/prod")).ok()).toBe(
+      true,
+    );
+    await page.goto(`/worktrees/${project.id}/flow?environment=prod`);
     const launched = page.waitForResponse(
       (r) => r.url().endsWith("/runs") && r.request().method() === "POST",
     );
@@ -1137,8 +1137,15 @@ test("runs use a configured environment after the environments are renamed", asy
       .click();
     const response = await launched;
     expect(response.ok()).toBe(true);
-    expect((await response.json()).environment).toBe("staging");
+    expect((await response.json()).environment).toBe("dev");
   } finally {
-    await page.request.put("/api/environments", { data: ["dev", "prod"] });
+    await page.request.post("/api/environments", {
+      data: {
+        id: "prod",
+        label: "prod",
+        color: "#e05252",
+        confirm_before_run: true,
+      },
+    });
   }
 });

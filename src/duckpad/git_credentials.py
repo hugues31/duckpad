@@ -168,11 +168,8 @@ class GitCredentials:
         self.store.delete(KEY_KIND, user_id)
 
     def private_key(self, user_id):
-        with self.store.lock:
-            user = self.store.get("user", user_id)
-            record = self.store.get(KEY_KIND, user_id)
-            # A deactivated account deletes its key; this guards records written by older versions.
-            return record["private_key"] if record and user and user["active"] else None
+        record = self.store.get(KEY_KIND, user_id)
+        return record["private_key"] if record else None
 
     # Trusted hosts
 

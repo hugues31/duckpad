@@ -75,6 +75,7 @@ def create_example(projects, catalog, private=False, name=None):
             "connector": "local",
             "environments": {env: {"root": str(root / env)} for env in ("dev", "prod")},
         },
+        create=True,
     )
     templates = BUILTINS.copy()
     templates["validated_orders"] = """-- @label Validated orders

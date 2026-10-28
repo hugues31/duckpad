@@ -14,20 +14,6 @@ class Access:
     def __init__(self, store):
         self.store = store
         self.membership_lock = threading.RLock()
-        # Existing projects belonged to the original administrator. Do not infer
-        # memberships again on subsequent starts or from editable Git content.
-        with store.lock:
-            if not store.get("settings", "access_migrated"):
-                for project in store.all("project"):
-                    store.put(
-                        "access",
-                        project["id"],
-                        {
-                            "members": {"admin": "admin"},
-                            "connections": [c["id"] for c in store.all("connection")],
-                        },
-                    )
-                store.put("settings", "access_migrated", True)
 
     def role(self, user, project):
         if not self.store.get("project", project):

@@ -8,7 +8,7 @@ import pytest
 from helpers import example_bundle, wait_run, wait_until
 
 from duckpad.auth import Auth
-from duckpad.bundle import bundle_to_files
+from duckpad.bundle import bundle_to_files, files_to_bundle
 from duckpad.components import expand, group, import_definition
 from duckpad.engine import Engine
 from duckpad.projects import QUIET_PERIOD, Projects
@@ -25,7 +25,12 @@ def test_authentication_password_survives_restart_without_plaintext(services):
     restarted = Auth(store)
     assert restarted.initial_password is None
     restarted.login("admin", password)
-    assert password not in json.dumps(store.get("auth", "admin"))
+    assert password not in json.dumps(store.get("user", "admin"))
+
+
+def test_project_files_require_documentation():
+    with pytest.raises(Problem, match=r"documentation\.json"):
+        files_to_bundle({"flow.json": '{"nodes": [], "edges": []}'})
 
 
 def test_external_batch_commits_final_invalid_content_once(services, tmp_path):
@@ -68,7 +73,7 @@ def test_non_utf8_file_is_reported_without_stopping_the_watcher(services, tmp_pa
     )
 
 
-def test_merge_preview_keeps_files_without_a_trailing_newline(services, tmp_path):
+def test_merge_review_keeps_files_without_a_trailing_newline(services, tmp_path):
     _, projects, _, _ = services
     main = projects.create("Merge base", example_bundle(tmp_path / "input.csv"))["id"]
 
@@ -82,7 +87,7 @@ def test_merge_preview_keeps_files_without_a_trailing_newline(services, tmp_path
     branch = projects.branch(main, "experiment")["id"]
     edit(main, "templates/total.sql", lambda text: text + "\n-- edited on main")
     edit(branch, "documentation.json", lambda _: '{"project": "Edited on the branch"}\n')
-    preview = projects.merge_preview(branch)
+    preview = projects.versioning.prepare(main, "refs/heads/experiment")
     assert preview["conflicts"] == []
     assert preview["files"]["templates/total.sql"].endswith("-- edited on main")
     assert "Edited on the branch" in preview["files"]["documentation.json"]
@@ -141,11 +146,9 @@ def test_branch_isolation_and_doc_merge_does_not_invalidate(services, tmp_path):
     snapshot["bundle"]["documentation"]["project"] = "A business definition"
     projects.write(branch["id"], snapshot["revision"], bundle_to_files(snapshot["bundle"]))
     assert not projects.snapshot(main["id"])["bundle"]["documentation"]
-    comparison = projects.merge_preview(branch["id"])
+    comparison = projects.versioning.prepare(main["id"], "refs/heads/feature/documentation")
     assert not comparison["conflicts"]
-    merged = projects.merge(
-        branch["id"], comparison["source_revision"], comparison["target_revision"], comparison["files"]
-    )
+    merged = projects.versioning.apply(main["id"], comparison["id"], {}, comparison["proposal_revision"])
     assert merged["bundle"]["documentation"]["project"] == "A business definition"
     assert engine.preview(main["id"], "dev", "total")["status"] == "valid"
     assert len(projects.git(main["path"], "show", "--format=%P", "--no-patch", "HEAD").split()) == 2

@@ -26,6 +26,7 @@ def test_absent_numeric_connection_values_use_defaults_without_overriding_explic
             "connector": "numeric",
             "environments": {"dev": {}, "prod": {"port": 0}},
         },
+        create=True,
     )
     assert catalog.capture(["numeric"], "dev")[0]["numeric"]["values"]["port"] == 5432
     assert catalog.capture(["numeric"], "prod")[0]["numeric"]["values"]["port"] == 0
@@ -54,7 +55,9 @@ def test_declarative_attached_connector_native_insert_and_environment_capture(se
     }
     catalog.save("connector", definition)
     catalog.save(
-        "connection", {"id": "warehouse", "name": "Warehouse", "connector": "native", "environments": paths}
+        "connection",
+        {"id": "warehouse", "name": "Warehouse", "connector": "native", "environments": paths},
+        create=True,
     )
     bundle = {
         "flow": {
@@ -122,7 +125,7 @@ def test_setup_rejects_data_operations_and_secret_redaction_survives_definition_
         "connector": "secret_test",
         "environments": {"dev": {"password": secret}},
     }
-    catalog.save("connection", copy.deepcopy(connection))
+    catalog.save("connection", copy.deepcopy(connection), create=True)
     _, secrets = catalog.capture(["hidden"], "dev")
     assert secret not in str(catalog.public())
     assert secret.replace("'", "''") not in redact(secret.replace("'", "''"), secrets)

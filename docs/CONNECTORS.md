@@ -9,17 +9,16 @@ a connection without changing project references. The editor rejects duplicate
 identifiers and updates to connections that have been deleted. Changing connectors
 keeps only parameters declared by the selected connector, in every environment.
 
-For explicit creation, use `PUT /api/catalog/connection?create=true` (409 if the
-identifier exists). For updates, use `?create=false` (404 if it does not exist).
-Omitting `create` retains the legacy create-or-replace behavior for existing API
-clients. Masked secrets in an update retain their stored values.
+To create a connection, use `PUT /api/catalog/connection?create=true` (409 if the
+identifier exists). For updates, use `?create=false` or omit `create` (404 if the
+connection does not exist). Masked secrets in an update retain their stored values.
 
 ## Environments
 
 Instance admins manage environments in **Instance settings → Environments**.
 Each has a stable identifier, an editable label, a color, and a **Confirm every
-run** option. Existing installations retain their identifiers and connection
-values; `dev` defaults to no confirmation and `prod` defaults to confirmation.
+run** option. Fresh instances include `dev` without confirmation and `prod` with
+confirmation enabled.
 Labels and colors appear in the workspace selector and connection settings.
 Changing them does not change project Git history or invalidate results.
 
@@ -40,8 +39,7 @@ Administrators can create an environment with `POST /api/environments`
 (`id`, `label`, `color` as a six-digit hex color, `confirm_before_run` as a boolean),
 edit its settings with `PUT /api/environments/{id}`, or delete it with
 `DELETE /api/environments/{id}`. `/api/workspace` exposes `catalog.environment_details`
-alongside the existing identifier list. The legacy bulk `PUT /api/environments`
-endpoint continues to accept identifiers without replacing their metadata.
+alongside the identifier list.
 
 ## Validated scope
 
