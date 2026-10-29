@@ -2,7 +2,8 @@ from pathlib import Path
 
 import pytest
 
-from duckpad.templates import compile_template, parse_template
+from duckpad.builtin_templates import BUILTINS
+from duckpad.templates import compile_template, directives, executable_sql, parse_template
 from duckpad.util import Problem
 
 EXPRESSIONS = parse_template(
@@ -41,3 +42,100 @@ def test_expression_lists_accept_projection_modifiers():
         Path(),
     )
     assert statements[0]["query"] == 'SELECT l.*, SUM(amount) AS revenue FROM "input"'
+
+
+@pytest.mark.parametrize(
+    "directive",
+    ["-- @label Renamed", "--@label Renamed", "  --   @label   Renamed  ", "--@description Renamed"],
+)
+def test_descriptive_directives_are_recognized_in_every_form(directive):
+    sql = "-- @input source\n-- @output result\nSELECT * FROM {{ source }};"
+    described = directive + "\n" + sql
+    assert executable_sql(described) == sql
+    assert directives(described)[0] == (directive.split("@")[1].split()[0], "Renamed")
+    assert parse_template(described)["blocks"] == parse_template(sql)["blocks"]
+
+
+def test_directives_inside_sql_lines_are_not_directives():
+    assert directives("SELECT 1 -- @input ghost\n-- @output result") == [("output", "result")]
+
+
+def source(body):
+    return parse_template(
+        "-- @kind source\n"
+        '-- @param connection: connection = "local"\n'
+        '-- @param file: file(connection) = "a.csv"\n'
+        '-- @param other: file(connection) = "b.csv"\n'
+        '-- @param delimiter: text = ","\n'
+        "-- @output result\n" + body
+    )
+
+
+LOCAL = {"local": {"alias": "local", "definition": {"capabilities": ["read"]}, "values": {"root": "/data"}}}
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "SELECT * FROM read_csv({{ file }}, delim={{ delimiter }}, header=true, types={'id': 'INT'})",
+        "SELECT * FROM read_csv([{{ file }}, {{ other }}])",
+        "SELECT * FROM read_csv({{ file }}) AS a JOIN read_parquet({{ other }}) AS b USING (id)",
+        "SELECT * FROM range(3)",
+    ],
+)
+def test_source_readers_accept_declared_resources(body):
+    compile_template(source(body), {}, {}, {"result": "out"}, LOCAL, Path())
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "SELECT * FROM read_csv([{{ file }}, '/elsewhere/other.csv'])",
+        "SELECT * FROM read_csv({{ file }}, '/elsewhere/other.csv')",
+        "SELECT * FROM read_csv('/elsewhere/other.csv', delim={{ file }})",
+        "SELECT * FROM read_csv({{ file }} || '.bak')",
+        "SELECT * FROM read_csv(files := '/elsewhere/other.csv')",
+        "SELECT * FROM read_csv({{ file }}, types=(SELECT * FROM read_text('/elsewhere/secret')))",
+        "SELECT * FROM read_csv({{ file }}) AS a JOIN read_csv('/elsewhere/other.csv') AS b USING (id)",
+    ],
+)
+def test_source_readers_reject_undeclared_or_unverifiable_files(body):
+    with pytest.raises(Problem, match="declared file resource parameters"):
+        compile_template(source(body), {}, {}, {"result": "out"}, LOCAL, Path())
+
+
+def export(body, parameters='-- @param target: destination(connection) = "out.csv"\n'):
+    return parse_template(
+        '-- @kind export\n-- @input rows\n-- @param connection: connection = "local"\n' + parameters + body
+    )
+
+
+def test_downloadable_exports_are_recognized_by_their_sql():
+    assert parse_template(BUILTINS["export_csv"])["download"] == {"parameter": "destination", "format": "csv"}
+    assert parse_template(BUILTINS["export_xlsx"])["download"] == {
+        "parameter": "destination",
+        "format": "xlsx",
+    }
+    assert parse_template(BUILTINS["export_oracle"])["download"] is None
+    assert parse_template(BUILTINS["load_csv"])["download"] is None
+    assert export("COPY (SELECT id FROM {{ rows }}) TO {{ target }} (FORMAT CSV, HEADER true);")[
+        "download"
+    ] == {"parameter": "target", "format": "csv"}
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "COPY {{ rows }} TO {{ target }} (FORMAT PARQUET);",
+        "COPY {{ rows }} TO {{ target }} (FORMAT {{ format }});",
+        "COPY {{ rows }} TO {{ target }} (FORMAT CSV, COMPRESSION gzip);",
+        "COPY {{ rows }} TO 'fixed.csv' (FORMAT CSV);",
+        "INSERT INTO {{ connection }}.{{ format }} SELECT * FROM {{ rows }};",
+        "COPY {{ rows }} TO {{ target }} (FORMAT CSV);\nCOPY {{ rows }} TO {{ target }} (FORMAT CSV);",
+    ],
+)
+def test_exports_without_a_single_local_csv_or_xlsx_file_are_not_downloadable(body):
+    parameters = (
+        '-- @param target: destination(connection) = "out.csv"\n-- @param format: keyword(csv|parquet)\n'
+    )
+    assert export(body, parameters)["download"] is None

@@ -226,6 +226,16 @@ def test_invalid_template_scope_does_not_block_independent_nodes(services, tmp_p
     assert wait_run(store, engine.launch(worktree, "dev", "total"))["status"] == "success"
 
 
+def test_invalid_template_keeps_only_its_declared_ports(tmp_path):
+    bundle = example_bundle(tmp_path / "input.csv")
+    bundle["templates"]["total"] = (
+        "--@input source\n-- @output result\n-- @unknown\nSELECT * FROM {{ source }} -- @input ghost"
+    )
+    node = expand(bundle, tolerant=True)[0]["total"]
+    assert node["parsed"]["inputs"] == ["source"]
+    assert node["error"] == "Unknown template directive: @unknown"
+
+
 def test_column_documentation_is_removed_only_after_confirmed_schema_change(services, tmp_path):
     store, projects, _, engine = services
     bundle = example_bundle(tmp_path / "input.csv")

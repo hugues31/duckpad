@@ -1,10 +1,10 @@
 """Pure definition comparisons. No execution, source access, saves or Git mutations."""
 
-import re
 from collections import Counter
 
 from .bundle import files_to_bundle
 from .components import expand
+from .templates import DESCRIPTIVE, directives, executable_sql
 from .util import Problem
 
 CATEGORIES = ("processing", "documentation", "layout")
@@ -14,8 +14,8 @@ EMPTY = {"flow": {}, "templates": {}, "components": {}, "documentation": {}}
 def label(value, fallback):
     if isinstance(value, dict):
         return str(value.get("label") or value.get("name") or fallback)
-    match = re.search(r"^--\s*@label\s+(.+)$", value or "", re.MULTILINE)
-    return match[1].strip() if match else fallback
+    labels = [text for key, text in directives(value) if key == "label"]
+    return labels[-1] if labels and labels[-1] else fallback
 
 
 def entities(bundle):
@@ -107,18 +107,10 @@ def categories(kind, paths, before, after):
     if kind == "documentation":
         return ["documentation"]
     if kind == "template":
-
-        def sql(text):
-            return "\n".join(
-                line
-                for line in (text or "").splitlines()
-                if not re.match(r"^\s*--\s*@(label|description)\b", line)
-            )
-
-        result = ["processing"] if sql(before) != sql(after) else []
+        result = ["processing"] if executable_sql(before) != executable_sql(after) else []
 
         def descriptions(text):
-            return re.findall(r"^\s*--\s*@(?:label|description)\b.*$", text or "", re.MULTILINE)
+            return [found for found in directives(text) if found[0] in DESCRIPTIVE]
 
         if descriptions(before) != descriptions(after) or not result:
             result.append("documentation")
@@ -168,13 +160,7 @@ def potential_impact(before, after):
                     "error",
                     "template_sql",
                 )
-            } | {
-                "sql": "\n".join(
-                    line
-                    for line in node.get("template_sql", "").splitlines()
-                    if not re.match(r"^\s*--\s*@(label|description)\b", line)
-                )
-            }
+            } | {"sql": executable_sql(node.get("template_sql", ""))}
 
         if processing(old[0].get(key)) != processing(new[0].get(key)):
             affected.add(key)
