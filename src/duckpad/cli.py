@@ -11,6 +11,7 @@ import uvicorn
 from filelock import FileLock, Timeout
 
 from .app import create_app
+from .logging import server_log_config
 
 
 def main():
@@ -25,7 +26,20 @@ def main():
     start.add_argument("--host", default="127.0.0.1")
     start.add_argument("--port", type=int, default=8765)
     start.add_argument("--no-browser", action="store_true")
+    start.add_argument(
+        "--trusted-local",
+        action="store_true",
+        help="Run trusted SQL without OS isolation (single-user, loopback only)",
+    )
+    start.add_argument(
+        "--log-level",
+        choices=("critical", "error", "warning", "info", "debug"),
+        default="info",
+        help="Server log level (default: info); debug includes successful UI polling requests",
+    )
     args = parser.parse_args()
+    if args.trusted_local and args.host not in ("127.0.0.1", "::1", "localhost"):
+        parser.error("--trusted-local requires --host 127.0.0.1, ::1, or localhost")
     if not shutil.which("git"):
         parser.error("Git is required. Install Git for your operating system and run duckpad start again.")
     args.home.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -36,8 +50,14 @@ def main():
         parser.error(
             "This Duckpad instance is already running. Open its browser window or choose another --home."
         )
-    app = create_app(args.home)
+    app = create_app(args.home, trusted_local=args.trusted_local)
     print(f"Duckpad · http://{args.host}:{args.port}", flush=True)
+    if args.trusted_local:
+        print(
+            "Trusted local mode: SQL runs without OS isolation, with your operating-system permissions. "
+            "Use only trusted projects on your own computer; do not share or proxy this instance.",
+            flush=True,
+        )
     if app.state.auth.initial_password:
         print(
             f"Initial administrator login: admin\nPassword: {app.state.auth.initial_password}\nSave this password. It will not be displayed again.",
@@ -48,7 +68,9 @@ def main():
         timer.daemon = True
         timer.start()
     try:
-        uvicorn.run(app, host=args.host, port=args.port)
+        uvicorn.run(
+            app, host=args.host, port=args.port, log_level=args.log_level, log_config=server_log_config()
+        )
     finally:
         lease.release()
 
