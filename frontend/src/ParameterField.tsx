@@ -131,6 +131,8 @@ export default function ParameterField({
               setUploadError("");
               try {
                 onChange(await uploadFile(file, worktree));
+                // An upload is a complete edit: commit it like a blur.
+                onBlur?.();
               } catch (error) {
                 setUploadError((error as Error).message);
               } finally {

@@ -1,30 +1,109 @@
-import { useEffect, useRef, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+
+/** The navigation that unmounts a draft: leaving its page or its worktree. */
+export type DraftScope = "page" | "worktree";
+
+interface Draft {
+  scope: DraftScope;
+  discard: () => void;
+}
+
+/** Registers an unsaved draft and returns its unregistration. */
+export const DraftContext = createContext<
+  ((draft: Draft) => () => void) | null
+>(null);
+
+export type DraftRegistry = ReturnType<typeof useDraftRegistry>;
+
+/** Collect the unsaved drafts of mounted editors for navigation and unload guards. */
+export function useDraftRegistry() {
+  const [drafts, setDrafts] = useState<ReadonlySet<Draft>>(() => new Set());
+  const register = useCallback((draft: Draft) => {
+    setDrafts((current) => new Set(current).add(draft));
+    return () =>
+      setDrafts((current) => {
+        const next = new Set(current);
+        next.delete(draft);
+        return next;
+      });
+  }, []);
+  return useMemo(() => {
+    const matching = (scope?: DraftScope) =>
+      [...drafts].filter((draft) => !scope || draft.scope === scope);
+    return {
+      register,
+      /** Whether an editor holds unsaved changes, optionally only of one scope. */
+      dirty: (scope?: DraftScope) => matching(scope).length > 0,
+      /** Discard unsaved changes, optionally only those of one scope. */
+      discard: (scope?: DraftScope) =>
+        matching(scope).forEach((draft) => draft.discard()),
+    };
+  }, [drafts, register]);
+}
+
+interface DraftOptions<T> {
+  /** Which navigation must confirm before discarding the draft. */
+  scope?: DraftScope;
+  /** Save pending edits when the editor closes instead of dropping them. */
+  autosave?: boolean;
+  equal?: (a: T, b: T) => boolean;
+}
 
 /** Keep immutable edits tied to their revision and serialize explicit saves.
+ * Incoming values replace the draft only while it holds no unsaved edits.
+ * Unsaved drafts are registered with the enclosing navigation guard.
  * Remount the owner when switching to a different document.
  */
 export function useRevisionDraft<T, Revision>(
   value: T,
   revision: Revision,
   onSave: (draft: T, base: Revision) => Promise<Revision>,
+  { scope = "page", autosave = false, equal = Object.is }: DraftOptions<T> = {},
 ) {
-  const [draft, setDraft] = useState(value);
+  const [state, setState] = useState({ draft: value, saved: value });
+  const [pending, setPending] = useState(false);
   const latest = useRef(value);
+  // The value of the base revision, which the draft is compared with.
+  const saved = useRef(value);
   const base = useRef(revision);
-  const dirty = useRef(false);
+  const incoming = useRef({ value, revision });
   const saving = useRef<{ draft: T; promise: Promise<void> } | null>(null);
+  // A rejected draft was already reported; closing the editor must not resend it.
+  const rejected = useRef<{ draft: T } | null>(null);
+  // Discarding invalidates the result of a save still in flight.
+  const generation = useRef(0);
+  const dirty = !equal(state.draft, state.saved);
+  const unsaved = () => !equal(latest.current, saved.current);
+  const show = (draft: T, savedValue: T) => {
+    latest.current = draft;
+    saved.current = savedValue;
+    setState({ draft, saved: savedValue });
+  };
 
   useEffect(() => {
-    if (dirty.current || saving.current) return;
-    latest.current = value;
+    incoming.current = { value, revision };
+    if (unsaved() || saving.current) return;
     base.current = revision;
-    setDraft(value);
+    show(value, value);
   }, [value, revision]);
 
   const update = (change: (current: T) => T) => {
-    latest.current = change(latest.current);
-    dirty.current = true;
-    setDraft(latest.current);
+    show(change(latest.current), saved.current);
+  };
+
+  const discard = () => {
+    generation.current++;
+    rejected.current = null;
+    base.current = incoming.current.revision;
+    show(incoming.current.value, incoming.current.value);
   };
 
   const persist = async (): Promise<void> => {
@@ -36,20 +115,58 @@ export function useRevisionDraft<T, Revision>(
       if (needsFollowUp) return persist();
       return;
     }
-    if (!dirty.current) return;
-    const saved = latest.current;
+    if (!unsaved()) return;
+    const draft = latest.current;
+    const started = generation.current;
     const promise = Promise.resolve()
-      .then(() => onSave(saved, base.current))
-      .then((revision) => {
-        base.current = revision;
-        dirty.current = latest.current !== saved;
-      })
+      .then(() => onSave(draft, base.current))
+      .then(
+        (revision) => {
+          if (started !== generation.current) return;
+          base.current = revision;
+          rejected.current = null;
+          // Keep edits typed while the save was in flight.
+          show(latest.current, draft);
+        },
+        (error) => {
+          rejected.current = { draft };
+          throw error;
+        },
+      )
       .finally(() => {
         saving.current = null;
+        setPending(false);
       });
-    saving.current = { draft: saved, promise };
+    saving.current = { draft, promise };
+    setPending(true);
     await promise;
   };
 
-  return { draft, update, persist };
+  const register = useContext(DraftContext);
+  const actions = useRef({ persist, discard });
+  actions.current = { persist, discard };
+  useEffect(() => {
+    if (!dirty || !register) return;
+    return register({ scope, discard: () => actions.current.discard() });
+  }, [dirty, register, scope]);
+  useEffect(
+    () => () => {
+      if (!autosave || !unsaved() || rejected.current?.draft === latest.current)
+        return;
+      // The owner reports save failures; nothing is left to display them here.
+      actions.current.persist().catch(() => undefined);
+    },
+    [],
+  );
+
+  return {
+    draft: state.draft,
+    /** The value of the revision being edited. */
+    saved: state.saved,
+    dirty,
+    pending,
+    update,
+    persist,
+    discard,
+  };
 }

@@ -1,59 +1,53 @@
-import { lazy, Suspense, useEffect, useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { Download, FileCode2, Loader2, Save } from "lucide-react";
 import { downloadProject } from "./api";
 import { useT } from "./i18n";
 import ProjectFileTree from "./ProjectFileTree";
 import { projectFileLanguage } from "./projectFiles";
+import { useRevisionDraft } from "./useRevisionDraft";
 import type { Snapshot } from "./types";
 
 const CodeEditor = lazy(() => import("./Editor"));
-type Draft = { base: Snapshot; files: Record<string, string> };
+type Files = Record<string, string>;
+
+const sameFiles = (a: Files, b: Files) =>
+  Object.keys(a).length === Object.keys(b).length &&
+  Object.keys(a).every((name) => a[name] === b[name]);
 
 export default function CodePanel({
   hidden,
   readOnly,
   snapshot,
   onSave,
-  onDirtyChange,
 }: {
   hidden: boolean;
   readOnly: boolean;
   snapshot: Snapshot;
-  onSave: (files: Record<string, string>, base: Snapshot) => Promise<void>;
-  onDirtyChange: (dirty: boolean) => void;
+  /** Save the files on top of the given revision; resolve to the saved snapshot. */
+  onSave: (files: Files, base: Snapshot) => Promise<Snapshot>;
 }) {
   const t = useT();
-  const [draft, setDraft] = useState<Draft | null>(null);
+  // The panel stays mounted across the worktree's tabs.
+  const {
+    draft: files,
+    saved,
+    dirty,
+    pending,
+    update,
+    persist,
+    discard,
+  } = useRevisionDraft(snapshot.files, snapshot, onSave, {
+    scope: "worktree",
+    equal: sameFiles,
+  });
   const [selected, setSelected] = useState("flow.json");
-  const [pending, setPending] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [error, setError] = useState("");
-  const files = draft?.files ?? snapshot.files;
   const path = selected in files ? selected : Object.keys(files).sort()[0];
-  const dirty = !!draft;
-
-  useEffect(() => {
-    onDirtyChange(dirty);
-    return () => onDirtyChange(false);
-  }, [dirty, onDirtyChange]);
-  useEffect(() => {
-    if (!dirty) return;
-    const beforeUnload = (event: BeforeUnloadEvent) => {
-      event.preventDefault();
-    };
-    window.addEventListener("beforeunload", beforeUnload);
-    return () => window.removeEventListener("beforeunload", beforeUnload);
-  }, [dirty]);
 
   const edit = (text: string) => {
     if (!path || readOnly || pending || text === files[path]) return;
-    const base = draft?.base ?? snapshot;
-    const next = { ...files, [path]: text };
-    setDraft(
-      Object.keys(next).every((name) => next[name] === base.files[name])
-        ? null
-        : { base, files: next },
-    );
+    update((current) => ({ ...current, [path]: text }));
     setError("");
   };
 
@@ -72,7 +66,7 @@ export default function CodePanel({
               className="button secondary small"
               disabled={pending}
               onClick={() => {
-                setDraft(null);
+                discard();
                 setError("");
               }}
             >
@@ -83,16 +77,11 @@ export default function CodePanel({
             className="button primary small"
             disabled={readOnly || !dirty || pending}
             onClick={async () => {
-              if (!draft || pending) return;
-              setPending(true);
               setError("");
               try {
-                await onSave(draft.files, draft.base);
-                setDraft(null);
+                await persist();
               } catch (e) {
                 setError((e as Error).message);
-              } finally {
-                setPending(false);
               }
             }}
           >
@@ -147,7 +136,7 @@ export default function CodePanel({
               <div className="code-file-heading">
                 <FileCode2 size={15} />
                 <span>{path}</span>
-                {draft && files[path] !== draft.base.files[path] && (
+                {files[path] !== saved[path] && (
                   <span className="muted">· {t("unsavedChanges")}</span>
                 )}
               </div>

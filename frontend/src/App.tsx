@@ -38,10 +38,9 @@ import {
 } from "./FlowToolbar";
 import {
   connectInput,
-  definitionOf,
   graphAt,
   identifier,
-  outputPorts,
+  nodeInterface,
   pathPrefix,
   type NodeConnection,
   type PathPart,
@@ -71,6 +70,11 @@ import type {
   Statuses,
   Workspace,
 } from "./types";
+import {
+  DraftContext,
+  useDraftRegistry,
+  type DraftRegistry,
+} from "./useRevisionDraft";
 import { PanelResizeHandle, usePanelSizes } from "./WorkspacePanels";
 
 const POLL_INTERVAL = 1000;
@@ -86,6 +90,7 @@ const EMPTY_STATUSES: Statuses = { nodes: {}, active: null };
 
 export default function App() {
   const preferences = usePreferences();
+  const drafts = useDraftRegistry();
   return (
     <I18n.Provider
       value={{
@@ -93,14 +98,23 @@ export default function App() {
         setLanguage: preferences.setLanguage,
       }}
     >
-      <ErrorBoundary>
-        <WorkspaceApp preferences={preferences} />
-      </ErrorBoundary>
+      <DraftContext.Provider value={drafts.register}>
+        <ErrorBoundary>
+          <WorkspaceApp preferences={preferences} drafts={drafts} />
+        </ErrorBoundary>
+      </DraftContext.Provider>
     </I18n.Provider>
   );
 }
 
-function WorkspaceApp({ preferences }: { preferences: Preferences }) {
+function WorkspaceApp({
+  preferences,
+  drafts,
+}: {
+  preferences: Preferences;
+  /** Unsaved drafts of the mounted editors. */
+  drafts: DraftRegistry;
+}) {
   const t = useT();
   const { message, notify, dismiss } = useToast();
   const [authenticated, setAuthenticated] = useState<boolean | null>(null);
@@ -140,10 +154,6 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
   const [snapshotState, setSnapshot] = useState<Snapshot | null>(null);
   const snapshot =
     snapshotState?.worktree.id === worktree ? snapshotState : null;
-  const [codeDirty, setCodeDirty] = useState(false);
-  const [documentationDirty, setDocumentationDirty] = useState(false);
-  const [codeDraftVersion, setCodeDraftVersion] = useState(0);
-  const [documentationDraftVersion, setDocumentationDraftVersion] = useState(0);
   const [selected, setSelected] = useState<string | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const openSearch = useCallback(() => setSearchOpen(true), []);
@@ -330,20 +340,19 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
     // Only drafts belonging to the page being left may block a transition.
     if (!authenticated || !isWorktreePage(currentLocation.pathname, worktree))
       return false;
-    const retainsCode = isWorktreePage(nextLocation.pathname, worktree);
+    const leavesPage = currentLocation.pathname !== nextLocation.pathname;
+    const leavesWorktree = !isWorktreePage(nextLocation.pathname, worktree);
     return (
-      (codeDirty && !retainsCode) ||
-      (documentationDirty &&
-        currentLocation.pathname !== nextLocation.pathname) ||
-      (saving && currentLocation.pathname !== nextLocation.pathname)
+      (drafts.dirty("worktree") && leavesWorktree) ||
+      ((drafts.dirty("page") || saving) && leavesPage)
     );
   });
   useBeforeUnload(
     useCallback(
       (event: BeforeUnloadEvent) => {
-        if (codeDirty || documentationDirty || saving) event.preventDefault();
+        if (drafts.dirty() || saving) event.preventDefault();
       },
-      [codeDirty, documentationDirty, saving],
+      [drafts, saving],
     ),
   );
   useEffect(() => {
@@ -387,9 +396,12 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
   const prefix = pathPrefix(path);
   const node = graph?.nodes.find((n) => n.id === selected);
   const fullNode = prefix + (selected || "");
-  const definition =
-    node && snapshot ? definitionOf(node, snapshot) : undefined;
-  const ports = node ? outputPorts(node, definition) : [];
+  const signature =
+    node && snapshot
+      ? nodeInterface(node, snapshot.parsed_templates, bundle?.components)
+      : undefined;
+  const definition = signature?.definition;
+  const ports = signature?.outputs || [];
   const active = statuses.active;
   const resultVersion = JSON.stringify(statuses.nodes);
   const project = workspace?.projects.find(
@@ -731,7 +743,7 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
     if (!canEdit) throw new Error(t("readerNotice"));
     setSaving(true);
     try {
-      await api(
+      return await api<Snapshot>(
         `/worktrees/${base.worktree.id}`,
         send({ revision: base.revision, files }, "PUT"),
       );
@@ -982,7 +994,7 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
               environment={environment}
               tab={tab}
               saving={saving}
-              dirty={codeDirty}
+              dirty={drafts.dirty("worktree")}
               branch={snapshot.worktree.branch}
               active={active}
               canRun={!busy && !!bundle}
@@ -1005,12 +1017,11 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
               onViewFiles={() => setTab("code")}
             />
             <CodePanel
-              key={`code:${worktree}:${codeDraftVersion}`}
+              key={`code:${worktree}`}
               hidden={tab !== "code"}
               readOnly={!canEdit}
               snapshot={snapshot}
               onSave={saveFiles}
-              onDirtyChange={setCodeDirty}
             />
             {tab === "code" ? null : tab === "history" ? (
               <HistoryPanel
@@ -1023,9 +1034,8 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
             ) : tab === "documentation" && bundle ? (
               <DocumentationPanel
                 readOnly={!canEdit}
-                key={`documentation:${worktree}:${documentationDraftVersion}`}
+                key={`documentation:${worktree}`}
                 snapshot={snapshot}
-                onDirtyChange={setDocumentationDirty}
                 onSave={(text, base) =>
                   saveFrom(base, (value) => {
                     value.documentation.project = text;
@@ -1047,6 +1057,7 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
                 <NodePalette
                   readOnly={!canEdit}
                   snapshot={snapshot}
+                  excludedComponents={path.map((part) => part.definition)}
                   hidden={!paletteOpen}
                   onClose={() => setPaletteOpen(false)}
                   onAdd={(kind, id) => safe(() => addNode(kind, id))}
@@ -1108,7 +1119,10 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
                         )
                       }
                       onDelete={(nodes, edges) =>
-                        safe(() => removeNodes(nodes, edges))
+                        removeNodes(nodes, edges).catch((error) => {
+                          notify(error.message, true);
+                          throw error;
+                        })
                       }
                       onAdd={(kind, id, position, connection) =>
                         safe(() => addNode(kind, id, position, connection))
@@ -1154,12 +1168,12 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
                   id="node-inspector"
                   hidden={!inspectorOpen}
                 >
-                  {node && definition ? (
+                  {node && signature?.definition ? (
                     <Inspector
                       readOnly={!canEdit}
                       key={worktree + fullNode}
                       node={node}
-                      definition={definition}
+                      signature={signature}
                       snapshot={snapshot}
                       graphNodes={graph.nodes}
                       graphEdges={graph.edges}
@@ -1176,11 +1190,9 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
                           );
                         })
                       }
-                      onSaveDocumentation={async (change, base) => {
-                        await saveFrom(base, (value) =>
-                          change(value.documentation),
-                        );
-                      }}
+                      onSaveDocumentation={(change, base) =>
+                        saveFrom(base, (value) => change(value.documentation))
+                      }
                       onInput={(port, source) =>
                         safe(() =>
                           updateGraph((g) => {
@@ -1263,12 +1275,11 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
               className="button primary"
               onClick={() => {
                 // Discard explicitly even if Back interrupts the route render.
-                if (!isWorktreePage(blocker.location.pathname, worktree)) {
-                  setCodeDraftVersion((value) => value + 1);
-                  setCodeDirty(false);
-                }
-                setDocumentationDraftVersion((value) => value + 1);
-                setDocumentationDirty(false);
+                drafts.discard(
+                  isWorktreePage(blocker.location.pathname, worktree)
+                    ? "page"
+                    : undefined,
+                );
                 blocker.proceed();
               }}
             >

@@ -9,9 +9,9 @@ import {
 import { createPortal } from "react-dom";
 import { Search, X } from "lucide-react";
 import { nodeIcon } from "./Canvas";
+import { nodeChoices, type NodeKind } from "./graph";
 import { templateLabel, useT } from "./i18n";
-import type { NodeKind } from "./NodePalette";
-import type { FlowNode, Json } from "./types";
+import type { Json } from "./types";
 
 export default function ConnectionPalette({
   parsed,
@@ -39,40 +39,20 @@ export default function ConnectionPalette({
   const [position, setPosition] = useState(screen);
   const portSide = handleType === "source" ? "inputs" : "outputs";
   const items = useMemo(() => {
-    // A component cannot contain itself, including through another definition.
-    const containsAncestor = (
-      id: string,
-      visited = new Set<string>(),
-    ): boolean => {
-      if (excludedComponents.includes(id)) return true;
-      if (visited.has(id)) return false;
-      visited.add(id);
-      return (components[id]?.nodes || []).some(
-        (node: FlowNode) =>
-          node.component && containsAncestor(node.component, visited),
-      );
-    };
-    const definitions = [
-      ...Object.entries(parsed).map(([id, definition]) => ({
-        id,
-        kind: "template" as NodeKind,
-        label: templateLabel(id, definition.label, t),
-        description: definition.description || "",
-        ports: (definition[portSide] || []) as string[],
-      })),
-      ...Object.entries(components)
-        .filter(([id]) => !containsAncestor(id))
-        .map(([id, definition]) => ({
-          id,
-          kind: "component" as NodeKind,
-          label: definition.name || id,
-          description: definition.description || "",
-          ports: Object.keys(definition[portSide] || {}),
-        })),
-    ];
     const query = search.trim().toLocaleLowerCase();
-    return definitions
-      .flatMap(({ ports, ...item }) => ports.map((port) => ({ ...item, port })))
+    return nodeChoices(parsed, components, excludedComponents)
+      .flatMap(({ kind, id, signature }) =>
+        signature[portSide].map((port) => ({
+          id,
+          kind,
+          port,
+          label:
+            kind === "component"
+              ? signature.definition!.name || id
+              : templateLabel(id, signature.definition!.label, t),
+          description: signature.definition!.description || "",
+        })),
+      )
       .filter((item) =>
         `${item.label} ${item.id} ${item.description} ${item.port}`
           .toLocaleLowerCase()
