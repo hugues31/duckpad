@@ -89,8 +89,9 @@ class Projects:
         self.commit(path, "feat(project): create " + " ".join(name.split())[:64])
         project = {"id": project_id, "name": name, "main": worktree_id, "created": now()}
         worktree = {"id": worktree_id, "project": project_id, "branch": "main", "path": str(path)}
-        self.store.put("project", project_id, project)
-        self.store.put("worktree", worktree_id, worktree)
+        with self.store.transaction():
+            self.store.put("project", project_id, project)
+            self.store.put("worktree", worktree_id, worktree)
         self.observed[worktree_id] = self.read_files(worktree)
         return worktree
 
@@ -99,21 +100,13 @@ class Projects:
 
         with self.lock:
             worktrees = [w for w in self.store.all("worktree") if w["project"] == project_id]
+            artifacts = [a["id"] for a in self.store.all("artifact") if a["project"] == project_id]
+            self.store.delete("project", project_id)
+            for identity in artifacts:
+                (self.store.home / "artifacts" / identity).unlink(missing_ok=True)
             for worktree in worktrees:
-                self.store.delete("worktree", worktree["id"])
                 self.observed.pop(worktree["id"], None)
                 self.pending.pop(worktree["id"], None)
-            for kind in ("run", "conflict"):
-                for record in self.store.all(kind):
-                    if record.get("worktree") in {w["id"] for w in worktrees}:
-                        self.store.delete(kind, record["id"])
-            for kind in ("artifact", "export_result"):
-                for identity, record in self.store.items(kind):
-                    if record.get("worktree") in {w["id"] for w in worktrees}:
-                        if kind == "artifact":
-                            (self.store.home / "artifacts" / identity).unlink(missing_ok=True)
-                        self.store.delete(kind, identity)
-            self.store.delete("project", project_id)
             for worktree in worktrees:
                 shutil.rmtree(worktree["path"], ignore_errors=True)
                 shutil.rmtree(self.store.home / "exports" / worktree["id"], ignore_errors=True)

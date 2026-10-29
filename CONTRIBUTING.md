@@ -16,6 +16,7 @@ uv run duckpad start --home .duckpad-dev --no-browser
 ## Code layout
 
 - `src/duckpad` is the Python service. [The architecture guide](docs/ARCHITECTURE.md) describes each module and the execution invariants.
+- [Instance persistence](docs/PERSISTENCE.md) describes the SQLModel schema, transaction boundaries and Alembic migration workflow.
 - `frontend/src` is the React interface. `api.ts` is the only HTTP client and `App.tsx` owns the workspace state.
 - `tests` holds the Python suite; shared builders and waits live in `tests/helpers.py`.
 - `frontend/e2e` holds the Playwright scenarios; `e2e/helpers.ts` signs in to the disposable test instance.

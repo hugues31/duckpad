@@ -110,7 +110,7 @@ class Engine:
         """The live DuckDB context of an existing worktree in a configured environment."""
         with self.lock:
             self.projects.get(worktree)
-            if environment not in self.store.get("settings", "environments"):
+            if environment not in self.catalog.environment_names():
                 raise Problem("Unknown environment", 404)
             key = (worktree, environment)
             if key not in self.contexts or getattr(self.contexts[key].db, "closed", False):
@@ -458,20 +458,21 @@ class Engine:
                 return [sanitize(item) for item in value]
             return value
 
-        self.store.put("run", run["id"], sanitize(run))
-        for key, state in run["nodes"].items():
-            if state.get("kind") == "export":
-                self.store.put(
-                    "export_result",
-                    digest([run["worktree"], run["environment"], key]),
-                    {
-                        **{k: state.get(k) for k in ("status", "fingerprint", "artifact")},
-                        **{k: run[k] for k in ("worktree", "environment", "commit", "started")},
-                        "node": key,
-                        "run": run["id"],
-                        "run_status": run["status"],
-                    },
-                )
+        with self.store.transaction():
+            self.store.put("run", run["id"], sanitize(run))
+            for key, state in run["nodes"].items():
+                if state.get("kind") == "export":
+                    self.store.put(
+                        "export_result",
+                        digest([run["worktree"], run["environment"], key]),
+                        {
+                            **{k: state.get(k) for k in ("status", "fingerprint", "artifact")},
+                            **{k: run[k] for k in ("worktree", "environment", "commit", "started")},
+                            "node": key,
+                            "run": run["id"],
+                            "run_status": run["status"],
+                        },
+                    )
         context = self.contexts.get((run["worktree"], run["environment"]))
         if context:
             with context.lock:
