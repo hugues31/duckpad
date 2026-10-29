@@ -23,6 +23,152 @@ async function waitForRun(page: Page, id: string) {
   ).toBeEnabled();
 }
 
+test("selects a surviving environment before requesting results when dev is absent", async ({
+  page,
+}) => {
+  await signIn(page);
+  const created = await (
+    await page.request.post("/api/projects", {
+      data: { name: "Explicit environment" },
+    })
+  ).json();
+  const endpoint = `/api/worktrees/${created.id}`;
+  const snapshot = await (await page.request.get(endpoint)).json();
+  snapshot.bundle.templates.constant =
+    "-- @kind source\n-- @output result\nSELECT 42 AS value;";
+  snapshot.bundle.flow.nodes = [
+    {
+      id: "constant",
+      template: "constant",
+      params: {},
+      position: { x: 0, y: 0 },
+    },
+    {
+      id: "export",
+      template: "export_csv",
+      params: { destination: "values.csv" },
+      position: { x: 300, y: 0 },
+    },
+  ];
+  snapshot.bundle.flow.edges = [
+    {
+      id: "edge",
+      source: "constant",
+      sourceHandle: "result",
+      target: "export",
+      targetHandle: "source",
+    },
+  ];
+  expect(
+    (
+      await page.request.put(endpoint, {
+        data: { revision: snapshot.revision, bundle: snapshot.bundle },
+      })
+    ).ok(),
+  ).toBeTruthy();
+  // A per-page catalog response avoids changing the shared test instance's environments.
+  // API tests cover actual deletion and all eight operations against the surviving catalog.
+  let releaseCatalog!: () => void;
+  const catalogReady = new Promise<void>((resolve) => {
+    releaseCatalog = resolve;
+  });
+  await page.route("**/api/workspace", async (route) => {
+    const response = await route.fetch();
+    const workspace = await response.json();
+    workspace.catalog.environments = ["prod"];
+    workspace.catalog.environment_details =
+      workspace.catalog.environment_details.filter(
+        (item: { id: string }) => item.id === "prod",
+      );
+    await catalogReady;
+    await route.fulfill({ response, json: workspace });
+  });
+  const selected: string[] = [];
+  const operations = new Set<string>();
+  page.on("request", (request) => {
+    const url = new URL(request.url());
+    if (!url.pathname.startsWith(endpoint + "/")) return;
+    const operation = url.pathname.slice(endpoint.length + 1).split("/")[0];
+    if (
+      ![
+        "status",
+        "compile",
+        "preview",
+        "exports",
+        "generations",
+        "runs",
+        "lineage",
+      ].includes(operation)
+    )
+      return;
+    selected.push(
+      request.method() === "POST"
+        ? request.postDataJSON().environment
+        : url.searchParams.get("environment")!,
+    );
+    operations.add(operation);
+  });
+  try {
+    await page.goto(`/worktrees/${created.id}/flow?environment=dev`);
+    await expect(
+      page.getByRole("status", { name: "Loading…", exact: true }),
+    ).toBeVisible();
+    expect(selected).toEqual([]);
+    releaseCatalog();
+    await expect(page.getByLabel("Environment", { exact: true })).toHaveValue(
+      "prod",
+    );
+    await expect(page).toHaveURL(/environment=prod/);
+    const launched = page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/runs") &&
+        response.request().method() === "POST",
+    );
+    await page
+      .getByRole("button", { name: "Run pipeline", exact: true })
+      .click();
+    await page
+      .getByRole("dialog", { name: "Confirm execution" })
+      .getByRole("button", { name: "Confirm and run", exact: true })
+      .click();
+    await waitForRun(page, (await (await launched).json()).id);
+    await page.locator('.react-flow__node[data-id="constant"]').click();
+    await page
+      .getByRole("button", { name: /Explain this value: value, rows 1,/ })
+      .click();
+    await expect(page.locator(".lineage-card.root")).toBeVisible();
+    await page
+      .getByRole("dialog")
+      .getByRole("button", { name: "Close", exact: true })
+      .click();
+    await page
+      .locator(".inspector")
+      .getByRole("button", { name: "SQL", exact: true })
+      .click();
+    await expect.poll(() => operations.has("compile")).toBeTruthy();
+    await page.locator('.react-flow__node[data-id="export"]').click();
+    const download = page.waitForEvent("download");
+    await page
+      .getByRole("button", { name: "Download exported data", exact: true })
+      .click();
+    expect((await download).suggestedFilename()).toBe("values.csv");
+    expect([...operations].sort()).toEqual([
+      "compile",
+      "exports",
+      "generations",
+      "lineage",
+      "preview",
+      "runs",
+      "status",
+    ]);
+    expect(selected.length).toBeGreaterThan(7);
+    expect(new Set(selected)).toEqual(new Set(["prod"]));
+  } finally {
+    releaseCatalog();
+    await page.request.delete(`/api/projects/${created.project}`);
+  }
+});
+
 test("manage environment labels, colors, confirmation and selected-environment deletion", async ({
   page,
 }) => {

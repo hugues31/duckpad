@@ -113,7 +113,9 @@ def test_external_changes_never_take_the_requesting_accounts_identity(instance, 
         check_identity(projects, worktree, account_identity(users["bob"][0]))
         check_identity(projects, worktree, SYSTEM_IDENTITY, "HEAD~1")
     elif finalize == "flush":
-        response = client.post(f"/api/worktrees/{worktree['id']}/runs", headers=users["bob"][1], json={})
+        response = client.post(
+            f"/api/worktrees/{worktree['id']}/runs", headers=users["bob"][1], json={"environment": "dev"}
+        )
         assert response.status_code == 200, response.text
         check_identity(projects, worktree, SYSTEM_IDENTITY)
     else:

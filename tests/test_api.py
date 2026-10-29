@@ -9,6 +9,7 @@ from helpers import wait_run
 
 import duckpad
 from duckpad.app import SESSION_COOKIE, create_app
+from duckpad.builtin_templates import BUILTINS
 
 
 @pytest.fixture
@@ -109,9 +110,170 @@ def test_grouping_inside_an_unknown_component_is_not_found(client, worktree):
 
 
 def test_unknown_worktrees_and_environments_are_not_found(client, worktree):
-    assert client.get("/api/worktrees/missing/status").status_code == 404
+    assert client.get("/api/worktrees/missing/status?environment=dev").status_code == 404
     assert client.get(f"/api/worktrees/{worktree}/status?environment=missing").status_code == 404
     assert client.get(f"/api/worktrees/{worktree}/status?environment=prod").status_code == 200
+
+
+ENVIRONMENT_OPERATIONS = [
+    ("get", "/status", {}),
+    ("get", "/compile/source", {}),
+    ("get", "/preview/source", {}),
+    ("get", "/exports/export", {}),
+    ("get", "/exports/export/download", {"run": "missing"}),
+    ("get", "/generations/missing", {}),
+    ("post", "/runs", {}),
+    ("post", "/lineage", {"dataset": "missing", "row": 0, "column": "value"}),
+]
+
+
+@pytest.mark.parametrize("delete_dev", [False, True])
+@pytest.mark.parametrize(("method", "suffix", "data"), ENVIRONMENT_OPERATIONS)
+def test_environment_is_required_before_dispatch(
+    app, client, worktree, monkeypatch, delete_dev, method, suffix, data
+):
+    if delete_dev:
+        assert client.delete("/api/environments/dev").status_code == 200
+
+    def unexpected_dispatch(*args, **kwargs):
+        pytest.fail("A request without an environment reached execution services")
+
+    services = app.state.services
+    for name in (
+        "statuses",
+        "compile",
+        "preview",
+        "export_result",
+        "open_export",
+        "generation_valid",
+        "launch",
+    ):
+        monkeypatch.setattr(services.engine, name, unexpected_dispatch)
+    monkeypatch.setattr(services.lineage, "explain", unexpected_dispatch)
+    response = client.request(
+        method,
+        f"/api/worktrees/{worktree}{suffix}",
+        **{
+            "params" if method == "get" else "json": data,
+        },
+    )
+    assert response.status_code == 422, response.text
+    assert response.json()["error"]
+    assert response.json()["detail"] == [
+        {
+            "location": "query.environment" if method == "get" else "body.environment",
+            "message": "Field required",
+        }
+    ]
+    assert services.store.all("run") == []
+    assert services.engine.contexts == {}
+
+
+@pytest.fixture
+def environment_pipeline(client, worktree):
+    path = f"/api/worktrees/{worktree}"
+    snapshot = client.get(path).json()
+    bundle = snapshot["bundle"]
+    bundle["templates"]["source"] = "-- @kind source\n-- @output result\nSELECT 42 AS value;"
+    bundle["templates"]["export_csv"] = BUILTINS["export_csv"]
+    bundle["flow"]["nodes"] = [
+        {"id": "source", "template": "source", "params": {}},
+        {"id": "export", "template": "export_csv", "params": {"destination": "values.csv"}},
+    ]
+    bundle["flow"]["edges"] = [
+        {
+            "id": "edge",
+            "source": "source",
+            "sourceHandle": "result",
+            "target": "export",
+            "targetHandle": "source",
+        }
+    ]
+    response = client.put(path, json={"revision": snapshot["revision"], "bundle": bundle})
+    assert response.status_code == 200, response.text
+    return path
+
+
+@pytest.mark.parametrize("environment", ["dev", "unknown", ""])
+@pytest.mark.parametrize(("method", "suffix", "data"), ENVIRONMENT_OPERATIONS)
+def test_deleted_and_unknown_environments_are_not_found(
+    app, client, environment_pipeline, environment, method, suffix, data
+):
+    assert client.delete("/api/environments/dev").status_code == 200
+    response = client.request(
+        method,
+        environment_pipeline + suffix,
+        **{
+            "params" if method == "get" else "json": {**data, "environment": environment},
+        },
+    )
+    assert response.status_code == 404, response.text
+    assert response.json()["error"] == "Unknown environment"
+    assert app.state.services.store.all("run") == []
+    assert app.state.services.engine.contexts == {}
+
+
+@pytest.mark.parametrize("environment", ["dev", "prod"])
+def test_execution_and_results_use_the_explicit_environment(app, client, environment_pipeline, environment):
+    path = environment_pipeline
+    if environment == "prod":
+        assert client.delete("/api/environments/dev").status_code == 200
+    params = {"environment": environment}
+    response = client.post(path + "/runs", json=params)
+    assert response.status_code == 200, response.text
+    run = wait_run(app.state.services.store, response.json())
+    assert run["status"] == "success", run
+    assert run["environment"] == environment
+    status = client.get(path + "/status", params=params)
+    assert status.status_code == 200
+    assert status.json()["nodes"]["source"]["outputs"]["result"]["status"] == "valid"
+    compiled = client.get(path + "/compile/source", params=params)
+    assert compiled.status_code == 200
+    assert "42" in compiled.json()[0]["sql"]
+    preview = client.get(path + "/preview/source", params=params)
+    assert preview.status_code == 200
+    result = preview.json()
+    assert result["environment"] == environment
+    assert result["rows"][0]["values"] == [42]
+    assert client.get(path + f"/generations/{result['id']}", params=params).json() == {"valid": True}
+    lineage = client.post(
+        path + "/lineage",
+        json={
+            **params,
+            "dataset": result["id"],
+            "row": result["rows"][0]["id"],
+            "column": "value",
+        },
+    )
+    assert lineage.status_code == 200, lineage.text
+    assert lineage.json()["value"] == 42
+    assert lineage.json()["complete"]
+    exported = client.get(path + "/exports/export", params=params)
+    assert exported.status_code == 200
+    assert exported.json()["status"] == "available"
+    downloaded = client.get(path + "/exports/export/download", params={**params, "run": run["id"]})
+    assert downloaded.status_code == 200, downloaded.text
+    assert downloaded.text.splitlines() == ["value", "42"]
+
+
+def test_openapi_requires_environments_without_defaults(app):
+    schema = app.openapi()
+    for suffix in (
+        "status",
+        "compile/{node}",
+        "preview/{node}",
+        "exports/{node}",
+        "exports/{node}/download",
+        "generations/{identity}",
+    ):
+        operation = schema["paths"]["/api/worktrees/{worktree}/" + suffix]["get"]
+        parameter = next(item for item in operation["parameters"] if item["name"] == "environment")
+        assert parameter["in"] == "query" and parameter["required"]
+        assert "default" not in parameter["schema"]
+    for name in ("Launch", "Explain"):
+        body = schema["components"]["schemas"][name]
+        assert "environment" in body["required"]
+        assert "default" not in body["properties"]["environment"]
 
 
 def test_connection_creation_rejects_duplicates_without_overwriting_secrets(app, client):
@@ -218,7 +380,7 @@ def executed_projects(app, client):
         response = client.post(path + "/runs", json={"environment": "dev"})
         assert response.status_code == 200, response.text
         assert wait_run(app.state.services.store, response.json())["status"] == "success"
-        preview = client.get(path + "/preview/double").json()
+        preview = client.get(path + "/preview/double?environment=dev").json()
         assert preview["status"] == "valid"
         assert preview["rows"][0]["values"] == [84]
         worktrees.append(worktree)
@@ -234,7 +396,7 @@ def admin_state(app, client, worktrees):
     for worktree in worktrees:
         for suffix in ("status", "preview/source", "preview/double"):
             path = f"/api/worktrees/{worktree['id']}/{suffix}"
-            response = client.get(path)
+            response = client.get(path, params={"environment": "dev"})
             assert response.status_code == 200, response.text
             state[path] = response.json()
     return state
@@ -330,12 +492,12 @@ def test_admin_edits_reset_results_only_when_idle(app, client, executed_projects
         affected = executed_projects[:1] if path.startswith("/api/projects/") else executed_projects
         for item in affected:
             base = f"/api/worktrees/{item['id']}"
-            assert client.get(base + "/status").json()["nodes"] == {}
-            assert client.get(base + "/preview/double").status_code == 404
+            assert client.get(base + "/status?environment=dev").json()["nodes"] == {}
+            assert client.get(base + "/preview/double?environment=dev").status_code == 404
         if len(affected) == 1:
             for suffix in ("status", "preview/source", "preview/double"):
                 path = f"/api/worktrees/{executed_projects[1]['id']}/{suffix}"
-                assert client.get(path).json() == before[path]
+                assert client.get(path, params={"environment": "dev"}).json() == before[path]
 
 
 def test_environment_metadata_preserves_connections_and_survives_catalog_reload(app, client, worktree):
@@ -418,11 +580,14 @@ def test_ui_runs_require_current_environment_confirmation_each_time(app, client,
     # Turning the option on affects already-open clients, even for a node run.
     settings = {"label": "Development", "color": "#abcdef", "confirm_before_run": True}
     assert client.put("/api/environments/dev", json=settings).status_code == 200
-    assert client.post(path, json={"entry_point": "ui", "node": "source"}).status_code == 409
+    assert (
+        client.post(path, json={"environment": "dev", "entry_point": "ui", "node": "source"}).status_code
+        == 409
+    )
     assert (
         client.put("/api/environments/dev", json={**settings, "confirm_before_run": False}).status_code == 200
     )
-    response = client.post(path, json={"entry_point": "ui"})
+    response = client.post(path, json={"environment": "dev", "entry_point": "ui"})
     assert response.status_code == 200
     wait_run(store, response.json())
     # Programmatic clients retain their explicit, non-interactive launch contract.

@@ -113,7 +113,7 @@ class Import(BaseModel):
 
 
 class Launch(BaseModel):
-    environment: str = "dev"
+    environment: str
     node: str | None = None
     entry_point: str | None = None
     confirmed: StrictBool = False
@@ -137,7 +137,7 @@ class NewEnvironment(EnvironmentSettings):
 
 
 class Explain(BaseModel):
-    environment: str = "dev"
+    environment: str
     dataset: str
     row: int
     column: str

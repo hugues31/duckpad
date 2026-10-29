@@ -614,7 +614,7 @@ def create_app(home: Path, watch=True, *, trusted_local=False):
     # Execution and results
 
     @app.get("/api/worktrees/{worktree}/status")
-    def status(worktree: str, environment: str = "dev"):
+    def status(worktree: str, environment: str):
         return engine.statuses(worktree, environment)
 
     @app.post("/api/worktrees/{worktree}/runs")
@@ -649,15 +649,15 @@ def create_app(home: Path, watch=True, *, trusted_local=False):
         return engine.cancel(run)
 
     @app.get("/api/worktrees/{worktree}/compile/{node}")
-    def compile_sql(worktree: str, node: str, environment: str = "dev"):
+    def compile_sql(worktree: str, node: str, environment: str):
         return engine.compile(worktree, environment, node)
 
     @app.get("/api/worktrees/{worktree}/exports/{node}")
-    def export_result(worktree: str, node: str, environment: str = "dev"):
+    def export_result(worktree: str, node: str, environment: str):
         return engine.export_result(worktree, environment, node)
 
     @app.get("/api/worktrees/{worktree}/exports/{node}/download")
-    def download_export(worktree: str, node: str, run: str, environment: str = "dev"):
+    def download_export(worktree: str, node: str, run: str, environment: str):
         opened = ExitStack()
         stream, record = opened.enter_context(engine.open_export(worktree, environment, node, run))
 
@@ -684,7 +684,7 @@ def create_app(home: Path, watch=True, *, trusted_local=False):
     def preview(
         worktree: str,
         node: str,
-        environment: str = "dev",
+        environment: str,
         port: str = "result",
         limit: int = 100,
         offset: int = 0,
@@ -703,7 +703,7 @@ def create_app(home: Path, watch=True, *, trusted_local=False):
         )
 
     @app.get("/api/worktrees/{worktree}/generations/{identity}")
-    def generation(worktree: str, identity: str, environment: str = "dev"):
+    def generation(worktree: str, identity: str, environment: str):
         return {"valid": engine.generation_valid(worktree, environment, identity)}
 
     @app.post("/api/worktrees/{worktree}/lineage")

@@ -215,7 +215,7 @@ def test_xlsx_api_upload_requires_grant_and_blocks_outside_files(tmp_path, excel
             ).status_code
             == 200
         )
-        assert client.get(f"/api/worktrees/{identity}/compile/source").status_code == 403
+        assert client.get(f"/api/worktrees/{identity}/compile/source?environment=dev").status_code == 403
         assert (
             client.put(
                 f"/api/projects/{worktree['project']}/connections", json={"connections": ["xlsx"]}

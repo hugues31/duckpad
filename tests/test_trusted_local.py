@@ -50,16 +50,23 @@ def test_trusted_example_runs_previews_traces_exports_and_recalculates(local):
     endpoint = f"/api/worktrees/{worktree}"
     assert client.get(endpoint).json()["diagnostics"] == []
     run = execute(app, client, worktree)
-    assert client.get(endpoint + "/preview/orders").json()["count"] == 120
-    report = client.get(endpoint + "/preview/report", params={"port": "report"}).json()
+    assert client.get(endpoint + "/preview/orders?environment=dev").json()["count"] == 120
+    report = client.get(endpoint + "/preview/report", params={"environment": "dev", "port": "report"}).json()
     assert report["status"] == "valid" and report["count"] == 4
     lineage = client.post(
         endpoint + "/lineage",
-        json={"dataset": report["id"], "row": report["rows"][0]["id"], "column": "revenue"},
+        json={
+            "environment": "dev",
+            "dataset": report["id"],
+            "row": report["rows"][0]["id"],
+            "column": "revenue",
+        },
     )
     assert lineage.status_code == 200, lineage.text
     assert lineage.json()["complete"] and lineage.json()["total"] > 0
-    download = client.get(endpoint + "/exports/export/download", params={"run": run["id"]})
+    download = client.get(
+        endpoint + "/exports/export/download", params={"environment": "dev", "run": run["id"]}
+    )
     assert download.status_code == 200, download.text
     assert len(list(csv.DictReader(io.StringIO(download.text)))) == 4
 
@@ -69,9 +76,19 @@ def test_trusted_example_runs_previews_traces_exports_and_recalculates(local):
             node["params"]["status"] = "refunded"
     saved = client.put(endpoint, json={"revision": snapshot["revision"], "bundle": snapshot["bundle"]})
     assert saved.status_code == 200, saved.text
-    assert client.get(endpoint + "/preview/report", params={"port": "report"}).json()["status"] == "stale"
+    assert (
+        client.get(endpoint + "/preview/report", params={"environment": "dev", "port": "report"}).json()[
+            "status"
+        ]
+        == "stale"
+    )
     assert execute(app, client, worktree)["id"] != run["id"]
-    assert client.get(endpoint + "/preview/validated", params={"port": "orders"}).json()["count"] == 13
+    assert (
+        client.get(endpoint + "/preview/validated", params={"environment": "dev", "port": "orders"}).json()[
+            "count"
+        ]
+        == 13
+    )
 
 
 def test_trusted_mode_prepares_connections_and_enforces_connection_grants(local, tmp_path):
@@ -114,7 +131,7 @@ def test_trusted_mode_prepares_connections_and_enforces_connection_grants(local,
         ).status_code
         == 200
     )
-    denied = client.post(endpoint + "/runs", json={"node": "source"})
+    denied = client.post(endpoint + "/runs", json={"environment": "dev", "node": "source"})
     assert denied.status_code == 422 and "not authorized" in denied.text
     assert (
         client.put(
@@ -125,7 +142,7 @@ def test_trusted_mode_prepares_connections_and_enforces_connection_grants(local,
     # Repeating the run also exercises connector teardown and initialization.
     for _ in range(2):
         execute(app, client, worktree["id"])
-        assert client.get(endpoint + "/preview/source").json()["rows"][0]["values"] == [42]
+        assert client.get(endpoint + "/preview/source?environment=dev").json()["rows"][0]["values"] == [42]
 
 
 def test_trusted_mode_cancels_native_sql_and_can_run_again(local):
@@ -143,7 +160,7 @@ def test_trusted_mode_cancels_native_sql_and_can_run_again(local):
         ).status_code
         == 200
     )
-    run = client.post(endpoint + "/runs", json={}).json()
+    run = client.post(endpoint + "/runs", json={"environment": "dev"}).json()
     wait_until(lambda: client.get(f"/api/runs/{run['id']}").json()["nodes"]["source"]["status"] == "running")
     assert client.post(f"/api/runs/{run['id']}/cancel").status_code == 200
     assert app.state.services.engine.wait(run["id"], timeout=30)["status"] == "canceled"
@@ -184,14 +201,14 @@ def test_trusted_mode_preserves_cancellation_before_native_execute(local, monkey
         return plan
 
     monkeypatch.setattr(engine_module, "plan_materialization", hold)
-    run = client.post(endpoint + "/runs", json={}).json()
+    run = client.post(endpoint + "/runs", json={"environment": "dev"}).json()
     try:
         assert planned.wait(10)
         assert client.post(f"/api/runs/{run['id']}/cancel").status_code == 200
         proceed.set()
         assert engine.wait(run["id"], timeout=5)["status"] == "canceled"
         assert not engine.active
-        assert client.get(endpoint + "/preview/source").status_code == 404
+        assert client.get(endpoint + "/preview/source?environment=dev").status_code == 404
     finally:
         # Release the original implementation's long query after a failed assertion.
         proceed.set()
@@ -246,7 +263,9 @@ def test_trusted_mode_retains_api_project_permissions(local):
     app.state.access.member(worktree["project"], user["id"], "reader")
     assert client.post("/api/login", json={"username": "reader", "password": password}).status_code == 200
     assert client.get(f"/api/worktrees/{worktree['id']}").status_code == 200
-    assert client.post(f"/api/worktrees/{worktree['id']}/runs", json={}).status_code == 403
+    assert (
+        client.post(f"/api/worktrees/{worktree['id']}/runs", json={"environment": "dev"}).status_code == 403
+    )
     assert client.get(f"/api/worktrees/{private['id']}").status_code == 404
     assert client.get("/api/users").status_code == 403
 
@@ -261,7 +280,7 @@ def test_restart_without_flag_restores_isolation_and_never_falls_back(tmp_path, 
     app = create_app(tmp_path / "instance", watch=False)
     with TestClient(app) as client:
         assert client.post("/api/login", json={"password": password}).status_code == 200
-        response = client.post(f"/api/worktrees/{worktree}/runs", json={})
+        response = client.post(f"/api/worktrees/{worktree}/runs", json={"environment": "dev"})
         assert response.status_code == 503
         assert response.json()["error"] == "SQL isolation is unavailable"
 

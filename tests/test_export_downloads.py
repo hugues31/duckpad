@@ -103,9 +103,9 @@ def test_contents_options_and_response_metadata(instance, export_excel_cache, fo
         client.put(
             f"/api/projects/{worktree['project']}/connections", json={"connections": ["local", "xlsx"]}
         )
-    assert client.get(endpoint).json()["status"] == "not_run"
+    assert client.get(endpoint, params={"environment": "dev"}).json()["status"] == "not_run"
     run = execute(services, worktree)
-    info = client.get(endpoint).json()
+    info = client.get(endpoint, params={"environment": "dev"}).json()
     assert info["status"] == "available", info
     assert info["run"] == run["id"]
     assert info["filename"] == filename
@@ -191,13 +191,13 @@ def test_stale_failed_running_and_replaced_results(instance, monkeypatch):
     worktree, endpoint = create(instance)
     first = execute(services, worktree)
     edit(services, worktree, lambda b: b["flow"]["nodes"][1]["params"].update(delimiter=";"))
-    assert client.get(endpoint).json()["status"] == "stale"
+    assert client.get(endpoint, params={"environment": "dev"}).json()["status"] == "stale"
     assert download(client, endpoint, first).status_code == 409
     second = execute(services, worktree)
     assert download(client, endpoint, first).status_code == 409
     assert download(client, endpoint, second).status_code == 200
     execute(services, worktree, target="source")
-    assert client.get(endpoint).json()["status"] == "stale"
+    assert client.get(endpoint, params={"environment": "dev"}).json()["status"] == "stale"
     edit(
         services,
         worktree,
@@ -207,7 +207,7 @@ def test_stale_failed_running_and_replaced_results(instance, monkeypatch):
     )
     failed = services.engine.wait(services.engine.launch(worktree["id"], "dev")["id"], 30)
     assert failed["status"] == "failed"
-    assert client.get(endpoint).json()["status"] == "failed"
+    assert client.get(endpoint, params={"environment": "dev"}).json()["status"] == "failed"
     assert download(client, endpoint, second).status_code == 409
     edit(
         services,
@@ -226,12 +226,12 @@ def test_stale_failed_running_and_replaced_results(instance, monkeypatch):
     pending = services.engine.launch(worktree["id"], "dev")
     try:
         assert entered.wait(5)
-        assert client.get(endpoint).json()["status"] == "running"
+        assert client.get(endpoint, params={"environment": "dev"}).json()["status"] == "running"
         assert download(client, endpoint, second).status_code == 409
     finally:
         release.set()
         services.engine.wait(pending["id"], 30)
-    assert client.get(endpoint).json()["status"] == "available"
+    assert client.get(endpoint, params={"environment": "dev"}).json()["status"] == "available"
 
 
 @pytest.mark.parametrize("replacement", ["missing", "symlink", "modified", "directory", "parent_symlink"])
@@ -251,7 +251,7 @@ def test_missing_or_replaced_artifacts_are_unavailable(instance, tmp_path, repla
         outside = tmp_path / "replacement"
         artifact.parent.rename(outside)
         artifact.parent.symlink_to(outside, target_is_directory=True)
-    assert client.get(endpoint).json()["status"] == "missing"
+    assert client.get(endpoint, params={"environment": "dev"}).json()["status"] == "missing"
     assert download(client, endpoint, run).status_code == 404
 
 
@@ -305,7 +305,7 @@ def test_restart_and_project_deletion(instance):
 def test_remote_and_non_file_destinations_have_no_download(instance):
     services, client = instance
     worktree, endpoint = create(instance, "oracle")
-    assert client.get(endpoint).json()["status"] == "unsupported"
+    assert client.get(endpoint, params={"environment": "dev"}).json()["status"] == "unsupported"
     edit(
         services,
         worktree,
@@ -313,7 +313,7 @@ def test_remote_and_non_file_destinations_have_no_download(instance):
             template="export_csv", params={"destination": "s3://bucket/export.csv"}
         ),
     )
-    assert client.get(endpoint).json()["status"] == "unsupported"
+    assert client.get(endpoint, params={"environment": "dev"}).json()["status"] == "unsupported"
 
 
 def test_streams_in_bounded_chunks_and_closes_the_file(instance, monkeypatch):
@@ -373,7 +373,7 @@ def test_completed_contexts_do_not_replace_each_other_and_grants_are_rechecked(i
         client.put(f"/api/projects/{worktree['project']}/connections", json={"connections": []}).status_code
         == 200
     )
-    assert client.get(endpoint).json()["status"] == "stale"
+    assert client.get(endpoint, params={"environment": "dev"}).json()["status"] == "stale"
     assert download(client, endpoint, dev).status_code == 409
 
 

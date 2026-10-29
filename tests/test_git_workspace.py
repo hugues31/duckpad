@@ -356,7 +356,7 @@ def test_cleanup_releases_engine_contexts_and_catalog_remains_writable(tmp_path,
             cursor.interrupt.assert_called_once_with()
             assert database.closed
             assert database.process.poll() is not None
-        assert client.get(f"/api/worktrees/{feature['id']}/status").status_code == 404
+        assert client.get(f"/api/worktrees/{feature['id']}/status?environment=dev").status_code == 404
         response = client.put(
             "/api/catalog/connector", json={"id": "cleanup_test", "name": "Cleanup test", "init_sql": ""}
         )
