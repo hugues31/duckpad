@@ -5,7 +5,7 @@ import json
 import re
 import zipfile
 import zlib
-from pathlib import Path
+from pathlib import PurePosixPath, PureWindowsPath
 
 from .bundle import files_to_bundle, is_declarative
 from .components import expand
@@ -86,7 +86,16 @@ def archive_bundle(files):
                 raise Problem(f"{name} is not valid JSON: {error}", 422) from error
             if not isinstance(value, dict):
                 raise Problem(f"{name} must contain a JSON object", 422)
-    return files_to_bundle(files)
+    bundle = files_to_bundle(files)
+    # Without README.md, the project's Markdown documentation is read from documentation.json.
+    if not isinstance(bundle["documentation"].get("project", ""), str):
+        raise Problem('documentation.json: "project" must be Markdown text', 422)
+    return bundle
+
+
+def absolute_path(value):
+    """Whether a path is absolute on POSIX or Windows, wherever the project was created or imported."""
+    return PurePosixPath(value).is_absolute() or PureWindowsPath(value).is_absolute()
 
 
 def import_warnings(bundle, granted):
@@ -105,7 +114,7 @@ def import_warnings(bundle, granted):
                     base_type(parameter["type"]) == "file"
                     and isinstance(value, str)
                     and not URI.match(value)
-                    and Path(value).is_absolute()
+                    and absolute_path(value)
                 ):
                     files.add(labels.get(node["root"], node["root"]))
     except (Problem, KeyError, TypeError, AttributeError, RecursionError):

@@ -2,6 +2,7 @@
 
 import io
 import logging
+import shutil
 import subprocess
 import tarfile
 import threading
@@ -74,30 +75,35 @@ class Projects:
         project_id, worktree_id = uid("project_"), uid("worktree_")
         path = self.store.home / "projects" / project_id
         path.mkdir(parents=True)
-        self.git(path, "init", "-b", "main")
-        atomic_write(path / ".gitignore", "data/\nexports/\n*.duckdb\n*.duckdb.wal\n.venv/\n__pycache__/\n")
-        if bundle is None:
-            bundle = {
-                "flow": {"id": project_id, "name": name, "description": "", "nodes": [], "edges": []},
-                "templates": BUILTINS.copy(),
-                "components": {},
-                "documentation": {},
-            }
-        bundle["flow"].update(id=project_id, name=name)
-        for file, content in bundle_to_files(bundle).items():
-            atomic_write(path / file, content)
-        self.commit(path, f"feat(project): {action} " + " ".join(name.split())[:64])
-        project = {"id": project_id, "name": name, "main": worktree_id, "created": now()}
-        worktree = {"id": worktree_id, "project": project_id, "branch": "main", "path": str(path)}
-        with self.store.transaction():
-            self.store.put("project", project_id, project)
-            self.store.put("worktree", worktree_id, worktree)
+        try:
+            self.git(path, "init", "-b", "main")
+            atomic_write(
+                path / ".gitignore", "data/\nexports/\n*.duckdb\n*.duckdb.wal\n.venv/\n__pycache__/\n"
+            )
+            if bundle is None:
+                bundle = {
+                    "flow": {"id": project_id, "name": name, "description": "", "nodes": [], "edges": []},
+                    "templates": BUILTINS.copy(),
+                    "components": {},
+                    "documentation": {},
+                }
+            bundle["flow"].update(id=project_id, name=name)
+            for file, content in bundle_to_files(bundle).items():
+                atomic_write(path / file, content)
+            self.commit(path, f"feat(project): {action} " + " ".join(name.split())[:64])
+            project = {"id": project_id, "name": name, "main": worktree_id, "created": now()}
+            worktree = {"id": worktree_id, "project": project_id, "branch": "main", "path": str(path)}
+            with self.store.transaction():
+                self.store.put("project", project_id, project)
+                self.store.put("worktree", worktree_id, worktree)
+        except Exception:
+            # A project is either recorded with its repository or leaves nothing behind.
+            shutil.rmtree(path, ignore_errors=True)
+            raise
         self.observed[worktree_id] = self.read_files(worktree)
         return worktree
 
     def delete(self, project_id):
-        import shutil
-
         with self.lock:
             worktrees = self.store.worktrees(project_id)
             artifacts = self.store.artifact_ids(project=project_id)

@@ -10,6 +10,7 @@ from helpers import wait_run
 
 import duckpad
 from duckpad.app import SESSION_COOKIE, create_app
+from duckpad.util import Problem
 
 
 @pytest.fixture
@@ -663,6 +664,27 @@ def test_import_reports_what_the_archive_cannot_carry(app, client, worktree, tmp
 
 
 @pytest.mark.parametrize(
+    "path",
+    [
+        "/srv/duckpad/resources/project_old/orders.csv",
+        "C:\\Duckpad\\resources\\project_old\\orders.csv",
+        "D:/exports/orders.csv",
+        "\\\\files.example.test\\share\\orders.csv",
+    ],
+)
+def test_import_reports_absolute_files_from_any_operating_system(client, worktree, path):
+    files = client.get(f"/api/worktrees/{worktree}").json()["files"]
+    flow = json.loads(files["flow.json"])
+    flow["nodes"] = [
+        {"id": "orders", "template": "load_csv", "label": "Orders", "params": {"file": path}},
+        {"id": "relative", "template": "load_csv", "label": "Relative", "params": {"file": "orders.csv"}},
+    ]
+    response = import_zip(client, project_zip({**files, "flow.json": json.dumps(flow)}))
+    assert response.status_code == 200, response.text
+    assert response.json()["warnings"]["files"] == ["Orders"]
+
+
+@pytest.mark.parametrize(
     ("entries", "complete", "error"),
     [
         (None, True, "Choose a readable ZIP archive of a Duckpad project"),
@@ -675,17 +697,43 @@ def test_import_reports_what_the_archive_cannot_carry(app, client, worktree, tmp
         ({"flow.json": "{"}, False, "flow.json is not valid JSON: Expecting property name"),
         ({"components/report.json": "[]"}, False, "components/report.json must contain a JSON object"),
         ({"templates/broken.sql": b"\xff"}, False, "templates/broken.sql is not valid UTF-8 text"),
+        (
+            {"documentation.json": '{"project": 123}', "README.md": None},
+            False,
+            'documentation.json: "project" must be Markdown text',
+        ),
     ],
 )
 def test_invalid_archives_do_not_create_projects(app, client, worktree, entries, complete, error):
     files = {} if complete else client.get(f"/api/worktrees/{worktree}").json()["files"]
-    data = b"not a zip" if entries is None else project_zip({**files, **entries})
+    # A None entry removes that file from the archive.
+    data = (
+        b"not a zip"
+        if entries is None
+        else project_zip({k: v for k, v in {**files, **entries}.items() if v is not None})
+    )
     before = client.get("/api/workspace").json()["projects"]
     response = import_zip(client, data, "Rejected")
     assert response.status_code == 422, response.text
     assert response.json()["error"].startswith(error)
     assert client.get("/api/workspace").json()["projects"] == before
     assert len(list((app.state.services.store.home / "projects").iterdir())) == len(before)
+
+
+def test_failed_import_leaves_no_project_folder(app, client, worktree, monkeypatch):
+    data = client.get(f"/api/worktrees/{worktree}/archive.zip").content
+    projects = app.state.services.projects
+    before = set((projects.store.home / "projects").iterdir())
+
+    def fail(path, message):
+        raise Problem("Cannot commit the imported project", 500)
+
+    monkeypatch.setattr(projects, "commit", fail)
+    response = import_zip(client, data)
+    assert response.status_code == 500
+    assert response.json()["error"] == "Cannot commit the imported project"
+    assert len(client.get("/api/workspace").json()["projects"]) == 1
+    assert set((projects.store.home / "projects").iterdir()) == before
 
 
 def test_import_rejects_duplicate_and_oversized_archives(app, client, worktree, monkeypatch):
