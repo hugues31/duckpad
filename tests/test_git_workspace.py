@@ -154,6 +154,20 @@ def test_layout_names_sql_and_parameters_have_distinct_categories():
     assert set(entity["categories"]) == {"processing", "documentation"}
 
 
+@pytest.mark.parametrize("directive", ["--@label", "  --  @label"])
+def test_label_directives_are_documentation_in_every_form(directive):
+    before = bundle()
+    after = copy.deepcopy(before)
+    after["templates"]["total"] = after["templates"]["total"].replace(
+        "-- @label Regional revenue", directive + " Regional sales"
+    )
+    report = compare_files(bundle_to_files(before), bundle_to_files(after))
+    entity = next(e for e in report["entities"] if e["id"] == "template/total")
+    assert entity["name"] == "Regional sales"
+    assert entity["categories"] == ["documentation"]
+    assert report["impact"]["status"] == "not_applicable"
+
+
 def test_deleted_nodes_and_edges_and_nested_scopes_remain_inspectable():
     before = bundle()
     after = copy.deepcopy(before)

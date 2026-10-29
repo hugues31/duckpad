@@ -36,6 +36,9 @@ PARAMETER_TYPES = {
 }
 # Types whose argument names the connection parameter that resolves them.
 CONNECTION_BOUND = {"file", "destination", "secret"}
+RESOURCE_TYPES = ("file", "destination")
+# Directives that document a template without changing what it computes.
+DESCRIPTIVE = ("label", "description")
 LIST_ITEM_TYPES = ("text", "number", "boolean", "column")
 
 
@@ -48,6 +51,17 @@ def type_argument(type_name):
     """`choice(a|b)` -> `a|b`; None without parentheses."""
     match = re.search(r"\((.*)\)", type_name)
     return (match[1] or None) if match else None
+
+
+def directive(line):
+    """`-- @param limit: number` -> ("param", "limit: number"); None for a SQL line."""
+    match = DIRECTIVE.match(line)
+    return match.groups() if match else None
+
+
+def directives(sql):
+    """Every directive of a template, in order, without validating the template."""
+    return [found for found in map(directive, (sql or "").splitlines()) if found]
 
 
 def parse_template(sql):
@@ -68,11 +82,11 @@ def parse_template(sql):
         buffer.clear()
 
     for line in sql.splitlines():
-        match = DIRECTIVE.match(line)
-        if not match:
+        found = directive(line)
+        if not found:
             buffer.append(line)
             continue
-        key, value = match.groups()
+        key, value = found
         if key in ("label", "description", "kind"):
             template[key] = value
         elif key == "input":
@@ -87,6 +101,7 @@ def parse_template(sql):
             raise Problem(f"Unknown template directive: @{key}")
     flush()
     validate_interface(template)
+    template["download"] = downloadable_export(template)
     return template
 
 
@@ -151,9 +166,31 @@ def parse_templates(templates):
 
 def executable_sql(sql):
     """Template text without descriptive directives, so relabeling never invalidates results."""
-    return "\n".join(
-        line for line in sql.splitlines() if not line.strip().startswith(("-- @label", "-- @description"))
-    )
+    return "\n".join(line for line in (sql or "").splitlines() if not is_descriptive(line))
+
+
+def is_descriptive(line):
+    found = directive(line)
+    return found is not None and found[0] in DESCRIPTIVE
+
+
+def downloadable_export(template):
+    """Destination parameter and format of an export whose file Duckpad can offer for download.
+
+    Decided from the template text, so copies imported under another identifier keep it.
+    """
+    if template["kind"] != "export" or len(template["blocks"]) != 1:
+        return None
+    # Inputs become tables, resources a literal of their own name, every other parameter a placeholder.
+    names = [p["name"] for p in template["parameters"] if base_type(p["type"]) in RESOURCE_TYPES]
+    values = {name: qi(name) for name in template["inputs"]} | {name: literal(name) for name in names}
+    sql = REFERENCE.sub(lambda m: values.get(m[1], "$" + m[1]), template["blocks"][0]["sql"])
+    try:
+        tree = parse_block(sql)
+    except (Problem, sqlglot.errors.SqlglotError):
+        return None
+    export = file_export(tree, [literal(name) for name in names]).get("export_file")
+    return {"parameter": export["path"], "format": export["format"]} if export else None
 
 
 def expression(value):
@@ -301,10 +338,8 @@ def check_access(template, tree, allowed, connections, resources):
                     raise Problem(
                         f"Source table requires a declared connection: {table.sql(dialect='duckdb')}"
                     )
-            elif not isinstance(table.this, (exp.GenerateSeries, exp.ExplodingGenerateSeries)) and not any(
-                resource in table.sql(dialect="duckdb") for resource in resources
-            ):
-                raise Problem("Source readers must use a declared file resource parameter")
+            elif not isinstance(table.this, (exp.GenerateSeries, exp.ExplodingGenerateSeries)):
+                check_reader(table.this, resources)
     else:
         if not isinstance(tree, (exp.Copy, exp.Insert)):
             raise Problem("Exports must use an explicit COPY TO or INSERT statement")
@@ -318,6 +353,27 @@ def check_access(template, tree, allowed, connections, resources):
                 raise Problem(f"Undeclared export input or destination: {table.sql(dialect='duckdb')}")
         if isinstance(tree, exp.Copy) and tree.args.get("kind"):
             raise Problem("Export COPY must write TO its declared destination")
+
+
+def check_reader(function, resources):
+    """A source reader's only positional argument names declared resources; the rest are named options."""
+    arguments = [
+        value
+        for values in function.args.values()
+        for value in (values if isinstance(values, list) else [values])
+        if isinstance(value, exp.Expression)
+    ]
+    positional = [argument for argument in arguments if not is_option(argument)]
+    files = positional[0].expressions if positional and isinstance(positional[0], exp.Array) else positional
+    if len(positional) != 1 or not files or any(f.sql(dialect="duckdb") not in resources for f in files):
+        raise Problem("Source readers must read only declared file resource parameters")
+
+
+def is_option(argument):
+    """`delim = ','` or `delim := ','`, as passed to DuckDB table functions."""
+    return isinstance(argument, (exp.EQ, exp.PropertyEQ, exp.Kwarg)) and isinstance(
+        argument.this, (exp.Column, exp.Identifier, exp.Var)
+    )
 
 
 def is_local_table(table, local_names):
@@ -342,9 +398,7 @@ def compile_template(template, params, inputs, physical_outputs, connections, di
             values[name] = "$" + name
         else:
             values[name] = rendered
-    resources = [
-        values[p["name"]] for p in template["parameters"] if base_type(p["type"]) in ("file", "destination")
-    ]
+    resources = [values[p["name"]] for p in template["parameters"] if base_type(p["type"]) in RESOURCE_TYPES]
     allowed = set(inputs.values())
     statements = []
     for block in template["blocks"]:
