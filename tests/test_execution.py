@@ -125,3 +125,82 @@ def test_preview_returns_timestamps_with_time_zones(services, tmp_path):
         "SELECT id, TIMESTAMPTZ '2024-01-02 12:00:00+00' AS seen FROM {{ source }} WHERE id = 1;",
     )
     assert preview["rows"][0]["values"][1].startswith("2024-01-02")
+
+
+def test_startup_loads_only_unfinished_runs(services, monkeypatch):
+    from duckpad.engine import UNFINISHED_RUN_STATUSES, Engine
+
+    store, projects, catalog, _ = services
+    tree = projects.create("Recovery")
+    completed = ("success", "failed", "partial_failure", "canceled", "interrupted")
+    for status in (*UNFINISHED_RUN_STATUSES, *completed):
+        store.put(
+            "run",
+            status,
+            {
+                "project": tree["project"],
+                "worktree": tree["id"],
+                "environment": "dev",
+                "status": status,
+                "started": "2026-01-01",
+                "commit": "commit",
+                "nodes": {"export": {"kind": "export", "status": "running"}},
+            },
+        )
+    original = store._record
+    loaded = []
+
+    def record(kind, row, session):
+        if kind == "run":
+            loaded.append(row.id)
+        return original(kind, row, session)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(store, "_record", record)
+        recovered = Engine(store, projects, catalog)
+        recovered.close()
+    assert set(loaded) == set(UNFINISHED_RUN_STATUSES)
+    for status in UNFINISHED_RUN_STATUSES:
+        run = store.get("run", status)
+        assert run["status"] == "interrupted"
+        assert run["nodes"]["export"]["external_outcome"] == "unknown"
+    for status in completed:
+        assert store.get("run", status)["status"] == status
+
+
+def test_final_persistence_failure_releases_worktree_for_runs_and_cleanup(services, monkeypatch):
+    from duckpad.engine import Execution
+
+    store, projects, _, engine = services
+    tree = projects.create("Persistence failure")
+    context = engine.context(tree["id"], "dev", create=True)
+    token = {"id": "failed-write", "cancel": threading.Event(), "cursor": None}
+    engine.active[tree["id"]] = token
+    run = {
+        "id": token["id"],
+        "project": tree["project"],
+        "worktree": tree["id"],
+        "environment": "dev",
+        "status": "preparing",
+        "started": "2026-01-01",
+        "nodes": {},
+    }
+    execution = Execution(token, context, run, {}, [], [], {}, [], {})
+    original = engine._persist
+
+    def fail_final_write(run, secrets):
+        if run.get("finished"):
+            raise OSError("Simulated final persistence failure")
+        original(run, secrets)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(engine, "_persist", fail_final_write)
+        with pytest.raises(OSError, match="Simulated final persistence failure"):
+            engine._execute(execution)
+    assert token["cursor"] is None
+    assert tree["id"] not in engine.active
+    assert wait_run(store, engine.launch(tree["id"], "dev"))["status"] == "success"
+    engine.close()
+    engine.reset_project(tree["project"])
+    projects.delete(tree["project"])
+    assert store.get("project", tree["project"]) is None

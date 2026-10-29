@@ -99,8 +99,8 @@ class Projects:
         import shutil
 
         with self.lock:
-            worktrees = [w for w in self.store.all("worktree") if w["project"] == project_id]
-            artifacts = [a["id"] for a in self.store.all("artifact") if a["project"] == project_id]
+            worktrees = self.store.worktrees(project_id)
+            artifacts = self.store.artifact_ids(project=project_id)
             self.store.delete("project", project_id)
             for identity in artifacts:
                 (self.store.home / "artifacts" / identity).unlink(missing_ok=True)
@@ -229,7 +229,7 @@ class Projects:
                 "bundle": bundle,
                 "files": files,
                 "diagnostics": errors,
-                "conflicts": [c for c in self.store.all("conflict") if c["worktree"] == worktree_id],
+                "conflicts": self.store.conflicts(worktree_id),
             }
 
     def write(self, worktree_id, revision, proposal, message="feat(project): save workspace changes"):
