@@ -1,8 +1,9 @@
 import duckdb
 import pytest
+import sqlglot
 
 from duckpad.datasets import Dataset
-from duckpad.materialize import plan_materialization, publish_view
+from duckpad.materialize import outer_aggregates, plan_materialization, publish_view, to_physical
 
 
 @pytest.fixture
@@ -60,3 +61,49 @@ def test_instrumentation_never_shifts_published_columns(upstream, query, instrum
     assert bool(plan["witnesses"] or plan["groups"]) is instrumented
     if not instrumented:
         assert plan["query"] == query
+
+
+def test_outer_aggregates_exclude_aggregates_evaluated_by_windows():
+    tree = sqlglot.parse_one(
+        "SELECT SUM(a), SUM(SUM(b)) OVER (), COUNT(*) OVER () FROM t GROUP BY c", read="duckdb"
+    )
+    assert [a.sql() for a in outer_aggregates(tree)] == ["SUM(a)"]
+
+
+def test_physical_names_point_tables_at_storage_and_renamed_columns_at_their_stored_name(upstream):
+    _, data = upstream
+    data.column_map = {"a": "__dp_user_a"}
+    tree = sqlglot.parse_one('SELECT "u"."a", "u"."b" FROM "up" AS "u"', read="duckdb")
+    assert to_physical(tree, {"up": data}) == {"u": data}
+    assert tree.sql(dialect="duckdb") == 'SELECT "u"."__dp_user_a", "u"."b" FROM "up_storage" AS "u"'
+
+
+def test_witnesses_keep_physical_rowids_beside_a_user_rowid_column():
+    with duckdb.connect() as db:
+        query = "SELECT * FROM (VALUES (10, 1), (20, 2)) t(rowid, a)"
+        plan = plan_materialization(db, {"table": "up", "query": query, "bindings": {}}, {}, instrument=False)
+        db.execute(plan["sql"])
+        columns, column_map, _ = publish_view(db, "up", plan)
+        data = Dataset(
+            id="up",
+            node="source",
+            port="result",
+            table="up",
+            columns=columns,
+            count=2,
+            run="run",
+            query=query,
+            bindings={},
+            dependencies={},
+            fingerprint="fingerprint",
+            source=True,
+            storage=plan["storage"],
+            column_map=column_map,
+        )
+        statement = {"table": "out", "query": "SELECT rowid, a FROM up ORDER BY a DESC", "bindings": {}}
+        plan = plan_materialization(db, statement, {"up": data})
+        db.execute(plan["sql"])
+        publish_view(db, "out", plan)
+        assert db.execute("SELECT * FROM out").fetchall() == [(20, 2), (10, 1)]
+        [witness] = plan["witnesses"].values()
+        assert db.execute(f'SELECT "{witness["column"]}" FROM out_storage').fetchall() == [(1,), (0,)]
