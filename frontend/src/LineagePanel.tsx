@@ -358,7 +358,7 @@ function LineageDialog({ worktree, environment, cell, onClose }: Props) {
       cache.current.set(key, result);
       return result;
     };
-    void buildLineageGraph(cell, pages, read, budget)
+    void buildLineageGraph(cell, pages, read, budget, t)
       .then((result) => {
         if (!abort.signal.aborted && !stopped.current) setGraph(result);
       })
@@ -369,7 +369,7 @@ function LineageDialog({ worktree, environment, cell, onClose }: Props) {
         if (!abort.signal.aborted && !stopped.current) setPending(false);
       });
     return () => abort.abort();
-  }, [worktree, environment, cell, pages, budget, revision]);
+  }, [worktree, environment, cell, pages, budget, revision, t]);
 
   const nodes = useMemo(
     () =>
