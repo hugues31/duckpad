@@ -78,6 +78,8 @@
   "newBranch": "New working branch",
   "merge": "Compare & merge",
   "branchName": "Branch name",
+  "branchNameHint": "Use a complete name, such as experiment/my-change. A branch name cannot end with '/'.",
+  "invalidBranchName": "Enter a valid branch name, such as experiment/my-change. Branch names cannot end with '/'.",
   "fromRevision": "Starting revision (optional)",
   "group": "Create component",
   "groupName": "Component name",

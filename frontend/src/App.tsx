@@ -596,8 +596,13 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
     setModal({
       kind: "form",
       title: t("newBranch"),
+      description: t("branchNameHint"),
       fields: [
-        { key: "name", label: t("branchName"), value: "experiment/" },
+        {
+          key: "name",
+          label: t("branchName"),
+          placeholder: "experiment/my-change",
+        },
         {
           key: "revision",
           label: t("fromRevision"),
@@ -609,7 +614,14 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
         const next = await api(
           `/worktrees/${worktree}/branches`,
           send({ name: v.name, revision: v.revision || undefined }),
-        );
+        ).catch((error) => {
+          if (
+            error instanceof ApiError &&
+            (error.detail as Json)?.code === "invalid_branch_name"
+          )
+            throw new Error(t("invalidBranchName"));
+          throw error;
+        });
         await refreshWorkspace();
         setWorktree(next.id);
         notify(t("branchCreated"));

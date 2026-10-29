@@ -78,6 +78,8 @@
   "newBranch": "Nouvelle branche de travail",
   "merge": "Comparer et fusionner",
   "branchName": "Nom de la branche",
+  "branchNameHint": "Utilisez un nom complet, comme experiment/my-change. Le nom d’une branche ne peut pas se terminer par « / ».",
+  "invalidBranchName": "Saisissez un nom de branche valide, comme experiment/my-change. Le nom d’une branche ne peut pas se terminer par « / ».",
   "fromRevision": "Révision de départ (facultative)",
   "group": "Créer un composant",
   "groupName": "Nom du composant",
