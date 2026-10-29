@@ -97,11 +97,10 @@ def search_instance(projects, access, user, query, limit):
         ):
             break
         try:
-            # Search the same committed content as the canvas, without saving a
+            # Search the same committed content as the canvas, without a lock, saving a
             # revision, running validation or reading execution/connection data.
-            with projects.lock:
-                commit = projects.git(worktree["path"], "rev-parse", "HEAD")
-                bundle = files_to_bundle(projects.revision_files(worktree["path"], commit))
+            commit = projects.git(worktree["path"], "rev-parse", "HEAD")
+            bundle = files_to_bundle(projects.revision_files(worktree["path"], commit))
             if any(add({**context, **entry}) for entry in node_entries(bundle)):
                 break
         except (Problem, OSError, ValueError, TypeError, AttributeError):

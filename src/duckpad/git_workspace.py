@@ -1,7 +1,9 @@
 """Frozen comparisons and reviewed Git integration for project repositories."""
 
 import tempfile
+import threading
 from collections import OrderedDict
+from contextlib import suppress
 from pathlib import Path
 
 from . import git_command
@@ -21,13 +23,15 @@ class GitWorkspace:
         self.git = projects.git
         self.frozen = OrderedDict()
         self.reviews = OrderedDict()
+        # Requests on different repositories record reports concurrently.
+        self.reports_lock = threading.Lock()
         self.safe_heads = set()
 
-    @staticmethod
-    def remember(cache, key, value):
-        cache[key] = value
-        while len(cache) > MAX_REPORTS:
-            cache.popitem(last=False)
+    def remember(self, cache, key, value):
+        with self.reports_lock:
+            cache[key] = value
+            while len(cache) > MAX_REPORTS:
+                cache.popitem(last=False)
         return value
 
     def resolve(self, path, ref):
@@ -80,8 +84,7 @@ class GitWorkspace:
         return {**self.metadata(path, commit, ref), "files": self.projects.revision_files(path, commit)}
 
     def compare(self, worktree_id, reference, target):
-        with self.projects.lock:
-            worktree = self.projects.get(worktree_id)
+        with self.projects.locked(worktree_id) as worktree:
             a, b = (self.revision(worktree, ref) for ref in (reference, target))
             return {
                 "a": {k: v for k, v in a.items() if k != "files"},
@@ -182,8 +185,7 @@ class GitWorkspace:
         return result
 
     def open_branch(self, worktree_id, name):
-        with self.projects.lock:
-            worktree = self.projects.get(worktree_id)
+        with self.projects.locked(worktree_id) as worktree:
             git_command.check_branch_name(worktree["path"], name)
             tree = self.store.find_worktree(worktree["project"], name)
             if tree:
@@ -206,7 +208,7 @@ class GitWorkspace:
             return result
 
     def cleanup(self, current_id, remove_id, integrated_id, expected_head):
-        with self.projects.lock:
+        with self.projects.locked(current_id):
             current, remove, target = (
                 self.projects.get(key) for key in (current_id, remove_id, integrated_id)
             )
@@ -239,6 +241,15 @@ class GitWorkspace:
     def ancestor(self, path, older, newer):
         return self.git(path, "merge-base", older, newer, check=False) == older
 
+    def prevalidate(self, path, ref):
+        """Validate a branch's history before the caller takes the repository lock.
+
+        Validated commits are cached, so the check repeated under the lock is immediate. Errors
+        are left to that check, which reports them in its usual order.
+        """
+        with suppress(Problem):
+            self.validate_history(path, self.resolve(path, ref))
+
     def validate_history(self, path, head):
         """Reject non-declarative history, symlinks and submodules before adoption/publication."""
         if head in self.safe_heads:
@@ -260,8 +271,9 @@ class GitWorkspace:
         self.safe_heads.update(commits)
 
     def prepare(self, destination, source_ref, remote_guard=None):
-        with self.projects.lock:
-            target = self.projects.get(destination)
+        if source_ref.startswith(("refs/heads/", "refs/remotes/origin/")):
+            self.prevalidate(self.projects.get(destination)["path"], source_ref)
+        with self.projects.locked(destination) as target:
             path = target["path"]
             target_head, current = self.clean(target)
             try:
@@ -419,7 +431,7 @@ class GitWorkspace:
                 ) from error
 
     def apply(self, worktree_id, key, choices, proposal_revision):
-        with self.projects.lock:
+        with self.projects.locked(worktree_id):
             review = self.review(worktree_id, key)
             proposal = self.proposal(worktree_id, key, choices)
             if proposal["unresolved"] or proposal["diagnostics"]:
