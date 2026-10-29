@@ -65,6 +65,7 @@ jobs:
       - run: uv sync --locked --python 3.12
       - run: npm ci --prefix frontend
       - run: npm run format:check --prefix frontend
+      - run: npm run check:i18n --prefix frontend
       - run: npm run build --prefix frontend
       - run: npm exec --prefix frontend -- playwright install --with-deps chromium
       - run: npm run test:e2e --prefix frontend

@@ -104,7 +104,7 @@ export function UsersPage({ refresh }: { refresh: () => Promise<unknown> }) {
             <tr>
               <th>{t("username")}</th>
               <th>{t("instanceRole")}</th>
-              <th>{t("status")}</th>
+              <th>{t("accountStatus")}</th>
               <th>{t("actions")}</th>
             </tr>
           </thead>

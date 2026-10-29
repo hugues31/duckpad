@@ -118,7 +118,7 @@ export default function LoginPage({
             {t("signInAction")}
           </button>
         </form>
-        <p className="login-hint">{t("passwordHint")}</p>
+        <p className="login-hint">{t("loginHint")}</p>
       </section>
       <div className="login-footnote">
         <Database size={14} />
