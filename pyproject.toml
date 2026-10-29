@@ -39,6 +39,9 @@ dependencies = [
     "joserfc>=1.7.7,<2",
     # Ed25519 account keys and validation of trusted SSH host keys.
     "cryptography>=44",
+    "sqlmodel>=0.0.48,<0.1",
+    "alembic>=1.20,<2",
+    "sqlalchemy>=2.0,<3",
 ]
 
 [project.urls]

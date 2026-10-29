@@ -2,6 +2,7 @@
 
 import io
 import logging
+import shutil
 import subprocess
 import tarfile
 import threading
@@ -10,7 +11,7 @@ from collections import OrderedDict
 from pathlib import Path
 
 from .builtin_templates import BUILTINS
-from .bundle import bundle_to_files, files_to_bundle, is_declarative, validate
+from .bundle import ROOT_FILES, bundle_to_files, files_to_bundle, is_declarative, validate
 from .comparison import commit_message
 from .components import reconcile_documentation
 from .git_workspace import GitWorkspace
@@ -70,50 +71,48 @@ class Projects:
             raise Problem(result.stderr.strip() or result.stdout.strip())
         return result.stdout.strip()
 
-    def create(self, name, bundle=None):
+    def create(self, name, bundle=None, action="create"):
         project_id, worktree_id = uid("project_"), uid("worktree_")
         path = self.store.home / "projects" / project_id
         path.mkdir(parents=True)
-        self.git(path, "init", "-b", "main")
-        atomic_write(path / ".gitignore", "data/\nexports/\n*.duckdb\n*.duckdb.wal\n")
-        if bundle is None:
-            bundle = {
-                "flow": {"id": project_id, "name": name, "description": "", "nodes": [], "edges": []},
-                "templates": BUILTINS.copy(),
-                "components": {},
-                "documentation": {},
-            }
-        bundle["flow"].update(id=project_id, name=name)
-        for file, content in bundle_to_files(bundle).items():
-            atomic_write(path / file, content)
-        self.commit(path, "feat(project): create " + " ".join(name.split())[:64])
-        project = {"id": project_id, "name": name, "main": worktree_id, "created": now()}
-        worktree = {"id": worktree_id, "project": project_id, "branch": "main", "path": str(path)}
-        self.store.put("project", project_id, project)
-        self.store.put("worktree", worktree_id, worktree)
+        try:
+            self.git(path, "init", "-b", "main")
+            atomic_write(
+                path / ".gitignore", "data/\nexports/\n*.duckdb\n*.duckdb.wal\n.venv/\n__pycache__/\n"
+            )
+            if bundle is None:
+                bundle = {
+                    "flow": {"id": project_id, "name": name, "description": "", "nodes": [], "edges": []},
+                    "templates": BUILTINS.copy(),
+                    "components": {},
+                    "documentation": {},
+                }
+            bundle["flow"].update(id=project_id, name=name)
+            for file, content in bundle_to_files(bundle).items():
+                atomic_write(path / file, content)
+            self.commit(path, f"feat(project): {action} " + " ".join(name.split())[:64])
+            project = {"id": project_id, "name": name, "main": worktree_id, "created": now()}
+            worktree = {"id": worktree_id, "project": project_id, "branch": "main", "path": str(path)}
+            with self.store.transaction():
+                self.store.put("project", project_id, project)
+                self.store.put("worktree", worktree_id, worktree)
+        except Exception:
+            # A project is either recorded with its repository or leaves nothing behind.
+            shutil.rmtree(path, ignore_errors=True)
+            raise
         self.observed[worktree_id] = self.read_files(worktree)
         return worktree
 
     def delete(self, project_id):
-        import shutil
-
         with self.lock:
-            worktrees = [w for w in self.store.all("worktree") if w["project"] == project_id]
+            worktrees = self.store.worktrees(project_id)
+            artifacts = self.store.artifact_ids(project=project_id)
+            self.store.delete("project", project_id)
+            for identity in artifacts:
+                (self.store.home / "artifacts" / identity).unlink(missing_ok=True)
             for worktree in worktrees:
-                self.store.delete("worktree", worktree["id"])
                 self.observed.pop(worktree["id"], None)
                 self.pending.pop(worktree["id"], None)
-            for kind in ("run", "conflict"):
-                for record in self.store.all(kind):
-                    if record.get("worktree") in {w["id"] for w in worktrees}:
-                        self.store.delete(kind, record["id"])
-            for kind in ("artifact", "export_result"):
-                for identity, record in self.store.items(kind):
-                    if record.get("worktree") in {w["id"] for w in worktrees}:
-                        if kind == "artifact":
-                            (self.store.home / "artifacts" / identity).unlink(missing_ok=True)
-                        self.store.delete(kind, identity)
-            self.store.delete("project", project_id)
             for worktree in worktrees:
                 shutil.rmtree(worktree["path"], ignore_errors=True)
                 shutil.rmtree(self.store.home / "exports" / worktree["id"], ignore_errors=True)
@@ -127,7 +126,7 @@ class Projects:
 
     def read_files(self, worktree):
         path = Path(worktree["path"])
-        names = ["flow.json", "documentation.json"]
+        names = list(ROOT_FILES)
         names += [
             p.relative_to(path).as_posix()
             for folder, pattern in [("templates", "*.sql"), ("components", "*.json")]
@@ -156,7 +155,10 @@ class Projects:
             before = dumps(bundle["documentation"])
             reconcile_documentation(previous, bundle)
             if before != dumps(bundle["documentation"]):
-                atomic_write(Path(path) / "documentation.json", dumps(bundle["documentation"]))
+                reconciled = bundle_to_files(bundle)
+                for name in ("documentation.json", "README.md"):
+                    atomic_write(Path(path) / name, reconciled[name])
+                existing = self.read_files({"path": str(path)})
         except (Problem, KeyError, TypeError, AttributeError):
             # An unavailable schema or malformed definition is never a deletion.
             pass
@@ -233,7 +235,7 @@ class Projects:
                 "bundle": bundle,
                 "files": files,
                 "diagnostics": errors,
-                "conflicts": [c for c in self.store.all("conflict") if c["worktree"] == worktree_id],
+                "conflicts": self.store.conflicts(worktree_id),
             }
 
     def write(self, worktree_id, revision, proposal, message="feat(project): save workspace changes"):
@@ -414,8 +416,15 @@ class Projects:
     def branch(self, worktree_id, name, revision=None):
         with self.lock:
             worktree = self.get(worktree_id)
+            try:
+                self.git(worktree["path"], "check-ref-format", "refs/heads/" + name)
+            except Problem as error:
+                raise Problem(
+                    "Enter a valid branch name, such as experiment/my-change. Branch names cannot end with '/'.",
+                    422,
+                    {"code": "invalid_branch_name"},
+                ) from error
             self.versioning.clean(worktree)
-            self.git(worktree["path"], "check-ref-format", "refs/heads/" + name)
             key = uid("worktree_")
             path = self.store.home / "worktrees" / key
             path.parent.mkdir(parents=True, exist_ok=True)

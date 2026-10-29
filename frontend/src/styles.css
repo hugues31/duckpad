@@ -2041,6 +2041,10 @@ small {
   letter-spacing: -0.04em;
   margin: 8px 0;
 }
+#projects-heading:focus {
+  /* Keep the navigation focus target without outlining a noninteractive title. */
+  outline: none;
+}
 .dashboard-heading h1,
 .login-card h1 {
   color: var(--accent);
@@ -2173,6 +2177,10 @@ small {
   border-radius: 12px;
   cursor: pointer;
 }
+/* A lone last card spans the row instead of leaving an empty column. */
+.project-template:last-of-type:nth-of-type(odd) {
+  grid-column: 1 / -1;
+}
 .project-template:has(:checked) {
   background: var(--accent-soft);
   border-color: var(--accent);
@@ -2205,6 +2213,18 @@ small {
   color: var(--muted);
   font-size: 12px;
   line-height: 1.6;
+}
+.new-project-content > p,
+.import-warning {
+  margin: 0;
+}
+.import-warning p,
+.import-warning ul {
+  margin: 0;
+}
+.import-warning ul {
+  margin-top: 6px;
+  padding-left: 18px;
 }
 .modal-backdrop {
   position: fixed;

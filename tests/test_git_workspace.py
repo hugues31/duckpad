@@ -234,7 +234,7 @@ def test_dirty_source_destination_and_invalid_combination_are_rejected(project):
     feature = projects.branch(main["id"], "feature")
     edit(projects, feature, lambda b: b["documentation"].update(project="Ready"))
     review = projects.versioning.prepare(main["id"], "refs/heads/feature")
-    Path(feature["path"], "documentation.json").write_text('{"project":"Still editing"}')
+    Path(feature["path"], "README.md").write_text("Still editing")
     with pytest.raises(Problem, match="Pending external"):
         apply(projects, review)
     assert projects.git(main["path"], "rev-parse", "HEAD") == review["target_head"]
@@ -519,7 +519,7 @@ def test_remote_divergence_race_dirty_state_and_configuration_changes(local_remo
     with pytest.raises(Problem, match="rejected"):
         push(projects, main, state)
     assert projects.git(remote, "rev-parse", "main") == projects.git(other["path"], "rev-parse", "HEAD")
-    Path(main["path"], "documentation.json").write_text('{"project":"Unsaved"}')
+    Path(main["path"], "README.md").write_text("Unsaved")
     with pytest.raises(Problem, match="Pending external"):
         push(projects, main, state)
 

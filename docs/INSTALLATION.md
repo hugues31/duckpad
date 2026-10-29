@@ -30,6 +30,18 @@ duckpad start --home /path/to/my-instance --port 8765 --no-browser
 
 Only one backend may own an instance directory at a time. Use separate `--home` directories for independent instances. The default address is `127.0.0.1`. Behind an HTTPS reverse proxy, set `DUCKPAD_SECURE_COOKIES=1` so the session cookie is only sent over HTTPS.
 
+If an older instance uses the legacy `records` document schema, startup exits with
+an error asking you to choose a new `--home`. That schema is not migrated
+automatically. Keep the old directory as a backup and start a fresh instance:
+
+```sh
+duckpad start --home /path/to/new-instance
+```
+
+The new instance creates a new administrator password. Reconfigure accounts and
+connections and import your project Git repositories; the old instance's execution
+history remains in its original database.
+
 For air-gapped deployments, [download extensions on any connected computer and
 import them into Duckpad](OFFLINE_EXTENSIONS.md) before running connectors that
 need them.

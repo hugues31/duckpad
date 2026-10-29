@@ -115,10 +115,9 @@ class OIDC:
                 )
             self.discover(config)
         config["revision"] = secrets.token_hex(16)
-        with self.store.lock:
+        with self.store.transaction():
             self.store.put("settings", "oidc", config)
-            for key, _ in self.store.items("oidc_transaction"):
-                self.store.delete("oidc_transaction", key)
+            self.store.delete_oidc_transactions()
         return self.public_settings()
 
     @staticmethod
@@ -182,11 +181,9 @@ class OIDC:
                 code_verifier=verifier,
                 response_mode="query",
             )
-        with self.store.lock:
-            for key, value in self.store.items("oidc_transaction"):
-                if value["expires"] < time.time():
-                    self.store.delete("oidc_transaction", key)
-            if len(self.store.items("oidc_transaction")) >= 1000:
+        with self.store.transaction():
+            self.store.purge_expired("oidc_transaction", time.time())
+            if self.store.count_oidc_transactions() >= 1000:
                 raise Problem("Too many pending sign-ins. Try again later.", 429)
             self.store.put(
                 "oidc_transaction",
@@ -204,7 +201,7 @@ class OIDC:
 
     def finish(self, params, browser):
         state = params.get("state", "")
-        with self.store.lock:
+        with self.store.transaction():
             transaction = self.store.get("oidc_transaction", session_key(state))
             if (
                 not browser
@@ -254,19 +251,18 @@ class OIDC:
 
     def create_session(self, config, claims):
         identity = {"issuer": config["issuer"], "subject": claims["sub"]}
-        with self.store.lock:
+        with self.store.transaction():
             if self.settings().get("revision") != config["revision"]:
                 raise Problem("SSO configuration changed; sign in again")
-            user = next((u for u in self.store.all("user") if u.get("oidc") == identity), None)
+            user = self.store.find_oidc_user(identity["issuer"], identity["subject"])
             if user is None:
                 if not config["allow_signup"]:
                     raise Problem("New SSO accounts are disabled")
                 name = claims.get("preferred_username") or claims.get("name") or "user"
                 name = re.sub(r"[^a-zA-Z0-9_.-]", "-", str(name))[:40].strip("-.") or "user"
-                existing = {u["username"].casefold() for u in self.store.all("user")}
                 while True:
                     username = name + "-sso-" + secrets.token_hex(4)
-                    if username.casefold() not in existing:
+                    if self.store.find_user(username) is None:
                         break
                 user = {
                     "id": uid("user_"),

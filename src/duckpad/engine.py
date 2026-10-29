@@ -93,24 +93,23 @@ class Engine:
         self.artifacts = Artifacts(store)
         self.contexts, self.active = {}, {}
         self.threads = []
-        for run in store.all("run"):
-            if run["status"] in UNFINISHED_RUN_STATUSES:
-                run["status"] = "interrupted"
-                run["error"] = (
-                    "The backend stopped before completion was confirmed. Manual recomputation is required."
-                )
-                for node in run["nodes"].values():
-                    if node["status"] == "running":
-                        node["status"] = "interrupted"
-                        if node.get("kind") == "export":
-                            node["external_outcome"] = "unknown"
-                self._persist(run, [])
+        for run in store.runs_with_statuses(UNFINISHED_RUN_STATUSES):
+            run["status"] = "interrupted"
+            run["error"] = (
+                "The backend stopped before completion was confirmed. Manual recomputation is required."
+            )
+            for node in run["nodes"].values():
+                if node["status"] == "running":
+                    node["status"] = "interrupted"
+                    if node.get("kind") == "export":
+                        node["external_outcome"] = "unknown"
+            self._persist(run, [])
 
     def context(self, worktree, environment, create=False):
         """The live DuckDB context of an existing worktree in a configured environment."""
         with self.lock:
             self.projects.get(worktree)
-            if environment not in self.store.get("settings", "environments"):
+            if environment not in self.catalog.environment_names():
                 raise Problem("Unknown environment", 404)
             key = (worktree, environment)
             if key not in self.contexts or getattr(self.contexts[key].db, "closed", False):
@@ -213,7 +212,7 @@ class Engine:
 
     def reset_project(self, project):
         with self.lock:
-            worktrees = {w["id"] for w in self.store.all("worktree") if w["project"] == project}
+            worktrees = {w["id"] for w in self.store.worktrees(project)}
             if worktrees & self.active.keys():
                 raise Problem(
                     "Stop active executions before changing project connections or deleting the project", 409
@@ -458,20 +457,21 @@ class Engine:
                 return [sanitize(item) for item in value]
             return value
 
-        self.store.put("run", run["id"], sanitize(run))
-        for key, state in run["nodes"].items():
-            if state.get("kind") == "export":
-                self.store.put(
-                    "export_result",
-                    digest([run["worktree"], run["environment"], key]),
-                    {
-                        **{k: state.get(k) for k in ("status", "fingerprint", "artifact")},
-                        **{k: run[k] for k in ("worktree", "environment", "commit", "started")},
-                        "node": key,
-                        "run": run["id"],
-                        "run_status": run["status"],
-                    },
-                )
+        with self.store.transaction():
+            self.store.put("run", run["id"], sanitize(run))
+            for key, state in run["nodes"].items():
+                if state.get("kind") == "export":
+                    self.store.put(
+                        "export_result",
+                        digest([run["worktree"], run["environment"], key]),
+                        {
+                            **{k: state.get(k) for k in ("status", "fingerprint", "artifact")},
+                            **{k: run[k] for k in ("worktree", "environment", "commit", "started")},
+                            "node": key,
+                            "run": run["id"],
+                            "run_status": run["status"],
+                        },
+                    )
         context = self.contexts.get((run["worktree"], run["environment"]))
         if context:
             with context.lock:
@@ -509,15 +509,17 @@ class Engine:
                     state["status"] = "canceled" if execution.canceled else "blocked"
         finally:
             with self.lock:
-                if execution.cursor:
-                    with suppress(duckdb.Error, Problem):
-                        execution.cursor.close()
-                execution.token["cursor"] = None
-                if execution.canceled:
-                    run["status"] = "canceled"
-                run.update(finished=now(), duration=time.monotonic() - started)
-                self._persist(run, secrets)
-                self.active.pop(context.worktree, None)
+                try:
+                    if execution.cursor:
+                        with suppress(duckdb.Error, Problem):
+                            execution.cursor.close()
+                    execution.token["cursor"] = None
+                    if execution.canceled:
+                        run["status"] = "canceled"
+                    run.update(finished=now(), duration=time.monotonic() - started)
+                    self._persist(run, secrets)
+                finally:
+                    self.active.pop(context.worktree, None)
 
     @staticmethod
     def _skip_reason(execution, key):

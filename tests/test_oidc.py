@@ -16,6 +16,7 @@ from duckpad.auth import Auth, session_key
 from duckpad.identity import account_identity
 from duckpad.logging import PollingAccessFilter
 from duckpad.store import Store
+from duckpad.util import Problem
 
 
 @pytest.fixture
@@ -423,3 +424,44 @@ def test_settings_accounts_and_sessions_survive_service_restart(instance):
         assert auth.check(token)["id"] == user["id"]
     finally:
         with_store.close()
+
+
+def test_pending_signin_limit_and_expiry_without_loading_transactions(instance, monkeypatch):
+    app, client, provider, _ = instance
+    configure(client)
+    store = app.state.auth.store
+    params = start(client, provider)
+    record = store.get("oidc_transaction", session_key(params["state"]))
+    with store.transaction():
+        for number in range(999):
+            store.put("oidc_transaction", f"pending-{number}", record)
+
+    def refuse_scan(*args):
+        pytest.fail("Sign-in must not load every transaction")
+
+    monkeypatch.setattr(store, "items", refuse_scan)
+    with pytest.raises(Problem, match="Too many pending sign-ins") as error:
+        app.state.oidc.start()
+    assert error.value.status == 429
+    store.put("oidc_transaction", "pending-0", {**record, "expires": time.time() - 1})
+    url, _ = app.state.oidc.start()
+    assert url.startswith(provider.issuer + "/authorize?")
+    assert store.count_oidc_transactions() == 1000
+
+
+def test_signup_retries_case_insensitive_username_collision_without_scanning_users(instance, monkeypatch):
+    app, client, provider, _ = instance
+    configure(client)
+    app.state.auth.create_user("MEMBER-sso-11111111", "local-password-123")
+    provider.claims["preferred_username"] = "member"
+    params = start(client, provider)
+    suffixes = iter(("11111111", "22222222"))
+    monkeypatch.setattr(oidc_module.secrets, "token_hex", lambda _length: next(suffixes))
+
+    def refuse_scan(*args):
+        pytest.fail("Signup must look up candidates instead of loading every account")
+
+    monkeypatch.setattr(app.state.auth.store, "all", refuse_scan)
+    result = client.get("/api/oidc/callback", params=params, follow_redirects=False)
+    assert result.headers["location"] == "/"
+    assert client.get("/api/session").json()["username"] == "member-sso-22222222"

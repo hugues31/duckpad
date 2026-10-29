@@ -41,7 +41,7 @@ def test_external_batch_commits_final_invalid_content_once(services, tmp_path):
     path = Path(worktree["path"])
     (path / "flow.json").write_text("{")
     time.sleep(0.3)
-    (path / "documentation.json").write_text('{"project":"External save"}')
+    (path / "README.md").write_text("External save")
     time.sleep(0.3)
     # Both writes fall within one quiet period, so they form a single save unit.
     assert len(projects.history(worktree["id"])) == original
@@ -86,17 +86,17 @@ def test_merge_review_keeps_files_without_a_trailing_newline(services, tmp_path)
     edit(main, "templates/total.sql", lambda text: text.rstrip("\n"))
     branch = projects.branch(main, "experiment")["id"]
     edit(main, "templates/total.sql", lambda text: text + "\n-- edited on main")
-    edit(branch, "documentation.json", lambda _: '{"project": "Edited on the branch"}\n')
+    edit(branch, "README.md", lambda _: "Edited on the branch\n")
     preview = projects.versioning.prepare(main, "refs/heads/experiment")
     assert preview["conflicts"] == []
     assert preview["files"]["templates/total.sql"].endswith("-- edited on main")
-    assert "Edited on the branch" in preview["files"]["documentation.json"]
+    assert "Edited on the branch" in preview["files"]["README.md"]
 
 
 def test_login_purges_expired_sessions(services):
     store, *_ = services
     auth = Auth(store)
-    store.put("session", "expired", {"expires": 0})
+    store.put("session", "expired", {"user": "admin", "version": 0, "expires": 0})
     auth.login("admin", auth.initial_password)
     assert store.get("session", "expired") is None
 

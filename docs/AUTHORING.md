@@ -1,10 +1,50 @@
 # Authoring projects
 
-The **Code** tab, between **Flow** and **Documentation**, displays the worktree's declarative files in a folder tree beside the Monaco editor. Select a file to edit its SQL or JSON, then choose **Save changes**. Drafts are retained when switching files or workspace tabs. Editing files in an external editor is also supported. Every completed save is versioned, including invalid SQL or JSON. Corrections create later commits. Inspect errors and fix the current files; Duckpad never runs an earlier valid graph silently.
+The **Code** tab, between **Flow** and **Documentation**, displays the worktree's declarative files in a folder tree beside the Monaco editor. Select a file to edit its SQL, JSON, Markdown or TOML, then choose **Save changes**. Drafts are retained when switching files or workspace tabs. Editing files in an external editor is also supported. Every completed save is versioned, including invalid content. Corrections create later commits. Inspect errors and fix the current files; Duckpad never runs an earlier valid graph silently.
 
-Choose **Download project ZIP** in the Code tab to export the selected branch's saved `flow.json`, `documentation.json`, SQL templates and component definitions, preserving their relative paths. Save or discard pending edits before downloading. The archive excludes Git history, datasets, execution results and instance connection settings. Project readers can browse and download these files; editing requires an editor or administrator role.
+Choose **Download project ZIP** in the Code tab to export the selected branch's saved `README.md`, `pyproject.toml`, `flow.json`, `documentation.json`, SQL templates and component definitions, preserving their relative paths. Save or discard pending edits before downloading. The archive excludes Git history, datasets, execution results, virtual environments and instance connection settings. Project readers can browse and download these files; editing requires an editor or administrator role.
+
+To recreate a project from such an archive, choose **New project**, then **Import a project ZIP**, and select the file. Leave the name empty to keep the name stored in `flow.json`. Archives whose files sit in a single top-level folder, such as a repository download from a Git host, are accepted. Only the declarative files above are read; Git metadata, data and other entries are ignored. The imported project starts its own Git history, makes you its administrator and can use only the **Local files** connection until an instance administrator grants others. Because the archive contains no connection settings or data, Duckpad then lists the connections the pipeline references that are unavailable to the new project, and the nodes that read uploaded files or other absolute paths, including Windows and network paths. Grant or create those connections, and upload the files again. Archives over 16 MiB (64 MiB once extracted), without `flow.json`, or with invalid JSON or non-UTF-8 files are rejected without creating a project.
 
 After running **Export CSV** or **Export XLSX**, select the export node and choose **Download exported data** in its inspector. The file contains the entire executed export, including its delimiter, headers and worksheet name. The inspector identifies the execution and environment. Changing inputs or settings, rerunning upstream nodes, or a failed execution requires another successful export before downloading. Missing files also require a rerun. Downloads are private to project members, survive a backend restart, and use a saved copy of the exported bytes so later writes to the destination cannot replace that execution's result. Oracle and remote-storage destinations do not offer this action.
+
+## Project layout and Python dependencies
+
+```text
+README.md              Project documentation in Markdown
+pyproject.toml         Python version and project dependencies
+flow.json              Pipeline graph
+documentation.json     Node, output and column documentation
+templates/*.sql        SQL definitions
+components/*.json      Reusable sub-flows
+```
+
+The **Documentation** tab edits the same `README.md` shown in **Code**. Project
+text is not duplicated in `documentation.json`. Older projects with a `project`
+entry in that JSON file remain readable; the next bundle save moves that text
+to `README.md` and adds the dependency manifest. When both sources exist,
+`README.md` takes precedence, including when it is empty.
+
+New projects include a standard `[project]` table in `pyproject.toml`, with a
+normalized name, Python `>=3.11`, and `duckpad` pinned to the creating instance's
+version. Edit `project.dependencies` in **Code** to add Python packages, for
+example `"pandas>=2"`. Comments and custom TOML tables survive other UI saves.
+The file is versioned, compared and exported with the rest of the project.
+Malformed TOML produces a file diagnostic and remains editable.
+
+On another machine with Python and [uv](https://docs.astral.sh/uv/), extract the
+ZIP and run `uv sync` from its directory to install the declared dependencies
+into `.venv`. The manifest sets `tool.uv.package = false`: this directory holds
+a pipeline, rather than a Python package to build. `uv` creates its local lockfile;
+Duckpad does not yet manage or export that lockfile, so transitive dependencies
+are not frozen by the ZIP.
+
+This manifest prepares project-specific Python environments. Duckpad currently
+executes SQL pipelines; saving this file does not install packages, create an
+environment or run Python scripts. The CLI does not yet open an extracted ZIP
+as a project automatically; import the ZIP from the interface instead.
+Connections, credentials and input data must also be configured separately on
+another instance.
 
 ## SQL template contract
 

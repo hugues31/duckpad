@@ -2,13 +2,15 @@
 
 import json
 import re
+import tomllib
 from pathlib import Path
 
+from . import __version__
 from .components import expand
 from .templates import parse_template
 from .util import Problem, dumps
 
-ROOT_FILES = ("flow.json", "documentation.json")
+ROOT_FILES = ("flow.json", "documentation.json", "README.md", "pyproject.toml")
 DECLARATIVE_PATH = re.compile(r"templates/[A-Za-z0-9_-]+\.sql|components/[A-Za-z0-9_-]+\.json")
 
 
@@ -19,6 +21,11 @@ def is_declarative(name):
 
 def files_to_bundle(files):
     try:
+        documentation = json.loads(files["documentation.json"])
+        if "README.md" in files and isinstance(documentation, dict):
+            documentation.pop("project", None)
+            if files["README.md"]:
+                documentation["project"] = files["README.md"]
         return {
             "flow": json.loads(files["flow.json"]),
             "templates": {
@@ -31,16 +38,33 @@ def files_to_bundle(files):
                 for n, text in files.items()
                 if n.startswith("components/") and n.endswith(".json")
             },
-            "documentation": json.loads(files["documentation.json"]),
+            "documentation": documentation,
+            "pyproject": files.get("pyproject.toml"),
         }
     except (ValueError, KeyError) as error:
         raise Problem(f"Cannot read declarative project files: {error}") from error
 
 
+def default_pyproject(name):
+    """A dependency-only project, suitable for uv sync without packaging the flow."""
+    slug = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-") or "untitled"
+    return (
+        f'[project]\nname = "duckpad-project-{slug}"\n'
+        'version = "0.1.0"\nreadme = "README.md"\nrequires-python = ">=3.11"\n'
+        f'dependencies = ["duckpad=={__version__}"]\n'
+        "\n[tool.uv]\npackage = false\n"
+    )
+
+
 def bundle_to_files(bundle):
+    documentation = bundle.get("documentation", {})
     return {
         "flow.json": dumps(bundle["flow"]),
-        "documentation.json": dumps(bundle.get("documentation", {})),
+        "documentation.json": dumps({k: v for k, v in documentation.items() if k != "project"}),
+        "README.md": documentation.get("project", ""),
+        "pyproject.toml": bundle.get("pyproject")
+        if bundle.get("pyproject") is not None
+        else default_pyproject(bundle["flow"].get("name", "Untitled project")),
         **{f"templates/{key}.sql": value for key, value in bundle.get("templates", {}).items()},
         **{f"components/{key}.json": dumps(value) for key, value in bundle.get("components", {}).items()},
     }
@@ -48,6 +72,11 @@ def bundle_to_files(bundle):
 
 def validate(bundle):
     errors = []
+    if bundle.get("pyproject") is not None:
+        try:
+            tomllib.loads(bundle["pyproject"])
+        except (ValueError, TypeError) as error:
+            errors.append({"file": "pyproject.toml", "message": str(error)})
     try:
         if not all(
             isinstance(bundle.get(key), dict) for key in ("flow", "templates", "components", "documentation")
