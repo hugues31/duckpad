@@ -1,6 +1,7 @@
 """Validate an immutable release tag and render its Conventional Commit notes."""
 
 import argparse
+import json
 import os
 import re
 import subprocess
@@ -34,27 +35,45 @@ def validate_tag(tag):
     return version, bool(match["pre"])
 
 
+def omit_duplicate_breaking_merges(releases):
+    """Drop breaking merge summaries whose merged branch already lists a breaking change.
+
+    Breaking merge commits bypass the merge filter so their migration notes are never
+    hidden. When the merged branch carries its own breaking commit in the same release,
+    the merge summary would only repeat it.
+    """
+    for release in releases:
+        breaking = {commit["id"] for commit in release["commits"] if commit["breaking"]}
+        release["commits"] = [
+            commit
+            for commit in release["commits"]
+            if not (commit["breaking"] and commit["merge_commit"])
+            or breaking.isdisjoint(git("rev-list", f"{commit['id']}^1..{commit['id']}^2").split())
+        ]
+    return releases
+
+
 def prepare_release(tag, repository, output):
     version, prerelease = validate_tag(tag)
     if not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repository):
         raise ValueError("Repository must use the owner/name form.")
+    cliff = ["git-cliff", "--config", str(CONFIG), "--offline", "--no-exec"]
+    env = {**os.environ, "RELEASE_REPOSITORY": repository}
     # Include only stable tags and this tag, so stable releases and release
     # candidates both describe all changes since the previous stable release.
-    subprocess.run(
-        [
-            "git-cliff",
-            "--config",
-            str(CONFIG),
-            "--offline",
-            "--no-exec",
-            "--tag-pattern",
-            rf"^(?:{STABLE_TAG}|{re.escape(tag)})$",
-            "--current",
-            "--output",
-            str(output),
-        ],
-        env={**os.environ, "RELEASE_REPOSITORY": repository},
+    context = subprocess.run(
+        [*cliff, "--tag-pattern", rf"^(?:{STABLE_TAG}|{re.escape(tag)})$", "--current", "--context"],
+        env=env,
         check=True,
+        stdout=subprocess.PIPE,
+        text=True,
+    ).stdout
+    subprocess.run(
+        [*cliff, "--from-context", "-", "--output", str(output)],
+        input=json.dumps(omit_duplicate_breaking_merges(json.loads(context))),
+        env=env,
+        check=True,
+        text=True,
     )
     if os.environ.get("GITHUB_OUTPUT"):
         with Path(os.environ["GITHUB_OUTPUT"]).open("a") as stream:

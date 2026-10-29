@@ -16,7 +16,7 @@ pip install duckpad=={{ version | trim_start_matches(pat="v") }}
 {% for group, changes in commits | group_by(attribute="group") %}
 ### {{ group | split(pat="|") | last }}
 {% for commit in changes %}
-- {% if commit.scope %}**{{ commit.scope }}:** {% endif %}{{ commit.message | upper_first }} ([{{ commit.id | truncate(length=7, end="") }}]({{ url }}/commit/{{ commit.id }})){% if commit.breaking_description %}
+- {% if commit.scope %}**{{ commit.scope }}:** {% endif %}{{ commit.message | upper_first }} ([{{ commit.id | truncate(length=7, end="") }}]({{ url }}/commit/{{ commit.id }})){% if commit.breaking_description and commit.breaking_description != commit.message %}
   > {{ commit.breaking_description | replace(from="\n", to="\n  > ") }}{% endif %}
 {% endfor %}
 {% endfor %}

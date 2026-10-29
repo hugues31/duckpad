@@ -70,10 +70,12 @@ The original commits from merged branches remain visible, avoiding duplicate
 entries for a change and its PR merge summary. Squashed PR commits are retained
 because they have a single parent. Breaking changes take precedence over these
 filters, including those in `chore!` or merge commits, so migration notes are never
-hidden. All other Conventional Commit types are retained. Both stable releases
-and release candidates describe changes since the previous stable tag, so
-promoting a candidate does not lose its feature notes. The first release includes
-the full history.
+hidden. A breaking merge summary is omitted only when its merged branch already
+lists a breaking change in the same release. Breaking headers without a footer are
+listed without repeating their summary as a migration note. All other Conventional
+Commit types are retained. Both stable releases and release candidates describe
+changes since the previous stable tag, so promoting a candidate does not lose its
+feature notes. The first release includes the full history.
 
 Preview notes for work not yet tagged, without publishing:
 

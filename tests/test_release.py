@@ -145,6 +145,33 @@ def test_notes_omit_merge_summaries_and_keep_branch_changes(repository, tmp_path
     assert "compare/v0.1.0...v0.2.0" in text
 
 
+def test_breaking_merge_summaries_are_omitted_only_when_the_branch_lists_them(repository, tmp_path):
+    repository("feat: previous release feature", "0.1.0", "v0.1.0")
+    git("checkout", "-b", "storage")
+    storage = repository("refactor(storage)!: adopt relational metadata", "0.2.0")
+    git("checkout", "-b", "settings", "main")
+    settings = repository("refactor(settings): move instance settings")
+    git("checkout", "main")
+    git("merge", "--no-ff", "storage", "-m", "refactor(storage)!: adopt relational storage (#44)")
+    duplicate = git("rev-parse", "HEAD")
+    git("merge", "--no-ff", "settings", "-m", "refactor(settings)!: move instance settings (#45)")
+    merge_only = git("rev-parse", "HEAD")
+    git("update-ref", "refs/remotes/origin/main", "HEAD")
+    git("tag", "v0.2.0")
+
+    notes = tmp_path / "notes.md"
+    release.prepare_release("v0.2.0", "example/duckpad", notes)
+    text = notes.read_text()
+    assert f"/commit/{storage}" in text and "Adopt relational metadata" in text
+    assert f"/commit/{duplicate}" not in text and "(#44)" not in text
+    # The merge is the only commit announcing this breaking change, so it remains visible.
+    assert f"/commit/{merge_only}" in text and "Move instance settings (#45)" in text
+    assert f"/commit/{settings}" in text
+    # Breaking headers without a footer have no migration note to repeat.
+    assert "> adopt relational metadata" not in text
+    assert "> move instance settings (#45)" not in text
+
+
 def test_maintenance_only_release_has_explicit_empty_notes(repository, tmp_path):
     repository("feat: add canvas", "0.1.0", "v0.1.0")
     repository("chore: prepare release", "0.1.1", "v0.1.1")
