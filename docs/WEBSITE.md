@@ -119,6 +119,10 @@ theme, UTC and a fixed viewport keep the scenes consistent. Transient toast
 notifications, live CPU/RAM meters and variable Git revision metadata are hidden
 during capture.
 No live instance, external connection credentials or private paths are needed.
+Administrative scenes use synthetic accounts. The SSO form shows placeholder
+origins and a masked sample secret; the sign-in scene uses the disposable OIDC
+provider and verifies a complete signed login. Extension screenshots show the
+real server runtime and download link without downloading or importing a binary.
 
 | Images in `docs/images/` | Guides |
 | --- | --- |
@@ -127,6 +131,9 @@ No live instance, external connection credentials or private paths are needed.
 | `code.png`, `component.png`, `node-documentation.png` | Authoring and example tour |
 | `connection.png`, `environments.png` | Connections |
 | `new-branch.png`, `git-comparison.png` | Version control |
+| `sso-settings.png`, `sso-sign-in.png` | Single sign-on |
+| `users.png`, `project-access.png`, `preferences.png` | Installation and accounts |
+| `extensions.png` | Offline extensions and extension import details |
 
 The tutorial recorder updates `website/public/demos/northstar.webm` and its
 WebVTT captions. The static build copies screenshots from `docs/images/`; do not

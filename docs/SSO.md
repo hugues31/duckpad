@@ -22,12 +22,19 @@ credentials for recovery if the provider becomes unavailable.
    discovery and supported protocol features. This does not verify the client
    credentials; complete a sign-in in a separate browser session to test them.
 
+The example below uses placeholder URLs. Replace them with your provider and
+application origins before saving.
+
+![OIDC settings with the issuer, client ID, masked client secret, application URL and redirect URI](images/sso-settings.png)
+
 The sign-in page offers both SSO and local password authentication. Duckpad
 requests the `openid profile email` scopes. A successful first sign-in creates a
 member with no access to existing private projects. Administrators can grant
 project membership, change roles, and deactivate SSO users from the existing
 administration interface. Disabling account creation still permits previously
 provisioned SSO users to sign in.
+
+![The sign-in page offers Continue with Northstar alongside local password authentication](images/sso-sign-in.png)
 
 Accounts are matched only by the verified `(issuer, sub)` pair, never by email or
 username. A generated `-sso-` suffix distinguishes their usernames from local

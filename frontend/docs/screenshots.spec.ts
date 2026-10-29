@@ -1,9 +1,14 @@
 import { test, expect, type Locator, type Page } from "@playwright/test";
 import { mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
-import { openInstanceSettings, signIn } from "../e2e/helpers";
+import {
+  openInstanceSettings,
+  openUserSettings,
+  PASSWORD,
+  signIn,
+} from "../e2e/helpers";
 
-// All scenes use the real application and disposable, synthetic Northstar data.
+// All scenes use the real application and disposable, synthetic fixtures.
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
     localStorage.setItem("duckpad-theme", "light");
@@ -216,4 +221,175 @@ test("capture branch creation and a real parameter comparison", async ({
     git.locator(".comparison-values tr").filter({ hasText: "refunded" }),
   ).toBeInViewport({ ratio: 1 });
   await capture(page, "git-comparison", git);
+});
+
+test("capture account roles, project access and personal preferences", async ({
+  page,
+}) => {
+  await openInstanceSettings(page, "Users and permissions");
+  for (const username of ["analyst", "reviewer"]) {
+    await page.getByRole("button", { name: "Add user", exact: true }).click();
+    const dialog = page.getByRole("dialog", { name: "Add user", exact: true });
+    await dialog.getByLabel("Username", { exact: true }).fill(username);
+    await dialog.getByLabel("New password", { exact: true }).fill(PASSWORD);
+    await dialog.getByRole("button", { name: "Create", exact: true }).click();
+    await expect(dialog).toBeHidden();
+    await expect(
+      page.getByLabel(`Instance role · ${username}`, { exact: true }),
+    ).toHaveValue("member");
+  }
+  await capture(page, "users", page.locator(".settings-layout"));
+  const users = await (await page.request.get("/api/users")).json();
+  const created = await page.request.post("/api/projects", {
+    data: { name: "Team workspace" },
+  });
+  expect(created.ok()).toBeTruthy();
+  const worktree = await created.json();
+  await page.goto(`/worktrees/${worktree.id}/flow`);
+  await page
+    .getByRole("link", { name: "Project settings", exact: true })
+    .click();
+  for (const [username, role] of [
+    ["analyst", "editor"],
+    ["reviewer", "reader"],
+  ]) {
+    const user = users.find(
+      (user: { username: string }) => user.username === username,
+    );
+    await page.getByLabel("User", { exact: true }).selectOption(user.id);
+    await page.getByLabel("Project role", { exact: true }).selectOption(role);
+    await page
+      .getByRole("button", { name: "Add participant", exact: true })
+      .click();
+    await expect(
+      page.getByLabel(`Project role · ${username}`, { exact: true }),
+    ).toHaveValue(role);
+  }
+  const participants = page.locator(".settings-card").filter({
+    has: page.getByRole("heading", { name: "Participants", exact: true }),
+  });
+  await capture(page, "project-access", participants);
+  await openUserSettings(page);
+  await expect(page.getByLabel("Language", { exact: true })).toHaveValue("en");
+  await expect(page.getByLabel("Theme", { exact: true })).toHaveValue("light");
+  await capture(
+    page,
+    "preferences",
+    page.locator(".settings-card").filter({
+      has: page.getByRole("heading", { name: "Preferences", exact: true }),
+    }),
+  );
+});
+
+test("capture offline extension download and import settings", async ({
+  page,
+}) => {
+  const runtime = await (
+    await page.request.get("/api/extensions/runtime")
+  ).json();
+  await openInstanceSettings(page, "Extensions");
+  await page
+    .getByLabel("Extension source", { exact: true })
+    .selectOption("core");
+  await page.getByLabel("Extension name", { exact: true }).fill("httpfs");
+  await expect(
+    page.getByRole("link", { name: "Download server binary", exact: true }),
+  ).toHaveAttribute(
+    "href",
+    `https://extensions.duckdb.org/${runtime.version}/${runtime.platform}/httpfs.duckdb_extension.gz`,
+  );
+  await expect(
+    page.getByLabel("Allow unsigned extensions", { exact: true }),
+  ).not.toBeChecked();
+  await expect(
+    page.getByRole("button", { name: "Import extension", exact: true }),
+  ).toBeDisabled();
+  await capture(page, "extensions", page.locator(".settings-layout"));
+});
+
+test("capture SSO configuration and the enabled sign-in choice", async ({
+  page,
+  browser,
+  baseURL,
+}) => {
+  const context = await browser.newContext({
+    baseURL,
+    viewport: { width: 1100, height: 1000 },
+    locale: "en-US",
+    colorScheme: "light",
+    reducedMotion: "reduce",
+  });
+  try {
+    await openInstanceSettings(page, "Single sign-on (OIDC)");
+    const settings = page.getByRole("region", {
+      name: "Single sign-on (OIDC)",
+      exact: true,
+    });
+    await settings.getByLabel("Enable single sign-on", { exact: true }).check();
+    await settings
+      .getByLabel("Sign-in button label", { exact: true })
+      .fill("Northstar");
+    // Document public example values in the real form before saving the local test provider.
+    await settings
+      .getByLabel("Issuer URL", { exact: true })
+      .fill("https://identity.example.com/realms/team");
+    await settings.getByLabel("Client ID", { exact: true }).fill("duckpad");
+    const secret = settings.getByLabel("Client secret", { exact: true });
+    await secret.fill("documentation-example");
+    await expect(secret).toHaveAttribute("type", "password");
+    await settings
+      .getByLabel("Application URL", { exact: true })
+      .fill("https://duckpad.example.com");
+    await expect(
+      settings.getByLabel("Redirect URI", { exact: true }),
+    ).toHaveValue("https://duckpad.example.com/api/oidc/callback");
+    await expect(
+      settings.getByRole("button", { name: "Save changes", exact: true }),
+    ).toBeEnabled();
+    await capture(page, "sso-settings", page.locator(".settings-layout"));
+
+    // The fixture validates discovery and completes a signed OIDC flow without external services.
+    await settings
+      .getByLabel("Issuer URL", { exact: true })
+      .fill(baseURL + "/test-oidc");
+    await settings.getByLabel("Client ID", { exact: true }).fill("test-client");
+    await secret.fill("test-secret");
+    await settings
+      .getByLabel("Application URL", { exact: true })
+      .fill(baseURL!);
+    await settings
+      .getByRole("button", { name: "Save changes", exact: true })
+      .click();
+    await expect(settings.getByRole("status")).toContainText(
+      "SSO settings saved",
+    );
+    await expect(secret).toHaveValue("");
+    const login = await context.newPage();
+    await login.goto("/");
+    const sso = login.getByRole("link", {
+      name: "Continue with Northstar",
+      exact: true,
+    });
+    await expect(sso).toBeVisible();
+    await expect(
+      login.getByRole("button", { name: "Sign in", exact: true }),
+    ).toBeVisible();
+    await expect(login.getByLabel("Password", { exact: true })).toHaveValue("");
+    await capture(login, "sso-sign-in", login.locator(".login-card"));
+    await sso.click();
+    await login
+      .getByRole("link", { name: "Approve test sign-in", exact: true })
+      .click();
+    await expect(
+      login.getByRole("navigation", { name: "Workspace", exact: true }),
+    ).toBeVisible();
+    const session = await (await login.request.get("/api/session")).json();
+    expect(session.auth_method).toBe("oidc");
+    expect(session.role).toBe("member");
+  } finally {
+    await context.close();
+    expect(
+      (await page.request.put("/api/sso", { data: { enabled: false } })).ok(),
+    ).toBeTruthy();
+  }
 });

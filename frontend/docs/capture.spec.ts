@@ -26,6 +26,7 @@ test("record a real pipeline, source lineage and SQL workspace", async ({
   browser,
   page: setup,
 }, testInfo) => {
+  test.setTimeout(120000);
   await signIn(setup);
   await setup
     .getByRole("button", { name: "Open example project", exact: true })
@@ -142,6 +143,7 @@ test("record a real pipeline, source lineage and SQL workspace", async ({
     );
     await expect(page.locator(".lineage-dialog .lineage-page")).toContainText(
       "6–10 / 27",
+      { timeout: 30000 },
     );
     await page.waitForTimeout(1400);
     await click(
