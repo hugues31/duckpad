@@ -78,7 +78,15 @@ def entities(bundle):
                     "documentation.json",
                 )
         else:
-            add(f"documentation/{section}", "documentation", section, values, "documentation.json")
+            add(
+                f"documentation/{section}",
+                "documentation",
+                section,
+                values,
+                "README.md" if section == "project" else "documentation.json",
+            )
+    if bundle.get("pyproject") is not None:
+        add("file/pyproject.toml", "file", "pyproject.toml", bundle["pyproject"], "pyproject.toml")
     return result
 
 
