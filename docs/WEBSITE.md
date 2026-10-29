@@ -104,12 +104,37 @@ npm run build --prefix website
 npm run docs:test --prefix frontend
 ```
 
-The capture updates `docs/images/workspace.png`, `docs/images/lineage.png`, and
-`docs/images/code.png`, plus `website/public/demos/northstar.webm` and its WebVTT
-captions. The static build copies screenshots from `docs/images/`; do not edit
-those generated copies in `website/public/demos/`. Commit the source screenshots
-and video when changing a demonstrated workflow, so README and preview images
-match the application. Keep fixtures synthetic and assertions meaningful.
+`docs:capture` runs both the tutorial recorder (`frontend/docs/capture.spec.ts`)
+and the guide screenshots (`frontend/docs/screenshots.spec.ts`). To refresh only
+the screenshots without recording the video:
+
+```sh
+npm run docs:screenshots --prefix frontend
+```
+
+The screenshot suite signs in to a disposable local instance, creates synthetic
+Northstar projects, and exercises the real interface. It waits for successful
+runs, populated editors and comparison results before capturing. English, light
+theme, UTC and a fixed viewport keep the scenes consistent. Transient toast
+notifications, live CPU/RAM meters and variable Git revision metadata are hidden
+during capture.
+No live instance, external connection credentials or private paths are needed.
+
+| Images in `docs/images/` | Guides |
+| --- | --- |
+| `new-project.png`, `workspace.png`, `parameters.png` | Quickstart and authoring |
+| `lineage.png` | Quickstart, example tour and lineage |
+| `code.png`, `component.png`, `node-documentation.png` | Authoring and example tour |
+| `connection.png`, `environments.png` | Connections |
+| `new-branch.png`, `git-comparison.png` | Version control |
+
+The tutorial recorder updates `website/public/demos/northstar.webm` and its
+WebVTT captions. The static build copies screenshots from `docs/images/`; do not
+edit the generated copies in `website/public/demos/`. Commit source screenshots
+when changing a demonstrated workflow so GitHub's Markdown and container previews
+also display the updated images. The published website regenerates them during
+every CI build; it does not depend on these committed copies being refreshed
+manually. Keep fixtures synthetic and assertions meaningful.
 
 Set `DUCKPAD_E2E_PORT` to isolate the recorder's backend port. The website tests
 use `DUCKPAD_SITE_PORT` and `WEBSITE_BASE_PATH`, so both root and subpath hosting
@@ -140,7 +165,9 @@ Python application. The quickstart explains how to run your own Duckpad instance
 ## Changing a product workflow
 
 1. Update the relevant guide and the recording selectors in
-   `frontend/docs/capture.spec.ts` alongside the application change.
+   `frontend/docs/screenshots.spec.ts` or `frontend/docs/capture.spec.ts` alongside
+   the application change. Add screenshots next to the relevant instructions,
+   with descriptive alt text and relative `images/` links.
 2. Run the capture, inspect the screenshots/video and commit the updated media.
 3. Run the site checks and browser tests, including a subpath build when changing
    navigation or assets. CI repeats the recording before publishing from `main`.

@@ -59,6 +59,8 @@ the node inspector, filters by a node, template or component ID. **Compare with
 parent** uses the actual first Git parent; merge commits also offer their other
 parents. A root commit compares with an empty tree.
 
+![Compare the Paid orders status parameter on main and an experimental branch](images/git-comparison.png)
+
 ## Branches and reviewed merges
 
 The Branches view lists local and fetched remote identity, head and worktree state.
@@ -68,6 +70,8 @@ in its isolated worktree. Opening it preserves the other worktrees.
 In **New working branch**, enter a complete name such as `experiment/my-change`.
 Git does not allow names ending in `/`, so `experiment/` alone is incomplete.
 An invalid name leaves the form open with an explanation so you can correct it.
+
+![Create an experimental branch from the current saved version](images/new-branch.png)
 
 The starting revision defaults to the latest saved version of the current branch.
 Select **Choose an earlier version** to browse its history by commit message,

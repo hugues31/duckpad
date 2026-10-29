@@ -16,6 +16,8 @@ of the steps below, regenerated from the application with Playwright.
 6. Select Customer reach. Its four ordered outputs use `DISTINCT`, `UNION`, `INTERSECT` and `EXCEPT` to compare customer channels.
 7. The two export nodes write revenue CSV reports. Their explicit paths appear in compiled SQL and run history. Running again replaces the same local files according to native `COPY` behavior.
 
+![Metrics inside the nested Regional summary component](images/component.png)
+
 ## Explain a value
 
 ![Source amounts contributing to regional revenue](images/lineage.png)

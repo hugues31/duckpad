@@ -35,9 +35,7 @@ test("record a real pipeline, source lineage and SQL workspace", async ({
   ).toBeVisible();
 
   const media = resolve("../website/public/demos");
-  const images = resolve("../docs/images");
   await mkdir(media, { recursive: true });
-  await mkdir(images, { recursive: true });
   const context = await browser.newContext({
     baseURL: testInfo.project.use.baseURL,
     storageState: await setup.context().storageState(),
@@ -116,10 +114,6 @@ test("record a real pipeline, source lineage and SQL workspace", async ({
     await expect(revenue).toBeVisible();
     await expect(page.locator(".preview-header .badge")).toHaveText("Valid");
     await page.waitForTimeout(1200);
-    await page.screenshot({
-      path: resolve(images, "workspace.png"),
-      animations: "disabled",
-    });
     caption(
       "Click a revenue value to see the calculation and its contributions.",
     );
@@ -139,10 +133,6 @@ test("record a real pipeline, source lineage and SQL workspace", async ({
       page.locator(".lineage-dialog .lineage-card.is-source").first(),
     ).toContainText("amount");
     await page.waitForTimeout(1400);
-    await page.screenshot({
-      path: resolve(images, "lineage.png"),
-      animations: "disabled",
-    });
     caption("Page through all contributing cells, five at a time.");
     await click(
       page,
@@ -171,10 +161,6 @@ test("record a real pipeline, source lineage and SQL workspace", async ({
       "templates/sql.sql",
     );
     await page.waitForTimeout(1500);
-    await page.screenshot({
-      path: resolve(images, "code.png"),
-      animations: "disabled",
-    });
     caption(
       "Your data, your logic, your workspace. Start with the Northstar tour.",
     );
