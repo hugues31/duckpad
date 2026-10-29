@@ -1,11 +1,13 @@
 """Private storage and row witnesses, separate from the public SQL relation.
 
 Only deterministic SELECTs with a proven cardinality-preserving augmentation
-receive hidden witnesses. DISTINCT and set operations keep their native query.
+receive hidden witnesses, and only when DuckDB binds the augmented query to the
+original columns. DISTINCT and set operations keep their native query.
 Public views expose exactly the original columns, including a user column named
 rowid. Hidden storage identities never become inputs to SELECT *.
 """
 
+import duckdb
 import sqlglot
 from sqlglot import exp
 from sqlglot.optimizer.qualify import qualify
@@ -69,10 +71,32 @@ def plan_materialization(cursor, statement, dependencies, instrument=True):
                 for table in augmented.find_all(exp.Table):
                     data = dependencies[table.name]
                     table.set("this", exp.to_identifier(data.relation, quoted=True))
-                query = sql(augmented)
+                instrumented = sql(augmented)
+                if _binds_columns(cursor, instrumented, bindings, columns, len(augmented.expressions)):
+                    query = instrumented
+                else:
+                    # Losing this node's lineage is better than publishing shifted columns.
+                    witnesses, groups = {}, {}
         except (sqlglot.errors.SqlglotError, KeyError, IndexError):
             witnesses, groups = {}, {}
     return _plan(storage, columns, query, witnesses, groups)
+
+
+def _binds_columns(cursor, query, bindings, columns, width):
+    """Whether an instrumented query yields the original columns, then one per hidden alias.
+
+    Positional aliases shift after an expression that expands to several columns, such
+    as COLUMNS(...), struct.* or UNNEST(struct). Qualification can also rewrite valid
+    DuckDB SQL into a query that no longer binds.
+    """
+    try:
+        described = cursor.execute("DESCRIBE " + query, bindings).fetchall()
+    except duckdb.InterruptException:
+        raise
+    except duckdb.Error:
+        return False
+    public = [{"name": c[0], "type": c[1]} for c in described[: len(columns)]]
+    return public == columns and len(described) == width
 
 
 def _plan(storage, columns, query, witnesses=None, groups=None):

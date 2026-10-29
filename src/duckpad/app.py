@@ -579,10 +579,6 @@ def create_app(home: Path, watch=True, *, trusted_local=False):
             request.state.user,
         )
 
-    @app.get("/api/worktrees/{worktree}/diff/{commit}")
-    def diff(worktree: str, commit: str):
-        return {"diff": projects.diff(worktree, commit)}
-
     @app.post("/api/worktrees/{worktree}/branches")
     def branch(worktree: str, data: schemas.NewBranch):
         return projects.branch(worktree, data.name, data.revision)

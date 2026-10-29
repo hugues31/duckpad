@@ -3,19 +3,19 @@
 import io
 import logging
 import shutil
-import subprocess
 import tarfile
 import threading
 import time
 from collections import OrderedDict
 from pathlib import Path
 
+from . import git_command
 from .builtin_templates import BUILTINS
 from .bundle import ROOT_FILES, bundle_to_files, files_to_bundle, is_declarative, validate
 from .comparison import commit_message
 from .components import reconcile_documentation
 from .git_workspace import GitWorkspace
-from .identity import SYSTEM_IDENTITY, current_identity, git_environment
+from .identity import SYSTEM_IDENTITY, current_identity
 from .merge import merge_files
 from .remote import Remotes
 from .templates import parse_template
@@ -54,22 +54,9 @@ class Projects:
         """The request's account, or the system for changes made outside a request."""
         return current_identity.get() or SYSTEM_IDENTITY
 
-    def git(self, path, *args, check=True, identity=None):
-        identity = identity or self.identity()
-        command = [
-            "git",
-            "-c",
-            f"user.name={identity['name']}",
-            "-c",
-            f"user.email={identity['email']}",
-            "-C",
-            str(path),
-            *args,
-        ]
-        result = subprocess.run(command, capture_output=True, text=True, env=git_environment(identity))
-        if result.returncode and check:
-            raise Problem(result.stderr.strip() or result.stdout.strip())
-        return result.stdout.strip()
+    def git(self, path, *args, identity=None, **options):
+        """Run Git as the request's account; see git_command.run for the options."""
+        return git_command.run(path, *args, identity=identity or self.identity(), **options)
 
     def create(self, name, bundle=None, action="create"):
         project_id, worktree_id = uid("project_"), uid("worktree_")
@@ -199,12 +186,8 @@ class Projects:
         """Declarative files of a commit, read through git archive and cached by commit."""
         key = (str(path), commit)
         if key not in self.commit_files:
-            result = subprocess.run(
-                ["git", "-C", str(path), "archive", "--format=tar", commit],
-                capture_output=True,
-                check=True,
-            )
-            with tarfile.open(fileobj=io.BytesIO(result.stdout)) as archive:
+            content = self.git(path, "archive", "--format=tar", commit, binary=True)
+            with tarfile.open(fileobj=io.BytesIO(content)) as archive:
                 files = {
                     entry.name: decode(entry.name, archive.extractfile(entry).read())
                     for entry in archive
@@ -399,42 +382,23 @@ class Projects:
             for line in log.splitlines()
         ]
 
-    def diff(self, worktree_id, commit):
-        path = self.get(worktree_id)["path"]
-        resolved = self.git(path, "rev-parse", "--verify", "--end-of-options", f"{commit}^{{commit}}")
-        header = self.git(path, "show", "-s", "--format=fuller", resolved, "--")
-        # Fetched or externally committed history can contain any file; show only project definitions.
-        changed = self.git(
-            path, "diff-tree", "-r", "-m", "--root", "--no-commit-id", "--name-only", "-z", resolved
-        )
-        paths = sorted({name for name in changed.split("\0") if is_declarative(name)})
-        if not paths:
-            return header
-        patch = self.git(path, "show", "--format=", resolved, "--", *(":(literal)" + name for name in paths))
-        return header + "\n\n" + patch if patch else header
-
     def branch(self, worktree_id, name, revision=None):
         with self.lock:
             worktree = self.get(worktree_id)
-            try:
-                self.git(worktree["path"], "check-ref-format", "refs/heads/" + name)
-            except Problem as error:
+            git_command.check_branch_name(worktree["path"], name)
+            if self.git(
+                worktree["path"], "rev-parse", "--verify", "--quiet", "refs/heads/" + name, check=False
+            ):
                 raise Problem(
-                    "Enter a valid branch name, such as experiment/my-change. Branch names cannot end with '/'.",
-                    422,
-                    {"code": "invalid_branch_name"},
-                ) from error
+                    "A branch with this name already exists. Choose another name.",
+                    409,
+                    {"code": "branch_exists"},
+                )
             self.versioning.clean(worktree)
             key = uid("worktree_")
             path = self.store.home / "worktrees" / key
             path.parent.mkdir(parents=True, exist_ok=True)
-            ref = self.git(
-                worktree["path"],
-                "rev-parse",
-                "--verify",
-                "--end-of-options",
-                f"{revision or 'HEAD'}^{{commit}}",
-            )
+            ref = self.versioning.resolve(worktree["path"], revision or "HEAD")
             if not self.git(
                 worktree["path"], "for-each-ref", "--format=%(refname)", "--contains", ref, "refs/heads/"
             ):

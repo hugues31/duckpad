@@ -10,6 +10,9 @@ from duckpad.util import clean
     [
         "SELECT category FROM {{ source }} WHERE grp='A' ORDER BY id;",
         "SELECT id, CAST(value / 3 AS DECIMAL(12,3)) AS amount, value > 20 AS eligible FROM {{ source }} ORDER BY id;",
+        "SELECT COLUMNS('id|grp'), category FROM {{ source }} ORDER BY id;",
+        "SELECT * EXCLUDE (grp), value * 2 AS doubled FROM {{ source }} ORDER BY id;",
+        "SELECT * REPLACE (value * 2 AS value), grp AS other FROM {{ source }} ORDER BY id;",
         "SELECT a.*, b.category AS other FROM {{ source }} a LEFT JOIN {{ source }} b ON a.id=b.id+1 ORDER BY a.id;",
         "SELECT a.*, b.category AS other FROM {{ source }} a RIGHT JOIN {{ source }} b ON a.id=b.id+1 ORDER BY b.id;",
         "SELECT a.id, b.id AS other FROM {{ source }} a FULL JOIN {{ source }} b ON a.id=b.id+1 ORDER BY a.id NULLS LAST, b.id;",

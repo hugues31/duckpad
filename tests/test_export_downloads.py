@@ -316,6 +316,48 @@ def test_remote_and_non_file_destinations_have_no_download(instance):
     assert client.get(endpoint, params={"environment": "dev"}).json()["status"] == "unsupported"
 
 
+def test_imported_and_custom_file_exports_offer_downloads(instance):
+    services, client = instance
+    worktree, endpoint = create(instance)
+    imported = client.post(
+        f"/api/worktrees/{worktree['id']}/import",
+        json={
+            "revision": services.projects.snapshot(worktree["id"])["revision"],
+            "source_worktree": worktree["id"],
+            "kind": "templates",
+            "id": "export_csv",
+        },
+    ).json()["imported"]
+    assert imported != "export_csv"
+    edit(services, worktree, lambda b: b["flow"]["nodes"][1].update(template=imported))
+    parsed = client.get(f"/api/worktrees/{worktree['id']}").json()["parsed_templates"]
+    assert parsed[imported]["download"] == {"parameter": "destination", "format": "csv"}
+    assert client.get(endpoint, params={"environment": "dev"}).json()["status"] == "not_run"
+    run = execute(services, worktree)
+    assert client.get(endpoint, params={"environment": "dev"}).json()["status"] == "available"
+    assert download(client, endpoint, run).text.splitlines()[0] == "id,label"
+
+    def custom(bundle, body):
+        bundle["templates"]["custom"] = (
+            '-- @kind export\n-- @input rows\n-- @param connection: connection = "local"\n'
+            '-- @param target: destination(connection) = "custom.csv"\n' + body
+        )
+        bundle["flow"]["nodes"][1].update(template="custom", params={})
+        bundle["flow"]["edges"][0]["targetHandle"] = "rows"
+
+    edit(
+        services,
+        worktree,
+        lambda b: custom(b, "COPY (SELECT id FROM {{ rows }}) TO {{ target }} (FORMAT CSV);"),
+    )
+    run = execute(services, worktree)
+    info = client.get(endpoint, params={"environment": "dev"}).json()
+    assert info["status"] == "available" and info["filename"] == "custom.csv"
+    assert download(client, endpoint, run).text.splitlines()[:2] == ["id", "0"]
+    edit(services, worktree, lambda b: custom(b, "COPY {{ rows }} TO {{ target }} (FORMAT PARQUET);"))
+    assert client.get(endpoint, params={"environment": "dev"}).json()["status"] == "unsupported"
+
+
 def test_streams_in_bounded_chunks_and_closes_the_file(instance, monkeypatch):
     from contextlib import contextmanager
 

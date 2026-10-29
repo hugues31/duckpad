@@ -1,14 +1,12 @@
 """Frozen comparisons and reviewed Git integration for project repositories."""
 
-import subprocess
 import tempfile
-import threading
 from collections import OrderedDict
 from pathlib import Path
 
+from . import git_command
 from .bundle import files_to_bundle, is_declarative, validate
 from .comparison import compare_files
-from .identity import git_environment
 from .merge import merge_files
 from .util import Problem, digest, now, uid
 
@@ -35,7 +33,12 @@ class GitWorkspace:
     def resolve(self, path, ref):
         if not ref or ref.startswith("-") or len(ref) > 256:
             raise Problem("Choose a branch or commit")
-        return self.git(path, "rev-parse", "--verify", "--end-of-options", f"{ref}^{{commit}}")
+        commit = self.git(
+            path, "rev-parse", "--verify", "--quiet", "--end-of-options", f"{ref}^{{commit}}", check=False
+        )
+        if not commit:
+            raise Problem("Branch or commit not found. Choose an existing branch or commit.", 404)
+        return commit
 
     def metadata(self, path, commit, name=None):
         text = self.git(path, "show", "-s", "--format=%H%x1f%an%x1f%aI%x1f%P%x1f%s", commit, "--")
@@ -181,16 +184,22 @@ class GitWorkspace:
     def open_branch(self, worktree_id, name):
         with self.projects.lock:
             worktree = self.projects.get(worktree_id)
-            ref = "refs/heads/" + name
-            self.git(worktree["path"], "check-ref-format", ref)
+            git_command.check_branch_name(worktree["path"], name)
             tree = self.store.find_worktree(worktree["project"], name)
             if tree:
                 return tree
-            self.resolve(worktree["path"], ref)
+            self.resolve(worktree["path"], "refs/heads/" + name)
             key = uid("worktree_")
             path = self.store.home / "worktrees" / key
             path.parent.mkdir(parents=True, exist_ok=True)
-            self.git(worktree["path"], "worktree", "add", str(path), name)
+            self.git(
+                worktree["path"],
+                "worktree",
+                "add",
+                str(path),
+                name,
+                failure="Git could not open this branch. It may be checked out outside Duckpad.",
+            )
             result = {"id": key, "project": worktree["project"], "branch": name, "path": str(path)}
             self.store.put("worktree", key, result)
             self.projects.observed[key] = self.projects.read_files(result)
@@ -211,7 +220,13 @@ class GitWorkspace:
             if head != expected_head or not self.ancestor(remove["path"], head, target_head):
                 raise Problem("The branch changed or has unmerged commits. Review it again.", 409)
             # Without --force Git also protects untracked files and locked worktrees.
-            self.git(current["path"], "worktree", "remove", remove["path"])
+            self.git(
+                current["path"],
+                "worktree",
+                "remove",
+                remove["path"],
+                failure="Git kept this worktree because it contains untracked files or is locked.",
+            )
             self.git(current["path"], "update-ref", "-d", "refs/heads/" + remove["branch"], head)
             artifacts = self.store.artifact_ids(worktree=remove_id)
             self.store.delete("worktree", remove_id)
@@ -363,57 +378,20 @@ class GitWorkspace:
         return target
 
     def run(self, path, *args, env=None, input=None):
-        identity = self.projects.identity()
-        result = subprocess.run(
-            [
-                "git",
-                "-c",
-                "core.hooksPath=/dev/null",
-                "-c",
-                f"user.name={identity['name']}",
-                "-c",
-                f"user.email={identity['email']}",
-                "-C",
-                str(path),
-                *args,
-            ],
-            env={**git_environment(identity), **(env or {})},
+        return self.git(
+            path,
+            *args,
+            env=env,
             input=input,
-            text=True,
-            capture_output=True,
-            timeout=30,
+            failure="Git could not complete the reviewed operation. Reload and retry.",
         )
-        if result.returncode:
-            raise Problem("Git could not complete the reviewed operation. Reload and retry.", 409)
-        return result.stdout.strip()
 
     def install(self, target, review, commit):
         """Hold both Git ref locks across checkout, so another Git client cannot advance either head."""
         path = target["path"]
-        identity = self.projects.identity()
-        command = [
-            "git",
-            "-c",
-            "core.hooksPath=/dev/null",
-            "-c",
-            f"user.name={identity['name']}",
-            "-c",
-            f"user.email={identity['email']}",
-            "-C",
-            path,
-            "update-ref",
-            "--stdin",
-        ]
-        with subprocess.Popen(
-            command,
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
-            text=True,
-            env=git_environment(identity),
+        with git_command.session(
+            path, "update-ref", "--stdin", identity=self.projects.identity()
         ) as transaction:
-            watchdog = threading.Timer(30, transaction.kill)
-            watchdog.start()
             installed = False
 
             def request(commands, acknowledgement):
@@ -439,11 +417,6 @@ class GitWorkspace:
                 raise Problem(
                     "Git integration was rejected. Local edits are retained; reload and review again.", 409
                 ) from error
-            finally:
-                transaction.stdin.close()
-                transaction.wait(timeout=35)
-                watchdog.cancel()
-                watchdog.join()
 
     def apply(self, worktree_id, key, choices, proposal_revision):
         with self.projects.lock:

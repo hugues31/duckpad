@@ -154,6 +154,20 @@ def test_layout_names_sql_and_parameters_have_distinct_categories():
     assert set(entity["categories"]) == {"processing", "documentation"}
 
 
+@pytest.mark.parametrize("directive", ["--@label", "  --  @label"])
+def test_label_directives_are_documentation_in_every_form(directive):
+    before = bundle()
+    after = copy.deepcopy(before)
+    after["templates"]["total"] = after["templates"]["total"].replace(
+        "-- @label Regional revenue", directive + " Regional sales"
+    )
+    report = compare_files(bundle_to_files(before), bundle_to_files(after))
+    entity = next(e for e in report["entities"] if e["id"] == "template/total")
+    assert entity["name"] == "Regional sales"
+    assert entity["categories"] == ["documentation"]
+    assert report["impact"]["status"] == "not_applicable"
+
+
 def test_deleted_nodes_and_edges_and_nested_scopes_remain_inspectable():
     before = bundle()
     after = copy.deepcopy(before)
@@ -564,21 +578,22 @@ def test_unsupported_files_in_ancestry_are_never_synchronized(local_remote):
             push(projects, main, state)
 
 
-def test_commit_diff_shows_only_project_definitions(project):
+def test_commit_comparison_shows_only_project_definitions(project):
     projects, main = project
     template = Path(main["path"], "templates", "orders.sql")
     template.write_text(template.read_text().replace("SELECT 1 AS amount", "SELECT 2 AS amount"))
     Path(main["path"], "secret.txt").write_text("private value")
     projects.git(main["path"], "add", "secret.txt", "templates/orders.sql")
     projects.git(main["path"], "commit", "-m", "chore: external commit")
-    diff = projects.diff(main["id"], "HEAD")
-    assert "chore: external commit" in diff and "+SELECT 2 AS amount;" in diff
-    assert "secret.txt" not in diff and "private value" not in diff
+    comparison = projects.versioning.compare(main["id"], "HEAD~1", "HEAD")
+    assert comparison["b"]["message"] == "chore: external commit"
+    assert "SELECT 2 AS amount" in json.dumps(comparison["entities"])
+    assert "secret.txt" not in json.dumps(comparison) and "private value" not in json.dumps(comparison)
     Path(main["path"], "secret.txt").write_text("another private value")
     projects.git(main["path"], "commit", "-am", "chore: change only an external file")
-    diff = projects.diff(main["id"], "HEAD")
-    assert diff.startswith("commit ") and "chore: change only an external file" in diff
-    assert "diff --git" not in diff and "private value" not in diff
+    comparison = projects.versioning.compare(main["id"], "HEAD~1", "HEAD")
+    assert comparison["b"]["message"] == "chore: change only an external file"
+    assert not comparison["counts"].get("modified") and "private value" not in json.dumps(comparison)
 
 
 def test_network_errors_never_echo_authentication_material(project, monkeypatch):

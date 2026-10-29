@@ -182,15 +182,14 @@ export default function Inspector({
       <button className="button secondary small" onClick={onHistory}>
         {t("elementHistory")}
       </button>
-      {kind === "export" &&
-        ["export_csv", "export_xlsx"].includes(node.template || "") && (
-          <ExportDownload
-            key={`${snapshot.worktree.id}:${environment}:${fullNode}:${snapshot.revision}`}
-            worktree={snapshot.worktree.id}
-            environment={environment}
-            node={fullNode}
-          />
-        )}
+      {!node.component && definition?.download && (
+        <ExportDownload
+          key={`${snapshot.worktree.id}:${environment}:${fullNode}:${snapshot.revision}`}
+          worktree={snapshot.worktree.id}
+          environment={environment}
+          node={fullNode}
+        />
+      )}
       <div className="tabs inspector-tabs">
         {TABS.map(([key, Icon]) => (
           <button
