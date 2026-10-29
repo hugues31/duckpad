@@ -35,6 +35,7 @@ import {
   type Explanation,
   type Query,
 } from "./lineageGraph";
+import { trapFocus } from "./modals";
 import "./lineage.css";
 
 type Props = {
@@ -409,23 +410,7 @@ function LineageDialog({ worktree, environment, cell, onClose }: Props) {
       ref={dialog}
       className="lineage-dialog"
       aria-labelledby={titleId}
-      onKeyDown={(event) => {
-        if (event.key !== "Tab") return;
-        const controls = [
-          ...event.currentTarget.querySelectorAll<HTMLElement>(
-            'button:not(:disabled), select:not(:disabled), [tabindex="0"]',
-          ),
-        ].filter((element) => element.getClientRects().length > 0);
-        const first = controls[0];
-        const last = controls.at(-1);
-        if (event.shiftKey && document.activeElement === first) {
-          event.preventDefault();
-          last?.focus();
-        } else if (!event.shiftKey && document.activeElement === last) {
-          event.preventDefault();
-          first?.focus();
-        }
-      }}
+      onKeyDown={(event) => trapFocus(event, event.currentTarget)}
       onCancel={(event) => {
         event.preventDefault();
         onClose();

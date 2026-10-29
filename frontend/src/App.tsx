@@ -762,6 +762,7 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
         await load();
       },
       onOpen: setWorktree,
+      onNewBranch: () => newBranch(),
     });
   }
   function resolveConflict(conflict: Json) {
