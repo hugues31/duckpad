@@ -43,6 +43,7 @@ export type ModalState =
       entity?: string;
       onChanged: () => Promise<void>;
       onOpen: (id: string) => void;
+      onNewBranch: () => void;
     }
   | {
       kind: "form";

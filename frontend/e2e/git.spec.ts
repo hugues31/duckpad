@@ -200,6 +200,10 @@ test("review and resolve a field conflict with base evidence, reject stale heads
   await dialog
     .getByRole("button", { name: "Review merge", exact: true })
     .click();
+  // The new review replaces the previous one and starts without a choice.
+  await expect(
+    dialog.getByLabel("Incoming", { exact: false }),
+  ).not.toBeChecked();
   await dialog.getByLabel("Incoming", { exact: false }).check();
   await expect(
     dialog.getByRole("button", { name: "Apply reviewed merge" }),
@@ -357,4 +361,245 @@ test("SQL inspection is read-only in French and dark theme", async ({
   ).json();
   expect(current.commit).toBe(after.commit);
   expect(current.files).toEqual(after.files);
+});
+
+test("reopening resolves the chosen names again after the branch moves", async ({
+  page,
+}) => {
+  const main = await createProject(page);
+  await page.request.post(`/api/worktrees/${main.id}/branches`, {
+    data: { name: "feature/moving" },
+  });
+  const feature = (
+    await (await page.request.get("/api/workspace")).json()
+  ).worktrees.find((w: any) => w.branch === "feature/moving");
+  // A frozen state stored by an earlier version would have expired with the server.
+  await page.evaluate(
+    (key) =>
+      sessionStorage.setItem(
+        key,
+        JSON.stringify({ a: "frozen_expired", b: "frozen_expired" }),
+      ),
+    `duckpad.git.${main.id}`,
+  );
+  const compared: string[][] = [];
+  page.on("request", (request) => {
+    const url = new URL(request.url());
+    if (url.pathname.endsWith("/git/compare"))
+      compared.push([url.searchParams.get("a")!, url.searchParams.get("b")!]);
+  });
+  let dialog = await openGit(page);
+  await expect(dialog.getByLabel("A: reference")).toHaveValue("HEAD");
+  await expect(dialog.getByLabel("B: target")).toHaveValue("working");
+  await expect(dialog.locator(".change-list")).toBeVisible();
+  await dialog.getByLabel("A: reference").fill("working");
+  await dialog.getByLabel("B: target").fill("refs/heads/feature/moving");
+  const sides = dialog.locator(".git-revisions small");
+  await expect(sides.first()).toContainText("Frozen at");
+  await expect(sides.last()).toContainText("refs/heads/feature/moving");
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+
+  const moved = await change(page, feature.id, (b) => {
+    b.flow.nodes[0].label = "Moved feature";
+  });
+  compared.length = 0;
+  dialog = await openGit(page);
+  await expect(dialog.getByLabel("A: reference")).toHaveValue("working");
+  await expect(dialog.getByLabel("B: target")).toHaveValue(
+    "refs/heads/feature/moving",
+  );
+  await expect(dialog.locator(".change-list")).toContainText("Moved feature");
+  await expect(dialog.locator(".git-revisions")).toContainText(
+    moved.commit.slice(0, 12),
+  );
+  await expect(dialog.getByRole("alert")).toHaveCount(0);
+  expect(compared).toEqual([["working", "refs/heads/feature/moving"]]);
+  expect(
+    await page.evaluate(() => JSON.stringify({ ...sessionStorage })),
+  ).not.toMatch(/frozen_(?!expired)|[0-9a-f]{40}/);
+});
+
+test("a reference chosen after opening a commit survives history filtering", async ({
+  page,
+}) => {
+  const main = await createProject(page);
+  const first = await (
+    await page.request.get(`/api/worktrees/${main.id}`)
+  ).json();
+  const second = await change(page, main.id, (b) => {
+    b.flow.nodes[0].label = "Renamed revenue";
+  });
+  await page.getByRole("link", { name: "History", exact: true }).click();
+  await page.getByRole("button", { name: "Git history", exact: true }).click();
+  await page
+    .locator(".history-row")
+    .filter({ hasText: second.commit.slice(0, 8) })
+    .getByRole("button", { name: "Changes", exact: true })
+    .click();
+  const dialog = page.getByRole("dialog", { name: "Project Git workspace" });
+  await expect(dialog.getByLabel("A: reference")).toHaveValue(first.commit);
+  await expect(dialog.getByLabel("B: target")).toHaveValue(second.commit);
+  await dialog.getByLabel("A: reference").fill("empty");
+  await expect(dialog.locator(".change-list")).toContainText("Renamed revenue");
+  const filtered = page.waitForResponse(
+    (response) =>
+      response.url().includes("/git/history?") &&
+      new URL(response.url()).searchParams.get("entity") === "revenue",
+  );
+  await dialog.locator(".git-history summary").click();
+  await dialog.getByLabel("History element").fill("revenue");
+  await filtered;
+  await expect(dialog.locator(".git-history")).toContainText("Renamed revenue");
+  await expect(dialog.getByLabel("A: reference")).toHaveValue("empty");
+});
+
+test("a failed history page keeps the comparison and Retry loads that page again", async ({
+  page,
+}) => {
+  const main = await createProject(page);
+  const first = await (
+    await page.request.get(`/api/worktrees/${main.id}`)
+  ).json();
+  const second = await change(page, main.id, (b) => {
+    b.flow.nodes[0].label = "Latest name";
+  });
+  const history = await (
+    await page.request.get(`/api/worktrees/${main.id}/git/history`)
+  ).json();
+  expect(history.items.length).toBeGreaterThan(1);
+  const pages: string[] = [];
+  await page.route(
+    `**/api/worktrees/${main.id}/git/history*`,
+    async (route) => {
+      const offset = new URL(route.request().url()).searchParams.get("offset");
+      pages.push(offset ?? "first");
+      if (offset === null)
+        await route.fulfill({
+          json: { ...history, items: history.items.slice(0, 1), next: 1 },
+        });
+      else if (pages.filter((value) => value !== "first").length === 1)
+        await route.fulfill({
+          status: 503,
+          json: { error: "History temporarily unavailable" },
+        });
+      else await route.continue();
+    },
+  );
+  const dialog = await openGit(page);
+  await dialog.getByLabel("A: reference").fill(first.commit);
+  await dialog.getByLabel("B: target").fill(second.commit);
+  await expect(dialog.locator(".change-list")).toContainText("Latest name");
+  const panel = dialog.locator(".git-history");
+  await panel.locator("summary").click();
+  await expect(panel.locator(".git-commit")).toHaveCount(1);
+  await panel.getByRole("button", { name: "Load more", exact: true }).click();
+  await expect(panel.getByRole("alert")).toContainText(
+    "History temporarily unavailable",
+  );
+  await expect(dialog.locator(".change-list")).toContainText("Latest name");
+  await expect(dialog.getByRole("alert")).toHaveCount(1);
+  await panel.getByRole("button", { name: "Retry", exact: true }).click();
+  await expect(panel.locator(".git-commit")).toHaveCount(history.items.length);
+  await expect(panel.getByRole("alert")).toHaveCount(0);
+  expect(pages).toEqual(["first", "1", "1"]);
+  await expect(dialog.locator(".change-list")).toContainText("Latest name");
+});
+
+test("closing the dialog during an action neither navigates nor closes the next dialog", async ({
+  page,
+}) => {
+  const main = await createProject(page);
+  await page.request.post(`/api/worktrees/${main.id}/branches`, {
+    data: { name: "feature/late" },
+  });
+  let hold = false;
+  let release = () => {};
+  const released = new Promise<void>((resolve) => (release = resolve));
+  let started = () => {};
+  const holding = new Promise<void>((resolve) => (started = resolve));
+  await page.route(
+    `**/api/worktrees/${main.id}/git/branches`,
+    async (route) => {
+      if (!hold) return route.continue();
+      hold = false;
+      started();
+      await released;
+      await route.continue().catch(() => {});
+    },
+  );
+  const dialog = await openGit(page, "Branches");
+  hold = true;
+  await dialog
+    .locator(".git-commit")
+    .filter({ hasText: "feature/late" })
+    .getByRole("button", { name: "Open isolated worktree", exact: true })
+    .click();
+  await holding;
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+  await page.getByTitle("New working branch", { exact: true }).click();
+  const next = page.getByRole("dialog", { name: "New working branch" });
+  await expect(next).toBeVisible();
+  const settled = page.waitForResponse((response) =>
+    response.url().endsWith(`/worktrees/${main.id}/git/branches`),
+  );
+  release();
+  await (await settled).finished();
+  // Let the late action finish before checking that it changed nothing.
+  await page.evaluate(() => new Promise((resolve) => setTimeout(resolve, 500)));
+  await expect(next).toBeVisible();
+  await expect(page).toHaveURL(new RegExp(`/worktrees/${main.id}/flow`));
+});
+
+test("the branches tab creates branches with the shared branch dialog", async ({
+  page,
+}) => {
+  const main = await createProject(page);
+  await page
+    .getByRole("button", { name: "Git synchronization", exact: true })
+    .click();
+  const dialog = page.getByRole("dialog", { name: "Project Git workspace" });
+  const close = dialog.getByRole("button", { name: "Close", exact: true });
+  await expect(close).toBeFocused();
+  await dialog.getByRole("button", { name: "Branches", exact: true }).click();
+  await close.focus();
+  await page.keyboard.press("Shift+Tab");
+  await expect(
+    dialog.getByRole("button", { name: "New working branch", exact: true }),
+  ).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(close).toBeFocused();
+  await dialog
+    .getByRole("button", { name: "New working branch", exact: true })
+    .click();
+  await expect(dialog).toBeHidden();
+  const create = page.getByRole("dialog", { name: "New working branch" });
+  const name = create.getByLabel("Branch name", { exact: true });
+  await expect(name).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(create).toBeHidden();
+  const opener = page.getByRole("button", {
+    name: "Git synchronization",
+    exact: true,
+  });
+  await expect(opener).toBeFocused();
+  await openGit(page, "Branches");
+  await dialog
+    .getByRole("button", { name: "New working branch", exact: true })
+    .click();
+  await name.fill("experiment/");
+  await create.getByRole("button", { name: "Create", exact: true }).click();
+  await expect(create.getByRole("alert")).toHaveText(en.invalidBranchName);
+  await name.fill("experiment/from-git");
+  await create.getByRole("button", { name: "Create", exact: true }).click();
+  await expect(create).toBeHidden();
+  await expect(page.locator(".toast")).toContainText(en.branchCreated);
+  const workspace = await (await page.request.get("/api/workspace")).json();
+  const branch = workspace.worktrees.find(
+    (w: any) =>
+      w.project === main.project && w.branch === "experiment/from-git",
+  );
+  expect(branch).toBeTruthy();
+  await expect(page).toHaveURL(new RegExp(`/worktrees/${branch.id}/flow`));
 });
