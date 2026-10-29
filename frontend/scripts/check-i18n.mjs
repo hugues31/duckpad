@@ -32,6 +32,8 @@ const DYNAMIC_KEYS = [
   "load_parquet",
   "load_xlsx",
   "load_oracle",
+  "export_csv",
+  "export_xlsx",
   "export_oracle",
   // Roles: role_<role> and project_<role>_hint.
   "role_editor",

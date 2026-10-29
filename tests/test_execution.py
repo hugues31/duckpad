@@ -61,6 +61,19 @@ def test_layout_change_preserves_valid_results(services, tmp_path):
     assert engine.preview(wt, "dev", "total")["status"] == "valid"
 
 
+@pytest.mark.parametrize(
+    "directive", ["-- @label Revenue", "--@label Revenue", "  --  @label Revenue", "--@description Revenue"]
+)
+def test_descriptive_directives_never_change_fingerprints(services, tmp_path, directive):
+    engine = services[3]
+    bundle = example_bundle(tmp_path / "input.csv")
+    before = engine.fingerprints(bundle, "dev")
+    bundle["templates"]["total"] = directive + "\n" + bundle["templates"]["total"]
+    assert engine.fingerprints(bundle, "dev") == before
+    bundle["templates"]["total"] += "\n-- SQL change"
+    assert engine.fingerprints(bundle, "dev")["total"] != before["total"]
+
+
 def test_conflicts_survive_and_disjoint_fields_merge(services, tmp_path):
     store, projects, _, _ = services
     worktree = projects.create("Test", example_bundle(tmp_path / "input.csv"))

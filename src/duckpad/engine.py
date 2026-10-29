@@ -757,9 +757,11 @@ class Engine:
             definition = nodes.get(node)
             if not definition:
                 raise Problem("Node not found", 404)
-            if definition.get("template") not in ("export_csv", "export_xlsx"):
+            download = definition["parsed"].get("download")
+            if not download:
                 return {"status": "unsupported"}
-            destination = definition.get("params", {}).get("destination", "")
+            values = {p["name"]: p.get("default") for p in definition["parsed"]["parameters"]}
+            destination = (values | definition.get("params", {}))[download["parameter"]]
             if URI.match(str(destination)):
                 return {"status": "unsupported"}
             result = self.store.get("export_result", digest([worktree, environment, node]))

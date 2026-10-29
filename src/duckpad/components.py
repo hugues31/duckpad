@@ -1,9 +1,8 @@
 """Project-owned reusable subgraphs with stable boundary ports."""
 
 import copy
-import re
 
-from .templates import parse_template
+from .templates import IDENTIFIER, directives, parse_template
 from .util import Problem, uid
 
 DOCUMENTATION_SECTIONS = ("nodes", "datasets", "columns")
@@ -81,8 +80,9 @@ def expand(bundle, tolerant=False):
                     if not (e["source"].startswith(key + "::") or e["target"].startswith(key + "::"))
                 ]
                 text = bundle["templates"].get(node.get("template"), "")
-                inputs = set(re.findall(r"--\s*@input\s+(\w+)", text))
-                outputs = set(re.findall(r"--\s*@output\s+(\w+)", text))
+                declared = directives(text)
+                inputs = {port for kind, port in declared if kind == "input" and IDENTIFIER.fullmatch(port)}
+                outputs = {port for kind, port in declared if kind == "output" and IDENTIFIER.fullmatch(port)}
                 inputs.update(e["targetHandle"] for e in graph.get("edges", []) if e["target"] == node["id"])
                 outputs.update(e["sourceHandle"] for e in graph.get("edges", []) if e["source"] == node["id"])
                 for direction, ports in (("inputs", inputs), ("outputs", outputs)):
