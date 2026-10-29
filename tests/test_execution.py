@@ -144,7 +144,10 @@ def test_startup_loads_only_unfinished_runs(services, monkeypatch):
                 "status": status,
                 "started": "2026-01-01",
                 "commit": "commit",
-                "nodes": {"export": {"kind": "export", "status": "running"}},
+                "nodes": {
+                    "export": {"kind": "export", "status": "running"},
+                    "later": {"kind": "export", "status": "pending"},
+                },
             },
         )
     original = store._record
@@ -164,6 +167,9 @@ def test_startup_loads_only_unfinished_runs(services, monkeypatch):
         run = store.get("run", status)
         assert run["status"] == "interrupted"
         assert run["nodes"]["export"]["external_outcome"] == "unknown"
+        # A node that never started is final too, without an unconfirmed external write.
+        assert run["nodes"]["later"]["status"] == "interrupted"
+        assert "external_outcome" not in run["nodes"]["later"]
     for status in completed:
         assert store.get("run", status)["status"] == status
 
