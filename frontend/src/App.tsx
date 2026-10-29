@@ -594,26 +594,14 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
   }
   function newBranch(revision = "") {
     setModal({
-      kind: "form",
-      title: t("newBranch"),
-      description: t("branchNameHint"),
-      fields: [
-        {
-          key: "name",
-          label: t("branchName"),
-          placeholder: "experiment/my-change",
-        },
-        {
-          key: "revision",
-          label: t("fromRevision"),
-          value: revision,
-          required: false,
-        },
-      ],
-      submit: async (v) => {
+      kind: "newBranch",
+      worktree,
+      branch: snapshot!.worktree.branch,
+      revision,
+      submit: async (name, startingRevision) => {
         const next = await api(
           `/worktrees/${worktree}/branches`,
-          send({ name: v.name, revision: v.revision || undefined }),
+          send({ name, revision: startingRevision }),
         ).catch((error) => {
           if (
             error instanceof ApiError &&

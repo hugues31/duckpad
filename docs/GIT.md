@@ -69,6 +69,14 @@ In **New working branch**, enter a complete name such as `experiment/my-change`.
 Git does not allow names ending in `/`, so `experiment/` alone is incomplete.
 An invalid name leaves the form open with an explanation so you can correct it.
 
+The starting revision defaults to the latest saved version of the current branch.
+Select **Choose an earlier version** to browse its history by commit message,
+author, date, and short commit ID. Search the loaded versions or use **Load more**
+to reach older history. The selected version remains visible when filtering, and
+the new branch starts at that exact commit. Opening a revision from the History
+page preselects it. **Enter a Git reference (advanced)** also accepts an existing
+branch name, tag, or commit.
+
 Choose an explicit source and destination, compare them, then select **Review
 merge**. The review displays the common base and exact heads. For every conflicting
 field, inspect base/current/incoming values and choose one. Each choice recomputes
