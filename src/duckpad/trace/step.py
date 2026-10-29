@@ -22,7 +22,7 @@ class Trace(NamedTuple):
 def distinct_values(rows, argument):
     """The Trace.distinct clauses: argument values over the rows a query selects."""
     values = b.project(rows, [argument.as_("_dp_distinct_value", quoted=True)])
-    return sql(exp.From(this=values.subquery("_dp_distinct"))), "_dp_distinct_value"
+    return sql(exp.From(this=values.subquery("_dp_distinct", copy=False))), "_dp_distinct_value"
 
 
 def unalias(expression):

@@ -1,6 +1,7 @@
 """SQLGlot builders for provenance queries.
 
-Builders copy the nodes they receive, so callers can pass parts of a traced query.
+Builders take ownership of the nodes they receive, except `project` and `without`,
+which copy their query. Pass a copy of a node that belongs to another tree or is reused.
 """
 
 from decimal import Decimal
@@ -41,27 +42,27 @@ def value(item):
 
 def same(left, right):
     """Null-safe equality."""
-    return exp.NullSafeEQ(this=left.copy(), expression=right.copy())
+    return exp.NullSafeEQ(this=left, expression=right)
 
 
 def not_null(expression):
-    return exp.Not(this=exp.Is(this=expression.copy(), expression=exp.Null()))
+    return exp.Not(this=exp.Is(this=expression, expression=exp.Null()))
 
 
 def every(conditions):
     """The conjunction of conditions, TRUE when there are none."""
     conditions = list(conditions)
-    return exp.and_(*conditions) if conditions else exp.true()
+    return exp.and_(*conditions, copy=False) if conditions else exp.true()
 
 
 def exists(query):
-    return exp.Exists(this=query.copy())
+    return exp.Exists(this=query)
 
 
 def project(query, expressions):
     """A copy of a query selecting other expressions."""
     query = query.copy()
-    query.set("expressions", [e.copy() for e in expressions])
+    query.set("expressions", list(expressions))
     return query
 
 
@@ -75,7 +76,7 @@ def without(query, *clauses):
 
 def select_from(query, alias, *expressions):
     """Select expressions, all columns by default, from a query used as a derived table."""
-    return exp.select(*(expressions or [exp.Star()])).from_(query.subquery(alias))
+    return exp.select(*(expressions or [exp.Star()])).from_(query.subquery(alias, copy=False), copy=False)
 
 
 def union_all(queries):

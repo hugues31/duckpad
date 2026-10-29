@@ -30,10 +30,13 @@ class WindowVisitor(Visitor):
         frames = {alias: f"_dp_frame_{i}" for i, alias in enumerate(self.tracer.sources)}
         currents = {alias: f"_dp_current_{i}" for i, alias in enumerate(self.tracer.sources)}
         additions = [
-            self.frame(window, function, alias).as_(name, quoted=True) for alias, name in frames.items()
+            self.frame(window, function, alias).as_(name, quoted=True, copy=False)
+            for alias, name in frames.items()
         ]
         additions.append(window.as_("_dp_window_value"))
-        additions.extend(b.rowid(alias).as_(name, quoted=True) for alias, name in currents.items())
+        additions.extend(
+            b.rowid(alias).as_(name, quoted=True, copy=False) for alias, name in currents.items()
+        )
         matched = self.tracer.matched(step, additions, currents)
         context_columns = columns + step.conditions + list(window.find_all(exp.Column))
         context = self.tracer.from_matched(context_columns, matched, frames, lists=True)
@@ -87,12 +90,12 @@ class WindowVisitor(Visitor):
         if len(aliases) != 1:
             raise Coverage("Distinct window arguments must reference one input relation.")
         alias = next(iter(aliases))
-        frame = b.select_from(matched, "frames", exp.Unnest(expressions=[b.column(frames[alias])]))
-        conditions = [b.rowid(alias).isin(query=frame)]
+        frame = b.select_from(matched.copy(), "frames", exp.Unnest(expressions=[b.column(frames[alias])]))
+        conditions = [b.rowid(alias).isin(query=frame, copy=False)]
         if selection:
-            conditions.append(selection)
-        rows = exp.select(exp.Star()).from_(b.table(self.tracer.sources[alias].relation, alias))
-        return distinct_values(rows.where(*conditions), argument)
+            conditions.append(selection.copy())
+        rows = exp.select(exp.Star()).from_(b.table(self.tracer.sources[alias].relation, alias), copy=False)
+        return distinct_values(rows.where(*conditions, copy=False), argument)
 
 
 class Predicate:
@@ -114,8 +117,9 @@ class Predicate:
                 argument = argument.expressions[0]
             clauses.append(b.not_null(self.local(argument, alias)))
             if isinstance(self.function, (exp.Min, exp.Max)):
-                chosen = b.select_from(self.matched, "chosen", exp.column("_dp_window_value")).limit(1)
-                clauses.append(b.same(self.local(argument, alias), chosen.subquery()))
+                chosen = b.select_from(self.matched.copy(), "chosen", exp.column("_dp_window_value"))
+                chosen.limit(1, copy=False)
+                clauses.append(b.same(self.local(argument, alias), chosen.subquery(copy=False)))
         if self.selection:
             clauses.append(self.local(self.selection, alias))
         if self.distinct_value is not ...:

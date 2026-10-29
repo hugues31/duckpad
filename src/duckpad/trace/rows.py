@@ -13,7 +13,7 @@ class RowVisitor(Visitor):
     def visit(self, step):
         tracer = self.tracer
         row_names = {alias: f"_dp_row_{i}" for i, alias in enumerate(tracer.sources)}
-        identities = [b.rowid(alias).as_(name, quoted=True) for alias, name in row_names.items()]
+        identities = [b.rowid(alias).as_(name, quoted=True, copy=False) for alias, name in row_names.items()]
         matched = tracer.matched(step, identities, row_names)
         if not tracer.dataset.witnesses and not step.tree.args.get("distinct") and tracer.count(matched) > 1:
             raise Coverage(

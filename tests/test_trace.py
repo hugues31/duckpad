@@ -345,3 +345,27 @@ def test_conditions_combine_without_changing_precedence():
     assert condition.sql(dialect="duckdb") == "(a OR b) AND c"
     assert b.every([]).sql() == "TRUE"
     assert b.union_all([]) is None
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        "SELECT id, value * 2 FROM src WHERE grp = 'A' OR id > 4 ORDER BY id",
+        "SELECT grp, MAX(value) FILTER (WHERE id > 1) FROM src WHERE id < 5 GROUP BY grp ORDER BY grp",
+        "WITH t AS (SELECT * FROM src) SELECT grp, COUNT(DISTINCT category) FROM t GROUP BY grp ORDER BY grp",
+        "SELECT id, MIN(value) FILTER (WHERE id > 1) OVER (PARTITION BY grp) FROM src ORDER BY id",
+        "SELECT id, COUNT(DISTINCT category) OVER (PARTITION BY grp) FROM src ORDER BY id",
+        "SELECT grp FROM src EXCEPT SELECT category FROM src ORDER BY 1",
+    ],
+)
+def test_tracing_leaves_the_normalized_step_unchanged(context, query):
+    data = materialize(context, "step", query)
+    tracer = TraceQuery(context, context.db.cursor(), data, 0)
+    tree = tracer.normalize(data)
+    normalized = tree.sql(dialect="duckdb")
+    first = tracer.trace(tree, len(tree.selects) - 1)
+    tracer.trace(tree, len(tree.selects) - 1, all_context=True)
+    if first[2]:
+        tracer.trace(tree, len(tree.selects) - 1, distinct_value="X")
+    assert tree.sql(dialect="duckdb") == normalized
+    assert tracer.trace(tree, len(tree.selects) - 1) == first

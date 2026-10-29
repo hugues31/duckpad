@@ -28,9 +28,9 @@ class SetOperationVisitor(Visitor):
             records = tracer.contribution(
                 data, b.rowid("d"), data.columns[index]["name"], b.column(columns[index], "d"), False
             )
-            rows = exp.select(*records).from_(b.table(data.relation, "d"))
+            rows = exp.select(*records).from_(b.table(data.relation, "d"), copy=False)
             if isinstance(tree, exp.Except) and side == "right":
                 contexts.append(rows)
             else:
-                queries.append(rows.where(tracer.matches(columns, "d")))
+                queries.append(rows.where(tracer.matches(columns, "d"), copy=False))
         return Trace(b.union_all(queries), b.union_all(contexts))
