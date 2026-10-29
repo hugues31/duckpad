@@ -8,11 +8,12 @@ import threading
 from contextlib import contextmanager
 from pathlib import Path
 
-from sqlalchemy import URL, delete, event, literal_column
+from sqlalchemy import URL, delete, event, func, literal_column
 from sqlmodel import Session, create_engine, select
 
 from . import models as m
 from .migrations import upgrade
+from .util import dumps
 
 MODELS = {
     "user": m.User,
@@ -36,6 +37,12 @@ MODELS = {
 SNAPSHOTS = {"connector": "definition", "conflict": "snapshot", "run": "snapshot"}
 
 
+def reject_unknown_fields(kind, data, fields):
+    unknown = data.keys() - fields
+    if unknown:
+        raise ValueError(f"Unknown {kind} fields: {', '.join(sorted(unknown))}")
+
+
 def configure_connection(connection, _record):
     # Explicit BEGIN makes DDL and SAVEPOINT rollback transactional on Python
     # 3.11 too, where sqlite3's default transaction mode does not.
@@ -51,6 +58,7 @@ def metadata_engine(path):
     engine = create_engine(
         URL.create("sqlite", database=str(path)),
         connect_args={"check_same_thread": False, "timeout": 30},
+        json_serializer=dumps,
         hide_parameters=True,
     )
     event.listen(engine, "connect", configure_connection)
@@ -183,6 +191,7 @@ class Store:
     def put(self, kind, key, value):
         with self.session() as session:
             if kind == "access":
+                reject_unknown_fields(kind, value, {"members", "connections"})
                 session.exec(delete(m.ProjectMember).where(m.ProjectMember.project == key))
                 session.exec(delete(m.ProjectConnection).where(m.ProjectConnection.project == key))
                 for user, role in value["members"].items():
@@ -207,13 +216,17 @@ class Store:
                     data = {**value, "id": key}
                 if kind in SNAPSHOTS:
                     field = SNAPSHOTS[kind]
-                    data[field] = {k: v for k, v in value.items() if k not in model.model_fields}
+                    data[field] = {k: data.pop(k) for k in list(data) if k not in model.model_fields}
                 if kind == "user":
                     data["username_key"] = data["username"].casefold()
-                    identity = data.get("oidc", {})
+                    identity = data.pop("oidc", {})
+                    reject_unknown_fields("OIDC identity", identity, {"issuer", "subject"})
                     data.update(oidc_issuer=identity.get("issuer"), oidc_subject=identity.get("subject"))
                 if kind == "oidc_transaction":
                     data["provider"] = data.pop("metadata")
+                if kind == "connection":
+                    environments = data.pop("environments")
+                reject_unknown_fields(kind, data, model.model_fields.keys())
                 # SQLModel table constructors do not validate by default.
                 session.merge(model.model_validate(data))
                 session.flush()
@@ -221,7 +234,7 @@ class Store:
                     session.exec(
                         delete(m.ConnectionEnvironment).where(m.ConnectionEnvironment.connection == key)
                     )
-                    for environment, parameters in value["environments"].items():
+                    for environment, parameters in environments.items():
                         session.add(
                             m.ConnectionEnvironment(
                                 connection=key, environment=environment, parameters=parameters
@@ -257,6 +270,62 @@ class Store:
         model = {"session": m.LoginSession, "oidc_transaction": m.OIDCTransaction}[kind]
         with self.session() as session:
             session.exec(delete(model).where(model.expires < now))
+
+    def runs_with_statuses(self, statuses):
+        with self.session() as session:
+            rows = session.exec(select(m.Run).where(m.Run.status.in_(statuses)))
+            return [self._record("run", row, session) for row in rows]
+
+    def worktrees(self, project):
+        with self.session() as session:
+            rows = session.exec(
+                select(m.Worktree).where(m.Worktree.project == project).order_by(literal_column("rowid"))
+            )
+            return [self._record("worktree", row, session) for row in rows]
+
+    def find_worktree(self, project, branch):
+        with self.session() as session:
+            row = session.exec(
+                select(m.Worktree).where(m.Worktree.project == project, m.Worktree.branch == branch)
+            ).first()
+            return self._record("worktree", row, session) if row else None
+
+    def conflicts(self, worktree):
+        with self.session() as session:
+            rows = session.exec(
+                select(m.Conflict).where(m.Conflict.worktree == worktree).order_by(literal_column("rowid"))
+            )
+            return [self._record("conflict", row, session) for row in rows]
+
+    def has_conflicts(self, worktree):
+        with self.session() as session:
+            return (
+                session.exec(select(m.Conflict.id).where(m.Conflict.worktree == worktree).limit(1)).first()
+                is not None
+            )
+
+    def artifact_ids(self, *, project=None, worktree=None):
+        if project is None and worktree is None:
+            raise ValueError("Specify a project or worktree for artifact lookup")
+        statement = select(m.Artifact.id)
+        if project is not None:
+            statement = statement.where(m.Artifact.project == project)
+        if worktree is not None:
+            statement = statement.where(m.Artifact.worktree == worktree)
+        with self.session() as session:
+            return list(session.exec(statement))
+
+    def delete_git_consents(self, project):
+        with self.session() as session:
+            session.exec(delete(m.GitConsent).where(m.GitConsent.project == project))
+
+    def count_oidc_transactions(self):
+        with self.session() as session:
+            return session.exec(select(func.count()).select_from(m.OIDCTransaction)).one()
+
+    def delete_oidc_transactions(self):
+        with self.session() as session:
+            session.exec(delete(m.OIDCTransaction))
 
     def runs(self, user, worktree=None):
         with self.session() as session:

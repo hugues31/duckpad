@@ -117,8 +117,7 @@ class OIDC:
         config["revision"] = secrets.token_hex(16)
         with self.store.transaction():
             self.store.put("settings", "oidc", config)
-            for key, _ in self.store.items("oidc_transaction"):
-                self.store.delete("oidc_transaction", key)
+            self.store.delete_oidc_transactions()
         return self.public_settings()
 
     @staticmethod
@@ -184,7 +183,7 @@ class OIDC:
             )
         with self.store.transaction():
             self.store.purge_expired("oidc_transaction", time.time())
-            if len(self.store.items("oidc_transaction")) >= 1000:
+            if self.store.count_oidc_transactions() >= 1000:
                 raise Problem("Too many pending sign-ins. Try again later.", 429)
             self.store.put(
                 "oidc_transaction",
@@ -261,10 +260,9 @@ class OIDC:
                     raise Problem("New SSO accounts are disabled")
                 name = claims.get("preferred_username") or claims.get("name") or "user"
                 name = re.sub(r"[^a-zA-Z0-9_.-]", "-", str(name))[:40].strip("-.") or "user"
-                existing = {u["username"].casefold() for u in self.store.all("user")}
                 while True:
                     username = name + "-sso-" + secrets.token_hex(4)
-                    if username.casefold() not in existing:
+                    if self.store.find_user(username) is None:
                         break
                 user = {
                     "id": uid("user_"),

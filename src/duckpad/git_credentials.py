@@ -241,10 +241,7 @@ class GitCredentials:
 
     def forget_project(self, project):
         """Every origin change requires new consent, even when a previous URL comes back."""
-        with self.store.lock:
-            for key, record in self.store.items(CONSENT_KIND):
-                if record["project"] == project:
-                    self.store.delete(CONSENT_KIND, key)
+        self.store.delete_git_consents(project)
 
     def credentials(self, user, project, url):
         """Return the private key for an SSH origin, or None for HTTPS, after every check."""
