@@ -10,7 +10,7 @@ from collections import OrderedDict
 from pathlib import Path
 
 from .builtin_templates import BUILTINS
-from .bundle import bundle_to_files, files_to_bundle, is_declarative, validate
+from .bundle import ROOT_FILES, bundle_to_files, files_to_bundle, is_declarative, validate
 from .comparison import commit_message
 from .components import reconcile_documentation
 from .git_workspace import GitWorkspace
@@ -75,7 +75,7 @@ class Projects:
         path = self.store.home / "projects" / project_id
         path.mkdir(parents=True)
         self.git(path, "init", "-b", "main")
-        atomic_write(path / ".gitignore", "data/\nexports/\n*.duckdb\n*.duckdb.wal\n")
+        atomic_write(path / ".gitignore", "data/\nexports/\n*.duckdb\n*.duckdb.wal\n.venv/\n__pycache__/\n")
         if bundle is None:
             bundle = {
                 "flow": {"id": project_id, "name": name, "description": "", "nodes": [], "edges": []},
@@ -127,7 +127,7 @@ class Projects:
 
     def read_files(self, worktree):
         path = Path(worktree["path"])
-        names = ["flow.json", "documentation.json"]
+        names = list(ROOT_FILES)
         names += [
             p.relative_to(path).as_posix()
             for folder, pattern in [("templates", "*.sql"), ("components", "*.json")]
@@ -156,7 +156,10 @@ class Projects:
             before = dumps(bundle["documentation"])
             reconcile_documentation(previous, bundle)
             if before != dumps(bundle["documentation"]):
-                atomic_write(Path(path) / "documentation.json", dumps(bundle["documentation"]))
+                reconciled = bundle_to_files(bundle)
+                for name in ("documentation.json", "README.md"):
+                    atomic_write(Path(path) / name, reconciled[name])
+                existing = self.read_files({"path": str(path)})
         except (Problem, KeyError, TypeError, AttributeError):
             # An unavailable schema or malformed definition is never a deletion.
             pass

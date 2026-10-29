@@ -1,4 +1,5 @@
 import io
+import json
 import tomllib
 import zipfile
 from pathlib import Path
@@ -493,7 +494,13 @@ def test_project_zip_contains_only_saved_declarative_files(app, client, worktree
 def test_project_zip_exports_selected_branch_and_invalid_saved_content(client, worktree):
     branch = client.post(f"/api/worktrees/{worktree}/branches", json={"name": "code-export"}).json()["id"]
     snapshot = client.get(f"/api/worktrees/{branch}").json()
-    files = {**snapshot["files"], "flow.json": "{", "templates/unicode.sql": "SELECT '東京';\n"}
+    files = {
+        **snapshot["files"],
+        "flow.json": "{",
+        "templates/unicode.sql": "SELECT '東京';\n",
+        "README.md": "# Exported context\n\nMarkdown travels with the project.\n",
+        "pyproject.toml": snapshot["files"]["pyproject.toml"] + "\n# Project dependencies\n",
+    }
     files["components/report.json"] = '{"nodes": [], "edges": []}\n'
     saved = client.put(f"/api/worktrees/{branch}", json={"revision": snapshot["revision"], "files": files})
     assert saved.status_code == 200, saved.text
@@ -501,6 +508,8 @@ def test_project_zip_exports_selected_branch_and_invalid_saved_content(client, w
     response = client.get(f"/api/worktrees/{branch}/archive.zip")
     with zipfile.ZipFile(io.BytesIO(response.content)) as archive:
         assert {name: archive.read(name).decode("utf-8") for name in archive.namelist()} == files
+        assert tomllib.loads(archive.read("pyproject.toml").decode())["project"]["dependencies"]
+        assert "project" not in json.loads(archive.read("documentation.json"))
     main = client.get(f"/api/worktrees/{worktree}/archive.zip")
     with zipfile.ZipFile(io.BytesIO(main.content)) as archive:
         assert archive.read("flow.json").decode() == snapshot["files"]["flow.json"]

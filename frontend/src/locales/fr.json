@@ -201,7 +201,7 @@
   "export_csv": "Exporter CSV",
   "export_xlsx": "Exporter XLSX",
   "export_oracle": "Exporter Oracle",
-  "emptyDocumentation": "Ajoutez du contexte qui accompagne votre pipeline.",
+  "emptyDocumentation": "Ajoutez du contexte qui accompagne votre pipeline dans README.md. Markdown est pris en charge.",
   "activeProject": "Projet actif",
   "aboutText": "Duckpad est un espace SQL local basé sur DuckDB, React Flow et Python. Les calculs sont manuels ; les fichiers du projet sont versionnés automatiquement.",
   "viewFiles": "Ouvrir les fichiers",

@@ -8,6 +8,7 @@ import {
   useReactFlow,
 } from "@xyflow/react";
 import { useT } from "./i18n";
+import { projectFileLanguage } from "./projectFiles";
 import Select from "./Select";
 import type { Json } from "./types";
 
@@ -333,7 +334,7 @@ export default function ComparisonView({
                       active.before === null ? "" : active.before,
                     )}
                     after={valueText(active.after === null ? "" : active.after)}
-                    language={active.file.endsWith(".sql") ? "sql" : "json"}
+                    language={projectFileLanguage(active.file)}
                   />
                 </Suspense>
               ) : (
