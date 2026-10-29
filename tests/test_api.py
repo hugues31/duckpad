@@ -29,6 +29,25 @@ def worktree(client):
     return client.post("/api/projects", json={"name": "API"}).json()["id"]
 
 
+@pytest.mark.parametrize("name", ["experiment/", "", "feature//change", "two words", "branch.lock"])
+def test_invalid_branch_names_have_actionable_errors_without_creating_worktrees(app, client, worktree, name):
+    before = client.get("/api/workspace").json()["worktrees"]
+    response = client.post(f"/api/worktrees/{worktree}/branches", json={"name": name})
+    assert response.status_code == 422, response.text
+    assert response.json()["detail"]["code"] == "invalid_branch_name"
+    assert "experiment/my-change" in response.json()["error"]
+    assert "cannot end with '/'" in response.json()["error"]
+    assert client.get("/api/workspace").json()["worktrees"] == before
+    projects = app.state.services.projects
+    main = projects.get(worktree)
+    assert projects.git(main["path"], "branch", "--format=%(refname:short)") == "main"
+    assert not list((projects.store.home / "worktrees").glob("*"))
+
+    corrected = client.post(f"/api/worktrees/{worktree}/branches", json={"name": "experiment/my-change"})
+    assert corrected.status_code == 200, corrected.text
+    assert corrected.json()["branch"] == "experiment/my-change"
+
+
 def test_session_reports_the_packaged_version(client):
     pyproject = tomllib.loads((Path(__file__).parents[1] / "pyproject.toml").read_text(encoding="utf-8"))
     assert (

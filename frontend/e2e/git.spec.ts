@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { signIn } from "./helpers";
+import en from "../src/locales/en.json" with { type: "json" };
 import fr from "../src/locales/fr.json" with { type: "json" };
 
 async function createProject(page: Page) {
@@ -53,6 +54,49 @@ async function openGit(page: Page, tab = "Compare versions") {
   const dialog = page.getByRole("dialog", { name: "Project Git workspace" });
   await dialog.getByRole("button", { name: tab, exact: true }).first().click();
   return dialog;
+}
+
+for (const language of ["en", "fr"] as const) {
+  test(`invalid branch names explain how to recover in ${language}`, async ({
+    page,
+  }) => {
+    const tree = await createProject(page);
+    if (language === "fr") {
+      await page.evaluate(() => localStorage.setItem("duckpad-language", "fr"));
+      await page.reload();
+    }
+    const labels = language === "fr" ? fr : en;
+    await page.getByTitle(labels.newBranch, { exact: true }).click();
+    const dialog = page.getByRole("dialog", { name: labels.newBranch });
+    const name = dialog.getByLabel(labels.branchName, { exact: true });
+    await expect(name).toHaveValue("");
+    await expect(name).toHaveAttribute("placeholder", "experiment/my-change");
+    await expect(dialog).toContainText(labels.branchNameHint);
+    await name.fill("experiment/");
+    await dialog
+      .getByRole("button", { name: labels.create, exact: true })
+      .click();
+    await expect(dialog.locator(".notice.error")).toHaveText(
+      labels.invalidBranchName,
+    );
+    await expect(name).toHaveValue("experiment/");
+    const workspace = await (await page.request.get("/api/workspace")).json();
+    expect(
+      workspace.worktrees.filter((w: any) => w.project === tree.project),
+    ).toHaveLength(1);
+    await name.fill("experiment/my-change");
+    await dialog
+      .getByRole("button", { name: labels.create, exact: true })
+      .click();
+    await expect(dialog).toBeHidden();
+    const after = await (await page.request.get("/api/workspace")).json();
+    const branch = after.worktrees.find(
+      (w: any) =>
+        w.project === tree.project && w.branch === "experiment/my-change",
+    );
+    expect(branch).toBeTruthy();
+    await expect(page).toHaveURL(new RegExp(`/worktrees/${branch.id}/flow`));
+  });
 }
 
 test("semantic comparison, actual parent, filters, frozen revisions and responsive keyboard navigation", async ({
