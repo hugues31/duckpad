@@ -1,9 +1,7 @@
 """Authenticated FastAPI endpoints for the local workspace."""
 
-import io
 import json
 import os
-import zipfile
 from contextlib import ExitStack, asynccontextmanager
 from pathlib import Path
 from typing import Annotated, Any, Literal
@@ -16,6 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.background import BackgroundTask
 
 from . import __version__, schemas
+from .archive import archive_bundle, import_warnings, read_archive, write_archive
 from .artifacts import CHUNK_SIZE
 from .auth import SESSION_LIFETIME, Auth
 from .bundle import bundle_to_files
@@ -96,7 +95,7 @@ def create_app(home: Path, watch=True, *, trusted_local=False):
         route = parts[1] if len(parts) > 1 else ""
         if route in ("users", "environments", "catalog", "resources", "sso", "extensions", "git-hosts"):
             access.instance_admin(user)
-        elif route == "projects" and len(parts) >= 3:
+        elif route == "projects" and len(parts) >= 3 and parts[2:] != ["import"]:
             access.require(user, parts[2], "reader" if request.method == "GET" else "admin")
             if len(parts) >= 4 and parts[3] == "connections" and request.method != "GET":
                 access.instance_admin(user)
@@ -337,6 +336,19 @@ def create_app(home: Path, watch=True, *, trusted_local=False):
     def create_project(data: schemas.NewProject, request: Request):
         return access.create(request.state.user, lambda: projects.create(data.name))
 
+    @app.post("/api/projects/import")
+    def import_project(
+        request: Request, file: Annotated[UploadFile, File()], name: Annotated[str, Form()] = ""
+    ):
+        bundle = archive_bundle(read_archive(file.file))
+        flow_name = bundle["flow"].get("name")
+        name = name.strip() or (flow_name.strip() if isinstance(flow_name, str) else "") or "Imported project"
+        worktree = access.create(request.state.user, lambda: projects.create(name, bundle, "import"))
+        return {
+            **worktree,
+            "warnings": import_warnings(bundle, access.record(worktree["project"])["connections"]),
+        }
+
     @app.post("/api/example")
     def example(request: Request, data: schemas.NewExample | None = None):
         return access.create(
@@ -475,12 +487,8 @@ def create_app(home: Path, watch=True, *, trusted_local=False):
     @app.get("/api/worktrees/{worktree}/archive.zip")
     def download_project(worktree: str):
         snapshot = projects.snapshot(worktree, committed=True)
-        output = io.BytesIO()
-        with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED) as archive:
-            for name, content in sorted(snapshot["files"].items()):
-                archive.writestr(name, content)
         return Response(
-            output.getvalue(),
+            write_archive(snapshot["files"]),
             media_type="application/zip",
             headers={"Content-Disposition": 'attachment; filename="duckpad-project.zip"'},
         )
@@ -614,7 +622,7 @@ def create_app(home: Path, watch=True, *, trusted_local=False):
     # Execution and results
 
     @app.get("/api/worktrees/{worktree}/status")
-    def status(worktree: str, environment: str = "dev"):
+    def status(worktree: str, environment: str):
         return engine.statuses(worktree, environment)
 
     @app.post("/api/worktrees/{worktree}/runs")
@@ -640,15 +648,15 @@ def create_app(home: Path, watch=True, *, trusted_local=False):
         return engine.cancel(run)
 
     @app.get("/api/worktrees/{worktree}/compile/{node}")
-    def compile_sql(worktree: str, node: str, environment: str = "dev"):
+    def compile_sql(worktree: str, node: str, environment: str):
         return engine.compile(worktree, environment, node)
 
     @app.get("/api/worktrees/{worktree}/exports/{node}")
-    def export_result(worktree: str, node: str, environment: str = "dev"):
+    def export_result(worktree: str, node: str, environment: str):
         return engine.export_result(worktree, environment, node)
 
     @app.get("/api/worktrees/{worktree}/exports/{node}/download")
-    def download_export(worktree: str, node: str, run: str, environment: str = "dev"):
+    def download_export(worktree: str, node: str, run: str, environment: str):
         opened = ExitStack()
         stream, record = opened.enter_context(engine.open_export(worktree, environment, node, run))
 
@@ -675,7 +683,7 @@ def create_app(home: Path, watch=True, *, trusted_local=False):
     def preview(
         worktree: str,
         node: str,
-        environment: str = "dev",
+        environment: str,
         port: str = "result",
         limit: int = 100,
         offset: int = 0,
@@ -694,7 +702,7 @@ def create_app(home: Path, watch=True, *, trusted_local=False):
         )
 
     @app.get("/api/worktrees/{worktree}/generations/{identity}")
-    def generation(worktree: str, identity: str, environment: str = "dev"):
+    def generation(worktree: str, identity: str, environment: str):
         return {"valid": engine.generation_valid(worktree, environment, identity)}
 
     @app.post("/api/worktrees/{worktree}/lineage")

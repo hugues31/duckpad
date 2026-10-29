@@ -21,7 +21,7 @@ import {
 } from "./navigation";
 import { Modal } from "./modals";
 import { AlertCircle, Loader2 } from "lucide-react";
-import { api, ApiError, send, withQuery } from "./api";
+import { api, ApiError, importProjectArchive, send, withQuery } from "./api";
 import { ProjectSettings } from "./Administration";
 import Canvas from "./Canvas";
 import CanvasHeader from "./CanvasHeader";
@@ -126,7 +126,7 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
   const environment =
     requestedEnvironment && environments.includes(requestedEnvironment)
       ? requestedEnvironment
-      : environments[0] || "dev";
+      : environments[0] || "";
   const setWorktree = (id: string) => {
     void navigate(worktreeUrl(id, tab, environment));
   };
@@ -261,7 +261,7 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
     });
   }, [worktree, authenticated]);
   useEffect(() => {
-    if (!worktree || !authenticated) return;
+    if (!worktree || !authenticated || !environment) return;
     let live = true;
     let timer: number | undefined;
     // Each poll starts after the previous one ends, so responses never overlap.
@@ -625,6 +625,14 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
         openProject(next.id);
       },
       createExample,
+      importArchive: async (file, name) => {
+        const result = await importProjectArchive(file, name);
+        await refreshWorkspace();
+        return {
+          warnings: result.warnings,
+          open: () => openProject(result.id),
+        };
+      },
     });
   }
   async function createExample(name?: string) {

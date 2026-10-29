@@ -93,18 +93,17 @@ class Engine:
         self.artifacts = Artifacts(store)
         self.contexts, self.active = {}, {}
         self.threads = []
-        for run in store.all("run"):
-            if run["status"] in UNFINISHED_RUN_STATUSES:
-                run["status"] = "interrupted"
-                run["error"] = (
-                    "The backend stopped before completion was confirmed. Manual recomputation is required."
-                )
-                for node in run["nodes"].values():
-                    if node["status"] == "running":
-                        node["status"] = "interrupted"
-                        if node.get("kind") == "export":
-                            node["external_outcome"] = "unknown"
-                self._persist(run, [])
+        for run in store.runs_with_statuses(UNFINISHED_RUN_STATUSES):
+            run["status"] = "interrupted"
+            run["error"] = (
+                "The backend stopped before completion was confirmed. Manual recomputation is required."
+            )
+            for node in run["nodes"].values():
+                if node["status"] == "running":
+                    node["status"] = "interrupted"
+                    if node.get("kind") == "export":
+                        node["external_outcome"] = "unknown"
+            self._persist(run, [])
 
     def context(self, worktree, environment, create=False):
         """The live DuckDB context of an existing worktree in a configured environment."""
@@ -213,7 +212,7 @@ class Engine:
 
     def reset_project(self, project):
         with self.lock:
-            worktrees = {w["id"] for w in self.store.all("worktree") if w["project"] == project}
+            worktrees = {w["id"] for w in self.store.worktrees(project)}
             if worktrees & self.active.keys():
                 raise Problem(
                     "Stop active executions before changing project connections or deleting the project", 409
@@ -510,15 +509,17 @@ class Engine:
                     state["status"] = "canceled" if execution.canceled else "blocked"
         finally:
             with self.lock:
-                if execution.cursor:
-                    with suppress(duckdb.Error, Problem):
-                        execution.cursor.close()
-                execution.token["cursor"] = None
-                if execution.canceled:
-                    run["status"] = "canceled"
-                run.update(finished=now(), duration=time.monotonic() - started)
-                self._persist(run, secrets)
-                self.active.pop(context.worktree, None)
+                try:
+                    if execution.cursor:
+                        with suppress(duckdb.Error, Problem):
+                            execution.cursor.close()
+                    execution.token["cursor"] = None
+                    if execution.canceled:
+                        run["status"] = "canceled"
+                    run.update(finished=now(), duration=time.monotonic() - started)
+                    self._persist(run, secrets)
+                finally:
+                    self.active.pop(context.worktree, None)
 
     @staticmethod
     def _skip_reason(execution, key):
@@ -929,6 +930,7 @@ class Engine:
 
     def compile(self, worktree, environment, node_id):
         snapshot = self.projects.snapshot(worktree)
+        self.catalog.environment(environment)
         if not snapshot["bundle"]:
             raise Problem("Project files are invalid", 422, snapshot["diagnostics"])
         nodes, edges, _ = expand(snapshot["bundle"])

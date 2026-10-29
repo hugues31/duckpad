@@ -12,6 +12,7 @@ from filelock import FileLock, Timeout
 
 from .app import create_app
 from .logging import server_log_config
+from .util import Problem
 
 
 def main():
@@ -50,24 +51,27 @@ def main():
         parser.error(
             "This Duckpad instance is already running. Open its browser window or choose another --home."
         )
-    app = create_app(args.home, trusted_local=args.trusted_local)
-    print(f"Duckpad · http://{args.host}:{args.port}", flush=True)
-    if args.trusted_local:
-        print(
-            "Trusted local mode: SQL runs without OS isolation, with your operating-system permissions. "
-            "Use only trusted projects on your own computer; do not share or proxy this instance.",
-            flush=True,
-        )
-    if app.state.auth.initial_password:
-        print(
-            f"Initial administrator login: admin\nPassword: {app.state.auth.initial_password}\nSave this password. It will not be displayed again.",
-            flush=True,
-        )
-    if not args.no_browser:
-        timer = threading.Timer(1.0, lambda: webbrowser.open(f"http://{args.host}:{args.port}"))
-        timer.daemon = True
-        timer.start()
     try:
+        try:
+            app = create_app(args.home, trusted_local=args.trusted_local)
+        except Problem as error:
+            parser.error(str(error))
+        print(f"Duckpad · http://{args.host}:{args.port}", flush=True)
+        if args.trusted_local:
+            print(
+                "Trusted local mode: SQL runs without OS isolation, with your operating-system permissions. "
+                "Use only trusted projects on your own computer; do not share or proxy this instance.",
+                flush=True,
+            )
+        if app.state.auth.initial_password:
+            print(
+                f"Initial administrator login: admin\nPassword: {app.state.auth.initial_password}\nSave this password. It will not be displayed again.",
+                flush=True,
+            )
+        if not args.no_browser:
+            timer = threading.Timer(1.0, lambda: webbrowser.open(f"http://{args.host}:{args.port}"))
+            timer.daemon = True
+            timer.start()
         uvicorn.run(
             app, host=args.host, port=args.port, log_level=args.log_level, log_config=server_log_config()
         )

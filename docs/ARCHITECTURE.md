@@ -9,7 +9,7 @@ Duckpad has a Python API process serving a compiled React application and isolat
 | `app.py`, `schemas.py`, `auth.py`, `access.py`, `cli.py` | HTTP API and request bodies, individual accounts, salted password hashes, owned sessions and instance/project authorization, localhost startup, process lease |
 | `services.py` | Wiring of the instance services shared by the API, tests and scripts |
 | `models.py`, `store.py`, `migrations/`, `catalog.py` | SQLModel tables, Alembic migrations, transactions, environments, reusable connections and secret redaction |
-| `projects.py`, `bundle.py`, `merge.py` | Git worktrees, revision capture, external-save batching and durable conflict proposals; declarative file layout and validation; three-way merge |
+| `projects.py`, `bundle.py`, `archive.py`, `merge.py` | Git worktrees, revision capture, external-save batching and durable conflict proposals; declarative file layout and validation; bounded project ZIP export and import; three-way merge |
 | `git_workspace.py`, `remote.py`, `git_credentials.py` | Branches and reviewed merges; bounded fetch and leased push in an isolated Git and SSH environment; per-account SSH keys, trusted Git hosts and URL-bound consent |
 | `templates.py`, `builtin_templates.py`, `components.py` | Typed SQL compilation, read/write contracts, built-in templates, recursive expansion, parameter exposure, independent imports |
 | `engine.py`, `datasets.py`, `materialize.py` | Admission, immutable execution configuration, DuckDB ownership, cancellation, output publication and invalidation |
@@ -140,7 +140,29 @@ Duckpad's workers, CPU affinity or container quotas. In containers, the operatin
 system counters exposed by the runtime determine visibility. Missing metrics are
 shown as unavailable, and CPU sampling resumes after two valid snapshots.
 
-The main endpoint groups are `/session`, `/workspace`, `/projects`, `/example`, `/worktrees`, `/catalog`, `/environments`, `/runs`, `/conflicts`, `/library`, `/users`, `/password`, `/ssh-key`, `/git-hosts` and `/resources`. Uploads use `/worktrees/{id}/uploads` and are stored under `resources/<project>/`. Request bodies are validated; invalid requests receive a 422 response in the same `{"error", "detail"}` format as other failures. A worktree exposes definition snapshots and saves, branch/merge history, compiled SQL, status, previews, lineage and manual run launch. See the route definitions in `src/duckpad/app.py` for request shapes. APIs use the same services as the interface; there is no second runner or separate editor state.
+The main endpoint groups are `/session`, `/workspace`, `/projects`, `/example`, `/worktrees`, `/catalog`, `/environments`, `/runs`, `/conflicts`, `/library`, `/users`, `/password`, `/ssh-key`, `/git-hosts` and `/resources`. Uploads use `/worktrees/{id}/uploads` and are stored under `resources/<project>/`. `/projects/import` creates a project from the declarative files of an uploaded ZIP and reports referenced connections and absolute input files that the archive cannot carry. Request bodies are validated; invalid requests receive a 422 response in the same `{"error", "detail"}` format as other failures. A worktree exposes definition snapshots and saves, branch/merge history, compiled SQL, status, previews, lineage and manual run launch. See the route definitions in `src/duckpad/app.py` for request shapes. APIs use the same services as the interface; there is no second runner or separate editor state.
+
+Execution and result operations require an explicit configured environment. Under
+`/api/worktrees/{worktree}`, GET `status`, `compile/{node}`, `preview/{node}`,
+`exports/{node}`, `exports/{node}/download`, and `generations/{identity}` require
+the `environment` query parameter. POST `runs` and `lineage` require
+`environment` in their JSON body. Omitting it returns 422 before the operation
+runs; an unknown or deleted environment returns 404. No operation defaults to
+`dev`. The interface selects from the current catalog and sends that selection.
+
+For example, with a configured `prod` environment:
+
+```http
+POST /api/worktrees/{worktree}/runs
+Content-Type: application/json
+
+{"environment": "prod"}
+```
+
+Read its results with `GET /api/worktrees/{worktree}/preview/{node}?environment=prod`.
+Downloads also require the export run ID:
+`GET /api/worktrees/{worktree}/exports/{node}/download?environment=prod&run={run}`.
+The initial `dev` and `prod` catalog entries are editable configuration, not API defaults.
 
 ## Authorization and execution isolation
 

@@ -76,7 +76,10 @@ def smoke(python):
                 assert "Password:" not in next_log.read_text()
                 assert client.post("/api/login", json={"password": password}).status_code == 200
                 assert client.get(f"/api/runs/{run['id']}").json()["status"] == "success"
-                assert client.get(f"/api/worktrees/{example['id']}/preview/orders").status_code == 404
+                assert (
+                    client.get(f"/api/worktrees/{example['id']}/preview/orders?environment=dev").status_code
+                    == 404
+                )
                 second.terminate()
                 second.wait(10)
             return {

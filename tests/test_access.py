@@ -30,6 +30,7 @@ ROUTE_ACCESS = {
         "GET /api/library",
         "GET /api/runs",
         "POST /api/projects",
+        "POST /api/projects/import",
         "POST /api/example",
         "POST /api/password",
         "GET /api/ssh-key",
@@ -405,11 +406,16 @@ def test_reader_results_and_no_recalculation(instance):
     worktree = client.post("/api/example").json()
     app.state.access.member(worktree["project"], user["id"], "reader")
     store, engine = app.state.services.store, app.state.services.engine
-    assert request(client, headers, "GET", f"/worktrees/{worktree['id']}/status").status_code == 200
+    assert (
+        request(client, headers, "GET", f"/worktrees/{worktree['id']}/status?environment=dev").status_code
+        == 200
+    )
     assert engine.context(worktree["id"], "dev").db is None
-    run = client.post(f"/api/worktrees/{worktree['id']}/runs", json={}).json()
+    run = client.post(f"/api/worktrees/{worktree['id']}/runs", json={"environment": "dev"}).json()
     assert wait_run(store, run, timeout=30)["status"] == "success"
-    response = request(client, headers, "GET", f"/worktrees/{worktree['id']}/preview/orders").json()
+    response = request(
+        client, headers, "GET", f"/worktrees/{worktree['id']}/preview/orders?environment=dev"
+    ).json()
     assert response["count"] == 120
     assert request(client, headers, "POST", f"/runs/{run['id']}/cancel", json={}).status_code == 403
     assert len(store.all("run")) == 1
