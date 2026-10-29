@@ -2041,6 +2041,10 @@ small {
   letter-spacing: -0.04em;
   margin: 8px 0;
 }
+#projects-heading:focus {
+  /* Keep the navigation focus target without outlining a noninteractive title. */
+  outline: none;
+}
 .dashboard-heading h1,
 .login-card h1 {
   color: var(--accent);
