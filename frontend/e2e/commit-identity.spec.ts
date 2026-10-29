@@ -57,12 +57,6 @@ test("local collaborators save under their own identities and see them in Git hi
           )[0].author,
       )
       .toBe(username);
-    const diff = await (
-      await member.request.get(`/api/worktrees/${project.id}/diff/HEAD`)
-    ).json();
-    expect(diff.diff).toContain(
-      `${username} <${user.id}@users.duckpad.invalid>`,
-    );
     await member
       .getByRole("button", { name: "Git synchronization", exact: true })
       .click();

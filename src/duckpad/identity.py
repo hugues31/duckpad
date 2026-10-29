@@ -1,6 +1,5 @@
 """Server-owned Git attribution scoped to one authenticated request."""
 
-import os
 import re
 from contextlib import contextmanager
 from contextvars import ContextVar
@@ -42,14 +41,3 @@ def commit_author(identity):
         yield
     finally:
         current_identity.reset(token)
-
-
-def git_environment(identity):
-    # Explicit author AND committer override any identity inherited from the server.
-    return {
-        **os.environ,
-        "GIT_AUTHOR_NAME": identity["name"],
-        "GIT_AUTHOR_EMAIL": identity["email"],
-        "GIT_COMMITTER_NAME": identity["name"],
-        "GIT_COMMITTER_EMAIL": identity["email"],
-    }

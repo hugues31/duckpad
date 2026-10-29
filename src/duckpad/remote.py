@@ -4,18 +4,19 @@ import os
 import re
 import shlex
 import shutil
-import subprocess
 import tempfile
 import time
 from pathlib import Path
 from urllib.parse import urlsplit
 
+from . import git_command
 from .bundle import files_to_bundle, validate
+from .git_command import GitError, GitTimeout
 from .git_credentials import SCP_URL, GitCredentials, transport
 from .util import Problem, digest, now, uid
 
 NETWORK_TIMEOUT = 30
-# Server-wide Git and SSH settings, agents and helpers must never authenticate network Git.
+# Every Git command drops the server's Git, SSH and credential-manager variables except these.
 INHERITED_GIT_VARIABLES = {"GIT_SSL_CAINFO", "GIT_SSL_CAPATH"}
 
 
@@ -51,32 +52,24 @@ def validate_url(value):
 
 
 def network_environment(home, ssh_command):
-    """Environment of one network Git process, isolated from the server account's credentials."""
-    env = {
-        key: value
-        for key, value in os.environ.items()
-        if not key.startswith(("GIT_", "SSH_", "GCM_")) or key in INHERITED_GIT_VARIABLES
-    }
-    env.update(
+    """Variables isolating one network Git process from the server account's credentials.
+
+    They extend git_command.environment, which already ignores system and global Git configuration.
+    """
+    return {
+        **{key: os.environ[key] for key in INHERITED_GIT_VARIABLES if key in os.environ},
         # A private HOME hides ~/.gitconfig, ~/.git-credentials and ~/.netrc from Git and curl.
-        HOME=home,
-        XDG_CONFIG_HOME=home,
-        GIT_CONFIG_NOSYSTEM="1",
-        GIT_CONFIG_GLOBAL=os.devnull,
-        GIT_TERMINAL_PROMPT="0",
-        GIT_ASKPASS="",
-        SSH_ASKPASS_REQUIRE="never",
-        GCM_INTERACTIVE="Never",
-        GIT_SSH_COMMAND=ssh_command,
-        GIT_SSH_VARIANT="ssh",
+        "HOME": home,
+        "XDG_CONFIG_HOME": home,
+        "GIT_ASKPASS": "",
+        "SSH_ASKPASS_REQUIRE": "never",
+        "GCM_INTERACTIVE": "Never",
+        "GIT_SSH_COMMAND": ssh_command,
+        "GIT_SSH_VARIANT": "ssh",
         # Kerberos must never authenticate with the server account's tickets or keytab.
-        KRB5CCNAME=f"FILE:{home}/no-kerberos-ticket",
-        KRB5_CLIENT_KTNAME=os.devnull,
-        # Error classification reads Git's English messages.
-        LC_ALL="C",
-    )
-    env.pop("SSH_AUTH_SOCK", None)
-    return env
+        "KRB5CCNAME": f"FILE:{home}/no-kerberos-ticket",
+        "KRB5_CLIENT_KTNAME": os.devnull,
+    }
 
 
 def ssh_command(identity, known_hosts):
@@ -99,6 +92,44 @@ def ssh_command(identity, known_hosts):
     for option in options:
         command += ["-o", option]
     return shlex.join(command)
+
+
+def network_problem(output, key):
+    """A user message for a failed network Git command, which never echoes its output."""
+    text = output.lower()
+    if "host key verification" in text or "host key for" in text:
+        return Problem(
+            "The Git host's SSH key does not match this instance's trusted hosts. Ask an instance "
+            "administrator to check the Git hosts settings.",
+            502,
+        )
+    if any(
+        word in text
+        for word in (
+            "authentication",
+            "permission denied",
+            "could not read username",
+            "repository not found",
+        )
+    ):
+        return Problem(
+            "Git authentication failed. Add your Duckpad SSH public key to your account on the Git "
+            "host, check that it can access this repository, then try again."
+            if key
+            else "This HTTPS repository requires authentication. Duckpad reads only public "
+            "repositories over HTTPS; use an SSH origin with your personal key.",
+            502,
+        )
+    if any(word in text for word in ("stale info", "rejected", "non-fast-forward")):
+        return Problem(
+            "The remote changed or rejected the push. Fetch and review incoming changes before retrying.",
+            409,
+        )
+    # Remote stderr can contain credentials, private paths or attacker-controlled text.
+    return Problem(
+        "Git network operation failed. Check the repository URL and server connectivity, then fetch again.",
+        502,
+    )
 
 
 class Remotes:
@@ -143,7 +174,7 @@ class Remotes:
             if url:
                 validate_url(url)
                 self.credentials.check_origin(url)
-                self.git(worktree["path"], "check-ref-format", "refs/heads/" + remote_branch)
+                git_command.check_branch_name(worktree["path"], remote_branch)
             changed = (url or None) != config["url"]
             if changed:
                 self.credentials.forget_project(worktree["project"])
@@ -192,7 +223,6 @@ class Remotes:
         """Run network Git with the given account key for SSH, or without credentials for HTTPS."""
         allowed = "ssh" if key else "https"
         settings = [
-            "core.hooksPath=/dev/null",
             "core.askPass=",
             "credential.helper=",
             # Without this, HTTPS retries a 401 with an empty user name, enabling Kerberos login.
@@ -212,52 +242,20 @@ class Remotes:
             if key:
                 with os.fdopen(os.open(identity, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "w") as stream:
                     stream.write(key)
-            command = ["git", *(f for s in settings for f in ("-c", s)), "-C", str(path), *args]
-            env = network_environment(directory, ssh_command(identity, known_hosts))
             try:
-                result = subprocess.run(
-                    command, env=env, text=True, capture_output=True, timeout=NETWORK_TIMEOUT
+                return git_command.run(
+                    path,
+                    *args,
+                    settings=settings,
+                    env=network_environment(directory, ssh_command(identity, known_hosts)),
+                    timeout=NETWORK_TIMEOUT,
                 )
-            except subprocess.TimeoutExpired as error:
+            except GitTimeout as error:
                 raise Problem(
                     "Git network operation timed out. Check server connectivity, then fetch again.", 504
                 ) from error
-        if result.returncode:
-            text = result.stderr.lower()
-            if "host key verification" in text or "host key for" in text:
-                raise Problem(
-                    "The Git host's SSH key does not match this instance's trusted hosts. Ask an instance "
-                    "administrator to check the Git hosts settings.",
-                    502,
-                )
-            if any(
-                word in text
-                for word in (
-                    "authentication",
-                    "permission denied",
-                    "could not read username",
-                    "repository not found",
-                )
-            ):
-                raise Problem(
-                    "Git authentication failed. Add your Duckpad SSH public key to your account on the Git "
-                    "host, check that it can access this repository, then try again."
-                    if key
-                    else "This HTTPS repository requires authentication. Duckpad reads only public "
-                    "repositories over HTTPS; use an SSH origin with your personal key.",
-                    502,
-                )
-            if any(word in text for word in ("stale info", "rejected", "non-fast-forward")):
-                raise Problem(
-                    "The remote changed or rejected the push. Fetch and review incoming changes before retrying.",
-                    409,
-                )
-            # Remote stderr can contain credentials, private paths or attacker-controlled text.
-            raise Problem(
-                "Git network operation failed. Check the repository URL and server connectivity, then fetch again.",
-                502,
-            )
-        return result.stdout.strip()
+            except GitError as error:
+                raise network_problem(error.output, key) from error
 
     def status(self, worktree_id):
         with self.projects.lock:

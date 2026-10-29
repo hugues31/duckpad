@@ -62,24 +62,31 @@ class Database:
                     target = self.pending.get(response["id"])
                 if target:
                     target.put(response)
+        except OSError:
+            # Termination can reset the transport instead of producing a clean EOF.
+            pass
         finally:
-            with self.lock:
-                self.closed = True
-                for target in self.pending.values():
-                    target.put({"error": "The isolated SQL worker stopped", "type": "Error"})
+            self._stopped()
+
+    def _stopped(self):
+        with self.lock:
+            self.closed = True
+            for target in self.pending.values():
+                target.put({"error": "The isolated SQL worker stopped", "type": "Error"})
 
     def call(self, operation, **arguments):
         target = queue.Queue()
-        with self.lock:
-            if self.closed:
-                raise Problem("The isolated SQL worker is unavailable", 503)
-            self.serial += 1
-            identity = self.serial
-            self.pending[identity] = target
-            self.socket.sendall(
-                (json.dumps(clean({"id": identity, "operation": operation, **arguments})) + "\n").encode()
-            )
+        identity = None
         try:
+            with self.lock:
+                if self.closed:
+                    raise Problem("The isolated SQL worker is unavailable", 503)
+                self.serial += 1
+                identity = self.serial
+                self.pending[identity] = target
+                self.socket.sendall(
+                    (json.dumps(clean({"id": identity, "operation": operation, **arguments})) + "\n").encode()
+                )
             result = target.get()
             if "error" in result:
                 error_type = getattr(duckdb, result.get("type", "Error"), duckdb.Error)
@@ -87,9 +94,14 @@ class Database:
                     error_type = duckdb.Error
                 raise error_type(result["error"])
             return result.get("value")
+        except OSError:
+            # A concurrent close may win before the reader marks the worker stopped.
+            self._stopped()
+            raise Problem("The isolated SQL worker is unavailable", 503) from None
         finally:
-            with self.lock:
-                self.pending.pop(identity, None)
+            if identity is not None:
+                with self.lock:
+                    self.pending.pop(identity, None)
 
     def cursor(self):
         return Cursor(self, self.call("cursor"))

@@ -3,6 +3,7 @@
 import copy
 import threading
 from concurrent.futures import ThreadPoolExecutor
+from unittest.mock import Mock
 
 import duckdb
 import pytest
@@ -119,6 +120,37 @@ def test_isolated_csv_pipeline_ignores_an_authorized_unconfigured_connection(iso
     assert run["nodes"]["oracle"]["status"] == "blocked"
     assert "requires user in staging" in run["nodes"]["oracle"]["error"]
     assert engine.preview(worktree["id"], "staging", "total")["count"] == 2
+
+
+@pytest.mark.parametrize("discard", [False, True])
+def test_concurrent_startup_closes_unpublished_database(isolated, monkeypatch, discard):
+    engine = isolated.engine
+    worktree = project(isolated, "Concurrent startup")["id"]
+    entered, release = threading.Event(), threading.Event()
+    unused, published = Mock(closed=False), Mock(closed=False)
+    databases = iter([unused, published])
+
+    def open_database(*_args):
+        database = next(databases)
+        if database is unused:
+            entered.set()
+            assert release.wait(30)
+        return database
+
+    monkeypatch.setattr(engine, "_open", open_database)
+    with ThreadPoolExecutor(1) as pool:
+        starting = pool.submit(engine.context, worktree, "dev", create=True)
+        try:
+            assert entered.wait(PROMPT)
+            if discard:
+                engine.discard_worktree(worktree)
+            current = engine.context(worktree, "dev", create=True)
+        finally:
+            release.set()
+        assert starting.result(PROMPT) is current
+    assert current.db is published
+    unused.close.assert_called_once_with()
+    published.close.assert_not_called()
 
 
 def test_remote_access_follows_the_secret_type_rather_than_the_connector_id(isolated, monkeypatch):
