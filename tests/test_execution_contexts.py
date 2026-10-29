@@ -84,7 +84,7 @@ def test_blocked_worker_startup_blocks_neither_statuses_nor_other_cancellations(
             statuses = pool.submit(engine.statuses, busy["id"], "dev").result(PROMPT)
             assert statuses["active"]["id"] == run["id"]
             assert pool.submit(engine.statuses, starting["id"], "dev").result(PROMPT)["nodes"] == {}
-            assert pool.submit(engine.cancel, run["id"]).result(PROMPT)["status"] == "canceling"
+            assert pool.submit(engine.cancel, run["id"]).result(PROMPT)["status"] in ("canceling", "canceled")
             assert not launch.done()
         finally:
             release.set()

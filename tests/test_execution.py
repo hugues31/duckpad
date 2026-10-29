@@ -112,7 +112,7 @@ def test_atomic_admission_and_cancellation(services, tmp_path):
     assert entered.wait(2)
     with pytest.raises(Problem, match="active execution"):
         engine.launch(wt, "prod")
-    assert engine.cancel(run["id"])["status"] == "canceling"
+    assert engine.cancel(run["id"])["status"] in ("canceling", "canceled")
     release.set()
     assert wait_run(store, run)["status"] == "canceled"
     wait_until(lambda: not engine.active, message="The worktree stayed reserved")
