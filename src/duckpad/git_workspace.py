@@ -213,7 +213,10 @@ class GitWorkspace:
             # Without --force Git also protects untracked files and locked worktrees.
             self.git(current["path"], "worktree", "remove", remove["path"])
             self.git(current["path"], "update-ref", "-d", "refs/heads/" + remove["branch"], head)
+            artifacts = [a["id"] for a in self.store.all("artifact") if a["worktree"] == remove_id]
             self.store.delete("worktree", remove_id)
+            for identity in artifacts:
+                (self.store.home / "artifacts" / identity).unlink(missing_ok=True)
             self.projects.observed.pop(remove_id, None)
             self.projects.pending.pop(remove_id, None)
             return {"ok": True}

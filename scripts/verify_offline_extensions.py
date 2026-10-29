@@ -17,6 +17,7 @@ from pathlib import Path
 
 import duckdb
 
+from duckpad.auth import Auth
 from duckpad.services import Services
 from duckpad.util import Problem, literal
 
@@ -86,6 +87,7 @@ def verify_duckpad(home, cache, isolated, allow_unsigned=False, import_file=None
             },
         )
         if isolated:
+            Auth(instance.store)
             instance.engine.access.own(worktree, {"id": "admin"}, ["local", "h3"])
         worktree_id = worktree["id"]
     finally:

@@ -105,7 +105,7 @@ def test_declarative_attached_connector_native_insert_and_environment_capture(se
     assert engine.preview(branch, "prod", "source")["rows"][0]["values"] == [1, 100]
 
 
-def test_setup_rejects_data_operations_and_secret_redaction_survives_definition_deletion(services):
+def test_setup_rejects_data_operations_and_referenced_connector_deletion(services):
     store, _, catalog, _ = services
     for sql in ("SELECT 1;", "CREATE TABLE hidden AS SELECT 1;", "COPY t TO 'hidden.csv';"):
         with pytest.raises(Problem):
@@ -129,7 +129,10 @@ def test_setup_rejects_data_operations_and_secret_redaction_survives_definition_
     _, secrets = catalog.capture(["hidden"], "dev")
     assert secret not in str(catalog.public())
     assert secret.replace("'", "''") not in redact(secret.replace("'", "''"), secrets)
-    store.delete("connector", "secret_test")
+    with pytest.raises(Problem, match="Remove this connector's connections"):
+        catalog.delete("connector", "secret_test")
     assert secret not in str(catalog.public())
-    with pytest.raises(Problem, match="Missing connector"):
-        catalog.capture(["hidden"], "dev")
+    assert catalog.capture(["hidden"], "dev")[0]
+    catalog.delete("connection", "hidden")
+    catalog.delete("connector", "secret_test")
+    assert store.get("connector", "secret_test") is None

@@ -8,7 +8,7 @@ Duckpad has a Python API process serving a compiled React application and isolat
 | --- | --- |
 | `app.py`, `schemas.py`, `auth.py`, `access.py`, `cli.py` | HTTP API and request bodies, individual accounts, salted password hashes, owned sessions and instance/project authorization, localhost startup, process lease |
 | `services.py` | Wiring of the instance services shared by the API, tests and scripts |
-| `store.py`, `catalog.py` | SQLite records, environments, reusable connections, typed connector setup and secret redaction |
+| `models.py`, `store.py`, `migrations/`, `catalog.py` | SQLModel tables, Alembic migrations, transactions, environments, reusable connections and secret redaction |
 | `projects.py`, `bundle.py`, `merge.py` | Git worktrees, revision capture, external-save batching and durable conflict proposals; declarative file layout and validation; three-way merge |
 | `git_workspace.py`, `remote.py`, `git_credentials.py` | Branches and reviewed merges; bounded fetch and leased push in an isolated Git and SSH environment; per-account SSH keys, trusted Git hosts and URL-bound consent |
 | `templates.py`, `builtin_templates.py`, `components.py` | Typed SQL compilation, read/write contracts, built-in templates, recursive expansion, parameter exposure, independent imports |

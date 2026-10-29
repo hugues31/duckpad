@@ -79,7 +79,7 @@ class Access:
         if "active" in data and not isinstance(data["active"], bool):
             raise Problem("Active must be a boolean")
         credentials = Auth.credentials(data["password"]) if "password" in data else {}
-        with self.membership_lock, self.store.lock:
+        with self.membership_lock, self.store.transaction():
             user = self.store.get("user", identity)
             if not user:
                 raise Problem("User not found", 404)
@@ -105,7 +105,7 @@ class Access:
     def member(self, project, identity, role):
         if role is not None and role not in LEVELS:
             raise Problem("Unknown project role")
-        with self.membership_lock, self.store.lock:
+        with self.membership_lock, self.store.transaction():
             user = self.store.get("user", identity)
             if role is not None and (not user or not user["active"]):
                 raise Problem("Choose an active user")
@@ -129,7 +129,7 @@ class Access:
             raise Problem("Choose existing connections")
         if before_change is not None:
             before_change()
-        with self.store.lock:
+        with self.store.transaction():
             record = self.record(project)
             record["connections"] = list(dict.fromkeys(references))
             self.store.put("access", project, record)

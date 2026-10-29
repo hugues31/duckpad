@@ -62,8 +62,8 @@ class Auth:
         if role not in ("admin", "member"):
             raise Problem("Unknown instance role")
         credentials = self.credentials(password)
-        with self.store.lock:
-            if any(u["username"].casefold() == username.casefold() for u in self.store.all("user")):
+        with self.store.transaction():
+            if self.store.find_user(username):
                 raise Problem("Username already exists", 409)
             user = {"id": uid("user_"), "username": username, "role": role, "active": True, **credentials}
             self.store.put("user", user["id"], user)
@@ -82,16 +82,14 @@ class Auth:
                 raise Problem("Too many login attempts. Try again in a minute.", 429)
             attempt = time.time()
             recent.append(attempt)
-        user = next(
-            (u for u in self.store.all("user") if u["username"].casefold() == username.casefold()), None
-        )
+        user = self.store.find_user(username)
         # Run the same password derivation for unknown and disabled accounts.
         record = user if user and not user.get("oidc") else {"salt": "00" * 32, "hash": "00" * 64}
         valid = hmac.compare_digest(self.hash_password(password[:1024], record["salt"]), record["hash"])
         if not user or user.get("oidc") or not user["active"] or not valid or len(password) > 1024:
             raise Problem("Invalid username or password", 401)
         token = secrets.token_urlsafe(32)
-        with self.store.lock:
+        with self.store.transaction():
             current = self.store.get("user", user["id"])
             if not current["active"] or current["hash"] != user["hash"]:
                 raise Problem("Invalid username or password", 401)
@@ -110,9 +108,7 @@ class Auth:
         return token
 
     def _purge_expired(self, now):
-        for key, session in self.store.items("session"):
-            if session["expires"] < now:
-                self.store.delete("session", key)
+        self.store.purge_expired("session", now)
 
     def check(self, token):
         session = self.store.get("session", session_key(token))

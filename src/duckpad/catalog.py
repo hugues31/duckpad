@@ -87,35 +87,6 @@ class Catalog:
         self.store = store
         self._validated = set()
         self.on_change = lambda: None
-        if not store.get("settings", "catalog_initialized"):
-            for definition in PRESETS:
-                store.put("connector", definition["id"], definition)
-            store.put(
-                "connection",
-                "local",
-                {
-                    "id": "local",
-                    "name": "Local workspace",
-                    "connector": "local",
-                    "environments": {"dev": {"root": ""}, "prod": {"root": ""}},
-                    "secret_fields": [],
-                },
-            )
-            store.put("settings", "environments", ["dev", "prod"])
-            store.put(
-                "settings",
-                "environment_details",
-                {
-                    name: {
-                        "id": name,
-                        "label": name,
-                        "color": "#e05252" if name == "prod" else "#31a878",
-                        "confirm_before_run": name == "prod",
-                    }
-                    for name in ("dev", "prod")
-                },
-            )
-            store.put("settings", "catalog_initialized", True)
 
     def public(self):
         connections = copy.deepcopy(self.store.all("connection"))
@@ -129,36 +100,35 @@ class Catalog:
         return {
             "connectors": self.store.all("connector"),
             "connections": connections,
-            "environments": self.store.get("settings", "environments"),
+            "environments": self.environment_names(),
             "environment_details": self.environments(),
             "duckdb_version": duckdb.__version__,
         }
 
     def environments(self):
-        details = self.store.get("settings", "environment_details")
-        return [details[name] for name in self.store.get("settings", "environments")]
+        return self.store.all("environment")
+
+    def environment_names(self):
+        return [item["id"] for item in self.environments()]
 
     def environment(self, identity):
-        for environment in self.environments():
-            if environment["id"] == identity:
-                return environment
-        raise Problem("Unknown environment", 404)
+        environment = self.store.get("environment", identity)
+        if environment is None:
+            raise Problem("Unknown environment", 404)
+        return environment
 
     def save_environment(self, data, *, create=False):
-        identity = data["id"]
-        names = self.store.get("settings", "environments")
-        if create and identity in names:
-            raise Problem("An environment with this identifier already exists", 409)
-        if not create:
-            self.environment(identity)
-        details = self.store.get("settings", "environment_details")
-        details[identity] = data
-        self.store.put("settings", "environment_details", details)
-        if create:
-            self.store.put("settings", "environments", [*names, identity])
-            for connection in self.store.all("connection"):
-                connection["environments"][identity] = {}
-                self.store.put("connection", connection["id"], connection)
+        with self.store.transaction():
+            identity = data["id"]
+            if create and self.store.get("environment", identity) is not None:
+                raise Problem("An environment with this identifier already exists", 409)
+            if not create:
+                self.environment(identity)
+            self.store.put("environment", identity, data)
+            if create:
+                for connection in self.store.all("connection"):
+                    connection["environments"][identity] = {}
+                    self.store.put("connection", connection["id"], connection)
 
     def validate_environment_deletion(self, identity):
         self.environment(identity)
@@ -166,15 +136,9 @@ class Catalog:
             raise Problem("Keep at least one environment", 409)
 
     def delete_environment(self, identity):
-        self.validate_environment_deletion(identity)
-        names = [item["id"] for item in self.environments() if item["id"] != identity]
-        details = self.store.get("settings", "environment_details")
-        details.pop(identity, None)
-        self.store.put("settings", "environments", names)
-        self.store.put("settings", "environment_details", details)
-        for connection in self.store.all("connection"):
-            connection["environments"].pop(identity, None)
-            self.store.put("connection", connection["id"], connection)
+        with self.store.transaction():
+            self.validate_environment_deletion(identity)
+            self.store.delete("environment", identity)
 
     def save(self, kind, data, *, create=False, before_change=None):
         """Validate and prepare the edit before resetting execution state or writing."""
@@ -198,6 +162,8 @@ class Catalog:
                 raise Problem("Connector definition does not exist")
             if not isinstance(data.get("environments"), dict):
                 raise Problem("A connection needs settings for each environment")
+            if set(data["environments"]) - set(self.environment_names()):
+                raise Problem("Choose existing environments")
             if previous.get("connector") != data["connector"]:
                 names = {parameter["name"] for parameter in definition.get("parameters", [])}
                 data["environments"] = {
@@ -219,6 +185,8 @@ class Catalog:
     def delete(self, kind, identity, *, before_change=None):
         if kind not in KINDS:
             raise Problem("Unknown catalog entity", 404)
+        if kind == "connector" and any(c["connector"] == identity for c in self.store.all("connection")):
+            raise Problem("Remove this connector's connections before deleting it", 409)
         if before_change is not None:
             before_change()
         self.store.delete(kind, identity)
