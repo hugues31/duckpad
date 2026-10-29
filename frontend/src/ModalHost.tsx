@@ -2,6 +2,7 @@ import { Boxes } from "lucide-react";
 import DuckMark from "./DuckMark";
 import GitWorkspace from "./GitWorkspace";
 import NewProjectModal from "./NewProjectModal";
+import NewBranchModal from "./NewBranchModal";
 import { useT } from "./i18n";
 import {
   EditorModal,
@@ -14,6 +15,13 @@ import type { Environment, Json } from "./types";
 
 /** Every dialog of the workspace, with the actions it triggers. */
 export type ModalState =
+  | {
+      kind: "newBranch";
+      worktree: string;
+      branch: string;
+      revision?: string;
+      submit: (name: string, revision?: string) => Promise<void>;
+    }
   | {
       kind: "newProject";
       createEmpty: (name: string) => Promise<void>;
@@ -69,6 +77,8 @@ export default function ModalHost({
 }) {
   const t = useT();
   switch (modal?.kind) {
+    case "newBranch":
+      return <NewBranchModal {...modal} onClose={onClose} />;
     case "newProject":
       return <NewProjectModal {...modal} onClose={onClose} />;
     case "runConfirmation":
