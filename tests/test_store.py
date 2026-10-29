@@ -3,6 +3,7 @@
 import sqlite3
 import threading
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import closing
 
 import pytest
 from alembic import command
@@ -58,12 +59,12 @@ def test_initial_migration_matches_models_and_survives_restart(store):
 
 def test_unknown_document_schema_is_not_modified(tmp_path):
     path = tmp_path / "instance.sqlite"
-    with sqlite3.connect(path) as connection:
+    with closing(sqlite3.connect(path)) as connection, connection:
         connection.execute("CREATE TABLE records (kind TEXT, id TEXT, value TEXT)")
         connection.execute("INSERT INTO records VALUES ('settings', 'marker', 'kept')")
     with pytest.raises(Problem, match="unsupported document schema"):
         Store(tmp_path)
-    with sqlite3.connect(path) as connection:
+    with closing(sqlite3.connect(path)) as connection:
         assert connection.execute("SELECT value FROM records").fetchone() == ("kept",)
         assert connection.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall() == [
             ("records",)
