@@ -410,8 +410,15 @@ class Projects:
     def branch(self, worktree_id, name, revision=None):
         with self.lock:
             worktree = self.get(worktree_id)
+            try:
+                self.git(worktree["path"], "check-ref-format", "refs/heads/" + name)
+            except Problem as error:
+                raise Problem(
+                    "Enter a valid branch name, such as experiment/my-change. Branch names cannot end with '/'.",
+                    422,
+                    {"code": "invalid_branch_name"},
+                ) from error
             self.versioning.clean(worktree)
-            self.git(worktree["path"], "check-ref-format", "refs/heads/" + name)
             key = uid("worktree_")
             path = self.store.home / "worktrees" / key
             path.parent.mkdir(parents=True, exist_ok=True)

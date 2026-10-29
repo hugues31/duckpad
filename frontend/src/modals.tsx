@@ -173,6 +173,7 @@ export interface FormField {
   key: string;
   label: string;
   value?: string;
+  placeholder?: string;
   multiline?: boolean;
   required?: boolean;
 }
@@ -220,6 +221,7 @@ export function FormModal({
                 <input
                   autoFocus={f === fields[0]}
                   required={f.required !== false}
+                  placeholder={f.placeholder}
                   value={values[f.key]}
                   onChange={(e) =>
                     setValues({ ...values, [f.key]: e.target.value })
