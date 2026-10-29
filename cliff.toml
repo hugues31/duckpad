@@ -1,0 +1,61 @@
+[changelog]
+header = ""
+body = """
+{% set repository = get_env(name="RELEASE_REPOSITORY", default="hugues31/duckpad") %}
+{% set url = "https://github.com/" ~ repository %}
+## Duckpad {{ version }}
+
+{% if version is matching("(a|b|rc)[0-9]+$") %}
+**Pre-release:** intended for testing before the next stable release.
+
+{% endif %}
+```sh
+pip install duckpad=={{ version | trim_start_matches(pat="v") }}
+```
+
+{% for group, changes in commits | group_by(attribute="group") %}
+### {{ group | split(pat="|") | last }}
+{% for commit in changes %}
+- {% if commit.scope %}**{{ commit.scope }}:** {% endif %}{{ commit.message | upper_first }} ([{{ commit.id | truncate(length=7, end="") }}]({{ url }}/commit/{{ commit.id }})){% if commit.breaking_description %}
+  > {{ commit.breaking_description | replace(from="\n", to="\n  > ") }}{% endif %}
+{% endfor %}
+{% endfor %}
+{% if not commits %}
+No user-facing changes in this release.
+
+{% endif %}
+{% if previous.version %}
+**Full changelog:** [{{ previous.version }}...{{ version }}]({{ url }}/compare/{{ previous.version }}...{{ version }})
+{% else %}
+**Full changelog:** [Commits for {{ version }}]({{ url }}/commits/{{ version }})
+{% endif %}
+
+The wheel includes the web interface; Node.js is not required. Download the wheel,
+source archive, and SHA-256 checksums from the assets below.
+"""
+footer = ""
+trim = true
+format = true
+
+[git]
+conventional_commits = true
+filter_unconventional = true
+split_commits = false
+protect_breaking_commits = true
+commit_parsers = [
+  { field = "breaking", pattern = "true", group = "0|Breaking changes" },
+  { field = "merge_commit", pattern = "true", skip = true },
+  { message = "^feat", group = "1|Features" },
+  { message = "^fix", group = "2|Fixes" },
+  { message = "^perf", group = "3|Performance" },
+  { message = "^docs", group = "4|Documentation" },
+  { message = "^revert", group = "5|Reverts" },
+  { message = "^(build|ci|refactor|style|test)", group = "6|Maintenance" },
+  { message = "^chore", skip = true },
+  { message = ".*", group = "6|Maintenance" },
+]
+filter_commits = false
+tag_pattern = '^v[0-9]+\.[0-9]+\.[0-9]+$'
+use_branch_tags = true
+topo_order = true
+sort_commits = "oldest"
