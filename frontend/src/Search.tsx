@@ -199,31 +199,7 @@ export default function InstanceSearch({
   const [query, setQuery] = useState("");
   const [response, setResponse] = useState<SearchResponse | null>(null);
   const [error, setError] = useState("");
-  const container = useRef<HTMLDivElement>(null);
-  const returnFocus = useRef(document.activeElement as HTMLElement);
   const scope = workspace.projects.map((p) => `${p.id}:${p.role}`).join("|");
-  useEffect(() => {
-    const trap = (event: KeyboardEvent) => {
-      if (event.key !== "Tab") return;
-      const dialog = container.current?.closest("[role=dialog]");
-      const controls = dialog?.querySelectorAll<HTMLElement>("button, input");
-      if (!controls?.length) return;
-      const first = controls[0],
-        last = controls[controls.length - 1];
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first.focus();
-      }
-    };
-    document.addEventListener("keydown", trap);
-    return () => {
-      document.removeEventListener("keydown", trap);
-      returnFocus.current?.focus();
-    };
-  }, []);
   useEffect(() => {
     setResponse(null);
     setError("");
@@ -260,7 +236,7 @@ export default function InstanceSearch({
   );
   return (
     <Modal title={t("instanceSearch")} onClose={onClose}>
-      <div className="modal-content instance-search" ref={container}>
+      <div className="modal-content instance-search">
         <p>{t("instanceSearchHint")}</p>
         <SearchField
           autoFocus

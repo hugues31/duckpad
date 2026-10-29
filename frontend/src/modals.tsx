@@ -1,4 +1,11 @@
-import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import {
+  lazy,
+  Suspense,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { X } from "lucide-react";
 import { useT } from "./i18n";
 import type { Json } from "./types";
@@ -70,6 +77,56 @@ export function topDialog() {
     .at(-1);
 }
 
+const TABBABLE =
+  "a[href], button, input, select, textarea, summary, [tabindex]";
+
+/** Controls of a container reached with Tab, in document order. */
+function tabbable(container: HTMLElement) {
+  return [...container.querySelectorAll<HTMLElement>(TABBABLE)].filter(
+    (element) => {
+      if (
+        element.tabIndex < 0 ||
+        element.matches(":disabled") ||
+        !element.getClientRects().length
+      )
+        return false;
+      if (
+        !(element instanceof HTMLInputElement) ||
+        element.type !== "radio" ||
+        !element.name
+      )
+        return true;
+      // Tab enters a radio group once, through its checked option or else its first one.
+      const group = [
+        ...container.querySelectorAll<HTMLInputElement>(
+          `input[type="radio"][name="${CSS.escape(element.name)}"]`,
+        ),
+      ];
+      return element === (group.find((radio) => radio.checked) ?? group[0]);
+    },
+  );
+}
+
+/** Keep Tab and Shift+Tab cycling through the controls of a modal container. */
+export function trapFocus(
+  event: Pick<KeyboardEvent, "key" | "shiftKey" | "preventDefault">,
+  container: HTMLElement,
+) {
+  if (event.key !== "Tab") return;
+  const controls = tabbable(container);
+  const active = document.activeElement;
+  const outside = active === container || !container.contains(active);
+  if (outside || active === (event.shiftKey ? controls[0] : controls.at(-1))) {
+    event.preventDefault();
+    (event.shiftKey ? controls.at(-1) : controls[0])?.focus();
+  }
+}
+
+/**
+ * A modal dialog that traps the focus while it is the top dialog, and returns
+ * it to its opener when closed. The focus starts on the element marked with
+ * `data-autofocus`, a child using `autoFocus`, or else the first control.
+ */
 export function Modal({
   title,
   children,
@@ -83,9 +140,37 @@ export function Modal({
 }) {
   const t = useT();
   const dialog = useRef<HTMLElement>(null);
+  // Read while rendering, before a child with autoFocus takes the focus.
+  const [opener] = useState(() => document.activeElement as HTMLElement | null);
+  useLayoutEffect(() => {
+    const element = dialog.current!;
+    const active = document.activeElement as HTMLElement | null;
+    // A dialog replacing another one returns to the control its predecessor restored.
+    const returnTo = opener?.isConnected
+      ? opener
+      : element.contains(active)
+        ? null
+        : active;
+    if (!element.contains(active))
+      (
+        element.querySelector<HTMLElement>("[data-autofocus]") ??
+        tabbable(element)[0]
+      )?.focus();
+    return () => {
+      const current = document.activeElement;
+      if (
+        returnTo?.isConnected &&
+        (current === document.body || element.contains(current))
+      )
+        returnTo.focus();
+    };
+  }, [opener]);
   useEffect(() => {
-    const key = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && topDialog() === dialog.current) onClose();
+    const key = (event: KeyboardEvent) => {
+      const element = dialog.current;
+      if (!element || topDialog() !== element) return;
+      if (event.key === "Escape") onClose();
+      else trapFocus(event, element);
     };
     document.addEventListener("keydown", key);
     return () => document.removeEventListener("keydown", key);

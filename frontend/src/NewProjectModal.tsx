@@ -49,39 +49,8 @@ export default function NewProjectModal({
   const warnings = imported?.warnings;
   const { pending, error, setError, run } = useAsyncAction();
   const submitting = useRef(false);
-  const form = useRef<HTMLFormElement>(null);
   const done = useRef<HTMLButtonElement>(null);
   const importing = template === "archive";
-
-  useEffect(() => {
-    const opener = document.activeElement as HTMLElement | null;
-    const dialog = form.current?.closest<HTMLElement>("[role=dialog]");
-    dialog
-      ?.querySelector<HTMLInputElement>('input[name="project-name"]')
-      ?.focus();
-    const trapFocus = (event: KeyboardEvent) => {
-      if (event.key !== "Tab" || !dialog) return;
-      const elements = Array.from(
-        dialog.querySelectorAll<HTMLElement>(
-          'button:not(:disabled), input:not(:disabled):not([type="radio"]), input[type="radio"]:checked:not(:disabled)',
-        ),
-      );
-      const first = elements[0];
-      const last = elements.at(-1);
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault();
-        last?.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first?.focus();
-      }
-    };
-    dialog?.addEventListener("keydown", trapFocus);
-    return () => {
-      dialog?.removeEventListener("keydown", trapFocus);
-      if (opener?.isConnected) opener.focus();
-    };
-  }, []);
 
   useEffect(() => {
     if (warnings) done.current?.focus();
@@ -96,7 +65,6 @@ export default function NewProjectModal({
       }}
     >
       <form
-        ref={form}
         aria-busy={pending}
         onSubmit={async (event) => {
           event.preventDefault();
@@ -151,6 +119,7 @@ export default function NewProjectModal({
               <span>{t("name")}</span>
               <input
                 name="project-name"
+                data-autofocus
                 required={!importing}
                 placeholder={importing ? t("archiveNamePlaceholder") : ""}
                 value={name}
