@@ -65,6 +65,10 @@ The Branches view lists local and fetched remote identity, head and worktree sta
 Create a branch from a chosen commit or branch, or open an existing local branch
 in its isolated worktree. Opening it preserves the other worktrees.
 
+In **New working branch**, enter a complete name such as `experiment/my-change`.
+Git does not allow names ending in `/`, so `experiment/` alone is incomplete.
+An invalid name leaves the form open with an explanation so you can correct it.
+
 Choose an explicit source and destination, compare them, then select **Review
 merge**. The review displays the common base and exact heads. For every conflicting
 field, inspect base/current/incoming values and choose one. Each choice recomputes
