@@ -4,6 +4,8 @@ The **Code** tab, between **Flow** and **Documentation**, displays the worktree'
 
 Choose **Download project ZIP** in the Code tab to export the selected branch's saved `README.md`, `pyproject.toml`, `flow.json`, `documentation.json`, SQL templates and component definitions, preserving their relative paths. Save or discard pending edits before downloading. The archive excludes Git history, datasets, execution results, virtual environments and instance connection settings. Project readers can browse and download these files; editing requires an editor or administrator role.
 
+To recreate a project from such an archive, choose **New project**, then **Import a project ZIP**, and select the file. Leave the name empty to keep the name stored in `flow.json`. Archives whose files sit in a single top-level folder, such as a repository download from a Git host, are accepted. Only the declarative files above are read; Git metadata, data and other entries are ignored. The imported project starts its own Git history, makes you its administrator and can use only the **Local files** connection until an instance administrator grants others. Because the archive contains no connection settings or data, Duckpad then lists the connections the pipeline references that are unavailable to the new project, and the nodes that read uploaded files or other absolute paths, including Windows and network paths. Grant or create those connections, and upload the files again. Archives over 16 MiB (64 MiB once extracted), without `flow.json`, or with invalid JSON or non-UTF-8 files are rejected without creating a project.
+
 After running **Export CSV** or **Export XLSX**, select the export node and choose **Download exported data** in its inspector. The file contains the entire executed export, including its delimiter, headers and worksheet name. The inspector identifies the execution and environment. Changing inputs or settings, rerunning upstream nodes, or a failed execution requires another successful export before downloading. Missing files also require a rerun. Downloads are private to project members, survive a backend restart, and use a saved copy of the exported bytes so later writes to the destination cannot replace that execution's result. Oracle and remote-storage destinations do not offer this action.
 
 ## Project layout and Python dependencies
@@ -40,8 +42,9 @@ are not frozen by the ZIP.
 This manifest prepares project-specific Python environments. Duckpad currently
 executes SQL pipelines; saving this file does not install packages, create an
 environment or run Python scripts. The CLI does not yet open an extracted ZIP
-as a project automatically. Connections, credentials and input data must also
-be configured separately on another instance.
+as a project automatically; import the ZIP from the interface instead.
+Connections, credentials and input data must also be configured separately on
+another instance.
 
 ## SQL template contract
 

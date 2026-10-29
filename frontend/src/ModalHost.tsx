@@ -1,7 +1,7 @@
 import { Boxes } from "lucide-react";
 import DuckMark from "./DuckMark";
 import GitWorkspace from "./GitWorkspace";
-import NewProjectModal from "./NewProjectModal";
+import NewProjectModal, { type ImportedProject } from "./NewProjectModal";
 import { useT } from "./i18n";
 import {
   EditorModal,
@@ -18,6 +18,7 @@ export type ModalState =
       kind: "newProject";
       createEmpty: (name: string) => Promise<void>;
       createExample: (name: string) => Promise<void>;
+      importArchive: (file: File, name: string) => Promise<ImportedProject>;
     }
   | {
       kind: "runConfirmation";
