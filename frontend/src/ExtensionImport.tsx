@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
-import { api, importExtension } from "./api";
+import { useState } from "react";
+import { importExtension } from "./api";
 import { useT } from "./i18n";
+import { useApiResource } from "./useApiResource";
 import { useAsyncAction } from "./useAsyncAction";
 import Select from "./Select";
 
@@ -13,25 +14,17 @@ type Runtime = {
 
 export default function ExtensionImport() {
   const t = useT();
-  const [runtime, setRuntime] = useState<Runtime | null>(null);
+  const {
+    data: runtime,
+    error: loadError,
+    setData: setRuntime,
+  } = useApiResource<Runtime>("/extensions/runtime");
   const [source, setSource] = useState<Source>("core");
   const [name, setName] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [saved, setSaved] = useState(false);
-  const { pending, error, setError, run } = useAsyncAction();
-  useEffect(() => {
-    let live = true;
-    api<Runtime>("/extensions/runtime")
-      .then((value) => {
-        if (live) setRuntime(value);
-      })
-      .catch((e: Error) => {
-        if (live) setError(e.message);
-      });
-    return () => {
-      live = false;
-    };
-  }, [setError]);
+  const { pending, run, ...save } = useAsyncAction();
+  const error = save.error || loadError;
   const validName = /^[a-z][a-z0-9_]{0,63}$/.test(name);
   const host =
     source === "community"

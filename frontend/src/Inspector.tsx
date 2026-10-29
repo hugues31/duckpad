@@ -1,5 +1,5 @@
 import Select from "./Select";
-import { lazy, Suspense, useEffect, useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import {
   ArrowRight,
   BookOpen,
@@ -19,6 +19,7 @@ import ParameterField from "./ParameterField";
 import QueryBuilder from "./QueryBuilder";
 import { useRevisionDraft } from "./useRevisionDraft";
 import type { FlowEdge, FlowNode, Json, Snapshot, Statuses } from "./types";
+import { useApiResource, useResource } from "./useApiResource";
 
 const CodeEditor = lazy(() => import("./Editor"));
 
@@ -83,44 +84,59 @@ export default function Inspector({
     persist: saveDraft,
   } = useRevisionDraft(node, snapshot, onSave, { autosave: !readOnly });
   const [sqlMode, setSqlMode] = useState<"current" | "executed">("current");
-  const [compiled, setCompiled] = useState<Json[]>([]);
-  const [error, setError] = useState("");
-  const [inputColumns, setInputColumns] = useState<Record<string, Json[]>>({});
+  const [saveError, setError] = useState("");
+  const worktree = snapshot.worktree.id;
+  const prefix = fullNode.includes("::")
+    ? fullNode.slice(0, fullNode.lastIndexOf("::") + 2)
+    : "";
+  const inputEdges = graphEdges.filter((e) => e.target === node.id);
+  // Column suggestions come from the materialized inputs; refresh them when results change.
+  const inputColumns =
+    useResource(
+      `${worktree}:${fullNode}`,
+      async (signal) =>
+        Object.fromEntries(
+          await Promise.all(
+            inputEdges.map(async (edge) => {
+              try {
+                const result = await api(
+                  withQuery(
+                    `/worktrees/${worktree}/preview/${encodeURIComponent(prefix + edge.source)}`,
+                    { environment, port: edge.sourceHandle, limit: 1 },
+                  ),
+                  { signal },
+                );
+                return [edge.targetHandle, result.columns as Json[]] as const;
+              } catch {
+                return [edge.targetHandle, []] as const;
+              }
+            }),
+          ),
+        ) as Record<string, Json[]>,
+      {
+        refresh: JSON.stringify([
+          environment,
+          inputEdges.map((e) => [e.source, e.sourceHandle, e.targetHandle]),
+          statuses.nodes,
+        ]),
+      },
+    ).data || {};
+  const compilation = useApiResource<Json[]>(
+    tab === "sql" && sqlMode === "current"
+      ? withQuery(
+          `/worktrees/${worktree}/compile/${encodeURIComponent(fullNode)}`,
+          { environment },
+        )
+      : null,
+    { refresh: snapshot.revision },
+  );
+  const error = saveError || compilation.error;
   const schemas = Object.fromEntries(
     Object.entries(inputColumns).map(([port, columns]) => [
       port,
       columns.map((column) => column.name as string),
     ]),
   );
-  // Column suggestions come from the materialized inputs; refresh them when results change.
-  useEffect(() => {
-    let live = true;
-    const prefix = fullNode.includes("::")
-      ? fullNode.slice(0, fullNode.lastIndexOf("::") + 2)
-      : "";
-    Promise.all(
-      graphEdges
-        .filter((e) => e.target === node.id)
-        .map(async (edge) => {
-          try {
-            const result = await api(
-              withQuery(
-                `/worktrees/${snapshot.worktree.id}/preview/${encodeURIComponent(prefix + edge.source)}`,
-                { environment, port: edge.sourceHandle, limit: 1 },
-              ),
-            );
-            return [edge.targetHandle, result.columns as Json[]] as const;
-          } catch {
-            return [edge.targetHandle, []] as const;
-          }
-        }),
-    ).then((entries) => {
-      if (live) setInputColumns(Object.fromEntries(entries));
-    });
-    return () => {
-      live = false;
-    };
-  }, [graphEdges, fullNode, environment, statuses, snapshot.worktree.id]);
   const persist = async () => {
     if (readOnly) return;
     setError("");
@@ -130,30 +146,11 @@ export default function Inspector({
       setError((e as Error).message);
     }
   };
-  useEffect(() => {
-    if (tab === "sql" && sqlMode === "current") {
-      setError("");
-      let live = true;
-      api(
-        withQuery(
-          `/worktrees/${snapshot.worktree.id}/compile/${encodeURIComponent(fullNode)}`,
-          { environment },
-        ),
-      )
-        .then((statements) => {
-          if (live) setCompiled(statements);
-        })
-        .catch((e) => {
-          if (live) setError(e.message);
-        });
-      return () => {
-        live = false;
-      };
-    }
-  }, [tab, sqlMode, snapshot.revision, fullNode, environment]);
   const { definition, kind, parameters, inputs } = signature;
   const statements: Json[] =
-    sqlMode === "executed" ? preview?.executed_sql || [] : compiled;
+    sqlMode === "executed"
+      ? preview?.executed_sql || []
+      : compilation.data || [];
   return (
     <aside className="inspector">
       <div className="inspector-title">

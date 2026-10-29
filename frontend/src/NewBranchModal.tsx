@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { GitCommitHorizontal, Loader2 } from "lucide-react";
 import { api, withQuery } from "./api";
 import { useLanguage, useT } from "./i18n";
 import { Modal } from "./modals";
 import Select from "./Select";
+import { useResource } from "./useApiResource";
 import { useAsyncAction } from "./useAsyncAction";
 import "./branch.css";
 
@@ -37,60 +38,46 @@ export default function NewBranchModal({
   const [name, setName] = useState("");
   const [mode, setMode] = useState(revision ? "history" : "current");
   const [reference, setReference] = useState("");
-  const [history, setHistory] = useState<History | null>(null);
-  const [selected, setSelected] = useState<Revision | null>(null);
+  const [chosen, setSelected] = useState<Revision | null>(null);
   const [query, setQuery] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [historyError, setHistoryError] = useState("");
-  const [reload, setReload] = useState(0);
   const { pending, error, run } = useAsyncAction();
+  const more = useAsyncAction();
   const submitting = useRef(false);
   const base = `/worktrees/${worktree}/git/history`;
-
-  useEffect(() => {
-    let live = true;
-    setLoading(true);
-    setHistoryError("");
-    void (async () => {
-      try {
-        const result = await api<History>(base);
-        let initial = result.items.find((item) => item.commit === revision);
-        if (revision && !initial) {
-          const older = await api<History>(
-            withQuery(base, { ref: revision, limit: 1 }),
-          );
-          initial = older.items[0];
-        }
-        if (live) {
-          setHistory(result);
-          setSelected((previous) => previous || initial || null);
-        }
-      } catch (e) {
-        if (live) setHistoryError((e as Error).message);
-      } finally {
-        if (live) setLoading(false);
+  const initial = useResource(
+    JSON.stringify([base, revision]),
+    async (signal) => {
+      const history = await api<History>(base, { signal });
+      let start = history.items.find((item) => item.commit === revision);
+      if (revision && !start) {
+        const older = await api<History>(
+          withQuery(base, { ref: revision, limit: 1 }),
+          { signal },
+        );
+        start = older.items[0];
       }
-    })();
-    return () => {
-      live = false;
-    };
-  }, [base, revision, reload]);
+      return { history, start: start || null };
+    },
+  );
+  const history = initial.data?.history || null;
+  const selected = chosen || initial.data?.start || null;
+  const loading = initial.pending || more.pending;
+  const historyError = more.error || (initial.pending ? "" : initial.error);
 
-  async function loadMore() {
-    if (!history || history.next === null || loading) return;
-    setLoading(true);
-    setHistoryError("");
-    try {
+  const loadMore = () =>
+    more.run(async () => {
+      if (!history || history.next === null) return;
       const result = await api<History>(
         withQuery(base, { ref: history.head, offset: history.next }),
       );
-      setHistory({ ...result, items: [...history.items, ...result.items] });
-    } catch (e) {
-      setHistoryError((e as Error).message);
-    } finally {
-      setLoading(false);
-    }
-  }
+      initial.setData(
+        (current) =>
+          current && {
+            ...current,
+            history: { ...result, items: [...history.items, ...result.items] },
+          },
+      );
+    });
 
   const search = query.trim().toLocaleLowerCase(language);
   const revisions =
@@ -234,9 +221,7 @@ export default function NewBranchModal({
                     className="button secondary small"
                     disabled={loading || pending}
                     onClick={() =>
-                      history
-                        ? void loadMore()
-                        : setReload((value) => value + 1)
+                      history ? void loadMore() : initial.reload()
                     }
                   >
                     {t("retry")}

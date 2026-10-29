@@ -148,3 +148,52 @@ test("download a full CSV export and keep project ZIP separate", async ({
     await page.request.delete(`/api/projects/${worktree.project}`);
   }
 });
+
+test("a failed export check clears its error once the export answers again", async ({
+  page,
+}) => {
+  await signIn(page);
+  const worktree = await (
+    await page.request.post("/api/projects", {
+      data: { name: "Export check" },
+    })
+  ).json();
+  const endpoint = `/api/worktrees/${worktree.id}`;
+  const snapshot = await (await page.request.get(endpoint)).json();
+  snapshot.bundle.flow.nodes = [
+    {
+      id: "export",
+      label: "CSV file",
+      template: "export_csv",
+      params: { destination: "check.csv" },
+      position: { x: 0, y: 0 },
+    },
+  ];
+  snapshot.bundle.flow.edges = [];
+  expect(
+    (
+      await page.request.put(endpoint, {
+        data: { revision: snapshot.revision, bundle: snapshot.bundle },
+      })
+    ).ok(),
+  ).toBeTruthy();
+  const check = `**/api/worktrees/${worktree.id}/exports/export?*`;
+  await page.route(check, (route) =>
+    route.fulfill({
+      status: 503,
+      json: { error: "Export status temporarily unavailable" },
+    }),
+  );
+  await page.goto(`/worktrees/${worktree.id}/flow`);
+  await page.locator('.react-flow__node[data-id="export"]').click();
+  const panel = page.getByRole("region", {
+    name: "Download exported data",
+    exact: true,
+  });
+  await expect(panel.getByRole("alert")).toContainText(
+    "Export status temporarily unavailable",
+  );
+  await page.unroute(check);
+  await expect(panel).toContainText("Run this export successfully");
+  await expect(panel.getByRole("alert")).toHaveCount(0);
+});

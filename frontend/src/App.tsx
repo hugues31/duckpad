@@ -21,7 +21,13 @@ import {
 } from "./navigation";
 import { Modal } from "./modals";
 import { AlertCircle, Loader2 } from "lucide-react";
-import { api, ApiError, importProjectArchive, send, withQuery } from "./api";
+import {
+  api,
+  ApiError,
+  importProjectArchive,
+  onSessionExpired,
+  send,
+} from "./api";
 import { ProjectSettings } from "./Administration";
 import Canvas from "./Canvas";
 import CanvasHeader from "./CanvasHeader";
@@ -67,17 +73,18 @@ import type {
   Graph,
   Json,
   Snapshot,
-  Statuses,
   Workspace,
 } from "./types";
+import { usePolling } from "./usePolling";
 import {
   DraftContext,
   useDraftRegistry,
   type DraftRegistry,
 } from "./useRevisionDraft";
+import { useWorktreeSnapshot } from "./useWorktreeSnapshot";
 import { PanelResizeHandle, usePanelSizes } from "./WorkspacePanels";
 
-const POLL_INTERVAL = 1000;
+const WORKSPACE_INTERVAL = 5000;
 /** Height of each banner stacked under the toolbar, in pixels. */
 const NOTICE_HEIGHT = 36;
 const WIDE_LAYOUT = "(min-width: 1100px)";
@@ -86,7 +93,6 @@ const NEW_TEMPLATE = `-- @label Custom transform
 -- @output result
 SELECT * FROM {{ source }};
 `;
-const EMPTY_STATUSES: Statuses = { nodes: {}, active: null };
 
 export default function App() {
   const preferences = usePreferences();
@@ -147,13 +153,6 @@ function WorkspaceApp({
   const setTab = (value: WorkspaceTab) => {
     void navigate(worktreeUrl(worktree, value, environment));
   };
-  const [loadError, setLoadError] = useState("");
-  const currentWorktree = useRef(worktree);
-  currentWorktree.current = worktree;
-  const snapshotEpoch = useRef(0);
-  const [snapshotState, setSnapshot] = useState<Snapshot | null>(null);
-  const snapshot =
-    snapshotState?.worktree.id === worktree ? snapshotState : null;
   const [selected, setSelected] = useState<string | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const openSearch = useCallback(() => setSearchOpen(true), []);
@@ -166,7 +165,6 @@ function WorkspaceApp({
   const expireSession = useCallback(() => setAuthenticated(false), []);
   const [path, setPath] = useState<PathPart[]>([]);
   const [selection, setSelection] = useState<string[]>([]);
-  const [statuses, setStatuses] = useState<Statuses>(EMPTY_STATUSES);
   const [preview, setPreview] = useState<Json | null>(null);
   const [cell, setCell] = useState<Cell | null>(null);
   const [modal, setModal] = useState<ModalState | null>(null);
@@ -192,6 +190,7 @@ function WorkspaceApp({
     void action().catch((e) => notify(e.message, true));
   };
 
+  useEffect(() => onSessionExpired(expireSession), [expireSession]);
   useEffect(() => {
     api("/session")
       .then(() => setAuthenticated(true))
@@ -202,31 +201,35 @@ function WorkspaceApp({
     setWorkspace(value);
     return value;
   }, []);
-  const load = useCallback(
-    async (id = worktree) => {
-      if (!id) return;
-      const epoch = snapshotEpoch.current;
-      const value = await api<Snapshot>(`/worktrees/${id}`);
-      // Discard reads started before a save completed or the worktree changed.
-      if (id !== currentWorktree.current || epoch !== snapshotEpoch.current)
-        return;
-      setLoadError("");
-      setSnapshot((old) =>
-        old?.worktree.id === value.worktree.id &&
-        old?.revision === value.revision &&
-        old?.role === value.role &&
-        JSON.stringify(old.connections) === JSON.stringify(value.connections) &&
-        JSON.stringify(old.conflicts) === JSON.stringify(value.conflicts)
-          ? old
-          : value,
-      );
+  const {
+    snapshot,
+    statuses,
+    loadError,
+    refresh: load,
+    setActive,
+  } = useWorktreeSnapshot(worktree, environment, {
+    enabled: !!authenticated,
+    onUnavailable: () => {
+      setCell(null);
+      setPreview(null);
+      setModal(null);
+      return refreshWorkspace();
     },
-    [worktree],
-  );
+  });
   useEffect(() => {
     if (authenticated)
       void refreshWorkspace().catch((e) => notify(e.message, true));
   }, [authenticated, refreshWorkspace, notify, location.key]);
+  // Membership and branch changes made elsewhere appear without a reload.
+  usePolling(
+    () => refreshWorkspace().then(() => undefined),
+    {
+      interval: WORKSPACE_INTERVAL,
+      delay: WORKSPACE_INTERVAL,
+      enabled: !!authenticated,
+    },
+    [refreshWorkspace],
+  );
   useEffect(() => {
     if (!authenticated || area !== "home") return;
     sessionStorage.removeItem(SSO_RETURN_KEY);
@@ -251,10 +254,8 @@ function WorkspaceApp({
     navigate,
   ]);
   useEffect(() => {
-    setLoadError("");
     if (!worktree || !authenticated) return;
     setLastWorktree(worktree);
-    setSnapshot(null);
     setSelected(null);
     setFocusRequest(null);
     handledSearch.current = "";
@@ -262,79 +263,15 @@ function WorkspaceApp({
     setPath([]);
     setCell(null);
     setPreview(null);
-    setStatuses(EMPTY_STATUSES);
-    load(worktree).catch((e) => {
-      if (currentWorktree.current === worktree) {
-        if (e.status === 401) setAuthenticated(false);
-        else setLoadError(e.message);
-      }
-    });
   }, [worktree, authenticated]);
   useEffect(() => {
-    if (!worktree || !authenticated || !environment) return;
-    let live = true;
-    let timer: number | undefined;
-    // Each poll starts after the previous one ends, so responses never overlap.
-    const poll = async () => {
-      try {
-        const [status] = await Promise.all([
-          api<Statuses>(
-            withQuery(`/worktrees/${worktree}/status`, { environment }),
-          ),
-          load(worktree).catch(async (e) => {
-            // Only a denied snapshot means project access was revoked. A status
-            // request can return 404 while a deleted environment is refreshing.
-            if (
-              live &&
-              e instanceof ApiError &&
-              [403, 404].includes(e.status)
-            ) {
-              setSnapshot(null);
-              setCell(null);
-              setPreview(null);
-              setModal(null);
-              setStatuses(EMPTY_STATUSES);
-              setLoadError(t("routeUnavailable"));
-              await refreshWorkspace();
-            }
-            throw e;
-          }),
-        ]);
-        // Keep the previous object when nothing changed, so dependents do not refetch.
-        if (live)
-          setStatuses((old) =>
-            JSON.stringify(old) === JSON.stringify(status) ? old : status,
-          );
-      } catch (e) {
-        if (!live) return;
-        if (e instanceof ApiError && e.status === 401) setAuthenticated(false);
-      }
-      if (live) timer = window.setTimeout(poll, POLL_INTERVAL);
-    };
-    void poll();
-    return () => {
-      live = false;
-      clearTimeout(timer);
-    };
-  }, [worktree, environment, authenticated, load]);
-  useEffect(() => {
-    if (!authenticated) {
-      setSearchOpen(false);
-      setWorkspace(null);
-      setSnapshot(null);
-      setStatuses({ nodes: {}, active: null });
-      setModal(null);
-      setCell(null);
-      setPreview(null);
-      return;
-    }
-    const timer = setInterval(() => {
-      refreshWorkspace().catch((e) => {
-        if (e.status === 401) setAuthenticated(false);
-      });
-    }, 5000);
-    return () => clearInterval(timer);
-  }, [authenticated, refreshWorkspace]);
+    if (authenticated) return;
+    setSearchOpen(false);
+    setWorkspace(null);
+    setModal(null);
+    setCell(null);
+    setPreview(null);
+  }, [authenticated]);
   const blocker = useBlocker(({ currentLocation, nextLocation }) => {
     // Router history can advance before an unmounted editor's cleanup runs.
     // Only drafts belonging to the page being left may block a transition.
@@ -474,11 +411,9 @@ function WorkspaceApp({
         `/worktrees/${base.worktree.id}`,
         send({ revision: base.revision, bundle: value }, "PUT"),
       );
-      snapshotEpoch.current++;
       await load(base.worktree.id);
       return saved;
     } catch (e) {
-      snapshotEpoch.current++;
       await load(base.worktree.id);
       notify((e as Error).message, true);
       throw e;
@@ -569,8 +504,7 @@ function WorkspaceApp({
           `/worktrees/${worktree}/runs`,
           send({ environment, node: target, entry_point: "ui", confirmed }),
         );
-        if (currentWorktree.current === worktree)
-          setStatuses((old) => ({ ...old, active: result }));
+        setActive(worktree, result);
       } finally {
         setBusy(false);
       }
@@ -899,7 +833,6 @@ function WorkspaceApp({
             workspace={workspace}
             environment={environment}
             onClose={() => setSearchOpen(false)}
-            onExpired={expireSession}
           />
         )}
         {!workspace || area === "home" ? (
@@ -911,7 +844,7 @@ function WorkspaceApp({
           (area === "projectSettings" && !project) ||
           (area === "pipelines" &&
             (!workspace.worktrees.some((w) => w.id === worktree) ||
-              loadError)) ? (
+              (loadError && !snapshot))) ? (
           <main className="empty-state" tabIndex={-1}>
             <AlertCircle size={32} />
             <h1>
@@ -934,10 +867,7 @@ function WorkspaceApp({
             project={project.id}
             workspace={workspace}
             refresh={refreshWorkspace}
-            onDeleted={() => {
-              setSnapshot(null);
-              void navigate("/projects", { replace: true });
-            }}
+            onDeleted={() => void navigate("/projects", { replace: true })}
           />
         ) : area === "instanceSettings" && workspace && instanceAdmin ? (
           <InstanceSettings
@@ -1007,7 +937,7 @@ function WorkspaceApp({
                     `/runs/${active!.id}/cancel`,
                     send({}),
                   );
-                  setStatuses((old) => ({ ...old, active: canceled }));
+                  setActive(worktree, canceled);
                 })
               }
             />

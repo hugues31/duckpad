@@ -19,7 +19,23 @@ export function withQuery(path: string, query: Query) {
   return `${path}?${params}`;
 }
 
+/** Absolute URL of an API path, for links and frames the browser loads itself. */
+export const apiUrl = (path: string) => "/api" + path;
+
+const expiryListeners = new Set<() => void>();
+
+/** Call `listener` whenever the API rejects the session; returns an unsubscribe function. */
+export function onSessionExpired(listener: () => void) {
+  expiryListeners.add(listener);
+  return () => {
+    expiryListeners.delete(listener);
+  };
+}
+
 async function readError(response: Response) {
+  // Every request reports an expired session here, so callers never check for 401 themselves.
+  if (response.status === 401)
+    for (const listener of expiryListeners) listener();
   const json = response.headers
     .get("content-type")
     ?.includes("application/json");
@@ -35,7 +51,7 @@ export async function api<T = any>(
   path: string,
   options?: RequestInit,
 ): Promise<T> {
-  const response = await fetch("/api" + path, {
+  const response = await fetch(apiUrl(path), {
     credentials: "same-origin",
     ...options,
     headers: { "Content-Type": "application/json", ...options?.headers },
@@ -52,7 +68,7 @@ export const send = (data: unknown, method = "POST"): RequestInit => ({
 /** Download the saved declarative files of the current working branch. */
 export async function downloadProject(worktree: string) {
   const response = await fetch(
-    `/api/worktrees/${encodeURIComponent(worktree)}/archive.zip`,
+    apiUrl(`/worktrees/${encodeURIComponent(worktree)}/archive.zip`),
     { credentials: "same-origin" },
   );
   if (!response.ok) throw await readError(response);
@@ -81,7 +97,7 @@ export async function importProjectArchive(
   const form = new FormData();
   form.append("file", file);
   form.append("name", name);
-  const response = await fetch("/api/projects/import", {
+  const response = await fetch(apiUrl("/projects/import"), {
     method: "POST",
     body: form,
     credentials: "same-origin",
@@ -98,7 +114,7 @@ export async function uploadFile(
   const form = new FormData();
   form.append("file", file);
   const response = await fetch(
-    `/api/worktrees/${encodeURIComponent(worktree)}/uploads`,
+    apiUrl(`/worktrees/${encodeURIComponent(worktree)}/uploads`),
     {
       method: "POST",
       body: form,
@@ -114,7 +130,7 @@ export async function importExtension(file: File, source: string) {
   const form = new FormData();
   form.append("file", file);
   form.append("source", source);
-  const response = await fetch("/api/extensions/import", {
+  const response = await fetch(apiUrl("/extensions/import"), {
     method: "POST",
     body: form,
     credentials: "same-origin",

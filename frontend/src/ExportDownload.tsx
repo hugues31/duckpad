@@ -1,7 +1,9 @@
 import { Download } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
-import { api, withQuery } from "./api";
+import { useRef } from "react";
+import { api, apiUrl, withQuery } from "./api";
 import { useT } from "./i18n";
+import { useApiResource } from "./useApiResource";
+import { useAsyncAction } from "./useAsyncAction";
 
 type ExportResult = {
   status:
@@ -36,69 +38,44 @@ export default function ExportDownload({
   node: string;
 }) {
   const t = useT();
-  const [result, setResult] = useState<ExportResult | null>(null);
-  const [error, setError] = useState("");
-  const [checking, setChecking] = useState(false);
   const frame = useRef<HTMLIFrameElement>(null);
   const endpoint = `/worktrees/${encodeURIComponent(worktree)}/exports/${encodeURIComponent(node)}`;
-  useEffect(() => {
-    let live = true;
-    let timer: number | undefined;
-    const poll = async () => {
-      try {
-        const value = await api<ExportResult>(
-          withQuery(endpoint, { environment }),
-        );
-        if (live) setResult(value);
-      } catch (e) {
-        if (live) {
-          setResult(null);
-          setError((e as Error).message);
-        }
-      }
-      if (live) timer = window.setTimeout(poll, 1500);
-    };
-    void poll();
-    return () => {
-      live = false;
-      clearTimeout(timer);
-    };
-  }, [endpoint, environment]);
+  const {
+    data: result,
+    error: pollError,
+    setData: setResult,
+  } = useApiResource<ExportResult>(withQuery(endpoint, { environment }), {
+    interval: 1500,
+  });
+  // A download failure stays until the next attempt; a polling failure until the next poll.
+  const download = useAsyncAction();
+  const error = download.error || pollError;
 
   if (result?.status === "unsupported") return null;
   return (
     <section className="export-download" aria-label={t("downloadExportedData")}>
       <button
         className="button secondary full"
-        disabled={checking || result?.status !== "available"}
-        onClick={async () => {
-          setError("");
-          setChecking(true);
-          try {
+        disabled={download.pending || result?.status !== "available"}
+        onClick={() =>
+          download.run(async () => {
             const current = await api<ExportResult>(
               withQuery(endpoint, { environment }),
             );
             setResult(current);
-            if (
-              current.status === "available" &&
-              current.run === result?.run &&
-              frame.current
-            ) {
-              // Let the browser stream the attachment to disk, without buffering it in a Blob.
-              frame.current.src =
-                "/api" +
+            if (current.status !== "available") return;
+            if (current.run !== result?.run)
+              throw new Error(t("exportChanged"));
+            // Let the browser stream the attachment to disk, without buffering it in a Blob.
+            if (frame.current)
+              frame.current.src = apiUrl(
                 withQuery(endpoint + "/download", {
                   environment,
                   run: current.run,
-                });
-            } else if (current.status === "available")
-              setError(t("exportChanged"));
-          } catch (e) {
-            setError((e as Error).message);
-          } finally {
-            setChecking(false);
-          }
-        }}
+                }),
+              );
+          })
+        }
       >
         <Download size={15} />
         {t("downloadExportedData")}
@@ -132,9 +109,9 @@ export default function ExportDownload({
           const body = frame.current?.contentDocument?.body.textContent;
           if (body) {
             try {
-              setError(JSON.parse(body).error || t("exportMissing"));
+              download.setError(JSON.parse(body).error || t("exportMissing"));
             } catch {
-              setError(t("exportMissing"));
+              download.setError(t("exportMissing"));
             }
           }
         }}

@@ -141,10 +141,16 @@ test("late snapshots cannot replace the project opened from the dashboard", asyn
   await page
     .getByRole("link", { name: "Open project: Delayed project", exact: true })
     .click();
-  await pending;
+  const request = await pending;
+  // Leaving the project cancels its snapshot read.
+  const cancelled = page.waitForEvent(
+    "requestfailed",
+    (failed) => failed === request,
+  );
   await page
     .getByRole("link", { name: "Duckpad — Projects", exact: true })
     .click();
+  await cancelled;
   await page
     .getByRole("link", { name: "Open project: Current project", exact: true })
     .click();
@@ -152,9 +158,7 @@ test("late snapshots cannot replace the project opened from the dashboard", asyn
   await expect(
     page.getByRole("button", { name: "Run pipeline", exact: true }),
   ).toBeVisible();
-  const response = page.waitForResponse(`**/api/worktrees/${first.id}`);
   release();
-  await response;
   await page.unrouteAll({ behavior: "wait" });
   await expect(page.getByLabel("Active project")).toHaveValue(second.project);
   await expect(page.getByLabel("Branch", { exact: true })).toHaveValue(

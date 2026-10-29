@@ -423,6 +423,7 @@
   "sync_new_remote_branch": "Ready for first publication",
   "sync_remote_deleted": "Remote branch deleted",
   "sync_unrelated": "Unrelated histories",
+  "sync_unavailable": "Status unavailable",
   "toPush": "to push",
   "toIntegrate": "to integrate",
   "recovery_behind": "Review incoming changes before publishing.",

@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { api, send } from "./api";
 import { useT } from "./i18n";
+import { useApiResource } from "./useApiResource";
 import { useAsyncAction } from "./useAsyncAction";
 
 type GitHosts = {
@@ -12,29 +13,21 @@ type GitHosts = {
 /** Trusted SSH host keys and allowed origin prefixes for every project's network Git. */
 export default function GitHostsSettings() {
   const t = useT();
-  const [settings, setSettings] = useState<GitHosts | null>(null);
-  const [knownHosts, setKnownHosts] = useState("");
-  const [prefixes, setPrefixes] = useState("");
+  const resource = useApiResource<GitHosts>("/git-hosts");
+  const settings = resource.data;
+  // Unedited fields show the saved settings.
+  const [hostsDraft, setKnownHosts] = useState<string | null>(null);
+  const [prefixesDraft, setPrefixes] = useState<string | null>(null);
+  const knownHosts = hostsDraft ?? settings?.known_hosts ?? "";
+  const prefixes = prefixesDraft ?? settings?.prefixes.join("\n") ?? "";
   const [saved, setSaved] = useState(false);
-  const { pending, error, setError, run } = useAsyncAction();
+  const { pending, run, ...save } = useAsyncAction();
+  const error = save.error || resource.error;
   const show = (value: GitHosts) => {
-    setSettings(value);
-    setKnownHosts(value.known_hosts);
-    setPrefixes(value.prefixes.join("\n"));
+    resource.setData(value);
+    setKnownHosts(null);
+    setPrefixes(null);
   };
-  useEffect(() => {
-    let live = true;
-    api<GitHosts>("/git-hosts")
-      .then((value) => {
-        if (live) show(value);
-      })
-      .catch((e: Error) => {
-        if (live) setError(e.message);
-      });
-    return () => {
-      live = false;
-    };
-  }, [setError]);
   return (
     <section className="settings-card" aria-labelledby="git-hosts-heading">
       <h2 id="git-hosts-heading">{t("gitHosts")}</h2>
