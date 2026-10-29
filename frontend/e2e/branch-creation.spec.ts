@@ -198,6 +198,10 @@ test("history entry preselects its version with French labels, keyboard access a
     .getByLabel(fr.branchName, { exact: true })
     .fill("experiment/french");
   await page.setViewportSize({ width: 390, height: 844 });
+  await expect(
+    dialog.getByRole("button", { name: fr.create, exact: true }),
+  ).toBeInViewport();
+  await expect(dialog.getByTitle(fr.close)).toBeInViewport();
   expect(
     await dialog.evaluate(
       (element) => element.scrollWidth <= element.clientWidth + 1,

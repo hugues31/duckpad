@@ -1,3 +1,9 @@
+.modal:has(.new-branch-content) > form {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
 .new-branch-content {
   display: grid;
   gap: 16px;
