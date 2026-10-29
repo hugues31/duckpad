@@ -8,7 +8,7 @@ import {
   Users,
 } from "lucide-react";
 import { settingsSections } from "./navigation";
-import { UsersPage } from "./Administration";
+import UsersPage from "./UsersPage";
 import ConnectionsPanel from "./ConnectionsPanel";
 import EnvironmentsPanel from "./EnvironmentsPanel";
 import ExtensionSettings from "./ExtensionSettings";

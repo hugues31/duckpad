@@ -2,7 +2,10 @@ import { createContext, useCallback, useContext } from "react";
 import en from "./locales/en.json";
 import fr from "./locales/fr.json";
 
-export type Language = "en" | "fr";
+const locales = { en, fr };
+export type Language = keyof typeof locales;
+/** The interface languages, one per translation catalog. */
+export const languages = Object.keys(locales) as Language[];
 export const I18n = createContext<{
   language: Language;
   setLanguage: (l: Language) => void;
@@ -14,8 +17,7 @@ export const useLanguage = () => useContext(I18n).language;
 export function useT() {
   const language = useLanguage();
   return useCallback(
-    (key: string): string =>
-      (language === "fr" ? fr : en)[key as keyof typeof en] ?? key,
+    (key: string): string => locales[language][key as keyof typeof en] ?? key,
     [language],
   );
 }
