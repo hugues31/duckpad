@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 from helpers import wait_run
 
 from duckpad.app import create_app
+from duckpad.auth import Auth
 from duckpad.services import Services
 
 
@@ -25,6 +26,7 @@ def test_extension_policy_recreates_databases_and_persists_across_restarts(tmp_p
     try:
         worktree = instance.projects.create("Extension policy", bundle())
         if isolated:
+            Auth(instance.store)
             instance.engine.access.own(worktree, {"id": "admin"}, ["local"])
         identity = worktree["id"]
         commit = instance.projects.snapshot(identity)["commit"]

@@ -96,7 +96,7 @@ def test_merge_review_keeps_files_without_a_trailing_newline(services, tmp_path)
 def test_login_purges_expired_sessions(services):
     store, *_ = services
     auth = Auth(store)
-    store.put("session", "expired", {"expires": 0})
+    store.put("session", "expired", {"user": "admin", "version": 0, "expires": 0})
     auth.login("admin", auth.initial_password)
     assert store.get("session", "expired") is None
 

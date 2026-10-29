@@ -8,6 +8,7 @@ import duckdb
 import pytest
 from helpers import wait_run
 
+from duckpad.auth import Auth
 from duckpad.builtin_templates import BUILTINS
 from duckpad.bundle import bundle_to_files
 from duckpad.data_preparation import render_preparation
@@ -195,6 +196,7 @@ def test_save_reload_replacement_schema_change_failure_and_downstream_export(pre
     }
     worktree = instance.projects.create("Data preparation", bundle)
     if instance.engine.access:
+        Auth(instance.store)
         instance.engine.access.own(worktree, {"id": "admin"}, ["local"])
     wt = worktree["id"]
     snapshot = instance.projects.snapshot(wt)

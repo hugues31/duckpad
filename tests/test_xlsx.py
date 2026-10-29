@@ -11,6 +11,7 @@ from helpers import wait_run
 from xlsx_fixture import workbook
 
 from duckpad.app import create_app
+from duckpad.auth import Auth
 from duckpad.builtin_templates import BUILTINS
 from duckpad.bundle import bundle_to_files
 from duckpad.catalog import PRESETS, Catalog
@@ -67,6 +68,7 @@ def source_bundle(params=None):
 def project(instance, bundle):
     worktree = instance.projects.create("Spreadsheets", bundle)
     if instance.engine.access:
+        Auth(instance.store)
         instance.engine.access.own(worktree, {"id": "admin"}, ["local", "xlsx"])
     return worktree["id"]
 

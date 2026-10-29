@@ -365,7 +365,18 @@ def test_environment_creation_deletion_and_recreation_do_not_copy_secrets(app, c
     connection = store.get("connection", "local")
     connection["environments"]["qa"] = {"root": "private-connection-value"}
     store.put("connection", "local", connection)
-    store.put("run", "historic", {"environment": "qa"})
+    worktree = app.state.services.projects.create("Historical environment")
+    store.put(
+        "run",
+        "historic",
+        {
+            "project": worktree["project"],
+            "worktree": worktree["id"],
+            "environment": "qa",
+            "status": "success",
+            "started": "2026-01-01T00:00:00Z",
+        },
+    )
     response = client.delete("/api/environments/qa")
     assert response.status_code == 200
     assert "qa" not in response.json()["environments"]

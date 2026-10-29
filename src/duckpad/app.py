@@ -260,7 +260,7 @@ def create_app(home: Path, watch=True, *, trusted_local=False):
             else {
                 "connectors": [],
                 "connections": [],
-                "environments": store.get("settings", "environments"),
+                "environments": catalog.environment_names(),
                 "environment_details": catalog.environments(),
             },
         }
@@ -626,16 +626,7 @@ def create_app(home: Path, watch=True, *, trusted_local=False):
     def runs(request: Request, worktree: str | None = None):
         if worktree:
             access.worktree(request.state.user, worktree)
-        return list(
-            reversed(
-                [
-                    r
-                    for r in store.all("run")
-                    if (not worktree or r["worktree"] == worktree)
-                    and access.role(request.state.user, r["project"])
-                ]
-            )
-        )
+        return store.runs(request.state.user, worktree)
 
     @app.get("/api/runs/{run}")
     def get_run(run: str):

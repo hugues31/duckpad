@@ -5,7 +5,8 @@ from types import SimpleNamespace
 
 
 def test_capture_and_download_use_descriptor_metadata(services, tmp_path, monkeypatch):
-    _, _, _, engine = services
+    store, projects, _, engine = services
+    worktree = projects.create("Artifact metadata")
     artifacts = engine.artifacts
     source = tmp_path / "report.csv"
     source.write_bytes(b"value\n42\n")
@@ -25,8 +26,16 @@ def test_capture_and_download_use_descriptor_metadata(services, tmp_path, monkey
         return info
 
     monkeypatch.setattr(Path, "stat", path_metadata)
-    run = {"id": "run_test", "project": "project_test", "worktree": "worktree_test", "environment": "dev"}
+    run = {
+        "id": "run_test",
+        "project": worktree["project"],
+        "worktree": worktree["id"],
+        "environment": "dev",
+        "status": "running",
+        "started": "2026-01-01T00:00:00Z",
+    }
+    store.put("run", run["id"], run)
     identity = artifacts.capture({"path": str(source), "format": "csv"}, run, "export", [tmp_path])
-    with artifacts.open(identity, "worktree_test", "dev", "export", "run_test") as (stream, record):
+    with artifacts.open(identity, worktree["id"], "dev", "export", "run_test") as (stream, record):
         assert stream.read() == b"value\n42\n"
         assert record["size"] == len(b"value\n42\n")
