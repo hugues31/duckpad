@@ -83,10 +83,7 @@ test("Code has a keyboard file tree, preserves drafts across files and tabs, sav
   // A concurrent edit to a different file must survive the revision-based save.
   const files = {
     ...snapshot.files,
-    "documentation.json": JSON.stringify({
-      ...snapshot.bundle.documentation,
-      project: "Concurrent documentation",
-    }),
+    "README.md": "Concurrent documentation",
   };
   expect(
     (
@@ -120,6 +117,81 @@ test("Code has a keyboard file tree, preserves drafts across files and tabs, sav
     "Saved from the Code tab",
   );
   expect(errors).toEqual([]);
+});
+
+test("project Markdown and Python dependencies round trip between Code, Documentation and ZIP", async ({
+  page,
+}) => {
+  const { worktree, snapshot } = await openCode(page);
+  const manifest =
+    snapshot.files["pyproject.toml"].replace(
+      "dependencies = [",
+      'dependencies = ["pandas>=2", ',
+    ) + '\n# Keep custom settings\n[tool.custom]\nvalue = "example"\n';
+  await page
+    .getByRole("treeitem", { name: "pyproject.toml", exact: true })
+    .click();
+  await editCode(page, manifest);
+  await page.getByRole("button", { name: "Save changes", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "Save changes", exact: true }),
+  ).toBeDisabled();
+
+  const markdown = "# Revenue\n\nProject **business context**.\n";
+  await page.getByRole("link", { name: "Documentation", exact: true }).click();
+  await expect(page.locator(".documentation-page")).toContainText("README.md");
+  await page.locator(".project-documentation").fill(markdown);
+  const saved = page.waitForResponse(
+    (response) =>
+      response.url().endsWith(`/worktrees/${worktree.id}`) &&
+      response.request().method() === "PUT",
+  );
+  await page.getByRole("button", { name: "Save changes", exact: true }).click();
+  expect((await saved).ok()).toBeTruthy();
+  await expect(page.locator(".documentation-page .muted.small")).toHaveText(
+    "All changes saved",
+  );
+  await page.getByRole("link", { name: "Code", exact: true }).click();
+  await page.getByRole("treeitem", { name: "README.md", exact: true }).click();
+  await expect(page.locator(".code-editor-body")).toContainText(
+    "business context",
+  );
+  const changed = markdown + "\nEdited from Code.\n";
+  await editCode(page, changed);
+  await page.getByRole("button", { name: "Save changes", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "Save changes", exact: true }),
+  ).toBeDisabled();
+  await page.getByRole("link", { name: "Documentation", exact: true }).click();
+  await expect(page.locator(".project-documentation")).toHaveValue(changed);
+  await page.reload();
+  await expect(page.locator(".project-documentation")).toHaveValue(changed);
+  const result = await (
+    await page.request.get(`/api/worktrees/${worktree.id}`)
+  ).json();
+  expect(result.files["README.md"]).toBe(changed);
+  expect(JSON.parse(result.files["documentation.json"])).not.toHaveProperty(
+    "project",
+  );
+  expect(result.files["pyproject.toml"]).toBe(manifest);
+  expect(result.diagnostics).toEqual([]);
+
+  await page.getByRole("link", { name: "Code", exact: true }).click();
+  const download = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Download project ZIP" }).click();
+  const bytes = await readFile((await (await download).path())!);
+  expect(bytes.includes(Buffer.from("README.md"))).toBeTruthy();
+  expect(bytes.includes(Buffer.from("pyproject.toml"))).toBeTruthy();
+
+  await page
+    .getByRole("treeitem", { name: "pyproject.toml", exact: true })
+    .click();
+  await editCode(page, "[project\n");
+  await page.getByRole("button", { name: "Save changes", exact: true }).click();
+  await expect(page.locator(".banner.error")).toContainText("pyproject.toml");
+  await editCode(page, manifest);
+  await page.getByRole("button", { name: "Save changes", exact: true }).click();
+  await expect(page.locator(".banner.error")).toHaveCount(0);
 });
 
 test("invalid project files remain editable in Code and can be repaired", async ({

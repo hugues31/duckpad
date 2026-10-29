@@ -155,7 +155,8 @@ export function WorkspaceNotices({
         <div className="banner error">
           <AlertCircle size={16} />
           <span>
-            {snapshot.diagnostics.length} · {snapshot.diagnostics[0].message}
+            {snapshot.diagnostics.length} · {snapshot.diagnostics[0].file}:{" "}
+            {snapshot.diagnostics[0].message}
           </span>
           <button onClick={onViewFiles}>
             {t("viewFiles")}
