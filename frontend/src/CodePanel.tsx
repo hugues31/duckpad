@@ -3,6 +3,7 @@ import { Download, FileCode2, Loader2, Save } from "lucide-react";
 import { downloadProject } from "./api";
 import { useT } from "./i18n";
 import ProjectFileTree from "./ProjectFileTree";
+import { projectFileLanguage } from "./projectFiles";
 import type { Snapshot } from "./types";
 
 const CodeEditor = lazy(() => import("./Editor"));
@@ -157,7 +158,7 @@ export default function CodePanel({
                       key={path}
                       value={files[path]}
                       onChange={edit}
-                      language={path.endsWith(".sql") ? "sql" : "json"}
+                      language={projectFileLanguage(path)}
                       readOnly={readOnly || pending}
                       height="100%"
                     />

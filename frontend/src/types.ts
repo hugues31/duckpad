@@ -29,6 +29,7 @@ export interface Bundle {
   templates: Record<string, string>;
   components: Record<string, Json>;
   documentation: Json;
+  pyproject?: string | null;
 }
 export interface Snapshot {
   role: "reader" | "editor" | "admin";
