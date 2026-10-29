@@ -276,3 +276,167 @@ def test_batch_migration_preserves_children_and_rolls_back_on_failure(store):
         assert "_alembic_tmp_user" not in inspect(connection).get_table_names()
     with migration_connection(store.engine) as connection:
         command.check(configuration(connection))
+
+
+@pytest.mark.parametrize("kind", ["user", "project", "worktree", "connection", "environment", "access"])
+def test_unknown_fields_are_rejected_without_changing_records(store, kind):
+    Auth(store)
+    worktree = Projects(store).create("Strict records")
+    keys = {
+        "user": "admin",
+        "project": worktree["project"],
+        "worktree": worktree["id"],
+        "connection": "local",
+        "environment": "dev",
+        "access": worktree["project"],
+    }
+    key = keys[kind]
+    original = store.get(kind, key)
+    with pytest.raises(ValueError, match=f"Unknown {kind} fields: new_service_field"):
+        store.put(kind, key, {**original, "new_service_field": "must not disappear"})
+    assert store.get(kind, key) == original
+
+
+def test_converted_fields_and_arbitrary_json_snapshots_round_trip(store):
+    from datetime import UTC, date, datetime
+    from decimal import Decimal
+
+    worktree = Projects(store).create("Snapshots")
+    identity = {"issuer": "https://identity.example", "subject": "one"}
+    store.put("user", "sso", {"username": "SSO", "role": "member", "active": True, "oidc": identity})
+    assert store.get("user", "sso")["oidc"] == identity
+    connection = store.get("connection", "local")
+    connection["environments"]["dev"] = {"arbitrary_parameter": "value"}
+    store.put("connection", "local", connection)
+    assert store.get("connection", "local") == connection
+    transaction = {
+        "browser": "browser",
+        "nonce": "nonce",
+        "verifier": "verifier",
+        "revision": "revision",
+        "metadata": {"custom_provider_field": [1, 2]},
+        "expires": 123.0,
+    }
+    store.put("oidc_transaction", "transaction", transaction)
+    assert store.get("oidc_transaction", "transaction") == transaction
+    connector = {"id": "custom", "custom_definition_field": {"nested": True}}
+    store.put("connector", "custom", connector)
+    assert store.get("connector", "custom") == connector
+    conflict = {"id": "conflict", "worktree": worktree["id"], "custom_snapshot_field": [1, 2]}
+    store.put("conflict", "conflict", conflict)
+    assert store.get("conflict", "conflict") == conflict
+    snapshot = {
+        "amount": Decimal("1.20"),
+        "date": date(2026, 1, 2),
+        "timestamp": datetime(2026, 1, 2, tzinfo=UTC),
+        "bytes": b"\x00\xff",
+    }
+    store.put(
+        "run",
+        "run",
+        {
+            "project": worktree["project"],
+            "worktree": worktree["id"],
+            "environment": "dev",
+            "status": "success",
+            "started": "2026-01-01",
+            "nodes": {"node": snapshot},
+        },
+    )
+    assert store.get("run", "run")["nodes"]["node"] == {
+        "amount": "1.20",
+        "date": "2026-01-02",
+        "timestamp": "2026-01-02T00:00:00+00:00",
+        "bytes": "00ff",
+    }
+    store.put("settings", "custom", {"arbitrary": [1, 2]})
+    store.put("revision", worktree["id"] + ":custom", {"custom.txt": "contents"})
+    assert store.get("settings", "custom") == {"arbitrary": [1, 2]}
+    assert store.get("revision", worktree["id"] + ":custom") == {"custom.txt": "contents"}
+
+
+def test_scoped_queries_and_bulk_deletes_leave_other_projects_untouched(store):
+    from sqlalchemy import event
+
+    from duckpad.git_credentials import GitCredentials
+
+    Auth(store)
+    projects = Projects(store)
+    first, second = projects.create("First"), projects.create("Second")
+    credentials = GitCredentials(store)
+    for tree in (first, second):
+        key = tree["id"]
+        store.put("conflict", key, {"worktree": key, "proposal": {"flow.json": "{}"}})
+        store.put(
+            "run",
+            key,
+            {
+                "project": tree["project"],
+                "worktree": key,
+                "environment": "dev",
+                "status": "success",
+                "started": "2026-01-01",
+            },
+        )
+        store.put(
+            "artifact",
+            key,
+            {
+                "run": key,
+                "project": tree["project"],
+                "worktree": key,
+                "environment": "dev",
+                "node": "export",
+                "filename": "report.csv",
+                "media_type": "text/csv",
+                "size": 0,
+                "signature": [],
+            },
+        )
+        credentials.consent("admin", tree["project"], "https://example.com/repo.git")
+    statements = []
+
+    def capture(_connection, _cursor, statement, _parameters, _context, _many):
+        statements.append(statement)
+
+    event.listen(store.engine, "before_cursor_execute", capture)
+    try:
+        assert store.worktrees(first["project"]) == [first]
+        assert store.find_worktree(first["project"], first["branch"]) == first
+        assert store.find_worktree(first["project"], "missing") is None
+        assert [c["id"] for c in projects.snapshot(first["id"])["conflicts"]] == [first["id"]]
+        assert store.has_conflicts(first["id"])
+        assert not store.has_conflicts("missing")
+        assert store.artifact_ids(project=first["project"]) == [first["id"]]
+        assert store.artifact_ids(worktree=second["id"]) == [second["id"]]
+        credentials.forget_project(first["project"])
+        assert not credentials.consented("admin", first["project"], "https://example.com/repo.git")
+        assert credentials.consented("admin", second["project"], "https://example.com/repo.git")
+    finally:
+        event.remove(store.engine, "before_cursor_execute", capture)
+    queries = [s for s in statements if s.startswith(("SELECT", "DELETE"))]
+    assert queries and all("WHERE" in statement for statement in queries)
+
+
+def test_oidc_transaction_count_and_clear_do_not_load_provider_snapshots(store, monkeypatch):
+    for key in ("first", "second"):
+        store.put(
+            "oidc_transaction",
+            key,
+            {
+                "browser": "browser",
+                "nonce": "nonce",
+                "verifier": "verifier",
+                "revision": "revision",
+                "metadata": {"arbitrary": True},
+                "expires": 123.0,
+            },
+        )
+
+    def refuse_record(*args):
+        pytest.fail("Counting or deleting transactions must not deserialize their snapshots")
+
+    monkeypatch.setattr(store, "_record", refuse_record)
+    assert store.count_oidc_transactions() == 2
+    store.delete_oidc_transactions()
+    assert store.count_oidc_transactions() == 0

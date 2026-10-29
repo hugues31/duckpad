@@ -34,7 +34,7 @@ def migration_connection(engine):
             with connection.begin():
                 if "records" in inspect(connection).get_table_names():
                     raise Problem(
-                        "This database uses the unsupported document schema. Start with a new Duckpad data directory."
+                        "This database uses the unsupported document schema. Start with a new data directory using duckpad start --home <new-directory>."
                     )
                 yield connection
                 if connection.exec_driver_sql("PRAGMA foreign_key_check").first():

@@ -136,13 +136,13 @@ class GitWorkspace:
             worktree["path"], "diff", "--name-only"
         ):
             raise Problem("This worktree has pending Git edits. Save them before integration.", 409)
-        if any(c["worktree"] == worktree["id"] for c in self.store.all("conflict")):
+        if self.store.has_conflicts(worktree["id"]):
             raise Problem("Resolve concurrent editing conflicts before integration.", 409)
         return head, files
 
     def branches(self, worktree_id):
         worktree = self.projects.get(worktree_id)
-        trees = {w["branch"]: w for w in self.store.all("worktree") if w["project"] == worktree["project"]}
+        trees = {w["branch"]: w for w in self.store.worktrees(worktree["project"])}
         rows = self.git(
             worktree["path"],
             "for-each-ref",
@@ -183,9 +183,9 @@ class GitWorkspace:
             worktree = self.projects.get(worktree_id)
             ref = "refs/heads/" + name
             self.git(worktree["path"], "check-ref-format", ref)
-            for tree in self.store.all("worktree"):
-                if tree["project"] == worktree["project"] and tree["branch"] == name:
-                    return tree
+            tree = self.store.find_worktree(worktree["project"], name)
+            if tree:
+                return tree
             self.resolve(worktree["path"], ref)
             key = uid("worktree_")
             path = self.store.home / "worktrees" / key
@@ -213,7 +213,7 @@ class GitWorkspace:
             # Without --force Git also protects untracked files and locked worktrees.
             self.git(current["path"], "worktree", "remove", remove["path"])
             self.git(current["path"], "update-ref", "-d", "refs/heads/" + remove["branch"], head)
-            artifacts = [a["id"] for a in self.store.all("artifact") if a["worktree"] == remove_id]
+            artifacts = self.store.artifact_ids(worktree=remove_id)
             self.store.delete("worktree", remove_id)
             for identity in artifacts:
                 (self.store.home / "artifacts" / identity).unlink(missing_ok=True)
@@ -263,13 +263,10 @@ class GitWorkspace:
                 self.projects.remotes.checked_config(target, digest(config))
                 if not config.get("checked"):
                     raise Problem("Fetch origin before reviewing a remote branch", 409)
-            source_tree = next(
-                (
-                    w
-                    for w in self.store.all("worktree")
-                    if w["project"] == target["project"] and "refs/heads/" + w["branch"] == source_ref
-                ),
-                None,
+            source_tree = (
+                self.store.find_worktree(target["project"], source_ref.removeprefix("refs/heads/"))
+                if source_ref.startswith("refs/heads/")
+                else None
             )
             if source_tree:
                 self.clean(source_tree)
