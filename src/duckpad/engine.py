@@ -930,6 +930,7 @@ class Engine:
 
     def compile(self, worktree, environment, node_id):
         snapshot = self.projects.snapshot(worktree)
+        self.catalog.environment(environment)
         if not snapshot["bundle"]:
             raise Problem("Project files are invalid", 422, snapshot["diagnostics"])
         nodes, edges, _ = expand(snapshot["bundle"])

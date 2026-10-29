@@ -105,7 +105,7 @@ for (const [node, defaultAmount] of [
     expect(params(snapshot)).not.toHaveProperty("amount");
     await expect(amount).toHaveValue(String(defaultAmount));
     const compiled = await (
-      await page.request.get(`${url}/compile/${node}`)
+      await page.request.get(`${url}/compile/${node}?environment=dev`)
     ).json();
     expect(compiled[0].bindings.amount).toBe(defaultAmount);
 
@@ -206,7 +206,9 @@ test("clearing a required number does not save zero and invalid drafts stay edit
   const stored = await save(page, url, () => amount.blur());
   expect(stored.bundle!.flow.nodes[0].params).not.toHaveProperty("amount");
   await expect(amount).toHaveValue("");
-  const compiled = await page.request.get(`${url}/compile/template`);
+  const compiled = await page.request.get(
+    `${url}/compile/template?environment=dev`,
+  );
   expect(compiled.ok()).toBe(false);
   expect(await compiled.text()).toContain("Parameter amount is required");
 });

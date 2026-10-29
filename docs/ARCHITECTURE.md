@@ -142,6 +142,28 @@ shown as unavailable, and CPU sampling resumes after two valid snapshots.
 
 The main endpoint groups are `/session`, `/workspace`, `/projects`, `/example`, `/worktrees`, `/catalog`, `/environments`, `/runs`, `/conflicts`, `/library`, `/users`, `/password`, `/ssh-key`, `/git-hosts` and `/resources`. Uploads use `/worktrees/{id}/uploads` and are stored under `resources/<project>/`. `/projects/import` creates a project from the declarative files of an uploaded ZIP and reports referenced connections and absolute input files that the archive cannot carry. Request bodies are validated; invalid requests receive a 422 response in the same `{"error", "detail"}` format as other failures. A worktree exposes definition snapshots and saves, branch/merge history, compiled SQL, status, previews, lineage and manual run launch. See the route definitions in `src/duckpad/app.py` for request shapes. APIs use the same services as the interface; there is no second runner or separate editor state.
 
+Execution and result operations require an explicit configured environment. Under
+`/api/worktrees/{worktree}`, GET `status`, `compile/{node}`, `preview/{node}`,
+`exports/{node}`, `exports/{node}/download`, and `generations/{identity}` require
+the `environment` query parameter. POST `runs` and `lineage` require
+`environment` in their JSON body. Omitting it returns 422 before the operation
+runs; an unknown or deleted environment returns 404. No operation defaults to
+`dev`. The interface selects from the current catalog and sends that selection.
+
+For example, with a configured `prod` environment:
+
+```http
+POST /api/worktrees/{worktree}/runs
+Content-Type: application/json
+
+{"environment": "prod"}
+```
+
+Read its results with `GET /api/worktrees/{worktree}/preview/{node}?environment=prod`.
+Downloads also require the export run ID:
+`GET /api/worktrees/{worktree}/exports/{node}/download?environment=prod&run={run}`.
+The initial `dev` and `prod` catalog entries are editable configuration, not API defaults.
+
 ## Authorization and execution isolation
 
 The server rechecks the account, instance role and project membership on every
