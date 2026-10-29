@@ -30,6 +30,7 @@ ROUTE_ACCESS = {
         "GET /api/library",
         "GET /api/runs",
         "POST /api/projects",
+        "POST /api/projects/import",
         "POST /api/example",
         "POST /api/password",
         "GET /api/ssh-key",

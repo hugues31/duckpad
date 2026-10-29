@@ -547,3 +547,165 @@ def test_project_zip_exports_selected_branch_and_invalid_saved_content(client, w
     assert client.get("/api/worktrees/missing/archive.zip").status_code == 404
     client.cookies.clear()
     assert client.get(f"/api/worktrees/{branch}/archive.zip").status_code == 401
+
+
+def project_zip(files, prefix=""):
+    output = io.BytesIO()
+    with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for name, content in files.items():
+            archive.writestr(prefix + name, content)
+    return output.getvalue()
+
+
+def import_zip(client, data, name=None):
+    return client.post(
+        "/api/projects/import",
+        files={"file": ("project.zip", data, "application/zip")},
+        data={} if name is None else {"name": name},
+    )
+
+
+def test_downloaded_zip_imports_as_an_independent_project(app, client, worktree):
+    snapshot = client.get(f"/api/worktrees/{worktree}").json()
+    flow = json.loads(snapshot["files"]["flow.json"])
+    flow["nodes"] = [
+        {"id": "city", "template": "city", "label": "City", "params": {}, "position": {"x": 0, "y": 0}}
+    ]
+    files = {
+        **snapshot["files"],
+        "flow.json": json.dumps(flow),
+        "templates/city.sql": "-- @label City\n-- @output result\nSELECT '東京' AS city;\n",
+        "README.md": "# Imported context\n\nMarkdown travels with the project.\n",
+    }
+    saved = client.put(f"/api/worktrees/{worktree}", json={"revision": snapshot["revision"], "files": files})
+    assert saved.status_code == 200, saved.text
+    source = saved.json()
+    response = import_zip(client, client.get(f"/api/worktrees/{worktree}/archive.zip").content)
+    assert response.status_code == 200, response.text
+    imported = response.json()
+    assert imported["project"] != source["worktree"]["project"]
+    assert imported["warnings"] == {"connections": [], "files": []}
+    copy = client.get(f"/api/worktrees/{imported['id']}").json()
+    assert copy["diagnostics"] == []
+    assert copy["role"] == "admin"
+    assert copy["bundle"]["flow"] == {**source["bundle"]["flow"], "id": imported["project"]}
+    assert {name: text for name, text in copy["files"].items() if name != "flow.json"} == {
+        name: text for name, text in source["files"].items() if name != "flow.json"
+    }
+    project = next(
+        p for p in client.get("/api/workspace").json()["projects"] if p["id"] == imported["project"]
+    )
+    assert project["name"] == "API"
+    settings = client.get(f"/api/projects/{imported['project']}/settings").json()
+    assert settings["connections"] == ["local"]
+    assert [member["role"] for member in settings["members"]] == ["admin"]
+    projects = app.state.services.projects
+    assert projects.git(imported["path"], "log", "--format=%s") == "feat(project): import API"
+    assert client.get(f"/api/worktrees/{worktree}").json()["commit"] == source["commit"]
+
+
+def test_import_reads_a_nested_project_folder_and_ignores_local_files(app, client, worktree):
+    files = client.get(f"/api/worktrees/{worktree}").json()["files"]
+    output = io.BytesIO()
+    with zipfile.ZipFile(output, "w") as archive:
+        archive.writestr("api-main/", "")
+        for name, content in {
+            **files,
+            ".git/config": "[core]\n",
+            ".env": "PRIVATE_VALUE=not-for-import\n",
+            "data/input.csv": "id\n1\n",
+            "notes.txt": "Unrelated local file",
+            "templates/notes.txt": "Not a template",
+        }.items():
+            archive.writestr("api-main/" + name, content)
+        archive.writestr("__MACOSX/api-main/._flow.json", b"\x00\x05\x16\x07")
+    response = import_zip(client, output.getvalue(), "  Imported copy  ")
+    assert response.status_code == 200, response.text
+    imported = response.json()
+    copy = client.get(f"/api/worktrees/{imported['id']}").json()
+    assert copy["bundle"]["flow"]["name"] == "Imported copy"
+    assert set(copy["files"]) == set(files)
+    path = Path(imported["path"])
+    projects = app.state.services.projects
+    assert set(projects.git(path, "ls-files").splitlines()) == {*files, ".gitignore"}
+    for name in (".env", "data", "notes.txt", "templates/notes.txt", "__MACOSX"):
+        assert not (path / name).exists()
+
+
+def test_import_reports_what_the_archive_cannot_carry(app, client, worktree, tmp_path):
+    example = client.post("/api/example", json={"name": "Revenue lab"}).json()
+    response = import_zip(client, client.get(f"/api/worktrees/{example['id']}/archive.zip").content)
+    assert response.status_code == 200, response.text
+    assert response.json()["warnings"] == {"connections": ["sample_" + example["project"]], "files": []}
+
+    files = client.get(f"/api/worktrees/{worktree}").json()["files"]
+    uploaded = str(tmp_path / "instance" / "resources" / "project_elsewhere" / "orders.csv")
+
+    def source(identity, label, **params):
+        return {"id": identity, "template": "load_csv", "label": label, "params": params}
+
+    flow = json.loads(files["flow.json"])
+    flow["nodes"] = [
+        source("upload", "Uploaded orders", connection="local", file=uploaded),
+        source("remote", "Remote orders", connection="warehouse", file="s3://bucket/orders.csv"),
+        {"id": "packaged", "component": "sources", "label": "Packaged sources", "params": {}},
+    ]
+    component = {"nodes": [source("inner", "Inner", connection="local", file=uploaded)], "edges": []}
+    data = project_zip(
+        {**files, "flow.json": json.dumps(flow), "components/sources.json": json.dumps(component)}
+    )
+    response = import_zip(client, data)
+    assert response.status_code == 200, response.text
+    assert response.json()["warnings"] == {
+        "connections": ["warehouse"],
+        "files": ["Packaged sources", "Uploaded orders"],
+    }
+
+
+@pytest.mark.parametrize(
+    ("entries", "complete", "error"),
+    [
+        (None, True, "Choose a readable ZIP archive of a Duckpad project"),
+        ({"README.md": "# No flow\n"}, True, "The archive must contain one Duckpad project"),
+        (
+            {"first/flow.json": "{}", "second/flow.json": "{}"},
+            True,
+            "The archive must contain one Duckpad project",
+        ),
+        ({"flow.json": "{"}, False, "flow.json is not valid JSON: Expecting property name"),
+        ({"components/report.json": "[]"}, False, "components/report.json must contain a JSON object"),
+        ({"templates/broken.sql": b"\xff"}, False, "templates/broken.sql is not valid UTF-8 text"),
+    ],
+)
+def test_invalid_archives_do_not_create_projects(app, client, worktree, entries, complete, error):
+    files = {} if complete else client.get(f"/api/worktrees/{worktree}").json()["files"]
+    data = b"not a zip" if entries is None else project_zip({**files, **entries})
+    before = client.get("/api/workspace").json()["projects"]
+    response = import_zip(client, data, "Rejected")
+    assert response.status_code == 422, response.text
+    assert response.json()["error"].startswith(error)
+    assert client.get("/api/workspace").json()["projects"] == before
+    assert len(list((app.state.services.store.home / "projects").iterdir())) == len(before)
+
+
+def test_import_rejects_duplicate_and_oversized_archives(app, client, worktree, monkeypatch):
+    files = client.get(f"/api/worktrees/{worktree}").json()["files"]
+    output = io.BytesIO()
+    with zipfile.ZipFile(output, "w") as archive:
+        for name, content in files.items():
+            archive.writestr(name, content)
+        with pytest.warns(UserWarning, match="Duplicate name"):
+            archive.writestr("flow.json", files["flow.json"])
+    response = import_zip(client, output.getvalue())
+    assert response.status_code == 422
+    assert response.json()["error"] == "The archive contains flow.json more than once"
+    expanded = project_zip({**files, "README.md": "A" * 2_000_000})
+    monkeypatch.setattr("duckpad.archive.MAX_PROJECT_BYTES", 1_000_000)
+    response = import_zip(client, expanded)
+    assert response.status_code == 413
+    assert response.json()["error"] == "Extracted project files are limited to 64 MiB"
+    monkeypatch.setattr("duckpad.archive.MAX_ARCHIVE_BYTES", len(expanded) - 1)
+    response = import_zip(client, expanded)
+    assert response.status_code == 413
+    assert response.json()["error"] == "Project archives are limited to 16 MiB"
+    assert len(client.get("/api/workspace").json()["projects"]) == 1

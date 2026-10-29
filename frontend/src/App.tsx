@@ -21,7 +21,7 @@ import {
 } from "./navigation";
 import { Modal } from "./modals";
 import { AlertCircle, Loader2 } from "lucide-react";
-import { api, ApiError, send, withQuery } from "./api";
+import { api, ApiError, importProjectArchive, send, withQuery } from "./api";
 import { ProjectSettings } from "./Administration";
 import Canvas from "./Canvas";
 import CanvasHeader from "./CanvasHeader";
@@ -637,6 +637,14 @@ function WorkspaceApp({ preferences }: { preferences: Preferences }) {
         openProject(next.id);
       },
       createExample,
+      importArchive: async (file, name) => {
+        const result = await importProjectArchive(file, name);
+        await refreshWorkspace();
+        return {
+          warnings: result.warnings,
+          open: () => openProject(result.id),
+        };
+      },
     });
   }
   async function createExample(name?: string) {

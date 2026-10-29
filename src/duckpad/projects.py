@@ -70,7 +70,7 @@ class Projects:
             raise Problem(result.stderr.strip() or result.stdout.strip())
         return result.stdout.strip()
 
-    def create(self, name, bundle=None):
+    def create(self, name, bundle=None, action="create"):
         project_id, worktree_id = uid("project_"), uid("worktree_")
         path = self.store.home / "projects" / project_id
         path.mkdir(parents=True)
@@ -86,7 +86,7 @@ class Projects:
         bundle["flow"].update(id=project_id, name=name)
         for file, content in bundle_to_files(bundle).items():
             atomic_write(path / file, content)
-        self.commit(path, "feat(project): create " + " ".join(name.split())[:64])
+        self.commit(path, f"feat(project): {action} " + " ".join(name.split())[:64])
         project = {"id": project_id, "name": name, "main": worktree_id, "created": now()}
         worktree = {"id": worktree_id, "project": project_id, "branch": "main", "path": str(path)}
         with self.store.transaction():

@@ -1,24 +1,57 @@
 import { useEffect, useRef, useState } from "react";
-import { FolderPlus, Loader2, Workflow } from "lucide-react";
+import { FileArchive, FolderPlus, Loader2, Workflow } from "lucide-react";
+import type { ImportWarnings } from "./api";
 import { useT } from "./i18n";
 import { Modal } from "./modals";
 import { useAsyncAction } from "./useAsyncAction";
 
+const STARTING_POINTS = {
+  empty: {
+    icon: FolderPlus,
+    label: "emptyProject",
+    description: "emptyProjectDescription",
+  },
+  example: {
+    icon: Workflow,
+    label: "fromExample",
+    description: "exampleDescription",
+  },
+  archive: {
+    icon: FileArchive,
+    label: "importArchive",
+    description: "importArchiveDescription",
+  },
+} as const;
+
+/** A project created from an archive, opened once its import warnings are read. */
+export interface ImportedProject {
+  warnings: ImportWarnings;
+  open: () => void;
+}
+
 export default function NewProjectModal({
   createEmpty,
   createExample,
+  importArchive,
   onClose,
 }: {
   createEmpty: (name: string) => Promise<void>;
   createExample: (name: string) => Promise<void>;
+  importArchive: (file: File, name: string) => Promise<ImportedProject>;
   onClose: () => void;
 }) {
   const t = useT();
-  const [template, setTemplate] = useState<"empty" | "example">("empty");
+  const [template, setTemplate] =
+    useState<keyof typeof STARTING_POINTS>("empty");
   const [name, setName] = useState("");
+  const [archive, setArchive] = useState<File | null>(null);
+  const [imported, setImported] = useState<ImportedProject | null>(null);
+  const warnings = imported?.warnings;
   const { pending, error, setError, run } = useAsyncAction();
   const submitting = useRef(false);
   const form = useRef<HTMLFormElement>(null);
+  const done = useRef<HTMLButtonElement>(null);
+  const importing = template === "archive";
 
   useEffect(() => {
     const opener = document.activeElement as HTMLElement | null;
@@ -50,11 +83,16 @@ export default function NewProjectModal({
     };
   }, []);
 
+  useEffect(() => {
+    if (warnings) done.current?.focus();
+  }, [warnings]);
+
   return (
     <Modal
       title={t("newProject")}
       onClose={() => {
-        if (!submitting.current) onClose();
+        if (imported) imported.open();
+        else if (!submitting.current) onClose();
       }}
     >
       <form
@@ -62,80 +100,152 @@ export default function NewProjectModal({
         aria-busy={pending}
         onSubmit={async (event) => {
           event.preventDefault();
-          if (submitting.current || !name.trim()) return;
+          if (imported) return imported.open();
+          if (submitting.current || (importing ? !archive : !name.trim()))
+            return;
           submitting.current = true;
-          const created = await run(() =>
-            template === "empty"
-              ? createEmpty(name.trim())
-              : createExample(name.trim()),
-          );
+          let result = null as ImportedProject | null;
+          const created = await run(async () => {
+            if (importing) result = await importArchive(archive!, name.trim());
+            else if (template === "empty") await createEmpty(name.trim());
+            else await createExample(name.trim());
+          });
           submitting.current = false;
-          if (created) onClose();
+          if (!created) return;
+          if (!result) return onClose();
+          const { connections, files } = result.warnings;
+          // Opening the project closes this dialog, so unavailable dependencies are listed first.
+          if (connections.length || files.length) setImported(result);
+          else result.open();
         }}
       >
-        <div className="modal-content new-project-content">
-          <label className="field">
-            <span>{t("name")}</span>
-            <input
-              name="project-name"
-              required
-              value={name}
-              disabled={pending}
-              onChange={(event) => setName(event.target.value)}
-            />
-          </label>
-          <fieldset className="project-templates" disabled={pending}>
-            <legend>{t("projectStartingPoint")}</legend>
-            {(["empty", "example"] as const).map((value) => {
-              const Icon = value === "empty" ? FolderPlus : Workflow;
-              return (
-                <label className="project-template" key={value}>
-                  <input
-                    type="radio"
-                    name="project-template"
-                    value={value}
-                    checked={template === value}
-                    aria-labelledby={`project-template-${value}`}
-                    aria-describedby={`project-template-${value}-description`}
-                    onChange={() => {
-                      setTemplate(value);
-                      setError("");
-                    }}
-                  />
-                  <Icon size={22} aria-hidden="true" />
-                  <strong id={`project-template-${value}`}>
-                    {t(value === "empty" ? "emptyProject" : "fromExample")}
-                  </strong>
-                  <span id={`project-template-${value}-description`}>
-                    {t(
-                      value === "empty"
-                        ? "emptyProjectDescription"
-                        : "exampleDescription",
-                    )}
-                  </span>
-                </label>
-              );
-            })}
-          </fieldset>
-          {error && (
-            <div className="notice error" role="alert">
-              {error}
-            </div>
-          )}
-        </div>
+        {warnings ? (
+          <div className="modal-content new-project-content">
+            <p role="status">{t("projectImported")}</p>
+            {!!warnings.connections.length && (
+              <div className="notice warning import-warning">
+                <p>{t("importMissingConnections")}</p>
+                <ul>
+                  {warnings.connections.map((connection) => (
+                    <li key={connection}>
+                      <code>{connection}</code>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {!!warnings.files.length && (
+              <div className="notice warning import-warning">
+                <p>{t("importMissingFiles")}</p>
+                <ul>
+                  {warnings.files.map((label) => (
+                    <li key={label}>{label}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="modal-content new-project-content">
+            <label className="field">
+              <span>{t("name")}</span>
+              <input
+                name="project-name"
+                required={!importing}
+                placeholder={importing ? t("archiveNamePlaceholder") : ""}
+                value={name}
+                disabled={pending}
+                onChange={(event) => setName(event.target.value)}
+              />
+            </label>
+            <fieldset className="project-templates" disabled={pending}>
+              <legend>{t("projectStartingPoint")}</legend>
+              {(
+                Object.keys(STARTING_POINTS) as (keyof typeof STARTING_POINTS)[]
+              ).map((value) => {
+                const {
+                  icon: Icon,
+                  label,
+                  description,
+                } = STARTING_POINTS[value];
+                return (
+                  <label className="project-template" key={value}>
+                    <input
+                      type="radio"
+                      name="project-template"
+                      value={value}
+                      checked={template === value}
+                      aria-labelledby={`project-template-${value}`}
+                      aria-describedby={`project-template-${value}-description`}
+                      onChange={() => {
+                        setTemplate(value);
+                        setError("");
+                      }}
+                    />
+                    <Icon size={22} aria-hidden="true" />
+                    <strong id={`project-template-${value}`}>{t(label)}</strong>
+                    <span id={`project-template-${value}-description`}>
+                      {t(description)}
+                    </span>
+                  </label>
+                );
+              })}
+            </fieldset>
+            {importing && (
+              <label className="field">
+                <span>{t("projectArchive")}</span>
+                <input
+                  type="file"
+                  name="project-archive"
+                  accept=".zip,application/zip"
+                  required
+                  disabled={pending}
+                  onChange={(event) => {
+                    setArchive(event.target.files?.[0] || null);
+                    setError("");
+                  }}
+                />
+              </label>
+            )}
+            {error && (
+              <div className="notice error" role="alert">
+                {error}
+              </div>
+            )}
+          </div>
+        )}
         <footer>
-          <button
-            type="button"
-            className="button secondary"
-            disabled={pending}
-            onClick={onClose}
-          >
-            {t("cancel")}
-          </button>
-          <button className="button primary" disabled={pending || !name.trim()}>
-            {pending && <Loader2 className="spin" size={16} />}
-            {t(pending ? "creatingProject" : "create")}
-          </button>
+          {warnings ? (
+            <button ref={done} className="button primary">
+              {t("openImportedProject")}
+            </button>
+          ) : (
+            <>
+              <button
+                type="button"
+                className="button secondary"
+                disabled={pending}
+                onClick={onClose}
+              >
+                {t("cancel")}
+              </button>
+              <button
+                className="button primary"
+                disabled={pending || (importing ? !archive : !name.trim())}
+              >
+                {pending && <Loader2 className="spin" size={16} />}
+                {t(
+                  pending
+                    ? importing
+                      ? "importingProject"
+                      : "creatingProject"
+                    : importing
+                      ? "importProject"
+                      : "create",
+                )}
+              </button>
+            </>
+          )}
         </footer>
       </form>
     </Modal>

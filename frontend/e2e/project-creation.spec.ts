@@ -227,3 +227,94 @@ test("the chooser supports keyboard navigation, French and dark mode on a phone"
   const after = await (await page.request.get("/api/workspace")).json();
   expect(after.projects.length).toBe(before.projects.length);
 });
+
+test("a downloaded project ZIP imports as a new project and lists what it cannot carry", async ({
+  page,
+}) => {
+  await signIn(page);
+  const source = await (
+    await page.request.post("/api/example", { data: { name: "Zip source" } })
+  ).json();
+  const archive = await (
+    await page.request.get(`/api/worktrees/${source.id}/archive.zip`)
+  ).body();
+  await page.reload();
+  const before = await (await page.request.get("/api/workspace")).json();
+  await page.getByRole("button", { name: "New project", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "New project", exact: true });
+  await dialog.getByRole("radio", { name: "Import a project ZIP" }).check();
+  const name = dialog.getByLabel("Name", { exact: true });
+  await expect(name).toHaveAttribute("placeholder", "Name from the archive");
+  const submit = dialog.getByRole("button", { name: "Import", exact: true });
+  await expect(submit).toBeDisabled();
+  const file = dialog.getByLabel("Project ZIP", { exact: true });
+  await file.setInputFiles({
+    name: "notes.zip",
+    mimeType: "application/zip",
+    buffer: Buffer.from("not a zip"),
+  });
+  await submit.click();
+  await expect(dialog.getByRole("alert")).toHaveText(
+    "Choose a readable ZIP archive of a Duckpad project",
+  );
+  expect(
+    (await (await page.request.get("/api/workspace")).json()).projects,
+  ).toHaveLength(before.projects.length);
+
+  await file.setInputFiles({
+    name: "zip-source.zip",
+    mimeType: "application/zip",
+    buffer: archive,
+  });
+  await expect(dialog.getByRole("alert")).toHaveCount(0);
+  const response = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/api/projects/import") &&
+      response.request().method() === "POST",
+  );
+  await submit.click();
+  const result = await response;
+  expect(result.ok()).toBeTruthy();
+  const imported = await result.json();
+  expect(imported.project).not.toBe(source.project);
+  await expect(dialog.getByRole("status")).toContainText("Project imported.");
+  await expect(dialog.locator("code")).toHaveText(`sample_${source.project}`);
+  const open = dialog.getByRole("button", {
+    name: "Open project",
+    exact: true,
+  });
+  await expect(open).toBeFocused();
+  await open.click();
+  await expect(dialog).toHaveCount(0);
+  await expect(page.getByLabel("Active project")).toHaveValue(imported.project);
+  await expect(page.getByLabel("Active project")).toContainText("Zip source");
+  await expect(
+    page.locator(".react-flow__node").filter({
+      has: page.getByText("Regional revenue", { exact: true }),
+    }),
+  ).toBeVisible();
+  const copy = await (
+    await page.request.get(`/api/worktrees/${imported.id}`)
+  ).json();
+  expect(copy.bundle.flow.name).toBe("Zip source");
+  expect(copy.files["README.md"]).toContain("Northstar");
+
+  const blank = await (
+    await page.request.post("/api/projects", { data: { name: "Blank zip" } })
+  ).json();
+  await page.getByRole("button", { name: "New project", exact: true }).click();
+  await dialog.getByRole("radio", { name: "Import a project ZIP" }).check();
+  await name.fill("  Renamed import  ");
+  await file.setInputFiles({
+    name: "blank.zip",
+    mimeType: "application/zip",
+    buffer: await (
+      await page.request.get(`/api/worktrees/${blank.id}/archive.zip`)
+    ).body(),
+  });
+  await submit.click();
+  await expect(dialog).toHaveCount(0);
+  await expect(page.getByLabel("Active project")).toContainText(
+    "Renamed import",
+  );
+});

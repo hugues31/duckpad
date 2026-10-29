@@ -67,6 +67,29 @@ export async function downloadProject(worktree: string) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
+/** What a project archive cannot carry, reported after an import. */
+export interface ImportWarnings {
+  connections: string[];
+  files: string[];
+}
+
+/** Recreate a project from a downloaded ZIP; an empty name keeps the archive's. */
+export async function importProjectArchive(
+  file: File,
+  name: string,
+): Promise<{ id: string; project: string; warnings: ImportWarnings }> {
+  const form = new FormData();
+  form.append("file", file);
+  form.append("name", name);
+  const response = await fetch("/api/projects/import", {
+    method: "POST",
+    body: form,
+    credentials: "same-origin",
+  });
+  if (!response.ok) throw await readError(response);
+  return response.json();
+}
+
 /** Store a local file on the server and return its server-side path. */
 export async function uploadFile(
   file: File,
