@@ -165,9 +165,10 @@ class Lineage:
                 raise
             return incomplete(response, f"This SQL step could not be explained: {error}")
         finally:
-            cursor.close()
+            # Unregister first: a recalculation interrupts only registered, still open cursors.
             with context.lock:
                 context.lineage.pop(request_id, None)
+            cursor.close()
 
     @staticmethod
     def page(cursor, query, offset):

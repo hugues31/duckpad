@@ -1,4 +1,4 @@
-"""Native execution with the same persistent cancellation as the SQL worker."""
+"""Persistent cancellation shared by native execution and the SQL worker."""
 
 import threading
 
@@ -6,6 +6,8 @@ import duckdb
 
 
 class Cursor:
+    """A DuckDB cursor that, once interrupted, refuses every later statement."""
+
     def __init__(self, cursor):
         self.cursor = cursor
         self.lock = threading.Lock()

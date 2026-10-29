@@ -2,6 +2,7 @@
 
 import copy
 import logging
+import re
 import threading
 import time
 from contextlib import suppress
@@ -28,6 +29,10 @@ UNFINISHED_RUN_STATUSES = ("preparing", "running", "canceling")
 MAX_PREVIEW_ROWS = 10_000
 # How often a run waits for lineage readers to release a replaced output.
 READER_POLL_INTERVAL = 0.005
+# URL prefixes that DuckDB scopes to each object storage secret type by default.
+REMOTE_PREFIXES = {"s3": ("s3://", "s3a://", "s3n://"), "r2": ("r2://",), "gcs": ("gcs://", "gs://")}
+SECRET_OPTIONS = re.compile(r"\bSECRET\s+\{\{\s*secret_name\s*\}\}\s*\(([^)]*)", re.IGNORECASE)
+SECRET_TYPE = re.compile(r"\bTYPE\s+[\"']?(\w+)", re.IGNORECASE)
 
 
 @dataclass
@@ -73,6 +78,30 @@ def reachable(seeds, edges, upstream):
         result = extended
 
 
+def remote_prefixes(captured):
+    """Remote URL prefixes covered by the connections' storage secret types, whatever their IDs."""
+    prefixes = []
+    for connection in captured.values():
+        sql = re.sub(r"--[^\n]*|/\*.*?\*/", "", connection["definition"].get("init_sql", ""), flags=re.DOTALL)
+        for options in SECRET_OPTIONS.findall(sql):
+            for kind in SECRET_TYPE.findall(options):
+                prefixes += [p for p in REMOTE_PREFIXES.get(kind.lower(), ()) if p not in prefixes]
+    return prefixes
+
+
+def interrupt(cursor):
+    """Interrupt a cursor without waiting for its statement to stop.
+
+    Cancellation persists in the cursor, and a cursor closed meanwhile has nothing left to stop.
+    """
+
+    def stop():
+        with suppress(duckdb.Error, Problem):
+            cursor.interrupt()
+
+    threading.Thread(target=stop, name="interrupt", daemon=True).start()
+
+
 def run_outcome(statuses, canceled):
     if canceled:
         return "canceled"
@@ -99,64 +128,109 @@ class Engine:
                 "The backend stopped before completion was confirmed. Manual recomputation is required."
             )
             for node in run["nodes"].values():
-                if node["status"] == "running":
-                    node["status"] = "interrupted"
-                    if node.get("kind") == "export":
+                if node["status"] in ("pending", "running"):
+                    if node["status"] == "running" and node.get("kind") == "export":
                         node["external_outcome"] = "unknown"
+                    node["status"] = "interrupted"
             self._persist(run, [])
 
     def context(self, worktree, environment, create=False):
-        """The live DuckDB context of an existing worktree in a configured environment."""
-        with self.lock:
+        """The live DuckDB context of an existing worktree in a configured environment.
+
+        Its database starts outside the engine lock, so status and cancellation requests
+        never wait for a worker, extension installation or connection setup.
+        """
+        key = (worktree, environment)
+        while True:
             self.projects.get(worktree)
             if environment not in self.catalog.environment_names():
                 raise Problem("Unknown environment", 404)
-            key = (worktree, environment)
-            if key not in self.contexts or getattr(self.contexts[key].db, "closed", False):
-                self.contexts[key] = Context(*key, db=None)
-            if self.contexts[key].db is None and (create or not self.access):
-                extensions = self.store.home / "extensions"
-                extensions.mkdir(exist_ok=True)
-                config = {**database_config(extensions), **self.extension_settings()}
-                if self.isolated:
-                    from .sandbox import Database
+            with self.lock:
+                context, stopped = self.contexts.get(key), None
+                if context is None or getattr(context.db, "closed", False):
+                    stopped = context and context.db
+                    context = self.contexts[key] = Context(*key, db=None)
+            if stopped:
+                # Reap the replaced worker's process and release its descriptors.
+                stopped.close()
+            if context.db is not None or (self.access and not create):
+                return context
+            database = self._open(worktree, environment)
+            with self.lock:
+                if self.contexts.get(key) is context and context.db is None:
+                    context.db = database
+                    return context
+            # Another request published its database first, or the context was discarded meanwhile.
+            database.close()
+            if self.contexts.get(key) is context:
+                return context
 
-                    project = self.projects.get(worktree)["project"]
-                    references = self.access.record(project)["connections"]
-                    available = [
-                        r
-                        for r in references
-                        if environment in self.store.get("connection", r, {}).get("environments", {})
-                    ]
-                    captured, _ = self.catalog.capture(available, environment)
-                    roots, writable = self.access.local_roots(project, captured)
-                    directory = self.store.home / "exports" / worktree / environment
-                    directory.mkdir(parents=True, exist_ok=True)
-                    temporary = directory / ".temporary"
-                    temporary.mkdir(exist_ok=True)
-                    # Provision only trusted administrator-declared extensions,
-                    # before giving the worker read-only access to their cache.
-                    if any(c["definition"].get("extensions") for c in captured.values()):
-                        with duckdb.connect(config=config) as setup:
-                            self.catalog.prepare(setup, captured)
-                    database = Database(
-                        {
-                            "captured": captured,
-                            "extensions": str(extensions),
-                            "allow_unsigned_extensions": config["allow_unsigned_extensions"],
-                            "offline_extensions": self.store.get("settings", "offline_extensions", {}),
-                            "read_paths": [str(p) for p in roots],
-                            "write_paths": [str(p) for p in [*writable, directory]],
-                            "temporary": str(temporary),
-                            "remote_paths": ["s3://"]
-                            if any(c["definition"]["id"] == "s3" for c in captured.values())
-                            else [],
-                        }
-                    )
-                else:
-                    database = duckdb.connect(":memory:", config=config)
-                self.contexts[key].db = database
-            return self.contexts[key]
+    def _open(self, worktree, environment):
+        extensions = self.store.home / "extensions"
+        extensions.mkdir(exist_ok=True)
+        config = {**database_config(extensions), **self.extension_settings()}
+        if not self.isolated:
+            return duckdb.connect(":memory:", config=config)
+        from .sandbox import Database
+
+        project = self.projects.get(worktree)["project"]
+        captured, secrets = self._configured_connections(project, environment)
+        roots, writable = self.access.local_roots(project, captured)
+        directory = self.exports(worktree, environment)
+        directory.mkdir(parents=True, exist_ok=True)
+        temporary = directory / ".temporary"
+        temporary.mkdir(exist_ok=True)
+        self._install_extensions(captured, config, secrets)
+        try:
+            return Database(
+                {
+                    "captured": captured,
+                    "extensions": str(extensions),
+                    "allow_unsigned_extensions": config["allow_unsigned_extensions"],
+                    "offline_extensions": self.store.get("settings", "offline_extensions", {}),
+                    "read_paths": [str(p) for p in roots],
+                    "write_paths": [str(p) for p in [*writable, directory]],
+                    "temporary": str(temporary),
+                    "remote_paths": remote_prefixes(captured),
+                }
+            )
+        except Problem as error:
+            raise Problem(redact(str(error), secrets), error.status, error.detail) from None
+
+    def _configured_connections(self, project, environment):
+        """Capture the project's authorized connections that are fully configured for the environment.
+
+        Creating an environment adds an empty configuration to every connection. A connection
+        still missing required settings stays unavailable instead of failing every run; nodes
+        that use it are blocked by their own capture error.
+        """
+        captured, secrets = {}, []
+        for reference in self.access.record(project)["connections"]:
+            try:
+                values, hidden = self.catalog.capture([reference], environment)
+            except Problem:
+                continue
+            captured.update(values)
+            secrets.extend(hidden)
+        return captured, secrets
+
+    def _install_extensions(self, captured, config, secrets):
+        """Provision trusted administrator-declared extensions before the worker gets read-only
+        access to their cache. Connection setup, such as ATTACH, runs only in the worker."""
+        declared = [c for c in captured.values() if c["definition"].get("extensions")]
+        if not declared:
+            return
+        with duckdb.connect(config=config) as setup:
+            for connection in declared:
+                definition = {**connection["definition"], "init_sql": ""}
+                try:
+                    self.catalog.prepare(setup, {"extensions": {**connection, "definition": definition}})
+                except duckdb.Error as error:
+                    raise Problem(
+                        f"Cannot install the extensions of connection {connection['name']}: "
+                        + redact(str(error), secrets),
+                        503,
+                    ) from None
 
     def extension_settings(self):
         return {"allow_unsigned_extensions": self.store.get("settings", "allow_unsigned_extensions", False)}
@@ -300,7 +374,7 @@ class Engine:
         for request in list(context.lineage.values()):
             if affected is None or request["nodes"] & affected:
                 request["canceled"].set()
-                request["cursor"].interrupt()
+                interrupt(request["cursor"])
 
     def statuses(self, worktree, environment):
         context = self.context(worktree, environment)
@@ -444,10 +518,6 @@ class Engine:
         return captured, secrets
 
     def _persist(self, run, secrets):
-        token = self.active.get(run["worktree"])
-        if token and token["cancel"].is_set() and run["status"] in ("preparing", "running"):
-            run["status"] = "canceling"
-
         def sanitize(value):
             if isinstance(value, str):
                 return redact(value, secrets)
@@ -458,6 +528,15 @@ class Engine:
             return value
 
         with self.store.transaction():
+            # Check inside the write, which serializes with a cancellation request's own update.
+            token = self.active.get(run["worktree"])
+            if (
+                token
+                and token["id"] == run["id"]
+                and token["cancel"].is_set()
+                and run["status"] in ("preparing", "running")
+            ):
+                run["status"] = "canceling"
             self.store.put("run", run["id"], sanitize(run))
             for key, state in run["nodes"].items():
                 if state.get("kind") == "export":
@@ -508,12 +587,13 @@ class Engine:
                 if state["status"] in ("pending", "running"):
                     state["status"] = "canceled" if execution.canceled else "blocked"
         finally:
+            execution.token["cursor"] = None
+            if execution.cursor:
+                # A concurrent interrupt of this closed cursor is ignored.
+                with suppress(duckdb.Error, Problem):
+                    execution.cursor.close()
             with self.lock:
                 try:
-                    if execution.cursor:
-                        with suppress(duckdb.Error, Problem):
-                            execution.cursor.close()
-                    execution.token["cursor"] = None
                     if execution.canceled:
                         run["status"] = "canceled"
                     run.update(finished=now(), duration=time.monotonic() - started)
@@ -820,15 +900,21 @@ class Engine:
             return bool(dataset and dataset.status == "valid")
 
     def cancel(self, run_id):
+        run = self.store.get("run", run_id)
+        if not run:
+            raise Problem("Execution not found", 404)
         with self.lock:
-            run = self.store.get("run", run_id)
-            if not run:
-                raise Problem("Execution not found", 404)
             token = self.active.get(run["worktree"])
-            if token and token["id"] == run_id:
-                token["cancel"].set()
-                if token["cursor"]:
-                    token["cursor"].interrupt()
+            if not token or token["id"] != run_id:
+                return self.store.get("run", run_id)
+            token["cancel"].set()
+            cursor = token["cursor"]
+        if cursor:
+            interrupt(cursor)
+        # The run's later writes keep this status; its final write replaces it.
+        with self.store.transaction():
+            run = self.store.get("run", run_id)
+            if run["status"] in ("preparing", "running"):
                 run["status"] = "canceling"
                 self.store.put("run", run_id, run)
         return run
@@ -981,6 +1067,9 @@ class Engine:
             self.cancel(token["id"])
         for thread in threads:
             thread.join()
-        for context in self.contexts.values():
+        with self.lock:
+            contexts = list(self.contexts.values())
+            self.contexts.clear()
+        for context in contexts:
             if context.db:
                 context.db.close()

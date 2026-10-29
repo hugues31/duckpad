@@ -515,7 +515,8 @@ def test_sql_worker_cancels_and_recovers_after_process_exit(instance):
     projects.write(worktree["id"], snapshot["revision"], bundle_to_files(bundle))
     assert wait_run(store, engine.launch(worktree["id"], "dev"))["status"] == "success"
     assert engine.context(worktree["id"], "dev").db.process.pid != database.process.pid
-    database.close()
+    # The replaced worker was reaped and its descriptors released.
+    assert database.process.stderr.closed and database.socket.fileno() == -1
 
 
 def test_read_only_connection_root_cannot_be_written_through_another_connection(instance, tmp_path):
