@@ -11,7 +11,7 @@ import {
   X,
 } from "lucide-react";
 import { api, withQuery } from "./api";
-import { definitionOf, outputPorts } from "./graph";
+import { nodeInterface, type NodeInterface } from "./graph";
 import { useT } from "./i18n";
 import NodeDocumentation from "./NodeDocumentation";
 import ExportDownload from "./ExportDownload";
@@ -31,7 +31,7 @@ const TABS = [
 export default function Inspector({
   readOnly = false,
   node,
-  definition,
+  signature,
   snapshot,
   graphNodes,
   graphEdges,
@@ -52,7 +52,7 @@ export default function Inspector({
 }: {
   readOnly?: boolean;
   node: FlowNode;
-  definition: Json;
+  signature: NodeInterface;
   snapshot: Snapshot;
   graphNodes: FlowNode[];
   graphEdges: FlowEdge[];
@@ -65,7 +65,7 @@ export default function Inspector({
   onSaveDocumentation: (
     change: (documentation: Json) => void,
     base: Snapshot,
-  ) => Promise<void>;
+  ) => Promise<Snapshot>;
   onInput: (port: string, source: string) => void;
   onDelete: () => void;
   onRun: () => void;
@@ -76,11 +76,12 @@ export default function Inspector({
 }) {
   const t = useT();
   const [tab, setTab] = useState<(typeof TABS)[number][0]>("parameters");
+  // Pending edits are saved when another node is selected or the panel closes.
   const {
     draft,
     update,
     persist: saveDraft,
-  } = useRevisionDraft(node, snapshot, onSave);
+  } = useRevisionDraft(node, snapshot, onSave, { autosave: !readOnly });
   const [sqlMode, setSqlMode] = useState<"current" | "executed">("current");
   const [compiled, setCompiled] = useState<Json[]>([]);
   const [error, setError] = useState("");
@@ -150,21 +151,13 @@ export default function Inspector({
       };
     }
   }, [tab, sqlMode, snapshot.revision, fullNode, environment]);
-  const parameters = node.component
-    ? Object.entries(definition.parameters || {}).map(([name, p]) => ({
-        ...(p as Json),
-        name,
-      }))
-    : definition.parameters || [];
-  const inputs = node.component
-    ? Object.keys(definition.inputs || {})
-    : definition.inputs || [];
+  const { definition, kind, parameters, inputs } = signature;
   const statements: Json[] =
     sqlMode === "executed" ? preview?.executed_sql || [] : compiled;
   return (
     <aside className="inspector">
       <div className="inspector-title">
-        <span>{node.label || definition.name || definition.label}</span>
+        <span>{node.label || definition?.name || definition?.label}</span>
         <button className="icon" onClick={onClose} title={t("close")}>
           <X size={18} />
         </button>
@@ -174,9 +167,7 @@ export default function Inspector({
           {node.component ? <Boxes size={18} /> : <Settings2 size={18} />}
         </span>
         <div>
-          <strong>
-            {t(node.component ? "component" : definition.kind || "transform")}
-          </strong>
+          <strong>{t(kind)}</strong>
           <small>{node.template || node.component}</small>
         </div>
         <button
@@ -191,7 +182,7 @@ export default function Inspector({
       <button className="button secondary small" onClick={onHistory}>
         {t("elementHistory")}
       </button>
-      {definition.kind === "export" &&
+      {kind === "export" &&
         ["export_csv", "export_xlsx"].includes(node.template || "") && (
           <ExportDownload
             key={`${snapshot.worktree.id}:${environment}:${fullNode}:${snapshot.revision}`}
@@ -258,16 +249,18 @@ export default function Inspector({
                         {graphNodes
                           .filter((n) => n.id !== node.id)
                           .flatMap((n) =>
-                            outputPorts(n, definitionOf(n, snapshot)).map(
-                              (p) => (
-                                <option
-                                  key={n.id + ":" + p}
-                                  value={n.id + ":" + p}
-                                >
-                                  {n.label || n.id} · {p}
-                                </option>
-                              ),
-                            ),
+                            nodeInterface(
+                              n,
+                              snapshot.parsed_templates,
+                              snapshot.bundle?.components,
+                            ).outputs.map((p) => (
+                              <option
+                                key={n.id + ":" + p}
+                                value={n.id + ":" + p}
+                              >
+                                {n.label || n.id} · {p}
+                              </option>
+                            )),
                           )}
                       </Select>
                     </label>
@@ -279,14 +272,15 @@ export default function Inspector({
             <QueryBuilder
               kind={node.template || ""}
               schemas={schemas}
-              onApply={(values) =>
+              onApply={(values) => {
                 update((current) => ({
                   ...current,
                   params: { ...current.params, ...values },
-                }))
-              }
+                }));
+                void persist();
+              }}
             />
-            {parameters.map((parameter: Json) => (
+            {parameters.map((parameter) => (
               <ParameterField
                 key={parameter.name}
                 worktree={snapshot.worktree.id}

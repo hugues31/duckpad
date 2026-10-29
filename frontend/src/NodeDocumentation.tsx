@@ -1,7 +1,13 @@
 import Select from "./Select";
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { useT } from "./i18n";
+import { useRevisionDraft } from "./useRevisionDraft";
 import type { Json, Snapshot } from "./types";
+
+type SaveDocumentation = (
+  change: (documentation: Json) => void,
+  base: Snapshot,
+) => Promise<Snapshot>;
 
 export default function NodeDocumentation({
   snapshot,
@@ -12,41 +18,13 @@ export default function NodeDocumentation({
   snapshot: Snapshot;
   fullNode: string;
   preview: Json | null;
-  onSave: (
-    change: (documentation: Json) => void,
-    base: Snapshot,
-  ) => Promise<void>;
+  onSave: SaveDocumentation;
 }) {
   const t = useT();
   const [kind, setKind] = useState("nodes");
   const [column, setColumn] = useState("");
   const key =
     kind === "nodes" ? fullNode : fullNode + ":" + (preview?.port || "result");
-  const current =
-    kind === "columns"
-      ? snapshot.bundle?.documentation.columns?.[key]?.[column] || ""
-      : snapshot.bundle?.documentation[kind]?.[key] || "";
-  const [value, setValue] = useState(current);
-  const [message, setMessage] = useState("");
-  const base = useRef(snapshot);
-  useEffect(() => {
-    setValue(current);
-    base.current = snapshot;
-  }, [kind, column, key, current]);
-  async function save() {
-    try {
-      await onSave((documentation) => {
-        documentation[kind] ??= {};
-        if (kind === "columns") {
-          documentation.columns[key] ??= {};
-          documentation.columns[key][column] = value;
-        } else documentation[kind][key] = value;
-      }, base.current);
-      setMessage(t("saved"));
-    } catch (e) {
-      setMessage((e as Error).message);
-    }
-  }
   return (
     <>
       <Select
@@ -70,19 +48,79 @@ export default function NodeDocumentation({
           ))}
         </Select>
       )}
+      <DocumentationEditor
+        key={`${kind}:${key}:${column}`}
+        snapshot={snapshot}
+        kind={kind}
+        documentKey={key}
+        column={kind === "columns" ? column : ""}
+        onSave={onSave}
+      />
+    </>
+  );
+}
+
+/** Edit one documentation entry; switching entries remounts the editor. */
+function DocumentationEditor({
+  snapshot,
+  kind,
+  documentKey,
+  column,
+  onSave,
+}: {
+  snapshot: Snapshot;
+  kind: string;
+  documentKey: string;
+  column: string;
+  onSave: SaveDocumentation;
+}) {
+  const t = useT();
+  const [message, setMessage] = useState("");
+  const editable =
+    snapshot.role !== "reader" && (kind !== "columns" || !!column);
+  const documentation = snapshot.bundle?.documentation;
+  const current: string =
+    (kind === "columns"
+      ? documentation?.columns?.[documentKey]?.[column]
+      : documentation?.[kind]?.[documentKey]) || "";
+  // Switching nodes or entries saves the notes rather than dropping them.
+  const { draft, update, persist, pending } = useRevisionDraft(
+    current,
+    snapshot,
+    (text, base) =>
+      onSave((value) => {
+        value[kind] ??= {};
+        if (kind === "columns") {
+          value.columns[documentKey] ??= {};
+          value.columns[documentKey][column] = text;
+        } else value[kind][documentKey] = text;
+      }, base),
+    { autosave: editable },
+  );
+  async function save() {
+    setMessage("");
+    try {
+      await persist();
+      setMessage(t("saved"));
+    } catch (e) {
+      setMessage((e as Error).message);
+    }
+  }
+  return (
+    <>
       <textarea
-        readOnly={snapshot.role === "reader"}
+        readOnly={!editable}
         className="documentation-editor"
-        value={value}
+        value={draft}
         placeholder={t("documentationPlaceholder")}
-        onChange={(e) => setValue(e.target.value)}
+        onChange={(e) => update(() => e.target.value)}
       />
       <button
         className="button primary full"
         onClick={save}
-        disabled={snapshot.role === "reader" || (kind === "columns" && !column)}
+        disabled={!editable || pending}
       >
-        {t("save")}
+        {t(pending ? "saving" : "save")}
       </button>
       {message && <p className="muted small">{message}</p>}
     </>

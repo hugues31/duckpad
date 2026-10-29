@@ -37,7 +37,7 @@ import {
 } from "lucide-react";
 import "@xyflow/react/dist/style.css";
 import { useT, templateLabel } from "./i18n";
-import { DRAG_TYPE, type NodeConnection } from "./graph";
+import { DRAG_TYPE, nodeInterface, type NodeConnection } from "./graph";
 import ConnectionPalette from "./ConnectionPalette";
 import { layoutNodes } from "./graphLayout";
 import { SearchField } from "./Search";
@@ -148,7 +148,8 @@ interface CanvasProps {
   onSelect: (id: string | null) => void;
   onMove: (nodes: FlowNode[]) => Promise<void>;
   onConnect: (edge: Omit<FlowEdge, "id">) => void;
-  onDelete: (nodes: string[], edges: string[]) => void;
+  /** Resolve once the deletion is saved; reject if it failed. */
+  onDelete: (nodes: string[], edges: string[]) => Promise<void>;
   onAdd: (
     kind: NodeKind,
     id: string,
@@ -224,15 +225,11 @@ function CanvasInner(props: CanvasProps) {
   const displayNodes = useMemo(
     () =>
       props.nodes.map((node) => {
-        const definition = node.component
-          ? props.components[node.component]
-          : props.parsed[node.template || ""];
-        const inputs = node.component
-          ? Object.keys(definition?.inputs || {})
-          : definition?.inputs || [];
-        const outputs = node.component
-          ? Object.keys(definition?.outputs || {})
-          : definition?.outputs || [];
+        const { definition, kind, inputs, outputs } = nodeInterface(
+          node,
+          props.parsed,
+          props.components,
+        );
         const result = props.statuses.nodes?.[props.prefix + node.id];
         const nested = Object.entries(props.statuses.nodes || {})
           .filter(([id]) => id.startsWith(props.prefix + node.id + "::"))
@@ -277,9 +274,7 @@ function CanvasInner(props: CanvasProps) {
               node.label ||
               definition?.name ||
               templateLabel(node.template || "sql", definition?.label, t),
-            kind: node.component
-              ? "component"
-              : definition?.kind || "transform",
+            kind,
             inputs,
             outputs,
             status,
@@ -342,6 +337,9 @@ function CanvasInner(props: CanvasProps) {
     new Map<string, { position: FlowNode["position"] }>(),
   );
   const previousSelected = useRef(props.selected);
+  // React Flow removes deleted nodes locally before the save; a failed save
+  // leaves the snapshot unchanged, so restore the nodes explicitly.
+  const [restore, setRestore] = useState(0);
   useEffect(() => {
     const selectionChanged = previousSelected.current !== props.selected;
     previousSelected.current = props.selected;
@@ -360,7 +358,7 @@ function CanvasInner(props: CanvasProps) {
         };
       }),
     );
-  }, [displayNodes, props.selected, pendingMoves]);
+  }, [displayNodes, props.selected, pendingMoves, restore]);
   useEffect(() => {
     if (!initialized || !frame.width || !frame.height) return;
     const layout = [
@@ -549,13 +547,15 @@ function CanvasInner(props: CanvasProps) {
             })),
           )
         }
-        onDelete={({ nodes, edges }) =>
-          !props.readOnly &&
-          props.onDelete(
-            nodes.map((n) => n.id),
-            edges.map((e) => e.id),
-          )
-        }
+        onDelete={({ nodes, edges }) => {
+          if (props.readOnly) return;
+          props
+            .onDelete(
+              nodes.map((n) => n.id),
+              edges.map((e) => e.id),
+            )
+            .catch(() => setRestore((value) => value + 1));
+        }}
         onSelectionChange={selectionChanged}
         onDragOver={(event) => {
           event.preventDefault();

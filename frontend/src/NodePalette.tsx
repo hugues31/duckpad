@@ -1,17 +1,18 @@
 import { useMemo, useState } from "react";
 import { Boxes, Code2, Plus, Search, X } from "lucide-react";
 import { nodeIcon } from "./Canvas";
-import { DRAG_TYPE } from "./graph";
+import { DRAG_TYPE, nodeChoices, type NodeKind } from "./graph";
 import { templateLabel, useT } from "./i18n";
 import type { Snapshot } from "./types";
 
-const CATEGORIES = ["sources", "transforms", "components", "exports"] as const;
+export type { NodeKind } from "./graph";
 
-export type NodeKind = "template" | "component";
+const CATEGORIES = ["sources", "transforms", "components", "exports"] as const;
 
 export default function NodePalette({
   readOnly,
   snapshot,
+  excludedComponents,
   hidden,
   onClose,
   onAdd,
@@ -20,6 +21,8 @@ export default function NodePalette({
 }: {
   readOnly: boolean;
   snapshot: Snapshot;
+  /** The opened component definitions, which the graph cannot contain. */
+  excludedComponents: string[];
   hidden: boolean;
   onClose: () => void;
   onAdd: (kind: NodeKind, id: string) => void;
@@ -29,34 +32,26 @@ export default function NodePalette({
   const t = useT();
   const [search, setSearch] = useState("");
   const items = useMemo(() => {
-    const templates = Object.entries(snapshot.parsed_templates).map(
-      ([id, definition]) => ({
-        id,
-        kind: "template" as NodeKind,
-        label: templateLabel(id, definition.label, t),
-        category:
-          definition.kind === "source"
-            ? "sources"
-            : definition.kind === "export"
-              ? "exports"
-              : "transforms",
-        description: definition.description,
-      }),
-    );
-    const components = Object.entries(snapshot.bundle?.components || {}).map(
-      ([id, definition]) => ({
-        id,
-        kind: "component" as NodeKind,
-        label: definition.name,
-        category: "components",
-        description: definition.description,
-      }),
-    );
     const query = search.toLowerCase();
-    return [...templates, ...components].filter((item) =>
-      item.label?.toLowerCase().includes(query),
-    );
-  }, [snapshot, search, t]);
+    return nodeChoices(
+      snapshot.parsed_templates,
+      snapshot.bundle?.components || {},
+      excludedComponents,
+    )
+      .map(({ kind, id, signature: { definition, kind: role } }) => ({
+        id,
+        kind,
+        label:
+          kind === "component"
+            ? definition!.name
+            : templateLabel(id, definition!.label, t),
+        category:
+          CATEGORIES.find((category) => category === role + "s") ||
+          "transforms",
+        description: definition!.description,
+      }))
+      .filter((item) => item.label?.toLowerCase().includes(query));
+  }, [snapshot, excludedComponents, search, t]);
   return (
     <aside
       className="palette"
