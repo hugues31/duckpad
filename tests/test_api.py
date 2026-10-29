@@ -256,8 +256,8 @@ def test_execution_and_results_use_the_explicit_environment(app, client, environ
     assert downloaded.text.splitlines() == ["value", "42"]
 
 
-def test_openapi_requires_environments_without_defaults(app):
-    schema = app.openapi()
+def test_openapi_requires_environments_without_defaults(client):
+    schema = client.app.openapi()
     for suffix in (
         "status",
         "compile/{node}",
