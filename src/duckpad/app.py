@@ -343,7 +343,7 @@ def create_app(home: Path, watch=True, *, trusted_local=False):
         return catalog.public()
 
     def save_upload(worktree, file):
-        folder = store.home / "resources" / projects.get(worktree)["project"]
+        folder = store.paths.resources(projects.get(worktree)["project"])
         folder.mkdir(parents=True, exist_ok=True)
         name = upload_name(file.filename)
         # A failed or interrupted upload never leaves a partial file under its final name.
@@ -555,8 +555,7 @@ def create_app(home: Path, watch=True, *, trusted_local=False):
     @app.post("/api/worktrees/{worktree}/git/cleanup")
     def git_cleanup(worktree: str, data: schemas.BranchCleanup):
         with engine.exclusive(projects.get(worktree)["project"]):
-            if data.remove_worktree in engine.active:
-                raise Problem("Stop the worktree's execution before removing it", 409)
+            engine.require_idle(data.remove_worktree)
             result = projects.versioning.cleanup(
                 worktree, data.remove_worktree, data.integrated_worktree, data.expected_head
             )
@@ -651,7 +650,11 @@ def create_app(home: Path, watch=True, *, trusted_local=False):
     @app.post("/api/worktrees/{worktree}/runs")
     def launch(worktree: str, data: schemas.Launch):
         entry_point = "ui" if data.entry_point == "ui" else "api"
-        return engine.launch(worktree, data.environment, data.node, entry_point, confirmed=data.confirmed)
+        settings = catalog.environment(data.environment)
+        # The interface asks before running in a protected environment; API clients run directly.
+        if entry_point == "ui" and settings["confirm_before_run"] and not data.confirmed:
+            raise Problem("Confirm this environment before running", 409, {"confirmation_required": settings})
+        return engine.launch(worktree, data.environment, data.node, entry_point)
 
     @app.get("/api/runs")
     def runs(request: Request, worktree: str | None = None):

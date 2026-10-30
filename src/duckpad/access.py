@@ -137,7 +137,7 @@ class Access:
             self.store.put("access", project, record)
 
     def local_roots(self, project, captured):
-        resource = self.store.home / "resources" / project
+        resource = self.store.paths.resources(project)
         resource.mkdir(parents=True, exist_ok=True)
         roots, writable = [resource], [resource]
         for connection in captured.values():

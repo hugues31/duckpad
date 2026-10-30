@@ -14,7 +14,7 @@ from . import git_command
 from .builtin_templates import BUILTINS
 from .bundle import ROOT_FILES, bundle_to_files, files_to_bundle, is_declarative
 from .comparison import commit_message
-from .components import reconcile_documentation
+from .components import expand, reconcile_documentation
 from .git_command import GitError
 from .git_workspace import GitWorkspace, diagnose, require_valid
 from .identity import SYSTEM_IDENTITY, current_identity
@@ -85,7 +85,7 @@ class Projects:
         A project is either recorded with its repository and related records, or leaves nothing behind.
         """
         project_id, worktree_id = project_id or uid("project_"), uid("worktree_")
-        path = self.store.home / "projects" / project_id
+        path = self.store.paths.project(project_id)
         path.mkdir(parents=True)
         try:
             self.git(path, "init", "-b", "main")
@@ -123,7 +123,7 @@ class Projects:
                 artifacts = self.store.artifact_ids(project=project_id)
                 self.store.delete("project", project_id)
             self.discard(worktrees, artifacts)
-            shutil.rmtree(self.store.home / "resources" / project_id, ignore_errors=True)
+            shutil.rmtree(self.store.paths.resources(project_id), ignore_errors=True)
 
     def open_worktree(self, worktree, branch, start=None):
         """Check out a branch, created at start when given, in a new recorded worktree.
@@ -132,7 +132,7 @@ class Projects:
         without its directory: a failure removes the checkout and the branch it created.
         """
         repository, key = worktree["path"], uid("worktree_")
-        path = self.store.home / "worktrees" / key
+        path = self.store.paths.worktree(key)
         path.parent.mkdir(parents=True, exist_ok=True)
         # Forget directories removed by an interrupted cleanup; Git would keep their branch checked out.
         self.git(repository, "worktree", "prune")
@@ -164,12 +164,12 @@ class Projects:
         Every step tolerates files that are already gone, so an interrupted cleanup can run again.
         """
         for identity in artifacts:
-            (self.store.home / "artifacts" / identity).unlink(missing_ok=True)
+            (self.store.paths.artifacts / identity).unlink(missing_ok=True)
         for worktree in worktrees:
             self.observed.pop(worktree["id"], None)
             self.pending.pop(worktree["id"], None)
             shutil.rmtree(worktree["path"], ignore_errors=True)
-            shutil.rmtree(self.store.home / "exports" / worktree["id"], ignore_errors=True)
+            shutil.rmtree(self.store.paths.exports(worktree["id"]), ignore_errors=True)
 
     def get(self, worktree_id):
         result = self.store.get("worktree", worktree_id)
@@ -356,6 +356,43 @@ class Projects:
             self.on_change(worktree_id)
             return self.snapshot(worktree_id)
 
+    def prune_column_documentation(self, worktree_id, node, columns, current):
+        """Remove the documentation of columns that a node's published outputs no longer have.
+
+        `columns` lists the column names of each output port. `current(bundle)` tells whether
+        those outputs still match the files; the documentation of an outdated result is kept.
+        Component outputs that expose a port of the node are pruned with it.
+        """
+        with self.locked(worktree_id):
+            snapshot = self.snapshot(worktree_id)
+            bundle = snapshot["bundle"]
+            if not bundle or not current(bundle):
+                return
+            documentation = bundle["documentation"].get("columns", {})
+            schemas = {f"{node}:{port}": set(names) for port, names in columns.items()}
+            try:
+                _, _, boundaries = expand(bundle, tolerant=True)
+                for parent, boundary in boundaries.items():
+                    for port, target in boundary["outputs"].items():
+                        if target[0] == node and target[1] in columns:
+                            schemas[f"{parent}:{port}"] = schemas[f"{node}:{target[1]}"]
+            except Problem:
+                pass
+            changed = False
+            for key, names in schemas.items():
+                if key in documentation:
+                    pruned = {name: text for name, text in documentation[key].items() if name in names}
+                    if pruned != documentation[key]:
+                        documentation[key] = pruned
+                        changed = True
+            if changed:
+                self.write(
+                    worktree_id,
+                    snapshot["revision"],
+                    bundle_to_files(bundle),
+                    "docs(schema): remove documentation for removed columns",
+                )
+
     def _write_files(self, worktree, files, previous):
         """Write merged files, whose names come from the checked proposal and the project files."""
         path = Path(worktree["path"])
@@ -419,8 +456,8 @@ class Projects:
         # Finish cleanups interrupted after their records were deleted: the directories of
         # unrecorded worktrees are removed, and Git forgets them before it next opens a branch.
         recorded = {worktree["id"] for worktree in worktrees}
-        for folder in ("worktrees", "exports"):
-            for path in (self.store.home / folder).glob("worktree_*"):
+        for folder in self.store.paths.worktree_directories():
+            for path in folder.glob("worktree_*"):
                 if path.name not in recorded:
                     shutil.rmtree(path, ignore_errors=True)
         for worktree in worktrees:

@@ -13,7 +13,6 @@ class Dataset:
     id: str
     node: str
     port: str
-    table: str
     columns: list
     count: int
     run: str
@@ -21,18 +20,23 @@ class Dataset:
     bindings: dict
     dependencies: dict
     fingerprint: str
+    storage: str
     source: bool = False
     status: str = "valid"
     created: str = field(default_factory=now)
-    storage: str = ""
     column_map: dict = field(default_factory=dict)
     witnesses: dict = field(default_factory=dict)
     groups: dict = field(default_factory=dict)
 
     @property
+    def table(self):
+        """The public view of the rows, named after the result generation."""
+        return self.id
+
+    @property
     def relation(self):
         """The physical table holding the rows, including hidden lineage columns."""
-        return self.storage or self.table
+        return self.storage
 
     def stored(self, column):
         """The physical name of a public column; user columns named rowid are renamed."""

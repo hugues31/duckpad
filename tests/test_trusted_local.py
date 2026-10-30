@@ -9,11 +9,11 @@ from concurrent.futures import ThreadPoolExecutor
 import duckdb
 import pytest
 from fastapi.testclient import TestClient
-from helpers import wait_until
+from helpers import join_run, wait_until
 
 from duckpad import cli
-from duckpad import engine as engine_module
 from duckpad.app import create_app
+from duckpad.execution import runs as runs_module
 from duckpad.native import Cursor as NativeCursor
 from duckpad.util import Problem
 
@@ -37,7 +37,7 @@ def local(tmp_path, monkeypatch):
 def execute(app, client, worktree, **options):
     response = client.post(f"/api/worktrees/{worktree}/runs", json={"environment": "dev", **options})
     assert response.status_code == 200, response.text
-    result = app.state.services.engine.wait(response.json()["id"], timeout=30)
+    result = join_run(app.state.services.store, response.json()["id"], timeout=30)
     assert result["status"] == "success", result
     return result
 
@@ -163,7 +163,7 @@ def test_trusted_mode_cancels_native_sql_and_can_run_again(local):
     run = client.post(endpoint + "/runs", json={"environment": "dev"}).json()
     wait_until(lambda: client.get(f"/api/runs/{run['id']}").json()["nodes"]["source"]["status"] == "running")
     assert client.post(f"/api/runs/{run['id']}/cancel").status_code == 200
-    assert app.state.services.engine.wait(run["id"], timeout=30)["status"] == "canceled"
+    assert join_run(app.state.services.store, run["id"], timeout=30)["status"] == "canceled"
     snapshot = client.get(endpoint).json()
     snapshot["bundle"]["templates"]["slow"] = "-- @kind source\n-- @output result\nSELECT 42 AS value;"
     assert (
@@ -192,7 +192,7 @@ def test_trusted_mode_preserves_cancellation_before_native_execute(local, monkey
         == 200
     )
     planned, proceed = threading.Event(), threading.Event()
-    original = engine_module.plan_materialization
+    original = runs_module.plan_materialization
 
     def hold(*args, **kwargs):
         plan = original(*args, **kwargs)
@@ -200,20 +200,20 @@ def test_trusted_mode_preserves_cancellation_before_native_execute(local, monkey
         assert proceed.wait(10)
         return plan
 
-    monkeypatch.setattr(engine_module, "plan_materialization", hold)
+    monkeypatch.setattr(runs_module, "plan_materialization", hold)
     run = client.post(endpoint + "/runs", json={"environment": "dev"}).json()
     try:
         assert planned.wait(10)
         assert client.post(f"/api/runs/{run['id']}/cancel").status_code == 200
         proceed.set()
-        assert engine.wait(run["id"], timeout=5)["status"] == "canceled"
+        assert join_run(app.state.services.store, run["id"], timeout=5)["status"] == "canceled"
         assert not engine.active
         assert client.get(endpoint + "/preview/source?environment=dev").status_code == 404
     finally:
         # Release the original implementation's long query after a failed assertion.
         proceed.set()
         engine.cancel(run["id"])
-        engine.wait(run["id"], timeout=30)
+        join_run(app.state.services.store, run["id"], timeout=30)
     snapshot = client.get(endpoint).json()
     snapshot["bundle"]["templates"]["slow"] = "-- @kind source\n-- @output result\nSELECT 42 AS value;"
     assert (

@@ -189,7 +189,7 @@ def test_environment_is_required_before_dispatch(
         }
     ]
     assert services.store.all("run") == []
-    assert services.engine.contexts == {}
+    assert services.engine.pool.contexts == {}
 
 
 @pytest.fixture
@@ -233,7 +233,7 @@ def test_deleted_and_unknown_environments_are_not_found(
     assert response.status_code == 404, response.text
     assert response.json()["error"] == "Unknown environment"
     assert app.state.services.store.all("run") == []
-    assert app.state.services.engine.contexts == {}
+    assert app.state.services.engine.pool.contexts == {}
 
 
 @pytest.mark.parametrize("environment", ["dev", "prod"])

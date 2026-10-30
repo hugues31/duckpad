@@ -4,6 +4,7 @@ from collections import Counter
 
 from .bundle import files_to_bundle
 from .components import expand
+from .graph import reachable
 from .templates import DESCRIPTIVE, directives, executable_sql
 from .util import Problem
 
@@ -170,11 +171,7 @@ def potential_impact(before, after):
         if old_edges.get(key) != new_edges.get(key):
             affected.update(e["target"] for e in (old_edges.get(key), new_edges.get(key)) if e)
     direct = set(affected)
-    while True:
-        downstream = {e["target"] for e in old[1] + new[1] if e["source"] in affected}
-        if downstream <= affected:
-            break
-        affected |= downstream
+    affected = reachable(direct, old[1] + new[1], upstream=False)
     return {
         "status": "partial" if affected or errors else "not_applicable",
         "reason": "Static dependencies only. Schemas and output values were not resolved; no sources were read."

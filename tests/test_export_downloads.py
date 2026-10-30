@@ -13,6 +13,7 @@ from xml.etree import ElementTree
 import duckdb
 import pytest
 from fastapi.testclient import TestClient
+from helpers import join_run
 
 from duckpad.app import create_app
 from duckpad.artifacts import CHUNK_SIZE, open_regular
@@ -70,7 +71,7 @@ def create(instance, format_name="csv", **params):
 
 def execute(services, worktree, environment="dev", target=None):
     run = services.engine.launch(worktree["id"], environment, target)
-    result = services.engine.wait(run["id"], timeout=30)
+    result = join_run(services.store, run["id"], timeout=30)
     assert result["status"] == "success", result
     return result
 
@@ -118,7 +119,7 @@ def test_contents_options_and_response_metadata(instance, export_excel_cache, fo
     assert int(response.headers["content-length"]) == len(response.content)
     assert response.headers["cache-control"] == "no-store"
     assert response.headers["x-content-type-options"] == "nosniff"
-    original = services.engine.exports(worktree["id"], "dev") / filename
+    original = services.store.paths.exports(worktree["id"], "dev") / filename
     assert response.content == original.read_bytes()
     if format_name == "csv":
         assert response.headers["content-type"].startswith("text/csv")
@@ -205,7 +206,7 @@ def test_stale_failed_running_and_replaced_results(instance, monkeypatch):
             rows="-- @kind source\n-- @output result\nSELECT error('failed source');"
         ),
     )
-    failed = services.engine.wait(services.engine.launch(worktree["id"], "dev")["id"], 30)
+    failed = join_run(services.store, services.engine.launch(worktree["id"], "dev")["id"], 30)
     assert failed["status"] == "failed"
     assert client.get(endpoint, params={"environment": "dev"}).json()["status"] == "failed"
     assert download(client, endpoint, second).status_code == 409
@@ -215,14 +216,14 @@ def test_stale_failed_running_and_replaced_results(instance, monkeypatch):
         lambda b: b["templates"].update(rows="-- @kind source\n-- @output result\nSELECT 42 AS id;"),
     )
     entered, release = threading.Event(), threading.Event()
-    original = services.engine._compute
+    original = services.engine.runs._compute
 
     def delayed(*args):
         entered.set()
         assert release.wait(10)
         return original(*args)
 
-    monkeypatch.setattr(services.engine, "_compute", delayed)
+    monkeypatch.setattr(services.engine.runs, "_compute", delayed)
     pending = services.engine.launch(worktree["id"], "dev")
     try:
         assert entered.wait(5)
@@ -230,8 +231,29 @@ def test_stale_failed_running_and_replaced_results(instance, monkeypatch):
         assert download(client, endpoint, second).status_code == 409
     finally:
         release.set()
-        services.engine.wait(pending["id"], 30)
+        join_run(services.store, pending["id"], 30)
     assert client.get(endpoint, params={"environment": "dev"}).json()["status"] == "available"
+
+
+def test_a_new_export_run_purges_the_copy_it_replaces(instance):
+    services, client = instance
+    worktree, endpoint = create(instance)
+    first = execute(services, worktree)["nodes"]["export"]["artifact"]
+    assert (services.store.paths.artifacts / first).is_file()
+    second = execute(services, worktree)
+    kept = second["nodes"]["export"]["artifact"]
+    assert services.store.get("artifact", first) is None
+    assert [path.name for path in services.store.paths.artifacts.iterdir()] == [kept]
+    assert download(client, endpoint, second).status_code == 200
+    # A failed run replaces the current result, so its previous copy goes too.
+    edit(
+        services,
+        worktree,
+        lambda b: b["templates"].update(rows="-- @kind source\n-- @output result\nSELECT error('failed');"),
+    )
+    assert join_run(services.store, services.engine.launch(worktree["id"], "dev")["id"])["status"] == "failed"
+    assert not services.store.all("artifact")
+    assert not list(services.store.paths.artifacts.iterdir())
 
 
 @pytest.mark.parametrize("replacement", ["missing", "symlink", "modified", "directory", "parent_symlink"])
@@ -259,7 +281,7 @@ def test_source_capture_rejects_symlinks_traversal_and_special_files(instance, t
     services, _ = instance
     worktree, _ = create(instance)
     run = execute(services, worktree)
-    root = services.engine.exports(worktree["id"], "dev")
+    root = services.store.paths.exports(worktree["id"], "dev")
     original = root / "export.csv"
     link = root / "link.csv"
     link.symlink_to(original)
@@ -276,7 +298,9 @@ def test_source_capture_rejects_symlinks_traversal_and_special_files(instance, t
         services.store.home / "instance.sqlite",
     ):
         with pytest.raises(OSError, match=r".+"):
-            services.engine.artifacts.capture({"path": str(path), "format": "csv"}, run, "export", [root])
+            services.engine.exports.artifacts.capture(
+                {"path": str(path), "format": "csv"}, run, "export", [root]
+            )
     with open_regular(original) as stream:
         assert len(stream.read(CHUNK_SIZE)) > 0
 

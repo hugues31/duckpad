@@ -93,7 +93,7 @@ def test_extension_settings_api_requires_a_boolean_and_preserves_active_runs(tmp
         context = services.engine.context(worktree["id"], "dev")
         assert client.put("/api/extensions/settings", json=defaults).json() == defaults
         assert context.db.closed
-        assert services.engine.contexts == {}
+        assert services.engine.pool.contexts == {}
 
 
 def test_extension_upload_validation_preserves_settings_and_cache(tmp_path, monkeypatch):

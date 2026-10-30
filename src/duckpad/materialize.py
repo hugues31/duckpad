@@ -149,10 +149,7 @@ def publish_view(cursor, table, plan):
 
 
 def drop_dataset(cursor, dataset):
-    if dataset.storage:
-        drop_relations(cursor, dataset.table, dataset.storage)
-    else:
-        cursor.execute(f"DROP TABLE IF EXISTS {qi(dataset.table)}")
+    drop_relations(cursor, dataset.table, dataset.storage)
 
 
 def drop_relations(cursor, view, storage):

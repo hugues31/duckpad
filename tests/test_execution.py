@@ -48,6 +48,42 @@ def test_failed_output_set_retains_all_previous_outputs(services, tmp_path):
     assert engine.preview(wt, "dev", "total")["status"] == "stale"
 
 
+def test_next_run_drops_the_results_of_removed_nodes(services, tmp_path):
+    store, projects, _, engine = services
+    wt = projects.create("Test", example_bundle(tmp_path / "input.csv"))["id"]
+    assert wait_run(store, engine.launch(wt, "dev"))["status"] == "success"
+    context = engine.context(wt, "dev")
+    removed = context.outputs["total"]["result"]
+
+    def relations():
+        query = "SELECT table_name FROM duckdb_tables() UNION ALL SELECT view_name FROM duckdb_views()"
+        return {row[0] for row in context.db.execute(query).fetchall()}
+
+    assert {removed.table, removed.storage} <= relations()
+    snapshot = projects.snapshot(wt)
+    flow = snapshot["bundle"]["flow"]
+    flow["nodes"] = [node for node in flow["nodes"] if node["id"] != "total"]
+    flow["edges"] = [edge for edge in flow["edges"] if edge["target"] != "total"]
+    projects.write(wt, snapshot["revision"], bundle_to_files(snapshot["bundle"]))
+    # Any run of the worktree releases them, whatever its scope.
+    assert wait_run(store, engine.launch(wt, "dev", "source"))["status"] == "success"
+    assert not {removed.table, removed.storage} & relations()
+    assert all(dataset.node != "total" for dataset in context.datasets.values())
+    assert "total" not in engine.statuses(wt, "dev")["nodes"]
+    assert engine.preview(wt, "dev", "filter")["count"] == 3
+
+
+def test_compiled_sql_is_the_query_that_runs_materialize(services, tmp_path):
+    store, projects, _, engine = services
+    wt = projects.create("Test", example_bundle(tmp_path / "input.csv"))["id"]
+    compiled = engine.compile(wt, "dev", "total")[0]
+    assert compiled["sql"] == compiled["query"] and compiled["sql"].startswith("SELECT")
+    statement = wait_run(store, engine.launch(wt, "dev"))["nodes"]["total"]["statements"][0]
+    assert statement["sql"] == statement["query"]
+    storage = statement["table"] + "_storage"
+    assert statement["materialization_sql"][0].startswith(f'CREATE TABLE "{storage}" AS ')
+
+
 def test_layout_change_preserves_valid_results(services, tmp_path):
     store, projects, _, engine = services
     wt = projects.create("Test", example_bundle(tmp_path / "input.csv"))["id"]
@@ -67,11 +103,11 @@ def test_layout_change_preserves_valid_results(services, tmp_path):
 def test_descriptive_directives_never_change_fingerprints(services, tmp_path, directive):
     engine = services[3]
     bundle = example_bundle(tmp_path / "input.csv")
-    before = engine.fingerprints(bundle, "dev")
+    before = engine.fingerprints.of(bundle, "dev")
     bundle["templates"]["total"] = directive + "\n" + bundle["templates"]["total"]
-    assert engine.fingerprints(bundle, "dev") == before
+    assert engine.fingerprints.of(bundle, "dev") == before
     bundle["templates"]["total"] += "\n-- SQL change"
-    assert engine.fingerprints(bundle, "dev")["total"] != before["total"]
+    assert engine.fingerprints.of(bundle, "dev")["total"] != before["total"]
 
 
 def test_conflicts_survive_and_disjoint_fields_merge(services, tmp_path):
@@ -141,7 +177,8 @@ def test_preview_returns_timestamps_with_time_zones(services, tmp_path):
 
 
 def test_startup_loads_only_unfinished_runs(services, monkeypatch):
-    from duckpad.engine import UNFINISHED_RUN_STATUSES, Engine
+    from duckpad.engine import Engine
+    from duckpad.execution.runs import UNFINISHED_RUN_STATUSES
 
     store, projects, catalog, _ = services
     tree = projects.create("Recovery")
@@ -188,7 +225,7 @@ def test_startup_loads_only_unfinished_runs(services, monkeypatch):
 
 
 def test_final_persistence_failure_releases_worktree_for_runs_and_cleanup(services, monkeypatch):
-    from duckpad.engine import Execution
+    from duckpad.execution.runs import Execution
 
     store, projects, _, engine = services
     tree = projects.create("Persistence failure")
@@ -205,7 +242,7 @@ def test_final_persistence_failure_releases_worktree_for_runs_and_cleanup(servic
         "nodes": {},
     }
     execution = Execution(token, context, run, {}, [], [], {}, [], {})
-    original = engine._persist
+    original = engine.runs._persist
 
     def fail_final_write(run, secrets):
         if run.get("finished"):
@@ -213,9 +250,9 @@ def test_final_persistence_failure_releases_worktree_for_runs_and_cleanup(servic
         original(run, secrets)
 
     with monkeypatch.context() as patch:
-        patch.setattr(engine, "_persist", fail_final_write)
+        patch.setattr(engine.runs, "_persist", fail_final_write)
         with pytest.raises(OSError, match="Simulated final persistence failure"):
-            engine._execute(execution)
+            engine.runs._execute(execution)
     assert token["cursor"] is None
     assert tree["id"] not in engine.active
     assert wait_run(store, engine.launch(tree["id"], "dev"))["status"] == "success"

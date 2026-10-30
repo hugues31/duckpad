@@ -53,7 +53,7 @@ def signature(info):
 class Artifacts:
     def __init__(self, store):
         self.store = store
-        self.directory = store.home / "artifacts"
+        self.directory = store.paths.artifacts
         self.directory.mkdir(mode=0o700, exist_ok=True)
 
     def capture(self, spec, run, node, roots):

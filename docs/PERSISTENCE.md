@@ -103,6 +103,10 @@ environment deletes its live connection parameters; historical run, artifact
 and export environment names remain snapshots without foreign keys to live
 environments. Recreating an environment starts with empty parameters.
 
+An export result names only the latest run of its node in an environment. When a
+new run replaces it, the download copy of the previous run and its artifact record
+are deleted.
+
 JSON columns hold variable connector definitions, connection parameters,
 revision files, conflict/run snapshots, Git mappings, provider metadata and
 settings. Secrets remain private instance configuration. Public responses are

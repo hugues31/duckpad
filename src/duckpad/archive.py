@@ -9,7 +9,7 @@ from pathlib import PurePosixPath, PureWindowsPath
 
 from .bundle import files_to_bundle, is_declarative
 from .components import expand
-from .engine import connection_references
+from .graph import connection_references
 from .projects import decode
 from .templates import URI, base_type
 from .util import Problem
