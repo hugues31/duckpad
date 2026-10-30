@@ -67,6 +67,7 @@ export async function buildLineageGraph(
   pages: Record<string, Partial<Query>>,
   read: (query: Query) => Promise<Explanation>,
   budget: number,
+  t: (key: string) => string,
 ) {
   const entries = new Map<string, Entry>();
   const edges = new Map<string, Edge>();
@@ -81,8 +82,7 @@ export async function buildLineageGraph(
     const visited = new Set(ancestors);
     while (true) {
       const id = cellId(current);
-      if (visited.has(id))
-        throw new Error("A circular lineage reference cannot be displayed.");
+      if (visited.has(id)) throw new Error(t("lineageCircularReference"));
       visited.add(id);
       const existing = entries.get(id);
       if (existing) {

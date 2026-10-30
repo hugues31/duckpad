@@ -13,7 +13,7 @@ Duckpad has a Python API process serving a compiled React application and isolat
 | `git_command.py`, `git_workspace.py`, `remote.py`, `git_credentials.py` | The only Git process runner: time-limited, without hooks or server Git configuration, logging Git output and returning readable errors; branches and reviewed merges; bounded fetch and leased push in an isolated Git and SSH environment; per-account SSH keys, trusted Git hosts and URL-bound consent |
 | `templates.py`, `builtin_templates.py`, `components.py` | Typed SQL compilation, read/write contracts, built-in templates, recursive expansion, parameter exposure, independent imports |
 | `engine.py`, `datasets.py`, `materialize.py` | Admission, immutable execution configuration, DuckDB ownership, cancellation, output publication and invalidation |
-| `lineage.py`, `trace.py`, `sqlast.py` | Lineage requests and their cancellation; SQLGlot normalization and targeted provenance queries over materialized dependencies |
+| `lineage.py`, `trace/`, `sqlast.py` | Lineage requests and their cancellation; SQLGlot normalization and targeted provenance queries over materialized dependencies, built as SQLGlot expressions by one visitor per SQL construct |
 | `sandbox.py`, `sql_worker.py` | JSON RPC, separate SQL processes, kernel filesystem restrictions and locked DuckDB configuration |
 | `resources.py` | Portable machine-wide CPU and physical memory counters |
 | `example.py` | Reproducible local sample data and documented Northstar project |

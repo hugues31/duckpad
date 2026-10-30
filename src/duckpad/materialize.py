@@ -48,29 +48,24 @@ def plan_materialization(cursor, statement, dependencies, instrument=True):
             )
             aliases = {t.alias_or_name: dependencies[t.name] for t in augmented.find_all(exp.Table)}
             grouping = augmented.args.get("group")
-            has_aggregate = any(a.find_ancestor(exp.Window) is None for a in augmented.find_all(exp.AggFunc))
+            keys = []
             if grouping and not has_grouping_sets(grouping):
-                for expression in grouping.expressions:
-                    hidden = uid("__dp_group_")
-                    groups[sql(expression)] = hidden
-                    augmented.append("expressions", expression.copy().as_(hidden, quoted=True))
-            elif not grouping and not has_aggregate:
-                for alias, data in aliases.items():
-                    hidden = uid("__dp_witness_")
-                    witnesses[alias] = {"column": hidden, "dataset": data.id}
-                    augmented.append("expressions", exp.column("rowid", table=alias).as_(hidden, quoted=True))
+                keys = [(expression, uid("__dp_group_")) for expression in grouping.expressions]
+                groups = {sql(expression): hidden for expression, hidden in keys}
+            elif not grouping and not outer_aggregates(augmented):
+                witnesses = {
+                    alias: {"column": uid("__dp_witness_"), "dataset": data.id}
+                    for alias, data in aliases.items()
+                }
             if witnesses or groups:
                 # Rewrite original rowid columns before appending physical rowids.
-                for column in augmented.find_all(exp.Column):
-                    data = aliases.get(column.table)
-                    is_witness = isinstance(column.parent, exp.Alias) and column.parent.alias in {
-                        w["column"] for w in witnesses.values()
-                    }
-                    if data and not is_witness and column.name in data.column_map:
-                        column.set("this", exp.to_identifier(data.column_map[column.name], quoted=True))
-                for table in augmented.find_all(exp.Table):
-                    data = dependencies[table.name]
-                    table.set("this", exp.to_identifier(data.relation, quoted=True))
+                to_physical(augmented, dependencies)
+                for expression, hidden in keys:
+                    augmented.append("expressions", expression.copy().as_(hidden, quoted=True))
+                for alias, witness in witnesses.items():
+                    augmented.append(
+                        "expressions", exp.column("rowid", table=alias).as_(witness["column"], quoted=True)
+                    )
                 instrumented = sql(augmented)
                 if _binds_columns(cursor, instrumented, bindings, columns, len(augmented.expressions)):
                     query = instrumented
@@ -80,6 +75,27 @@ def plan_materialization(cursor, statement, dependencies, instrument=True):
         except (sqlglot.errors.SqlglotError, KeyError, IndexError):
             witnesses, groups = {}, {}
     return _plan(storage, columns, query, witnesses, groups)
+
+
+def outer_aggregates(tree):
+    """Aggregates computed by grouping rows, as opposed to aggregates evaluated inside a window."""
+    return [a for a in tree.find_all(exp.AggFunc) if a.find_ancestor(exp.Window) is None]
+
+
+def to_physical(tree, datasets):
+    """Point a qualified query at physical storage in place; return its datasets by table alias.
+
+    `datasets` maps table names to datasets. Tables read their dataset's storage, and public
+    columns renamed in storage, such as a user column named rowid, read their stored name.
+    """
+    aliases = {t.alias_or_name: datasets[t.name] for t in tree.find_all(exp.Table)}
+    for column in tree.find_all(exp.Column):
+        data = aliases.get(column.table)
+        if data and column.name in data.column_map:
+            column.set("this", exp.to_identifier(data.stored(column.name), quoted=True))
+    for table in tree.find_all(exp.Table):
+        table.set("this", exp.to_identifier(datasets[table.name].relation, quoted=True))
+    return aliases
 
 
 def _binds_columns(cursor, query, bindings, columns, width):

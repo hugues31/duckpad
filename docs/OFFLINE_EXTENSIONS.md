@@ -16,6 +16,8 @@ does not need DuckDB, Python, Linux, or a prepared extension cache.
 3. Configure the connector and connection under **Instance settings → Connections**,
    grant the connection to the project, and run your pipeline.
 
+![Extension settings show the server runtime, binary download link, file import and unsigned-build policy](images/extensions.png)
+
 Duckpad decompresses the file, checks its version, platform and signature, and
 installs it locally. **The server needs no Internet connection or restart.**
 The browser must be able to reach Duckpad to upload the file.

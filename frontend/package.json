@@ -9,11 +9,13 @@
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "build": "tsc -b && vite build",
-    "check": "tsc -b",
-    "format": "prettier --write src e2e docs playwright*.config.ts vite.config.ts",
-    "format:check": "prettier --check src e2e docs playwright*.config.ts vite.config.ts",
+    "check": "tsc -b && npm run check:i18n",
+    "check:i18n": "node scripts/check-i18n.mjs",
+    "format": "prettier --write src e2e docs scripts playwright*.config.ts vite.config.ts",
+    "format:check": "prettier --check src e2e docs scripts playwright*.config.ts vite.config.ts",
     "test:e2e": "playwright test",
     "docs:capture": "playwright test --config playwright.docs.config.ts",
+    "docs:screenshots": "playwright test --config playwright.docs.config.ts screenshots.spec.ts",
     "docs:test": "playwright test --config playwright.site.config.ts"
   },
   "dependencies": {

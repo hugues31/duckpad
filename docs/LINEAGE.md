@@ -10,6 +10,8 @@ An unchanged column passed through a projection, filter or join does not add a c
 
 Pan and zoom to explore the graph. Automatic tracing has a request budget; an unexplored value offers **Trace earlier inputs** to continue. Escape closes the dialog and restores keyboard focus to the selected cell. Recalculation interrupts all graph requests and navigation.
 
+![Five source amounts and the sum they contribute to, with pagination for all 27 values](images/lineage.png)
+
 ## Validated baseline
 
 | Construct | Status | Behavior |
@@ -44,7 +46,7 @@ These constructs remain executable when they satisfy the template contract, but 
 - Window arguments that combine columns from multiple joined relations without an intermediate projection.
 - Expressions combining several extrema into one cell, and multi-expression distinct aggregates/windows.
 - Volatile expressions such as random values, UUIDs or current timestamps: replay must not invent an explanation from a new evaluation.
-- Projections that expand into several columns, such as `COLUMNS(...)`, `struct.*` or `UNNEST` of a struct: the step runs its native query without captured row witnesses.
+- Projections that expand into several columns, such as `COLUMNS(...)`, `struct.*` or `UNNEST` of a struct: the step runs its native query without captured row witnesses, and lineage reports this limitation for its cells.
 - Indistinguishable duplicate occurrences in a composed CTE/derived projection when no original row witness was captured. Use separate pipeline nodes to capture each stage's witnesses.
 
 The response sets `complete: false` and identifies the unsupported step. The UI shows a coverage warning instead of presenting a partial search as complete. An unsupported construct does not modify the computed query values.
