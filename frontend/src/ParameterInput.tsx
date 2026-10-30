@@ -4,6 +4,9 @@ import { useT } from "./i18n";
 /** Keep incomplete input intact until it can be committed as a parameter value. */
 export default function ParameterInput({
   kind,
+  id,
+  label,
+  placeholder,
   secret = false,
   disabled = false,
   value,
@@ -11,6 +14,10 @@ export default function ParameterInput({
   onBlur,
 }: {
   kind: "number" | "list";
+  id?: string;
+  /** An accessible name, when no label element names the input. */
+  label?: string;
+  placeholder?: string;
   secret?: boolean;
   disabled?: boolean;
   value: any;
@@ -21,6 +28,9 @@ export default function ParameterInput({
   const [draft, setDraft] = useState<string | null>(null);
   return (
     <input
+      id={id}
+      aria-label={label}
+      placeholder={placeholder}
       disabled={disabled}
       type={secret ? "password" : "text"}
       inputMode={kind === "number" ? "decimal" : undefined}

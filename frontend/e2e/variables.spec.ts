@@ -1,0 +1,578 @@
+import { expect, test, type Page } from "@playwright/test";
+import { signIn } from "./helpers";
+import type { Snapshot } from "../src/types";
+
+const ORDER_STATUS = {
+  type: "choice(paid|refunded|pending)",
+  description: "Order status counted as revenue.",
+  default: "paid",
+};
+
+/** The Northstar example, optionally changed through the API before it opens. */
+async function example(
+  page: Page,
+  change?: (bundle: NonNullable<Snapshot["bundle"]>) => void,
+) {
+  await signIn(page);
+  const response = await page.request.post("/api/example", {
+    data: { name: "Northstar" },
+  });
+  expect(response.ok()).toBeTruthy();
+  const worktree = await response.json();
+  const url = `/api/worktrees/${worktree.id}`;
+  if (change) await update(page, url, change);
+  return { id: worktree.id as string, url };
+}
+
+async function snapshot(page: Page, url: string): Promise<Snapshot> {
+  return (await page.request.get(url)).json();
+}
+
+async function update(
+  page: Page,
+  url: string,
+  change: (bundle: NonNullable<Snapshot["bundle"]>) => void,
+) {
+  const current = await snapshot(page, url);
+  change(current.bundle!);
+  const response = await page.request.put(url, {
+    data: { revision: current.revision, bundle: current.bundle },
+  });
+  expect(response.ok()).toBeTruthy();
+  return (await response.json()) as Snapshot;
+}
+
+/** Bind Paid orders to order_status, declared with the given environment values. */
+const bindOrderStatus =
+  (environments: Record<string, string> = {}) =>
+  (bundle: NonNullable<Snapshot["bundle"]>) => {
+    bundle.variables = { order_status: { ...ORDER_STATUS, environments } };
+    bundle.flow.nodes.find((n) => n.id === "validated")!.params.status = {
+      $var: "order_status",
+    };
+  };
+
+async function run(page: Page, url: string, environment: string) {
+  const started = await page.request.post(`${url}/runs`, {
+    data: { environment },
+  });
+  expect(started.ok()).toBeTruthy();
+  const execution = await started.json();
+  await expect
+    .poll(
+      async () =>
+        (await (await page.request.get(`/api/runs/${execution.id}`)).json())
+          .status,
+      { timeout: 30000 },
+    )
+    .toBe("success");
+}
+
+/** The status of a node's first result in an environment. */
+async function resultStatus(
+  page: Page,
+  url: string,
+  environment: string,
+  node: string,
+) {
+  const statuses = await (
+    await page.request.get(`${url}/status?environment=${environment}`)
+  ).json();
+  return Object.values(statuses.nodes[node]?.outputs || {}).map(
+    (output) => (output as { status: string }).status,
+  )[0];
+}
+
+async function commits(page: Page, url: string) {
+  return (await (await page.request.get(`${url}/git/history`)).json()).items
+    .length as number;
+}
+
+function node(page: Page, label: string) {
+  return page.locator(".react-flow__node").filter({
+    has: page.getByText(label, { exact: true }),
+  });
+}
+
+async function saved(page: Page) {
+  await expect(
+    page.getByText("All changes saved", { exact: true }),
+  ).toBeVisible();
+}
+
+test("promote a constant to a variable, then reuse it on another node (workflows 1 and 2)", async ({
+  page,
+}) => {
+  const { id, url } = await example(page, (bundle) => {
+    bundle.variables = {
+      oracle_schema: { type: "identifier", default: "DEMO" },
+    };
+    bundle.flow.nodes.push({
+      id: "refunds",
+      template: "validated_orders",
+      label: "Refunded orders",
+      params: { status: "refunded" },
+      position: { x: 530, y: 420 },
+    });
+    bundle.flow.edges.push({
+      id: "enriched_result_refunds_source",
+      source: "enriched",
+      target: "refunds",
+      sourceHandle: "result",
+      targetHandle: "source",
+    });
+  });
+  await run(page, url, "dev");
+  const before = await commits(page, url);
+  await page.goto(`/worktrees/${id}/flow`);
+  await node(page, "Paid orders").click();
+  const inspector = page.locator(".inspector");
+  await expect(page.locator(".preview-header .badge")).toHaveText("Valid");
+  await inspector
+    .getByRole("button", { name: "Bind status to a variable", exact: true })
+    .click();
+  const picker = inspector.getByRole("group", {
+    name: "Bind status to a variable",
+  });
+  // An identifier cannot be bound to a text parameter.
+  await expect(
+    picker.getByRole("button", { name: /oracle_schema/ }),
+  ).toBeDisabled();
+  await expect(picker).toContainText("identifier · incompatible");
+  await picker
+    .getByRole("button", { name: "Create a variable from “paid”…" })
+    .click();
+  const dialog = page.getByRole("dialog", { name: "New variable" });
+  await expect(dialog.getByLabel("Name", { exact: true })).toHaveValue(
+    "status",
+  );
+  await expect(dialog.getByLabel("Default value", { exact: true })).toHaveValue(
+    "paid",
+  );
+  await dialog.getByLabel("Name", { exact: true }).fill("order_status");
+  await dialog
+    .getByLabel("Description", { exact: true })
+    .fill("Order status counted as revenue.");
+  await dialog
+    .getByRole("button", { name: "Create and bind", exact: true })
+    .click();
+  await expect(dialog).toBeHidden();
+  await saved(page);
+
+  // One commit declares the variable and binds the parameter.
+  let current = await snapshot(page, url);
+  expect(current.bundle!.variables).toMatchObject({
+    order_status: {
+      type: "text",
+      default: "paid",
+      description: "Order status counted as revenue.",
+    },
+  });
+  expect(
+    current.bundle!.flow.nodes.find((n) => n.id === "validated")!.params.status,
+  ).toEqual({ $var: "order_status" });
+  expect(await commits(page, url)).toBe(before + 1);
+  const bound = inspector.getByRole("group", {
+    name: "status is bound to order_status",
+  });
+  await expect(bound).toContainText("= paid in dev");
+  await expect(bound).toContainText("paid in every environment");
+  // The value is unchanged, so the result stays valid.
+  await expect(page.locator(".preview-header .badge")).toHaveText("Valid");
+  expect(await resultStatus(page, url, "dev", "validated")).toBe("valid");
+
+  await node(page, "Refunded orders").click();
+  await inspector
+    .getByRole("button", { name: "Bind status to a variable", exact: true })
+    .click();
+  await inspector.getByRole("button", { name: /^order_status/ }).click();
+  await saved(page);
+  await expect(
+    inspector.getByRole("group", { name: "status is bound to order_status" }),
+  ).toBeVisible();
+  current = await snapshot(page, url);
+  expect(
+    current.bundle!.flow.nodes.find((n) => n.id === "refunds")!.params.status,
+  ).toEqual({ $var: "order_status" });
+
+  // The cross restores a fixed value, initialized with the current one.
+  await inspector
+    .getByRole("button", {
+      name: "Use a fixed value instead of order_status",
+      exact: true,
+    })
+    .click();
+  await saved(page);
+  await expect(inspector.getByRole("textbox", { name: "status" })).toHaveValue(
+    "paid",
+  );
+  current = await snapshot(page, url);
+  expect(
+    current.bundle!.flow.nodes.find((n) => n.id === "refunds")!.params.status,
+  ).toBe("paid");
+
+  await page.getByRole("link", { name: "Variables", exact: true }).click();
+  const row = page.getByRole("row").filter({ hasText: "order_status" });
+  await expect(row).toContainText("1 node");
+  await expect(
+    page.getByRole("row").filter({ hasText: "oracle_schema" }),
+  ).toContainText("Not used");
+});
+
+test("use a production value, confirm its run and explain it in History (workflows 3 and 6)", async ({
+  page,
+}) => {
+  const { id, url } = await example(page, bindOrderStatus());
+  await run(page, url, "dev");
+  await run(page, url, "prod");
+  await page.goto(`/worktrees/${id}/variables?environment=dev`);
+  const table = page.locator(".variables-table");
+  await expect(table.locator("th[aria-current]")).toHaveText("dev");
+  await table.getByRole("button", { name: "order_status" }).click();
+  const editor = page.getByRole("complementary", { name: "order_status" });
+  const prod = editor.getByLabel("prod value", { exact: true });
+  await expect(prod).toBeDisabled();
+  await editor
+    .getByRole("switch", { name: "Use the default value in prod" })
+    .click();
+  await expect(prod).toBeEnabled();
+  await prod.selectOption("refunded");
+  await expect(editor.getByRole("status")).toHaveText(
+    "Saving marks Paid orders and 5 descendants as stale in prod. Nothing runs automatically.",
+  );
+  await editor
+    .getByRole("button", { name: "Save changes", exact: true })
+    .click();
+  await saved(page);
+  const row = table.getByRole("row").filter({ hasText: "order_status" });
+  await expect(row.getByRole("cell").nth(3)).toHaveText("default");
+  await expect(row.getByRole("cell").nth(4)).toHaveText("refunded");
+  expect((await snapshot(page, url)).bundle!.variables).toMatchObject({
+    order_status: { environments: { prod: "refunded" } },
+  });
+
+  // Only the production results that use the variable become stale.
+  await expect
+    .poll(() => resultStatus(page, url, "prod", "validated"))
+    .toBe("stale");
+  expect(await resultStatus(page, url, "prod", "enriched")).toBe("valid");
+  expect(await resultStatus(page, url, "dev", "validated")).toBe("valid");
+
+  await editor.getByRole("button", { name: /Paid orders/ }).click();
+  await expect(page).toHaveURL(/\/flow\?environment=dev&node=validated/);
+  await page.getByLabel("Environment", { exact: true }).selectOption("prod");
+  await expect(page.locator(".preview-header .badge")).toHaveText("Stale");
+  await expect(page.locator(".stale-reason")).toHaveText(
+    "Variable order_status changed in prod: paid → refunded. Run to refresh.",
+  );
+  const inspector = page.locator(".inspector");
+  await expect(
+    inspector.getByRole("group", { name: "status is bound to order_status" }),
+  ).toContainText("= refunded in prod");
+  await inspector.getByRole("button", { name: "SQL", exact: true }).click();
+  const variables = inspector.locator(".variable-values");
+  await expect(variables).toContainText("order_status");
+  await expect(variables).toContainText("refunded");
+  await expect(variables).toContainText("prod value");
+
+  await page.getByRole("button", { name: "Run pipeline", exact: true }).click();
+  const confirmation = page.getByRole("dialog", { name: "Confirm execution" });
+  await expect(confirmation).toContainText("Variables used by this run · prod");
+  const listed = confirmation
+    .getByRole("row")
+    .filter({ hasText: "order_status" });
+  await expect(listed).toContainText("refunded");
+  await expect(listed).toContainText("prod value");
+  await confirmation
+    .getByRole("button", { name: "Confirm and run", exact: true })
+    .click();
+  await expect
+    .poll(() => resultStatus(page, url, "prod", "validated"), {
+      timeout: 30000,
+    })
+    .toBe("valid");
+
+  await page.getByRole("link", { name: "History", exact: true }).click();
+  await page
+    .locator(".history-row")
+    .filter({ hasText: "prod" })
+    .first()
+    .click();
+  const details = page.getByRole("dialog", { name: "View execution" });
+  const recorded = details.locator(".run-variables");
+  await expect(recorded).toContainText("Variables");
+  await expect(recorded).toContainText("order_status");
+  await expect(recorded).toContainText("Paid orders · status");
+  await expect(recorded).toContainText("refunded");
+  await expect(recorded).toContainText("prod value");
+});
+
+test("try another value on a branch and compare it with main (workflow 5)", async ({
+  page,
+}) => {
+  const { url } = await example(page, bindOrderStatus());
+  const branch = await (
+    await page.request.post(`${url}/branches`, {
+      data: { name: "experiment/refunds" },
+    })
+  ).json();
+  await page.goto(`/worktrees/${branch.id}/variables?variable=order_status`);
+  const editor = page.getByRole("complementary", { name: "order_status" });
+  await editor
+    .getByLabel("Default value", { exact: true })
+    .selectOption("refunded");
+  await expect(editor.getByRole("status")).toContainText(
+    "as stale in dev, prod",
+  );
+  await editor
+    .getByRole("button", { name: "Save changes", exact: true })
+    .click();
+  await saved(page);
+  await run(page, `/api/worktrees/${branch.id}`, "dev");
+  // main is unchanged until a merge.
+  expect((await snapshot(page, url)).bundle!.variables).toMatchObject({
+    order_status: { default: "paid" },
+  });
+
+  await page
+    .getByRole("button", { name: "Git synchronization", exact: true })
+    .click();
+  const git = page.getByRole("dialog", { name: "Project Git workspace" });
+  await git
+    .getByRole("button", { name: "Compare versions", exact: true })
+    .first()
+    .click();
+  await git.getByLabel("A: reference").fill("main");
+  await git.getByLabel("B: target").fill("experiment/refunds");
+  const change = git.locator(".change-row").filter({ hasText: "order_status" });
+  await expect(change).toContainText("Variable");
+  await change.click();
+  await expect(git.locator(".comparison-values")).toContainText("refunded");
+  await expect(git.locator(".comparison-usages")).toHaveText(
+    "Nodes using this variable: Paid orders (status)",
+  );
+  await expect(git.locator(".git-impact summary")).toContainText(
+    "downstream elements",
+  );
+});
+
+test("rename, delete, diagnostics, the Code file and read-only access", async ({
+  page,
+  browser,
+  baseURL,
+}) => {
+  const { id, url } = await example(page);
+  // Code creates variables.json when a project has none.
+  await page.goto(`/worktrees/${id}/code`);
+  await page
+    .getByRole("button", { name: "Create variables.json", exact: true })
+    .click();
+  await expect(page.locator(".code-file-heading")).toContainText(
+    "variables.json",
+  );
+  await page
+    .locator(".code-toolbar")
+    .getByRole("button", { name: "Save changes", exact: true })
+    .click();
+  await expect
+    .poll(async () => (await snapshot(page, url)).bundle!.variables)
+    .toEqual({});
+
+  await update(page, url, bindOrderStatus());
+  await run(page, url, "dev");
+  await page.goto(`/worktrees/${id}/variables`);
+  await page.getByRole("button", { name: "New variable", exact: true }).click();
+  const creation = page.getByRole("complementary", { name: "New variable" });
+  await creation.getByLabel("Name", { exact: true }).fill("api_token");
+  await expect(creation).toContainText("looks like a credential");
+  await creation.getByLabel("Name", { exact: true }).fill("minimum_amount");
+  await creation.getByLabel("Type", { exact: true }).selectOption("number");
+  await creation.getByLabel("Default value", { exact: true }).fill("300");
+  await creation.getByLabel("Default value", { exact: true }).blur();
+  await creation.getByRole("button", { name: "Create", exact: true }).click();
+  const minimum = page.getByRole("complementary", { name: "minimum_amount" });
+  await expect(minimum).toBeVisible();
+  expect((await snapshot(page, url)).bundle!.variables).toMatchObject({
+    minimum_amount: { type: "number", default: 300 },
+  });
+  await minimum.getByRole("button", { name: "Delete", exact: true }).click();
+  await page
+    .getByRole("dialog", { name: "Delete variable" })
+    .getByRole("button", { name: "Delete", exact: true })
+    .click();
+  await expect(minimum).toBeHidden();
+  expect((await snapshot(page, url)).bundle!.variables).not.toHaveProperty(
+    "minimum_amount",
+  );
+
+  await page
+    .locator(".variables-table")
+    .getByRole("button", { name: "order_status" })
+    .click();
+  const editor = page.getByRole("complementary", { name: "order_status" });
+  await expect(
+    editor.getByRole("button", { name: "Delete", exact: true }),
+  ).toBeDisabled();
+  const before = await commits(page, url);
+  await editor.getByRole("button", { name: "Rename…", exact: true }).click();
+  const rename = page.getByRole("dialog", { name: "Rename variable" });
+  await rename.getByLabel("Name", { exact: true }).fill("revenue_status");
+  await rename.getByRole("button", { name: "Rename", exact: true }).click();
+  await expect(
+    page.getByRole("complementary", { name: "revenue_status" }),
+  ).toBeVisible();
+  const renamed = await snapshot(page, url);
+  expect(Object.keys(renamed.bundle!.variables as object)).toEqual([
+    "revenue_status",
+  ]);
+  expect(
+    renamed.bundle!.flow.nodes.find((n) => n.id === "validated")!.params.status,
+  ).toEqual({ $var: "revenue_status" });
+  expect(await commits(page, url)).toBe(before + 1);
+  expect(await resultStatus(page, url, "dev", "validated")).toBe("valid");
+
+  // Diagnostics appear on the variable, the binding and the toolbar banner.
+  await update(page, url, (bundle) => {
+    (bundle.variables as Record<string, any>).revenue_status.environments = {
+      prod: "cancelled",
+      staging: "paid",
+    };
+    bundle.flow.nodes.push({
+      id: "orphan",
+      template: "validated_orders",
+      label: "Orphan orders",
+      params: { status: { $var: "missing" } },
+      position: { x: 530, y: 420 },
+    });
+  });
+  const variable = page.getByRole("complementary", { name: "revenue_status" });
+  await expect(variable.locator(".notice.error")).toContainText(
+    "invalid value for prod",
+  );
+  await expect(variable.locator(".notice.warning")).toContainText(
+    "which is not an environment of this instance",
+  );
+  await expect(variable).toContainText("staging");
+  await expect(page.locator(".notice.warning").first()).toContainText(
+    "missing is used by Orphan orders but is not declared.",
+  );
+  const prodCell = page
+    .getByRole("row")
+    .filter({ hasText: "revenue_status" })
+    .getByRole("cell")
+    .nth(4);
+  await expect(prodCell).toHaveText("no value");
+  await page.getByRole("link", { name: "Flow", exact: true }).click();
+  await node(page, "Orphan orders").click();
+  await expect(
+    page
+      .locator(".inspector")
+      .getByRole("group", { name: "status is bound to missing" }),
+  ).toContainText("This variable is not declared in variables.json.");
+  await page
+    .locator(".banner.error")
+    .getByRole("button", { name: "Open in Variables" })
+    .click();
+  await expect(page).toHaveURL(/\/variables\?.*variable=revenue_status/);
+
+  // Readers browse variables without editing them.
+  const username = `variables-reader-${Date.now()}`;
+  const user = await (
+    await page.request.post("/api/users", {
+      data: { username, password: "reader-browser-password" },
+    })
+  ).json();
+  const project = (await snapshot(page, url)).worktree.project;
+  expect(
+    (
+      await page.request.put(`/api/projects/${project}/members/${user.id}`, {
+        data: { role: "reader" },
+      })
+    ).ok(),
+  ).toBeTruthy();
+  const context = await browser.newContext({ baseURL });
+  try {
+    const reader = await context.newPage();
+    await reader.goto("/");
+    await reader.getByLabel("Username", { exact: true }).fill(username);
+    await reader
+      .getByLabel("Password", { exact: true })
+      .fill("reader-browser-password");
+    await reader.getByRole("button", { name: "Sign in", exact: true }).click();
+    await expect(
+      reader.getByRole("navigation", { name: "Workspace", exact: true }),
+    ).toBeVisible();
+    await reader.goto(`/worktrees/${id}/variables?variable=revenue_status`);
+    const readOnly = reader.getByRole("complementary", {
+      name: "revenue_status",
+    });
+    await expect(
+      readOnly.getByLabel("Default value", { exact: true }),
+    ).toBeDisabled();
+    await expect(
+      readOnly.getByRole("button", { name: "Save changes" }),
+    ).toHaveCount(0);
+    await expect(
+      reader.getByRole("button", { name: "New variable" }),
+    ).toHaveCount(0);
+  } finally {
+    await context.close();
+  }
+});
+
+test("merge conflicts on variables are resolved per variable", async ({
+  page,
+}) => {
+  const { url } = await example(page, bindOrderStatus());
+  const branch = await (
+    await page.request.post(`${url}/branches`, {
+      data: { name: "feature/status" },
+    })
+  ).json();
+  await update(page, url, (bundle) => {
+    (bundle.variables as Record<string, any>).order_status.environments = {
+      prod: "pending",
+    };
+  });
+  await update(page, `/api/worktrees/${branch.id}`, (bundle) => {
+    const variable = (bundle.variables as Record<string, any>).order_status;
+    variable.environments = { prod: "refunded" };
+    variable.description = "Statuses counted as revenue.";
+  });
+  await page.goto(url.replace("/api", "") + "/flow");
+  await page
+    .getByRole("button", { name: "Git synchronization", exact: true })
+    .click();
+  const dialog = page.getByRole("dialog", { name: "Project Git workspace" });
+  await dialog
+    .getByRole("button", { name: "Branches", exact: true })
+    .first()
+    .click();
+  await dialog
+    .getByLabel("Source branch")
+    .selectOption("refs/heads/feature/status");
+  await dialog
+    .getByRole("button", { name: "Review merge", exact: true })
+    .click();
+  // Only the production value conflicts; the description merges cleanly.
+  const conflict = dialog.locator(".git-conflict");
+  await expect(conflict).toHaveCount(1);
+  await expect(conflict.locator("legend")).toContainText(
+    "Variable order_status · prod value",
+  );
+  await expect(conflict.locator(".git-conflict-values")).toContainText(
+    "pending",
+  );
+  await expect(conflict.locator(".git-conflict-values")).toContainText(
+    "refunded",
+  );
+  await conflict.getByLabel("Incoming", { exact: false }).check();
+  await dialog.getByRole("button", { name: "Apply reviewed merge" }).click();
+  await expect(dialog).toContainText("Branch merged");
+  expect((await snapshot(page, url)).bundle!.variables).toMatchObject({
+    order_status: {
+      description: "Statuses counted as revenue.",
+      environments: { prod: "refunded" },
+    },
+  });
+});

@@ -1,7 +1,7 @@
-import { Outlet } from "react-router";
+import { Outlet, useNavigate } from "react-router";
 import CodePanel from "../CodePanel";
 import { FlowToolbar, WorkspaceNotices } from "../FlowToolbar";
-import { usePageRoute } from "../navigation";
+import { usePageRoute, worktreeUrl } from "../navigation";
 import { useShell, useWorkspace } from "../shell";
 import { useWorktree } from "../worktree";
 import { useFlowView } from "./FlowPage";
@@ -10,6 +10,7 @@ import { PageLoading, RouteError } from "./PageStates";
 /** The toolbar, notices and code editor shared by the tabs of a working branch. */
 export default function WorktreePage() {
   const { openModal, openWorktree } = useShell();
+  const navigate = useNavigate();
   const workspace = useWorkspace();
   const { tab = "flow" } = usePageRoute();
   const { id, environment, snapshot, statuses, loadError, canEdit, saveFiles } =
@@ -31,7 +32,15 @@ export default function WorktreePage() {
             conflict: snapshot.conflicts[0].id,
           })
         }
-        onViewFiles={() => openWorktree(id, "code")}
+        onViewFiles={(diagnostic) =>
+          diagnostic.variable
+            ? void navigate(
+                worktreeUrl(id, "variables", environment, {
+                  variable: diagnostic.variable,
+                }),
+              )
+            : openWorktree(id, "code")
+        }
       />
       <CodePanel
         key={id}

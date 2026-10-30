@@ -4,6 +4,7 @@ import ComparisonView from "./ComparisonView";
 import { TabStatus, useTabAction } from "./gitTabs";
 import { useT } from "./i18n";
 import type { Json } from "./types";
+import { conflictLabel } from "./variables";
 
 export default function GitReviewTab({
   review: proposal,
@@ -71,7 +72,12 @@ export default function GitReviewTab({
           </h3>
           {review.conflicts.map((conflict: Json) => (
             <fieldset className="git-conflict" key={conflict.path}>
-              <legend>{conflict.path}</legend>
+              <legend>
+                {conflictLabel(conflict.path, t) ?? conflict.path}
+                {conflictLabel(conflict.path, t) && (
+                  <code className="muted">{conflict.path}</code>
+                )}
+              </legend>
               <div className="git-conflict-values">
                 {["base", "current", "incoming"].map((choice) => (
                   <label key={choice}>

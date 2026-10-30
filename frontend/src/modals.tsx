@@ -269,12 +269,15 @@ export function FormModal({
   onSubmit,
   onClose,
   description,
+  submitLabel,
 }: {
   title: string;
   fields: FormField[];
   onSubmit: (values: Json) => Promise<void>;
   onClose: () => void;
   description?: string;
+  /** The submit button label; "Create" by default. */
+  submitLabel?: string;
 }) {
   const t = useT();
   const [values, setValues] = useState<Json>(
@@ -322,7 +325,7 @@ export function FormModal({
             {t("cancel")}
           </button>
           <button className="button primary" disabled={pending}>
-            {t(pending ? "saving" : "create")}
+            {pending ? t("saving") : submitLabel || t("create")}
           </button>
         </footer>
       </form>

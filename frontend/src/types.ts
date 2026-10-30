@@ -30,6 +30,39 @@ export interface Bundle {
   components: Record<string, Json>;
   documentation: Json;
   pyproject?: string | null;
+  /** The declarations of variables.json, its raw text when malformed, or null without the file. */
+  variables?: Record<string, Json> | string | null;
+}
+/** A root flow node parameter bound to a project variable. */
+export interface VariableUsage {
+  node: string;
+  label: string;
+  param: string;
+}
+/** A variable's value in one environment, or why it has none. */
+export interface VariableValue {
+  value?: unknown;
+  source?: "default" | "environment";
+  error?: string;
+}
+export interface VariableSummary {
+  type: string;
+  description: string;
+  default?: unknown;
+  environments: Record<string, unknown>;
+  errors: string[];
+  warnings: string[];
+  values: Record<string, VariableValue>;
+  usages: VariableUsage[];
+}
+/** What the snapshot reports about variables.json, for the interface. */
+export interface VariablesSummary {
+  file_error: string | null;
+  declarations: Record<string, VariableSummary>;
+  /** References to variables that variables.json does not declare. */
+  undeclared: Record<string, VariableUsage[]>;
+  diagnostics: Json[];
+  warnings: Json[];
 }
 export interface Snapshot {
   role: "reader" | "editor" | "admin";
@@ -42,6 +75,8 @@ export interface Snapshot {
   diagnostics: Json[];
   conflicts: Json[];
   parsed_templates: Record<string, Json>;
+  /** Null while the project files cannot be read. */
+  variables: VariablesSummary | null;
 }
 export interface Project {
   role: "admin" | "editor" | "reader";

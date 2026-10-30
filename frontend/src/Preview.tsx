@@ -12,9 +12,10 @@ import {
 import { api, ApiError, withQuery } from "./api";
 import { formatValue } from "./graph";
 import type { Cell } from "./lineageGraph";
-import type { Json } from "./types";
+import type { Json, Snapshot } from "./types";
 import { useT } from "./i18n";
 import { useResource } from "./useApiResource";
+import { useStaleVariables } from "./VariableFields";
 
 export interface PreviewQuery {
   port: string;
@@ -117,6 +118,8 @@ export type NodePreview = ReturnType<typeof useNodePreview>;
 /** The rows of the selected node, loaded by `useNodePreview`. */
 export default function Preview({
   readOnly = false,
+  snapshot,
+  environment,
   preview: { data, error, pending: loading, query, update },
   ports,
   active,
@@ -126,6 +129,8 @@ export default function Preview({
   onExplain,
 }: {
   readOnly?: boolean;
+  snapshot: Snapshot;
+  environment: string;
   preview: NodePreview;
   ports: string[];
   active: boolean;
@@ -137,6 +142,7 @@ export default function Preview({
   const t = useT();
   const { port, limit, offset, sort, descending, filterColumn } = query;
   const [filter, setFilter] = useState(query.filter);
+  const staleVariables = useStaleVariables(snapshot, environment, data);
   useEffect(() => {
     if (filter === query.filter) return;
     const timer = setTimeout(() => update({ filter, offset: 0 }), 250);
@@ -166,6 +172,9 @@ export default function Preview({
           )}
           {data && (
             <span className={`badge ${data.status}`}>{t(data.status)}</span>
+          )}
+          {!!staleVariables.length && (
+            <span className="stale-reason">{staleVariables.join(" ")}</span>
           )}
           {loading && <Loader2 size={14} className="spin" />}
         </div>

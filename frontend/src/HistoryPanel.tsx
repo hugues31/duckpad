@@ -12,6 +12,16 @@ import { useT } from "./i18n";
 import { Modal } from "./modals";
 import type { Json } from "./types";
 import { useApiResource } from "./useApiResource";
+import { VariableValues } from "./VariableFields";
+
+/** The node parameters bound to each variable of a run, as "Node · parameter". */
+function boundParameters(run: Json) {
+  const result: Record<string, string[]> = {};
+  for (const state of Object.values(run.nodes || {}) as Json[])
+    for (const [parameter, name] of Object.entries(state.variables || {}))
+      (result[name as string] ||= []).push(`${state.label} · ${parameter}`);
+  return result;
+}
 
 export default function HistoryPanel({
   readOnly = false,
@@ -145,6 +155,16 @@ export default function HistoryPanel({
               </span>
             </div>
             {selected.error && <p className="notice error">{selected.error}</p>}
+            {!!Object.keys(selected.variables || {}).length && (
+              <section className="run-variables">
+                <h4>{t("variables")}</h4>
+                <VariableValues
+                  variables={selected.variables}
+                  environment={selected.environment}
+                  parameters={boundParameters(selected)}
+                />
+              </section>
+            )}
             <details className="run-step">
               <summary>{t("executionConfiguration")}</summary>
               <pre className="expression">

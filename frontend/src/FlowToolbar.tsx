@@ -11,6 +11,7 @@ import {
   Play,
   Square,
   Settings2,
+  Variable,
   Workflow,
   type LucideIcon,
 } from "lucide-react";
@@ -29,6 +30,7 @@ const TAB_ICONS: Record<WorkspaceTab, LucideIcon> = {
   flow: Workflow,
   code: FileCode2,
   documentation: BookOpen,
+  variables: Variable,
   history: Activity,
 };
 
@@ -130,7 +132,8 @@ export function WorkspaceNotices({
   snapshot: Snapshot;
   active: Json | null;
   onResolve: () => void;
-  onViewFiles: () => void;
+  /** Show where a diagnostic applies: its variable, or the project files. */
+  onViewFiles: (diagnostic: Json) => void;
 }) {
   const t = useT();
   const nodes = Object.values(active?.nodes || {}) as Json[];
@@ -159,8 +162,12 @@ export function WorkspaceNotices({
             {snapshot.diagnostics.length} · {snapshot.diagnostics[0].file}:{" "}
             {snapshot.diagnostics[0].message}
           </span>
-          <button onClick={onViewFiles}>
-            {t("viewFiles")}
+          <button onClick={() => onViewFiles(snapshot.diagnostics[0])}>
+            {t(
+              snapshot.diagnostics[0].variable
+                ? "openInVariables"
+                : "viewFiles",
+            )}
             <ArrowRight size={14} />
           </button>
         </div>

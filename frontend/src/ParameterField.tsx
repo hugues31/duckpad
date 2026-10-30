@@ -1,7 +1,7 @@
 import Select from "./Select";
 import ColumnPreparation from "./ColumnPreparation";
 import ParameterInput from "./ParameterInput";
-import { useId, useState } from "react";
+import { useId, useState, type ReactNode } from "react";
 import { FileUp } from "lucide-react";
 import { uploadFile } from "./api";
 import { useT } from "./i18n";
@@ -16,6 +16,7 @@ export default function ParameterField({
   schemas,
   columns,
   worktree,
+  variable,
 }: {
   parameter: Json;
   value: any;
@@ -25,9 +26,12 @@ export default function ParameterField({
   schemas?: string[];
   columns?: Json[];
   worktree?: string;
+  /** The variable button shown next to the name, and the bound variable replacing the input. */
+  variable?: { control: ReactNode; bound: ReactNode };
 }) {
   const t = useT();
   const columnList = useId();
+  const id = useId();
   const [uploadError, setUploadError] = useState("");
   const name = parameter.name;
   const type = parameter.type || "text";
@@ -44,13 +48,17 @@ export default function ParameterField({
       />
     );
   return (
-    <label className="field">
+    <div className="field">
       <span>
-        {name.replaceAll("_", " ")}
+        <label htmlFor={id}>{name.replaceAll("_", " ")}</label>
+        {variable?.control}
         <small>{base}</small>
       </span>
-      {base === "boolean" ? (
+      {variable?.bound ? (
+        variable.bound
+      ) : base === "boolean" ? (
         <Select
+          id={id}
           value={String(value ?? false)}
           onChange={(e) => onChange(e.target.value === "true")}
           onBlur={onBlur}
@@ -60,6 +68,7 @@ export default function ParameterField({
         </Select>
       ) : base === "connection" ? (
         <Select
+          id={id}
           value={value || ""}
           onChange={(e) => onChange(e.target.value)}
           onBlur={onBlur}
@@ -78,6 +87,7 @@ export default function ParameterField({
         </Select>
       ) : base === "choice" || base === "keyword" ? (
         <Select
+          id={id}
           value={value}
           onChange={(e) => onChange(e.target.value)}
           onBlur={onBlur}
@@ -88,6 +98,7 @@ export default function ParameterField({
         </Select>
       ) : base === "list" || base === "number" ? (
         <ParameterInput
+          id={id}
           kind={base}
           value={value}
           onChange={onChange}
@@ -97,6 +108,7 @@ export default function ParameterField({
         base === "expression" ||
         base === "schema" ? (
         <textarea
+          id={id}
           rows={3}
           className="code-input"
           value={
@@ -109,6 +121,7 @@ export default function ParameterField({
         />
       ) : (
         <input
+          id={id}
           type="text"
           value={value ?? ""}
           onChange={(e) => onChange(e.target.value)}
@@ -116,7 +129,7 @@ export default function ParameterField({
           list={base === "column" && schemas ? columnList : undefined}
         />
       )}
-      {base === "file" && worktree && (
+      {base === "file" && worktree && !variable?.bound && (
         <span className="file-upload">
           <FileUp size={13} />
           {t("upload")}
@@ -151,6 +164,6 @@ export default function ParameterField({
           ))}
         </datalist>
       )}
-    </label>
+    </div>
   );
 }

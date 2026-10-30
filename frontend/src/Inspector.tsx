@@ -1,5 +1,5 @@
 import Select from "./Select";
-import { lazy, Suspense, useState } from "react";
+import { lazy, Suspense, useRef, useState } from "react";
 import {
   ArrowRight,
   BookOpen,
@@ -20,6 +20,14 @@ import QueryBuilder from "./QueryBuilder";
 import { useRevisionDraft } from "./useRevisionDraft";
 import type { FlowEdge, FlowNode, Json, Snapshot, Statuses } from "./types";
 import { useApiResource, useResource } from "./useApiResource";
+import { BoundVariable, VariablePicker } from "./VariableBinding";
+import { StatementVariables } from "./VariableFields";
+import {
+  bindTo,
+  variableReference,
+  variableTypeFor,
+  type Declaration,
+} from "./variables";
 
 const CodeEditor = lazy(() => import("./Editor"));
 
@@ -62,7 +70,12 @@ export default function Inspector({
   connections: Json[];
   statuses: Statuses;
   preview: Json | null;
-  onSave: (node: FlowNode, base: Snapshot) => Promise<Snapshot>;
+  /** Save the node, with the variables it binds for the first time, in one change. */
+  onSave: (
+    node: FlowNode,
+    base: Snapshot,
+    variables: Record<string, Declaration>,
+  ) => Promise<Snapshot>;
   onSaveDocumentation: (
     change: (documentation: Json) => void,
     base: Snapshot,
@@ -77,12 +90,24 @@ export default function Inspector({
 }) {
   const t = useT();
   const [tab, setTab] = useState<(typeof TABS)[number][0]>("parameters");
+  // Variables created from a parameter, declared by the save that binds it.
+  const declared = useRef<Record<string, Declaration>>({});
   // Pending edits are saved when another node is selected or the panel closes.
   const {
     draft,
     update,
     persist: saveDraft,
-  } = useRevisionDraft(node, snapshot, onSave, { autosave: !readOnly });
+  } = useRevisionDraft(
+    node,
+    snapshot,
+    async (value: FlowNode, base: Snapshot) => {
+      const variables = { ...declared.current };
+      const saved = await onSave(value, base, variables);
+      for (const name of Object.keys(variables)) delete declared.current[name];
+      return saved;
+    },
+    { autosave: !readOnly },
+  );
   const [sqlMode, setSqlMode] = useState<"current" | "executed">("current");
   const [saveError, setError] = useState("");
   const worktree = snapshot.worktree.id;
@@ -147,6 +172,18 @@ export default function Inspector({
     }
   };
   const { definition, kind, parameters, inputs } = signature;
+  // Only the root flow binds variables; component definitions stay portable.
+  const bindable = !fullNode.includes("::");
+  const setParameter = (name: string, value: unknown) =>
+    update((current) => {
+      const params = { ...current.params };
+      if (value === undefined) delete params[name];
+      else params[name] = value;
+      return { ...current, params };
+    });
+  const nodeProblems = snapshot.diagnostics.filter(
+    (item) => item.file === "flow.json" && item.node === node.id,
+  );
   const statements: Json[] =
     sqlMode === "executed"
       ? preview?.executed_sql || []
@@ -276,29 +313,81 @@ export default function Inspector({
                 void persist();
               }}
             />
-            {parameters.map((parameter) => (
-              <ParameterField
-                key={parameter.name}
-                worktree={snapshot.worktree.id}
-                parameter={parameter}
-                value={draft.params?.[parameter.name] ?? parameter.default}
-                onChange={(value) =>
-                  update((current) => {
-                    const params = { ...current.params };
-                    if (value === undefined) delete params[parameter.name];
-                    else params[parameter.name] = value;
-                    return { ...current, params };
-                  })
-                }
-                onBlur={persist}
-                connections={connections}
-                columns={inputColumns[parameter.type?.match(/\((\w+)\)/)?.[1]]}
-                schemas={
-                  schemas[parameter.type?.match(/\((\w+)\)/)?.[1]] ||
-                  Object.values(schemas).flat()
-                }
-              />
-            ))}
+            {parameters.map((parameter) => {
+              const value = draft.params?.[parameter.name] ?? parameter.default;
+              const type = parameter.type || "text";
+              const reference = variableReference(value);
+              const variableType = bindable ? variableTypeFor(type) : null;
+              return (
+                <ParameterField
+                  key={parameter.name}
+                  worktree={snapshot.worktree.id}
+                  parameter={parameter}
+                  value={value}
+                  variable={
+                    variableType || reference
+                      ? {
+                          control: variableType && (
+                            <VariablePicker
+                              snapshot={snapshot}
+                              parameter={parameter.name}
+                              parameterType={type}
+                              variableType={variableType}
+                              value={reference ? undefined : value}
+                              disabled={readOnly}
+                              onBind={(name) => {
+                                setParameter(parameter.name, bindTo(name));
+                                void persist();
+                              }}
+                              onCreate={async (name, declaration) => {
+                                declared.current[name] = declaration;
+                                setParameter(parameter.name, bindTo(name));
+                                await saveDraft();
+                              }}
+                            />
+                          ),
+                          bound: reference && (
+                            <BoundVariable
+                              snapshot={snapshot}
+                              worktree={worktree}
+                              environment={environment}
+                              parameter={parameter.name}
+                              parameterType={type}
+                              name={reference}
+                              problem={
+                                nodeProblems.find((item) =>
+                                  String(item.message).includes(
+                                    `parameter ${parameter.name}`,
+                                  ),
+                                )?.message
+                              }
+                              disabled={readOnly}
+                              onUnbind={() => {
+                                // Keep computing the same value, now written in the node.
+                                const current =
+                                  snapshot.variables?.declarations[reference]
+                                    ?.values[environment];
+                                setParameter(parameter.name, current?.value);
+                                void persist();
+                              }}
+                            />
+                          ),
+                        }
+                      : undefined
+                  }
+                  onChange={(value) => setParameter(parameter.name, value)}
+                  onBlur={persist}
+                  connections={connections}
+                  columns={
+                    inputColumns[parameter.type?.match(/\((\w+)\)/)?.[1]]
+                  }
+                  schemas={
+                    schemas[parameter.type?.match(/\((\w+)\)/)?.[1]] ||
+                    Object.values(schemas).flat()
+                  }
+                />
+              );
+            })}
             <button className="button primary full" onClick={persist}>
               {t("save")}
             </button>
@@ -356,6 +445,14 @@ export default function Inspector({
                 height="330px"
               />
             </Suspense>
+            <StatementVariables
+              statements={statements}
+              environment={
+                sqlMode === "executed" && preview
+                  ? preview.environment
+                  : environment
+              }
+            />
             {statements.some(
               (s) => Object.keys(s.bindings || {}).length > 0,
             ) && (
