@@ -158,6 +158,39 @@ def test_accounts_memberships_and_grants_survive_restart(tmp_path):
         assert request(client, headers, "GET", settings_path).json() == settings
 
 
+def test_projects_are_created_without_the_default_local_connection(instance):
+    app, client = instance
+    owner, headers = account(app, "owner")
+    assert client.delete("/api/catalog/connection/local").status_code == 200
+    project = own_project(app, client, headers)["project"]
+    settings = request(client, headers, "GET", f"/projects/{project}/settings").json()
+    assert settings["connections"] == [] and settings["members"][0]["id"] == owner["id"]
+    example = request(client, headers, "POST", "/example", json={"name": "Sample"})
+    assert example.status_code == 200, example.text
+    project = example.json()["project"]
+    settings = request(client, headers, "GET", f"/projects/{project}/settings").json()
+    assert settings["connections"] == ["sample_" + project]
+
+
+@pytest.mark.parametrize("kind", ["project", "example"])
+def test_a_project_without_its_access_records_leaves_nothing_behind(instance, monkeypatch, kind):
+    app, client = instance
+    services = app.state.services
+    _, headers = account(app, "owner")
+
+    def refuse(*args):
+        raise Problem("Simulated access failure", 409)
+
+    monkeypatch.setattr(services.engine.access, "own", refuse)
+    route = "/projects" if kind == "project" else "/example"
+    response = request(client, headers, "POST", route, json={"name": "Orphan"})
+    assert response.status_code == 409 and response.json()["error"] == "Simulated access failure"
+    home = services.store.home
+    assert services.store.all("project") == [] and services.store.all("worktree") == []
+    assert [c["id"] for c in services.store.all("connection")] == ["local"]
+    assert not list(home.glob("projects/*")) and not list(home.glob("resources/*"))
+
+
 def test_private_discovery_and_all_direct_resource_routes(instance):
     app, client = instance
     owner, owner_headers = account(app, "owner")

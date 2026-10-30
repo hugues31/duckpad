@@ -1,5 +1,7 @@
 import copy
 import json
+import logging
+import shutil
 import subprocess
 import threading
 from pathlib import Path
@@ -9,11 +11,14 @@ import duckdb
 import pytest
 from fastapi.testclient import TestClient
 
+from duckpad import git_command
 from duckpad.app import create_app
 from duckpad.bundle import bundle_to_files
 from duckpad.comparison import commit_message, compare_files
 from duckpad.components import group
+from duckpad.git_command import GitError
 from duckpad.remote import validate_url
+from duckpad.services import Services
 from duckpad.util import Problem
 
 
@@ -312,6 +317,103 @@ def test_non_main_destination_and_protected_cleanup(project):
     assert projects.store.get("worktree", feature["id"]) is None
 
 
+def integrated_feature(projects, main):
+    feature = projects.branch(main["id"], "feature")
+    edit(projects, feature, lambda b: b["documentation"].update(project="Ready"))
+    review = projects.versioning.prepare(main["id"], "refs/heads/feature")
+    apply(projects, review)
+    return feature, review["source_head"]
+
+
+def test_cleanup_keeps_a_locked_worktree(project):
+    projects, main = project
+    feature, head = integrated_feature(projects, main)
+    projects.git(main["path"], "worktree", "lock", feature["path"])
+    with pytest.raises(Problem, match="untracked files or is locked"):
+        projects.versioning.cleanup(main["id"], feature["id"], main["id"], head)
+    assert Path(feature["path"]).exists() and projects.store.get("worktree", feature["id"])
+
+
+def test_cleanup_survives_a_failed_branch_deletion_and_a_restart(tmp_path, monkeypatch):
+    home = tmp_path / "instance"
+    services = Services.open(home)
+    projects = services.projects
+    main = projects.create("Revenue", bundle())
+    feature, head = integrated_feature(projects, main)
+    exports = projects.store.home / "exports" / feature["id"]
+    (exports / "dev").mkdir(parents=True)
+    (exports / "dev" / "report.csv").write_text("revenue\n1\n")
+    run = git_command.run
+
+    def refuse_ref_deletion(path, *args, **options):
+        if args[:2] == ("update-ref", "-d"):
+            raise GitError()
+        return run(path, *args, **options)
+
+    monkeypatch.setattr(git_command, "run", refuse_ref_deletion)
+    assert projects.versioning.cleanup(main["id"], feature["id"], main["id"], head) == {"ok": True}
+    monkeypatch.setattr(git_command, "run", run)
+    assert projects.store.get("worktree", feature["id"]) is None
+    assert not Path(feature["path"]).exists() and not exports.exists()
+    services.close()
+    app = create_app(home)
+    with TestClient(app):
+        restarted = app.state.services.projects
+        assert main["id"] in restarted.observed
+        # The branch Git kept is only listed as closed, and opens again.
+        branches = restarted.versioning.branches(main["id"])
+        assert next(b for b in branches if b["name"] == "feature")["state"] == "closed"
+        reopened = restarted.versioning.open_branch(main["id"], "feature")
+        assert restarted.git(reopened["path"], "rev-parse", "HEAD") == head
+
+
+def test_restart_finishes_interrupted_cleanups_and_ignores_lost_directories(tmp_path, monkeypatch, caplog):
+    home = tmp_path / "instance"
+    services = Services.open(home)
+    projects = services.projects
+    main = projects.create("Revenue", bundle())
+    feature, head = integrated_feature(projects, main)
+    lost = projects.branch(main["id"], "lost")
+    # The process stops once the record is deleted, before any file is removed.
+    monkeypatch.setattr(projects, "discard", Mock(side_effect=SystemExit))
+    with pytest.raises(SystemExit):
+        projects.versioning.cleanup(main["id"], feature["id"], main["id"], head)
+    assert projects.store.get("worktree", feature["id"]) is None and Path(feature["path"]).exists()
+    # A directory deleted outside Duckpad leaves a record without its directory.
+    shutil.rmtree(lost["path"])
+    services.close()
+    app = create_app(home)
+    with caplog.at_level(logging.ERROR, logger="duckpad.projects"), TestClient(app):
+        restarted = app.state.services.projects
+        assert f"Worktree {lost['id']} is unavailable" in caplog.text
+        assert lost["id"] not in restarted.observed and main["id"] in restarted.observed
+        assert not Path(feature["path"]).exists()
+        assert restarted.versioning.open_branch(main["id"], "feature")["branch"] == "feature"
+
+
+def test_a_worktree_that_cannot_be_recorded_leaves_no_checkout(project, monkeypatch):
+    projects, main = project
+    put = projects.store.put
+
+    def refuse_worktree(kind, key, value):
+        if kind == "worktree":
+            raise RuntimeError("Simulated write failure")
+        return put(kind, key, value)
+
+    projects.git(main["path"], "branch", "existing")
+    monkeypatch.setattr(projects.store, "put", refuse_worktree)
+    with pytest.raises(RuntimeError, match="Simulated"):
+        projects.branch(main["id"], "created")
+    with pytest.raises(RuntimeError, match="Simulated"):
+        projects.versioning.open_branch(main["id"], "existing")
+    monkeypatch.setattr(projects.store, "put", put)
+    assert not list((projects.store.home / "worktrees").iterdir())
+    # The branch created for the worktree is removed; the branch that already existed is kept.
+    assert projects.git(main["path"], "branch", "--list", "created", "existing") == "existing"
+    assert projects.branch(main["id"], "created")["branch"] == "created"
+    assert projects.versioning.open_branch(main["id"], "existing")["branch"] == "existing"
+
+
 @pytest.mark.parametrize("execute", [False, True])
 def test_cleanup_releases_engine_contexts_and_catalog_remains_writable(tmp_path, execute):
     app = create_app(tmp_path / "instance", watch=False)
@@ -552,8 +654,9 @@ def test_remote_deletion_recreation_invalid_imports_and_unrelated_history(local_
     projects.flush(other["id"])
     projects.git(other["path"], "push", str(remote), "HEAD:main")
     state = projects.remotes.fetch(main["id"], state["config_revision"])
-    with pytest.raises(Problem, match="invalid"):
+    with pytest.raises(Problem, match="Fix incoming project definitions") as rejected:
         projects.remotes.pull(main["id"], state["config_revision"], state["local_head"], state["remote_head"])
+    assert rejected.value.status == 422 and rejected.value.detail[0]["file"] == "flow.json"
     assert projects.snapshot(main["id"])["bundle"] is not None
     unrelated = projects.create("Unrelated", bundle())
     projects.git(unrelated["path"], "push", str(remote), "HEAD:unrelated")

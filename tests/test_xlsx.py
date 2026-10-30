@@ -14,13 +14,11 @@ from duckpad.app import create_app
 from duckpad.auth import Auth
 from duckpad.builtin_templates import BUILTINS
 from duckpad.bundle import bundle_to_files
-from duckpad.catalog import PRESETS, Catalog
+from duckpad.catalog import Catalog
 from duckpad.services import Services
 from duckpad.store import Store
 from duckpad.templates import compile_template, parse_template
 from duckpad.util import Problem
-
-XLSX_PRESET = next(preset for preset in PRESETS if preset["id"] == "xlsx")
 
 
 @pytest.fixture(scope="module")
@@ -84,8 +82,9 @@ def test_fresh_catalog_includes_xlsx_and_preserves_customizations_on_restart(tmp
     store = Store(tmp_path)
     try:
         catalog = Catalog(store)
-        assert store.get("connector", "xlsx") == XLSX_PRESET
-        definition = {**XLSX_PRESET, "name": "Custom spreadsheets"}
+        seeded = store.get("connector", "xlsx")
+        assert seeded["name"] == "Excel (XLSX)" and seeded["extensions"] == [{"name": "excel"}]
+        definition = {**seeded, "name": "Custom spreadsheets"}
         catalog.save("connector", definition)
         Catalog(store)
         assert store.get("connector", "xlsx") == definition
@@ -231,7 +230,7 @@ def test_xlsx_api_upload_requires_grant_and_blocks_outside_files(tmp_path, excel
         failed = wait_run(instance.store, instance.engine.launch(identity, "dev"), timeout=30)
         assert failed["status"] == "failed", failed
         assert "Permission Error: Cannot access file" in failed["nodes"]["source"]["error"]
-        readonly = copy.deepcopy(XLSX_PRESET)
+        readonly = copy.deepcopy(instance.store.get("connector", "xlsx"))
         readonly.update(id="readonly_xlsx", capabilities=["read"])
         instance.catalog.save("connector", readonly)
         instance.catalog.save("connection", {**connection, "connector": "readonly_xlsx"})

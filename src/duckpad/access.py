@@ -46,24 +46,26 @@ class Access:
             raise Problem("Instance administrator access required", 403)
 
     def create(self, user, factory, sample=False):
-        with self.membership_lock:
+        """Create a project that its creator administers; factory(grant) creates it.
+
+        The project calls grant(worktree) in the transaction that records it, so a project never
+        exists without its members and connection grants.
+        """
+
+        def grant(worktree):
             current = self.store.get("user", user["id"])
             if not current or not current["active"]:
                 raise Problem("Authentication required", 401)
-            worktree = factory()
-            connections = ["local", "sample_" + worktree["project"]] if sample else ["local"]
-            return self.own(worktree, user, connections)
+            defaults = ["local", "sample_" + worktree["project"]] if sample else ["local"]
+            # Administrators may delete the default connection: new projects then start without it.
+            self.own(worktree, user, [c for c in defaults if self.store.get("connection", c)])
 
-    def own(self, worktree, user, connections=None):
+        return factory(grant)
+
+    def own(self, worktree, user, connections):
         self.store.put(
-            "access",
-            worktree["project"],
-            {
-                "members": {user["id"]: "admin"},
-                "connections": connections or ["local"],
-            },
+            "access", worktree["project"], {"members": {user["id"]: "admin"}, "connections": connections}
         )
-        return worktree
 
     def validate_admins(self, members, users=None):
         users = users if users is not None else self.store.all("user")

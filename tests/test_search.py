@@ -60,7 +60,7 @@ def project(app, name):
         "documentation": {"project": "hidden-documentation"},
     }
     worktree = app.state.services.projects.create(name, bundle)
-    app.state.access.own(worktree, {"id": "admin"})
+    app.state.access.own(worktree, {"id": "admin"}, ["local"])
     return worktree
 
 

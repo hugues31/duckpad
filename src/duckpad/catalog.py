@@ -15,60 +15,6 @@ PARAMETER_TYPES = ("text", "number", "boolean", "file")
 # Catalog identifiers.
 NAME = re.compile(r"[A-Za-z][\w-]*")
 
-PRESETS = [
-    {
-        "id": "local",
-        "name": "Local files",
-        "description": "CSV and Parquet on this computer.",
-        "parameters": [{"name": "root", "type": "text", "default": ""}],
-        "extensions": [],
-        "init_sql": "",
-        "capabilities": ["read", "write"],
-        "compatibility": "Validated on DuckDB 2.0.0, Linux x86_64, with native CSV and Parquet. Other DuckDB versions and platforms require validation.",
-    },
-    {
-        "id": "xlsx",
-        "name": "Excel (XLSX)",
-        "description": "Read worksheets and export XLSX workbooks on this computer.",
-        "parameters": [{"name": "root", "type": "text", "default": ""}],
-        "extensions": [{"name": "excel"}],
-        "init_sql": "",
-        "capabilities": ["read", "write"],
-        "compatibility": "Requires the matching DuckDB excel extension. Validated with DuckDB 2.0.0 on Linux x86_64, including isolated execution. Legacy .xls files are not supported.",
-    },
-    {
-        "id": "s3",
-        "name": "Amazon S3",
-        "description": "CSV and Parquet in S3-compatible object storage.",
-        "parameters": [
-            {"name": "key_id", "type": "text", "secret": True},
-            {"name": "secret", "type": "text", "secret": True},
-            {"name": "region", "type": "text", "default": "us-east-1"},
-            {"name": "endpoint", "type": "text", "default": "s3.amazonaws.com"},
-            {"name": "use_ssl", "type": "boolean", "default": True},
-            {"name": "url_style", "type": "text", "default": "vhost"},
-        ],
-        "extensions": [{"name": "httpfs"}],
-        "init_sql": "CREATE OR REPLACE TEMPORARY SECRET {{ secret_name }} (TYPE S3, KEY_ID {{ key_id }}, SECRET {{ secret }}, REGION {{ region }}, ENDPOINT {{ endpoint }}, USE_SSL {{ use_ssl }}, URL_STYLE {{ url_style }});",
-        "capabilities": ["read", "write"],
-        "compatibility": "Validated on DuckDB 2.0.0 with matching httpfs, Linux x86_64, and a Moto S3 endpoint. Live AWS IAM/TLS behavior requires deployment validation.",
-    },
-    {
-        "id": "oracle",
-        "name": "Oracle · OraDuck",
-        "description": "Read Oracle tables and load existing tables through OraDuck.",
-        "parameters": [
-            {"name": "user", "type": "text"},
-            {"name": "password", "type": "text", "secret": True},
-            {"name": "dsn", "type": "text"},
-        ],
-        "extensions": [{"name": "oraduck", "repository": "community"}],
-        "init_sql": "CREATE OR REPLACE TEMPORARY SECRET {{ secret_name }} (TYPE oraduck, USER {{ user }}, PASSWORD {{ password }}, DSN {{ dsn }}); ATTACH '' AS {{ alias }} (TYPE oraduck, SECRET {{ secret_name }});",
-        "capabilities": ["read", "write"],
-        "compatibility": "Validated with DuckDB 2.0.0, OraDuck 0.4.0, Oracle 19.3, Instant Client 19.32 on Linux x86_64. Requires a matching extension, Instant Client 19+ (Basic/Basic Light), libaio and libnsl on Linux. Other platforms and versions require validation.",
-    },
-]
-
 
 def secret_names(definition):
     """Names of a connector's parameters that must never be displayed or recorded."""
@@ -142,6 +88,14 @@ class Catalog:
 
     def save(self, kind, data, *, create=False, before_change=None):
         """Validate and prepare the edit before resetting execution state or writing."""
+        self.check(kind, data, create=create)
+        if before_change is not None:
+            before_change()
+        self.store.put(kind, data["id"], data)
+        self.on_change()
+
+    def check(self, kind, data, *, create=False):
+        """Validate a connector or connection and complete it for storage, without writing it."""
         if kind not in KINDS:
             raise Problem("Unknown catalog entity", 404)
         if not NAME.fullmatch(str(data.get("id", ""))):
@@ -177,10 +131,7 @@ class Catalog:
                         values[key] = previous["environments"].get(env, {}).get(key, "")
         else:
             self.validate_definition(data)
-        if before_change is not None:
-            before_change()
-        self.store.put(kind, data["id"], data)
-        self.on_change()
+        return data
 
     def delete(self, kind, identity, *, before_change=None):
         if kind not in KINDS:
