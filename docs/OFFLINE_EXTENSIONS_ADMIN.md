@@ -10,6 +10,8 @@ or through authenticated `GET /api/extensions/runtime`. Download
 the file on any computer with Internet access. No extension is installed or
 executed on that computer.
 
+![Choose a core extension for the displayed server version and platform before downloading and importing it](images/extensions.png)
+
 Official download addresses use these patterns:
 
 ```text

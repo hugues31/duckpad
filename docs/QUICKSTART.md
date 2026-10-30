@@ -32,9 +32,13 @@ virtual environments and development from source.
 ## 2. Open the example
 
 Choose **New project** on the Projects page, enter a name, then choose
-**Start from an example → Create**. Keep the **dev** environment selected and
-click **Run pipeline**. Wait for the run to finish.
-This reads 120 orders and 12 customers, joins them and writes two local CSV reports.
+**Start from an example → Create**.
+
+![Create a named project from the built-in example](images/new-project.png)
+
+Keep the **dev** environment selected and click **Run pipeline**. Wait for the
+run to finish. This reads 120 orders and 12 customers, joins them and writes two
+local CSV reports.
 
 ![The Northstar pipeline and its revenue preview](images/workspace.png)
 
@@ -77,6 +81,8 @@ and explicit limitations.
 Select **Paid orders** and change its **status** parameter. The old preview
 becomes **Stale**. Click **Run pipeline** again to compute the new result.
 You choose when a run happens; editing never starts one automatically.
+
+![Paid orders parameters beside its output preview](images/parameters.png)
 
 Try the **Code** tab to inspect the project files and SQL. Use **New working
 branch** before experimenting with a shared definition, then compare your changes
