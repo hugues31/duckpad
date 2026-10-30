@@ -28,7 +28,7 @@ Open the localhost address printed in the terminal. Sign in as `admin` using the
 duckpad start --home /path/to/my-instance --port 8765 --no-browser
 ```
 
-Only one backend may own an instance directory at a time. Use separate `--home` directories for independent instances. The default address is `127.0.0.1`. Behind an HTTPS reverse proxy, set `DUCKPAD_SECURE_COOKIES=1` so the session cookie is only sent over HTTPS.
+Only one backend may own an instance directory at a time. Use separate `--home` directories for independent instances. The default address is `127.0.0.1`.
 
 If an older instance uses the legacy `records` document schema, startup exits with
 an error asking you to choose a new `--home`. That schema is not migrated
@@ -50,6 +50,30 @@ Successful GET requests used for background polling (workspace, resources, workt
 snapshots, status, and generations) are logged at DEBUG. The default INFO level
 still shows other requests, including failed polling requests. Use
 `duckpad start --log-level debug` to include polling in the server logs.
+
+## Reverse proxy
+
+Behind an HTTPS reverse proxy, set `DUCKPAD_SECURE_COOKIES=1` so the session cookie is only sent over HTTPS.
+
+Sign-in attempts are limited per client address: 12 per minute. Duckpad reads the
+client address from the proxy's `X-Forwarded-For` header only when the request comes
+from an address listed in `FORWARDED_ALLOW_IPS` (by default, `127.0.0.1`). When the
+proxy runs on another host or container, set `FORWARDED_ALLOW_IPS` to the proxy's
+address, or a comma-separated list of addresses or networks:
+
+```sh
+FORWARDED_ALLOW_IPS=172.18.0.2 duckpad start --host 0.0.0.0 --no-browser
+```
+
+Without it, every user appears to come from the proxy and shares one limit, so 12
+failed sign-ins within a minute block everyone's sign-in. List only proxies: a client
+that can reach Duckpad directly from a trusted address can choose its reported address.
+Duckpad prints a reminder at startup when it listens on a non-loopback address and
+`FORWARDED_ALLOW_IPS` is not set.
+
+File uploads are limited to 1 GiB per file. Allow request bodies of that size in the
+proxy, for example with `client_max_body_size` in nginx. For larger files, an
+instance admin can grant a local connection whose root contains them.
 
 ## Trusted local mode
 

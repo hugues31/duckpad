@@ -41,7 +41,6 @@ ROUTE_ACCESS = {
         "GET /api/projects/{project}/settings",
         "GET /api/worktrees/{worktree}",
         "GET /api/worktrees/{worktree}/archive.zip",
-        "GET /api/worktrees/{worktree}/history",
         "GET /api/worktrees/{worktree}/git/history",
         "GET /api/worktrees/{worktree}/git/compare",
         "GET /api/worktrees/{worktree}/git/branches",
@@ -177,7 +176,7 @@ def test_private_discovery_and_all_direct_resource_routes(instance):
         ("GET", f"/worktrees/{worktree['id']}"),
         ("GET", f"/worktrees/{branch['id']}"),
         ("GET", f"/worktrees/{worktree['id']}/status"),
-        ("GET", f"/worktrees/{worktree['id']}/history"),
+        ("GET", f"/worktrees/{worktree['id']}/git/history"),
         ("GET", f"/worktrees/{worktree['id']}/archive.zip"),
         ("GET", f"/worktrees/{worktree['id']}/git/compare?a=HEAD&b=HEAD"),
         ("GET", f"/worktrees/{worktree['id']}/compile/source"),
@@ -474,7 +473,7 @@ def test_account_validation_and_no_credential_disclosure(instance):
     assert client.post("/api/users", json={"username": "new", "password": "short"}).status_code == 400
     assert (
         client.post("/api/users", json={"username": "new", "password": PASSWORD, "role": "owner"}).status_code
-        == 400
+        == 422
     )
     created = client.post("/api/users", json={"username": "new", "password": PASSWORD}).json()
     assert set(created) == {"id", "username", "role", "active"}

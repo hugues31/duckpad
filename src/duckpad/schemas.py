@@ -2,12 +2,41 @@
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, StrictBool, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, field_validator, model_validator
 
 
 class Login(BaseModel):
     username: str = "admin"
     password: str
+
+
+class NewUser(BaseModel):
+    username: str
+    password: str
+    role: Literal["admin", "member"] = "member"
+
+
+class UserChanges(BaseModel):
+    """Only the fields that are present change; null leaves a field unchanged."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    role: Literal["admin", "member"] | None = None
+    active: StrictBool | None = None
+    password: str | None = None
+
+
+class PasswordChange(BaseModel):
+    current: str
+    password: str
+
+
+class ProjectRole(BaseModel):
+    role: Literal["reader", "editor", "admin"]
+
+
+class ConnectionGrants(BaseModel):
+    connections: list[str]
 
 
 class ExtensionSettings(BaseModel):

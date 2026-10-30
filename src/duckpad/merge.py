@@ -7,6 +7,17 @@ from .util import dumps
 MISSING = object()
 
 
+def by_identity(value):
+    """Index a list of objects by their unique string ids, or None when it cannot merge by identity."""
+    if not isinstance(value, list) or not all(
+        isinstance(x, dict) and isinstance(x.get("id"), str) for x in value
+    ):
+        return None
+    mapping = {x["id"]: x for x in value}
+    # Repeated ids would collapse into one item, so such lists merge as whole values.
+    return mapping if len(mapping) == len(value) else None
+
+
 def merge_values(base, current, proposed, path="", choices=None, evidence=None):
     """Three-way merge logical fields; arrays with stable IDs merge by identity."""
     if current == proposed or proposed == base:
@@ -28,11 +39,8 @@ def merge_values(base, current, proposed, path="", choices=None, evidence=None):
                 result[key] = value
             conflicts.extend(errors)
         return result, conflicts
-    if all(
-        isinstance(v, list) and all(isinstance(x, dict) and "id" in x for x in v)
-        for v in (base, current, proposed)
-    ):
-        mappings = [{x["id"]: x for x in v} for v in (base, current, proposed)]
+    mappings = [by_identity(v) for v in (base, current, proposed)]
+    if all(mapping is not None for mapping in mappings):
         result, conflicts = merge_values(*mappings, path, choices, evidence)
         order = list(dict.fromkeys([x["id"] for x in current + proposed + base]))
         return [result[k] for k in order if k in result], conflicts

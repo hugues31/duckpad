@@ -11,8 +11,13 @@ from duckpad.auth import Auth
 from duckpad.bundle import bundle_to_files, files_to_bundle
 from duckpad.components import expand, group, import_definition
 from duckpad.engine import Engine
+from duckpad.merge import merge_files
 from duckpad.projects import QUIET_PERIOD, Projects
-from duckpad.util import Problem
+from duckpad.util import Problem, dumps
+
+
+def commit_count(projects, worktree):
+    return int(projects.git(worktree["path"], "rev-list", "--count", "HEAD"))
 
 
 def test_authentication_password_survives_restart_without_plaintext(services):
@@ -36,7 +41,7 @@ def test_project_files_require_documentation():
 def test_external_batch_commits_final_invalid_content_once(services, tmp_path):
     _, projects, _, _ = services
     worktree = projects.create("Batch", example_bundle(tmp_path / "input.csv"))
-    original = len(projects.history(worktree["id"]))
+    original = commit_count(projects, worktree)
     projects.start_watcher()
     path = Path(worktree["path"])
     (path / "flow.json").write_text("{")
@@ -44,12 +49,10 @@ def test_external_batch_commits_final_invalid_content_once(services, tmp_path):
     (path / "README.md").write_text("External save")
     time.sleep(0.3)
     # Both writes fall within one quiet period, so they form a single save unit.
-    assert len(projects.history(worktree["id"])) == original
-    wait_until(
-        lambda: len(projects.history(worktree["id"])) == original + 1, message="Batch was not committed"
-    )
+    assert commit_count(projects, worktree) == original
+    wait_until(lambda: commit_count(projects, worktree) == original + 1, message="Batch was not committed")
     time.sleep(QUIET_PERIOD)
-    assert len(projects.history(worktree["id"])) == original + 1
+    assert commit_count(projects, worktree) == original + 1
     snapshot = projects.snapshot(worktree["id"])
     assert snapshot["bundle"] is None
     assert snapshot["files"]["flow.json"] == "{"
@@ -320,3 +323,27 @@ def test_group_import_and_explicit_deletion_preserve_documentation_lifecycle(ser
         "Order amount."
         in projects.revision_files(projects.get(destination)["path"], copied["commit"])["documentation.json"]
     )
+
+
+def note_files(ids, edited=None):
+    notes = [
+        {"id": identity, "text": "edited" if index == edited else "original"}
+        for index, identity in enumerate(ids)
+    ]
+    return {"flow.json": dumps({"notes": notes})}
+
+
+def test_lists_with_unique_string_ids_merge_by_identity():
+    merged, conflicts = merge_files(
+        note_files(["a", "b"]), note_files(["a", "b"], 0), note_files(["a", "b"], 1)
+    )
+    assert conflicts == []
+    assert [note["text"] for note in json.loads(merged["flow.json"])["notes"]] == ["edited", "edited"]
+
+
+@pytest.mark.parametrize("ids", [[1, 2], ["a", "a"], [["a"], ["b"]], [None, "b"], [True, False]])
+def test_lists_without_unique_string_ids_merge_as_whole_values(ids):
+    current = note_files(ids, 0)
+    merged, conflicts = merge_files(note_files(ids), current, note_files(ids, 1))
+    assert conflicts == ["flow.json/notes"]
+    assert merged == current

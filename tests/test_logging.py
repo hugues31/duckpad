@@ -112,7 +112,7 @@ def test_cli_polling_logs(tmp_path, level):
         ("POST", "/api/resources", 200),
         ("PUT", "/api/worktrees/worktree_test", 200),
         ("DELETE", "/api/worktrees/worktree_test", 204),
-        ("GET", "/api/worktrees/worktree_test/history", 200),
+        ("GET", "/api/worktrees/worktree_test/git/history", 200),
         ("GET", "/api/worktrees/worktree_test/status/extra", 200),
         ("GET", "/api/worktrees/worktree_test/generations/data_test/extra", 200),
         ("GET", "/api/catalog?next=/api/resources", 200),

@@ -15,7 +15,7 @@ from joserfc.errors import JoseError
 from joserfc.jwk import KeySet
 from pydantic import BaseModel, ConfigDict, Field, SecretStr
 
-from .auth import SESSION_LIFETIME, session_key
+from .auth import session_key
 from .identity import oidc_identity
 from .util import Problem, uid
 
@@ -276,16 +276,4 @@ class OIDC:
             # Refresh attribution on every verified sign-in; account linkage still uses issuer/sub.
             user["commit_identity"] = oidc_identity(user, claims)
             self.store.put("user", user["id"], user)
-            token = secrets.token_urlsafe(32)
-            self.auth._purge_expired(time.time())
-            self.store.put(
-                "session",
-                session_key(token),
-                {
-                    "user": user["id"],
-                    "oidc_revision": config["revision"],
-                    "version": user.get("session_version", 0),
-                    "expires": time.time() + SESSION_LIFETIME,
-                },
-            )
-        return token
+            return self.auth.start_session(user, oidc_revision=config["revision"])

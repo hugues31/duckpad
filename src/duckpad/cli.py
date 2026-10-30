@@ -14,6 +14,8 @@ from .app import create_app
 from .logging import server_log_config
 from .util import Problem
 
+LOOPBACK_HOSTS = ("127.0.0.1", "::1", "localhost")
+
 
 def main():
     parser = argparse.ArgumentParser(prog="duckpad", description="Local SQL pipelines with cell lineage")
@@ -39,7 +41,7 @@ def main():
         help="Server log level (default: info); debug includes successful UI polling requests",
     )
     args = parser.parse_args()
-    if args.trusted_local and args.host not in ("127.0.0.1", "::1", "localhost"):
+    if args.trusted_local and args.host not in LOOPBACK_HOSTS:
         parser.error("--trusted-local requires --host 127.0.0.1, ::1, or localhost")
     if not shutil.which("git"):
         parser.error("Git is required. Install Git for your operating system and run duckpad start again.")
@@ -61,6 +63,12 @@ def main():
             print(
                 "Trusted local mode: SQL runs without OS isolation, with your operating-system permissions. "
                 "Use only trusted projects on your own computer; do not share or proxy this instance.",
+                flush=True,
+            )
+        if args.host not in LOOPBACK_HOSTS and not os.environ.get("FORWARDED_ALLOW_IPS"):
+            print(
+                "FORWARDED_ALLOW_IPS is not set. Behind a reverse proxy on another host or container, "
+                "set it to the proxy address; otherwise all users share the proxy's login attempt limit.",
                 flush=True,
             )
         if app.state.auth.initial_password:
