@@ -260,6 +260,11 @@ test("use a production value, confirm its run and explain it in History (workflo
 
   await editor.getByRole("button", { name: /Paid orders/ }).click();
   await expect(page).toHaveURL(/\/flow\?environment=dev&node=validated/);
+  await expect(
+    page.locator(".inspector").getByRole("group", {
+      name: "status is bound to order_status",
+    }),
+  ).toContainText("= paid in dev");
   await page.getByLabel("Environment", { exact: true }).selectOption("prod");
   await expect(page.locator(".preview-header .badge")).toHaveText("Stale");
   await expect(page.locator(".stale-reason")).toHaveText(
