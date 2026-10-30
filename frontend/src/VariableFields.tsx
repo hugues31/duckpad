@@ -2,7 +2,14 @@ import { withQuery } from "./api";
 import { useT } from "./i18n";
 import ParameterInput from "./ParameterInput";
 import Select from "./Select";
-import type { Json, Snapshot } from "./types";
+import type {
+  Json,
+  PreviewPage,
+  Run,
+  Snapshot,
+  Statement,
+  VariableValue,
+} from "./types";
 import { useApiResource } from "./useApiResource";
 import {
   baseType,
@@ -26,8 +33,8 @@ export function VariableValueInput({
   disabled = false,
 }: {
   type: string;
-  value: unknown;
-  onChange: (value: unknown) => void;
+  value: Json | undefined;
+  onChange: (value: Json | undefined) => void;
   id?: string;
   label?: string;
   placeholder?: string;
@@ -76,12 +83,14 @@ export function VariableValueInput({
         value={value}
         onChange={(next) => {
           if (kind === "number" || !Array.isArray(next)) return onChange(next);
-          const items = next.filter((item: string) => item !== "");
+          const items = next.filter((item) => item !== "");
           // Keep text that is not a number, so validation can point at it.
           onChange(
             type === "list<number>"
-              ? items.map((item: string) =>
-                  Number.isFinite(Number(item)) ? Number(item) : item,
+              ? items.map((item) =>
+                  typeof item === "string" && Number.isFinite(Number(item))
+                    ? Number(item)
+                    : item,
                 )
               : items,
           );
@@ -123,7 +132,7 @@ export function VariableValues({
   environment,
   parameters,
 }: {
-  variables: Record<string, Json>;
+  variables: Record<string, VariableValue>;
   environment: string;
   /** The parameters bound to each variable, when they are known. */
   parameters?: Record<string, string[]>;
@@ -164,11 +173,11 @@ export function StatementVariables({
   statements,
   environment,
 }: {
-  statements: Json[];
+  statements: Statement[];
   environment: string;
 }) {
   const t = useT();
-  const variables: Record<string, Json> = Object.create(null);
+  const variables: Record<string, VariableValue> = Object.create(null);
   const parameters: Record<string, string[]> = Object.create(null);
   for (const statement of statements)
     for (const item of statement.variables || []) {
@@ -197,38 +206,36 @@ export function StatementVariables({
 export function useStaleVariables(
   snapshot: Snapshot,
   environment: string,
-  result: Json | null,
+  result: PreviewPage | null,
 ) {
   const t = useT();
   const stale = result?.status === "stale" && result.run;
-  const run = useApiResource<Json>(stale ? `/runs/${result.run}` : null);
+  const run = useApiResource<Run>(stale ? `/runs/${result.run}` : null);
   const bundle = snapshot.bundle;
   const summary = snapshot.variables;
   if (!stale || !run.data?.variables || !bundle || !summary) return [];
   const root = String(result.node).split("::")[0];
-  return Object.entries(run.data.variables as Record<string, Json>).flatMap(
-    ([name, used]) => {
-      const declared = variableSummary(snapshot, name);
-      const current = declared?.values[environment];
-      const usages = (declared?.usages || []).map((usage) => usage.node);
-      if (
-        !declared ||
-        !(usages.includes(root) || descendants(bundle, usages).has(root)) ||
-        (sameValue(current?.value, used.value) && !current?.error)
-      )
-        return [];
-      return [
-        fill(t("staleVariable"), {
-          name,
-          environment,
-          before: formatVariableValue(used.value),
-          after: current?.error
-            ? t("noVariableValue")
-            : formatVariableValue(current?.value),
-        }),
-      ];
-    },
-  );
+  return Object.entries(run.data.variables).flatMap(([name, used]) => {
+    const declared = variableSummary(snapshot, name);
+    const current = declared?.values[environment];
+    const usages = (declared?.usages || []).map((usage) => usage.node);
+    if (
+      !declared ||
+      !(usages.includes(root) || descendants(bundle, usages).has(root)) ||
+      (sameValue(current?.value, used.value) && !current?.error)
+    )
+      return [];
+    return [
+      fill(t("staleVariable"), {
+        name,
+        environment,
+        before: formatVariableValue(used.value),
+        after: current?.error
+          ? t("noVariableValue")
+          : formatVariableValue(current?.value),
+      }),
+    ];
+  });
 }
 
 /** The variables a launch would use, with their values, before it is confirmed. */
@@ -242,7 +249,7 @@ export function ScopeVariables({
   node?: string;
 }) {
   const t = useT();
-  const scope = useApiResource<Record<string, Json>>(
+  const scope = useApiResource<Record<string, VariableValue>>(
     withQuery(`/worktrees/${worktree}/variables/scope`, { environment, node }),
   );
   if (scope.error)

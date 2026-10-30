@@ -13,7 +13,7 @@ import { nodeInterface } from "./graph";
 import { useT } from "./i18n";
 import { ConfirmModal, FormModal } from "./modals";
 import Select from "./Select";
-import type { Environment, Snapshot, VariableSummary } from "./types";
+import type { Environment, Json, Snapshot, VariableSummary } from "./types";
 import { useRevisionDraft } from "./useRevisionDraft";
 import { VariableValueInput } from "./VariableFields";
 import {
@@ -90,12 +90,14 @@ export default function VariablesPanel({
   const [search, setSearch] = useState("");
   const [dirty, setDirty] = useState(false);
   const [leaving, setLeaving] = useState<(() => void) | null>(null);
-  useEffect(() => {
+  const [previousRequest, setPreviousRequest] = useState(requested);
+  if (requested !== previousRequest) {
+    setPreviousRequest(requested);
     if (requested) {
       setSelected(requested);
       setCreating(null);
     }
-  }, [requested]);
+  }
   const summary = snapshot.variables;
   const declared = Object.entries(summary?.declarations || {});
   const shown = declared.filter(([name, variable]) =>
@@ -475,7 +477,7 @@ function VariableEditor({
   ].filter(Boolean) as string[];
   const set = (change: Partial<Draft>) =>
     update((current) => ({ ...current, ...change }));
-  const setEnvironment = (key: string, item: unknown) =>
+  const setEnvironment = (key: string, item: Json | undefined) =>
     update((current) => {
       const next = { ...current.environments };
       if (item === undefined) delete next[key];

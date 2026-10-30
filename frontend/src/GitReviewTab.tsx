@@ -2,8 +2,8 @@ import { useState } from "react";
 import { api, send } from "./api";
 import ComparisonView from "./ComparisonView";
 import { TabStatus, useTabAction } from "./gitTabs";
+import type { MergeChoice, MergeReview } from "./gitTypes";
 import { useT } from "./i18n";
-import type { Json } from "./types";
 import { conflictLabel } from "./variables";
 
 export default function GitReviewTab({
@@ -15,7 +15,7 @@ export default function GitReviewTab({
   onCancel,
   onChanged,
 }: {
-  review: Json;
+  review: MergeReview;
   worktree: string;
   base: string;
   canEdit: boolean;
@@ -26,22 +26,22 @@ export default function GitReviewTab({
   const t = useT();
   const { pending, error, run, retry } = useTabAction();
   const [review, setReview] = useState(proposal);
-  const [integrated, setIntegrated] = useState<Json | null>(null);
+  const [integrated, setIntegrated] = useState<MergeReview | null>(null);
 
-  const choose = (path: string, choice: string) => {
+  const choose = (path: string, choice: MergeChoice) => {
     const previous = review;
     const choices = { ...review.choices, [path]: choice };
     setReview({
       ...review,
       choices,
-      conflicts: review.conflicts.map((item: Json) =>
+      conflicts: review.conflicts.map((item) =>
         item.path === path ? { ...item, choice } : item,
       ),
     });
     void run(async () => {
       try {
         setReview(
-          await api<Json>(
+          await api<MergeReview>(
             `/worktrees/${review.worktree}/git/reviews/${review.id}`,
             send({ choices }),
           ),
@@ -70,7 +70,7 @@ export default function GitReviewTab({
           <h3>
             {t("fieldConflicts")} · {review.unresolved.length} {t("unresolved")}
           </h3>
-          {review.conflicts.map((conflict: Json) => (
+          {review.conflicts.map((conflict) => (
             <fieldset className="git-conflict" key={conflict.path}>
               <legend>
                 {conflictLabel(conflict.path, t) ?? conflict.path}
@@ -79,7 +79,7 @@ export default function GitReviewTab({
                 )}
               </legend>
               <div className="git-conflict-values">
-                {["base", "current", "incoming"].map((choice) => (
+                {(["base", "current", "incoming"] as const).map((choice) => (
                   <label key={choice}>
                     <span>
                       <input
@@ -105,7 +105,7 @@ export default function GitReviewTab({
           ))}
         </section>
       )}
-      {review.diagnostics.map((d: Json, i: number) => (
+      {review.diagnostics.map((d, i) => (
         <p key={i} className="notice error">
           {d.file}: {d.message}
         </p>

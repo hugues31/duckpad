@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useT } from "./i18n";
+import type { Json } from "./types";
 
 /** Keep incomplete input intact until it can be committed as a parameter value. */
 export default function ParameterInput({
@@ -21,8 +22,9 @@ export default function ParameterInput({
   placeholder?: string;
   secret?: boolean;
   disabled?: boolean;
-  value: any;
-  onChange: (value: any) => void;
+  value: Json | undefined;
+  /** Receives the parsed value, or incomplete numeric text when commitOnChange is enabled. */
+  onChange: (value: number | string | string[] | undefined) => void;
   onBlur?: () => void;
   /** Let form validation see incomplete values while preserving their input text. */
   commitOnChange?: boolean;
@@ -45,7 +47,9 @@ export default function ParameterInput({
       disabled={disabled}
       type={secret ? "password" : "text"}
       inputMode={kind === "number" ? "decimal" : undefined}
-      value={draft ?? (Array.isArray(value) ? value.join(", ") : (value ?? ""))}
+      value={
+        draft ?? (Array.isArray(value) ? value.join(", ") : String(value ?? ""))
+      }
       onChange={(e) => {
         e.currentTarget.setCustomValidity("");
         setDraft(e.target.value);

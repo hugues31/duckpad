@@ -18,7 +18,17 @@ import ExportDownload from "./ExportDownload";
 import ParameterField from "./ParameterField";
 import QueryBuilder from "./QueryBuilder";
 import { useRevisionDraft } from "./useRevisionDraft";
-import type { FlowEdge, FlowNode, Json, Snapshot, Statuses } from "./types";
+import type {
+  Column,
+  Documentation,
+  FlowEdge,
+  FlowNode,
+  Json,
+  PreviewPage,
+  Snapshot,
+  Statement,
+  Statuses,
+} from "./types";
 import { useApiResource, useResource } from "./useApiResource";
 import { BoundVariable, VariablePicker } from "./VariableBinding";
 import { StatementVariables } from "./VariableFields";
@@ -68,9 +78,9 @@ export default function Inspector({
   graphEdges: FlowEdge[];
   fullNode: string;
   environment: string;
-  connections: Json[];
+  connections: Snapshot["connections"];
   statuses: Statuses;
-  preview: Json | null;
+  preview: PreviewPage | null;
   /** Save the node, with the variables it binds for the first time, in one change. */
   onSave: (
     node: FlowNode,
@@ -78,7 +88,7 @@ export default function Inspector({
     variables: Record<string, Declaration>,
   ) => Promise<Snapshot>;
   onSaveDocumentation: (
-    change: (documentation: Json) => void,
+    change: (documentation: Documentation) => void,
     base: Snapshot,
   ) => Promise<Snapshot>;
   onInput: (port: string, source: string) => void;
@@ -125,20 +135,20 @@ export default function Inspector({
           await Promise.all(
             inputEdges.map(async (edge) => {
               try {
-                const result = await api(
+                const result = await api<PreviewPage>(
                   withQuery(
                     `/worktrees/${worktree}/preview/${encodeURIComponent(prefix + edge.source)}`,
                     { environment, port: edge.sourceHandle, limit: 1 },
                   ),
                   { signal },
                 );
-                return [edge.targetHandle, result.columns as Json[]] as const;
+                return [edge.targetHandle, result.columns] as const;
               } catch {
-                return [edge.targetHandle, []] as const;
+                return [edge.targetHandle, [] as Column[]] as const;
               }
             }),
           ),
-        ) as Record<string, Json[]>,
+        ),
       {
         refresh: JSON.stringify([
           environment,
@@ -147,7 +157,7 @@ export default function Inspector({
         ]),
       },
     ).data || {};
-  const compilation = useApiResource<Json[]>(
+  const compilation = useApiResource<Statement[]>(
     tab === "sql" && sqlMode === "current"
       ? withQuery(
           `/worktrees/${worktree}/compile/${encodeURIComponent(fullNode)}`,
@@ -160,7 +170,7 @@ export default function Inspector({
   const schemas = Object.fromEntries(
     Object.entries(inputColumns).map(([port, columns]) => [
       port,
-      columns.map((column) => column.name as string),
+      columns.map((column) => column.name),
     ]),
   );
   const persist = async () => {
@@ -172,10 +182,10 @@ export default function Inspector({
       setError((e as Error).message);
     }
   };
-  const { definition, kind, parameters, inputs } = signature;
+  const { kind, parameters, inputs } = signature;
   // Only the root flow binds variables; component definitions stay portable.
   const bindable = !fullNode.includes("::");
-  const setParameter = (name: string, value: unknown) =>
+  const setParameter = (name: string, value: Json | undefined) =>
     update((current) => {
       const params = { ...current.params };
       if (value === undefined) delete params[name];
@@ -185,14 +195,19 @@ export default function Inspector({
   const nodeProblems = snapshot.diagnostics.filter(
     (item) => item.file === "flow.json" && item.node === node.id,
   );
-  const statements: Json[] =
+  const statements: Statement[] =
     sqlMode === "executed"
       ? preview?.executed_sql || []
       : compilation.data || [];
   return (
     <aside className="inspector">
       <div className="inspector-title">
-        <span>{node.label || definition?.name || definition?.label}</span>
+        <span>
+          {node.label ||
+            (signature.kind === "component"
+              ? signature.definition?.name
+              : signature.definition?.label)}
+        </span>
         <button className="icon" onClick={onClose} title={t("close")}>
           <X size={18} />
         </button>
@@ -217,7 +232,7 @@ export default function Inspector({
       <button className="button secondary small" onClick={onHistory}>
         {t("elementHistory")}
       </button>
-      {!node.component && definition?.download && (
+      {signature.kind !== "component" && signature.definition?.download && (
         <ExportDownload
           key={`${snapshot.worktree.id}:${environment}:${fullNode}:${snapshot.revision}`}
           worktree={snapshot.worktree.id}
@@ -319,6 +334,8 @@ export default function Inspector({
               const type = parameter.type || "text";
               const reference = variableReference(value);
               const variableType = bindable ? variableTypeFor(type) : null;
+              // Column parameters name the input port they choose from.
+              const port = parameter.type.match(/\((\w+)\)/)?.[1];
               return (
                 <ParameterField
                   key={parameter.name}
@@ -380,12 +397,9 @@ export default function Inspector({
                   onChange={(value) => setParameter(parameter.name, value)}
                   onBlur={persist}
                   connections={connections}
-                  columns={
-                    inputColumns[parameter.type?.match(/\((\w+)\)/)?.[1]]
-                  }
+                  columns={port ? inputColumns[port] : undefined}
                   schemas={
-                    schemas[parameter.type?.match(/\((\w+)\)/)?.[1]] ||
-                    Object.values(schemas).flat()
+                    (port && schemas[port]) || Object.values(schemas).flat()
                   }
                 />
               );

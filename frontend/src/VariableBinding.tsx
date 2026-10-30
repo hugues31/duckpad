@@ -5,7 +5,7 @@ import { ArrowRight, Plus, Variable, X } from "lucide-react";
 import { useT } from "./i18n";
 import { Modal } from "./modals";
 import { worktreeUrl } from "./navigation";
-import type { Snapshot, VariableSummary } from "./types";
+import type { Json, Snapshot, VariableSummary } from "./types";
 import { useAsyncAction } from "./useAsyncAction";
 import { VariableValueInput } from "./VariableFields";
 import {
@@ -71,7 +71,7 @@ export function VariablePicker({
   parameterType: string;
   /** The type a variable created from the current value takes. */
   variableType: string;
-  value: unknown;
+  value: Json | undefined;
   disabled: boolean;
   onBind: (name: string) => void;
   onCreate: (name: string, declaration: Declaration) => Promise<void>;
@@ -207,7 +207,7 @@ function CreateVariableDialog({
 }: {
   name: string;
   type: string;
-  value: unknown;
+  value: Json | undefined;
   taken: string[];
   onCreate: (name: string, declaration: Declaration) => Promise<void>;
   onClose: () => void;

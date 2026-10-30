@@ -1,4 +1,11 @@
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { createPortal } from "react-dom";
 import {
   ReactFlow,
@@ -25,6 +32,7 @@ import {
 import { api, send, withQuery } from "./api";
 import { formatValue } from "./graph";
 import { useT } from "./i18n";
+import { useResource } from "./useApiResource";
 import { isFinal, usePolling } from "./usePolling";
 import {
   arrangeLineage,
@@ -56,14 +64,18 @@ type CardData = {
 };
 type CardNode = Node<CardData, "lineage">;
 const nodeTypes = { lineage: CalculationCard };
-const operationKeys: Record<string, string> = {
+const operationKeys = {
   sum: "lineageSum",
   avg: "lineageAverage",
   min: "lineageMinimum",
   max: "lineageMaximum",
   count: "lineageCount",
   count_distinct: "lineageDistinctCount",
-};
+} as const;
+const isExplained = (
+  operation: string,
+): operation is keyof typeof operationKeys =>
+  Object.hasOwn(operationKeys, operation);
 
 function CalculationCard({ data }: NodeProps<CardNode>) {
   const t = useT();
@@ -120,7 +132,9 @@ function CalculationCard({ data }: NodeProps<CardNode>) {
                 ? "lineageValueGroup"
                 : !result.complete
                   ? "partial"
-                  : operationKeys[operation] || "lineageCalculation",
+                  : isExplained(operation)
+                    ? operationKeys[operation]
+                    : "lineageCalculation",
         )}
         {data.root && <span>{t("lineageSelectedValue")}</span>}
       </div>
@@ -181,7 +195,7 @@ function CalculationCard({ data }: NodeProps<CardNode>) {
                 </>
               ) : result.total === 0 ? (
                 t("lineageNoInputs")
-              ) : operationKeys[operation] ? (
+              ) : isExplained(operation) ? (
                 <>
                   {t(`${operationKeys[operation]}Reason`).replace(
                     "{count}",
@@ -310,29 +324,32 @@ function LineageDialog({ worktree, environment, cell, onClose }: Props) {
   }, []);
 
   // Stop exploring once the explained result is recalculated or edited.
+  // Verification pauses while an error is shown, until the user retries.
   usePolling(
-    async (signal) => {
-      try {
-        const result = await api(
-          withQuery(`/worktrees/${worktree}/generations/${cell.dataset}`, {
-            environment,
-          }),
-          { signal },
-        );
-        if (signal.aborted || result.valid) return;
-        stopped.current = true;
-        controller.current?.abort();
-        setInterrupted(true);
-        setPending(false);
-        return false;
-      } catch (e) {
-        // Temporary failures are retried; a final one stops verification.
-        if (!signal.aborted && isFinal(e)) setError((e as Error).message);
-        throw e;
-      }
-    },
-    { interval: 500 },
-    [worktree, environment, cell.dataset, revision],
+    useCallback(
+      async (signal: AbortSignal) => {
+        try {
+          const result = await api<{ valid: boolean }>(
+            withQuery(`/worktrees/${worktree}/generations/${cell.dataset}`, {
+              environment,
+            }),
+            { signal },
+          );
+          if (signal.aborted || result.valid) return;
+          stopped.current = true;
+          controller.current?.abort();
+          setInterrupted(true);
+          setPending(false);
+          return false;
+        } catch (e) {
+          // Temporary failures are retried; a final one stops verification.
+          if (!signal.aborted && isFinal(e)) setError((e as Error).message);
+          throw e;
+        }
+      },
+      [worktree, environment, cell.dataset],
+    ),
+    { interval: 500, enabled: !error },
   );
 
   useEffect(() => {
@@ -551,45 +568,35 @@ function CalculationDetails({
   );
   const [selection, setSelection] = useState(0);
   const [offset, setOffset] = useState(0);
-  const [page, setPage] = useState<Explanation | null>(null);
-  const [error, setError] = useState("");
-  const [pending, setPending] = useState(false);
   const current = selections[selection];
-  useEffect(() => {
-    if (!current) return;
-    const abort = new AbortController();
-    setPending(true);
-    setError("");
-    setPage(null);
-    void api<Explanation>(`/worktrees/${worktree}/lineage`, {
-      ...send({
-        dataset: current.dataset,
-        row: current.row,
-        column: current.column,
-        environment,
-        context: true,
-        offset,
+  const {
+    data: page,
+    error,
+    pending,
+  } = useResource(
+    current
+      ? JSON.stringify([
+          worktree,
+          environment,
+          current.dataset,
+          current.row,
+          current.column,
+          offset,
+        ])
+      : null,
+    (signal) =>
+      api<Explanation>(`/worktrees/${worktree}/lineage`, {
+        ...send({
+          dataset: current!.dataset,
+          row: current!.row,
+          column: current!.column,
+          environment,
+          context: true,
+          offset,
+        }),
+        signal,
       }),
-      signal: abort.signal,
-    })
-      .then((result) => {
-        if (!abort.signal.aborted) setPage(result);
-      })
-      .catch((e) => {
-        if (!abort.signal.aborted) setError(e.message);
-      })
-      .finally(() => {
-        if (!abort.signal.aborted) setPending(false);
-      });
-    return () => abort.abort();
-  }, [
-    worktree,
-    environment,
-    current?.dataset,
-    current?.row,
-    current?.column,
-    offset,
-  ]);
+  );
   return (
     <aside
       className="lineage-details"

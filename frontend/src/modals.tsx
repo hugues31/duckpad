@@ -8,7 +8,6 @@ import {
 } from "react";
 import { X } from "lucide-react";
 import { useT } from "./i18n";
-import type { Json } from "./types";
 import { useAsyncAction } from "./useAsyncAction";
 
 const CodeEditor = lazy(() => import("./Editor"));
@@ -273,14 +272,14 @@ export function FormModal({
 }: {
   title: string;
   fields: FormField[];
-  onSubmit: (values: Json) => Promise<void>;
+  onSubmit: (values: Record<string, string>) => Promise<void>;
   onClose: () => void;
   description?: string;
   /** The submit button label; "Create" by default. */
   submitLabel?: string;
 }) {
   const t = useT();
-  const [values, setValues] = useState<Json>(
+  const [values, setValues] = useState<Record<string, string>>(
     Object.fromEntries(fields.map((f) => [f.key, f.value || ""])),
   );
   const { pending, error, run } = useAsyncAction();

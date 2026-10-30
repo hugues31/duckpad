@@ -175,28 +175,33 @@ function SignedIn({
     return value;
   }, []);
   useEffect(() => {
-    void refreshWorkspace().catch((e) => notify(e.message, true));
-  }, [refreshWorkspace, notify, location.key]);
+    api<Workspace>("/workspace").then(setWorkspace, (e) =>
+      notify(e.message, true),
+    );
+  }, [notify, location.key]);
   // Membership and branch changes made elsewhere appear without a reload.
   usePolling(
-    () => refreshWorkspace().then(() => undefined),
+    useCallback(async () => {
+      await refreshWorkspace();
+    }, [refreshWorkspace]),
     { interval: WORKSPACE_INTERVAL, delay: WORKSPACE_INTERVAL },
-    [refreshWorkspace],
   );
+  const unknownEnvironment =
+    !!workspace &&
+    !!requestedEnvironment &&
+    requestedEnvironment !== environment;
   useEffect(() => {
-    if (
-      workspace &&
-      worktree &&
-      requestedEnvironment &&
-      !environments.includes(requestedEnvironment)
-    )
+    if (worktree && unknownEnvironment)
       void navigate(worktreeUrl(worktree, tab, environment), {
         replace: true,
       });
-  }, [workspace, worktree, tab, environment, requestedEnvironment, navigate]);
-  useEffect(() => {
+  }, [worktree, unknownEnvironment, tab, environment, navigate]);
+  // A dialog belongs to the page that opened it.
+  const [modalPage, setModalPage] = useState(location.pathname);
+  if (location.pathname !== modalPage) {
+    setModalPage(location.pathname);
     setModal(null);
-  }, [location.pathname]);
+  }
 
   const shell: Shell = {
     workspace,

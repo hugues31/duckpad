@@ -1,3 +1,4 @@
+import type { Translate } from "./i18n";
 import type {
   Bundle,
   Json,
@@ -42,12 +43,12 @@ const BINDABLE: Record<string, string[]> = {
 };
 
 /** A declaration as stored in variables.json. */
-export interface Declaration {
+export type Declaration = {
   type: string;
   description?: string;
-  default?: unknown;
-  environments?: Record<string, unknown>;
-}
+  default?: Json;
+  environments?: Record<string, Json>;
+};
 
 /** `choice(a|b)` -> `choice`, `list<text>` -> `list`. */
 export const baseType = (type: string) => type.trim().split(/[<(]/)[0].trim();
@@ -60,13 +61,15 @@ export function typeOptions(type: string): string[] {
 
 /** The variable named by a parameter value such as `{"$var": "order_status"}`. */
 export function variableReference(value: unknown): string | null {
-  return value !== null &&
-    typeof value === "object" &&
-    !Array.isArray(value) &&
-    Object.keys(value).length === 1 &&
-    typeof (value as Json).$var === "string"
-    ? (value as Json).$var
-    : null;
+  if (
+    value === null ||
+    typeof value !== "object" ||
+    Array.isArray(value) ||
+    Object.keys(value).length !== 1
+  )
+    return null;
+  const name = (value as Record<string, unknown>).$var;
+  return typeof name === "string" ? name : null;
 }
 
 export const bindTo = (name: string) => ({ $var: name });
@@ -125,7 +128,7 @@ export function validValue(type: string, value: unknown): boolean {
 }
 
 /** A starting value of a type, for an environment that stops using the default. */
-export function initialValue(type: string): unknown {
+export function initialValue(type: string): Json | undefined {
   const kind = baseType(type);
   if (kind === "number") return 0;
   if (kind === "boolean") return false;
@@ -225,7 +228,7 @@ export const fill = (text: string, values: Record<string, string | number>) =>
   );
 
 /** A merge path inside variables.json, named after its variable and field, else null. */
-export function conflictLabel(path: string, t: (key: string) => string) {
+export function conflictLabel(path: string, t: Translate) {
   const prefix = VARIABLES_FILE + "/";
   if (!path.startsWith(prefix)) return null;
   const [name, field, environment] = path

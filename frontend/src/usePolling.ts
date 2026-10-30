@@ -1,4 +1,4 @@
-import { useEffect, type DependencyList } from "react";
+import { useEffect } from "react";
 import { ApiError } from "./api";
 
 /** Answers a retry cannot change: the session ended, access was revoked or the resource is gone. */
@@ -17,15 +17,15 @@ export interface PollingOptions {
 }
 
 /**
- * Run `task` until the dependencies change or the component unmounts, aborting
- * its signal then. Each run starts after the previous one settles, so responses
- * never overlap. A run returning false, or failing with a final API error,
- * stops polling; other failures are retried.
+ * Run `task` until it changes or the component unmounts, aborting its signal
+ * then: wrap it in `useCallback` so that its dependencies restart polling. Each
+ * run starts after the previous one settles, so responses never overlap. A run
+ * returning false, or failing with a final API error, stops polling; other
+ * failures are retried.
  */
 export function usePolling(
   task: (signal: AbortSignal) => Promise<boolean | void>,
   { interval, delay = 0, enabled = true }: PollingOptions,
-  deps: DependencyList,
 ) {
   useEffect(() => {
     if (!enabled) return;
@@ -47,5 +47,5 @@ export function usePolling(
       controller.abort();
       clearTimeout(timer);
     };
-  }, [enabled, interval, delay, ...deps]);
+  }, [task, enabled, interval, delay]);
 }

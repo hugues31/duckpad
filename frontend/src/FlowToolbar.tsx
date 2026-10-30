@@ -23,7 +23,7 @@ import {
   type WorkspaceTab,
 } from "./navigation";
 import { useShell } from "./shell";
-import type { Json, Snapshot } from "./types";
+import type { Diagnostic, Run, Snapshot } from "./types";
 import { useLoadedWorktree } from "./worktree";
 
 const TAB_ICONS: Record<WorkspaceTab, LucideIcon> = {
@@ -130,13 +130,13 @@ export function WorkspaceNotices({
   onViewFiles,
 }: {
   snapshot: Snapshot;
-  active: Json | null;
+  active: Run | null;
   onResolve: () => void;
   /** Show where a diagnostic applies: its variable, or the project files. */
-  onViewFiles: (diagnostic: Json) => void;
+  onViewFiles: (diagnostic: Diagnostic) => void;
 }) {
   const t = useT();
-  const nodes = Object.values(active?.nodes || {}) as Json[];
+  const nodes = Object.values(active?.nodes || {});
   const completed = nodes.filter((n) => n.status === "success").length;
   return (
     <>
@@ -192,7 +192,7 @@ export function WorkspaceNotices({
   );
 }
 
-export const noticeCount = (snapshot: Snapshot, active: Json | null) =>
+export const noticeCount = (snapshot: Snapshot, active: Run | null) =>
   Number(!!snapshot.conflicts.length) +
   Number(!!snapshot.diagnostics.length) +
   Number(!!active) +

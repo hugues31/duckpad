@@ -1,6 +1,6 @@
 import { useT } from "./i18n";
 import Select from "./Select";
-import type { Json } from "./types";
+import type { Column } from "./types";
 
 const types = [
   "VARCHAR",
@@ -18,6 +18,17 @@ const types = [
   "TIMESTAMPTZ",
 ];
 
+/** The setting of one column; the "in" checks tell enabled options apart. */
+type PreparationRow = {
+  source?: string;
+  /** The output name of a selected column. */
+  name?: string;
+  type?: string;
+  trim?: boolean;
+  date_format?: string;
+  replacement?: string;
+};
+
 /** Structured template parameters are the form state, including after a reload. */
 export default function ColumnPreparation({
   kind,
@@ -28,19 +39,20 @@ export default function ColumnPreparation({
 }: {
   kind: string;
   value: unknown;
-  columns: Json[];
-  onChange: (value: Json[]) => void;
+  columns: Column[];
+  onChange: (value: PreparationRow[]) => void;
   onBlur?: () => void;
 }) {
   const t = useT();
   const selecting = kind === "column_selection";
-  const rows: Json[] = Array.isArray(value) ? value : [];
+  // Project files may hold anything: rows that are not objects are reported.
+  const rows: PreparationRow[] = Array.isArray(value) ? value : [];
   const malformed =
     !Array.isArray(value) ||
     rows.some((row) => !row || typeof row !== "object" || Array.isArray(row));
-  const update = (index: number, patch: Json) =>
+  const update = (index: number, patch: PreparationRow) =>
     onChange(rows.map((row, i) => (i === index ? { ...row, ...patch } : row)));
-  const removeSetting = (index: number, name: string) =>
+  const removeSetting = (index: number, name: "date_format" | "replacement") =>
     onChange(
       rows.map((row, i) => {
         if (i !== index) return row;
@@ -89,6 +101,7 @@ export default function ColumnPreparation({
             selecting &&
             (typeof name !== "string" ||
               !name.trim() ||
+              // eslint-disable-next-line no-control-regex -- names exclude control characters
               /[\x00-\x1f]/.test(name));
           const textOperation = Boolean(row.trim || "date_format" in row);
           return (

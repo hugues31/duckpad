@@ -35,7 +35,7 @@ export default function LoginPage({
       url.searchParams.delete("sso_error");
       void navigate(url.pathname + url.search + url.hash, { replace: true });
     }
-  }, []);
+  }, [location.search, navigate]);
   const { pending, error, run } = useAsyncAction();
   return (
     <div className="login-page">

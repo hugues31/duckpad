@@ -8,10 +8,10 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { Search, X } from "lucide-react";
-import { nodeIcon } from "./Canvas";
+import { NodeIcon } from "./Canvas";
 import { nodeChoices, type NodeKind } from "./graph";
 import { templateLabel, useT } from "./i18n";
-import type { Json } from "./types";
+import type { ComponentDefinition, ParsedTemplate } from "./types";
 
 export default function ConnectionPalette({
   parsed,
@@ -22,8 +22,8 @@ export default function ConnectionPalette({
   onChoose,
   onClose,
 }: {
-  parsed: Record<string, Json>;
-  components: Record<string, Json>;
+  parsed: Record<string, ParsedTemplate>;
+  components: Record<string, ComponentDefinition>;
   excludedComponents: string[];
   handleType: "source" | "target";
   screen: { x: number; y: number };
@@ -41,16 +41,16 @@ export default function ConnectionPalette({
   const items = useMemo(() => {
     const query = search.trim().toLocaleLowerCase();
     return nodeChoices(parsed, components, excludedComponents)
-      .flatMap(({ kind, id, signature }) =>
-        signature[portSide].map((port) => ({
-          id,
-          kind,
+      .flatMap((choice) =>
+        choice.signature[portSide].map((port) => ({
+          id: choice.id,
+          kind: choice.kind,
           port,
           label:
-            kind === "component"
-              ? signature.definition!.name || id
-              : templateLabel(id, signature.definition!.label, t),
-          description: signature.definition!.description || "",
+            choice.kind === "component"
+              ? choice.definition.name || choice.id
+              : templateLabel(choice.id, choice.definition.label, t),
+          description: choice.definition.description || "",
         })),
       )
       .filter((item) =>
@@ -164,34 +164,33 @@ export default function ConnectionPalette({
         aria-label={t("compatibleNodes")}
         className="connection-palette-list"
       >
-        {items.map((item, index) => {
-          const Icon = nodeIcon(
-            item.kind === "component" ? "component" : item.id,
-          );
-          return (
-            <button
-              key={`${item.kind}:${item.id}:${item.port}`}
-              id={`${listId}-${index}`}
-              type="button"
-              role="option"
-              aria-selected={index === activeIndex}
-              tabIndex={-1}
-              className="connection-palette-item"
-              title={item.description}
-              onPointerMove={() => setActive(index)}
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={() => onChoose(item.kind, item.id, item.port)}
-            >
-              <Icon size={19} aria-hidden="true" />
-              <span>
-                <strong>{item.label}</strong>
-                <small>
-                  {t(portSide)} · {item.port}
-                </small>
-              </span>
-            </button>
-          );
-        })}
+        {items.map((item, index) => (
+          <button
+            key={`${item.kind}:${item.id}:${item.port}`}
+            id={`${listId}-${index}`}
+            type="button"
+            role="option"
+            aria-selected={index === activeIndex}
+            tabIndex={-1}
+            className="connection-palette-item"
+            title={item.description}
+            onPointerMove={() => setActive(index)}
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={() => onChoose(item.kind, item.id, item.port)}
+          >
+            <NodeIcon
+              kind={item.kind === "component" ? "component" : item.id}
+              size={19}
+              aria-hidden="true"
+            />
+            <span>
+              <strong>{item.label}</strong>
+              <small>
+                {t(portSide)} · {item.port}
+              </small>
+            </span>
+          </button>
+        ))}
       </div>
       {!items.length && (
         <p role="status" className="connection-palette-empty">
