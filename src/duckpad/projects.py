@@ -10,16 +10,16 @@ from collections import OrderedDict
 from contextlib import contextmanager, suppress
 from pathlib import Path
 
-from . import git_command
 from .builtin_templates import BUILTINS
 from .bundle import ROOT_FILES, bundle_to_files, files_to_bundle, is_declarative
 from .comparison import commit_message
 from .components import reconcile_documentation
-from .git_command import GitError
-from .git_workspace import GitWorkspace, diagnose, require_valid
-from .identity import SYSTEM_IDENTITY, current_identity
+from .git import command
+from .git.command import GitError
+from .git.identity import SYSTEM_IDENTITY, current_identity
+from .git.remote import Remotes
+from .git.workspace import GitWorkspace, diagnose, require_valid
 from .merge import merge_files
-from .remote import Remotes
 from .templates import parse_template
 from .util import Problem, atomic_write, digest, dumps, inside, now, uid
 
@@ -76,8 +76,8 @@ class Projects:
         return current_identity.get() or SYSTEM_IDENTITY
 
     def git(self, path, *args, identity=None, **options):
-        """Run Git as the request's account; see git_command.run for the options."""
-        return git_command.run(path, *args, identity=identity or self.identity(), **options)
+        """Run Git as the request's account; see command.run for the options."""
+        return command.run(path, *args, identity=identity or self.identity(), **options)
 
     def create(self, name, bundle=None, action="create", *, project_id=None, record=None):
         """Create a project repository and record it; record(worktree) joins the same transaction.
@@ -141,7 +141,7 @@ class Projects:
             "worktree",
             "add",
             *(["-b", branch, str(path), start] if start else [str(path), branch]),
-            failure=git_command.FAILURE if start else OPEN_FAILURE,
+            failure=command.FAILURE if start else OPEN_FAILURE,
         )
         result = {"id": key, "project": worktree["project"], "branch": branch, "path": str(path)}
         try:
@@ -507,7 +507,7 @@ class Projects:
         if revision:
             self.versioning.prevalidate(self.get(worktree_id)["path"], revision)
         with self.locked(worktree_id) as worktree:
-            git_command.check_branch_name(worktree["path"], name)
+            command.check_branch_name(worktree["path"], name)
             if self.git(
                 worktree["path"], "rev-parse", "--verify", "--quiet", "refs/heads/" + name, check=False
             ):
