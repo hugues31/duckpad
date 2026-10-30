@@ -49,12 +49,14 @@ export const pathPrefix = (path: PathPart[]) =>
 /** A template or component that a node instantiates. */
 export type NodeKind = "template" | "component";
 
+/** What a template does with data. */
+export type TemplateKind = "source" | "transform" | "export";
+
 /** What a node exposes, whether it instantiates a template or a component. */
 export interface NodeInterface {
   /** The component definition or parsed template, unless it was removed. */
   definition: Json | undefined;
-  /** "component", or the template kind: "source", "transform" or "export". */
-  kind: string;
+  kind: TemplateKind | "component";
   inputs: string[];
   outputs: string[];
   parameters: Json[];

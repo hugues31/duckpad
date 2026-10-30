@@ -64,14 +64,18 @@ type CardData = {
 };
 type CardNode = Node<CardData, "lineage">;
 const nodeTypes = { lineage: CalculationCard };
-const operationKeys: Record<string, string> = {
+const operationKeys = {
   sum: "lineageSum",
   avg: "lineageAverage",
   min: "lineageMinimum",
   max: "lineageMaximum",
   count: "lineageCount",
   count_distinct: "lineageDistinctCount",
-};
+} as const;
+const isExplained = (
+  operation: string,
+): operation is keyof typeof operationKeys =>
+  Object.hasOwn(operationKeys, operation);
 
 function CalculationCard({ data }: NodeProps<CardNode>) {
   const t = useT();
@@ -128,7 +132,9 @@ function CalculationCard({ data }: NodeProps<CardNode>) {
                 ? "lineageValueGroup"
                 : !result.complete
                   ? "partial"
-                  : operationKeys[operation] || "lineageCalculation",
+                  : isExplained(operation)
+                    ? operationKeys[operation]
+                    : "lineageCalculation",
         )}
         {data.root && <span>{t("lineageSelectedValue")}</span>}
       </div>
@@ -189,7 +195,7 @@ function CalculationCard({ data }: NodeProps<CardNode>) {
                 </>
               ) : result.total === 0 ? (
                 t("lineageNoInputs")
-              ) : operationKeys[operation] ? (
+              ) : isExplained(operation) ? (
                 <>
                   {t(`${operationKeys[operation]}Reason`).replace(
                     "{count}",

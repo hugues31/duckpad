@@ -3,7 +3,7 @@ import { useRef, useState } from "react";
 import ParameterInput from "./ParameterInput";
 import { Database, KeyRound, Plus, Settings2 } from "lucide-react";
 import { api, ApiError, send } from "./api";
-import { useT } from "./i18n";
+import { useT, useTranslateValue } from "./i18n";
 import { Modal } from "./modals";
 import type { Json, Workspace } from "./types";
 import { useAsyncAction } from "./useAsyncAction";
@@ -18,6 +18,7 @@ export default function ConnectionsPanel({
   onEditor: (data: { title: string; value: string }) => void;
 }) {
   const t = useT();
+  const translateValue = useTranslateValue();
   const [creating, setCreating] = useState(false);
   const [selected, setSelectedState] = useState<Json | null>(null);
   const selectedRef = useRef<Json | null>(null);
@@ -152,7 +153,7 @@ export default function ConnectionsPanel({
           <div className="row gap">
             {connector.capabilities.map((c: string) => (
               <span key={c} className="badge neutral">
-                {t(c)}
+                {translateValue(c)}
               </span>
             ))}
             <button

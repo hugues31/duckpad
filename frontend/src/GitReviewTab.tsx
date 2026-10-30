@@ -73,7 +73,7 @@ export default function GitReviewTab({
             <fieldset className="git-conflict" key={conflict.path}>
               <legend>{conflict.path}</legend>
               <div className="git-conflict-values">
-                {["base", "current", "incoming"].map((choice) => (
+                {(["base", "current", "incoming"] as const).map((choice) => (
                   <label key={choice}>
                     <span>
                       <input

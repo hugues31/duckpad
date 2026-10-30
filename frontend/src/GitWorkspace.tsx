@@ -5,14 +5,14 @@ import GitCompareTab, { savedSelection, type Selection } from "./GitCompareTab";
 import GitReviewTab from "./GitReviewTab";
 import GitSyncTab from "./GitSyncTab";
 import type { Repository } from "./gitTabs";
-import { useT } from "./i18n";
+import { useT, type TranslationKey } from "./i18n";
 import { Modal } from "./modals";
 import type { Json } from "./types";
 import "./git.css";
 
 type Mode = "compare" | "branches" | "sync" | "review";
 
-const TABS: Record<Mode, string> = {
+const TABS: Record<Mode, TranslationKey> = {
   compare: "compareVersions",
   branches: "branches",
   sync: "gitSynchronization",

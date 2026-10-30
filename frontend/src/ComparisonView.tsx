@@ -7,7 +7,7 @@ import {
   ReactFlowProvider,
   useReactFlow,
 } from "@xyflow/react";
-import { useT } from "./i18n";
+import { useT, useTranslateValue } from "./i18n";
 import { projectFileLanguage } from "./projectFiles";
 import Select from "./Select";
 import type { Json } from "./types";
@@ -166,6 +166,7 @@ export default function ComparisonView({
   onHistory?: (entity: string) => void;
 }) {
   const t = useT();
+  const translateValue = useTranslateValue();
   const [filters, setFilters] = useState(() => {
     try {
       return {
@@ -219,12 +220,14 @@ export default function ComparisonView({
               setFilters({ ...filters, category: e.target.value })
             }
           >
-            {["all", "processing", "documentation", "layout"].map((c) => (
-              <option key={c} value={c}>
-                {t(c)}
-                {c !== "all" ? ` (${report.categories[c] || 0})` : ""}
-              </option>
-            ))}
+            {(["all", "processing", "documentation", "layout"] as const).map(
+              (c) => (
+                <option key={c} value={c}>
+                  {t(c)}
+                  {c !== "all" ? ` (${report.categories[c] || 0})` : ""}
+                </option>
+              ),
+            )}
           </Select>
         </label>
         <input
@@ -253,11 +256,13 @@ export default function ComparisonView({
         </button>
       </div>
       <div className="git-legend">
-        {["added", "removed", "modified", "unchanged"].map((status) => (
-          <span key={status}>
-            {SYMBOL[status]} {t(status)}: {report.counts[status] || 0}
-          </span>
-        ))}
+        {(["added", "removed", "modified", "unchanged"] as const).map(
+          (status) => (
+            <span key={status}>
+              {SYMBOL[status]} {t(status)}: {report.counts[status] || 0}
+            </span>
+          ),
+        )}
       </div>
       {report.diagnostics?.map((d: Json, i: number) => (
         <p className="notice error" key={i}>
@@ -278,7 +283,8 @@ export default function ComparisonView({
                 {SYMBOL[e.status]} {e.name}
               </strong>
               <small>
-                {t(e.kind)} · {e.categories.map((c: string) => t(c)).join(", ")}
+                {translateValue(e.kind)} ·{" "}
+                {e.categories.map(translateValue).join(", ")}
               </small>
               <small>{e.scope || e.file}</small>
             </button>
@@ -411,7 +417,7 @@ export default function ComparisonView({
             </p>
           ))}
           <div className="git-wiring">
-            {["before", "after"].map((side) => (
+            {(["before", "after"] as const).map((side) => (
               <section key={side}>
                 <h4>
                   {t(side)} · {t("wiring")}

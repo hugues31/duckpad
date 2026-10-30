@@ -4,7 +4,7 @@ import { Link } from "react-router";
 import { ApiError, api, send, withQuery } from "./api";
 import ComparisonView from "./ComparisonView";
 import { TabStatus, useTabAction, type Repository } from "./gitTabs";
-import { useT } from "./i18n";
+import { useT, useTranslateValue } from "./i18n";
 import { ConfirmModal } from "./modals";
 import type { Json } from "./types";
 
@@ -27,6 +27,7 @@ export default function GitSyncTab({
   onClose: () => void;
 }) {
   const t = useT();
+  const translateValue = useTranslateValue();
   const { pending, error, run, retry } = useTabAction();
   const { remote } = repository;
   const canEdit = role !== "reader";
@@ -128,7 +129,7 @@ export default function GitSyncTab({
         <strong>
           {remote.local_branch} → origin/{remote.remote_branch || "—"}
         </strong>
-        <span className="badge">{t("sync_" + remote.state)}</span>
+        <span className="badge">{translateValue("sync_" + remote.state)}</span>
         <p>
           {remote.ahead ?? "—"} {t("toPush")} / {remote.behind ?? "—"}{" "}
           {t("toIntegrate")}
@@ -286,7 +287,7 @@ export default function GitSyncTab({
         "unverified",
         "remote_deleted",
       ].includes(remote.state) && (
-        <p className="notice">{t("recovery_" + remote.state)}</p>
+        <p className="notice">{translateValue("recovery_" + remote.state)}</p>
       )}
       {publication && (
         <section className="publication-review">

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Plus, Shield, Trash2 } from "lucide-react";
 import { api, send } from "./api";
-import { useT } from "./i18n";
+import { useT, useTranslateValue } from "./i18n";
 import { Modal } from "./modals";
 import RoleSelect, { PROJECT_ROLES } from "./RoleSelect";
 import Select from "./Select";
@@ -27,6 +27,7 @@ export default function ProjectSettings({
   onDeleted: () => void;
 }) {
   const t = useT();
+  const translateValue = useTranslateValue();
   const [settings, setSettings] = useState<Json | null>(null);
   const [confirmation, setConfirmation] = useState<Json | null>(null);
   const { pending, error, setError, run } = useAsyncAction();
@@ -86,7 +87,7 @@ export default function ProjectSettings({
           </div>
           {settings && (
             <span className="access-badge active">
-              {t(`role_${settings.role}`)}
+              {translateValue(`role_${settings.role}`)}
             </span>
           )}
         </div>

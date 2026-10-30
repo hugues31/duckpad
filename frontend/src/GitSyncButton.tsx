@@ -1,5 +1,5 @@
 import { AlertTriangle, GitCompareArrows } from "lucide-react";
-import { useT } from "./i18n";
+import { useT, useTranslateValue } from "./i18n";
 import type { Json } from "./types";
 import { useApiResource } from "./useApiResource";
 
@@ -15,6 +15,7 @@ export default function GitSyncButton({
   onClick: () => void;
 }) {
   const t = useT();
+  const translateValue = useTranslateValue();
   const {
     data: state,
     error,
@@ -23,7 +24,7 @@ export default function GitSyncButton({
     refresh: `${commit}:${version}`,
   });
   const status = state
-    ? t("sync_" + state.state)
+    ? translateValue("sync_" + state.state)
     : error
       ? `${t("sync_unavailable")}: ${error}`
       : t("loading");
