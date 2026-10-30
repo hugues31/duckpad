@@ -211,9 +211,13 @@ export default function ConnectionsPanel({
                   if (error instanceof ApiError) {
                     const code = (error.detail as Json)?.code;
                     if (code === "connection_exists")
-                      throw new Error(t("connectionAlreadyExists"));
+                      throw new Error(t("connectionAlreadyExists"), {
+                        cause: error,
+                      });
                     if (code === "connection_missing")
-                      throw new Error(t("connectionMissing"));
+                      throw new Error(t("connectionMissing"), {
+                        cause: error,
+                      });
                   }
                   throw error;
                 }

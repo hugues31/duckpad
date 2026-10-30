@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import { api } from "./api";
 import { usePolling, type PollingOptions } from "./usePolling";
 
@@ -29,21 +29,28 @@ export function useResource<T>(
   const [settled, setSettled] = useState<Settled<T> | null>(null);
   const request =
     key === null ? null : JSON.stringify([key, refresh ?? null, attempt]);
+  // The request identifies what to load; a new `load` alone does not reload.
+  const latestLoad = useRef(load);
+  useLayoutEffect(() => {
+    latestLoad.current = load;
+  });
   usePolling(
-    async (signal) => {
-      const done = (data: T | null, error: string) => {
-        if (!signal.aborted)
-          setSettled({ key: key!, request: request!, data, error });
-      };
-      try {
-        done(await load(signal), "");
-      } catch (e) {
-        done(null, (e as Error).message);
-        throw e;
-      }
-    },
+    useCallback(
+      async (signal: AbortSignal) => {
+        const done = (data: T | null, error: string) => {
+          if (!signal.aborted)
+            setSettled({ key: key!, request: request!, data, error });
+        };
+        try {
+          done(await latestLoad.current(signal), "");
+        } catch (e) {
+          done(null, (e as Error).message);
+          throw e;
+        }
+      },
+      [key, request],
+    ),
     { ...polling, enabled: enabled && request !== null },
-    [request],
   );
   const current = settled?.key === key ? settled : null;
   return {

@@ -89,6 +89,7 @@ export default function ColumnPreparation({
             selecting &&
             (typeof name !== "string" ||
               !name.trim() ||
+              // eslint-disable-next-line no-control-regex -- names exclude control characters
               /[\x00-\x1f]/.test(name));
           const textOperation = Boolean(row.trim || "date_format" in row);
           return (

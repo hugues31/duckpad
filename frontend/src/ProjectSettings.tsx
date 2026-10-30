@@ -30,13 +30,13 @@ export default function ProjectSettings({
   const [settings, setSettings] = useState<Json | null>(null);
   const [confirmation, setConfirmation] = useState<Json | null>(null);
   const { pending, error, setError, run } = useAsyncAction();
-  const load = useCallback(
-    async () => setSettings(await api(`/projects/${project}/settings`)),
+  const read = useCallback(
+    () => api<Json>(`/projects/${project}/settings`),
     [project],
   );
   useEffect(() => {
-    load().catch((e) => setError(e.message));
-  }, [load, setError]);
+    read().then(setSettings, (e) => setError(e.message));
+  }, [read, setError]);
   // Reloads after other changes keep unsaved grants, which guard navigation.
   const grants = useRevisionDraft<string[], Json | null>(
     settings?.connections ?? NO_CONNECTIONS,
@@ -54,7 +54,7 @@ export default function ProjectSettings({
     run(async () => {
       await action();
       setConfirmation(null);
-      await load();
+      setSettings(await read());
       await refresh();
     });
   const deleteProject = () =>

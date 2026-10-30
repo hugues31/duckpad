@@ -1,5 +1,5 @@
 import Select from "./Select";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   ChevronLeft,
   ChevronRight,
@@ -27,6 +27,16 @@ export interface PreviewQuery {
   filter: string;
 }
 
+const initialQuery = (port: string, limit: number): PreviewQuery => ({
+  port,
+  limit,
+  offset: 0,
+  sort: "",
+  descending: false,
+  filterColumn: "",
+  filter: "",
+});
+
 /**
  * The rows of a node, loaded once for the data preview and the Inspector.
  * The query restarts from the first output port when the node, its outputs or
@@ -48,18 +58,15 @@ export function useNodePreview({
   version: string;
 }) {
   const owner = JSON.stringify([worktree, environment, node, ports]);
-  const initial = (limit: number): PreviewQuery => ({
-    port: ports[0] || "result",
-    limit,
-    offset: 0,
-    sort: "",
-    descending: false,
-    filterColumn: "",
-    filter: "",
-  });
-  const [state, setState] = useState(() => ({ owner, query: initial(100) }));
+  const firstPort = ports[0] || "result";
+  const [state, setState] = useState(() => ({
+    owner,
+    query: initialQuery(firstPort, 100),
+  }));
   const query =
-    state.owner === owner ? state.query : initial(state.query.limit);
+    state.owner === owner
+      ? state.query
+      : initialQuery(firstPort, state.query.limit);
   const path =
     node === null
       ? null
@@ -94,22 +101,23 @@ export function useNodePreview({
     { refresh: `${path}:${version}` },
   );
   // Merge into the latest query: a delayed filter must not undo other changes.
-  const update = (change: Partial<PreviewQuery>) =>
-    setState((current) => ({
-      owner,
-      query: {
-        ...(current.owner === owner
-          ? current.query
-          : initial(current.query.limit)),
-        ...change,
-      },
-    }));
+  const update = useCallback(
+    (change: Partial<PreviewQuery>) =>
+      setState((current) => ({
+        owner,
+        query: {
+          ...(current.owner === owner
+            ? current.query
+            : initialQuery(firstPort, current.query.limit)),
+          ...change,
+        },
+      })),
+    [owner, firstPort],
+  );
   // Filter the first column until another existing one is chosen.
-  useEffect(() => {
-    const columns: Json[] = data?.columns || [];
-    if (columns.length && !columns.some((c) => c.name === query.filterColumn))
-      update({ filterColumn: columns[0].name });
-  }, [data]);
+  const columns: Json[] = data?.columns || [];
+  if (columns.length && !columns.some((c) => c.name === query.filterColumn))
+    update({ filterColumn: columns[0].name });
   return { data: data as Json | null, error, pending, query, update };
 }
 export type NodePreview = ReturnType<typeof useNodePreview>;
@@ -141,7 +149,7 @@ export default function Preview({
     if (filter === query.filter) return;
     const timer = setTimeout(() => update({ filter, offset: 0 }), 250);
     return () => clearTimeout(timer);
-  }, [filter]);
+  }, [filter, query.filter, update]);
   return (
     <section
       className="preview-panel"

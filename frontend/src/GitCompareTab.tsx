@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { api, withQuery } from "./api";
 import ComparisonView from "./ComparisonView";
 import { TabStatus } from "./gitTabs";
@@ -68,26 +68,45 @@ export default function GitCompareTab({
   onSelect: (selection: Selection) => void;
 }) {
   const t = useT();
+  // The previous report stays in place while another comparison loads.
   const [report, setReport] = useState<Json | null>(null);
-  const [comparing, setComparing] = useState(false);
-  const [error, setError] = useState("");
   const [attempt, setAttempt] = useState(0);
+  const comparison = useMemo(
+    () => ({ base, storageKey, selection, attempt }),
+    [base, storageKey, selection, attempt],
+  );
+  // Each comparison is settled by its own answer.
+  const [settled, setSettled] = useState<{
+    comparison: typeof comparison;
+    error: string;
+  } | null>(null);
+  const comparing = ready && settled?.comparison !== comparison;
+  const error = settled?.comparison === comparison ? settled.error : "";
   const resolved = useRef<Resolved>(null);
   const [entity, setEntity] = useState(initialEntity);
   const [history, setHistory] = useState<History | null>(null);
-  const [historyError, setHistoryError] = useState<{
+  const [historyAttempt, setHistoryAttempt] = useState(0);
+  const historyRequest = JSON.stringify([
+    base,
+    entity,
+    version,
+    historyAttempt,
+  ]);
+  // Failures only show while the history they concern is the current one.
+  const [historyFailure, setHistoryFailure] = useState<{
+    request: string;
     message: string;
     retry: () => void;
   } | null>(null);
-  const [historyAttempt, setHistoryAttempt] = useState(0);
+  const historyError =
+    historyFailure?.request === historyRequest ? historyFailure : null;
   const [loadingMore, setLoadingMore] = useState(false);
 
   useEffect(() => {
     if (!ready) return;
     const controller = new AbortController();
+    const { base, storageKey, selection } = comparison;
     const frozen = frozenFor(resolved.current, selection);
-    setComparing(true);
-    setError("");
     api<Json>(
       withQuery(`${base}/compare`, {
         a: frozen?.a || selection.a,
@@ -99,7 +118,7 @@ export default function GitCompareTab({
         if (controller.signal.aborted) return;
         resolved.current = { selection, a: result.a.ref, b: result.b.ref };
         setReport(result);
-        setComparing(false);
+        setSettled({ comparison, error: "" });
         // Resolved revisions go stale and frozen ones expire: only names are kept.
         sessionStorage.setItem(
           selectionKey(storageKey),
@@ -107,16 +126,14 @@ export default function GitCompareTab({
         );
       })
       .catch((e) => {
-        if (controller.signal.aborted) return;
-        setError(e.message);
-        setComparing(false);
+        if (!controller.signal.aborted)
+          setSettled({ comparison, error: e.message });
       });
     return () => controller.abort();
-  }, [base, storageKey, selection, ready, attempt]);
+  }, [comparison, ready]);
 
   useEffect(() => {
     const controller = new AbortController();
-    setHistoryError(null);
     api<History>(
       withQuery(`${base}/history`, { entity: entity || undefined }),
       { signal: controller.signal },
@@ -126,19 +143,20 @@ export default function GitCompareTab({
       })
       .catch((e) => {
         if (!controller.signal.aborted)
-          setHistoryError({
+          setHistoryFailure({
+            request: historyRequest,
             message: e.message,
             retry: () => setHistoryAttempt((value) => value + 1),
           });
       });
     return () => controller.abort();
-  }, [base, entity, version, historyAttempt]);
+  }, [base, entity, historyRequest]);
 
   async function loadMore() {
     if (!history || history.next === null) return;
     const from = history;
     setLoadingMore(true);
-    setHistoryError(null);
+    setHistoryFailure(null);
     try {
       const page = await api<History>(
         withQuery(`${base}/history`, {
@@ -154,7 +172,11 @@ export default function GitCompareTab({
           : current,
       );
     } catch (e) {
-      setHistoryError({ message: (e as Error).message, retry: loadMore });
+      setHistoryFailure({
+        request: historyRequest,
+        message: (e as Error).message,
+        retry: loadMore,
+      });
     } finally {
       setLoadingMore(false);
     }

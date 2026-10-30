@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Boxes, Code2, Plus, Search, X } from "lucide-react";
-import { nodeIcon } from "./Canvas";
+import { NodeIcon } from "./Canvas";
 import { DRAG_TYPE, nodeChoices, type NodeKind } from "./graph";
 import { templateLabel, useT } from "./i18n";
 import type { Snapshot } from "./types";
@@ -81,34 +81,32 @@ export default function NodePalette({
             <h4>{t(category)}</h4>
             {items
               .filter((item) => item.category === category)
-              .map((item) => {
-                const Icon = nodeIcon(
-                  item.kind === "component" ? "component" : item.id,
-                );
-                return (
-                  <button
-                    className="palette-item"
-                    key={item.id}
-                    draggable={!readOnly}
-                    disabled={readOnly}
-                    onDragStart={(e) => {
-                      e.dataTransfer.setData(
-                        DRAG_TYPE,
-                        JSON.stringify({ kind: item.kind, id: item.id }),
-                      );
-                      e.dataTransfer.effectAllowed = "move";
-                    }}
-                    onClick={() => onAdd(item.kind, item.id)}
-                    title={item.description}
-                  >
-                    <span className={`palette-icon ${item.category}`}>
-                      <Icon size={17} />
-                    </span>
-                    <span>{item.label}</span>
-                    <Plus size={12} className="palette-plus" />
-                  </button>
-                );
-              })}
+              .map((item) => (
+                <button
+                  className="palette-item"
+                  key={item.id}
+                  draggable={!readOnly}
+                  disabled={readOnly}
+                  onDragStart={(e) => {
+                    e.dataTransfer.setData(
+                      DRAG_TYPE,
+                      JSON.stringify({ kind: item.kind, id: item.id }),
+                    );
+                    e.dataTransfer.effectAllowed = "move";
+                  }}
+                  onClick={() => onAdd(item.kind, item.id)}
+                  title={item.description}
+                >
+                  <span className={`palette-icon ${item.category}`}>
+                    <NodeIcon
+                      kind={item.kind === "component" ? "component" : item.id}
+                      size={17}
+                    />
+                  </span>
+                  <span>{item.label}</span>
+                  <Plus size={12} className="palette-plus" />
+                </button>
+              ))}
           </section>
         ))}
       </div>

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { createPortal } from "react-dom";
 import { Link } from "react-router";
 import { ApiError, api, send, withQuery } from "./api";
@@ -31,25 +31,28 @@ export default function GitSyncTab({
   const { remote } = repository;
   const canEdit = role !== "reader";
   const admin = role === "admin";
-  const [url, setUrl] = useState("");
-  const [mapping, setMapping] = useState("");
+  const [url, setUrl] = useState(remote?.url || "");
+  const [mapping, setMapping] = useState(
+    remote?.remote_branch || remote?.local_branch || "",
+  );
   const [publication, setPublication] = useState<{
     remote: Json;
     diff: Json;
   } | null>(null);
+  // A new origin state resets the form and invalidates the reviewed publication.
+  const [formRemote, setFormRemote] = useState(remote);
+  if (remote !== formRemote) {
+    setFormRemote(remote);
+    setUrl(remote?.url || "");
+    setMapping(remote?.remote_branch || remote?.local_branch || "");
+    setPublication(null);
+  }
   const [recreate, setRecreate] = useState(false);
   const [keyRequired, setKeyRequired] = useState(false);
   const [consent, setConsent] = useState<{
     url: string;
     retry: () => Promise<void>;
   } | null>(null);
-
-  // A new origin state resets the form and invalidates the reviewed publication.
-  useEffect(() => {
-    setUrl(remote?.url || "");
-    setMapping(remote?.remote_branch || remote?.local_branch || "");
-    setPublication(null);
-  }, [remote]);
 
   const act = (action: () => Promise<unknown>) => {
     setKeyRequired(false);

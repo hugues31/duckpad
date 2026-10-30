@@ -11,8 +11,9 @@
     "build": "tsc -b && vite build",
     "check": "tsc -b && npm run check:i18n",
     "check:i18n": "node scripts/check-i18n.mjs",
-    "format": "prettier --write src e2e docs scripts playwright*.config.ts vite.config.ts",
-    "format:check": "prettier --check src e2e docs scripts playwright*.config.ts vite.config.ts",
+    "lint": "eslint .",
+    "format": "prettier --write src e2e docs scripts playwright*.config.ts vite.config.ts eslint.config.js",
+    "format:check": "prettier --check src e2e docs scripts playwright*.config.ts vite.config.ts eslint.config.js",
     "test:e2e": "playwright test",
     "docs:capture": "playwright test --config playwright.docs.config.ts",
     "docs:screenshots": "playwright test --config playwright.docs.config.ts screenshots.spec.ts",
@@ -29,12 +30,17 @@
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.11.1",
+    "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.56.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^4.4.0",
+    "eslint": "^10.13.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.13.0",
     "prettier": "^3.9.10",
     "typescript": "^5.7.0",
+    "typescript-eslint": "^8.72.1",
     "vite": "^6.2.0"
   }
 }

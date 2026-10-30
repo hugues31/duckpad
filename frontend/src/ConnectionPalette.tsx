@@ -8,7 +8,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { Search, X } from "lucide-react";
-import { nodeIcon } from "./Canvas";
+import { NodeIcon } from "./Canvas";
 import { nodeChoices, type NodeKind } from "./graph";
 import { templateLabel, useT } from "./i18n";
 import type { Json } from "./types";
@@ -164,34 +164,33 @@ export default function ConnectionPalette({
         aria-label={t("compatibleNodes")}
         className="connection-palette-list"
       >
-        {items.map((item, index) => {
-          const Icon = nodeIcon(
-            item.kind === "component" ? "component" : item.id,
-          );
-          return (
-            <button
-              key={`${item.kind}:${item.id}:${item.port}`}
-              id={`${listId}-${index}`}
-              type="button"
-              role="option"
-              aria-selected={index === activeIndex}
-              tabIndex={-1}
-              className="connection-palette-item"
-              title={item.description}
-              onPointerMove={() => setActive(index)}
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={() => onChoose(item.kind, item.id, item.port)}
-            >
-              <Icon size={19} aria-hidden="true" />
-              <span>
-                <strong>{item.label}</strong>
-                <small>
-                  {t(portSide)} · {item.port}
-                </small>
-              </span>
-            </button>
-          );
-        })}
+        {items.map((item, index) => (
+          <button
+            key={`${item.kind}:${item.id}:${item.port}`}
+            id={`${listId}-${index}`}
+            type="button"
+            role="option"
+            aria-selected={index === activeIndex}
+            tabIndex={-1}
+            className="connection-palette-item"
+            title={item.description}
+            onPointerMove={() => setActive(index)}
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={() => onChoose(item.kind, item.id, item.port)}
+          >
+            <NodeIcon
+              kind={item.kind === "component" ? "component" : item.id}
+              size={19}
+              aria-hidden="true"
+            />
+            <span>
+              <strong>{item.label}</strong>
+              <small>
+                {t(portSide)} · {item.port}
+              </small>
+            </span>
+          </button>
+        ))}
       </div>
       {!items.length && (
         <p role="status" className="connection-palette-empty">

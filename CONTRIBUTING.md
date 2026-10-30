@@ -34,6 +34,7 @@ uv run ruff check src tests scripts
 uv run ruff format --check src tests scripts
 uv run pytest -q
 npm run check --prefix frontend
+npm run lint --prefix frontend
 npm run format:check --prefix frontend
 npm run build --prefix frontend
 npm run test:e2e --prefix frontend

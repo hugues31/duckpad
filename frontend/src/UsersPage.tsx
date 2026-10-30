@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { Plus, Users } from "lucide-react";
 import { api, send } from "./api";
 import { useT } from "./i18n";
@@ -7,6 +7,8 @@ import RoleSelect from "./RoleSelect";
 import Select from "./Select";
 import type { Json } from "./types";
 import { useAsyncAction } from "./useAsyncAction";
+
+const readUsers = () => api<Json[]>("/users");
 
 /** Instance accounts: creation, instance roles, passwords and deactivation. */
 export default function UsersPage({
@@ -22,12 +24,11 @@ export default function UsersPage({
   // The dialog reports its own errors, next to the form that caused them.
   const dialog = useAsyncAction();
   const busy = pending || dialog.pending;
-  const load = useCallback(async () => setUsers(await api("/users")), []);
   useEffect(() => {
-    load().catch((e) => setError(e.message));
-  }, [load, setError]);
+    readUsers().then(setUsers, (e) => setError(e.message));
+  }, [setError]);
   async function reload() {
-    await load();
+    setUsers(await readUsers());
     await refresh();
   }
   const update = (id: string, data: Json) =>

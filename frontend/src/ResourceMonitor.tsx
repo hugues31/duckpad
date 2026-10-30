@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { X } from "lucide-react";
 import { api } from "./api";
 import { useT } from "./i18n";
@@ -40,25 +40,24 @@ function Chart({
   label: string;
 }) {
   const t = useT();
-  const end = samples.at(-1)?.at ?? Date.now();
-  let connected = false;
-  let previousAt = 0;
-  const path = samples
-    .map((sample) => {
-      const value = sample[metric];
-      if (value === null) {
-        connected = false;
-        return "";
-      }
-      const x = 4 + 312 * (1 - (end - sample.at) / historyWindow);
-      const y = 74 - (value / 100) * 56;
-      const command =
-        connected && sample.at - previousAt < interval * 3 ? "L" : "M";
-      connected = true;
-      previousAt = sample.at;
-      return `${command}${x.toFixed(1)},${y.toFixed(1)} l0,0`;
-    })
-    .join(" ");
+  const end = samples.at(-1)?.at ?? 0;
+  const commands: string[] = [];
+  // Time of the previous point, or null after a missing value.
+  let previousAt: number | null = null;
+  for (const sample of samples) {
+    const value = sample[metric];
+    if (value === null) {
+      previousAt = null;
+      continue;
+    }
+    const x = 4 + 312 * (1 - (end - sample.at) / historyWindow);
+    const y = 74 - (value / 100) * 56;
+    const command =
+      previousAt !== null && sample.at - previousAt < interval * 3 ? "L" : "M";
+    previousAt = sample.at;
+    commands.push(`${command}${x.toFixed(1)},${y.toFixed(1)} l0,0`);
+  }
+  const path = commands.join(" ");
   return (
     <div className={`resource-chart resource-${metric}`}>
       <div className="resource-chart-heading">
@@ -87,7 +86,7 @@ export default function ResourceMonitor() {
   const [open, setOpen] = useState(false);
   const previous = useRef<Counters | null>(null);
   usePolling(
-    async (signal) => {
+    useCallback(async (signal: AbortSignal) => {
       let sample: Sample = {
         at: Date.now(),
         cpu: null,
@@ -141,9 +140,8 @@ export default function ResourceMonitor() {
           sample,
         ].slice(-61),
       );
-    },
+    }, []),
     { interval },
-    [],
   );
   const latest = samples.at(-1);
   return (
