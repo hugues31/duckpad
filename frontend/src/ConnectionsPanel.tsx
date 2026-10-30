@@ -2,10 +2,10 @@ import Select from "./Select";
 import { useRef, useState } from "react";
 import ParameterInput from "./ParameterInput";
 import { Database, KeyRound, Plus, Settings2 } from "lucide-react";
-import { api, ApiError, send } from "./api";
-import { useT, useTranslateValue } from "./i18n";
+import { api, errorDetail, send } from "./api";
+import { useT } from "./i18n";
 import { Modal } from "./modals";
-import type { Json, Workspace } from "./types";
+import type { Connection, Json, Workspace } from "./types";
 import { useAsyncAction } from "./useAsyncAction";
 
 export default function ConnectionsPanel({
@@ -18,11 +18,10 @@ export default function ConnectionsPanel({
   onEditor: (data: { title: string; value: string }) => void;
 }) {
   const t = useT();
-  const translateValue = useTranslateValue();
   const [creating, setCreating] = useState(false);
-  const [selected, setSelectedState] = useState<Json | null>(null);
-  const selectedRef = useRef<Json | null>(null);
-  const setSelected = (value: Json | null) => {
+  const [selected, setSelectedState] = useState<Connection | null>(null);
+  const selectedRef = useRef<Connection | null>(null);
+  const setSelected = (value: Connection | null) => {
     selectedRef.current = value;
     setSelectedState(value);
   };
@@ -34,9 +33,9 @@ export default function ConnectionsPanel({
     : catalog.environments[0];
   const { pending: saving, error, setError, run } = useAsyncAction();
   const definition = catalog.connectors.find(
-    (c: Json) => c.id === selected?.connector,
+    (c) => c.id === selected?.connector,
   );
-  const changeValue = (name: string, value: any) => {
+  const changeValue = (name: string, value: Json | undefined) => {
     const old = selectedRef.current!;
     const values = { ...old.environments?.[env] };
     if (value === undefined) delete values[name];
@@ -66,7 +65,7 @@ export default function ConnectionsPanel({
               name: "",
               connector: "local",
               environments: Object.fromEntries(
-                catalog.environments.map((e: string) => [e, {}]),
+                catalog.environments.map((e) => [e, {}]),
               ),
             });
           }}
@@ -76,7 +75,7 @@ export default function ConnectionsPanel({
         </button>
       </div>
       <div className="connection-grid">
-        {catalog.connections.map((connection: Json) => (
+        {catalog.connections.map((connection) => (
           <button
             key={connection.id}
             className="connection-card"
@@ -91,9 +90,8 @@ export default function ConnectionsPanel({
             </span>
             <strong>{connection.name}</strong>
             <span>
-              {catalog.connectors.find(
-                (c: Json) => c.id === connection.connector,
-              )?.name || connection.connector}
+              {catalog.connectors.find((c) => c.id === connection.connector)
+                ?.name || connection.connector}
             </span>
             <div className="row gap">
               {catalog.environment_details
@@ -143,7 +141,7 @@ export default function ConnectionsPanel({
           {t("newConnector")}
         </button>
       </div>
-      {catalog.connectors.map((connector: Json) => (
+      {catalog.connectors.map((connector) => (
         <div className="connector-row" key={connector.id}>
           <div>
             <strong>{connector.name}</strong>
@@ -151,16 +149,16 @@ export default function ConnectionsPanel({
             <small>{connector.compatibility}</small>
           </div>
           <div className="row gap">
-            {connector.capabilities.map((c: string) => (
+            {(connector.capabilities ?? []).map((c) => (
               <span key={c} className="badge neutral">
-                {translateValue(c)}
+                {t(c)}
               </span>
             ))}
             <button
               className="button secondary small"
               onClick={() =>
                 onEditor({
-                  title: connector.name,
+                  title: connector.name ?? connector.id,
                   value: JSON.stringify(connector, null, 2),
                 })
               }
@@ -209,17 +207,15 @@ export default function ConnectionsPanel({
                     send(data, "PUT"),
                   );
                 } catch (error) {
-                  if (error instanceof ApiError) {
-                    const code = (error.detail as Json)?.code;
-                    if (code === "connection_exists")
-                      throw new Error(t("connectionAlreadyExists"), {
-                        cause: error,
-                      });
-                    if (code === "connection_missing")
-                      throw new Error(t("connectionMissing"), {
-                        cause: error,
-                      });
-                  }
+                  const { code } = errorDetail(error);
+                  if (code === "connection_exists")
+                    throw new Error(t("connectionAlreadyExists"), {
+                      cause: error,
+                    });
+                  if (code === "connection_missing")
+                    throw new Error(t("connectionMissing"), {
+                      cause: error,
+                    });
                   throw error;
                 }
                 await refresh();
@@ -265,8 +261,8 @@ export default function ConnectionsPanel({
                     const connector = e.target.value;
                     const parameters = new Set(
                       catalog.connectors
-                        .find((c: Json) => c.id === connector)
-                        ?.parameters.map((p: Json) => p.name),
+                        .find((c) => c.id === connector)
+                        ?.parameters?.map((p) => p.name),
                     );
                     setSelected({
                       ...selected,
@@ -276,7 +272,7 @@ export default function ConnectionsPanel({
                           ([environment, values]) => [
                             environment,
                             Object.fromEntries(
-                              Object.entries(values as Json).filter(([name]) =>
+                              Object.entries(values).filter(([name]) =>
                                 parameters.has(name),
                               ),
                             ),
@@ -286,7 +282,7 @@ export default function ConnectionsPanel({
                     });
                   }}
                 >
-                  {catalog.connectors.map((c: Json) => (
+                  {catalog.connectors.map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.name}
                     </option>
@@ -307,7 +303,7 @@ export default function ConnectionsPanel({
                   </button>
                 ))}
               </div>
-              {definition?.parameters.map((p: Json) => (
+              {definition?.parameters?.map((p) => (
                 <label
                   className="field"
                   key={`${selected.connector}:${env}:${p.name}`}
@@ -344,11 +340,11 @@ export default function ConnectionsPanel({
                     <input
                       disabled={saving}
                       type={p.secret ? "password" : "text"}
-                      value={
+                      value={String(
                         selected.environments?.[env]?.[p.name] ??
-                        p.default ??
-                        ""
-                      }
+                          p.default ??
+                          "",
+                      )}
                       onChange={(e) => changeValue(p.name, e.target.value)}
                     />
                   )}

@@ -38,17 +38,18 @@ export default function NodePalette({
       snapshot.bundle?.components || {},
       excludedComponents,
     )
-      .map(({ kind, id, signature: { definition, kind: role } }) => ({
-        id,
-        kind,
+      .map((choice) => ({
+        id: choice.id,
+        kind: choice.kind,
         label:
-          kind === "component"
-            ? definition!.name
-            : templateLabel(id, definition!.label, t),
+          choice.kind === "component"
+            ? choice.definition.name
+            : templateLabel(choice.id, choice.definition.label, t),
         category:
-          CATEGORIES.find((category) => category === role + "s") ||
-          "transforms",
-        description: definition!.description,
+          CATEGORIES.find(
+            (category) => category === choice.signature.kind + "s",
+          ) || "transforms",
+        description: choice.definition.description,
       }))
       .filter((item) => item.label?.toLowerCase().includes(query));
   }, [snapshot, excludedComponents, search, t]);

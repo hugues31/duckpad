@@ -12,7 +12,7 @@ import {
 import { api, ApiError, withQuery } from "./api";
 import { formatValue } from "./graph";
 import type { Cell } from "./lineageGraph";
-import type { Json } from "./types";
+import type { PreviewPage } from "./types";
 import { useT } from "./i18n";
 import { useResource } from "./useApiResource";
 
@@ -91,7 +91,7 @@ export function useNodePreview({
     node === null ? null : `${worktree}:${node}`,
     async (signal) => {
       try {
-        return await api<Json>(path!, { signal });
+        return await api<PreviewPage>(path!, { signal });
       } catch (e) {
         // A node without a result yet has nothing to preview.
         if (e instanceof ApiError && e.status === 404) return null;
@@ -115,10 +115,10 @@ export function useNodePreview({
     [owner, firstPort],
   );
   // Filter the first column until another existing one is chosen.
-  const columns: Json[] = data?.columns || [];
+  const columns = data?.columns || [];
   if (columns.length && !columns.some((c) => c.name === query.filterColumn))
     update({ filterColumn: columns[0].name });
-  return { data: data as Json | null, error, pending, query, update };
+  return { data, error, pending, query, update };
 }
 export type NodePreview = ReturnType<typeof useNodePreview>;
 
@@ -215,7 +215,7 @@ export default function Preview({
               value={filterColumn}
               onChange={(e) => update({ filterColumn: e.target.value })}
             >
-              {data.columns.map((c: Json) => (
+              {data.columns.map((c) => (
                 <option key={c.name}>{c.name}</option>
               ))}
             </Select>
@@ -240,7 +240,7 @@ export default function Preview({
               <thead>
                 <tr>
                   <th className="row-number">#</th>
-                  {data.columns.map((column: Json) => (
+                  {data.columns.map((column) => (
                     <th key={column.name}>
                       <button
                         onClick={() =>
@@ -266,10 +266,10 @@ export default function Preview({
                 </tr>
               </thead>
               <tbody>
-                {data.rows.map((row: Json) => (
+                {data.rows.map((row) => (
                   <tr key={row.id}>
                     <td className="row-number">{row.id + 1}</td>
-                    {row.values.map((value: any, i: number) => (
+                    {row.values.map((value, i) => (
                       <td key={i}>
                         <button
                           className={`cell ${value === null ? "null" : ""}`}

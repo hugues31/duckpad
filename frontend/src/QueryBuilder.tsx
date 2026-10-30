@@ -18,7 +18,7 @@ export default function QueryBuilder({
 }: {
   kind: string;
   schemas: Record<string, string[]>;
-  onApply: (parameters: Json) => void;
+  onApply: (parameters: Record<string, Json>) => void;
 }) {
   const t = useT();
   const [column, setColumn] = useState("");

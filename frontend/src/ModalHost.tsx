@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { Boxes } from "lucide-react";
-import { api, ApiError, importProjectArchive, send } from "./api";
+import { api, errorDetail, importProjectArchive, send } from "./api";
 import DuckMark from "./DuckMark";
 import GitWorkspace from "./GitWorkspace";
 import NewProjectModal from "./NewProjectModal";
@@ -10,7 +10,13 @@ import { useT } from "./i18n";
 import { ConfirmModal, EditorModal, FormModal, Modal } from "./modals";
 import { usePageRoute } from "./navigation";
 import { useShell } from "./shell";
-import type { Bundle, Environment, Json, Snapshot } from "./types";
+import type {
+  Bundle,
+  Conflict,
+  Environment,
+  Snapshot,
+  Worktree,
+} from "./types";
 import { useApiResource } from "./useApiResource";
 import { useAsyncAction } from "./useAsyncAction";
 import { useWorktree } from "./worktree";
@@ -81,9 +87,13 @@ export function useProjectCreation() {
   };
   return {
     createEmpty: async (name: string) =>
-      openWorktree((await created(api("/projects", send({ name })))).id),
+      openWorktree(
+        (await created(api<Worktree>("/projects", send({ name })))).id,
+      ),
     createExample: async (name?: string) =>
-      openWorktree((await created(api("/example", send({ name })))).id),
+      openWorktree(
+        (await created(api<Worktree>("/example", send({ name })))).id,
+      ),
     importArchive: async (file: File, name: string) => {
       const result = await created(importProjectArchive(file, name));
       return {
@@ -102,7 +112,7 @@ function NewProjectDialog({ onClose }: { onClose: () => void }) {
 function AboutDialog({ onClose }: { onClose: () => void }) {
   const t = useT();
   const { workspace } = useShell();
-  const session = useApiResource<Json>("/session");
+  const session = useApiResource<{ version: string }>("/session");
   return (
     <Modal title="Duckpad" onClose={onClose}>
       <div className="modal-content">
@@ -271,14 +281,11 @@ function NewBranchDialog({
   const { refreshWorkspace, notify, openWorktree } = useShell();
   const { tab } = usePageRoute();
   const create = async (name: string, startingRevision?: string) => {
-    const next = await api(
+    const next = await api<Worktree>(
       `/worktrees/${worktree}/branches`,
       send({ name, revision: startingRevision }),
     ).catch((error) => {
-      if (
-        error instanceof ApiError &&
-        (error.detail as Json)?.code === "invalid_branch_name"
-      )
+      if (errorDetail(error).code === "invalid_branch_name")
         throw new Error(t("invalidBranchName"));
       throw error;
     });
@@ -330,7 +337,7 @@ function ConflictDialog({
   conflict,
   onClose,
 }: {
-  conflict: Json;
+  conflict: Conflict;
   onClose: () => void;
 }) {
   const t = useT();
@@ -398,7 +405,7 @@ function CombinedResolutionDialog({
   conflict,
   onClose,
 }: {
-  conflict: Json;
+  conflict: Conflict;
   onClose: () => void;
 }) {
   const t = useT();
@@ -439,8 +446,8 @@ function GroupDialog({
   const navigate = useNavigate();
   const { id, refresh } = useWorktree();
   const [base] = useState(snapshot);
-  const group = async (values: Json) => {
-    const result = await api(
+  const group = async (values: Record<string, string>) => {
+    const result = await api<Snapshot & { selected: string }>(
       `/worktrees/${id}/group`,
       send({
         revision: base.revision,
@@ -476,6 +483,18 @@ function GroupDialog({
   );
 }
 
+/** A template or component of a project's main branch, available for import. */
+interface LibraryItem {
+  project: string;
+  project_name: string;
+  kind: "templates" | "components";
+  id: string;
+  name: string;
+  /** The main branch of the project. */
+  worktree: string;
+  commit: string;
+}
+
 function LibraryDialog({
   snapshot,
   onClose,
@@ -486,14 +505,14 @@ function LibraryDialog({
   const t = useT();
   const { notify } = useShell();
   const { id, refresh } = useWorktree();
-  const library = useApiResource<Json[]>("/library");
+  const library = useApiResource<LibraryItem[]>("/library");
   const { pending, error, run } = useAsyncAction();
   // A double click must not import two copies.
   const importing = useRef(false);
   const items = (library.data || []).filter(
     (item) => item.project !== snapshot.worktree.project,
   );
-  const importItem = async (item: Json) => {
+  const importItem = async (item: LibraryItem) => {
     if (importing.current) return;
     importing.current = true;
     const imported = await run(async () => {

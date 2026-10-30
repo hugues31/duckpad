@@ -10,7 +10,8 @@ import {
 import { withQuery } from "./api";
 import { useT } from "./i18n";
 import { Modal } from "./modals";
-import type { Json } from "./types";
+import type { HistoryPage } from "./gitTypes";
+import type { Run } from "./types";
 import { useApiResource } from "./useApiResource";
 
 export default function HistoryPanel({
@@ -28,9 +29,9 @@ export default function HistoryPanel({
 }) {
   const t = useT();
   const [tab, setTab] = useState<"runs" | "git">("runs");
-  const [selected, setSelected] = useState<Json | null>(null);
-  const runHistory = useApiResource<Json[]>(withQuery("/runs", { worktree }));
-  const gitHistory = useApiResource<{ items: Json[] }>(
+  const [selected, setSelected] = useState<Run | null>(null);
+  const runHistory = useApiResource<Run[]>(withQuery("/runs", { worktree }));
+  const gitHistory = useApiResource<HistoryPage>(
     withQuery(`/worktrees/${worktree}/git/history`, { limit: 100 }),
   );
   const runs = runHistory.data || [];
@@ -169,21 +170,16 @@ export default function HistoryPanel({
             {Object.entries(selected.nodes).map(([key, state]) => (
               <details className="run-step" key={key}>
                 <summary>
-                  <span className={`badge ${(state as Json).status}`}>
-                    {t((state as Json).status)}
+                  <span className={`badge ${state.status}`}>
+                    {t(state.status)}
                   </span>
-                  <strong>{(state as Json).label}</strong>
-                  <span className="muted">
-                    {(state as Json).duration?.toFixed(3)} s
-                  </span>
+                  <strong>{state.label}</strong>
+                  <span className="muted">{state.duration?.toFixed(3)} s</span>
                 </summary>
-                {(state as Json).error && (
-                  <p className="notice error">{(state as Json).error}</p>
-                )}
-                {(state as Json).external_outcome && (
+                {state.error && <p className="notice error">{state.error}</p>}
+                {state.external_outcome && (
                   <p className="notice">
-                    {t("externalOutcome")}:{" "}
-                    {t((state as Json).external_outcome)}
+                    {t("externalOutcome")}: {t(state.external_outcome)}
                   </p>
                 )}
                 <pre className="expression">

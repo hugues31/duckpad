@@ -1,6 +1,6 @@
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import { api, ApiError, withQuery } from "./api";
-import type { Json, Snapshot, Statuses } from "./types";
+import type { Run, Snapshot, Statuses } from "./types";
 import { usePolling } from "./usePolling";
 
 const POLL_INTERVAL = 1000;
@@ -118,7 +118,7 @@ export function useWorktreeSnapshot(
       [load],
     ),
     /** Show a run started or cancelled on the given branch as its active run. */
-    setActive: useCallback((id: string, run: Json) => {
+    setActive: useCallback((id: string, run: Run) => {
       if (id === current.current)
         setStatuses((old) => ({ ...old, active: run }));
     }, []),

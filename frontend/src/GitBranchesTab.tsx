@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { api, send } from "./api";
 import { TabStatus, useTabAction, type Repository } from "./gitTabs";
+import type { Branch, MergeReview } from "./gitTypes";
 import { useT } from "./i18n";
 import Select from "./Select";
-import type { Json } from "./types";
+import type { Worktree } from "./types";
 
 export default function GitBranchesTab({
   worktree,
@@ -24,7 +25,7 @@ export default function GitBranchesTab({
   preferMain: boolean;
   repository: Repository;
   onCompare: (a: string, b: string) => void;
-  onReview: (review: Json) => void;
+  onReview: (review: MergeReview) => void;
   onChanged: () => Promise<void>;
   onOpenWorktree: (id: string) => void;
   onNewBranch: () => void;
@@ -70,7 +71,10 @@ export default function GitBranchesTab({
             onChange={(e) => setDestination(e.target.value)}
           >
             {branches
-              .filter((v) => !v.remote && v.worktree)
+              .filter(
+                (v): v is Branch & { worktree: string } =>
+                  !v.remote && !!v.worktree,
+              )
               .map((v) => (
                 <option key={v.ref} value={v.worktree}>
                   {v.name}
@@ -96,7 +100,7 @@ export default function GitBranchesTab({
           onClick={() =>
             run(async () =>
               onReview(
-                await api<Json>(
+                await api<MergeReview>(
                   `/worktrees/${destinationId}/git/reviews`,
                   send({ source: sourceRef }),
                 ),
@@ -135,7 +139,10 @@ export default function GitBranchesTab({
                 run(async () => {
                   const tree = item.worktree
                     ? { id: item.worktree }
-                    : await api(`${base}/open`, send({ name: item.name }));
+                    : await api<Worktree>(
+                        `${base}/open`,
+                        send({ name: item.name }),
+                      );
                   await onChanged();
                   onOpenWorktree(tree.id);
                 })

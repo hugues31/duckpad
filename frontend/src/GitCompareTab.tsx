@@ -2,9 +2,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { api, withQuery } from "./api";
 import ComparisonView from "./ComparisonView";
 import { TabStatus } from "./gitTabs";
+import type { Branch, Comparison, HistoryPage } from "./gitTypes";
 import { useT } from "./i18n";
 import Select from "./Select";
-import type { Json } from "./types";
 
 /**
  * The revisions chosen for a comparison, as the user names them. `pinned`
@@ -15,12 +15,6 @@ export interface Selection {
   a: string;
   b: string;
   pinned?: { a?: string; b?: string };
-}
-
-interface History {
-  items: Json[];
-  head: string;
-  next: number | null;
 }
 
 type Resolved = { selection: Selection; a: string; b: string } | null;
@@ -61,7 +55,7 @@ export default function GitCompareTab({
   selection: Selection;
   /** False while the revisions to open with are still being resolved. */
   ready: boolean;
-  branches: Json[];
+  branches: Branch[];
   entity?: string;
   /** Changes whenever a Git action may have changed the history. */
   version: number;
@@ -69,7 +63,7 @@ export default function GitCompareTab({
 }) {
   const t = useT();
   // The previous report stays in place while another comparison loads.
-  const [report, setReport] = useState<Json | null>(null);
+  const [report, setReport] = useState<Comparison | null>(null);
   const [attempt, setAttempt] = useState(0);
   const comparison = useMemo(
     () => ({ base, storageKey, selection, attempt }),
@@ -84,7 +78,7 @@ export default function GitCompareTab({
   const error = settled?.comparison === comparison ? settled.error : "";
   const resolved = useRef<Resolved>(null);
   const [entity, setEntity] = useState(initialEntity);
-  const [history, setHistory] = useState<History | null>(null);
+  const [history, setHistory] = useState<HistoryPage | null>(null);
   const [historyAttempt, setHistoryAttempt] = useState(0);
   const historyRequest = JSON.stringify([
     base,
@@ -107,7 +101,7 @@ export default function GitCompareTab({
     const controller = new AbortController();
     const { base, storageKey, selection } = comparison;
     const frozen = frozenFor(resolved.current, selection);
-    api<Json>(
+    api<Comparison>(
       withQuery(`${base}/compare`, {
         a: frozen?.a || selection.a,
         b: frozen?.b || selection.b,
@@ -134,7 +128,7 @@ export default function GitCompareTab({
 
   useEffect(() => {
     const controller = new AbortController();
-    api<History>(
+    api<HistoryPage>(
       withQuery(`${base}/history`, { entity: entity || undefined }),
       { signal: controller.signal },
     )
@@ -158,7 +152,7 @@ export default function GitCompareTab({
     setLoadingMore(true);
     setHistoryFailure(null);
     try {
-      const page = await api<History>(
+      const page = await api<HistoryPage>(
         withQuery(`${base}/history`, {
           ref: from.head,
           offset: from.next!,
@@ -265,7 +259,7 @@ export default function GitCompareTab({
             value={selection.a}
             onChange={(e) => onSelect({ a: e.target.value, b: selection.b })}
           >
-            {currentCommit.parents.map((parent: string) => (
+            {currentCommit.parents.map((parent) => (
               <option key={parent} value={parent}>
                 {parent.slice(0, 12)}
               </option>
@@ -290,10 +284,8 @@ export default function GitCompareTab({
         </label>
         <datalist id="git-entities">
           {report?.entities
-            .filter((v: Json) =>
-              ["node", "template", "component"].includes(v.kind),
-            )
-            .map((v: Json) => (
+            .filter((v) => ["node", "template", "component"].includes(v.kind))
+            .map((v) => (
               <option key={v.id} value={v.id}>
                 {v.name}
               </option>

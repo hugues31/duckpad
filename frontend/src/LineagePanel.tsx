@@ -329,7 +329,7 @@ function LineageDialog({ worktree, environment, cell, onClose }: Props) {
     useCallback(
       async (signal: AbortSignal) => {
         try {
-          const result = await api(
+          const result = await api<{ valid: boolean }>(
             withQuery(`/worktrees/${worktree}/generations/${cell.dataset}`, {
               environment,
             }),

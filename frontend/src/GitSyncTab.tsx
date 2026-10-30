@@ -1,12 +1,12 @@
 import { useState } from "react";
 import { createPortal } from "react-dom";
 import { Link } from "react-router";
-import { ApiError, api, send, withQuery } from "./api";
+import { api, errorDetail, send, withQuery } from "./api";
 import ComparisonView from "./ComparisonView";
 import { TabStatus, useTabAction, type Repository } from "./gitTabs";
+import type { Comparison, MergeReview, RemoteStatus } from "./gitTypes";
 import { useT, useTranslateValue } from "./i18n";
 import { ConfirmModal } from "./modals";
-import type { Json } from "./types";
 
 export default function GitSyncTab({
   base,
@@ -22,8 +22,8 @@ export default function GitSyncTab({
   storageKey: string;
   repository: Repository;
   /** Refresh the workspace after a change, showing the returned origin state first. */
-  onChanged: (remote: Json) => Promise<void>;
-  onReview: (review: Json) => void;
+  onChanged: (remote: RemoteStatus) => Promise<void>;
+  onReview: (review: MergeReview) => void;
   onClose: () => void;
 }) {
   const t = useT();
@@ -37,8 +37,8 @@ export default function GitSyncTab({
     remote?.remote_branch || remote?.local_branch || "",
   );
   const [publication, setPublication] = useState<{
-    remote: Json;
-    diff: Json;
+    remote: RemoteStatus;
+    diff: Comparison;
   } | null>(null);
   // A new origin state resets the form and invalidates the reviewed publication.
   const [formRemote, setFormRemote] = useState(remote);
@@ -65,12 +65,14 @@ export default function GitSyncTab({
       try {
         await action();
       } catch (e) {
-        const detail = e instanceof ApiError ? (e.detail as Json) : null;
-        if (detail?.consent_required) {
-          setConsent({ url: detail.consent_required.url, retry: action });
+        const detail = errorDetail(e);
+        const consentRequired = detail.consent_required as
+          { url: string } | undefined;
+        if (consentRequired) {
+          setConsent({ url: consentRequired.url, retry: action });
           return;
         }
-        if (detail?.ssh_key_required) setKeyRequired(true);
+        if (detail.ssh_key_required) setKeyRequired(true);
         throw e;
       }
     });
@@ -129,7 +131,7 @@ export default function GitSyncTab({
         <strong>
           {remote.local_branch} → origin/{remote.remote_branch || "—"}
         </strong>
-        <span className="badge">{translateValue("sync_" + remote.state)}</span>
+        <span className="badge">{t(`sync_${remote.state}`)}</span>
         <p>
           {remote.ahead ?? "—"} {t("toPush")} / {remote.behind ?? "—"}{" "}
           {t("toIntegrate")}
@@ -155,7 +157,7 @@ export default function GitSyncTab({
             e.preventDefault();
             act(async () =>
               onChanged(
-                await api<Json>(
+                await api<RemoteStatus>(
                   `${base}/remote`,
                   send(
                     {
@@ -199,7 +201,7 @@ export default function GitSyncTab({
             onClick={() =>
               act(async () =>
                 onChanged(
-                  await api<Json>(
+                  await api<RemoteStatus>(
                     `${base}/remote`,
                     send(
                       { url: null, config_revision: remote.config_revision },
@@ -230,7 +232,7 @@ export default function GitSyncTab({
           onClick={() =>
             network(async () =>
               onChanged(
-                await api<Json>(
+                await api<RemoteStatus>(
                   `${base}/fetch`,
                   send({ config_revision: remote.config_revision }),
                 ),
@@ -249,7 +251,7 @@ export default function GitSyncTab({
           }
           onClick={() =>
             act(async () =>
-              onReview(await api<Json>(`${base}/pull`, send(heads))),
+              onReview(await api<MergeReview>(`${base}/pull`, send(heads))),
             )
           }
         >
@@ -265,7 +267,7 @@ export default function GitSyncTab({
           }
           onClick={() =>
             act(async () => {
-              const diff = await api<Json>(
+              const diff = await api<Comparison>(
                 withQuery(`${base}/compare`, {
                   a: remote.remote_head || "empty",
                   b: remote.local_head,
@@ -319,7 +321,7 @@ export default function GitSyncTab({
             onClick={() =>
               network(async () =>
                 onChanged(
-                  await api<Json>(
+                  await api<RemoteStatus>(
                     `${base}/push`,
                     send({
                       config_revision: publication.remote.config_revision,

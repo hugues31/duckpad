@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { act, cleanup, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Snapshot, Statuses } from "./types";
+import type { Run, Snapshot, Statuses } from "./types";
 import { useWorktreeSnapshot } from "./useWorktreeSnapshot";
 
 const json = (body: unknown, status = 200) =>
@@ -13,7 +13,7 @@ const json = (body: unknown, status = 200) =>
 const snapshot = (worktree: string, revision: string): Snapshot => ({
   role: "editor",
   connections: [],
-  worktree: { id: worktree, branch: worktree },
+  worktree: { id: worktree, project: "project", branch: worktree },
   revision,
   commit: "0123abc",
   bundle: null,
@@ -23,8 +23,28 @@ const snapshot = (worktree: string, revision: string): Snapshot => ({
   parsed_templates: {},
 });
 
+const run = (id: string, worktree: string): Run => ({
+  id,
+  project: "project",
+  worktree,
+  branch: worktree,
+  environment: "dev",
+  commit: "0123abc",
+  scope: "project",
+  trigger: "manual",
+  entry_point: "ui",
+  status: "running",
+  started: "2026-01-01T00:00:00Z",
+  nodes: {},
+  connections: {},
+  definitions: {},
+  components: {},
+});
+
 const statuses: Statuses = {
-  nodes: { load_orders: { status: "completed" } },
+  nodes: {
+    load_orders: { outputs: {}, error: null, execution_status: "success" },
+  },
   active: null,
 };
 
@@ -246,12 +266,12 @@ describe("useWorktreeSnapshot", () => {
     const { result } = watch({ worktree: "main", environment: "dev" });
     await advance();
 
-    act(() => result.current.setActive("feature", { id: "run_other" }));
+    act(() => result.current.setActive("feature", run("run_other", "feature")));
     expect(result.current.statuses.active).toBeNull();
-    act(() => result.current.setActive("main", { id: "run_1" }));
+    act(() => result.current.setActive("main", run("run_1", "main")));
     expect(result.current.statuses).toEqual({
       ...statuses,
-      active: { id: "run_1" },
+      active: run("run_1", "main"),
     });
   });
 });

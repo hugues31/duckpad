@@ -5,9 +5,14 @@ import GitCompareTab, { savedSelection, type Selection } from "./GitCompareTab";
 import GitReviewTab from "./GitReviewTab";
 import GitSyncTab from "./GitSyncTab";
 import type { Repository } from "./gitTabs";
+import type {
+  Branch,
+  HistoryPage,
+  MergeReview,
+  RemoteStatus,
+} from "./gitTypes";
 import { useT, type TranslationKey } from "./i18n";
 import { Modal } from "./modals";
-import type { Json } from "./types";
 import "./git.css";
 
 type Mode = "compare" | "branches" | "sync" | "review";
@@ -22,8 +27,8 @@ const TABS: Record<Mode, TranslationKey> = {
 /** Load the branches and origin state, reporting failures to the tabs that show them. */
 function useRepository(base: string, onChanged: () => Promise<void>) {
   const [state, setState] = useState<{
-    branches: Json[];
-    remote: Json | null;
+    branches: Branch[];
+    remote: RemoteStatus | null;
   }>({ branches: [], remote: null });
   const [loading, setLoading] = useState(true);
   const [failure, setFailure] = useState<Repository["failure"]>(null);
@@ -36,8 +41,8 @@ function useRepository(base: string, onChanged: () => Promise<void>) {
       try {
         if (changed) await onChanged();
         const [branches, remote] = await Promise.all([
-          api<Json[]>(`${base}/branches`),
-          api<Json>(`${base}/remote`),
+          api<Branch[]>(`${base}/branches`),
+          api<RemoteStatus>(`${base}/remote`),
         ]);
         if (current === sequence.current) setState({ branches, remote });
       } catch (e) {
@@ -57,7 +62,8 @@ function useRepository(base: string, onChanged: () => Promise<void>) {
   }, [load]);
   return {
     repository: { ...state, loading, failure, reload: () => load() },
-    setRemote: (remote: Json) => setState((old) => ({ ...old, remote })),
+    setRemote: (remote: RemoteStatus) =>
+      setState((old) => ({ ...old, remote })),
     /** Refresh the workspace and the repository after a Git change. */
     refresh: () => load(true),
   };
@@ -97,7 +103,7 @@ export default function GitWorkspace({
     commit ? { a: `${commit}^`, b: commit } : savedSelection(storageKey),
   );
   const [ready, setReady] = useState(!commit);
-  const [review, setReview] = useState<Json | null>(null);
+  const [review, setReview] = useState<MergeReview | null>(null);
   const [version, setVersion] = useState(0);
   const { repository, setRemote, refresh } = useRepository(base, onChanged);
 
@@ -112,7 +118,7 @@ export default function GitWorkspace({
     if (!commit) return;
     const controller = new AbortController();
     const fallback = `${commit}^`;
-    api<Json>(withQuery(`${base}/history`, { ref: commit, limit: 1 }), {
+    api<HistoryPage>(withQuery(`${base}/history`, { ref: commit, limit: 1 }), {
       signal: controller.signal,
     })
       .then((page) => {
@@ -136,7 +142,7 @@ export default function GitWorkspace({
     setTab(value);
     setVisited((old) => (old.includes(value) ? old : [...old, value]));
   };
-  const changed = async (remote?: Json) => {
+  const changed = async (remote?: RemoteStatus) => {
     if (remote) setRemote(remote);
     await refresh();
     setVersion((value) => value + 1);
@@ -145,7 +151,7 @@ export default function GitWorkspace({
     setSelection({ a, b });
     show("compare");
   };
-  const openReview = (value: Json) => {
+  const openReview = (value: MergeReview) => {
     setReview(value);
     show("review");
   };

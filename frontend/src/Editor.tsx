@@ -8,7 +8,7 @@ import "monaco-editor/esm/vs/language/json/monaco.contribution";
 import EditorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";
 import JsonWorker from "monaco-editor/esm/vs/language/json/json.worker?worker";
 // Bundle workers and the editor locally; no CDN access is needed at runtime.
-(globalThis as any).MonacoEnvironment = {
+window.MonacoEnvironment = {
   getWorker: (_: string, label: string) =>
     label === "json" ? new JsonWorker() : new EditorWorker(),
 };

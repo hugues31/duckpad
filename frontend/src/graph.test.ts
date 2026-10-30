@@ -9,7 +9,14 @@ import {
   pathPrefix,
   type PathPart,
 } from "./graph";
-import type { Bundle, FlowEdge, FlowNode, Graph } from "./types";
+import type {
+  Bundle,
+  ComponentDefinition,
+  FlowEdge,
+  FlowNode,
+  Graph,
+  ParsedTemplate,
+} from "./types";
 
 const node = (id: string, fields: Partial<FlowNode> = {}): FlowNode => ({
   id,
@@ -31,7 +38,7 @@ const edge = (
 });
 
 /** A component definition whose nodes instantiate the given components. */
-const component = (...children: string[]) => ({
+const component = (...children: string[]): ComponentDefinition => ({
   inputs: {},
   outputs: {},
   parameters: {},
@@ -41,7 +48,7 @@ const component = (...children: string[]) => ({
   edges: [],
 });
 
-const parsed = {
+const parsed: Record<string, ParsedTemplate> = {
   load_csv: {
     label: "Load CSV",
     kind: "source",
@@ -156,7 +163,7 @@ describe("nodeInterface", () => {
 
   it("lists the ports and named parameters of a component definition", () => {
     const target = (node: string, param: string) => [{ node, param }];
-    const definition = {
+    const definition: ComponentDefinition = {
       inputs: {
         orders: { node: "join", port: "left" },
         customers: { node: "join", port: "right" },
@@ -229,6 +236,8 @@ describe("nodeChoices", () => {
     expect(choices[3].signature).toEqual(
       nodeInterface({ component: "b" }, parsed, components),
     );
+    expect(choices[1].definition).toBe(parsed.join);
+    expect(choices[3].definition).toBe(components.b);
   });
 
   it("excludes the opened components themselves", () => {

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useT } from "./i18n";
+import type { Json } from "./types";
 
 /** Keep incomplete input intact until it can be committed as a parameter value. */
 export default function ParameterInput({
@@ -13,8 +14,9 @@ export default function ParameterInput({
   kind: "number" | "list";
   secret?: boolean;
   disabled?: boolean;
-  value: any;
-  onChange: (value: any) => void;
+  value: Json | undefined;
+  /** Receives a number, a list of strings, or undefined for an empty number. */
+  onChange: (value: number | string[] | undefined) => void;
   onBlur?: () => void;
 }) {
   const t = useT();
@@ -24,7 +26,9 @@ export default function ParameterInput({
       disabled={disabled}
       type={secret ? "password" : "text"}
       inputMode={kind === "number" ? "decimal" : undefined}
-      value={draft ?? (Array.isArray(value) ? value.join(", ") : (value ?? ""))}
+      value={
+        draft ?? (Array.isArray(value) ? value.join(", ") : String(value ?? ""))
+      }
       onChange={(e) => {
         e.currentTarget.setCustomValidity("");
         setDraft(e.target.value);

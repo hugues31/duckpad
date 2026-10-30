@@ -7,20 +7,35 @@ import {
   ReactFlowProvider,
   useReactFlow,
 } from "@xyflow/react";
+import type {
+  ChangeCategory,
+  ChangeStatus,
+  ComparisonReport,
+  EdgeChange,
+  EntityChange,
+  NodeChange,
+} from "./gitTypes";
 import { useT, useTranslateValue } from "./i18n";
 import { projectFileLanguage } from "./projectFiles";
 import Select from "./Select";
-import type { Json } from "./types";
+import type { FlowEdge } from "./types";
+
+type Side = "before" | "after";
 
 const CodeDiff = lazy(() =>
   import("./Editor").then((module) => ({ default: module.CodeDiff })),
 );
-const SYMBOL: Record<string, string> = {
+const SYMBOL: Record<ChangeStatus, string> = {
   added: "+",
   removed: "−",
   modified: "~",
   unchanged: "=",
 };
+/** A field of a compared object or array; nothing for other values. */
+const fieldOf = (value: unknown, field: string): unknown =>
+  typeof value === "object" && value !== null
+    ? (value as Record<string, unknown>)[field]
+    : undefined;
 const valueText = (value: unknown) =>
   value === undefined || value === null
     ? "—"
@@ -34,7 +49,7 @@ function ComparisonGraph({
   selected,
   onSelect,
 }: {
-  entities: Json[];
+  entities: EntityChange[];
   scope: string;
   selected: string;
   onSelect: (id: string) => void;
@@ -44,12 +59,12 @@ function ComparisonGraph({
   const nodes = useMemo(
     () =>
       entities
-        .filter((e) => e.kind === "node" && e.scope === scope)
+        .filter((e): e is NodeChange => e.kind === "node" && e.scope === scope)
         .map((e, index) => {
           const node = e.after || e.before;
           return {
             id: e.id,
-            position: node.position || {
+            position: node?.position || {
               x: (index % 4) * 210,
               y: Math.floor(index / 4) * 100,
             },
@@ -65,9 +80,9 @@ function ComparisonGraph({
   const edges = useMemo(
     () =>
       entities
-        .filter((e) => e.kind === "edge" && e.scope === scope)
+        .filter((e): e is EdgeChange => e.kind === "edge" && e.scope === scope)
         .flatMap((e) => {
-          const versions =
+          const versions: [Side, FlowEdge | null][] =
             e.status === "modified"
               ? [
                   ["before", e.before],
@@ -80,7 +95,7 @@ function ComparisonGraph({
                   ],
                 ];
           return versions
-            .filter(([, value]) => value)
+            .filter((version): version is [Side, FlowEdge] => !!version[1])
             .map(([side, value]) => ({
               id: `${e.id}/${side}`,
               source: `${scope ? scope + "/" : ""}node/${value.source}`,
@@ -156,18 +171,25 @@ function ComparisonGraph({
   );
 }
 
+/** The filters of the change list, kept for the browser session. */
+interface Filters {
+  only: boolean;
+  category: ChangeCategory | "all";
+  search: string;
+}
+
 export default function ComparisonView({
   report,
   storageKey,
   onHistory,
 }: {
-  report: Json;
+  report: ComparisonReport;
   storageKey: string;
   onHistory?: (entity: string) => void;
 }) {
   const t = useT();
   const translateValue = useTranslateValue();
-  const [filters, setFilters] = useState(() => {
+  const [filters, setFilters] = useState<Filters>(() => {
     try {
       return {
         only: true,
@@ -184,7 +206,7 @@ export default function ComparisonView({
   useEffect(() => {
     sessionStorage.setItem(storageKey, JSON.stringify(filters));
   }, [storageKey, filters]);
-  const entities: Json[] = report.entities;
+  const entities = report.entities;
   const filtered = entities.filter(
     (e) =>
       (!filters.only || e.status !== "unchanged") &&
@@ -217,7 +239,10 @@ export default function ComparisonView({
             aria-label={t("changeCategory")}
             value={filters.category}
             onChange={(e) =>
-              setFilters({ ...filters, category: e.target.value })
+              setFilters({
+                ...filters,
+                category: e.target.value as Filters["category"],
+              })
             }
           >
             {(["all", "processing", "documentation", "layout"] as const).map(
@@ -264,7 +289,7 @@ export default function ComparisonView({
           ),
         )}
       </div>
-      {report.diagnostics?.map((d: Json, i: number) => (
+      {report.diagnostics?.map((d, i) => (
         <p className="notice error" key={i}>
           {d.side}: {d.message}
         </p>
@@ -371,7 +396,7 @@ export default function ComparisonView({
                               {valueText(
                                 field === "value" && typeof value !== "object"
                                   ? value
-                                  : value?.[field],
+                                  : fieldOf(value, field),
                               )}
                             </pre>
                           </td>
@@ -411,7 +436,7 @@ export default function ComparisonView({
             <strong>{t("downstreamElements")}</strong>:{" "}
             {report.impact.downstream.join(", ") || "—"}
           </p>
-          {report.impact.diagnostics.map((d: Json, i: number) => (
+          {report.impact.diagnostics.map((d, i) => (
             <p key={i}>
               {d.node}: {d.message}
             </p>
@@ -422,7 +447,7 @@ export default function ComparisonView({
                 <h4>
                   {t(side)} · {t("wiring")}
                 </h4>
-                {report.impact[side + "_wiring"].map((edge: Json) => (
+                {report.impact[`${side}_wiring`].map((edge) => (
                   <p key={edge.id}>
                     <code>
                       {edge.source}.{edge.sourceHandle} → {edge.target}.
@@ -432,7 +457,7 @@ export default function ComparisonView({
                 ))}
                 <h4>{t("instanceScopes")}</h4>
                 <pre>
-                  {JSON.stringify(report.impact[side + "_scopes"], null, 2)}
+                  {JSON.stringify(report.impact[`${side}_scopes`], null, 2)}
                 </pre>
               </section>
             ))}

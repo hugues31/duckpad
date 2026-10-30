@@ -11,7 +11,7 @@ import { Search, X } from "lucide-react";
 import { NodeIcon } from "./Canvas";
 import { nodeChoices, type NodeKind } from "./graph";
 import { templateLabel, useT } from "./i18n";
-import type { Json } from "./types";
+import type { ComponentDefinition, ParsedTemplate } from "./types";
 
 export default function ConnectionPalette({
   parsed,
@@ -22,8 +22,8 @@ export default function ConnectionPalette({
   onChoose,
   onClose,
 }: {
-  parsed: Record<string, Json>;
-  components: Record<string, Json>;
+  parsed: Record<string, ParsedTemplate>;
+  components: Record<string, ComponentDefinition>;
   excludedComponents: string[];
   handleType: "source" | "target";
   screen: { x: number; y: number };
@@ -41,16 +41,16 @@ export default function ConnectionPalette({
   const items = useMemo(() => {
     const query = search.trim().toLocaleLowerCase();
     return nodeChoices(parsed, components, excludedComponents)
-      .flatMap(({ kind, id, signature }) =>
-        signature[portSide].map((port) => ({
-          id,
-          kind,
+      .flatMap((choice) =>
+        choice.signature[portSide].map((port) => ({
+          id: choice.id,
+          kind: choice.kind,
           port,
           label:
-            kind === "component"
-              ? signature.definition!.name || id
-              : templateLabel(id, signature.definition!.label, t),
-          description: signature.definition!.description || "",
+            choice.kind === "component"
+              ? choice.definition.name || choice.id
+              : templateLabel(choice.id, choice.definition.label, t),
+          description: choice.definition.description || "",
         })),
       )
       .filter((item) =>

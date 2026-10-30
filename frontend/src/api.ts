@@ -9,6 +9,14 @@ export class ApiError extends Error {
   }
 }
 
+/** The fields of an API error's detail, or none when it has no detail object. */
+export function errorDetail(error: unknown): Record<string, unknown> {
+  const detail = error instanceof ApiError ? error.detail : undefined;
+  return typeof detail === "object" && detail !== null && !Array.isArray(detail)
+    ? (detail as Record<string, unknown>)
+    : {};
+}
+
 type Query = Record<string, string | number | boolean | undefined>;
 
 /** Build an API path with encoded query parameters; undefined values are omitted. */
@@ -47,7 +55,8 @@ async function readError(response: Response) {
   );
 }
 
-export async function api<T = any>(
+/** Call the API; `T` describes the JSON response, which is not checked. */
+export async function api<T = unknown>(
   path: string,
   options?: RequestInit,
 ): Promise<T> {

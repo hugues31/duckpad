@@ -5,10 +5,10 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { api, ApiError, send } from "./api";
+import { api, errorDetail, send } from "./api";
 import { useT } from "./i18n";
 import { useShell } from "./shell";
-import type { Bundle, Environment, Json, Snapshot, Statuses } from "./types";
+import type { Bundle, Environment, Run, Snapshot, Statuses } from "./types";
 import { useWorktreeSnapshot } from "./useWorktreeSnapshot";
 
 /** The working branch opened by the URL, with the actions that change it. */
@@ -89,7 +89,10 @@ export function WorktreeProvider({
     await refresh();
   }, [refreshWorkspace, refresh]);
 
-  async function write(base: Snapshot, change: Json) {
+  async function write(
+    base: Snapshot,
+    change: { bundle: Bundle } | { files: Record<string, string> },
+  ) {
     if (!canEdit) throw new Error(t("readerNotice"));
     setSaves((count) => count + 1);
     try {
@@ -107,7 +110,7 @@ export function WorktreeProvider({
   async function launch(environment: string, node?: string, confirmed = false) {
     setStarting(true);
     try {
-      const run = await api(
+      const run = await api<Run>(
         `/worktrees/${id}/runs`,
         send({ environment, node, entry_point: "ui", confirmed }),
       );
@@ -151,9 +154,8 @@ export function WorktreeProvider({
       try {
         await launch(environment, node);
       } catch (e) {
-        const required =
-          e instanceof ApiError &&
-          (e.detail as Json | undefined)?.confirmation_required;
+        const required = errorDetail(e).confirmation_required as
+          Environment | undefined;
         if (required) confirmRun(required, node);
         else notify((e as Error).message, true);
       }
@@ -162,7 +164,10 @@ export function WorktreeProvider({
     stop: async () => {
       if (!statuses.active) return;
       try {
-        const run = await api(`/runs/${statuses.active.id}/cancel`, send({}));
+        const run = await api<Run>(
+          `/runs/${statuses.active.id}/cancel`,
+          send({}),
+        );
         setActive(id, run);
       } catch (e) {
         notify((e as Error).message, true);

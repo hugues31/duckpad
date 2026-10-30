@@ -43,7 +43,14 @@ import ConnectionPalette from "./ConnectionPalette";
 import { layoutNodes } from "./graphLayout";
 import { SearchField } from "./Search";
 import type { NodeKind } from "./NodePalette";
-import type { FlowEdge, FlowNode, Json, Statuses } from "./types";
+import type {
+  ComponentDefinition,
+  FlowEdge,
+  FlowNode,
+  ParsedTemplate,
+  Statuses,
+  TemplateKind,
+} from "./types";
 
 /** The icon of a template, from its ID, or of any component. */
 export function NodeIcon({ kind, ...props }: LucideProps & { kind: string }) {
@@ -65,7 +72,21 @@ function StatusIcon({ status, ...props }: LucideProps & { status: string }) {
   return <Circle {...props} />;
 }
 
-function PipelineNode({ data, selected }: NodeProps<Node<Json>>) {
+/** What the canvas shows of a node. */
+type PipelineData = {
+  label: string;
+  kind: TemplateKind | "component";
+  inputs: string[];
+  outputs: string[];
+  /** The run or result state shown on the node, if any. */
+  status: string;
+  /** The template ID, or "component". */
+  icon: string;
+  subtitle?: string;
+};
+type PipelineNode = Node<PipelineData, "pipeline">;
+
+function PipelineNode({ data, selected }: NodeProps<PipelineNode>) {
   const t = useT();
   const source = data.kind === "source";
   const portPosition = (index: number, count: number) => {
@@ -134,8 +155,8 @@ interface CanvasProps {
   readOnly?: boolean;
   nodes: FlowNode[];
   edges: FlowEdge[];
-  parsed: Record<string, Json>;
-  components: Record<string, Json>;
+  parsed: Record<string, ParsedTemplate>;
+  components: Record<string, ComponentDefinition>;
   excludedComponents: string[];
   statuses: Statuses;
   prefix: string;
@@ -230,23 +251,20 @@ function CanvasInner(props: CanvasProps) {
   const displayNodes = useMemo(
     () =>
       props.nodes.map((node) => {
-        const { definition, kind, inputs, outputs } = nodeInterface(
-          node,
-          props.parsed,
-          props.components,
-        );
+        const signature = nodeInterface(node, props.parsed, props.components);
+        const { kind, inputs, outputs } = signature;
         const result = props.statuses.nodes?.[props.prefix + node.id];
         const nested = Object.entries(props.statuses.nodes || {})
           .filter(([id]) => id.startsWith(props.prefix + node.id + "::"))
-          .map(([, v]) => v as Json);
-        const states = [result, ...nested].filter(Boolean);
+          .map(([, v]) => v);
+        const states = result ? [result, ...nested] : nested;
         const active = Object.entries(props.statuses.active?.nodes || {})
           .filter(
             ([id]) =>
               id === props.prefix + node.id ||
               id.startsWith(props.prefix + node.id + "::"),
           )
-          .map(([, v]) => (v as Json).status);
+          .map(([, v]) => v.status as string);
         const status = active.includes("running")
           ? "running"
           : active.includes("failed")
@@ -260,7 +278,7 @@ function CanvasInner(props: CanvasProps) {
                   ? "failed"
                   : states.some((s) =>
                         Object.values(s.outputs || {}).some(
-                          (o: any) => o.status === "stale",
+                          (o) => o.status === "stale",
                         ),
                       )
                     ? "stale"
@@ -271,24 +289,32 @@ function CanvasInner(props: CanvasProps) {
                         : "";
         return {
           id: node.id,
-          type: "pipeline",
+          type: "pipeline" as const,
           position: node.position || { x: 0, y: 0 },
           selected: node.id === props.selected,
           data: {
             label:
               node.label ||
-              definition?.name ||
-              templateLabel(node.template || "sql", definition?.label, t),
+              (signature.kind === "component"
+                ? signature.definition?.name
+                : undefined) ||
+              templateLabel(
+                node.template || "sql",
+                signature.kind === "component"
+                  ? undefined
+                  : signature.definition?.label,
+                t,
+              ),
             kind,
             inputs,
             outputs,
             status,
-            icon: node.component ? "component" : node.template,
+            icon: node.component ? "component" : node.template || "",
             subtitle:
               node.component || outputs.length > 1
                 ? `${outputs.length} ${t("outputs")}`
                 : Object.values(result?.outputs || {}).length === 1
-                  ? `${(Object.values(result.outputs)[0] as Json).count.toLocaleString()} ${t("rows")}`
+                  ? `${Object.values(result!.outputs)[0].count.toLocaleString()} ${t("rows")}`
                   : undefined,
           },
         };
@@ -303,7 +329,7 @@ function CanvasInner(props: CanvasProps) {
       t,
     ],
   );
-  const [nodes, setNodes] = useState<Node<Json>[]>(displayNodes);
+  const [nodes, setNodes] = useState<PipelineNode[]>(displayNodes);
   const matches = useMemo(() => {
     const terms = query.trim().toLocaleLowerCase().split(/\s+/);
     if (!query.trim()) return [];
@@ -378,7 +404,8 @@ function CanvasInner(props: CanvasProps) {
   }, [initialized, frame, props.nodes.length, fitGraph]);
   const { onSelection } = props;
   const selectionChanged = useCallback(
-    ({ nodes }: { nodes: Node<Json>[] }) => onSelection(nodes.map((n) => n.id)),
+    ({ nodes }: { nodes: PipelineNode[] }) =>
+      onSelection(nodes.map((n) => n.id)),
     [onSelection],
   );
   const running = !!props.statuses.active;
@@ -410,7 +437,7 @@ function CanvasInner(props: CanvasProps) {
       }),
     [props.edges, nodes, running],
   );
-  const changes = (changes: NodeChange<Node<Json>>[]) =>
+  const changes = (changes: NodeChange<PipelineNode>[]) =>
     setNodes((current) => applyNodeChanges(changes, current));
   const persistPositions = async (moved: FlowNode[]) => {
     const pending = new Map(

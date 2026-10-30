@@ -90,7 +90,7 @@ function locate(bundle: Bundle, target: string) {
       definition: parent.component,
       label: parent.label || definition.name || instance,
     });
-    graph = definition as Graph;
+    graph = definition;
   }
   const id = ids[ids.length - 1];
   return graph.nodes.some((node) => node.id === id) ? { path, id } : null;
@@ -276,7 +276,8 @@ export default function FlowPage() {
       {
         instance: id,
         definition: instance.component,
-        label: instance.label || bundle!.components[instance.component].name,
+        label:
+          instance.label || bundle!.components[instance.component].name || id,
       },
     ]);
   }
@@ -284,9 +285,9 @@ export default function FlowPage() {
   if (!bundle || !graph) return <InvalidProject />;
   const connections = snapshot.connections.filter(
     (connection) =>
-      !["source", "export"].includes(definition?.kind) ||
+      (signature?.kind !== "source" && signature?.kind !== "export") ||
       connection.capabilities.includes(
-        definition?.kind === "export" ? "write" : "read",
+        signature.kind === "export" ? "write" : "read",
       ),
   );
   const shown = {
