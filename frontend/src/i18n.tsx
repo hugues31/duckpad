@@ -3,7 +3,13 @@ import en from "./locales/en.json";
 import fr from "./locales/fr.json";
 import pt from "./locales/pt.json";
 
-const locales = { en, fr, pt };
+/** A key of the translation catalogs. */
+export type TranslationKey = keyof typeof en;
+// Every catalog defines every key.
+const locales = { en, fr, pt } satisfies Record<
+  string,
+  Record<TranslationKey, string>
+>;
 export type Language = keyof typeof locales;
 /** The interface languages, one per translation catalog. */
 export const languages = Object.keys(locales) as Language[];
@@ -14,16 +20,32 @@ export const I18n = createContext<{
 
 export const useLanguage = () => useContext(I18n).language;
 
-/** Translate a key; unknown keys, such as server-provided status values, are shown as is. */
+const isTranslationKey = (value: string): value is TranslationKey =>
+  Object.hasOwn(en, value);
+
+/** Translate a key of the catalogs. */
 export function useT() {
   const language = useLanguage();
   return useCallback(
-    (key: string): string => locales[language][key as keyof typeof en] ?? key,
+    (key: TranslationKey) => locales[language][key],
     [language],
   );
 }
+export type Translate = ReturnType<typeof useT>;
 
-const builtinLabels: Record<string, string> = {
+/**
+ * Translate a value known only at runtime, such as a status reported by the
+ * server; values without a translation are shown as is.
+ */
+export function useTranslateValue() {
+  const t = useT();
+  return useCallback(
+    (value: string) => (isTranslationKey(value) ? t(value) : value),
+    [t],
+  );
+}
+
+const builtinLabels = {
   load_csv: "Load CSV",
   load_parquet: "Load Parquet",
   load_xlsx: "Load XLSX",
@@ -37,13 +59,15 @@ const builtinLabels: Record<string, string> = {
   export_xlsx: "Export XLSX",
   export_oracle: "Export Oracle",
   sql: "SQL transform",
-};
+} satisfies Partial<Record<TranslationKey, string>>;
+const isBuiltin = (id: string): id is keyof typeof builtinLabels =>
+  Object.hasOwn(builtinLabels, id);
 
 /** Built-in templates keep a translated label until their label is edited. */
 export function templateLabel(
   id: string,
   label: string | undefined,
-  t: (key: string) => string,
+  t: Translate,
 ) {
-  return label === builtinLabels[id] ? t(id) : label || id;
+  return isBuiltin(id) && label === builtinLabels[id] ? t(id) : label || id;
 }

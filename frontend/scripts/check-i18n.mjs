@@ -1,5 +1,6 @@
 /**
- * Check the UI translation catalogs in src/locales against the frontend sources:
+ * Check the UI translation catalogs in src/locales against the frontend sources,
+ * excluding unit tests (*.test.ts and *.test.tsx):
  *
  * - every locale defines the same keys, each exactly once;
  * - every key passed to t() as a string literal, including each branch of a
@@ -121,7 +122,9 @@ for (const locale of locales)
 
 const used = new Set(DYNAMIC_KEYS);
 for (const name of readdirSync(sourceDir, { recursive: true })) {
-  if (!/\.tsx?$/.test(name)) continue;
+  // Unit tests are not application code: their string literals must not count
+  // as uses of a key, which would hide keys the application no longer uses.
+  if (!/\.tsx?$/.test(name) || /\.test\.tsx?$/.test(name)) continue;
   const path = join(sourceDir, name);
   const file = ts.createSourceFile(
     path,

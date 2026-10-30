@@ -34,6 +34,7 @@ import {
   Sparkles,
   Maximize,
   Workflow,
+  type LucideProps,
 } from "lucide-react";
 import "@xyflow/react/dist/style.css";
 import { useT, templateLabel } from "./i18n";
@@ -42,35 +43,51 @@ import ConnectionPalette from "./ConnectionPalette";
 import { layoutNodes } from "./graphLayout";
 import { SearchField } from "./Search";
 import type { NodeKind } from "./NodePalette";
-import type { FlowEdge, FlowNode, Json, Statuses } from "./types";
+import type {
+  ComponentDefinition,
+  FlowEdge,
+  FlowNode,
+  ParsedTemplate,
+  Statuses,
+  TemplateKind,
+} from "./types";
 
-export const nodeIcon = (key: string) =>
-  key.includes("export")
-    ? FileOutput
-    : key === "join"
-      ? GitMerge
-      : key === "filter"
-        ? Filter
-        : key === "aggregate" || key.includes("metrics")
-          ? Sigma
-          : key.startsWith("load_")
-            ? FileInput
-            : key === "component"
-              ? Boxes
-              : Code2;
-const statusIcon = (status: string) =>
-  status === "valid" || status === "success"
-    ? Check
-    : status === "running" || status === "preparing"
-      ? Loader2
-      : status === "stale" || status === "failed" || status === "blocked"
-        ? AlertCircle
-        : Circle;
+/** The icon of a template, from its ID, or of any component. */
+export function NodeIcon({ kind, ...props }: LucideProps & { kind: string }) {
+  if (kind.includes("export")) return <FileOutput {...props} />;
+  if (kind === "join") return <GitMerge {...props} />;
+  if (kind === "filter") return <Filter {...props} />;
+  if (kind === "aggregate" || kind.includes("metrics"))
+    return <Sigma {...props} />;
+  if (kind.startsWith("load_")) return <FileInput {...props} />;
+  if (kind === "component") return <Boxes {...props} />;
+  return <Code2 {...props} />;
+}
+function StatusIcon({ status, ...props }: LucideProps & { status: string }) {
+  if (status === "valid" || status === "success") return <Check {...props} />;
+  if (status === "running" || status === "preparing")
+    return <Loader2 {...props} />;
+  if (status === "stale" || status === "failed" || status === "blocked")
+    return <AlertCircle {...props} />;
+  return <Circle {...props} />;
+}
 
-function PipelineNode({ data, selected }: NodeProps<Node<Json>>) {
+/** What the canvas shows of a node. */
+type PipelineData = {
+  label: string;
+  kind: TemplateKind | "component";
+  inputs: string[];
+  outputs: string[];
+  /** The run or result state shown on the node, if any. */
+  status: string;
+  /** The template ID, or "component". */
+  icon: string;
+  subtitle?: string;
+};
+type PipelineNode = Node<PipelineData, "pipeline">;
+
+function PipelineNode({ data, selected }: NodeProps<PipelineNode>) {
   const t = useT();
-  const Icon = nodeIcon(data.icon);
-  const Status = statusIcon(data.status);
   const source = data.kind === "source";
   const portPosition = (index: number, count: number) => {
     const spacing = Math.min(24, 72 / Math.max(1, count - 1));
@@ -83,10 +100,11 @@ function PipelineNode({ data, selected }: NodeProps<Node<Json>>) {
       className={`pipeline-node ${source ? "source-node" : "round-node"} ${data.kind} ${selected ? "is-selected" : ""}`}
     >
       <div className="node-shape">
-        <Icon size={27} strokeWidth={1.6} />
+        <NodeIcon kind={data.icon} size={27} strokeWidth={1.6} />
         {data.status && (
           <span className={`node-status ${data.status}`}>
-            <Status
+            <StatusIcon
+              status={data.status}
               size={12}
               className={data.status === "running" ? "spin" : ""}
             />
@@ -137,8 +155,8 @@ interface CanvasProps {
   readOnly?: boolean;
   nodes: FlowNode[];
   edges: FlowEdge[];
-  parsed: Record<string, Json>;
-  components: Record<string, Json>;
+  parsed: Record<string, ParsedTemplate>;
+  components: Record<string, ComponentDefinition>;
   excludedComponents: string[];
   statuses: Statuses;
   prefix: string;
@@ -168,7 +186,15 @@ function CanvasInner(props: CanvasProps) {
   const viewportTouched = useRef(false);
   const lastFit = useRef("");
   const [query, setQuery] = useState("");
-  const [focus, setFocus] = useState<{ id: string } | null>(null);
+  const [focus, setFocus] = useState<{ id: string } | null>(
+    props.focusRequest ? { id: props.focusRequest.id } : null,
+  );
+  // Each new request from the page focuses its node once.
+  const [handledRequest, setHandledRequest] = useState(props.focusRequest);
+  if (props.focusRequest !== handledRequest) {
+    setHandledRequest(props.focusRequest);
+    if (props.focusRequest) setFocus({ id: props.focusRequest.id });
+  }
   const [pendingConnection, setPendingConnection] = useState<{
     endpoint: Omit<NodeConnection, "port">;
     position: { x: number; y: number };
@@ -225,23 +251,20 @@ function CanvasInner(props: CanvasProps) {
   const displayNodes = useMemo(
     () =>
       props.nodes.map((node) => {
-        const { definition, kind, inputs, outputs } = nodeInterface(
-          node,
-          props.parsed,
-          props.components,
-        );
+        const signature = nodeInterface(node, props.parsed, props.components);
+        const { kind, inputs, outputs } = signature;
         const result = props.statuses.nodes?.[props.prefix + node.id];
         const nested = Object.entries(props.statuses.nodes || {})
           .filter(([id]) => id.startsWith(props.prefix + node.id + "::"))
-          .map(([, v]) => v as Json);
-        const states = [result, ...nested].filter(Boolean);
+          .map(([, v]) => v);
+        const states = result ? [result, ...nested] : nested;
         const active = Object.entries(props.statuses.active?.nodes || {})
           .filter(
             ([id]) =>
               id === props.prefix + node.id ||
               id.startsWith(props.prefix + node.id + "::"),
           )
-          .map(([, v]) => (v as Json).status);
+          .map(([, v]) => v.status as string);
         const status = active.includes("running")
           ? "running"
           : active.includes("failed")
@@ -255,7 +278,7 @@ function CanvasInner(props: CanvasProps) {
                   ? "failed"
                   : states.some((s) =>
                         Object.values(s.outputs || {}).some(
-                          (o: any) => o.status === "stale",
+                          (o) => o.status === "stale",
                         ),
                       )
                     ? "stale"
@@ -266,24 +289,32 @@ function CanvasInner(props: CanvasProps) {
                         : "";
         return {
           id: node.id,
-          type: "pipeline",
+          type: "pipeline" as const,
           position: node.position || { x: 0, y: 0 },
           selected: node.id === props.selected,
           data: {
             label:
               node.label ||
-              definition?.name ||
-              templateLabel(node.template || "sql", definition?.label, t),
+              (signature.kind === "component"
+                ? signature.definition?.name
+                : undefined) ||
+              templateLabel(
+                node.template || "sql",
+                signature.kind === "component"
+                  ? undefined
+                  : signature.definition?.label,
+                t,
+              ),
             kind,
             inputs,
             outputs,
             status,
-            icon: node.component ? "component" : node.template,
+            icon: node.component ? "component" : node.template || "",
             subtitle:
               node.component || outputs.length > 1
                 ? `${outputs.length} ${t("outputs")}`
                 : Object.values(result?.outputs || {}).length === 1
-                  ? `${(Object.values(result.outputs)[0] as Json).count.toLocaleString()} ${t("rows")}`
+                  ? `${Object.values(result!.outputs)[0].count.toLocaleString()} ${t("rows")}`
                   : undefined,
           },
         };
@@ -298,7 +329,7 @@ function CanvasInner(props: CanvasProps) {
       t,
     ],
   );
-  const [nodes, setNodes] = useState<Node<Json>[]>(displayNodes);
+  const [nodes, setNodes] = useState<PipelineNode[]>(displayNodes);
   const matches = useMemo(() => {
     const terms = query.trim().toLocaleLowerCase().split(/\s+/);
     if (!query.trim()) return [];
@@ -317,22 +348,20 @@ function CanvasInner(props: CanvasProps) {
     });
   }, [query, displayNodes, props.nodes, t]);
   useEffect(() => {
-    if (props.focusRequest) setFocus({ id: props.focusRequest.id });
-  }, [props.focusRequest]);
-  useEffect(() => {
     if (!focus || !initialized || !frame.width || !frame.height) return;
     const target = getNodes().filter((node) => node.id === focus.id);
     if (!target.length) return;
     viewportTouched.current = true;
     fitGraph(target);
   }, [focus, initialized, frame, getNodes, fitGraph]);
-  useEffect(() => {
-    if (!pendingConnection) return;
+  if (pendingConnection) {
+    // Close the palette once its endpoint is gone or the graph became read-only.
     const { nodeId, handleId, handleType } = pendingConnection.endpoint;
     const origin = displayNodes.find((node) => node.id === nodeId);
     const ports = origin?.data[handleType === "source" ? "outputs" : "inputs"];
-    if (props.readOnly || !ports?.includes(handleId)) closeConnectionPalette();
-  }, [displayNodes, props.readOnly, pendingConnection, closeConnectionPalette]);
+    if (props.readOnly || !ports?.includes(handleId))
+      setPendingConnection(null);
+  }
   const [pendingMoves, setPendingMoves] = useState(
     new Map<string, { position: FlowNode["position"] }>(),
   );
@@ -373,18 +402,20 @@ function CanvasInner(props: CanvasProps) {
     // Polls and node measurements must never undo a user's pan or zoom.
     if (!viewportTouched.current) fitGraph();
   }, [initialized, frame, props.nodes.length, fitGraph]);
+  const { onSelection } = props;
   const selectionChanged = useCallback(
-    ({ nodes }: { nodes: Node<Json>[] }) =>
-      props.onSelection(nodes.map((n) => n.id)),
-    [props.onSelection],
+    ({ nodes }: { nodes: PipelineNode[] }) =>
+      onSelection(nodes.map((n) => n.id)),
+    [onSelection],
   );
+  const running = !!props.statuses.active;
   const edges = useMemo(
     () =>
       props.edges.map((e) => {
         const connected = nodes.some(
           (n) => n.selected && (n.id === e.source || n.id === e.target),
         );
-        const highlighted = connected || !!props.statuses.active;
+        const highlighted = connected || running;
         return {
           ...e,
           type: "smoothstep",
@@ -404,9 +435,9 @@ function CanvasInner(props: CanvasProps) {
           },
         };
       }),
-    [props.edges, nodes, !!props.statuses.active],
+    [props.edges, nodes, running],
   );
-  const changes = (changes: NodeChange<Node<Json>>[]) =>
+  const changes = (changes: NodeChange<PipelineNode>[]) =>
     setNodes((current) => applyNodeChanges(changes, current));
   const persistPositions = async (moved: FlowNode[]) => {
     const pending = new Map(

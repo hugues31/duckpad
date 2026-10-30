@@ -5,9 +5,29 @@ import { useT } from "./i18n";
 import { Modal } from "./modals";
 import RoleSelect, { PROJECT_ROLES } from "./RoleSelect";
 import Select from "./Select";
-import type { Json, Workspace } from "./types";
+import type { ProjectRole, Workspace } from "./types";
 import { useAsyncAction } from "./useAsyncAction";
 import { useRevisionDraft } from "./useRevisionDraft";
+
+interface Member {
+  id: string;
+  username: string;
+  active: boolean;
+  role: ProjectRole;
+}
+
+interface Settings {
+  project: { name: string };
+  /** The role of the signed-in user. */
+  role: ProjectRole;
+  members: Member[];
+  /** Active accounts that can join the project; listed for its admins only. */
+  users: { id: string; username: string }[];
+  /** The granted connections. */
+  connections: string[];
+}
+
+type Confirmation = { kind: "delete" } | { kind: "remove"; member: Member };
 
 const NO_CONNECTIONS: string[] = [];
 /** Connection grants form a set: their order does not matter. */
@@ -27,18 +47,18 @@ export default function ProjectSettings({
   onDeleted: () => void;
 }) {
   const t = useT();
-  const [settings, setSettings] = useState<Json | null>(null);
-  const [confirmation, setConfirmation] = useState<Json | null>(null);
+  const [settings, setSettings] = useState<Settings | null>(null);
+  const [confirmation, setConfirmation] = useState<Confirmation | null>(null);
   const { pending, error, setError, run } = useAsyncAction();
-  const load = useCallback(
-    async () => setSettings(await api(`/projects/${project}/settings`)),
+  const read = useCallback(
+    () => api<Settings>(`/projects/${project}/settings`),
     [project],
   );
   useEffect(() => {
-    load().catch((e) => setError(e.message));
-  }, [load, setError]);
+    read().then(setSettings, (e) => setError(e.message));
+  }, [read, setError]);
   // Reloads after other changes keep unsaved grants, which guard navigation.
-  const grants = useRevisionDraft<string[], Json | null>(
+  const grants = useRevisionDraft<string[], Settings | null>(
     settings?.connections ?? NO_CONNECTIONS,
     settings,
     async (connections, revision) => {
@@ -54,7 +74,7 @@ export default function ProjectSettings({
     run(async () => {
       await action();
       setConfirmation(null);
-      await load();
+      setSettings(await read());
       await refresh();
     });
   const deleteProject = () =>
@@ -68,7 +88,7 @@ export default function ProjectSettings({
   const admin = settings?.role === "admin";
   const available =
     settings?.users.filter(
-      (u: Json) => !settings.members.some((m: Json) => m.id === u.id),
+      (u) => !settings.members.some((m) => m.id === u.id),
     ) || [];
   return (
     <section className="full-panel administration-page project-settings">
@@ -131,7 +151,7 @@ export default function ProjectSettings({
                     <option value="">
                       {t(available.length ? "chooseUser" : "noAvailableUsers")}
                     </option>
-                    {available.map((u: Json) => (
+                    {available.map((u) => (
                       <option key={u.id} value={u.id}>
                         {u.username}
                       </option>
@@ -171,7 +191,7 @@ export default function ProjectSettings({
                   </tr>
                 </thead>
                 <tbody>
-                  {settings?.members.map((member: Json) => (
+                  {settings?.members.map((member) => (
                     <tr key={member.id}>
                       <td>
                         <strong>{member.username}</strong>
@@ -224,7 +244,7 @@ export default function ProjectSettings({
                 <h2>{t("authorizedConnections")}</h2>
                 <p className="muted">{t("authorizedConnectionsHint")}</p>
                 <div className="connection-grants">
-                  {workspace.catalog.connections.map((c: Json) => (
+                  {workspace.catalog.connections.map((c) => (
                     <label key={c.id}>
                       <input
                         type="checkbox"
@@ -286,7 +306,9 @@ export default function ProjectSettings({
                   : "confirmRemoveAccess",
               )}{" "}
               <strong>
-                {confirmation.member?.username || settings?.project.name}
+                {confirmation.kind === "remove"
+                  ? confirmation.member.username
+                  : settings?.project.name}
               </strong>
             </p>
             {error && (

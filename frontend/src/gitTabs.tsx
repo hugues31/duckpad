@@ -1,12 +1,12 @@
 import { useCallback, useRef } from "react";
+import type { Branch, RemoteStatus } from "./gitTypes";
 import { useT } from "./i18n";
-import type { Json } from "./types";
 import { useAsyncAction } from "./useAsyncAction";
 
 /** Branches and origin state shared by the tabs of the Git workspace. */
 export interface Repository {
-  branches: Json[];
-  remote: Json | null;
+  branches: Branch[];
+  remote: RemoteStatus | null;
   loading: boolean;
   failure: { message: string; retry: () => void } | null;
   reload: () => Promise<void>;

@@ -1,12 +1,18 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { Plus, Users } from "lucide-react";
 import { api, send } from "./api";
 import { useT } from "./i18n";
 import { Modal } from "./modals";
 import RoleSelect from "./RoleSelect";
 import Select from "./Select";
-import type { Json } from "./types";
+import type { User } from "./types";
 import { useAsyncAction } from "./useAsyncAction";
+
+const readUsers = () => api<User[]>("/users");
+
+/** The open dialog and the account it acts on. */
+type Dialog =
+  { kind: "create" } | { kind: "password" | "deactivate"; user: User };
 
 /** Instance accounts: creation, instance roles, passwords and deactivation. */
 export default function UsersPage({
@@ -15,33 +21,32 @@ export default function UsersPage({
   refresh: () => Promise<unknown>;
 }) {
   const t = useT();
-  const [users, setUsers] = useState<Json[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
   const [query, setQuery] = useState("");
-  const [modal, setModal] = useState<Json | null>(null);
+  const [modal, setModal] = useState<Dialog | null>(null);
   const { pending, error, setError, run } = useAsyncAction();
   // The dialog reports its own errors, next to the form that caused them.
   const dialog = useAsyncAction();
   const busy = pending || dialog.pending;
-  const load = useCallback(async () => setUsers(await api("/users")), []);
   useEffect(() => {
-    load().catch((e) => setError(e.message));
-  }, [load, setError]);
+    readUsers().then(setUsers, (e) => setError(e.message));
+  }, [setError]);
   async function reload() {
-    await load();
+    setUsers(await readUsers());
     await refresh();
   }
-  const update = (id: string, data: Json) =>
+  const update = (id: string, data: { role?: string; active?: boolean }) =>
     run(async () => {
       await api(`/users/${id}`, send(data, "PATCH"));
       await reload();
     });
-  function open(value: Json) {
+  function open(value: Dialog) {
     dialog.setError("");
     setModal(value);
   }
-  async function submit({ kind, user }: Json, data: FormData) {
+  async function submit(modal: Dialog, data: FormData) {
     const saved = await dialog.run(() =>
-      kind === "create"
+      modal.kind === "create"
         ? api(
             "/users",
             send({
@@ -51,9 +56,9 @@ export default function UsersPage({
             }),
           )
         : api(
-            `/users/${user.id}`,
+            `/users/${modal.user.id}`,
             send(
-              kind === "deactivate"
+              modal.kind === "deactivate"
                 ? { active: false }
                 : { password: data.get("password") },
               "PATCH",

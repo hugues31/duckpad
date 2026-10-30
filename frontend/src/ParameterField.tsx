@@ -5,7 +5,7 @@ import { useId, useState } from "react";
 import { FileUp } from "lucide-react";
 import { uploadFile } from "./api";
 import { useT } from "./i18n";
-import type { Json } from "./types";
+import type { Column, Json, Parameter, Snapshot } from "./types";
 
 export default function ParameterField({
   parameter,
@@ -17,13 +17,15 @@ export default function ParameterField({
   columns,
   worktree,
 }: {
-  parameter: Json;
-  value: any;
-  onChange: (value: any) => void;
+  parameter: Parameter;
+  /** The value set on the node, or else the declared default. */
+  value: Json | undefined;
+  /** Receives undefined to fall back on the default. */
+  onChange: (value: Json | undefined) => void;
   onBlur?: () => void;
-  connections: Json[];
+  connections: Snapshot["connections"];
   schemas?: string[];
-  columns?: Json[];
+  columns?: Column[];
   worktree?: string;
 }) {
   const t = useT();
@@ -32,6 +34,7 @@ export default function ParameterField({
   const name = parameter.name;
   const type = parameter.type || "text";
   const base = type.split(/[<(]/)[0];
+  const text = value == null ? "" : String(value);
   if (base === "secret") return null;
   if (["column_selection", "value_cleaning"].includes(base))
     return (
@@ -60,14 +63,14 @@ export default function ParameterField({
         </Select>
       ) : base === "connection" ? (
         <Select
-          value={value || ""}
+          value={text}
           onChange={(e) => onChange(e.target.value)}
           onBlur={onBlur}
         >
-          {!value && <option value="">{t("notConnected")}</option>}
-          {value && !connections.some((c) => c.id === value) && (
-            <option value={value} disabled>
-              {value} · {t("unavailableConnection")}
+          {!text && <option value="">{t("notConnected")}</option>}
+          {text && !connections.some((c) => c.id === text) && (
+            <option value={text} disabled>
+              {text} · {t("unavailableConnection")}
             </option>
           )}
           {connections.map((c) => (
@@ -78,7 +81,7 @@ export default function ParameterField({
         </Select>
       ) : base === "choice" || base === "keyword" ? (
         <Select
-          value={value}
+          value={text}
           onChange={(e) => onChange(e.target.value)}
           onBlur={onBlur}
         >
@@ -100,9 +103,7 @@ export default function ParameterField({
           rows={3}
           className="code-input"
           value={
-            typeof value === "object"
-              ? JSON.stringify(value, null, 2)
-              : (value ?? "")
+            typeof value === "object" ? JSON.stringify(value, null, 2) : text
           }
           onChange={(e) => onChange(e.target.value)}
           onBlur={onBlur}
@@ -110,7 +111,7 @@ export default function ParameterField({
       ) : (
         <input
           type="text"
-          value={value ?? ""}
+          value={text}
           onChange={(e) => onChange(e.target.value)}
           onBlur={onBlur}
           list={base === "column" && schemas ? columnList : undefined}

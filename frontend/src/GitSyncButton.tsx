@@ -1,6 +1,6 @@
 import { AlertTriangle, GitCompareArrows } from "lucide-react";
 import { useT } from "./i18n";
-import type { Json } from "./types";
+import type { RemoteStatus } from "./gitTypes";
 import { useApiResource } from "./useApiResource";
 
 export default function GitSyncButton({
@@ -19,11 +19,11 @@ export default function GitSyncButton({
     data: state,
     error,
     reload,
-  } = useApiResource<Json>(`/worktrees/${worktree}/git/remote`, {
+  } = useApiResource<RemoteStatus>(`/worktrees/${worktree}/git/remote`, {
     refresh: `${commit}:${version}`,
   });
   const status = state
-    ? t("sync_" + state.state)
+    ? t(`sync_${state.state}`)
     : error
       ? `${t("sync_unavailable")}: ${error}`
       : t("loading");

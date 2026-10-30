@@ -1,5 +1,5 @@
 import Select from "./Select";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   ChevronLeft,
   ChevronRight,
@@ -12,7 +12,7 @@ import {
 import { api, ApiError, withQuery } from "./api";
 import { formatValue } from "./graph";
 import type { Cell } from "./lineageGraph";
-import type { Json } from "./types";
+import type { PreviewPage } from "./types";
 import { useT } from "./i18n";
 import { useResource } from "./useApiResource";
 
@@ -26,6 +26,16 @@ export interface PreviewQuery {
   /** The applied filter text. */
   filter: string;
 }
+
+const initialQuery = (port: string, limit: number): PreviewQuery => ({
+  port,
+  limit,
+  offset: 0,
+  sort: "",
+  descending: false,
+  filterColumn: "",
+  filter: "",
+});
 
 /**
  * The rows of a node, loaded once for the data preview and the Inspector.
@@ -48,18 +58,15 @@ export function useNodePreview({
   version: string;
 }) {
   const owner = JSON.stringify([worktree, environment, node, ports]);
-  const initial = (limit: number): PreviewQuery => ({
-    port: ports[0] || "result",
-    limit,
-    offset: 0,
-    sort: "",
-    descending: false,
-    filterColumn: "",
-    filter: "",
-  });
-  const [state, setState] = useState(() => ({ owner, query: initial(100) }));
+  const firstPort = ports[0] || "result";
+  const [state, setState] = useState(() => ({
+    owner,
+    query: initialQuery(firstPort, 100),
+  }));
   const query =
-    state.owner === owner ? state.query : initial(state.query.limit);
+    state.owner === owner
+      ? state.query
+      : initialQuery(firstPort, state.query.limit);
   const path =
     node === null
       ? null
@@ -84,7 +91,7 @@ export function useNodePreview({
     node === null ? null : `${worktree}:${node}`,
     async (signal) => {
       try {
-        return await api<Json>(path!, { signal });
+        return await api<PreviewPage>(path!, { signal });
       } catch (e) {
         // A node without a result yet has nothing to preview.
         if (e instanceof ApiError && e.status === 404) return null;
@@ -94,23 +101,24 @@ export function useNodePreview({
     { refresh: `${path}:${version}` },
   );
   // Merge into the latest query: a delayed filter must not undo other changes.
-  const update = (change: Partial<PreviewQuery>) =>
-    setState((current) => ({
-      owner,
-      query: {
-        ...(current.owner === owner
-          ? current.query
-          : initial(current.query.limit)),
-        ...change,
-      },
-    }));
+  const update = useCallback(
+    (change: Partial<PreviewQuery>) =>
+      setState((current) => ({
+        owner,
+        query: {
+          ...(current.owner === owner
+            ? current.query
+            : initialQuery(firstPort, current.query.limit)),
+          ...change,
+        },
+      })),
+    [owner, firstPort],
+  );
   // Filter the first column until another existing one is chosen.
-  useEffect(() => {
-    const columns: Json[] = data?.columns || [];
-    if (columns.length && !columns.some((c) => c.name === query.filterColumn))
-      update({ filterColumn: columns[0].name });
-  }, [data]);
-  return { data: data as Json | null, error, pending, query, update };
+  const columns = data?.columns || [];
+  if (columns.length && !columns.some((c) => c.name === query.filterColumn))
+    update({ filterColumn: columns[0].name });
+  return { data, error, pending, query, update };
 }
 export type NodePreview = ReturnType<typeof useNodePreview>;
 
@@ -141,7 +149,7 @@ export default function Preview({
     if (filter === query.filter) return;
     const timer = setTimeout(() => update({ filter, offset: 0 }), 250);
     return () => clearTimeout(timer);
-  }, [filter]);
+  }, [filter, query.filter, update]);
   return (
     <section
       className="preview-panel"
@@ -207,7 +215,7 @@ export default function Preview({
               value={filterColumn}
               onChange={(e) => update({ filterColumn: e.target.value })}
             >
-              {data.columns.map((c: Json) => (
+              {data.columns.map((c) => (
                 <option key={c.name}>{c.name}</option>
               ))}
             </Select>
@@ -232,7 +240,7 @@ export default function Preview({
               <thead>
                 <tr>
                   <th className="row-number">#</th>
-                  {data.columns.map((column: Json) => (
+                  {data.columns.map((column) => (
                     <th key={column.name}>
                       <button
                         onClick={() =>
@@ -258,10 +266,10 @@ export default function Preview({
                 </tr>
               </thead>
               <tbody>
-                {data.rows.map((row: Json) => (
+                {data.rows.map((row) => (
                   <tr key={row.id}>
                     <td className="row-number">{row.id + 1}</td>
-                    {row.values.map((value: any, i: number) => (
+                    {row.values.map((value, i) => (
                       <td key={i}>
                         <button
                           className={`cell ${value === null ? "null" : ""}`}

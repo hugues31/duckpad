@@ -2,12 +2,13 @@ import Select from "./Select";
 import { useState } from "react";
 import { useT } from "./i18n";
 import { useRevisionDraft } from "./useRevisionDraft";
-import type { Json, Snapshot } from "./types";
+import type { Documentation, PreviewPage, Snapshot } from "./types";
 
 type SaveDocumentation = (
-  change: (documentation: Json) => void,
+  change: (documentation: Documentation) => void,
   base: Snapshot,
 ) => Promise<Snapshot>;
+type DocumentationKind = "nodes" | "datasets" | "columns";
 
 export default function NodeDocumentation({
   snapshot,
@@ -17,11 +18,11 @@ export default function NodeDocumentation({
 }: {
   snapshot: Snapshot;
   fullNode: string;
-  preview: Json | null;
+  preview: PreviewPage | null;
   onSave: SaveDocumentation;
 }) {
   const t = useT();
-  const [kind, setKind] = useState("nodes");
+  const [kind, setKind] = useState<DocumentationKind>("nodes");
   const [column, setColumn] = useState("");
   const key =
     kind === "nodes" ? fullNode : fullNode + ":" + (preview?.port || "result");
@@ -29,7 +30,7 @@ export default function NodeDocumentation({
     <>
       <Select
         value={kind}
-        onChange={(e) => setKind(e.target.value)}
+        onChange={(e) => setKind(e.target.value as DocumentationKind)}
         aria-label={t("documentation")}
       >
         <option value="nodes">{t("nodeDocs")}</option>
@@ -43,7 +44,7 @@ export default function NodeDocumentation({
           aria-label={t("chooseColumn")}
         >
           <option value="">{t("chooseColumn")}</option>
-          {preview?.columns.map((c: Json) => (
+          {preview?.columns.map((c) => (
             <option key={c.name}>{c.name}</option>
           ))}
         </Select>
@@ -69,7 +70,7 @@ function DocumentationEditor({
   onSave,
 }: {
   snapshot: Snapshot;
-  kind: string;
+  kind: DocumentationKind;
   documentKey: string;
   column: string;
   onSave: SaveDocumentation;
@@ -89,11 +90,9 @@ function DocumentationEditor({
     snapshot,
     (text, base) =>
       onSave((value) => {
-        value[kind] ??= {};
-        if (kind === "columns") {
-          value.columns[documentKey] ??= {};
-          value.columns[documentKey][column] = text;
-        } else value[kind][documentKey] = text;
+        if (kind === "columns")
+          ((value.columns ??= {})[documentKey] ??= {})[column] = text;
+        else (value[kind] ??= {})[documentKey] = text;
       }, base),
     { autosave: editable },
   );

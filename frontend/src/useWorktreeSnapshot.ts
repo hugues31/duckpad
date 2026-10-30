@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import { api, ApiError, withQuery } from "./api";
-import type { Json, Snapshot, Statuses } from "./types";
+import type { Run, Snapshot, Statuses } from "./types";
 import { usePolling } from "./usePolling";
 
 const POLL_INTERVAL = 1000;
@@ -33,12 +33,22 @@ export function useWorktreeSnapshot(
   const [state, setState] = useState<Snapshot | null>(null);
   const [statuses, setStatuses] = useState<Statuses>(EMPTY_STATUSES);
   const [loadError, setLoadError] = useState("");
+  // Another branch, or polling enabled again, starts from an empty state.
+  const [source, setSource] = useState({ worktree, enabled });
+  if (source.worktree !== worktree || source.enabled !== enabled) {
+    setSource({ worktree, enabled });
+    setLoadError("");
+    setState(null);
+    setStatuses(EMPTY_STATUSES);
+  }
   const current = useRef(worktree);
-  current.current = worktree;
   // Incremented after every change, so reads started before it are discarded.
   const epoch = useRef(0);
   const unavailable = useRef(onUnavailable);
-  unavailable.current = onUnavailable;
+  useLayoutEffect(() => {
+    current.current = worktree;
+    unavailable.current = onUnavailable;
+  });
 
   const load = useCallback(async (id: string, signal?: AbortSignal) => {
     const started = epoch.current;
@@ -54,48 +64,44 @@ export function useWorktreeSnapshot(
     }
   }, []);
 
-  useEffect(() => {
-    setLoadError("");
-    setState(null);
-    setStatuses(EMPTY_STATUSES);
-  }, [worktree, enabled]);
-
   usePolling(
-    async (signal) => {
-      try {
-        const [status] = await Promise.all([
-          // Statuses need an environment; the snapshot is read without one.
-          environment
-            ? api<Statuses>(
-                withQuery(`/worktrees/${worktree}/status`, { environment }),
-                { signal },
-              )
-            : null,
-          load(worktree, signal).catch(async (e) => {
-            // Only a denied snapshot means project access was revoked. A status
-            // request can return 404 while a deleted environment is refreshing.
-            if (
-              !signal.aborted &&
-              e instanceof ApiError &&
-              [403, 404].includes(e.status)
-            ) {
-              setState(null);
-              setStatuses(EMPTY_STATUSES);
-              await unavailable.current();
-            }
-            throw e;
-          }),
-        ]);
-        if (status && !signal.aborted)
-          setStatuses((old) =>
-            JSON.stringify(old) === JSON.stringify(status) ? old : status,
-          );
-      } catch {
-        // Keep polling: temporary failures pass, and revoked access can be restored.
-      }
-    },
+    useCallback(
+      async (signal: AbortSignal) => {
+        try {
+          const [status] = await Promise.all([
+            // Statuses need an environment; the snapshot is read without one.
+            environment
+              ? api<Statuses>(
+                  withQuery(`/worktrees/${worktree}/status`, { environment }),
+                  { signal },
+                )
+              : null,
+            load(worktree, signal).catch(async (e) => {
+              // Only a denied snapshot means project access was revoked. A status
+              // request can return 404 while a deleted environment is refreshing.
+              if (
+                !signal.aborted &&
+                e instanceof ApiError &&
+                [403, 404].includes(e.status)
+              ) {
+                setState(null);
+                setStatuses(EMPTY_STATUSES);
+                await unavailable.current();
+              }
+              throw e;
+            }),
+          ]);
+          if (status && !signal.aborted)
+            setStatuses((old) =>
+              JSON.stringify(old) === JSON.stringify(status) ? old : status,
+            );
+        } catch {
+          // Keep polling: temporary failures pass, and revoked access can be restored.
+        }
+      },
+      [worktree, environment, load],
+    ),
     { interval: POLL_INTERVAL, enabled: enabled && !!worktree },
-    [worktree, environment, load],
   );
 
   return {
@@ -112,7 +118,7 @@ export function useWorktreeSnapshot(
       [load],
     ),
     /** Show a run started or cancelled on the given branch as its active run. */
-    setActive: useCallback((id: string, run: Json) => {
+    setActive: useCallback((id: string, run: Run) => {
       if (id === current.current)
         setStatuses((old) => ({ ...old, active: run }));
     }, []),

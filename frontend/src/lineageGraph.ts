@@ -1,4 +1,5 @@
 import type { Node, Edge } from "@xyflow/react";
+import type { Translate } from "./i18n";
 
 export type Cell = {
   dataset: string;
@@ -67,7 +68,7 @@ export async function buildLineageGraph(
   pages: Record<string, Partial<Query>>,
   read: (query: Query) => Promise<Explanation>,
   budget: number,
-  t: (key: string) => string,
+  t: Translate,
 ) {
   const entries = new Map<string, Entry>();
   const edges = new Map<string, Edge>();

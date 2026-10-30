@@ -18,7 +18,16 @@ import ExportDownload from "./ExportDownload";
 import ParameterField from "./ParameterField";
 import QueryBuilder from "./QueryBuilder";
 import { useRevisionDraft } from "./useRevisionDraft";
-import type { FlowEdge, FlowNode, Json, Snapshot, Statuses } from "./types";
+import type {
+  Column,
+  Documentation,
+  FlowEdge,
+  FlowNode,
+  PreviewPage,
+  Snapshot,
+  Statement,
+  Statuses,
+} from "./types";
 import { useApiResource, useResource } from "./useApiResource";
 
 const CodeEditor = lazy(() => import("./Editor"));
@@ -59,12 +68,12 @@ export default function Inspector({
   graphEdges: FlowEdge[];
   fullNode: string;
   environment: string;
-  connections: Json[];
+  connections: Snapshot["connections"];
   statuses: Statuses;
-  preview: Json | null;
+  preview: PreviewPage | null;
   onSave: (node: FlowNode, base: Snapshot) => Promise<Snapshot>;
   onSaveDocumentation: (
-    change: (documentation: Json) => void,
+    change: (documentation: Documentation) => void,
     base: Snapshot,
   ) => Promise<Snapshot>;
   onInput: (port: string, source: string) => void;
@@ -99,20 +108,20 @@ export default function Inspector({
           await Promise.all(
             inputEdges.map(async (edge) => {
               try {
-                const result = await api(
+                const result = await api<PreviewPage>(
                   withQuery(
                     `/worktrees/${worktree}/preview/${encodeURIComponent(prefix + edge.source)}`,
                     { environment, port: edge.sourceHandle, limit: 1 },
                   ),
                   { signal },
                 );
-                return [edge.targetHandle, result.columns as Json[]] as const;
+                return [edge.targetHandle, result.columns] as const;
               } catch {
-                return [edge.targetHandle, []] as const;
+                return [edge.targetHandle, [] as Column[]] as const;
               }
             }),
           ),
-        ) as Record<string, Json[]>,
+        ),
       {
         refresh: JSON.stringify([
           environment,
@@ -121,7 +130,7 @@ export default function Inspector({
         ]),
       },
     ).data || {};
-  const compilation = useApiResource<Json[]>(
+  const compilation = useApiResource<Statement[]>(
     tab === "sql" && sqlMode === "current"
       ? withQuery(
           `/worktrees/${worktree}/compile/${encodeURIComponent(fullNode)}`,
@@ -134,7 +143,7 @@ export default function Inspector({
   const schemas = Object.fromEntries(
     Object.entries(inputColumns).map(([port, columns]) => [
       port,
-      columns.map((column) => column.name as string),
+      columns.map((column) => column.name),
     ]),
   );
   const persist = async () => {
@@ -146,15 +155,20 @@ export default function Inspector({
       setError((e as Error).message);
     }
   };
-  const { definition, kind, parameters, inputs } = signature;
-  const statements: Json[] =
+  const { kind, parameters, inputs } = signature;
+  const statements: Statement[] =
     sqlMode === "executed"
       ? preview?.executed_sql || []
       : compilation.data || [];
   return (
     <aside className="inspector">
       <div className="inspector-title">
-        <span>{node.label || definition?.name || definition?.label}</span>
+        <span>
+          {node.label ||
+            (signature.kind === "component"
+              ? signature.definition?.name
+              : signature.definition?.label)}
+        </span>
         <button className="icon" onClick={onClose} title={t("close")}>
           <X size={18} />
         </button>
@@ -179,7 +193,7 @@ export default function Inspector({
       <button className="button secondary small" onClick={onHistory}>
         {t("elementHistory")}
       </button>
-      {!node.component && definition?.download && (
+      {signature.kind !== "component" && signature.definition?.download && (
         <ExportDownload
           key={`${snapshot.worktree.id}:${environment}:${fullNode}:${snapshot.revision}`}
           worktree={snapshot.worktree.id}
@@ -276,29 +290,32 @@ export default function Inspector({
                 void persist();
               }}
             />
-            {parameters.map((parameter) => (
-              <ParameterField
-                key={parameter.name}
-                worktree={snapshot.worktree.id}
-                parameter={parameter}
-                value={draft.params?.[parameter.name] ?? parameter.default}
-                onChange={(value) =>
-                  update((current) => {
-                    const params = { ...current.params };
-                    if (value === undefined) delete params[parameter.name];
-                    else params[parameter.name] = value;
-                    return { ...current, params };
-                  })
-                }
-                onBlur={persist}
-                connections={connections}
-                columns={inputColumns[parameter.type?.match(/\((\w+)\)/)?.[1]]}
-                schemas={
-                  schemas[parameter.type?.match(/\((\w+)\)/)?.[1]] ||
-                  Object.values(schemas).flat()
-                }
-              />
-            ))}
+            {parameters.map((parameter) => {
+              // Column parameters name the input port they choose from.
+              const port = parameter.type.match(/\((\w+)\)/)?.[1];
+              return (
+                <ParameterField
+                  key={parameter.name}
+                  worktree={snapshot.worktree.id}
+                  parameter={parameter}
+                  value={draft.params?.[parameter.name] ?? parameter.default}
+                  onChange={(value) =>
+                    update((current) => {
+                      const params = { ...current.params };
+                      if (value === undefined) delete params[parameter.name];
+                      else params[parameter.name] = value;
+                      return { ...current, params };
+                    })
+                  }
+                  onBlur={persist}
+                  connections={connections}
+                  columns={port ? inputColumns[port] : undefined}
+                  schemas={
+                    (port && schemas[port]) || Object.values(schemas).flat()
+                  }
+                />
+              );
+            })}
             <button className="button primary full" onClick={persist}>
               {t("save")}
             </button>

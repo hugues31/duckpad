@@ -20,6 +20,7 @@ uv run duckpad start --home .duckpad-dev --no-browser
 - `frontend/src` is the React interface. `api.ts` is the only HTTP client, `routes.tsx` renders the components of `pages/`, and `shell.ts` and `worktree.tsx` hold the session and working branch state they share.
 - `tests` holds the Python suite; shared builders and waits live in `tests/helpers.py`.
 - `frontend/e2e` holds the Playwright scenarios; `e2e/helpers.ts` signs in to the disposable test instance.
+- Vitest unit tests sit next to the frontend helpers and hooks they cover, as `frontend/src/*.test.ts` or `*.test.tsx`.
 - `website` is the static Astro presentation and documentation site. See the
   [website guide](docs/WEBSITE.md) for its Node.js requirement, local preview,
   Playwright demo recording and publishing. Update the relevant guide and captured
@@ -34,12 +35,14 @@ uv run ruff check src tests scripts
 uv run ruff format --check src tests scripts
 uv run pytest -q
 npm run check --prefix frontend
+npm run lint --prefix frontend
 npm run format:check --prefix frontend
+npm run test:unit --prefix frontend
 npm run build --prefix frontend
 npm run test:e2e --prefix frontend
 ```
 
-Use `uv run ruff format src tests scripts` and `npm run format --prefix frontend` to fix formatting. Add a regression test with every bug fix: a Python test for service behavior, a Playwright scenario for interface behavior.
+Use `uv run ruff format src tests scripts` and `npm run format --prefix frontend` to fix formatting. Add a regression test with every bug fix: a Python test for service behavior, a Vitest unit test for a frontend helper or shared hook, a Playwright scenario for interface behavior.
 
 ## Conventions
 

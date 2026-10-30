@@ -1,4 +1,13 @@
-import type { Bundle, FlowEdge, FlowNode, Graph, Json } from "./types";
+import type {
+  Bundle,
+  ComponentDefinition,
+  FlowEdge,
+  FlowNode,
+  Graph,
+  Parameter,
+  ParsedTemplate,
+  TemplateKind,
+} from "./types";
 
 /** MIME type of palette items dragged onto the canvas. */
 export const DRAG_TYPE = "application/duckpad";
@@ -22,7 +31,7 @@ export const identifier = (prefix = "node") => {
   return prefix + "_" + suffix;
 };
 
-export const formatValue = (value: any) =>
+export const formatValue = (value: unknown) =>
   value === null
     ? "NULL"
     : typeof value === "object"
@@ -39,7 +48,7 @@ export interface PathPart {
 /** The flow, or the component definition opened through the breadcrumb. */
 export const graphAt = (bundle: Bundle, path: PathPart[]): Graph =>
   path.length
-    ? (bundle.components[path[path.length - 1].definition] as Graph)
+    ? bundle.components[path[path.length - 1].definition]
     : bundle.flow;
 
 /** Prefix of expanded node IDs inside the opened component instance. */
@@ -49,24 +58,25 @@ export const pathPrefix = (path: PathPart[]) =>
 /** A template or component that a node instantiates. */
 export type NodeKind = "template" | "component";
 
-/** What a node exposes, whether it instantiates a template or a component. */
-export interface NodeInterface {
-  /** The component definition or parsed template, unless it was removed. */
-  definition: Json | undefined;
-  /** "component", or the template kind: "source", "transform" or "export". */
-  kind: string;
+/** What a node exposes, whether it instantiates a template or a component.
+ * The definition is undefined once removed from the project.
+ */
+export type NodeInterface = {
   inputs: string[];
   outputs: string[];
-  parameters: Json[];
-}
+  parameters: Parameter[];
+} & (
+  | { kind: "component"; definition: ComponentDefinition | undefined }
+  | { kind: TemplateKind; definition: ParsedTemplate | undefined }
+);
 
 /** Component definitions key their ports and parameters by name; parsed
  * templates list them.
  */
 export function nodeInterface(
   node: Pick<FlowNode, "template" | "component">,
-  parsed: Record<string, Json>,
-  components: Record<string, Json> = {},
+  parsed: Record<string, ParsedTemplate>,
+  components: Record<string, ComponentDefinition> = {},
 ): NodeInterface {
   if (node.component) {
     const definition = components[node.component];
@@ -76,7 +86,7 @@ export function nodeInterface(
       inputs: Object.keys(definition?.inputs || {}),
       outputs: Object.keys(definition?.outputs || {}),
       parameters: Object.entries(definition?.parameters || {}).map(
-        ([name, parameter]) => ({ ...(parameter as Json), name }),
+        ([name, parameter]) => ({ ...parameter, name }),
       ),
     };
   }
@@ -90,35 +100,42 @@ export function nodeInterface(
   };
 }
 
+/** A template or component offered by the palettes, with its definition. */
+export type NodeChoice = { id: string; signature: NodeInterface } & (
+  | { kind: "template"; definition: ParsedTemplate }
+  | { kind: "component"; definition: ComponentDefinition }
+);
+
 /** Templates and components that can be added inside the given opened
  * component definitions. A component cannot contain itself, even through
  * another definition.
  */
 export function nodeChoices(
-  parsed: Record<string, Json>,
-  components: Record<string, Json>,
+  parsed: Record<string, ParsedTemplate>,
+  components: Record<string, ComponentDefinition>,
   opened: string[],
-) {
+): NodeChoice[] {
   const containsOpened = (id: string, visited = new Set<string>()): boolean => {
     if (opened.includes(id)) return true;
     if (visited.has(id)) return false;
     visited.add(id);
     return (components[id]?.nodes || []).some(
-      (node: FlowNode) =>
-        node.component && containsOpened(node.component, visited),
+      (node) => node.component && containsOpened(node.component, visited),
     );
   };
   return [
-    ...Object.keys(parsed).map((id) => ({
-      kind: "template" as NodeKind,
+    ...Object.entries(parsed).map(([id, definition]) => ({
+      kind: "template" as const,
       id,
+      definition,
       signature: nodeInterface({ template: id }, parsed),
     })),
-    ...Object.keys(components)
-      .filter((id) => !containsOpened(id))
-      .map((id) => ({
-        kind: "component" as NodeKind,
+    ...Object.entries(components)
+      .filter(([id]) => !containsOpened(id))
+      .map(([id, definition]) => ({
+        kind: "component" as const,
         id,
+        definition,
         signature: nodeInterface({ component: id }, parsed, components),
       })),
   ];

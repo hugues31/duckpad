@@ -1,6 +1,8 @@
 import {
   useCallback,
   useEffect,
+  useEffectEvent,
+  useLayoutEffect,
   useRef,
   useState,
   type CSSProperties,
@@ -88,7 +90,7 @@ function locate(bundle: Bundle, target: string) {
       definition: parent.component,
       label: parent.label || definition.name || instance,
     });
-    graph = definition as Graph;
+    graph = definition;
   }
   const id = ids[ids.length - 1];
   return graph.nodes.some((node) => node.id === id) ? { path, id } : null;
@@ -140,14 +142,14 @@ export default function FlowPage() {
   // the error of that save; report it instead.
   const inspected = worktree + fullNode;
   const shownInspector = useRef("");
-  shownInspector.current =
+  const inspectorShown =
     node && definition && panels.open.inspector ? inspected : "";
-  useEffect(
-    () => () => {
+  useLayoutEffect(() => {
+    shownInspector.current = inspectorShown;
+    return () => {
       shownInspector.current = "";
-    },
-    [],
-  );
+    };
+  }, [inspectorShown]);
   const fromInspector = <T,>(key: string, saving: Promise<T>) =>
     saving.catch((error) => {
       if (shownInspector.current !== key) notify(error.message, true);
@@ -190,27 +192,26 @@ export default function FlowPage() {
         ...(isWideLayout() ? {} : { palette: false }),
       });
   };
+  const reveal = useEffectEvent(
+    (found: { path: PathPart[]; id: string | null } | null) => {
+      if (!found) {
+        notify(t("searchTargetMissing"), true);
+        view.change({ revealed: location.key });
+        return;
+      }
+      select(found.id, found.path, location.key);
+      if (found.id) setFocusRequest({ id: found.id, key: location.key });
+    },
+  );
+  // Reveal the node named by a search result, once per navigation.
   useEffect(() => {
     if (!bundle || view.revealed === location.key) return;
     const target = new URLSearchParams(location.search).get("node");
     if (!target && !location.state?.searchResult) return;
-    const found = target ? locate(bundle, target) : { path: [], id: null };
-    if (!found) {
-      notify(t("searchTargetMissing"), true);
-      view.change({ revealed: location.key });
-      return;
-    }
-    select(found.id, found.path, location.key);
-    if (found.id) setFocusRequest({ id: found.id, key: location.key });
-  }, [
-    bundle,
-    view.revealed,
-    location.key,
-    location.search,
-    location.state,
-    notify,
-    t,
-  ]);
+    // A navigation, not a user event on this page, names the node to select.
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- once per location key
+    reveal(target ? locate(bundle, target) : { path: [], id: null });
+  }, [bundle, view.revealed, location.key, location.search, location.state]);
 
   async function updateGraph(change: (graph: Graph) => void) {
     if (!canEdit) return;
@@ -275,7 +276,8 @@ export default function FlowPage() {
       {
         instance: id,
         definition: instance.component,
-        label: instance.label || bundle!.components[instance.component].name,
+        label:
+          instance.label || bundle!.components[instance.component].name || id,
       },
     ]);
   }
@@ -283,9 +285,9 @@ export default function FlowPage() {
   if (!bundle || !graph) return <InvalidProject />;
   const connections = snapshot.connections.filter(
     (connection) =>
-      !["source", "export"].includes(definition?.kind) ||
+      (signature?.kind !== "source" && signature?.kind !== "export") ||
       connection.capabilities.includes(
-        definition?.kind === "export" ? "write" : "read",
+        signature.kind === "export" ? "write" : "read",
       ),
   );
   const shown = {

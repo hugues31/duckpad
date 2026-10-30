@@ -3,6 +3,8 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useEffectEvent,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -88,11 +90,14 @@ export function useRevisionDraft<T, Revision>(
     setState({ draft, saved: savedValue });
   };
 
-  useEffect(() => {
+  const receive = useEffectEvent((value: T, revision: Revision) => {
     incoming.current = { value, revision };
     if (unsaved() || saving.current) return;
     base.current = revision;
     show(value, value);
+  });
+  useEffect(() => {
+    receive(value, revision);
   }, [value, revision]);
 
   const update = (change: (current: T) => T) => {
@@ -142,22 +147,23 @@ export function useRevisionDraft<T, Revision>(
     await promise;
   };
 
+  const close = () => {
+    if (!autosave || !unsaved() || rejected.current?.draft === latest.current)
+      return;
+    // The owner reports save failures; nothing is left to display them here.
+    persist().catch(() => undefined);
+  };
   const register = useContext(DraftContext);
-  const actions = useRef({ persist, discard });
-  actions.current = { persist, discard };
+  // The registry and the unmount use the actions of the latest render.
+  const actions = useRef({ discard, close });
+  useLayoutEffect(() => {
+    actions.current = { discard, close };
+  });
   useEffect(() => {
     if (!dirty || !register) return;
     return register({ scope, discard: () => actions.current.discard() });
   }, [dirty, register, scope]);
-  useEffect(
-    () => () => {
-      if (!autosave || !unsaved() || rejected.current?.draft === latest.current)
-        return;
-      // The owner reports save failures; nothing is left to display them here.
-      actions.current.persist().catch(() => undefined);
-    },
-    [],
-  );
+  useEffect(() => () => actions.current.close(), []);
 
   return {
     draft: state.draft,
