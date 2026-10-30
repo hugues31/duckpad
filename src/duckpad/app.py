@@ -334,7 +334,7 @@ def create_app(home: Path, watch=True, *, trusted_local=False):
 
     @app.post("/api/projects")
     def create_project(data: schemas.NewProject, request: Request):
-        return access.create(request.state.user, lambda: projects.create(data.name))
+        return access.create(request.state.user, lambda grant: projects.create(data.name, record=grant))
 
     @app.post("/api/projects/import")
     def import_project(
@@ -343,7 +343,9 @@ def create_app(home: Path, watch=True, *, trusted_local=False):
         bundle = archive_bundle(read_archive(file.file))
         flow_name = bundle["flow"].get("name")
         name = name.strip() or (flow_name.strip() if isinstance(flow_name, str) else "") or "Imported project"
-        worktree = access.create(request.state.user, lambda: projects.create(name, bundle, "import"))
+        worktree = access.create(
+            request.state.user, lambda grant: projects.create(name, bundle, "import", record=grant)
+        )
         return {
             **worktree,
             "warnings": import_warnings(bundle, access.record(worktree["project"])["connections"]),
@@ -353,7 +355,7 @@ def create_app(home: Path, watch=True, *, trusted_local=False):
     def example(request: Request, data: schemas.NewExample | None = None):
         return access.create(
             request.state.user,
-            lambda: create_example(projects, catalog, private=True, name=data.name if data else None),
+            lambda grant: create_example(projects, catalog, data.name if data else None, grant),
             sample=True,
         )
 

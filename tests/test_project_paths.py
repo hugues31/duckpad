@@ -13,8 +13,7 @@ def normalized_files(snapshot):
 
 
 @pytest.mark.parametrize("relative_path", [PurePosixPath, PureWindowsPath], ids=["posix", "windows"])
-@pytest.mark.parametrize("private", [False, True], ids=["shared-example", "private-example"])
-def test_example_definitions_survive_disk_and_git_round_trips(services, monkeypatch, relative_path, private):
+def test_example_definitions_survive_disk_and_git_round_trips(services, monkeypatch, relative_path):
     class ProjectPath(type(Path())):
         def relative_to(self, *other, **kwargs):
             # Exercise both path separators while keeping real filesystem and Git operations.
@@ -22,7 +21,7 @@ def test_example_definitions_survive_disk_and_git_round_trips(services, monkeypa
 
     monkeypatch.setattr(projects_module, "Path", ProjectPath)
     _, projects, catalog, _ = services
-    worktree = create_example(projects, catalog, private=private)
+    worktree = create_example(projects, catalog)
     snapshot = projects.snapshot(worktree["id"])
     assert snapshot["diagnostics"] == []
     assert snapshot["bundle"]["templates"].keys() >= BUILTINS.keys()

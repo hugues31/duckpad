@@ -9,11 +9,28 @@ from pathlib import Path
 from . import git_command
 from .bundle import files_to_bundle, is_declarative, validate
 from .comparison import compare_files
+from .git_command import GitError
 from .merge import merge_files
 from .util import Problem, digest, now, uid
 
 MAX_REPORTS = 128
 MAX_HISTORY = 10000
+
+
+def diagnose(files):
+    """The bundle of project files and its validation errors; malformed definitions are errors."""
+    try:
+        bundle = files_to_bundle(files)
+        return bundle, validate(bundle)
+    except (Problem, KeyError, TypeError, AttributeError) as error:
+        return None, [{"file": "flow.json", "message": str(error)}]
+
+
+def require_valid(files, message):
+    """Reject project files that cannot be adopted, with their validation errors."""
+    _, errors = diagnose(files)
+    if errors:
+        raise Problem(message, 422, errors)
 
 
 class GitWorkspace:
@@ -194,21 +211,7 @@ class GitWorkspace:
             if tree:
                 return tree
             self.resolve(worktree["path"], "refs/heads/" + name)
-            key = uid("worktree_")
-            path = self.store.home / "worktrees" / key
-            path.parent.mkdir(parents=True, exist_ok=True)
-            self.git(
-                worktree["path"],
-                "worktree",
-                "add",
-                str(path),
-                name,
-                failure="Git could not open this branch. It may be checked out outside Duckpad.",
-            )
-            result = {"id": key, "project": worktree["project"], "branch": name, "path": str(path)}
-            self.store.put("worktree", key, result)
-            self.projects.observed[key] = self.projects.read_files(result)
-            return result
+            return self.projects.open_worktree(worktree, name)
 
     def cleanup(self, current_id, remove_id, integrated_id, expected_head):
         with self.projects.locked(current_id):
@@ -224,21 +227,24 @@ class GitWorkspace:
             target_head, _ = self.clean(target)
             if head != expected_head or not self.ancestor(remove["path"], head, target_head):
                 raise Problem("The branch changed or has unmerged commits. Review it again.", 409)
-            # Without --force Git also protects untracked files and locked worktrees.
-            self.git(
-                current["path"],
-                "worktree",
-                "remove",
-                remove["path"],
-                failure="Git kept this worktree because it contains untracked files or is locked.",
-            )
-            self.git(current["path"], "update-ref", "-d", "refs/heads/" + remove["branch"], head)
-            artifacts = self.store.artifact_ids(worktree=remove_id)
-            self.store.delete("worktree", remove_id)
-            for identity in artifacts:
-                (self.store.home / "artifacts" / identity).unlink(missing_ok=True)
-            self.projects.observed.pop(remove_id, None)
-            self.projects.pending.pop(remove_id, None)
+            # Like `git worktree remove` without --force, keep untracked files and locked worktrees.
+            gitdir = Path(self.git(remove["path"], "rev-parse", "--absolute-git-dir"))
+            if (gitdir / "locked").exists() or self.git(
+                remove["path"], "status", "--porcelain", "--untracked-files=normal"
+            ):
+                raise Problem(
+                    "Duckpad kept this worktree because it contains untracked files or is locked.", 409
+                )
+            # The record goes first: an interrupted cleanup leaves files to remove again, never a
+            # record whose directory is gone.
+            with self.store.transaction():
+                artifacts = self.store.artifact_ids(worktree=remove_id)
+                self.store.delete("worktree", remove_id)
+            self.projects.discard([remove], artifacts)
+            # Git logs each failure; a branch left behind is only listed as closed.
+            for args in (("worktree", "prune"), ("update-ref", "-d", "refs/heads/" + remove["branch"], head)):
+                with suppress(GitError):
+                    self.git(current["path"], *args)
             return {"ok": True}
 
     def ancestor(self, path, older, newer):
@@ -293,12 +299,7 @@ class GitWorkspace:
         with self.projects.locked(destination) as target:
             path = target["path"]
             target_head, current = self.clean(target)
-            try:
-                current_errors = validate(files_to_bundle(current))
-            except (Problem, TypeError, KeyError, AttributeError) as error:
-                raise Problem("Fix destination project definitions before review", 422) from error
-            if current_errors:
-                raise Problem("Fix destination project definitions before review", 422, current_errors)
+            require_valid(current, "Fix destination project definitions before review")
             if not source_ref.startswith(("refs/heads/", "refs/remotes/origin/")):
                 raise Problem("Choose an explicit local or fetched remote branch")
             source_head = self.resolve(path, source_ref)
@@ -323,12 +324,7 @@ class GitWorkspace:
                     "Unrelated histories cannot be integrated. Choose a branch from this project.", 409
                 )
             incoming = self.projects.revision_files(path, source_head)
-            try:
-                errors = validate(files_to_bundle(incoming))
-            except (Problem, TypeError, KeyError, AttributeError) as error:
-                raise Problem("Incoming project definitions are invalid", 422) from error
-            if errors:
-                raise Problem("Fix incoming project definitions before integration", 422, errors)
+            require_valid(incoming, "Fix incoming project definitions before integration")
             key = uid("review_")
             review = {
                 "id": key,
@@ -371,10 +367,7 @@ class GitWorkspace:
             c not in ("base", "current", "incoming") for c in choices.values()
         ):
             raise Problem("Choose base, current or incoming for a reported conflict")
-        try:
-            errors = validate(files_to_bundle(files))
-        except (Problem, TypeError, KeyError, AttributeError) as error:
-            errors = [{"message": str(error)}]
+        _, errors = diagnose(files)
         return {
             **{k: v for k, v in review.items() if k not in ("base", "current", "incoming", "remote_guard")},
             "choices": choices,
