@@ -36,7 +36,6 @@ import {
   Workflow,
   type LucideProps,
 } from "lucide-react";
-import "@xyflow/react/dist/style.css";
 import { useT, templateLabel } from "./i18n";
 import { DRAG_TYPE, nodeInterface, type NodeConnection } from "./graph";
 import ConnectionPalette from "./ConnectionPalette";

@@ -1,0 +1,177 @@
+/* Node inspector panel and its controls. */
+.inspector-layer {
+  display: contents;
+}
+.inspector {
+  position: absolute;
+  z-index: 20;
+  top: var(--stage-top);
+  bottom: 0;
+  right: 0;
+  width: var(--inspector-width);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  border-left: 1px solid var(--border);
+}
+.inspector-title {
+  height: 52px;
+  padding: 0 17px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-family: inherit;
+  font-weight: 700;
+  font-size: 13px;
+  flex-shrink: 0;
+  gap: 8px;
+}
+.inspector-title > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.inspector-kind {
+  padding: 19px;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+}
+.kind-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+.kind-icon.component {
+  background: var(--surface-alt);
+  color: light-dark(#6b589c, #d0bcff);
+}
+.inspector-kind > div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.inspector-kind strong {
+  font-size: 12px;
+  font-weight: 600;
+}
+.inspector-kind small {
+  font-size: 11px;
+  color: var(--muted);
+}
+.run-node {
+  margin-left: auto;
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+.inspector-tabs {
+  padding: 0 12px;
+  gap: 10px;
+  border-bottom: 1px solid var(--border);
+}
+.inspector-tabs button {
+  font-size: 11px;
+  gap: 5px;
+  padding: 12px 0;
+}
+.inspector-body {
+  padding: 21px 18px;
+  overflow: auto;
+  flex: 1;
+}
+.inspector-body .button.full {
+  margin-top: 8px;
+  font-size: 11px;
+}
+.inspector-body h4 {
+  margin-top: 23px;
+  margin-bottom: 15px;
+}
+.inspector-body input,
+.inspector-body select,
+.inspector-body textarea {
+  font-size: 12px;
+}
+.code-input {
+  font-size: 10px !important;
+  background: var(--surface-alt);
+}
+.readonly-fields {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+.inspector-danger {
+  margin-top: 35px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
+}
+.file-upload {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--accent);
+  font-size: 10px;
+  position: relative;
+  cursor: pointer;
+  width: max-content;
+  padding: 3px 0;
+}
+.file-upload input {
+  opacity: 0;
+  position: absolute;
+  inset: 0;
+  cursor: pointer;
+}
+.segmented {
+  display: flex;
+  padding: 3px;
+  border: 1px solid var(--border);
+  background: var(--surface-alt);
+  border-radius: 7px;
+  gap: 3px;
+}
+.segmented button {
+  flex: 1;
+  font-size: 10px;
+  padding: 7px 9px;
+  border-radius: 4px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.segmented button.active {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 1px 4px #0000000a;
+}
+.expression {
+  background: var(--surface-alt);
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 10px;
+  line-height: 1.7;
+  max-height: 350px;
+  overflow: auto;
+}
+.documentation-editor {
+  width: 100%;
+  min-height: 250px;
+  margin-top: 15px;
+  font-size: 12px;
+  line-height: 1.8;
+}
+.inspector-body > select {
+  width: 100%;
+  margin-bottom: 10px;
+}

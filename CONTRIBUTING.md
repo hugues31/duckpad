@@ -18,6 +18,7 @@ uv run duckpad start --home .duckpad-dev --no-browser
 - `src/duckpad` is the Python service. [The architecture guide](docs/ARCHITECTURE.md) describes each module, when modules form a sub-package, and the execution invariants.
 - [Instance persistence](docs/PERSISTENCE.md) describes the SQLModel schema, transaction boundaries and Alembic migration workflow.
 - `frontend/src` is the React interface. `api.ts` is the only HTTP client, `routes.tsx` renders the components of `pages/`, and `shell.ts` and `worktree.tsx` hold the session and working branch state they share.
+- `frontend/src/styles` holds the global stylesheets, one file per zone of the interface. `styles/index.css` imports them in cascade order, and only `main.tsx` imports it. Add a new style to the file of its zone; add a new file to `styles/index.css`, never as an import from a component.
 - `tests` holds the Python suite; shared builders and waits live in `tests/helpers.py`.
 - `frontend/e2e` holds the Playwright scenarios; `e2e/helpers.ts` signs in to the disposable test instance.
 - Vitest unit tests sit next to the frontend helpers and hooks they cover, as `frontend/src/*.test.ts` or `*.test.tsx`.

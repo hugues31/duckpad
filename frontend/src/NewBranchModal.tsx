@@ -6,7 +6,6 @@ import { Modal } from "./modals";
 import Select from "./Select";
 import { useResource } from "./useApiResource";
 import { useAsyncAction } from "./useAsyncAction";
-import "./branch.css";
 
 interface Revision {
   commit: string;
