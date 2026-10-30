@@ -1,4 +1,5 @@
 export type Json = Record<string, any>;
+export type Theme = "light" | "dark";
 export interface FlowNode {
   id: string;
   template?: string;
@@ -14,19 +15,25 @@ export interface FlowEdge {
   sourceHandle: string;
   targetHandle: string;
 }
+export interface Graph {
+  nodes: FlowNode[];
+  edges: FlowEdge[];
+  [key: string]: any;
+}
 export interface Bundle {
-  flow: {
+  flow: Graph & {
     id: string;
     name: string;
     description?: string;
-    nodes: FlowNode[];
-    edges: FlowEdge[];
   };
   templates: Record<string, string>;
   components: Record<string, Json>;
   documentation: Json;
+  pyproject?: string | null;
 }
 export interface Snapshot {
+  role: "reader" | "editor" | "admin";
+  connections: Json[];
   worktree: Json;
   revision: string;
   commit: string;
@@ -36,48 +43,38 @@ export interface Snapshot {
   conflicts: Json[];
   parsed_templates: Record<string, Json>;
 }
+export interface Project {
+  role: "admin" | "editor" | "reader";
+  id: string;
+  name: string;
+  main: string;
+  created: string;
+}
 export interface Workspace {
-  projects: Json[];
+  user: {
+    auth_method?: "oidc";
+    id: string;
+    username: string;
+    role: "admin" | "member";
+    active: boolean;
+  };
+  projects: Project[];
   worktrees: Json[];
-  catalog: Json;
-  identity: Json;
+  catalog: {
+    environments: string[];
+    environment_details: Environment[];
+    connectors: Json[];
+    connections: Json[];
+    duckdb_version?: string;
+  };
 }
-export class ApiError extends Error {
-  constructor(
-    message: string,
-    public status: number,
-    public detail?: any,
-  ) {
-    super(message);
-  }
+export interface Environment {
+  id: string;
+  label: string;
+  color: string;
+  confirm_before_run: boolean;
 }
-export async function api<T = any>(
-  path: string,
-  options?: RequestInit,
-): Promise<T> {
-  const response = await fetch("/api" + path, {
-    credentials: "same-origin",
-    ...options,
-    headers: { "Content-Type": "application/json", ...options?.headers },
-  });
-  const result = await response.json();
-  if (!response.ok)
-    throw new ApiError(
-      result.error || result.detail || "Request failed",
-      response.status,
-      result.detail,
-    );
-  return result;
+export interface Statuses {
+  nodes: Record<string, Json>;
+  active: Json | null;
 }
-export const send = (data: unknown, method = "POST"): RequestInit => ({
-  method,
-  body: JSON.stringify(data),
-});
-export const identifier = (prefix = "node") =>
-  prefix + "_" + crypto.randomUUID().replaceAll("-", "").slice(0, 12);
-export const formatValue = (value: any) =>
-  value === null
-    ? "NULL"
-    : typeof value === "object"
-      ? JSON.stringify(value)
-      : String(value);

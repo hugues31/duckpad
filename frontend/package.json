@@ -3,11 +3,20 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "build": "tsc -b && vite build",
-    "check": "tsc -b",
-    "test:e2e": "playwright test"
+    "check": "tsc -b && npm run check:i18n",
+    "check:i18n": "node scripts/check-i18n.mjs",
+    "format": "prettier --write src e2e docs scripts playwright*.config.ts vite.config.ts",
+    "format:check": "prettier --check src e2e docs scripts playwright*.config.ts vite.config.ts",
+    "test:e2e": "playwright test",
+    "docs:capture": "playwright test --config playwright.docs.config.ts",
+    "docs:screenshots": "playwright test --config playwright.docs.config.ts screenshots.spec.ts",
+    "docs:test": "playwright test --config playwright.site.config.ts"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",
@@ -15,9 +24,11 @@
     "lucide-react": "^0.468.0",
     "monaco-editor": "^0.52.0",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "react-router": "7.18.4"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.11.1",
     "@playwright/test": "^1.56.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
