@@ -57,6 +57,7 @@ class Context:
     worktree: str
     environment: str
     db: SQLDatabase | None
+    extensions: list[Record] = field(default_factory=list)
     outputs: dict[str, dict[str, Dataset]] = field(default_factory=dict)
     datasets: dict[str, Dataset] = field(default_factory=dict)
     errors: dict[str, str] = field(default_factory=dict)

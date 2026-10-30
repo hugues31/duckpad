@@ -11,6 +11,7 @@ from pathlib import Path
 
 import duckdb
 
+from . import project_extensions
 from .catalog import Catalog
 from .native import Cursor
 from .util import clean, literal
@@ -150,7 +151,13 @@ def serve(descriptor):
                 "temp_directory": policy["temporary"],
             },
         )
-        # Only administrator-authored connection setup runs before the lock.
+        project_extensions.load(
+            db,
+            policy.get("project_extensions", []),
+            policy.get("offline_extensions", {}),
+            policy.get("allow_unsigned_extensions", False),
+        )
+        # Administrator-authored connection setup runs before the lock.
         Catalog.prepare(None, db, policy["captured"], policy.get("offline_extensions", {}))
         allowed = [str(Path(p).resolve()) + "/" for p in policy["read_paths"] + policy["write_paths"]]
         allowed += policy["remote_paths"]

@@ -5,6 +5,7 @@ export const workspaceTabs = [
   "code",
   "documentation",
   "variables",
+  "extensions",
   "history",
 ] as const;
 export type WorkspaceTab = (typeof workspaceTabs)[number];

@@ -43,6 +43,11 @@ class ExtensionSettings(BaseModel):
     allow_unsigned_extensions: StrictBool
 
 
+class ProjectExtension(BaseModel):
+    name: str = Field(pattern=r"^[a-z][a-z0-9_]{0,63}$")
+    source: Literal["core", "community", "unsigned"]
+
+
 class NewProject(BaseModel):
     name: str = "Untitled project"
 

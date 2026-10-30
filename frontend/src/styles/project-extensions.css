@@ -1,0 +1,44 @@
+.project-extension-add {
+  display: flex;
+  align-items: end;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin: 24px 0;
+}
+.project-extension-add .field {
+  margin: 0;
+  min-width: 220px;
+}
+.project-extension-list {
+  display: grid;
+  gap: 16px;
+  margin: 24px 0;
+}
+.project-extension-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: start;
+  gap: 24px;
+  padding: 24px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.project-extension-card h2 {
+  margin-top: 0;
+}
+.project-extension-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: end;
+  gap: 8px;
+  max-width: 420px;
+}
+@media (max-width: 800px) {
+  .project-extension-card {
+    flex-direction: column;
+  }
+  .project-extension-actions {
+    justify-content: start;
+  }
+}

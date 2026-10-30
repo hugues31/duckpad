@@ -13,8 +13,12 @@ does not need DuckDB, Python, Linux, or a prepared extension cache.
 2. Transfer the downloaded file if necessary. In the same settings panel, choose
    the matching source, select the `.duckdb_extension.gz` or `.duckdb_extension`
    file, and click **Import extension**. Keep the original filename.
-3. Configure the connector and connection under **Instance settings → Connections**,
-   grant the connection to the project, and run your pipeline.
+3. Open your project's **Extensions** tab. Add the same name and origin, then
+   choose **Activate for this project** once it shows **Ready to activate**.
+   Its functions can now be used directly in SQL models. For a data-source
+   connector, continue to configure its connection under
+   **Instance settings → Connections** and grant it to the project; connector
+   extensions still load automatically.
 
 ![Extension settings show the server runtime, binary download link, file import and unsigned-build policy](images/extensions.png)
 
@@ -25,6 +29,81 @@ The browser must be able to reach Duckpad to upload the file.
 For example, a Windows browser connected to a Linux x86-64 server running DuckDB
 2.0.0 receives a link containing `v2.0.0/linux_amd64`, even though the browser runs
 on Windows. Use this same process for each extension your connectors need.
+
+## Activate a project capability
+
+The project's **Extensions** tab separates installing a server binary from
+enabling it in a project. An editor can add an extension by name, select
+**DuckDB core**, **DuckDB community** or **Custom / unsigned builds**, and enable
+an already installed binary. A reader can inspect the requirements. Only an
+instance administrator can import binaries or change the signature policy.
+
+![Project extensions distinguish an active core capability from a community binary that needs importing](images/project-extensions.png)
+
+- **Import required**: use **Download server binary** and ask an administrator
+  to import the file. Administrators can follow **Open instance import**, which
+  preselects the name and origin. Return to the project and refresh availability.
+- **Ready to activate**: choose **Activate for this project**. Duckpad checks
+  loading in a disposable process and saves the requirement after success.
+- **Loading failed**: the error identifies the missing binary, library, signature
+  or CPU compatibility problem. Have an administrator correct it, then retry.
+  **Check loading** also verifies an existing activation without changing it.
+- **Compatible binary required** or **Blocked by instance trust policy**:
+  retain the requirement, and ask an administrator to resolve it. Activation
+  never enables unsigned extensions on its own.
+
+Activation and subsequent execution load local binaries; they do not contact a
+repository or catalog. With an online server, binaries already installed through
+a connector are also available. Browser download followed by import works in
+both connected and airgapped installations; cross-origin browser fetching is not
+required.
+
+For example, add **duckfn_statrs** with origin **DuckDB community**, import its
+server binary, and activate it. Create this SQL model without a connection
+parameter:
+
+```sql
+-- @label Statistical functions
+-- @kind source
+-- @output result
+SELECT
+  sr_normal_cdf(0.0, 0.0, 1.0) AS cdf_0,
+  sr_normal_cdf(1.96, 0.0, 1.0) AS cdf_196,
+  sr_normal_pdf(0.0, 0.0, 1.0) AS pdf_0,
+  sr_normal_quantile(0.975, 0.0, 1.0) AS quantile_975;
+```
+
+The result is `0.5`, `0.9750021048529024`, `0.39894228040143265` and
+`1.9599639845400538`. The final two arguments are the mean and standard deviation.
+
+## Reopen, share and deactivate
+
+Requirements live in `extensions.json` alongside the flow and SQL models:
+
+```json
+{
+  "duckfn_statrs": { "source": "community", "enabled": true }
+}
+```
+
+This file follows the project's Git branch, revisions, ZIP export/import and
+sharing. Binary files and instance trust settings remain on the server and are
+never exported with the project. On another instance, the requirement is retained
+even when its binary is missing. The import dialog lists required extensions;
+open **Extensions** to check availability before running.
+
+Every new execution session loads the enabled requirements, including isolated
+workers and runs started by an external scheduler through the execution API.
+Duckpad does not add a scheduling service: the same execution entry point applies
+to UI, API and externally scheduled runs. Reopening the project or restarting the
+server does not require Internet access once compatible binaries are installed.
+
+**Deactivate for this project** keeps the declaration with `enabled: false`.
+Removing the entry also disables it. Existing results become stale when enabled
+requirements change, and the next execution recreates the database so disabled
+functions are no longer retained in that session. Other projects are unaffected.
+Built-in DuckDB functions and extensions required by a project's connectors remain
+available independently of this list.
 
 ## Before importing
 

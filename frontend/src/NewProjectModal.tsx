@@ -81,9 +81,10 @@ export default function NewProjectModal({
           submitting.current = false;
           if (!created) return;
           if (!result) return onClose();
-          const { connections, files } = result.warnings;
+          const { connections, files, extensions } = result.warnings;
           // Opening the project closes this dialog, so unavailable dependencies are listed first.
-          if (connections.length || files.length) setImported(result);
+          if (connections.length || files.length || extensions?.length)
+            setImported(result);
           else result.open();
         }}
       >
@@ -97,6 +98,18 @@ export default function NewProjectModal({
                   {warnings.connections.map((connection) => (
                     <li key={connection}>
                       <code>{connection}</code>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {!!warnings.extensions?.length && (
+              <div className="notice warning import-warning">
+                <p>{t("importExtensionRequirements")}</p>
+                <ul>
+                  {warnings.extensions.map((name) => (
+                    <li key={name}>
+                      <code>{name}</code>
                     </li>
                   ))}
                 </ul>

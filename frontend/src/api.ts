@@ -94,6 +94,7 @@ export async function downloadProject(worktree: string) {
 
 /** What a project archive cannot carry, reported after an import. */
 export interface ImportWarnings {
+  extensions?: string[];
   connections: string[];
   files: string[];
 }

@@ -2,7 +2,7 @@
 
 from collections import Counter
 
-from . import variables
+from . import project_extensions, variables
 from .bundle import files_to_bundle
 from .components import expand
 from .graph import reachable
@@ -48,6 +48,14 @@ def entities(bundle):
         graph(value, f"components/{key}.json", f"component/{key}")
     for key, value in sorted(bundle["templates"].items()):
         add(f"template/{key}", "template", label(value, key), value, f"templates/{key}.sql")
+    if bundle.get("extensions") is not None:
+        add(
+            "file/" + project_extensions.FILE,
+            "file",
+            project_extensions.FILE,
+            bundle["extensions"],
+            project_extensions.FILE,
+        )
     declared = bundle.get("variables")
     if isinstance(declared, dict):
         used_by = variables.usages(bundle)
@@ -152,6 +160,8 @@ def potential_impact(before, after):
             errors.append({"message": "Some definitions cannot be expanded; dependency analysis is partial."})
     old, new = views
     affected = set()
+    if before.get("extensions") != after.get("extensions"):
+        affected.update(old[0].keys() | new[0].keys())
     for key in old[0].keys() | new[0].keys():
 
         def processing(node):

@@ -1,3 +1,4 @@
+import type { ProjectExtension } from "./extensions";
 /** A value that JSON can represent, such as a parameter set by a user. */
 export type Json =
   string | number | boolean | null | Json[] | { [key: string]: Json };
@@ -75,6 +76,8 @@ export interface Bundle {
   pyproject?: string | null;
   /** The declarations of variables.json, its raw text when malformed, or null without the file. */
   variables?: Record<string, Json> | string | null;
+  /** Requirements from extensions.json, preserved as raw text when malformed. */
+  extensions?: Record<string, ProjectExtension> | string | null;
 }
 /** A root flow node parameter bound to a project variable. */
 export interface VariableUsage {

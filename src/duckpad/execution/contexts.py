@@ -10,6 +10,7 @@ from contextlib import suppress
 
 import duckdb
 
+from .. import project_extensions
 from ..access import Access
 from ..catalog import Catalog, redact
 from ..datasets import Context
@@ -85,28 +86,51 @@ class ContextPool:
         self.lock = lock
         self.contexts: dict[tuple[str, str], Context] = {}
 
-    def get(self, worktree: str, environment: str, create: bool = False) -> Context:
+    def get(
+        self, worktree: str, environment: str, create: bool = False, requirements: list[Record] | None = None
+    ) -> Context:
         """The live DuckDB context of an existing worktree in a configured environment.
 
         Its database starts outside the engine lock, so status and cancellation requests
         never wait for a worker, extension installation or connection setup.
         """
         key = (worktree, environment)
+        opening = create or not self.access
+        if opening and requirements is None:
+            with self.lock:
+                existing = self.contexts.get(key)
+            if (
+                not create
+                and existing is not None
+                and existing.db is not None
+                and not getattr(existing.db, "closed", False)
+            ):
+                requirements = existing.extensions
+            else:
+                bundle = self.projects.snapshot(worktree, committed=True)["bundle"]
+                requirements = project_extensions.enabled((bundle or {}).get("extensions"))
         while True:
             self.projects.get(worktree)
             if environment not in self.catalog.environment_names():
                 raise Problem("Unknown environment", 404)
             with self.lock:
                 context, stopped = self.contexts.get(key), None
-                if context is None or getattr(context.db, "closed", False):
+                if (
+                    context is None
+                    or getattr(context.db, "closed", False)
+                    or (create and context.extensions != requirements)
+                ):
+                    if context is not None:
+                        with context.lock:
+                            cancel_lineage(context)
                     stopped = context.db if context is not None else None
-                    context = self.contexts[key] = Context(*key, db=None)
+                    context = self.contexts[key] = Context(*key, db=None, extensions=requirements or [])
             if stopped:
                 # Reap the replaced worker's process and release its descriptors.
                 stopped.close()
             if context.db is not None or (self.access and not create):
                 return context
-            database = self._open(worktree, environment)
+            database = self._open(worktree, environment, requirements or [])
             with self.lock:
                 if self.contexts.get(key) is context and context.db is None:
                     context.db = database
@@ -136,12 +160,22 @@ class ContextPool:
     def extension_settings(self) -> dict[str, bool]:
         return {"allow_unsigned_extensions": self.store.get("settings", "allow_unsigned_extensions", False)}
 
-    def _open(self, worktree: str, environment: str) -> SQLDatabase:
+    def _open(self, worktree: str, environment: str, requirements: list[Record]) -> SQLDatabase:
         extensions = self.store.paths.extensions
         extensions.mkdir(exist_ok=True)
         config = {**database_config(extensions), **self.extension_settings()}
+        imports = self.store.get("settings", "offline_extensions", {})
         if not self.isolated:
-            return duckdb.connect(":memory:", config=config)
+            # Check native loading in a child first, even in trusted-local mode.
+            if requirements:
+                project_extensions.check(config, requirements, imports)
+            db = duckdb.connect(":memory:", config=config)
+            try:
+                project_extensions.load(db, requirements, imports, config["allow_unsigned_extensions"])
+                return db
+            except Exception:
+                db.close()
+                raise
         from ..sandbox import Database
 
         project = self.projects.get(worktree)["project"]
@@ -159,7 +193,8 @@ class ContextPool:
                     "captured": captured,
                     "extensions": str(extensions),
                     "allow_unsigned_extensions": config["allow_unsigned_extensions"],
-                    "offline_extensions": self.store.get("settings", "offline_extensions", {}),
+                    "offline_extensions": imports,
+                    "project_extensions": requirements,
                     "read_paths": [str(p) for p in roots],
                     "write_paths": [str(p) for p in [*writable, directory]],
                     "temporary": str(temporary),
@@ -167,7 +202,11 @@ class ContextPool:
                 }
             )
         except Problem as error:
-            raise Problem(redact(str(error), secrets), error.status, error.detail) from None
+            message = redact(str(error), secrets)
+            if requirements:
+                names = ", ".join(item["name"] for item in requirements)
+                message += f" Project extensions: {names}. Check their binaries, server CPU and native dependencies in Instance settings → Extensions."
+            raise Problem(message, error.status, error.detail) from None
 
     def _configured_connections(self, project: str, environment: str) -> tuple[Connections, list[str]]:
         """Capture the project's authorized connections that are fully configured for the environment.
