@@ -1,24 +1,32 @@
 """Run admission, immutable launch snapshots, node execution and output publication."""
 
+from __future__ import annotations
+
 import copy
 import threading
 import time
 from contextlib import suppress
 from dataclasses import dataclass, field
+from typing import Any, cast
 
 import duckdb
 
 from ..bundle import files_to_bundle, topological
-from ..catalog import redact
+from ..catalog import Catalog, redact
 from ..components import expand, in_subtree
 from ..data_preparation import failure_hint
 from ..datasets import Context, Dataset
 from ..graph import connection_references, reachable
 from ..materialize import drop_dataset, drop_relations, plan_materialization, publish_view
 from ..native import Cursor as NativeCursor
+from ..projects import Projects
+from ..store import Store
 from ..templates import base_type, compile_template
+from ..types import Connections, Record, RunToken, SQLCursor
 from ..util import Problem, now, qi, uid
-from .contexts import cancel_lineage, interrupt, wait_for_readers
+from .contexts import ContextPool, cancel_lineage, interrupt, wait_for_readers
+from .exports import Exports
+from .fingerprints import Fingerprints
 
 UNFINISHED_RUN_STATUSES = ("preparing", "running", "canceling")
 
@@ -27,25 +35,25 @@ UNFINISHED_RUN_STATUSES = ("preparing", "running", "canceling")
 class Execution:
     """State of one accepted run, owned by its worker thread."""
 
-    token: dict
+    token: RunToken
     context: Context
-    run: dict
-    nodes: dict
-    edges: list
-    order: list
-    captured: dict
-    secrets: list
-    fingerprints: dict
-    cursor: object = None
-    prepared: dict = field(default_factory=dict)
-    published: dict = field(default_factory=dict)
+    run: Record
+    nodes: dict[str, Record]
+    edges: list[Record]
+    order: list[str]
+    captured: Connections
+    secrets: list[str]
+    fingerprints: dict[str, str]
+    cursor: SQLCursor | None = None
+    prepared: dict[str, Exception | None] = field(default_factory=dict)
+    published: dict[str, dict[str, Dataset]] = field(default_factory=dict)
 
     @property
-    def canceled(self):
+    def canceled(self) -> bool:
         return self.token["cancel"].is_set()
 
 
-def run_outcome(statuses, canceled):
+def run_outcome(statuses: set[str], canceled: bool) -> str:
     if canceled:
         return "canceled"
     failed = bool(statuses & {"failed", "blocked"})
@@ -54,7 +62,7 @@ def run_outcome(statuses, canceled):
     return "failed" if failed else "success"
 
 
-def launch_scope(nodes, edges, target=None):
+def launch_scope(nodes: dict[str, Record], edges: list[Record], target: str | None = None) -> set[str]:
     """The nodes a launch computes: the whole project, or a node subtree and its upstream nodes."""
     if not target:
         return set(nodes)
@@ -65,15 +73,27 @@ def launch_scope(nodes, edges, target=None):
 
 
 class Runner:
-    def __init__(self, store, projects, catalog, pool, exports, fingerprints, lock, active, *, isolated):
+    def __init__(
+        self,
+        store: Store,
+        projects: Projects,
+        catalog: Catalog,
+        pool: ContextPool,
+        exports: Exports,
+        fingerprints: Fingerprints,
+        lock: threading.RLock,
+        active: dict[str, RunToken],
+        *,
+        isolated: bool,
+    ) -> None:
         self.store, self.projects, self.catalog = store, projects, catalog
         self.pool, self.exports, self.fingerprints = pool, exports, fingerprints
         # The engine lock and the active run tokens by worktree that it guards.
         self.lock, self.active = lock, active
         self.isolated = isolated
-        self.threads = []
+        self.threads: list[threading.Thread] = []
 
-    def recover(self):
+    def recover(self) -> None:
         """Close runs left unfinished by a stopped backend; nothing is replayed."""
         for run in self.store.runs_with_statuses(UNFINISHED_RUN_STATUSES):
             run["status"] = "interrupted"
@@ -87,9 +107,11 @@ class Runner:
                     node["status"] = "interrupted"
             self._persist(run, [])
 
-    def launch(self, worktree, environment, target=None, entry_point="api"):
+    def launch(
+        self, worktree: str, environment: str, target: str | None = None, entry_point: str = "api"
+    ) -> Record:
         self.projects.get(worktree)
-        token = {"id": uid("run_"), "cancel": threading.Event(), "cursor": None}
+        token: RunToken = {"id": uid("run_"), "cancel": threading.Event(), "cursor": None}
         self._admit(worktree, environment, token)
         try:
             execution = self._prepare(token, worktree, environment, target, entry_point)
@@ -98,13 +120,13 @@ class Runner:
             with self.lock:
                 self.threads = [t for t in self.threads if t.is_alive()] + [thread]
             thread.start()
-            return self.store.get("run", token["id"])
+            return cast(Record, self.store.get("run", token["id"]))
         except Exception:
             with self.lock:
                 self.active.pop(worktree, None)
             raise
 
-    def _admit(self, worktree, environment, token):
+    def _admit(self, worktree: str, environment: str, token: RunToken) -> None:
         """Reserve the worktree for a run; a busy worktree refuses it instead of queuing it."""
         with self.lock:
             self.catalog.environment(environment)
@@ -116,7 +138,9 @@ class Runner:
                 )
             self.active[worktree] = token
 
-    def _prepare(self, token, worktree, environment, target, entry_point):
+    def _prepare(
+        self, token: RunToken, worktree: str, environment: str, target: str | None, entry_point: str
+    ) -> Execution:
         """Capture the committed definitions and connection settings the run will use."""
         snapshot = self.projects.flush(worktree)
         bundle = copy.deepcopy(snapshot["bundle"])
@@ -172,7 +196,7 @@ class Runner:
         }
         return Execution(token, context, run, nodes, edges, order, captured, secrets, fingerprints)
 
-    def _check_conflicts(self, conflicts, scope, environment):
+    def _check_conflicts(self, conflicts: list[Record], scope: set[str], environment: str) -> None:
         """Reject a run when a pending edit conflict would change a node in its scope."""
         for conflict in conflicts:
             try:
@@ -184,9 +208,12 @@ class Runner:
             if computation_conflict:
                 raise Problem("Resolve computation-affecting edit conflicts before running", 409)
 
-    def _capture_connections(self, worktree, nodes, scope, environment, strict):
+    def _capture_connections(
+        self, worktree: str, nodes: dict[str, Record], scope: set[str], environment: str, strict: bool
+    ) -> tuple[Connections, list[str]]:
         """Freeze connection settings for the scope; invalid ones block their nodes (or the run if strict)."""
-        captured, secrets = {}, []
+        captured: Connections = {}
+        secrets: list[str] = []
         for key in scope:
             node = nodes[key]
             try:
@@ -199,14 +226,14 @@ class Runner:
                 raise Problem(node["error"], 422)
         return captured, secrets
 
-    def cancel(self, run_id):
+    def cancel(self, run_id: str) -> Record:
         run = self.store.get("run", run_id)
         if not run:
             raise Problem("Execution not found", 404)
         with self.lock:
             token = self.active.get(run["worktree"])
             if not token or token["id"] != run_id:
-                return self.store.get("run", run_id)
+                return cast(Record, self.store.get("run", run_id))
             token["cancel"].set()
             cursor = token["cursor"]
         if cursor:
@@ -217,10 +244,10 @@ class Runner:
             if run["status"] in ("preparing", "running"):
                 run["status"] = "canceling"
                 self.store.put("run", run_id, run)
-        return run
+        return cast(Record, run)
 
-    def _persist(self, run, secrets):
-        def sanitize(value):
+    def _persist(self, run: Record, secrets: list[str]) -> None:
+        def sanitize(value: Any) -> Any:
             if isinstance(value, str):
                 return redact(value, secrets)
             if isinstance(value, dict):
@@ -247,10 +274,11 @@ class Runner:
             with context.lock:
                 context.node_status.update({key: state["status"] for key, state in run["nodes"].items()})
 
-    def _execute(self, execution):
+    def _execute(self, execution: Execution) -> None:
         run, secrets, context = execution.run, execution.secrets, execution.context
         started = time.monotonic()
         try:
+            assert context.db is not None
             execution.cursor = context.db.cursor()
             if not self.isolated:
                 execution.cursor = NativeCursor(execution.cursor)
@@ -294,7 +322,7 @@ class Runner:
                     self.active.pop(context.worktree, None)
 
     @staticmethod
-    def _skip_reason(execution, key):
+    def _skip_reason(execution: Execution, key: str) -> dict[str, str] | None:
         """Return the state update for a node that must not start, if any."""
         if execution.canceled:
             return {"status": "canceled"}
@@ -310,7 +338,7 @@ class Runner:
             return {"status": "blocked", "error": "Blocked by " + ", ".join(failed)}
         return None
 
-    def _run_node(self, execution, key):
+    def _run_node(self, execution: Execution, key: str) -> None:
         run, secrets, context = execution.run, execution.secrets, execution.context
         node, state = execution.nodes[key], run["nodes"][key]
         state.update(status="running", started=now(), parameters=node.get("params", {}))
@@ -318,7 +346,7 @@ class Runner:
             state["external_outcome"] = "unknown"
         self._persist(run, secrets)
         node_start = time.monotonic()
-        created_tables = []
+        created_tables: list[tuple[str, str]] = []
         try:
             staged = self._compute(execution, key, created_tables)
             if execution.canceled:
@@ -346,11 +374,12 @@ class Runner:
         self._persist(run, secrets)
 
     @staticmethod
-    def _drop_staged(context, created_tables):
+    def _drop_staged(context: Context, created_tables: list[tuple[str, str]]) -> None:
         """Drop the tables of a node that failed before publication."""
         if not created_tables:
             return
         try:
+            assert context.db is not None
             cleanup = context.db.cursor()
             try:
                 for table, storage in created_tables:
@@ -361,7 +390,7 @@ class Runner:
             # A dead worker has already discarded its tables.
             pass
 
-    def _prepare_connections(self, execution, node):
+    def _prepare_connections(self, execution: Execution, node: Record) -> None:
         """Prepare each logical connection once per run, replaying its first failure."""
         for reference in connection_references(node):
             if reference not in execution.prepared:
@@ -371,12 +400,16 @@ class Runner:
                     execution.prepared[reference] = None
                 except Exception as error:
                     execution.prepared[reference] = error
-            if execution.prepared[reference]:
-                raise execution.prepared[reference]
+            failure = execution.prepared[reference]
+            if failure is not None:
+                raise failure
 
-    def _compute(self, execution, key, created_tables):
+    def _compute(
+        self, execution: Execution, key: str, created_tables: list[tuple[str, str]]
+    ) -> dict[str, Dataset]:
         """Execute a node's statements into freshly named tables; return its staged outputs."""
         cursor, context, run = execution.cursor, execution.context, execution.run
+        assert cursor is not None
         node, state = execution.nodes[key], run["nodes"][key]
         self._prepare_connections(execution, node)
         input_datasets = {
@@ -398,7 +431,7 @@ class Runner:
         )
         state["statements"] = statements
         self._persist(run, execution.secrets)
-        staged = {}
+        staged: dict[str, Dataset] = {}
         for statement in statements:
             if execution.canceled:
                 raise Problem("Execution canceled")
@@ -416,7 +449,9 @@ class Runner:
             created_tables.append((table, plan["storage"]))
             columns, column_map, view_sql = publish_view(cursor, table, plan)
             statement["materialization_sql"].extend(view_sql)
-            count = cursor.execute(f"SELECT count(*) FROM {qi(table)}").fetchone()[0]
+            count_row = cursor.execute(f"SELECT count(*) FROM {qi(table)}").fetchone()
+            assert count_row is not None
+            count = count_row[0]
             staged[statement["output"]] = Dataset(
                 id=table,
                 node=key,
@@ -436,7 +471,7 @@ class Runner:
             )
         return staged
 
-    def _export(self, execution, key, statement):
+    def _export(self, execution: Execution, key: str, statement: Record) -> None:
         """Run an export statement, then keep a private copy of the file it wrote for download."""
         state = execution.run["nodes"][key]
         # Serialize file writes and capture across worktrees sharing a destination.
@@ -444,6 +479,7 @@ class Runner:
             if execution.canceled:
                 raise Problem("Execution canceled")
             state["external_started"] = True
+            assert execution.cursor is not None
             execution.cursor.execute(statement["sql"], statement["bindings"])
             if statement.get("export_file"):
                 state["artifact"] = self.exports.capture(
@@ -451,7 +487,7 @@ class Runner:
                 )
         state["external_outcome"] = "completed"
 
-    def _publish(self, execution, key, staged):
+    def _publish(self, execution: Execution, key: str, staged: dict[str, Dataset]) -> dict[str, Dataset]:
         """Atomically replace a node's outputs; return the previous output set."""
         context = execution.context
         # A later edit must not turn a result for the old snapshot valid.
@@ -470,7 +506,7 @@ class Runner:
                 execution.published[key] = staged
         return previous
 
-    def _retire(self, execution, key, previous):
+    def _retire(self, execution: Execution, key: str, previous: dict[str, Dataset]) -> None:
         """Drop replaced outputs and their lineage tables once no lineage reader uses them."""
         context = execution.context
         for dataset in previous.values():
@@ -481,6 +517,7 @@ class Runner:
                     for d in context.datasets.values()
                     if d.id.startswith("trace_") and d.node == key and d.run != execution.run["id"]
                 ]
+                assert context.db is not None
                 cleanup = context.db.cursor()
                 try:
                     for old in [dataset, *traces]:
@@ -489,7 +526,7 @@ class Runner:
                 finally:
                     cleanup.close()
 
-    def _prune_documentation(self, execution, key, staged):
+    def _prune_documentation(self, execution: Execution, key: str, staged: dict[str, Dataset]) -> None:
         """Remove documentation of columns that the node's current outputs no longer have."""
         context = execution.context
         columns = {
@@ -498,13 +535,13 @@ class Runner:
         if not columns:
             return
 
-        def current(bundle):
+        def current(bundle: Record) -> bool:
             fingerprint = self.fingerprints.of(bundle, context.environment).get(key)
             return fingerprint == execution.fingerprints[key]
 
         self.projects.prune_column_documentation(context.worktree, key, columns, current)
 
-    def close(self):
+    def close(self) -> None:
         """Cancel active runs and wait for their workers."""
         with self.lock:
             tokens, threads = list(self.active.values()), list(self.threads)

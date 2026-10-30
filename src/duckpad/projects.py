@@ -1,5 +1,7 @@
 """Readable project files, optimistic saves, external batching and Git worktrees."""
 
+from __future__ import annotations
+
 import io
 import logging
 import shutil
@@ -7,20 +9,24 @@ import tarfile
 import threading
 import time
 from collections import OrderedDict
+from collections.abc import Callable, Collection, Iterable, Iterator, Mapping
 from contextlib import contextmanager, suppress
 from pathlib import Path
+from typing import Literal, Unpack, cast, overload
 
 from .builtin_templates import BUILTINS
 from .bundle import ROOT_FILES, bundle_to_files, files_to_bundle, is_declarative
 from .comparison import commit_message
 from .components import expand, reconcile_documentation
 from .git import command
-from .git.command import GitError
+from .git.command import GitError, GitOptions
 from .git.identity import SYSTEM_IDENTITY, current_identity
 from .git.remote import Remotes
 from .git.workspace import GitWorkspace, diagnose, require_valid
 from .merge import merge_files
+from .store import Store
 from .templates import parse_template
+from .types import Files, Record
 from .util import Problem, atomic_write, digest, dumps, inside, now, uid
 
 logger = logging.getLogger(__name__)
@@ -35,7 +41,7 @@ EXTERNAL_SAVE = "feat(project): save external changes"
 OPEN_FAILURE = "Git could not open this branch. It may be checked out outside Duckpad."
 
 
-def decode(name, content):
+def decode(name: str, content: bytes) -> str:
     try:
         return content.decode("utf-8")
     except UnicodeDecodeError as error:
@@ -43,20 +49,23 @@ def decode(name, content):
 
 
 class Projects:
-    def __init__(self, store):
+    def __init__(self, store: Store) -> None:
         self.store = store
-        self.locks, self.locks_guard = {}, threading.Lock()
+        self.locks: dict[str, threading.RLock] = {}
+        self.locks_guard = threading.Lock()
         # Guards the bounded caches, which requests read without a repository lock.
         self.cache_lock = threading.Lock()
         self.stop_event = threading.Event()
-        self.observed, self.pending = {}, {}
-        self.commit_files, self.revisions = OrderedDict(), OrderedDict()
-        self.on_change = lambda worktree: None
-        self.thread = None
+        self.observed: dict[str, Files] = {}
+        self.pending: dict[str, float] = {}
+        self.commit_files: OrderedDict[tuple[str, str], Files] = OrderedDict()
+        self.revisions: OrderedDict[tuple[str, str], Files] = OrderedDict()
+        self.on_change: Callable[[str], None] = lambda worktree: None
+        self.thread: threading.Thread | None = None
         self.versioning = GitWorkspace(self)
         self.remotes = Remotes(self.versioning)
 
-    def repository(self, project_id):
+    def repository(self, project_id: str) -> threading.RLock:
         """The lock serializing changes to one project's Git repository and all its worktrees.
 
         Network Git and history validation run outside it. Nothing holds two repository locks,
@@ -66,20 +75,65 @@ class Projects:
             return self.locks.setdefault(project_id, threading.RLock())
 
     @contextmanager
-    def locked(self, worktree_id):
+    def locked(self, worktree_id: str) -> Iterator[Record]:
         """Hold the repository lock of a worktree's project; yield the worktree read under it."""
         with self.repository(self.get(worktree_id)["project"]):
             yield self.get(worktree_id)
 
-    def identity(self):
+    def identity(self) -> dict[str, str]:
         """The request's account, or the system for changes made outside a request."""
         return current_identity.get() or SYSTEM_IDENTITY
 
-    def git(self, path, *args, identity=None, **options):
-        """Run Git as the request's account; see command.run for the options."""
-        return command.run(path, *args, identity=identity or self.identity(), **options)
+    @overload
+    def git(
+        self,
+        path: str | Path,
+        *args: str,
+        identity: Mapping[str, str] | None = None,
+        binary: Literal[False] = False,
+        **options: Unpack[GitOptions],
+    ) -> str: ...
 
-    def create(self, name, bundle=None, action="create", *, project_id=None, record=None):
+    @overload
+    def git(
+        self,
+        path: str | Path,
+        *args: str,
+        identity: Mapping[str, str] | None = None,
+        binary: Literal[True],
+        **options: Unpack[GitOptions],
+    ) -> bytes: ...
+
+    @overload
+    def git(
+        self,
+        path: str | Path,
+        *args: str,
+        identity: Mapping[str, str] | None = None,
+        binary: bool,
+        **options: Unpack[GitOptions],
+    ) -> str | bytes: ...
+
+    def git(
+        self,
+        path: str | Path,
+        *args: str,
+        identity: Mapping[str, str] | None = None,
+        binary: bool = False,
+        **options: Unpack[GitOptions],
+    ) -> str | bytes:
+        """Run Git as the request's account; see command.run for the options."""
+        return command.run(path, *args, identity=identity or self.identity(), binary=binary, **options)
+
+    def create(
+        self,
+        name: str,
+        bundle: Record | None = None,
+        action: str = "create",
+        *,
+        project_id: str | None = None,
+        record: Callable[[Record], None] | None = None,
+    ) -> Record:
         """Create a project repository and record it; record(worktree) joins the same transaction.
 
         A project is either recorded with its repository and related records, or leaves nothing behind.
@@ -116,7 +170,7 @@ class Projects:
         self.observed[worktree_id] = self.read_files(worktree)
         return worktree
 
-    def delete(self, project_id):
+    def delete(self, project_id: str) -> None:
         with self.repository(project_id):
             with self.store.transaction():
                 worktrees = self.store.worktrees(project_id)
@@ -125,7 +179,7 @@ class Projects:
             self.discard(worktrees, artifacts)
             shutil.rmtree(self.store.paths.resources(project_id), ignore_errors=True)
 
-    def open_worktree(self, worktree, branch, start=None):
+    def open_worktree(self, worktree: Record, branch: str, start: str | None = None) -> Record:
         """Check out a branch, created at start when given, in a new recorded worktree.
 
         The caller holds the repository lock. The record follows the checkout and is never left
@@ -158,7 +212,7 @@ class Projects:
         self.observed[key] = files
         return result
 
-    def discard(self, worktrees, artifacts):
+    def discard(self, worktrees: Iterable[Record], artifacts: Iterable[str]) -> None:
         """Remove the files of deleted worktree and artifact records, after their deletion.
 
         Every step tolerates files that are already gone, so an interrupted cleanup can run again.
@@ -171,13 +225,13 @@ class Projects:
             shutil.rmtree(worktree["path"], ignore_errors=True)
             shutil.rmtree(self.store.paths.exports(worktree["id"]), ignore_errors=True)
 
-    def get(self, worktree_id):
+    def get(self, worktree_id: str) -> Record:
         result = self.store.get("worktree", worktree_id)
         if not result:
             raise Problem("Worktree not found", 404)
-        return result
+        return cast(Record, result)
 
-    def read_files(self, worktree):
+    def read_files(self, worktree: Mapping[str, str]) -> Files:
         path = Path(worktree["path"])
         names = list(ROOT_FILES)
         names += [
@@ -196,7 +250,7 @@ class Projects:
             if is_declarative(name) and (path / name).is_file()
         }
 
-    def commit(self, path, message):
+    def commit(self, path: str | Path, message: str) -> str:
         tracked = self.git(path, "ls-files").splitlines()
         existing = self.read_files({"path": str(path)})
         head = self.git(path, "rev-parse", "--verify", "HEAD", check=False)
@@ -248,7 +302,9 @@ class Projects:
             )
         return self.git(path, "rev-parse", "HEAD")
 
-    def cached(self, cache, key, value=None):
+    def cached(
+        self, cache: OrderedDict[tuple[str, str], Files], key: tuple[str, str], value: Files | None = None
+    ) -> Files | None:
         """Read a bounded cache entry, or store one, evicting the least recently used."""
         with self.cache_lock:
             if value is None:
@@ -261,7 +317,7 @@ class Projects:
                     cache.popitem(last=False)
         return value
 
-    def revision_files(self, path, commit):
+    def revision_files(self, path: str | Path, commit: str) -> Files:
         """Declarative files of a commit, read through git archive and cached by commit.
 
         A commit never changes, so callers need no repository lock.
@@ -271,15 +327,16 @@ class Projects:
         if files is None:
             content = self.git(path, "archive", "--format=tar", commit, binary=True)
             with tarfile.open(fileobj=io.BytesIO(content)) as archive:
-                files = {
-                    entry.name: decode(entry.name, archive.extractfile(entry).read())
-                    for entry in archive
-                    if entry.isfile() and is_declarative(entry.name)
-                }
+                files = {}
+                for entry in archive:
+                    if entry.isfile() and is_declarative(entry.name):
+                        stream = archive.extractfile(entry)
+                        assert stream is not None
+                        files[entry.name] = decode(entry.name, stream.read())
             self.cached(self.commit_files, key, files)
         return dict(files)
 
-    def snapshot(self, worktree_id, committed=False):
+    def snapshot(self, worktree_id: str, committed: bool = False) -> Record:
         """Files of a worktree with their revision, the base of a later save.
 
         Committed files are read without a lock. Working files are read under the repository
@@ -306,7 +363,7 @@ class Projects:
             "conflicts": self.store.conflicts(worktree_id),
         }
 
-    def base(self, worktree, revision, current):
+    def base(self, worktree: Record, revision: str, current: Files) -> Files | None:
         """The files a save was edited from, or None when its revision is unknown.
 
         After a restart, a client still edits a committed snapshot of its branch.
@@ -323,7 +380,13 @@ class Projects:
                 return files
         return None
 
-    def write(self, worktree_id, revision, proposal, message="feat(project): save workspace changes"):
+    def write(
+        self,
+        worktree_id: str,
+        revision: str,
+        proposal: Files,
+        message: str = "feat(project): save workspace changes",
+    ) -> Record:
         # A rejected save writes nothing, not even part of the proposal.
         if not all(is_declarative(name) for name in proposal):
             raise Problem("Only declarative project files can be edited here")
@@ -356,7 +419,9 @@ class Projects:
             self.on_change(worktree_id)
             return self.snapshot(worktree_id)
 
-    def prune_column_documentation(self, worktree_id, node, columns, current):
+    def prune_column_documentation(
+        self, worktree_id: str, node: str, columns: dict[str, list[str]], current: Callable[[Record], bool]
+    ) -> None:
         """Remove the documentation of columns that a node's published outputs no longer have.
 
         `columns` lists the column names of each output port. `current(bundle)` tells whether
@@ -393,7 +458,7 @@ class Projects:
                     "docs(schema): remove documentation for removed columns",
                 )
 
-    def _write_files(self, worktree, files, previous):
+    def _write_files(self, worktree: Record, files: Files, previous: Files) -> None:
         """Write merged files, whose names come from the checked proposal and the project files."""
         path = Path(worktree["path"])
         for name in files.keys() | previous.keys():
@@ -403,13 +468,13 @@ class Projects:
             elif target.exists():
                 target.unlink()
 
-    def conflict(self, conflict_id):
+    def conflict(self, conflict_id: str) -> Record:
         conflict = self.store.get("conflict", conflict_id)
         if not conflict:
             raise Problem("Conflict not found", 404)
-        return conflict
+        return cast(Record, conflict)
 
-    def resolve(self, conflict_id, choice, files=None):
+    def resolve(self, conflict_id: str, choice: str, files: Files | None = None) -> Record:
         with self.locked(self.conflict(conflict_id)["worktree"]):
             # Read it again: another request may have resolved it while this one waited.
             conflict = self.conflict(conflict_id)
@@ -430,7 +495,7 @@ class Projects:
             result["conflicts"] = [c for c in result["conflicts"] if c["id"] != conflict_id]
             return result
 
-    def flush(self, worktree_id):
+    def flush(self, worktree_id: str) -> Record:
         with self.locked(worktree_id) as worktree:
             previous = self.read_files(worktree)
             # A stable read precedes capture; file writers may still begin a new
@@ -451,7 +516,7 @@ class Projects:
                 self.on_change(worktree_id)
             return self.snapshot(worktree_id, committed=True)
 
-    def start_watcher(self):
+    def start_watcher(self) -> None:
         worktrees = self.store.all("worktree")
         # Finish cleanups interrupted after their records were deleted: the directories of
         # unrecorded worktrees are removed, and Git forgets them before it next opens a branch.
@@ -471,7 +536,7 @@ class Projects:
                 # The watcher skips unobserved worktrees, so one lost directory never stops the instance.
                 logger.error("Worktree %s is unavailable and is not observed: %s", worktree["id"], error)
 
-        def watch():
+        def watch() -> None:
             while not self.stop_event.wait(WATCH_INTERVAL):
                 for worktree in self.store.all("worktree"):
                     lock = self.repository(worktree["project"])
@@ -491,7 +556,7 @@ class Projects:
         self.thread = threading.Thread(target=watch, name="duckpad-file-watcher", daemon=True)
         self.thread.start()
 
-    def _observe(self, worktree):
+    def _observe(self, worktree: Record) -> None:
         """Commit a worktree's external edits once they have been quiet for QUIET_PERIOD."""
         key = worktree["id"]
         current = self.read_files(worktree)
@@ -503,12 +568,12 @@ class Projects:
             del self.pending[key]
             self.on_change(key)
 
-    def stop(self):
+    def stop(self) -> None:
         self.stop_event.set()
         if self.thread:
             self.thread.join(2)
 
-    def library(self, visible=None):
+    def library(self, visible: Collection[str] | None = None) -> list[Record]:
         """Templates and components of every project's main branch, available for import."""
         items = []
         for project in self.store.all("project"):
@@ -540,7 +605,7 @@ class Projects:
                     )
         return items
 
-    def branch(self, worktree_id, name, revision=None):
+    def branch(self, worktree_id: str, name: str, revision: str | None = None) -> Record:
         if revision:
             self.versioning.prevalidate(self.get(worktree_id)["path"], revision)
         with self.locked(worktree_id) as worktree:

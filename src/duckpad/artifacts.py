@@ -1,12 +1,18 @@
 """Private, immutable copies of completed file exports, never client-selected paths."""
 
+from __future__ import annotations
+
 import os
 import re
 import shutil
 import stat
+from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
+from typing import BinaryIO
 
+from .store import Store
+from .types import Record
 from .util import Problem, uid
 
 CHUNK_SIZE = 64 * 1024
@@ -17,7 +23,7 @@ MEDIA_TYPES = {
 
 
 @contextmanager
-def open_regular(path):
+def open_regular(path: Path) -> Iterator[BinaryIO]:
     """Pin a regular file without following symlinks, including parent directories."""
     path = Path(path).absolute()
     if ".." in path.parts:
@@ -35,8 +41,8 @@ def open_regular(path):
     else:
         # The artifact directory is private and outside every SQL worker's writable roots.
         # Check reparse points as well on platforms without openat/O_NOFOLLOW.
-        for part in [*path.parents, path]:
-            info = part.lstat()
+        for parent in [*path.parents, path]:
+            info = parent.lstat()
             if stat.S_ISLNK(info.st_mode) or getattr(info, "st_file_attributes", 0) & 0x400:
                 raise OSError("Links are not allowed")
         descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_BINARY", 0))
@@ -46,17 +52,17 @@ def open_regular(path):
         yield stream
 
 
-def signature(info):
+def signature(info: os.stat_result) -> list[int]:
     return [info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns]
 
 
 class Artifacts:
-    def __init__(self, store):
+    def __init__(self, store: Store) -> None:
         self.store = store
         self.directory = store.paths.artifacts
         self.directory.mkdir(mode=0o700, exist_ok=True)
 
-    def capture(self, spec, run, node, roots):
+    def capture(self, spec: Record, run: Record, node: str, roots: list[Path]) -> str:
         """Copy the actual exported bytes, bounded in memory, before another export can overwrite them."""
         path = Path(spec["path"]).absolute()
         if ".." in path.parts or not any(path.is_relative_to(root) for root in roots):
@@ -96,7 +102,9 @@ class Artifacts:
             raise
 
     @contextmanager
-    def open(self, identity, worktree, environment, node, run):
+    def open(
+        self, identity: str, worktree: str, environment: str, node: str, run: str
+    ) -> Iterator[tuple[BinaryIO, Record]]:
         record = self.store.get("artifact", identity)
         if (
             not re.fullmatch(r"artifact_[0-9a-f]{16}", identity)

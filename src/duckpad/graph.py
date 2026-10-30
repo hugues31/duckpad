@@ -1,7 +1,13 @@
 """Dependency queries over the expanded nodes and edges of a flow, without executing anything."""
 
+from __future__ import annotations
 
-def connection_references(node):
+from collections.abc import Iterable
+
+from .types import Record
+
+
+def connection_references(node: Record) -> list[str]:
     """Return the connection IDs selected by a node's connection parameters."""
     params = node.get("params", {})
     return [
@@ -11,7 +17,7 @@ def connection_references(node):
     ]
 
 
-def reachable(seeds, edges, upstream):
+def reachable(seeds: Iterable[str], edges: list[Record], upstream: bool) -> set[str]:
     """Return the seeds and every node reachable against (upstream) or along the edges."""
     origin, destination = ("target", "source") if upstream else ("source", "target")
     result = set(seeds)

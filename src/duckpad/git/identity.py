@@ -1,18 +1,23 @@
 """Server-owned Git attribution scoped to one authenticated request."""
 
+from __future__ import annotations
+
 import re
+from collections.abc import Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
 
+from ..types import Record
+
 SYSTEM_IDENTITY = {"name": "Duckpad external changes", "email": "external@duckpad.invalid"}
-current_identity = ContextVar("git_identity", default=None)
+current_identity: ContextVar[dict[str, str] | None] = ContextVar("git_identity", default=None)
 
 
-def account_identity(user):
+def account_identity(user: Record) -> dict[str, str]:
     return {"name": user["username"], "email": f"{user['id']}@users.duckpad.invalid"}
 
 
-def oidc_identity(user, claims):
+def oidc_identity(user: Record, claims: Record) -> dict[str, str]:
     """Use validated ID-token claims without allowing Git identity delimiters."""
     identity = account_identity(user)
     for key in ("name", "preferred_username"):
@@ -34,7 +39,7 @@ def oidc_identity(user, claims):
 
 
 @contextmanager
-def commit_author(identity):
+def commit_author(identity: dict[str, str] | None) -> Iterator[None]:
     """Context variables propagate to endpoint workers and isolate concurrent requests."""
     token = current_identity.set(identity)
     try:

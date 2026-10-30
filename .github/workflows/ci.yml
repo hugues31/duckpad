@@ -28,7 +28,61 @@ jobs:
       - run: uv sync --locked --python ${{ matrix.python }}
       - run: uv run ruff check src tests scripts
       - run: uv run ruff format --check src tests scripts
+      - run: uv run mypy --python-version ${{ matrix.python }}
       - run: uv run pytest -q
+
+  typing-policy:
+    name: Python typing exceptions may only shrink
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - name: Compare typing exceptions with the base
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          python - <<'PY'
+          import os
+          import re
+          import subprocess
+          import tomllib
+          from pathlib import Path
+
+          def exceptions(config):
+              result = set()
+              for module in config.get("untyped_calls_exclude", []):
+                  result.add(("untyped_calls_exclude", module))
+              for override in config.get("overrides", []):
+                  for option in ("ignore_errors", "ignore_missing_imports"):
+                      if override.get(option):
+                          result.update((option, module) for module in override["module"])
+              return result
+
+          current = tomllib.loads(Path("pyproject.toml").read_text())["tool"]["mypy"]
+          current_exceptions = exceptions(current)
+          for option, module in current_exceptions:
+              if module.startswith("duckpad") and not re.fullmatch(r"duckpad(?:\.[a-z_]+)+", module):
+                  raise SystemExit(f"Use an exact module name for {option}: {module}")
+          if current.get("exclude") or current.get("ignore_errors") or current.get("ignore_missing_imports"):
+              raise SystemExit("Global typing exclusions are not allowed")
+          base = os.environ["BASE_SHA"]
+          if base and set(base) != {"0"}:
+              previous = tomllib.loads(subprocess.check_output(
+                  ["git", "show", f"{base}:pyproject.toml"], text=True
+              )).get("tool", {}).get("mypy")
+              # The first adoption establishes the baseline; subsequent changes only remove entries.
+              if previous is not None:
+                  added = current_exceptions - exceptions(previous)
+                  if added:
+                      raise SystemExit(f"Typing exceptions may only shrink: {sorted(added)}")
+          print("Typing exception policy passed")
+          PY
 
   windows-projects:
     name: Windows projects and trusted local execution

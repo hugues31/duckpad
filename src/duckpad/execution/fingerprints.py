@@ -1,24 +1,29 @@
 """Computation fingerprints, which change only when a node's result could change."""
 
+from __future__ import annotations
+
 import logging
 
 from ..bundle import topological
+from ..catalog import Catalog
 from ..components import expand
 from ..graph import connection_references
+from ..projects import Projects
 from ..templates import executable_sql
+from ..types import Connections, Record
 from ..util import Problem, digest
 
 logger = logging.getLogger(__name__)
 
 
 class Fingerprints:
-    def __init__(self, projects, catalog):
+    def __init__(self, projects: Projects, catalog: Catalog) -> None:
         self.projects, self.catalog = projects, catalog
 
-    def of(self, bundle, environment, captured=None):
+    def of(self, bundle: Record, environment: str, captured: Connections | None = None) -> dict[str, str]:
         """Fingerprint every node of a bundle from its SQL, parameters, connections and inputs."""
         nodes, edges, _ = expand(bundle, tolerant=True)
-        fingerprints = {}
+        fingerprints: dict[str, str] = {}
         for key in topological(nodes, edges, tolerant=True):
             node = nodes[key]
             connections = {}
@@ -48,7 +53,7 @@ class Fingerprints:
             )
         return fingerprints
 
-    def current(self, worktree, environment):
+    def current(self, worktree: str, environment: str) -> dict[str, str]:
         """Fingerprints of the committed files, or none when they cannot be expanded."""
         snapshot = self.projects.snapshot(worktree, committed=True)
         if snapshot["bundle"] is None:

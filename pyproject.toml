@@ -59,6 +59,8 @@ dev = [
     "httpx>=0.28",
     "ruff>=0.11",
     "git-cliff==2.14.2",
+    "mypy==2.4.1",
+    "types-psutil>=7.2",
 ]
 integration = ["oracledb>=3", "boto3>=1.38", "moto[server]>=5"]
 
@@ -97,3 +99,84 @@ line-length = 110
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "C4", "PIE", "RET", "SIM", "RUF", "FURB", "PERF", "PTH", "PT"]
 ignore = ["E501", "PT018"]
+
+[tool.mypy]
+python_version = "3.11"
+files = ["src/duckpad"]
+check_untyped_defs = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+warn_unused_configs = true
+show_error_codes = true
+# Transitional call boundaries into legacy services; remove entries as they gain annotations.
+untyped_calls_exclude = [
+    "duckpad.access",
+    "duckpad.bundle",
+    "duckpad.catalog",
+    "duckpad.comparison",
+    "duckpad.components",
+    "duckpad.data_preparation",
+    "duckpad.extensions",
+    "duckpad.git.remote",
+    "duckpad.git.workspace",
+    "duckpad.materialize",
+    "duckpad.merge",
+    "duckpad.store",
+    "duckpad.templates",
+]
+
+[[tool.mypy.overrides]]
+module = [
+    "duckpad.datasets",
+    "duckpad.engine",
+    "duckpad.execution.*",
+    "duckpad.git.command",
+    "duckpad.git.identity",
+    "duckpad.projects",
+    "duckpad.types",
+]
+# Equivalent to mypy 2.4.1 --strict. The shorthand enables flags globally,
+# even inside an override, so list them here to keep legacy modules in base mode.
+disallow_any_generics = true
+disallow_subclassing_any = true
+disallow_untyped_calls = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+warn_return_any = true
+implicit_reexport = false
+strict_equality = true
+extra_checks = true
+
+[[tool.mypy.overrides]]
+module = ["duckpad.app"]
+disallow_untyped_defs = true
+
+# Existing dynamic document/SQLModel code. Exact module names only: this list
+# may shrink, never grow. CI compares these exceptions with the base branch.
+[[tool.mypy.overrides]]
+module = [
+    "duckpad.archive",
+    "duckpad.bundle",
+    "duckpad.comparison",
+    "duckpad.components",
+    "duckpad.example",
+    "duckpad.git.remote",
+    "duckpad.git.workspace",
+    "duckpad.materialize",
+    "duckpad.merge",
+    "duckpad.search",
+    "duckpad.sql_worker",
+    "duckpad.store",
+    "duckpad.templates",
+    "duckpad.trace.describe",
+    "duckpad.trace.normalize",
+    "duckpad.trace.set_operation",
+]
+ignore_errors = true
+
+# Authlib does not ship typing metadata. Keep the exception scoped to this dependency.
+[[tool.mypy.overrides]]
+module = ["authlib.*"]
+ignore_missing_imports = true

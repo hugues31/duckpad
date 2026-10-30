@@ -1,11 +1,14 @@
 """Declarative connector definitions and environment-specific connections."""
 
+from __future__ import annotations
+
 import copy
 import re
 
 import duckdb
 
 from .templates import IDENTIFIER, REFERENCE
+from .types import Connections
 from .util import Problem, digest, literal, qi
 
 MASK = "••••"
@@ -21,7 +24,7 @@ def secret_names(definition):
     return {p["name"] for p in definition.get("parameters", []) if p.get("secret")}
 
 
-def redact(text, secrets):
+def redact(text: str, secrets: list[str]) -> str:
     """Mask secret values, including their SQL-escaped form, in displayed text."""
     for value in sorted((str(v) for v in secrets if v is not None and str(v)), key=len, reverse=True):
         text = text.replace(value, MASK).replace(value.replace("'", "''"), MASK)
@@ -195,7 +198,7 @@ class Catalog:
             raise Problem(f"Invalid connector initialization SQL: {error}") from error
         self._validated.add(fingerprint)
 
-    def capture(self, references, environment):
+    def capture(self, references: list[str], environment: str) -> tuple[Connections, list[str]]:
         captured, secrets = {}, []
         for reference in set(references):
             connection = self.store.get("connection", reference)
