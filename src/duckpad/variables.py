@@ -11,8 +11,10 @@ import copy
 import json
 import math
 import re
+from collections.abc import Iterable
 
 from .templates import base_type, directives, is_date, parse_parameter, type_argument
+from .types import Record
 from .util import Problem, dumps
 
 FILE = "variables.json"
@@ -437,7 +439,7 @@ def bind(bundle, nodes, environment):
     return nodes
 
 
-def used(bundle, nodes, keys, environment):
+def used(bundle: Record, nodes: dict[str, Record], keys: Iterable[str], environment: str) -> Record:
     """Variables used by bound nodes: name -> type, and value and source or the reason it has none."""
     variables, file_error = declarations(bundle)
     names = sorted({b["name"] for key in keys for b in nodes[key].get("variables", {}).values()})
@@ -450,7 +452,7 @@ def used(bundle, nodes, keys, environment):
     return result
 
 
-def annotate(statements, node):
+def annotate(statements: list[Record], node: Record) -> list[Record]:
     """List the variables of a node's bound parameters next to its compiled statements."""
     listed = [{"parameter": param, **binding} for param, binding in sorted(node.get("variables", {}).items())]
     if listed:
@@ -461,7 +463,7 @@ def annotate(statements, node):
 
 def usages(bundle):
     """Variable name -> the root flow node parameters bound to it."""
-    result = {}
+    result: dict[str, list[Record]] = {}
     for node in bundle["flow"].get("nodes", []):
         for param, name in sorted(references(node.get("params")).items()):
             result.setdefault(name, []).append(

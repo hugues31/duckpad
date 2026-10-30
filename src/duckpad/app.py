@@ -1,9 +1,12 @@
 """Authenticated FastAPI endpoints for the local workspace."""
 
+from __future__ import annotations
+
 import json
 import logging
 import os
 import re
+from collections.abc import AsyncGenerator, Iterator, Mapping
 from contextlib import ExitStack, asynccontextmanager
 from pathlib import Path, PureWindowsPath
 from typing import Annotated, Any, Literal
@@ -17,6 +20,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.background import BackgroundTask
 from starlette.datastructures import UploadFile as FormFile
 from starlette.exceptions import HTTPException
+from starlette.middleware.base import RequestResponseEndpoint
 
 from . import __version__, schemas, variables
 from .archive import archive_bundle, import_warnings, read_archive, write_archive
@@ -31,6 +35,7 @@ from .resources import resource_usage
 from .search import search_instance
 from .services import Services
 from .templates import parse_templates
+from .types import Record
 from .util import Problem, clean, uid
 
 SESSION_COOKIE = "duckpad_session"
@@ -46,30 +51,30 @@ STATIC = Path(__file__).parent / "static"
 logger = logging.getLogger(__name__)
 
 
-def problem_response(error: Problem, headers=None):
+def problem_response(error: Problem, headers: Mapping[str, str] | None = None) -> JSONResponse:
     return JSONResponse(
         {"error": str(error), "detail": clean(error.detail)}, status_code=error.status, headers=headers
     )
 
 
-def upload_name(filename):
+def upload_name(filename: str | None) -> str:
     """The client's base file name, whatever its path separators, without control characters."""
     name = re.sub(r"[\x00-\x1f\x7f]", "", PureWindowsPath(filename or "").name).strip()
     return name.encode()[-MAX_UPLOAD_NAME_BYTES:].decode(errors="ignore") or "data.csv"
 
 
-def session_token(request: Request):
+def session_token(request: Request) -> str:
     """The session cookie set by the UI, or a bearer token for API clients."""
     return request.cookies.get(SESSION_COOKIE) or request.headers.get("authorization", "").removeprefix(
         "Bearer "
     )
 
 
-def secure_cookies(request):
+def secure_cookies(request: Request) -> bool:
     return os.environ.get("DUCKPAD_SECURE_COOKIES") == "1" or request.url.scheme == "https"
 
 
-def set_session_cookie(response, request, token):
+def set_session_cookie(response: Response, request: Request, token: str) -> None:
     response.set_cookie(
         SESSION_COOKIE,
         token,
@@ -80,16 +85,17 @@ def set_session_cookie(response, request, token):
     )
 
 
-def create_app(home: Path, watch=True, *, trusted_local=False):
+def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -> FastAPI:
     services = Services.open(home, enforce_access=True, trusted_local=trusted_local)
     store, projects, catalog, engine = services.store, services.projects, services.catalog, services.engine
     auth = Auth(store)
     oidc = OIDC(store, auth)
     access = engine.access
+    assert access is not None
     credentials = projects.remotes.credentials
 
     @asynccontextmanager
-    async def lifespan(app):
+    async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         if watch:
             projects.start_watcher()
         yield
@@ -108,7 +114,7 @@ def create_app(home: Path, watch=True, *, trusted_local=False):
     app.state.oidc = oidc
     app.state.access = access
 
-    def authorize(request, user):
+    def authorize(request: Request, user: Record) -> None:
         parts = request.url.path.strip("/").split("/")
         route = parts[1] if len(parts) > 1 else ""
         if route in ("users", "environments", "catalog", "resources", "sso", "extensions", "git-hosts"):
@@ -142,22 +148,25 @@ def create_app(home: Path, watch=True, *, trusted_local=False):
             raise Problem("Not found", 404)
 
     @app.exception_handler(Problem)
-    async def problem_handler(request, error):
+    async def problem_handler(request: Request, error: Exception) -> JSONResponse:
+        assert isinstance(error, Problem)
         return problem_response(error)
 
     @app.exception_handler(RequestValidationError)
-    async def invalid_request(request, error):
+    async def invalid_request(request: Request, error: Exception) -> JSONResponse:
+        assert isinstance(error, RequestValidationError)
         errors = [{"location": ".".join(map(str, e["loc"])), "message": e["msg"]} for e in error.errors()]
         summary = "; ".join(f"{e['location']}: {e['message']}" for e in errors)
         return problem_response(Problem(f"Invalid request: {summary}", 422, errors))
 
     @app.exception_handler(HTTPException)
-    async def http_problem(request, error):
+    async def http_problem(request: Request, error: Exception) -> JSONResponse:
         # Framework errors, such as unsupported methods or malformed forms, use the same format.
+        assert isinstance(error, HTTPException)
         return problem_response(Problem(str(error.detail), error.status_code), error.headers)
 
     @app.middleware("http")
-    async def authentication(request: Request, call_next):
+    async def authentication(request: Request, call_next: RequestResponseEndpoint) -> Response:
         try:
             if request.url.path.startswith("/api/") and request.url.path not in PUBLIC_API_PATHS:
                 request.state.user = auth.check(session_token(request))
@@ -187,31 +196,32 @@ def create_app(home: Path, watch=True, *, trusted_local=False):
             response.headers["Cache-Control"] = "no-store"
         return response
 
+    # Keep the existing JSON serialization; return annotations are static contracts only.
     # Session
 
-    @app.post("/api/login")
-    def login(data: schemas.Login, request: Request):
+    @app.post("/api/login", response_model=None)
+    def login(data: schemas.Login, request: Request) -> JSONResponse:
         token = auth.login(data.username, data.password, request.client.host if request.client else "local")
         response = JSONResponse(auth.check(token))
         auth.logout(session_token(request))
         set_session_cookie(response, request, token)
         return response
 
-    @app.get("/api/sso")
-    def sso_settings():
+    @app.get("/api/sso", response_model=None)
+    def sso_settings() -> Record:
         return oidc.public_settings()
 
-    @app.put("/api/sso")
-    def save_sso_settings(data: OIDCSettings):
+    @app.put("/api/sso", response_model=None)
+    def save_sso_settings(data: OIDCSettings) -> Record:
         return oidc.save(data)
 
-    @app.get("/api/oidc/provider")
-    def sso_provider():
+    @app.get("/api/oidc/provider", response_model=None)
+    def sso_provider() -> dict[str, str] | None:
         config = oidc.settings()
         return {"label": config["label"]} if config["enabled"] else None
 
-    @app.get("/api/oidc/login")
-    def sso_login(request: Request):
+    @app.get("/api/oidc/login", response_model=None)
+    def sso_login(request: Request) -> RedirectResponse:
         try:
             url, browser = oidc.start()
         except Problem:
@@ -228,8 +238,8 @@ def create_app(home: Path, watch=True, *, trusted_local=False):
         )
         return response
 
-    @app.get(CALLBACK_PATH)
-    def sso_callback(request: Request):
+    @app.get(CALLBACK_PATH, response_model=None)
+    def sso_callback(request: Request) -> RedirectResponse:
         try:
             token = oidc.finish(request.query_params, request.cookies.get(OIDC_COOKIE))
             auth.logout(session_token(request))
@@ -243,33 +253,33 @@ def create_app(home: Path, watch=True, *, trusted_local=False):
         )
         return response
 
-    @app.post("/api/logout")
-    def logout(request: Request):
+    @app.post("/api/logout", response_model=None)
+    def logout(request: Request) -> JSONResponse:
         auth.logout(session_token(request))
         response = JSONResponse({"ok": True})
         response.delete_cookie(SESSION_COOKIE)
         return response
 
-    @app.get("/api/session")
-    def session(request: Request):
+    @app.get("/api/session", response_model=None)
+    def session(request: Request) -> Record:
         return {**request.state.user, "version": __version__}
 
-    @app.get("/api/resources")
-    def resources():
+    @app.get("/api/resources", response_model=None)
+    def resources() -> Record:
         return resource_usage()
 
     # Instance
 
-    @app.get("/api/search")
+    @app.get("/api/search", response_model=None)
     def search(
         request: Request,
         q: Annotated[str, Query(max_length=200)] = "",
         limit: Annotated[int, Query(ge=1, le=100)] = 50,
-    ):
+    ) -> Record:
         return search_instance(projects, request.state.user, q, limit)
 
-    @app.get("/api/workspace")
-    def workspace(request: Request):
+    @app.get("/api/workspace", response_model=None)
+    def workspace(request: Request) -> Record:
         user = request.state.user
         visible = store.visible_projects(user)
         ids = {p["id"] for p in visible}
@@ -287,62 +297,62 @@ def create_app(home: Path, watch=True, *, trusted_local=False):
             },
         }
 
-    @app.get("/api/extensions/settings")
-    def extension_settings():
+    @app.get("/api/extensions/settings", response_model=None)
+    def extension_settings() -> Record:
         return engine.extension_settings()
 
-    @app.put("/api/extensions/settings")
-    def save_extension_settings(data: schemas.ExtensionSettings):
+    @app.put("/api/extensions/settings", response_model=None)
+    def save_extension_settings(data: schemas.ExtensionSettings) -> Record:
         return engine.configure_extensions(data.allow_unsigned_extensions)
 
-    @app.get("/api/extensions/runtime")
-    def extension_runtime():
+    @app.get("/api/extensions/runtime", response_model=None)
+    def extension_runtime() -> Record:
         return engine.extension_runtime()
 
-    @app.post("/api/extensions/import")
+    @app.post("/api/extensions/import", response_model=None)
     def import_extension(
         file: Annotated[UploadFile, File()],
         source: Annotated[Literal["core", "community", "unsigned"], Form()],
-    ):
+    ) -> Record:
         return engine.import_extension(file.filename, source, file.file)
 
-    @app.get("/api/catalog")
-    def get_catalog():
+    @app.get("/api/catalog", response_model=None)
+    def get_catalog() -> Record:
         return catalog.public()
 
-    @app.put("/api/catalog/{kind}")
-    def save_catalog(kind: str, data: dict[str, Any], create: bool = False):
+    @app.put("/api/catalog/{kind}", response_model=None)
+    def save_catalog(kind: str, data: dict[str, Any], create: bool = False) -> Record:
         with engine.exclusive():
             catalog.save(kind, data, create=create, before_change=engine.reset_catalog)
         return catalog.public()
 
-    @app.delete("/api/catalog/{kind}/{identity}")
-    def delete_catalog(kind: str, identity: str):
+    @app.delete("/api/catalog/{kind}/{identity}", response_model=None)
+    def delete_catalog(kind: str, identity: str) -> Record:
         with engine.exclusive():
             catalog.delete(kind, identity, before_change=engine.reset_catalog)
         return catalog.public()
 
-    @app.post("/api/environments")
-    def create_environment(data: schemas.NewEnvironment):
+    @app.post("/api/environments", response_model=None)
+    def create_environment(data: schemas.NewEnvironment) -> Record:
         with engine.exclusive():
             catalog.save_environment(data.model_dump(), create=True)
         return catalog.public()
 
-    @app.put("/api/environments/{identity}")
-    def update_environment(identity: str, data: schemas.EnvironmentSettings):
+    @app.put("/api/environments/{identity}", response_model=None)
+    def update_environment(identity: str, data: schemas.EnvironmentSettings) -> Record:
         with engine.exclusive():
             catalog.save_environment({**data.model_dump(), "id": identity})
         return catalog.public()
 
-    @app.delete("/api/environments/{identity}")
-    def delete_environment(identity: str):
+    @app.delete("/api/environments/{identity}", response_model=None)
+    def delete_environment(identity: str) -> Record:
         with engine.exclusive():
             catalog.validate_environment_deletion(identity)
             engine.reset_catalog()
             catalog.delete_environment(identity)
         return catalog.public()
 
-    def save_upload(worktree, file):
+    def save_upload(worktree: str, file: FormFile) -> dict[str, str]:
         folder = store.paths.resources(projects.get(worktree)["project"])
         folder.mkdir(parents=True, exist_ok=True)
         name = upload_name(file.filename)
@@ -359,8 +369,8 @@ def create_app(home: Path, watch=True, *, trusted_local=False):
         # File parameters still need the server path; the project files already store it.
         return {"path": str(path), "name": name}
 
-    @app.post("/api/worktrees/{worktree}/uploads")
-    async def upload(worktree: str, request: Request):
+    @app.post("/api/worktrees/{worktree}/uploads", response_model=None)
+    async def upload(worktree: str, request: Request) -> Record:
         # Without chunked transfer encoding, the server never reads past Content-Length,
         # so oversized uploads are refused before any of their content is received.
         length = request.headers.get("content-length", "")
@@ -376,14 +386,14 @@ def create_app(home: Path, watch=True, *, trusted_local=False):
 
     # Projects and worktrees
 
-    @app.post("/api/projects")
-    def create_project(data: schemas.NewProject, request: Request):
+    @app.post("/api/projects", response_model=None)
+    def create_project(data: schemas.NewProject, request: Request) -> Record:
         return access.create(request.state.user, lambda grant: projects.create(data.name, record=grant))
 
-    @app.post("/api/projects/import")
+    @app.post("/api/projects/import", response_model=None)
     def import_project(
         request: Request, file: Annotated[UploadFile, File()], name: Annotated[str, Form()] = ""
-    ):
+    ) -> Record:
         bundle = archive_bundle(read_archive(file.file))
         flow_name = bundle["flow"].get("name")
         name = name.strip() or (flow_name.strip() if isinstance(flow_name, str) else "") or "Imported project"
@@ -395,55 +405,55 @@ def create_app(home: Path, watch=True, *, trusted_local=False):
             "warnings": import_warnings(bundle, access.record(worktree["project"])["connections"]),
         }
 
-    @app.post("/api/example")
-    def example(request: Request, data: schemas.NewExample | None = None):
+    @app.post("/api/example", response_model=None)
+    def example(request: Request, data: schemas.NewExample | None = None) -> Record:
         return access.create(
             request.state.user,
             lambda grant: create_example(projects, catalog, data.name if data else None, grant),
             sample=True,
         )
 
-    @app.get("/api/users")
-    def users():
+    @app.get("/api/users", response_model=None)
+    def users() -> list[Record]:
         return [auth.public(u) for u in store.all("user")]
 
-    @app.post("/api/users")
-    def create_user(data: schemas.NewUser):
+    @app.post("/api/users", response_model=None)
+    def create_user(data: schemas.NewUser) -> Record:
         return auth.create_user(data.username, data.password, data.role)
 
-    @app.patch("/api/users/{identity}")
-    def update_user(identity: str, data: schemas.UserChanges):
+    @app.patch("/api/users/{identity}", response_model=None)
+    def update_user(identity: str, data: schemas.UserChanges) -> Record:
         return access.update_user(identity, data.model_dump(exclude_none=True))
 
-    @app.post("/api/password")
-    def change_password(data: schemas.PasswordChange, request: Request):
+    @app.post("/api/password", response_model=None)
+    def change_password(data: schemas.PasswordChange, request: Request) -> Record:
         auth.confirm_password(request.state.user["id"], data.current)
         access.update_user(request.state.user["id"], {"password": data.password})
         return {"ok": True}
 
-    @app.get("/api/ssh-key")
-    def ssh_key(request: Request):
+    @app.get("/api/ssh-key", response_model=None)
+    def ssh_key(request: Request) -> Record | None:
         return credentials.public_key(request.state.user["id"])
 
-    @app.post("/api/ssh-key")
-    def generate_ssh_key(request: Request):
+    @app.post("/api/ssh-key", response_model=None)
+    def generate_ssh_key(request: Request) -> Record:
         return credentials.generate_key(request.state.user)
 
-    @app.delete("/api/ssh-key")
-    def delete_ssh_key(request: Request):
+    @app.delete("/api/ssh-key", response_model=None)
+    def delete_ssh_key(request: Request) -> Record:
         credentials.delete_key(request.state.user["id"])
         return {"ok": True}
 
-    @app.get("/api/git-hosts")
-    def git_hosts():
+    @app.get("/api/git-hosts", response_model=None)
+    def git_hosts() -> Record:
         return credentials.public_hosts()
 
-    @app.put("/api/git-hosts")
-    def save_git_hosts(data: schemas.GitHosts):
+    @app.put("/api/git-hosts", response_model=None)
+    def save_git_hosts(data: schemas.GitHosts) -> Record:
         return credentials.save_hosts(data.known_hosts, data.prefixes)
 
-    @app.get("/api/projects/{project}/settings")
-    def project_settings(project: str, request: Request):
+    @app.get("/api/projects/{project}/settings", response_model=None)
+    def project_settings(project: str, request: Request) -> Record:
         role = access.role(request.state.user, project)
         record = access.record(project)
         directory = [auth.public(u) for u in store.all("user")]
@@ -466,40 +476,41 @@ def create_app(home: Path, watch=True, *, trusted_local=False):
             "connections": record["connections"],
         }
 
-    @app.put("/api/projects/{project}/members/{identity}")
-    def set_member(project: str, identity: str, data: schemas.ProjectRole):
+    @app.put("/api/projects/{project}/members/{identity}", response_model=None)
+    def set_member(project: str, identity: str, data: schemas.ProjectRole) -> Record:
         access.member(project, identity, data.role)
         return {"ok": True}
 
-    @app.delete("/api/projects/{project}/members/{identity}")
-    def remove_member(project: str, identity: str):
+    @app.delete("/api/projects/{project}/members/{identity}", response_model=None)
+    def remove_member(project: str, identity: str) -> Record:
         access.member(project, identity, None)
         return {"ok": True}
 
-    @app.put("/api/projects/{project}/connections")
-    def project_connections(project: str, data: schemas.ConnectionGrants):
+    @app.put("/api/projects/{project}/connections", response_model=None)
+    def project_connections(project: str, data: schemas.ConnectionGrants) -> Record:
         with engine.exclusive(project):
             access.grant_connections(
                 project, data.connections, before_change=lambda: engine.reset_project(project)
             )
         return {"ok": True}
 
-    @app.delete("/api/projects/{project}")
-    def delete_project(project: str):
+    @app.delete("/api/projects/{project}", response_model=None)
+    def delete_project(project: str) -> Record:
         with engine.exclusive(project):
             engine.reset_project(project)
             projects.delete(project)
         return {"ok": True}
 
-    @app.get("/api/library")
-    def library(request: Request):
+    @app.get("/api/library", response_model=None)
+    def library(request: Request) -> list[Record]:
         return projects.library({p["id"] for p in store.visible_projects(request.state.user)})
 
-    @app.get("/api/worktrees/{worktree}")
-    def get_project(worktree: str, request: Request):
+    @app.get("/api/worktrees/{worktree}", response_model=None)
+    def get_project(worktree: str, request: Request) -> Record:
         result = projects.snapshot(worktree, committed=True)
         project = result["worktree"]["project"]
         result["role"] = access.role(request.state.user, project)
+        granted_connections = access.record(project)["connections"]
         result["connections"] = [
             {
                 "id": c["id"],
@@ -507,7 +518,7 @@ def create_app(home: Path, watch=True, *, trusted_local=False):
                 "capabilities": store.get("connector", c["connector"], {}).get("capabilities", []),
             }
             for c in store.all("connection")
-            if c["id"] in access.record(project)["connections"]
+            if c["id"] in granted_connections
         ]
         result["parsed_templates"] = parse_templates((result["bundle"] or {}).get("templates", {}))
         result["variables"] = (
@@ -515,13 +526,13 @@ def create_app(home: Path, watch=True, *, trusted_local=False):
         )
         return result
 
-    @app.put("/api/worktrees/{worktree}")
-    def save_project(worktree: str, data: schemas.Save):
+    @app.put("/api/worktrees/{worktree}", response_model=None)
+    def save_project(worktree: str, data: schemas.Save) -> Record:
         proposal = data.files if data.files is not None else bundle_to_files(data.bundle)
         return projects.write(worktree, data.revision, proposal)
 
-    @app.get("/api/worktrees/{worktree}/archive.zip")
-    def download_project(worktree: str):
+    @app.get("/api/worktrees/{worktree}/archive.zip", response_model=None)
+    def download_project(worktree: str) -> Response:
         snapshot = projects.snapshot(worktree, committed=True)
         return Response(
             write_archive(snapshot["files"]),
@@ -529,34 +540,34 @@ def create_app(home: Path, watch=True, *, trusted_local=False):
             headers={"Content-Disposition": 'attachment; filename="duckpad-project.zip"'},
         )
 
-    @app.post("/api/conflicts/{conflict}/resolve")
-    def resolve_conflict(conflict: str, data: schemas.Resolution):
+    @app.post("/api/conflicts/{conflict}/resolve", response_model=None)
+    def resolve_conflict(conflict: str, data: schemas.Resolution) -> Record:
         return projects.resolve(conflict, data.choice, data.files)
 
-    @app.get("/api/worktrees/{worktree}/git/history")
+    @app.get("/api/worktrees/{worktree}/git/history", response_model=None)
     def git_history(
         worktree: str,
         ref: str = "HEAD",
         offset: int = Query(default=0, ge=0),
         limit: int = Query(default=50, ge=1, le=100),
         entity: str | None = None,
-    ):
+    ) -> Record:
         return projects.versioning.history(worktree, ref, offset, limit, entity)
 
-    @app.get("/api/worktrees/{worktree}/git/compare")
-    def git_compare(worktree: str, a: str = "HEAD", b: str = "working"):
+    @app.get("/api/worktrees/{worktree}/git/compare", response_model=None)
+    def git_compare(worktree: str, a: str = "HEAD", b: str = "working") -> Record:
         return projects.versioning.compare(worktree, a, b)
 
-    @app.get("/api/worktrees/{worktree}/git/branches")
-    def git_branches(worktree: str):
+    @app.get("/api/worktrees/{worktree}/git/branches", response_model=None)
+    def git_branches(worktree: str) -> list[Record]:
         return projects.versioning.branches(worktree)
 
-    @app.post("/api/worktrees/{worktree}/git/open")
-    def git_open(worktree: str, data: schemas.NewBranch):
+    @app.post("/api/worktrees/{worktree}/git/open", response_model=None)
+    def git_open(worktree: str, data: schemas.NewBranch) -> Record:
         return projects.versioning.open_branch(worktree, data.name)
 
-    @app.post("/api/worktrees/{worktree}/git/cleanup")
-    def git_cleanup(worktree: str, data: schemas.BranchCleanup):
+    @app.post("/api/worktrees/{worktree}/git/cleanup", response_model=None)
+    def git_cleanup(worktree: str, data: schemas.BranchCleanup) -> Record:
         with engine.exclusive(projects.get(worktree)["project"]):
             engine.require_idle(data.remove_worktree)
             result = projects.versioning.cleanup(
@@ -565,40 +576,40 @@ def create_app(home: Path, watch=True, *, trusted_local=False):
             engine.discard_worktree(data.remove_worktree)
             return result
 
-    @app.post("/api/worktrees/{worktree}/git/reviews")
-    def git_review(worktree: str, data: schemas.GitReview):
+    @app.post("/api/worktrees/{worktree}/git/reviews", response_model=None)
+    def git_review(worktree: str, data: schemas.GitReview) -> Record:
         return projects.versioning.prepare(worktree, data.source)
 
-    @app.post("/api/worktrees/{worktree}/git/reviews/{review}")
-    def git_choices(worktree: str, review: str, data: schemas.GitChoices):
+    @app.post("/api/worktrees/{worktree}/git/reviews/{review}", response_model=None)
+    def git_choices(worktree: str, review: str, data: schemas.GitChoices) -> Record:
         return projects.versioning.proposal(worktree, review, data.choices)
 
-    @app.post("/api/worktrees/{worktree}/git/reviews/{review}/apply")
-    def git_apply(worktree: str, review: str, data: schemas.GitApply):
+    @app.post("/api/worktrees/{worktree}/git/reviews/{review}/apply", response_model=None)
+    def git_apply(worktree: str, review: str, data: schemas.GitApply) -> Record:
         return projects.versioning.apply(worktree, review, data.choices, data.proposal_revision)
 
-    @app.get("/api/worktrees/{worktree}/git/remote")
-    def git_remote(worktree: str):
+    @app.get("/api/worktrees/{worktree}/git/remote", response_model=None)
+    def git_remote(worktree: str) -> Record:
         return projects.remotes.status(worktree)
 
-    @app.put("/api/worktrees/{worktree}/git/remote")
-    def git_configure(worktree: str, data: schemas.RemoteConfiguration):
+    @app.put("/api/worktrees/{worktree}/git/remote", response_model=None)
+    def git_configure(worktree: str, data: schemas.RemoteConfiguration) -> Record:
         return projects.remotes.configure(worktree, data.url, data.remote_branch, data.config_revision)
 
-    @app.post("/api/worktrees/{worktree}/git/consent")
-    def git_consent(worktree: str, data: schemas.GitConsent, request: Request):
+    @app.post("/api/worktrees/{worktree}/git/consent", response_model=None)
+    def git_consent(worktree: str, data: schemas.GitConsent, request: Request) -> Record:
         return projects.remotes.consent(worktree, request.state.user, data.url)
 
-    @app.post("/api/worktrees/{worktree}/git/fetch")
-    def git_fetch(worktree: str, data: schemas.RemoteState, request: Request):
+    @app.post("/api/worktrees/{worktree}/git/fetch", response_model=None)
+    def git_fetch(worktree: str, data: schemas.RemoteState, request: Request) -> Record:
         return projects.remotes.fetch(worktree, data.config_revision, request.state.user)
 
-    @app.post("/api/worktrees/{worktree}/git/pull")
-    def git_pull(worktree: str, data: schemas.RemoteHeads):
+    @app.post("/api/worktrees/{worktree}/git/pull", response_model=None)
+    def git_pull(worktree: str, data: schemas.RemoteHeads) -> Record:
         return projects.remotes.pull(worktree, data.config_revision, data.local_head, data.remote_head)
 
-    @app.post("/api/worktrees/{worktree}/git/push")
-    def git_push(worktree: str, data: schemas.RemoteHeads, request: Request):
+    @app.post("/api/worktrees/{worktree}/git/push", response_model=None)
+    def git_push(worktree: str, data: schemas.RemoteHeads, request: Request) -> Record:
         return projects.remotes.push(
             worktree,
             data.config_revision,
@@ -608,12 +619,12 @@ def create_app(home: Path, watch=True, *, trusted_local=False):
             request.state.user,
         )
 
-    @app.post("/api/worktrees/{worktree}/branches")
-    def branch(worktree: str, data: schemas.NewBranch):
+    @app.post("/api/worktrees/{worktree}/branches", response_model=None)
+    def branch(worktree: str, data: schemas.NewBranch) -> Record:
         return projects.branch(worktree, data.name, data.revision)
 
-    @app.post("/api/worktrees/{worktree}/group")
-    def group_nodes(worktree: str, data: schemas.Group):
+    @app.post("/api/worktrees/{worktree}/group", response_model=None)
+    def group_nodes(worktree: str, data: schemas.Group) -> Record:
         snapshot = projects.snapshot(worktree)
         if data.revision != snapshot["revision"]:
             raise Problem("Reload the graph before grouping", 409)
@@ -624,8 +635,8 @@ def create_app(home: Path, watch=True, *, trusted_local=False):
         result["selected"] = selected
         return result
 
-    @app.post("/api/worktrees/{worktree}/variables/{name}/rename")
-    def rename_variable(worktree: str, name: str, data: schemas.VariableRename):
+    @app.post("/api/worktrees/{worktree}/variables/{name}/rename", response_model=None)
+    def rename_variable(worktree: str, name: str, data: schemas.VariableRename) -> Record:
         # The declaration and every reference change in one commit, from one locked read.
         with projects.locked(worktree):
             snapshot = projects.snapshot(worktree)
@@ -636,12 +647,12 @@ def create_app(home: Path, watch=True, *, trusted_local=False):
             bundle = variables.rename(snapshot["bundle"], name, data.name)
             return projects.write(worktree, data.revision, bundle_to_files(bundle))
 
-    @app.get("/api/worktrees/{worktree}/variables/scope")
-    def scope_variables(worktree: str, environment: str, node: str | None = None):
+    @app.get("/api/worktrees/{worktree}/variables/scope", response_model=None)
+    def scope_variables(worktree: str, environment: str, node: str | None = None) -> Record:
         return engine.scope_variables(worktree, environment, node)
 
-    @app.post("/api/worktrees/{worktree}/import")
-    def import_item(worktree: str, data: schemas.Import, request: Request):
+    @app.post("/api/worktrees/{worktree}/import", response_model=None)
+    def import_item(worktree: str, data: schemas.Import, request: Request) -> Record:
         access.worktree(request.state.user, data.source_worktree)
         snapshot = projects.snapshot(worktree)
         source = projects.snapshot(data.source_worktree)
@@ -662,12 +673,12 @@ def create_app(home: Path, watch=True, *, trusted_local=False):
 
     # Execution and results
 
-    @app.get("/api/worktrees/{worktree}/status")
-    def status(worktree: str, environment: str):
+    @app.get("/api/worktrees/{worktree}/status", response_model=None)
+    def status(worktree: str, environment: str) -> Record:
         return engine.statuses(worktree, environment)
 
-    @app.post("/api/worktrees/{worktree}/runs")
-    def launch(worktree: str, data: schemas.Launch):
+    @app.post("/api/worktrees/{worktree}/runs", response_model=None)
+    def launch(worktree: str, data: schemas.Launch) -> Record:
         entry_point = "ui" if data.entry_point == "ui" else "api"
         settings = catalog.environment(data.environment)
         # The interface asks before running in a protected environment; API clients run directly.
@@ -683,37 +694,37 @@ def create_app(home: Path, watch=True, *, trusted_local=False):
             )
         return engine.launch(worktree, data.environment, data.node, entry_point)
 
-    @app.get("/api/runs")
-    def runs(request: Request, worktree: str | None = None):
+    @app.get("/api/runs", response_model=None)
+    def runs(request: Request, worktree: str | None = None) -> list[Record]:
         if worktree:
             access.worktree(request.state.user, worktree)
         return store.runs(request.state.user, worktree)
 
-    @app.get("/api/runs/{run}")
-    def get_run(run: str):
+    @app.get("/api/runs/{run}", response_model=None)
+    def get_run(run: str) -> Record:
         record = store.get("run", run)
         if not record:
             raise Problem("Execution not found", 404)
         return record
 
-    @app.post("/api/runs/{run}/cancel")
-    def cancel(run: str):
+    @app.post("/api/runs/{run}/cancel", response_model=None)
+    def cancel(run: str) -> Record:
         return engine.cancel(run)
 
-    @app.get("/api/worktrees/{worktree}/compile/{node}")
-    def compile_sql(worktree: str, node: str, environment: str):
+    @app.get("/api/worktrees/{worktree}/compile/{node}", response_model=None)
+    def compile_sql(worktree: str, node: str, environment: str) -> list[Record]:
         return engine.compile(worktree, environment, node)
 
-    @app.get("/api/worktrees/{worktree}/exports/{node}")
-    def export_result(worktree: str, node: str, environment: str):
+    @app.get("/api/worktrees/{worktree}/exports/{node}", response_model=None)
+    def export_result(worktree: str, node: str, environment: str) -> Record:
         return engine.export_result(worktree, environment, node)
 
-    @app.get("/api/worktrees/{worktree}/exports/{node}/download")
-    def download_export(worktree: str, node: str, run: str, environment: str):
+    @app.get("/api/worktrees/{worktree}/exports/{node}/download", response_model=None)
+    def download_export(worktree: str, node: str, run: str, environment: str) -> StreamingResponse:
         opened = ExitStack()
         stream, record = opened.enter_context(engine.open_export(worktree, environment, node, run))
 
-        def chunks():
+        def chunks() -> Iterator[bytes]:
             try:
                 while chunk := stream.read(CHUNK_SIZE):
                     yield chunk
@@ -732,7 +743,7 @@ def create_app(home: Path, watch=True, *, trusted_local=False):
             background=BackgroundTask(opened.close),
         )
 
-    @app.get("/api/worktrees/{worktree}/preview/{node}")
+    @app.get("/api/worktrees/{worktree}/preview/{node}", response_model=None)
     def preview(
         worktree: str,
         node: str,
@@ -743,7 +754,7 @@ def create_app(home: Path, watch=True, *, trusted_local=False):
         sort: str | None = None,
         descending: bool = False,
         filters: str = "{}",
-    ):
+    ) -> Record:
         try:
             filter_values = json.loads(filters)
         except ValueError as error:
@@ -754,12 +765,12 @@ def create_app(home: Path, watch=True, *, trusted_local=False):
             worktree, environment, node, port, limit, offset, sort, descending, filter_values
         )
 
-    @app.get("/api/worktrees/{worktree}/generations/{identity}")
-    def generation(worktree: str, identity: str, environment: str):
+    @app.get("/api/worktrees/{worktree}/generations/{identity}", response_model=None)
+    def generation(worktree: str, identity: str, environment: str) -> Record:
         return {"valid": engine.generation_valid(worktree, environment, identity)}
 
-    @app.post("/api/worktrees/{worktree}/lineage")
-    def explain(worktree: str, data: schemas.Explain):
+    @app.post("/api/worktrees/{worktree}/lineage", response_model=None)
+    def explain(worktree: str, data: schemas.Explain) -> Record:
         return services.lineage.explain(
             worktree,
             data.environment,
@@ -779,8 +790,8 @@ def create_app(home: Path, watch=True, *, trusted_local=False):
     if (STATIC / "assets").exists():
         app.mount("/assets", StaticFiles(directory=STATIC / "assets"), name="assets")
 
-    @app.get("/{path:path}")
-    def frontend(path: str):
+    @app.get("/{path:path}", response_model=None)
+    def frontend(path: str) -> Response:
         if path == "api" or path.startswith("api/"):
             raise Problem("Not found", 404)
         if (STATIC / "index.html").exists():

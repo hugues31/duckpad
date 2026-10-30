@@ -59,6 +59,8 @@ dev = [
     "httpx>=0.28",
     "ruff>=0.11",
     "git-cliff==2.14.2",
+    "ty==0.0.95",
+    "types-psutil>=7.2",
 ]
 integration = ["oracledb>=3", "boto3>=1.38", "moto[server]>=5"]
 
@@ -71,6 +73,7 @@ include = [
     "/tests",
     "/scripts/build_hook.py",
     "/scripts/release.py",
+    "/scripts/check_typing_policy.py",
     "/cliff.toml",
     "/README.md",
     "/LICENSE",
@@ -97,3 +100,101 @@ line-length = 110
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "C4", "PIE", "RET", "SIM", "RUF", "FURB", "PERF", "PTH", "PT"]
 ignore = ["E501", "PT018"]
+extend-select = ["ANN001", "ANN002", "ANN003", "ANN201", "ANN202", "ANN204", "ANN205", "ANN206", "PYI"]
+
+# Ruff enforces signatures where ty enforces the stricter type rules below.
+# Explicit Any remains permitted at dynamic document boundaries, as before.
+[tool.ruff.lint.per-file-ignores]
+"!src/duckpad/{app.py,datasets.py,engine.py,execution/*.py,git/command.py,git/identity.py,projects.py,types.py}" = ["ANN", "PYI"]
+
+[tool.ty.environment]
+python-version = "3.11"
+
+[tool.ty.src]
+include = ["src/duckpad"]
+respect-ignore-files = false
+
+[tool.ty.analysis]
+respect-type-ignore-comments = false
+
+[tool.ty.rules]
+unused-ignore-comment = "error"
+redundant-cast = "error"
+
+[[tool.ty.overrides]]
+include = [
+    "src/duckpad/datasets.py",
+    "src/duckpad/engine.py",
+    "src/duckpad/execution/*.py",
+    "src/duckpad/git/command.py",
+    "src/duckpad/git/identity.py",
+    "src/duckpad/projects.py",
+    "src/duckpad/types.py",
+]
+[tool.ty.overrides.rules]
+dynamic-function-decorator-return = "error"
+missing-type-argument = "error"
+possibly-unresolved-reference = "error"
+unsound-return-statement = "error"
+[tool.ty.overrides.analysis]
+strict-equality-semantics = true
+strict-generic-narrowing = true
+
+# Existing dynamic document/SQLModel diagnostics. Keep exact file/rule pairs:
+# CI rejects new exceptions, broader patterns, and whole-file exclusions.
+
+[[tool.ty.overrides]]
+include = ["src/duckpad/comparison.py"]
+[tool.ty.overrides.rules]
+unresolved-attribute = "ignore"
+not-subscriptable = "ignore"
+unsupported-operator = "ignore"
+
+[[tool.ty.overrides]]
+include = ["src/duckpad/components.py"]
+[tool.ty.overrides.rules]
+unresolved-attribute = "ignore"
+invalid-assignment = "ignore"
+
+[[tool.ty.overrides]]
+include = ["src/duckpad/git/workspace.py"]
+[tool.ty.overrides.rules]
+unresolved-attribute = "ignore"
+
+[[tool.ty.overrides]]
+include = ["src/duckpad/materialize.py"]
+[tool.ty.overrides.rules]
+invalid-argument-type = "ignore"
+
+[[tool.ty.overrides]]
+include = ["src/duckpad/search.py"]
+[tool.ty.overrides.rules]
+invalid-argument-type = "ignore"
+unresolved-attribute = "ignore"
+
+[[tool.ty.overrides]]
+include = ["src/duckpad/sql_worker.py"]
+[tool.ty.overrides.rules]
+unresolved-attribute = "ignore"
+invalid-argument-type = "ignore"
+
+[[tool.ty.overrides]]
+include = ["src/duckpad/store.py"]
+[tool.ty.overrides.rules]
+invalid-argument-type = "ignore"
+unresolved-attribute = "ignore"
+
+[[tool.ty.overrides]]
+include = ["src/duckpad/templates.py"]
+[tool.ty.overrides.rules]
+unresolved-attribute = "ignore"
+
+[[tool.ty.overrides]]
+include = ["src/duckpad/trace/normalize.py"]
+[tool.ty.overrides.rules]
+invalid-argument-type = "ignore"
+
+[[tool.ty.overrides]]
+include = ["src/duckpad/trace/set_operation.py"]
+[tool.ty.overrides.rules]
+invalid-method-override = "ignore"

@@ -1,5 +1,7 @@
 """JSON-only RPC to a project-scoped SQL process; never deserialize worker code."""
 
+from __future__ import annotations
+
 import json
 import os
 import queue
@@ -7,14 +9,16 @@ import socket
 import subprocess
 import sys
 import threading
+from typing import Any
 
 import duckdb
 
+from .types import Record
 from .util import Problem, clean
 
 
 class Database:
-    def __init__(self, policy):
+    def __init__(self, policy: Record) -> None:
         parent, child = socket.socketpair()
         environment = {
             key: value
@@ -34,7 +38,7 @@ class Database:
         self.socket = parent
         self.stream = parent.makefile("rb")
         self.lock = threading.Lock()
-        self.pending = {}
+        self.pending: dict[int, queue.Queue[Record]] = {}
         self.serial = 0
         self.closed = False
         self.reader = threading.Thread(target=self._read, daemon=True)
@@ -54,7 +58,7 @@ class Database:
                 503,
             ) from None
 
-    def _read(self):
+    def _read(self) -> None:
         try:
             for line in self.stream:
                 response = json.loads(line)
@@ -68,14 +72,14 @@ class Database:
         finally:
             self._stopped()
 
-    def _stopped(self):
+    def _stopped(self) -> None:
         with self.lock:
             self.closed = True
             for target in self.pending.values():
                 target.put({"error": "The isolated SQL worker stopped", "type": "Error"})
 
-    def call(self, operation, **arguments):
-        target = queue.Queue()
+    def call(self, operation: str, **arguments: Any) -> Any:
+        target: queue.Queue[Record] = queue.Queue()
         identity = None
         try:
             with self.lock:
@@ -103,10 +107,10 @@ class Database:
                 with self.lock:
                     self.pending.pop(identity, None)
 
-    def cursor(self):
+    def cursor(self) -> Cursor:
         return Cursor(self, self.call("cursor"))
 
-    def close(self):
+    def close(self) -> None:
         if self.process.poll() is None:
             self.process.terminate()
         try:
@@ -114,6 +118,7 @@ class Database:
         except subprocess.TimeoutExpired:
             self.process.kill()
             self.process.wait()
+        assert self.process.stderr is not None
         self.diagnostics = self.process.stderr.read().decode(errors="replace")
         self.process.stderr.close()
         self.socket.close()
@@ -122,24 +127,24 @@ class Database:
 
 
 class Cursor:
-    def __init__(self, database, identity):
+    def __init__(self, database: Database, identity: str) -> None:
         self.database, self.identity = database, identity
         self.description = None
 
-    def execute(self, query, parameters=None):
+    def execute(self, query: str, parameters: Any = None) -> Cursor:
         self.description = self.database.call(
             "execute", cursor=self.identity, query=query, parameters=parameters
         )
         return self
 
-    def fetchall(self):
+    def fetchall(self) -> list[tuple[Any, ...]]:
         return [tuple(row) for row in self.database.call("fetchall", cursor=self.identity)]
 
-    def fetchone(self):
+    def fetchone(self) -> tuple[Any, ...] | None:
         row = self.database.call("fetchone", cursor=self.identity)
         return tuple(row) if row is not None else None
 
-    def interrupt(self):
+    def interrupt(self) -> None:
         if not self.database.closed:
             try:
                 self.database.call("interrupt", cursor=self.identity)
@@ -147,6 +152,6 @@ class Cursor:
                 if not self.database.closed:
                     raise
 
-    def close(self):
+    def close(self) -> None:
         if not self.database.closed:
             self.database.call("close", cursor=self.identity)

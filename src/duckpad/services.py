@@ -1,5 +1,7 @@
 """Wiring of the instance services shared by the HTTP API, tests and scripts."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -20,7 +22,7 @@ class Services:
     lineage: Lineage
 
     @classmethod
-    def open(cls, home: Path, *, enforce_access=False, trusted_local=False):
+    def open(cls, home: Path, *, enforce_access: bool = False, trusted_local: bool = False) -> Services:
         store = Store(home)
         projects, catalog = Projects(store), Catalog(store)
         engine = Engine(
@@ -35,7 +37,7 @@ class Services:
         catalog.on_change = engine.invalidate
         return cls(store, projects, catalog, engine, Lineage(engine))
 
-    def close(self):
+    def close(self) -> None:
         self.projects.stop()
         self.engine.close()
         self.store.close()
