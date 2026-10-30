@@ -1,5 +1,6 @@
 import { useLocation, useNavigate } from "react-router";
-import { signInReturn, SSO_RETURN_KEY } from "./navigation";
+import { SSO_RETURN_KEY } from "./navigation";
+import { signInReturn } from "./routes";
 import { useEffect, useState } from "react";
 import { ArrowRight, Database, Loader2 } from "lucide-react";
 import { api, apiUrl, send } from "./api";

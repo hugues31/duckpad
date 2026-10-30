@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 import App from "./App";
 import { createBrowserRouter } from "react-router";
 import { RouterProvider } from "react-router/dom";
-import { pageRoutes } from "./navigation";
+import { pageRoutes } from "./routes";
 import "./styles.css";
 import "./settings.css";
 const router = createBrowserRouter([{ Component: App, children: pageRoutes }]);

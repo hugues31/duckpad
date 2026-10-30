@@ -18,7 +18,7 @@ Duckpad has a Python API process serving a compiled React application and isolat
 | `resources.py` | Portable machine-wide CPU and physical memory counters |
 | `example.py` | Reproducible local sample data and documented Northstar project |
 
-The frontend in `frontend/src` mirrors this split: `api.ts` is the only HTTP client, `App.tsx` owns the workspace state, and each page, panel and dialog has its own module.
+The frontend in `frontend/src` mirrors this split: `api.ts` is the only HTTP client, `App.tsx` is the signed-in layout, `shell.ts` and `worktree.tsx` share the session and the open working branch with its pages, and each page, panel and dialog has its own module.
 
 ## Files and data
 
@@ -46,9 +46,10 @@ The account menu retains shortcuts for changing those preferences.
 ## Browser navigation
 
 The browser URL selects the page, settings section, worktree, and workspace tab.
-`navigation.ts` defines the routes; `main.tsx` installs React Router's
-`createBrowserRouter` and `RouterProvider`. `App.tsx` remains the persistent
-workspace layout and keeps the existing API client, polling, and save semantics.
+`routes.tsx` maps each route to a page component of `pages/`; `main.tsx` installs
+React Router's `createBrowserRouter` and `RouterProvider`. `App.tsx` is the
+persistent layout around the pages, with the top bar, dialogs and navigation guard.
+Dialog state is plain data; each dialog builds its actions from the current state.
 Page links use `Link` or `NavLink`, with browser history, keyboard navigation,
 active states, and opening in another tab. Titles and focus follow page changes.
 
