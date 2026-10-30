@@ -118,6 +118,47 @@ def test_notes_cover_changes_since_previous_stable_including_prereleases(reposit
     assert text.count("## Duckpad") == 1
 
 
+@pytest.mark.parametrize("tag", ["v0.10.0rc1", "v0.10.0"])
+def test_previous_stable_release_follows_semantic_version_order(repository, tmp_path, tag):
+    for minor in range(1, 10):
+        repository(f"feat: add the minor {minor} feature", f"0.{minor}.0", f"v0.{minor}.0", annotated=True)
+    repository("feat: add the next feature", tag[1:], tag, annotated=True)
+    # Packed tags are listed alphabetically, which places v0.10.0 right after v0.1.0.
+    git("pack-refs", "--all")
+    notes = tmp_path / "notes.md"
+    release.prepare_release(tag, "example/duckpad", notes)
+    text = notes.read_text()
+    assert "Add the next feature" in text
+    assert not any(f"minor {minor} feature" in text for minor in range(1, 10))
+    assert f"compare/v0.9.0...{tag}" in text
+
+
+def test_new_loose_tag_follows_packed_previous_releases(repository, tmp_path):
+    repository("feat: add canvas", "0.1.0", "v0.1.0")
+    repository("feat: add export", "0.2.0", "v0.2.0", annotated=True)
+    # A fresh clone packs fetched tags, while a tag created afterwards stays loose.
+    git("pack-refs", "--all")
+    repository("feat: add sharing", "0.3.0", "v0.3.0", annotated=True)
+    notes = tmp_path / "notes.md"
+    release.prepare_release("v0.3.0", "example/duckpad", notes)
+    text = notes.read_text()
+    assert "Add sharing" in text and "Add export" not in text and "Add canvas" not in text
+    assert "compare/v0.2.0...v0.3.0" in text
+
+
+def test_previous_stable_release_must_be_an_ancestor(repository, tmp_path):
+    repository("feat: add canvas", "0.1.0", "v0.1.0")
+    git("checkout", "-b", "hotfix")
+    repository("fix: repair canvas", "0.1.1", "v0.1.1")
+    git("checkout", "main")
+    repository("feat: add export", "0.2.0", "v0.2.0")
+    notes = tmp_path / "notes.md"
+    release.prepare_release("v0.2.0", "example/duckpad", notes)
+    text = notes.read_text()
+    assert "Add export" in text and "Repair canvas" not in text
+    assert "compare/v0.1.0...v0.2.0" in text
+
+
 @pytest.mark.parametrize("kind", ["feat", "fix"])
 def test_notes_omit_merge_summaries_and_keep_branch_changes(repository, tmp_path, kind):
     repository("feat: previous release feature", "0.1.0", "v0.1.0")
