@@ -1,11 +1,13 @@
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 
 import pytest
-from conftest import example_bundle, wait_run
+from helpers import example_bundle, wait_run, wait_until
 
-from duckpad.lineage import Lineage, TraceQuery
-from duckpad.projects import bundle_to_files
+from duckpad.bundle import bundle_to_files
+from duckpad.lineage import Lineage
+from duckpad.trace import TraceQuery
 from duckpad.util import Problem
 
 
@@ -32,13 +34,15 @@ def test_cancel_interrupts_active_duckdb_and_prevents_later_branch(services, tmp
     )
     projects.write(worktree, snapshot["revision"], bundle_to_files(snapshot["bundle"]))
     run = engine.launch(worktree, "dev")
-    deadline = time.monotonic() + 5
-    while time.monotonic() < deadline:
-        state = store.get("run", run["id"])["nodes"]["filter"]
-        if state.get("statements", [{}])[0].get("materialization_sql"):
-            break
-        time.sleep(0.01)
-    time.sleep(0.03)
+    wait_until(
+        lambda: (
+            store.get("run", run["id"])["nodes"]["filter"]
+            .get("statements", [{}])[0]
+            .get("materialization_sql")
+        ),
+        message="The long query did not start",
+    )
+    time.sleep(0.03)  # Let DuckDB enter the query that cancellation must interrupt.
     engine.cancel(run["id"])
     engine.cancel(run["id"])
     result = wait_run(store, run)
@@ -89,7 +93,6 @@ def test_recalculation_cancels_only_dependent_lineage_and_rejects_old_generation
 
 
 def test_simultaneous_entry_points_admit_exactly_one_run(services, tmp_path, monkeypatch):
-    from concurrent.futures import ThreadPoolExecutor
 
     store, projects, catalog, engine = services
     worktree = projects.create("Admission race", example_bundle(tmp_path / "race.csv"))["id"]
