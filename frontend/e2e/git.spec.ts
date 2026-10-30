@@ -157,6 +157,62 @@ test("semantic comparison, actual parent, filters, frozen revisions and responsi
   ).toEqual([]);
 });
 
+test("loaded comparison editors close and switch elements without disposing attached models", async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  const tree = await createProject(page);
+  const before = await (
+    await page.request.get(`/api/worktrees/${tree.id}`)
+  ).json();
+  const changed = await change(page, tree.id, (bundle) => {
+    bundle.templates.query = bundle.templates.query.replace(
+      "AS revenue",
+      "+ 1 AS revenue",
+    );
+    bundle.flow.nodes[0].params.minimum = 5;
+  });
+
+  for (let opening = 0; opening < 3; opening++) {
+    const dialog = await openGit(page);
+    await dialog.getByLabel("A: reference").fill(before.commit);
+    await dialog.getByLabel("B: target").fill(changed.commit);
+    const template = dialog
+      .locator(".change-row")
+      .filter({ hasText: "templates/query.sql" });
+    for (let selection = 0; selection < 2; selection++) {
+      await template.click();
+      await expect(dialog.locator(".monaco-diff-editor")).toBeVisible();
+      await expect(
+        dialog.locator(".monaco-diff-editor .editor.modified"),
+      ).toContainText(/\+\s*1\s+AS\s+revenue/);
+      if (selection === 0) {
+        await dialog
+          .locator(".change-row")
+          .filter({ hasText: "Regional revenue" })
+          .click();
+        await expect(dialog.locator(".monaco-diff-editor")).toHaveCount(0);
+      }
+    }
+    await dialog.getByRole("button", { name: "Swap A/B" }).click();
+    await expect(dialog.locator(".monaco-diff-editor")).toHaveCount(0);
+    await template.click();
+    await expect(
+      dialog.locator(".monaco-diff-editor .editor.original"),
+    ).toContainText(/\+\s*1\s+AS\s+revenue/);
+    await expect(
+      dialog.locator(".monaco-diff-editor .editor.modified"),
+    ).not.toContainText(/\+\s*1\s+AS\s+revenue/);
+    await page.keyboard.press("Escape");
+    await expect(dialog).toBeHidden();
+    await expect(
+      page.getByRole("button", { name: "Git synchronization", exact: true }),
+    ).toBeFocused();
+  }
+  expect(errors).toEqual([]);
+});
+
 test("review and resolve a field conflict with base evidence, reject stale heads, then integrate", async ({
   page,
 }) => {

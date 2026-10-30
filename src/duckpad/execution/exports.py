@@ -5,7 +5,7 @@ from contextlib import suppress
 from pathlib import Path
 
 from ..artifacts import Artifacts
-from ..components import expand
+from ..components import expand_for
 from ..graph import connection_references, reachable
 from ..templates import URI
 from ..util import Problem, digest
@@ -88,7 +88,7 @@ class Exports:
             snapshot = self.projects.snapshot(worktree)
             if not snapshot["bundle"]:
                 return {"status": "stale"}
-            nodes, edges, _ = expand(snapshot["bundle"], tolerant=True)
+            nodes, edges, _ = expand_for(snapshot["bundle"], environment)
             definition = nodes.get(node)
             if not definition:
                 raise Problem("Node not found", 404)

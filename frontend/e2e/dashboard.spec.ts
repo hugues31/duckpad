@@ -33,7 +33,7 @@ test("empty dashboard creates and opens a project, then lists it from the Duckpa
   await expect(
     page.getByRole("button", { name: "Open example project" }),
   ).toBeEnabled();
-  await page.unroute("**/api/workspace");
+  await page.unrouteAll({ behavior: "wait" });
   await page.getByRole("button", { name: "New project", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "New project" });
   await dialog.getByLabel("Name", { exact: true }).fill("Dashboard creation");

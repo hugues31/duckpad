@@ -44,6 +44,9 @@ class Engine:
     def launch(self, worktree, environment, target=None, entry_point="api"):
         return self.runs.launch(worktree, environment, target, entry_point)
 
+    def scope_variables(self, worktree, environment, target=None):
+        return self.runs.scope_variables(worktree, environment, target)
+
     def cancel(self, run_id):
         return self.runs.cancel(run_id)
 

@@ -18,7 +18,7 @@ from starlette.background import BackgroundTask
 from starlette.datastructures import UploadFile as FormFile
 from starlette.exceptions import HTTPException
 
-from . import __version__, schemas
+from . import __version__, schemas, variables
 from .archive import archive_bundle, import_warnings, read_archive, write_archive
 from .artifacts import CHUNK_SIZE
 from .auth import SESSION_LIFETIME, Auth
@@ -510,6 +510,9 @@ def create_app(home: Path, watch=True, *, trusted_local=False):
             if c["id"] in access.record(project)["connections"]
         ]
         result["parsed_templates"] = parse_templates((result["bundle"] or {}).get("templates", {}))
+        result["variables"] = (
+            variables.summary(result["bundle"], catalog.environment_names()) if result["bundle"] else None
+        )
         return result
 
     @app.put("/api/worktrees/{worktree}")
@@ -621,6 +624,22 @@ def create_app(home: Path, watch=True, *, trusted_local=False):
         result["selected"] = selected
         return result
 
+    @app.post("/api/worktrees/{worktree}/variables/{name}/rename")
+    def rename_variable(worktree: str, name: str, data: schemas.VariableRename):
+        # The declaration and every reference change in one commit, from one locked read.
+        with projects.locked(worktree):
+            snapshot = projects.snapshot(worktree)
+            if data.revision != snapshot["revision"]:
+                raise Problem("Reload the project before renaming a variable", 409)
+            if snapshot["bundle"] is None:
+                raise Problem("Project files are invalid", 422, snapshot["diagnostics"])
+            bundle = variables.rename(snapshot["bundle"], name, data.name)
+            return projects.write(worktree, data.revision, bundle_to_files(bundle))
+
+    @app.get("/api/worktrees/{worktree}/variables/scope")
+    def scope_variables(worktree: str, environment: str, node: str | None = None):
+        return engine.scope_variables(worktree, environment, node)
+
     @app.post("/api/worktrees/{worktree}/import")
     def import_item(worktree: str, data: schemas.Import, request: Request):
         access.worktree(request.state.user, data.source_worktree)
@@ -653,7 +672,15 @@ def create_app(home: Path, watch=True, *, trusted_local=False):
         settings = catalog.environment(data.environment)
         # The interface asks before running in a protected environment; API clients run directly.
         if entry_point == "ui" and settings["confirm_before_run"] and not data.confirmed:
-            raise Problem("Confirm this environment before running", 409, {"confirmation_required": settings})
+            try:
+                used = engine.scope_variables(worktree, data.environment, data.node)
+            except Problem:
+                used = {}
+            raise Problem(
+                "Confirm this environment before running",
+                409,
+                {"confirmation_required": settings, "variables": used},
+            )
         return engine.launch(worktree, data.environment, data.node, entry_point)
 
     @app.get("/api/runs")
