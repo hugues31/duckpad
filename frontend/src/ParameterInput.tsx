@@ -12,6 +12,7 @@ export default function ParameterInput({
   value,
   onChange,
   onBlur,
+  commitOnChange = false,
 }: {
   kind: "number" | "list";
   id?: string;
@@ -23,9 +24,19 @@ export default function ParameterInput({
   value: any;
   onChange: (value: any) => void;
   onBlur?: () => void;
+  /** Let form validation see incomplete values while preserving their input text. */
+  commitOnChange?: boolean;
 }) {
   const t = useT();
   const [draft, setDraft] = useState<string | null>(null);
+  const parse = (text: string) =>
+    kind === "list"
+      ? text.split(",").map((item) => item.trim())
+      : text.trim() === ""
+        ? undefined
+        : Number.isFinite(Number(text))
+          ? Number(text)
+          : text;
   return (
     <input
       id={id}
@@ -38,16 +49,12 @@ export default function ParameterInput({
       onChange={(e) => {
         e.currentTarget.setCustomValidity("");
         setDraft(e.target.value);
+        if (commitOnChange) onChange(parse(e.target.value));
       }}
       onBlur={(e) => {
         if (draft !== null) {
-          const parsed =
-            kind === "list"
-              ? draft.split(",").map((item) => item.trim())
-              : draft.trim() === ""
-                ? undefined
-                : Number(draft);
-          if (typeof parsed === "number" && !Number.isFinite(parsed)) {
+          const parsed = parse(draft);
+          if (kind === "number" && typeof parsed === "string") {
             e.currentTarget.setCustomValidity(t("invalidNumber"));
             e.currentTarget.reportValidity();
             return;

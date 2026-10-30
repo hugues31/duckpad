@@ -16,7 +16,7 @@ import { VariableValues } from "./VariableFields";
 
 /** The node parameters bound to each variable of a run, as "Node · parameter". */
 function boundParameters(run: Json) {
-  const result: Record<string, string[]> = {};
+  const result: Record<string, string[]> = Object.create(null);
   for (const state of Object.values(run.nodes || {}) as Json[])
     for (const [parameter, name] of Object.entries(state.variables || {}))
       (result[name as string] ||= []).push(`${state.label} · ${parameter}`);

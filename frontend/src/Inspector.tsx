@@ -25,6 +25,7 @@ import { StatementVariables } from "./VariableFields";
 import {
   bindTo,
   variableReference,
+  variableSummary,
   variableTypeFor,
   type Declaration,
 } from "./variables";
@@ -364,9 +365,10 @@ export default function Inspector({
                               disabled={readOnly}
                               onUnbind={() => {
                                 // Keep computing the same value, now written in the node.
-                                const current =
-                                  snapshot.variables?.declarations[reference]
-                                    ?.values[environment];
+                                const current = variableSummary(
+                                  snapshot,
+                                  reference,
+                                )?.values[environment];
                                 setParameter(parameter.name, current?.value);
                                 void persist();
                               }}

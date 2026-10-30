@@ -22,6 +22,14 @@ class Fingerprints:
         fingerprints = {}
         for key in topological(nodes, edges, tolerant=True):
             node = nodes[key]
+            # An omitted parameter and an explicit value equal to its default compute
+            # the same result, including when that value comes from a variable.
+            params = {
+                parameter["name"]: parameter["default"]
+                for parameter in node["parsed"]["parameters"]
+                if "default" in parameter
+            }
+            params.update(node.get("params", {}))
             connections = {}
             for reference in connection_references(node):
                 try:
@@ -33,7 +41,7 @@ class Fingerprints:
                 {
                     "sql": executable_sql(node["template_sql"]),
                     "error": node.get("error"),
-                    "params": node.get("params", {}),
+                    "params": params,
                     "connections": connections,
                     "inputs": [
                         (

@@ -28,6 +28,7 @@ import {
   sameValue,
   typeOptions,
   validValue,
+  variableSummary,
   VARIABLE_NAME,
   VARIABLE_TYPES,
   VARIABLES_FILE,
@@ -129,7 +130,7 @@ export default function VariablesPanel({
   const editing =
     creating !== null
       ? null
-      : selected && summary?.declarations[selected]
+      : selected && variableSummary(snapshot, selected)
         ? selected
         : null;
   const active = environments.find((item) => item.id === environment);
@@ -410,13 +411,18 @@ function VariableEditor({
   const t = useT();
   const id = useId();
   const saved = name ? declarations(snapshot.bundle)?.[name] : undefined;
-  const summary = name ? snapshot.variables?.declarations[name] : undefined;
+  const summary = name ? variableSummary(snapshot, name) : undefined;
   const value = useMemo<Draft>(
     () =>
       saved && name
-        ? { environments: {}, ...saved, name }
+        ? {
+            environments: {},
+            ...saved,
+            type: summary?.type || saved.type,
+            name,
+          }
         : { ...NEW_VARIABLE, name: initialName },
-    [saved, name, initialName],
+    [saved, summary?.type, name, initialName],
   );
   const taken = Object.keys(snapshot.variables?.declarations || {});
   const [message, setMessage] = useState("");
@@ -430,7 +436,7 @@ function VariableEditor({
     snapshot,
     async (draft, base) => {
       const result = await onSave(base, (variables) => {
-        if (!name && draft.name in variables)
+        if (!name && Object.hasOwn(variables, draft.name))
           throw new Error(t("variableExists"));
         variables[draft.name] = stored(draft);
       });
@@ -445,6 +451,7 @@ function VariableEditor({
   );
   const values = draft.environments || {};
   const kind = baseType(draft.type);
+  const choices = typeOptions(draft.type);
   const problems = [
     !name &&
       draft.name &&
@@ -452,7 +459,9 @@ function VariableEditor({
       t("invalidVariableName"),
     !name && taken.includes(draft.name) && t("variableExists"),
     kind === "choice" &&
-      !typeOptions(draft.type).length &&
+      (!choices.length ||
+        choices.some((option) => !option || /[()]/.test(option)) ||
+        new Set(choices).size !== choices.length) &&
       t("choiceOptionsRequired"),
     draft.default !== undefined &&
       !validValue(draft.type, draft.default) &&

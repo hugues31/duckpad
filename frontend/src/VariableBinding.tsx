@@ -15,6 +15,7 @@ import {
   formatVariableValue,
   looksSecret,
   validValue,
+  variableSummary,
   VARIABLE_NAME,
   type Declaration,
 } from "./variables";
@@ -326,7 +327,7 @@ export function BoundVariable({
   const t = useT();
   const summarize = useValueSummary();
   const summary = snapshot.variables;
-  const variable = summary?.declarations[name];
+  const variable = variableSummary(snapshot, name);
   const current = variable?.values[environment];
   const error =
     summary?.file_error ||

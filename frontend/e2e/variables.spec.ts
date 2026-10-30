@@ -576,3 +576,162 @@ test("merge conflicts on variables are resolved per variable", async ({
     },
   });
 });
+
+test("promoting a choice preserves spaces in its options and the current result", async ({
+  page,
+}) => {
+  const { id, url } = await example(page, (bundle) => {
+    bundle.templates.spaced = `-- @label Spaced choices
+-- @kind source
+-- @param status: choice(paid in full|refunded) = "paid in full"
+-- @output result
+SELECT {{ status }} AS status;`;
+    bundle.flow.nodes = [
+      {
+        id: "spaced",
+        template: "spaced",
+        params: {},
+        position: { x: 0, y: 0 },
+      },
+    ];
+    bundle.flow.edges = [];
+  });
+  await run(page, url, "dev");
+  await page.goto(`/worktrees/${id}/flow`);
+  await page.locator('.react-flow__node[data-id="spaced"]').click();
+  await page
+    .getByRole("button", { name: "Bind status to a variable", exact: true })
+    .click();
+  await page
+    .getByRole("button", {
+      name: "Create a variable from “paid in full”…",
+      exact: true,
+    })
+    .click();
+  const dialog = page.getByRole("dialog", { name: "New variable" });
+  await expect(dialog.getByLabel("Default value", { exact: true })).toHaveValue(
+    "paid in full",
+  );
+  await dialog
+    .getByRole("button", { name: "Create and bind", exact: true })
+    .click();
+  await expect(dialog).toBeHidden();
+  expect((await snapshot(page, url)).bundle!.variables).toMatchObject({
+    status: { type: "choice(paid in full|refunded)", default: "paid in full" },
+  });
+  expect(await resultStatus(page, url, "dev", "spaced")).toBe("valid");
+});
+
+test("invalid numeric variable drafts cannot save an older value", async ({
+  page,
+}) => {
+  const { id, url } = await example(page, (bundle) => {
+    bundle.variables = { threshold: { type: "number", default: 300 } };
+  });
+  await page.goto(`/worktrees/${id}/variables?variable=threshold`);
+  const editor = page.getByRole("complementary", { name: "threshold" });
+  await editor
+    .getByLabel("Description", { exact: true })
+    .fill("Minimum amount");
+  const value = editor.getByLabel("Default value", { exact: true });
+  await value.fill("-");
+  await value.blur();
+  const save = editor.getByRole("button", {
+    name: "Save changes",
+    exact: true,
+  });
+  await expect(save).toBeDisabled();
+  await value.fill("1e-3");
+  await value.blur();
+  await expect(save).toBeEnabled();
+  await save.click();
+  await expect(save).toBeDisabled();
+  expect((await snapshot(page, url)).bundle!.variables).toMatchObject({
+    threshold: { default: 0.001, description: "Minimum amount" },
+  });
+});
+
+test("a variable named constructor can be created, bound and audited", async ({
+  page,
+}) => {
+  const { id, url } = await example(page);
+  await page.goto(`/worktrees/${id}/variables`);
+  await page.getByRole("button", { name: "New variable", exact: true }).click();
+  const editor = page.getByRole("complementary", { name: "New variable" });
+  await editor.getByLabel("Name", { exact: true }).fill("constructor");
+  await editor.getByLabel("Default value", { exact: true }).fill("paid");
+  await editor.getByRole("button", { name: "Create", exact: true }).click();
+  await expect(
+    page.getByRole("complementary", { name: "constructor" }),
+  ).toBeVisible();
+  await page.getByRole("link", { name: "Flow", exact: true }).click();
+  await node(page, "Paid orders").click();
+  const inspector = page.locator(".inspector");
+  await inspector
+    .getByRole("button", { name: "Bind status to a variable", exact: true })
+    .click();
+  await inspector.getByRole("button", { name: /^constructor/ }).click();
+  await expect(
+    inspector.getByRole("group", { name: "status is bound to constructor" }),
+  ).toBeVisible();
+  await run(page, url, "dev");
+  await inspector.getByRole("button", { name: "SQL", exact: true }).click();
+  await expect(inspector.locator(".variable-values")).toContainText(
+    "constructor",
+  );
+  await page.getByRole("link", { name: "History", exact: true }).click();
+  await page.locator(".history-row").first().click();
+  await expect(
+    page
+      .getByRole("dialog", { name: "View execution" })
+      .locator(".run-variables"),
+  ).toContainText("constructor");
+});
+
+test("the editor normalizes imported types and rejects invalid choice declarations", async ({
+  page,
+}) => {
+  const { id, url } = await example(page, (bundle) => {
+    bundle.variables = {
+      cities: { type: " list < text > ", default: ["New York"] },
+    };
+  });
+  await page.goto(`/worktrees/${id}/variables?variable=cities`);
+  const editor = page.getByRole("complementary", { name: "cities" });
+  await expect(editor.getByLabel("Type", { exact: true })).toHaveValue(
+    "list<text>",
+  );
+  await editor
+    .getByLabel("Description", { exact: true })
+    .fill("Selected cities");
+  await editor
+    .getByRole("button", { name: "Save changes", exact: true })
+    .click();
+  await expect(
+    editor.getByRole("button", { name: "Save changes", exact: true }),
+  ).toBeDisabled();
+  expect((await snapshot(page, url)).bundle!.variables).toMatchObject({
+    cities: { type: "list<text>", default: ["New York"] },
+  });
+  await page.getByRole("button", { name: "New variable", exact: true }).click();
+  const creation = page.getByRole("complementary", { name: "New variable" });
+  await creation.getByLabel("Name", { exact: true }).fill("status");
+  await creation.getByLabel("Type", { exact: true }).selectOption("choice");
+  const options = creation.getByLabel("Options, separated by commas", {
+    exact: true,
+  });
+  await options.fill("paid, paid");
+  await creation
+    .getByLabel("Default value", { exact: true })
+    .selectOption("paid");
+  const create = creation.getByRole("button", { name: "Create", exact: true });
+  await expect(create).toBeDisabled();
+  await options.fill("paid, refunded (partial)");
+  await expect(create).toBeDisabled();
+  await options.fill("paid, refunded");
+  await create.click();
+  await expect(
+    page.getByRole("complementary", { name: "status" }),
+  ).toBeVisible();
+  expect((await snapshot(page, url)).variables!.file_error).toBeNull();
+});

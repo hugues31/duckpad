@@ -11,6 +11,7 @@ import {
   formatVariableValue,
   sameValue,
   typeOptions,
+  variableSummary,
 } from "./variables";
 import "./variables.css";
 
@@ -65,11 +66,13 @@ export function VariableValueInput({
   if (kind === "number" || kind === "list")
     return (
       <ParameterInput
+        key={type}
         id={id}
         label={label}
         placeholder={placeholder}
         disabled={disabled}
         kind={kind}
+        commitOnChange
         value={value}
         onChange={(next) => {
           if (kind === "number" || !Array.isArray(next)) return onChange(next);
@@ -165,8 +168,8 @@ export function StatementVariables({
   environment: string;
 }) {
   const t = useT();
-  const variables: Record<string, Json> = {};
-  const parameters: Record<string, string[]> = {};
+  const variables: Record<string, Json> = Object.create(null);
+  const parameters: Record<string, string[]> = Object.create(null);
   for (const statement of statements)
     for (const item of statement.variables || []) {
       variables[item.name] = item;
@@ -205,7 +208,7 @@ export function useStaleVariables(
   const root = String(result.node).split("::")[0];
   return Object.entries(run.data.variables as Record<string, Json>).flatMap(
     ([name, used]) => {
-      const declared = summary.declarations[name];
+      const declared = variableSummary(snapshot, name);
       const current = declared?.values[environment];
       const usages = (declared?.usages || []).map((usage) => usage.node);
       if (

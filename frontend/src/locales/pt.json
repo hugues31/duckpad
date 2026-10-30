@@ -93,7 +93,7 @@
   "variableType": "Tipo",
   "variableDescription": "Descrição",
   "choiceOptions": "Opções, separadas por vírgulas",
-  "choiceOptionsRequired": "Uma escolha precisa de pelo menos uma opção.",
+  "choiceOptionsRequired": "Uma escolha precisa de opções distintas, não vazias e sem parênteses.",
   "defaultValue": "Valor padrão",
   "noDefault": "Sem valor padrão",
   "valuePerEnvironment": "Valor por ambiente",

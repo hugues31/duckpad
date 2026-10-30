@@ -50,7 +50,7 @@ export interface Declaration {
 }
 
 /** `choice(a|b)` -> `choice`, `list<text>` -> `list`. */
-export const baseType = (type: string) => type.trim().split(/[<(]/)[0];
+export const baseType = (type: string) => type.trim().split(/[<(]/)[0].trim();
 
 /** The options of `choice(a|b)` or `keyword(a|b)`. */
 export function typeOptions(type: string): string[] {
@@ -90,12 +90,13 @@ export function compatible(variableType: string, parameterType: string) {
 
 /** The variable type that holds a parameter's value, or null when the parameter cannot be bound. */
 export function variableTypeFor(parameterType: string): string | null {
-  const type = parameterType.replace(/\s+/g, "");
+  const type = parameterType.trim();
   const target = baseType(type);
   if (["text", "file", "destination"].includes(target)) return "text";
   if (["number", "boolean", "date"].includes(target)) return target;
   if (["identifier", "column"].includes(target)) return "identifier";
-  if (type === "list<text>" || type === "list<number>") return type;
+  const list = type.replace(/\s+/g, "");
+  if (list === "list<text>" || list === "list<number>") return list;
   if ((target === "choice" || target === "keyword") && typeOptions(type).length)
     return `choice(${typeOptions(type).join("|")})`;
   return null;
@@ -179,7 +180,10 @@ export function declarations(
 export const variableSummary = (
   snapshot: Snapshot,
   name: string,
-): VariableSummary | undefined => snapshot.variables?.declarations[name];
+): VariableSummary | undefined => {
+  const declared = snapshot.variables?.declarations;
+  return declared && Object.hasOwn(declared, name) ? declared[name] : undefined;
+};
 
 /** Root flow nodes downstream of the given ones, excluding them. */
 export function descendants(bundle: Bundle, nodes: string[]) {

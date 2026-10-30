@@ -93,7 +93,7 @@
   "variableType": "Type",
   "variableDescription": "Description",
   "choiceOptions": "Options, separated by commas",
-  "choiceOptionsRequired": "A choice needs at least one option.",
+  "choiceOptionsRequired": "A choice needs distinct, non-empty options without parentheses.",
   "defaultValue": "Default value",
   "noDefault": "No default value",
   "valuePerEnvironment": "Value per environment",
