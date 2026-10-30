@@ -20,7 +20,6 @@ import {
   typeOptions,
   variableSummary,
 } from "./variables";
-import "./variables.css";
 
 /** Edit a value of a variable type; an empty field gives `undefined`. */
 export function VariableValueInput({

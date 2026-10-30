@@ -45,7 +45,6 @@ import {
   type Query,
 } from "./lineageGraph";
 import { trapFocus } from "./modals";
-import "./lineage.css";
 
 type Props = {
   worktree: string;

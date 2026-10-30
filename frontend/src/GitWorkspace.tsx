@@ -13,7 +13,6 @@ import type {
 } from "./gitTypes";
 import { useT, type TranslationKey } from "./i18n";
 import { Modal } from "./modals";
-import "./git.css";
 
 type Mode = "compare" | "branches" | "sync" | "review";
 
