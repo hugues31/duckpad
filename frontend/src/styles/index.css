@@ -5,6 +5,11 @@
  * import CSS from a component.
  */
 @import "@xyflow/react/dist/style.css";
+/*
+ * These feature sheets keep the position they had when their components
+ * imported them: their selectors win by specificity, and loading them later
+ * would reorder declarations of equal specificity.
+ */
 @import "./variables.css";
 @import "./lineage.css";
 @import "./git.css";
@@ -28,6 +33,5 @@
 @import "./toast.css";
 @import "./login.css";
 @import "./query-builder.css";
-@import "./responsive.css";
 @import "./administration.css";
 @import "./settings.css";

@@ -660,3 +660,79 @@ fieldset.palette-bottom {
   stroke: var(--accent) !important;
   stroke-width: 2px !important;
 }
+@media (min-width: 1700px) {
+  .flow-layout {
+    --palette-width: 224px;
+    --inspector-width: 350px;
+  }
+}
+@media (max-width: 1200px) {
+  .flow-layout {
+    --palette-width: 180px;
+    --inspector-width: 290px;
+  }
+  .palette-item {
+    font-size: 11px;
+  }
+}
+@media (max-width: 1099px) {
+  .palette-open {
+    --canvas-left: 0px;
+  }
+  .palette {
+    top: calc(var(--stage-top) + 38px);
+    width: var(--palette-width);
+    z-index: 25;
+  }
+  .resize-preview {
+    left: 0;
+    right: 0;
+  }
+  .resize-palette,
+  .resize-inspector {
+    top: calc(var(--stage-top) + 38px);
+  }
+  .preview-open .resize-palette,
+  .preview-open .resize-inspector {
+    bottom: var(--preview-height);
+  }
+  .preview-open .palette {
+    bottom: var(--preview-height);
+  }
+  .canvas-breadcrumb {
+    right: 0;
+  }
+}
+@media (max-width: 600px) {
+  .flow-layout {
+    --preview-height: 220px;
+  }
+  .inspector-open {
+    --canvas-right: 0px;
+  }
+  .preview-open .resize-inspector {
+    bottom: 0;
+  }
+  .canvas-breadcrumb {
+    gap: 4px;
+    overflow-x: auto;
+    padding: 3px 8px;
+  }
+  .canvas-breadcrumb > button:not(.icon):not(.group-button) {
+    max-width: 125px;
+  }
+  .canvas-breadcrumb .group-button {
+    font-size: 0;
+    padding: 7px;
+    flex-shrink: 0;
+  }
+  .react-flow__minimap.react-flow__panel {
+    display: none;
+  }
+  .canvas-safe-area {
+    bottom: calc(var(--canvas-bottom) + 60px);
+  }
+  .component-notice {
+    font-size: 10px;
+  }
+}

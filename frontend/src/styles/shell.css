@@ -429,3 +429,94 @@
   color: var(--muted);
   margin-right: 8px;
 }
+@media (max-width: 1200px) {
+  .project-picker select {
+    max-width: 230px;
+  }
+  .topbar-right {
+    gap: 7px;
+  }
+  .branch-picker select {
+    max-width: 120px;
+  }
+  .save-status {
+    display: none;
+  }
+}
+@media (max-width: 1099px) {
+  .topbar {
+    gap: 10px;
+  }
+  .project-picker select {
+    max-width: 200px;
+  }
+  .branch-picker select {
+    max-width: 90px;
+  }
+}
+@media (max-width: 800px) {
+  .app-shell {
+    --menu-height: 90px;
+  }
+  .topbar {
+    flex-wrap: wrap;
+    gap: 4px 12px;
+    padding: 6px 10px;
+  }
+  .rail {
+    border-right: 0;
+    padding-right: 0;
+  }
+  .topbar-right {
+    width: 100%;
+    justify-content: flex-end;
+  }
+  .project-picker {
+    margin-right: 0;
+    margin-left: auto;
+  }
+  .project-picker select {
+    max-width: 210px;
+    font-size: 12px;
+  }
+  .header-divider {
+    display: none;
+  }
+}
+@media (max-width: 600px) {
+  .app-shell {
+    --menu-height: 120px;
+    --toolbar-height: 78px;
+  }
+  .topbar {
+    gap: 3px;
+  }
+  .rail {
+    width: 100%;
+  }
+  .rail-main {
+    flex: 1;
+  }
+  .project-picker {
+    margin-left: 0;
+  }
+  .project-picker select {
+    max-width: 295px;
+  }
+  .flow-toolbar {
+    flex-wrap: wrap;
+    padding: 6px 10px;
+    gap: 3px;
+  }
+  .flow-toolbar > .row {
+    margin-left: auto;
+  }
+  .main-tabs {
+    width: 100%;
+    justify-content: space-between;
+  }
+  .main-tabs :is(button, a) {
+    font-size: 11px;
+    padding: 6px 9px;
+  }
+}

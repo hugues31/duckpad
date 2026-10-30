@@ -94,3 +94,11 @@
   align-self: flex-start;
   margin-top: 10px;
 }
+@media (max-width: 600px) {
+  .full-panel {
+    padding: 20px;
+  }
+  .page-heading {
+    flex-wrap: wrap;
+  }
+}

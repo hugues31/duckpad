@@ -175,3 +175,20 @@
   width: 100%;
   margin-bottom: 10px;
 }
+@media (max-width: 1099px) {
+  .inspector {
+    top: calc(var(--stage-top) + 38px);
+  }
+  .preview-open .inspector {
+    bottom: var(--preview-height);
+  }
+}
+@media (max-width: 600px) {
+  .inspector {
+    width: min(var(--inspector-width), 100%);
+    z-index: 26;
+  }
+  .preview-open .inspector {
+    bottom: 0;
+  }
+}
