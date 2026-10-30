@@ -43,6 +43,7 @@ jobs:
       - run: uv run ruff format --check src tests scripts
       - run: uv run pytest -q
       - run: npm ci --prefix frontend
+      - run: npm run test:unit --prefix frontend
       - run: npm run build --prefix frontend
       - run: npm exec --prefix frontend -- playwright install --with-deps chromium
       - run: npm run test:e2e --prefix frontend
