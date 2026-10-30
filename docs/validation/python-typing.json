@@ -1,0 +1,131 @@
+{
+  "date": "2026-10-30",
+  "python": "3.12.12",
+  "platform": "Linux x86_64",
+  "available_cpus": 8,
+  "files": 67,
+  "source_sha256": "e7ddefec1dff8ff1d0dca57e98a9291ec06e70feaaef8345a29f0e7ddf38404d",
+  "versions": {
+    "mypy": "mypy 2.4.1 (compiled: yes)",
+    "ty": "ty 0.0.95",
+    "ruff": "ruff 0.17.2"
+  },
+  "samples": {
+    "mypy_uncached": [
+      {
+        "seconds": 15.654029257595539,
+        "checker_seconds": 15.571009896695614,
+        "ruff_seconds": 0.08301936089992523,
+        "peak_mib": 383.03515625
+      },
+      {
+        "seconds": 16.589425638318062,
+        "checker_seconds": 16.515816397964954,
+        "ruff_seconds": 0.07360924035310745,
+        "peak_mib": 382.52734375
+      },
+      {
+        "seconds": 16.493615224957466,
+        "checker_seconds": 16.454552985727787,
+        "ruff_seconds": 0.03906223922967911,
+        "peak_mib": 383.47265625
+      },
+      {
+        "seconds": 16.8152199909091,
+        "checker_seconds": 16.788357950747013,
+        "ruff_seconds": 0.026862040162086487,
+        "peak_mib": 383.75
+      },
+      {
+        "seconds": 16.899469695985317,
+        "checker_seconds": 16.873310178518295,
+        "ruff_seconds": 0.026159517467021942,
+        "peak_mib": 383.375
+      }
+    ],
+    "mypy_warm": [
+      {
+        "seconds": 0.43348419666290283,
+        "checker_seconds": 0.4064250513911247,
+        "ruff_seconds": 0.027059145271778107,
+        "peak_mib": 69.21875
+      },
+      {
+        "seconds": 0.45721329748630524,
+        "checker_seconds": 0.41696231067180634,
+        "ruff_seconds": 0.0402509868144989,
+        "peak_mib": 69.1328125
+      },
+      {
+        "seconds": 0.4294225871562958,
+        "checker_seconds": 0.3922710046172142,
+        "ruff_seconds": 0.037151582539081573,
+        "peak_mib": 69.234375
+      },
+      {
+        "seconds": 0.5123327374458313,
+        "checker_seconds": 0.46465108543634415,
+        "ruff_seconds": 0.04768165200948715,
+        "peak_mib": 69.2109375
+      },
+      {
+        "seconds": 0.4712757393717766,
+        "checker_seconds": 0.4319789484143257,
+        "ruff_seconds": 0.03929679095745087,
+        "peak_mib": 69.2890625
+      }
+    ],
+    "ty": [
+      {
+        "seconds": 0.5158001333475113,
+        "checker_seconds": 0.4742627218365669,
+        "ruff_seconds": 0.041537411510944366,
+        "peak_mib": 242.19140625
+      },
+      {
+        "seconds": 0.49273839592933655,
+        "checker_seconds": 0.4661829248070717,
+        "ruff_seconds": 0.026555471122264862,
+        "peak_mib": 236.6953125
+      },
+      {
+        "seconds": 0.626477986574173,
+        "checker_seconds": 0.5945499688386917,
+        "ruff_seconds": 0.03192801773548126,
+        "peak_mib": 224.68359375
+      },
+      {
+        "seconds": 0.5434804111719131,
+        "checker_seconds": 0.5147952660918236,
+        "ruff_seconds": 0.02868514508008957,
+        "peak_mib": 215.68359375
+      },
+      {
+        "seconds": 0.6399468556046486,
+        "checker_seconds": 0.6088342070579529,
+        "ruff_seconds": 0.03111264854669571,
+        "peak_mib": 213.765625
+      }
+    ]
+  },
+  "medians": {
+    "mypy_uncached": {
+      "seconds": 16.589425638318062,
+      "checker_seconds": 16.515816397964954,
+      "ruff_seconds": 0.03906223922967911,
+      "peak_mib": 383.375
+    },
+    "mypy_warm": {
+      "seconds": 0.45721329748630524,
+      "checker_seconds": 0.41696231067180634,
+      "ruff_seconds": 0.03929679095745087,
+      "peak_mib": 69.21875
+    },
+    "ty": {
+      "seconds": 0.5434804111719131,
+      "checker_seconds": 0.5147952660918236,
+      "ruff_seconds": 0.03111264854669571,
+      "peak_mib": 224.68359375
+    }
+  }
+}
