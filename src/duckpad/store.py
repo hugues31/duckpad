@@ -13,6 +13,7 @@ from sqlmodel import Session, create_engine, select
 
 from . import models as m
 from .migrations import upgrade
+from .paths import InstancePaths
 from .util import dumps
 
 MODELS = {
@@ -70,6 +71,7 @@ class Store:
     def __init__(self, home: Path):
         self.home = home.resolve()
         self.home.mkdir(parents=True, exist_ok=True, mode=0o700)
+        self.paths = InstancePaths(self.home)
         self.lock = threading.RLock()
         self._local = threading.local()
         path = self.home / "instance.sqlite"

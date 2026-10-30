@@ -21,6 +21,19 @@ TARGET_TYPES = {
 }
 
 
+def failure_hint(types):
+    """Guidance appended to the SQL error of a node whose parameters of these types prepare data."""
+    preparation = set(types) & PREPARATION_TYPES
+    if not preparation:
+        return ""
+    hint = (
+        "\nCheck the configured source columns and output types. Conversions must be valid for every value."
+    )
+    if "value_cleaning" in preparation:
+        hint += " Date text must match its format (for example %d/%m/%Y); null replacements must match the resulting type (YYYY-MM-DD for DATE)."
+    return hint
+
+
 def identifier(value):
     if not isinstance(value, str) or not value.strip() or any(ord(c) < 32 for c in value):
         raise Problem("Column names must be nonempty text without control characters")

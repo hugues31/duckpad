@@ -10,6 +10,7 @@ from unittest.mock import Mock
 import duckdb
 import pytest
 from fastapi.testclient import TestClient
+from helpers import join_run
 
 from duckpad.app import create_app
 from duckpad.bundle import bundle_to_files
@@ -433,8 +434,8 @@ def test_cleanup_releases_engine_contexts_and_catalog_remains_writable(tmp_path,
             assert response.status_code == 200
         if execute:
             run = engine.launch(feature["id"], "dev")
-            assert engine.wait(run["id"])["status"] == "success"
-        contexts = [context for context in engine.contexts.values() if context.worktree == feature["id"]]
+            assert join_run(services.store, run["id"])["status"] == "success"
+        contexts = [context for context in engine.pool.contexts.values() if context.worktree == feature["id"]]
         database = engine.context(feature["id"], "dev").db
         retained = engine.context(main["id"], "dev")
         edit(projects, feature, lambda b: b["documentation"].update(project="Ready"))
@@ -450,7 +451,7 @@ def test_cleanup_releases_engine_contexts_and_catalog_remains_writable(tmp_path,
             f"/api/worktrees/{main['id']}/git/cleanup", json={**cleanup, "expected_head": "outdated"}
         )
         assert response.status_code == 409
-        assert all(engine.contexts[(c.worktree, c.environment)] is c for c in contexts)
+        assert all(engine.pool.contexts[(c.worktree, c.environment)] is c for c in contexts)
         if database:
             assert database.process.poll() is None
             canceled = threading.Event()
@@ -464,12 +465,12 @@ def test_cleanup_releases_engine_contexts_and_catalog_remains_writable(tmp_path,
         try:
             response = client.post(f"/api/worktrees/{main['id']}/git/cleanup", json=cleanup)
             assert response.status_code == 409
-            assert all(engine.contexts[(c.worktree, c.environment)] is c for c in contexts)
+            assert all(engine.pool.contexts[(c.worktree, c.environment)] is c for c in contexts)
         finally:
             engine.active.pop(feature["id"])
         response = client.post(f"/api/worktrees/{main['id']}/git/cleanup", json=cleanup)
         assert response.status_code == 200, response.text
-        assert not any(c.worktree == feature["id"] for c in engine.contexts.values())
+        assert not any(c.worktree == feature["id"] for c in engine.pool.contexts.values())
         assert engine.context(main["id"], "dev") is retained
         if database:
             assert canceled.is_set()
@@ -507,7 +508,7 @@ def test_catalog_invalidation_discards_orphaned_worktree_contexts(project, servi
     else:
         catalog.delete("connector", "cleanup_test")
         assert store.get("connector", "cleanup_test") is None
-    assert not any(c.worktree == feature["id"] for c in engine.contexts.values())
+    assert not any(c.worktree == feature["id"] for c in engine.pool.contexts.values())
     with pytest.raises(duckdb.ConnectionException, match="closed"):
         context.db.execute("SELECT 1")
 

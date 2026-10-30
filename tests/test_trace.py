@@ -35,7 +35,6 @@ def materialize(context, name, query, source=False):
         id=name,
         node=name,
         port="result",
-        table=name,
         columns=columns,
         count=context.db.execute(f'SELECT count(*) FROM "{name}"').fetchone()[0],
         run="run",

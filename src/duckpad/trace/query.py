@@ -78,7 +78,6 @@ class TraceQuery:
                 id=key,
                 node=owner.node,
                 port=name,
-                table=key,
                 columns=columns,
                 count=count,
                 run=owner.run,

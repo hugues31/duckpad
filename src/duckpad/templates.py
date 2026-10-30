@@ -417,7 +417,8 @@ def compile_template(template, params, inputs, physical_outputs, connections, di
                 "output": output,
                 "table": physical,
                 "query": query,
-                "sql": f"CREATE TABLE {qi(physical)} AS {query}" if output else query,
+                # Runs materialize outputs from this query and record the statements they execute.
+                "sql": query,
                 "bindings": used,
                 **file_export(tree, resources),
             }

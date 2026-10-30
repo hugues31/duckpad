@@ -70,7 +70,7 @@ def create_example(projects, catalog, name=None, record=None):
     """Create a project with its own sample data and connection; record joins its transaction."""
     project_id = uid("project_")
     connection_id = "sample_" + project_id
-    root = projects.store.home / "resources" / project_id / "sample"
+    root = projects.store.paths.resources(project_id) / "sample"
     connection = catalog.check(
         "connection",
         {

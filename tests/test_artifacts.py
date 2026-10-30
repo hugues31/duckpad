@@ -7,7 +7,7 @@ from types import SimpleNamespace
 def test_capture_and_download_use_descriptor_metadata(services, tmp_path, monkeypatch):
     store, projects, _, engine = services
     worktree = projects.create("Artifact metadata")
-    artifacts = engine.artifacts
+    artifacts = engine.exports.artifacts
     source = tmp_path / "report.csv"
     source.write_bytes(b"value\n42\n")
     original = Path.stat

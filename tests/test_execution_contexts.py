@@ -137,7 +137,7 @@ def test_concurrent_startup_closes_unpublished_database(isolated, monkeypatch, d
             assert release.wait(30)
         return database
 
-    monkeypatch.setattr(engine, "_open", open_database)
+    monkeypatch.setattr(engine.pool, "_open", open_database)
     with ThreadPoolExecutor(1) as pool:
         starting = pool.submit(engine.context, worktree, "dev", create=True)
         try:
@@ -300,12 +300,12 @@ def test_cancellation_keeps_newer_run_progress(services, monkeypatch):
         "commit": "commit",
         "nodes": {"first": {"status": "running"}, "second": {"status": "pending"}},
     }
-    engine._persist(run, [])
+    engine.runs._persist(run, [])
     progressed = copy.deepcopy(run)
     progressed["nodes"]["first"]["status"] = "success"
     progressed["nodes"]["second"]["status"] = "running"
     # The run thread writes its progress while the cancellation request updates the record.
-    writer = threading.Thread(target=engine._persist, args=(progressed, []))
+    writer = threading.Thread(target=engine.runs._persist, args=(progressed, []))
     original = store.put
 
     def put(kind, key, value):

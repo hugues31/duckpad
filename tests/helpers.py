@@ -1,8 +1,9 @@
 """Shared builders and deterministic waits for the test suite."""
 
+import threading
 import time
 
-from duckpad.engine import UNFINISHED_RUN_STATUSES
+from duckpad.execution.runs import UNFINISHED_RUN_STATUSES
 from duckpad.lineage import Lineage
 
 
@@ -23,6 +24,15 @@ def wait_run(store, run, timeout=10):
         return result if result["status"] not in UNFINISHED_RUN_STATUSES else None
 
     return wait_until(finished, timeout, "Run did not finish")
+
+
+def join_run(store, run_id, timeout=30):
+    """Wait until a run's worker thread has finished and released its worktree; return the record."""
+    for thread in threading.enumerate():
+        if thread.name == run_id:
+            thread.join(timeout)
+            assert not thread.is_alive(), f"Run {run_id} did not finish within {timeout} seconds"
+    return store.get("run", run_id)
 
 
 def example_bundle(path):
