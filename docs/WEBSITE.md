@@ -129,6 +129,7 @@ real server runtime and download link without downloading or importing a binary.
 | `new-project.png`, `workspace.png`, `parameters.png` | Quickstart and authoring |
 | `lineage.png` | Quickstart, example tour and lineage |
 | `code.png`, `component.png`, `node-documentation.png` | Authoring and example tour |
+| `variables.png`, `variable-binding.png`, `run-variables.png` | Authoring |
 | `connection.png`, `environments.png` | Connections |
 | `new-branch.png`, `git-comparison.png` | Version control |
 | `sso-settings.png`, `sso-sign-in.png` | Single sign-on |

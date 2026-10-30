@@ -1,6 +1,6 @@
 # Project variables (design proposal)
 
-**Status: delivery step 1 (model and engine) implemented; steps 2 and 3 proposed.** `variables.json`, the `date` parameter type, whole-parameter binding, fingerprints, run records, the API, ZIP archives, merge, comparison and grouping work as described below; see [Authoring projects](../AUTHORING.md#project-variables). The interface and `{{ var.name }}` references in expressions do not exist yet: the screenshots are mockups drawn over the current interface.
+**Status: delivery steps 1 (model and engine) and 2 (interface) implemented; step 3 proposed.** `variables.json`, the `date` parameter type, whole-parameter binding, fingerprints, run records, the API, ZIP archives, merge, comparison and grouping work as described below, and so do the **Variables** tab, the inspector's variable button and chip, stale reasons, run confirmations and run details; see [Authoring projects](../AUTHORING.md#project-variables). `{{ var.name }}` references in expressions do not exist yet: the screenshots are mockups drawn over the interface.
 
 ## Summary
 

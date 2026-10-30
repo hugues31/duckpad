@@ -38,6 +38,7 @@ test("Code has a keyboard file tree, preserves drafts across files and tabs, sav
     "Flow",
     "Code",
     "Documentation",
+    "Variables",
     "History",
   ]);
   await expect(page.getByRole("dialog")).toHaveCount(0);
@@ -276,6 +277,7 @@ test("Code is localized and keeps the tree beside Monaco at a narrow width", asy
     fr.flow,
     fr.code,
     fr.documentation,
+    fr.variables,
     fr.history,
   ]);
   await expect(
