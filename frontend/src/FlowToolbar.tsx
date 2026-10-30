@@ -1,6 +1,4 @@
 import { Link } from "react-router";
-import { worktreeUrl, type WorkspaceTab } from "./navigation";
-export type { WorkspaceTab } from "./navigation";
 import {
   Activity,
   AlertCircle,
@@ -14,66 +12,64 @@ import {
   Square,
   Settings2,
   Workflow,
+  type LucideIcon,
 } from "lucide-react";
 import { useT } from "./i18n";
+import {
+  projectSettingsUrl,
+  workspaceTabs,
+  worktreeUrl,
+  type WorkspaceTab,
+} from "./navigation";
+import { useShell } from "./shell";
 import type { Json, Snapshot } from "./types";
+import { useLoadedWorktree } from "./worktree";
 
-const TABS = [
-  ["flow", Workflow],
-  ["code", FileCode2],
-  ["documentation", BookOpen],
-  ["history", Activity],
-] as const;
+const TAB_ICONS: Record<WorkspaceTab, LucideIcon> = {
+  flow: Workflow,
+  code: FileCode2,
+  documentation: BookOpen,
+  history: Activity,
+};
 
-export function FlowToolbar({
-  readOnly,
-  project,
-  worktree,
-  environment,
-  tab,
-  saving,
-  dirty,
-  branch,
-  active,
-  canRun,
-  onMerge,
-  onRun,
-  onStop,
-}: {
-  readOnly: boolean;
-  project: string;
-  worktree: string;
-  environment: string;
-  tab: WorkspaceTab;
-  saving: boolean;
-  dirty: boolean;
-  branch: string;
-  active: Json | null;
-  canRun: boolean;
-  onMerge: () => void;
-  onRun: () => void;
-  onStop: () => void;
-}) {
+/** Tabs, save state and run controls of the open working branch. */
+export function FlowToolbar({ tab }: { tab: WorkspaceTab }) {
   const t = useT();
+  const { drafts, openModal } = useShell();
+  const {
+    id,
+    environment,
+    snapshot,
+    statuses: { active },
+    canEdit,
+    saving,
+    starting,
+    run,
+    stop,
+  } = useLoadedWorktree();
+  const dirty = drafts.dirty("worktree");
   return (
     <div className="flow-toolbar">
       <div className="tabs main-tabs">
-        {TABS.map(([key, Icon]) => (
-          <Link
-            to={worktreeUrl(worktree, key, environment)}
-            key={key}
-            className={tab === key ? "active" : ""}
-            aria-current={tab === key ? "page" : undefined}
-          >
-            <Icon size={15} />
-            {t(key)}
-          </Link>
-        ))}
+        {workspaceTabs.map((key) => {
+          const Icon = TAB_ICONS[key];
+          return (
+            <Link
+              to={worktreeUrl(id, key, environment)}
+              key={key}
+              className={tab === key ? "active" : ""}
+              aria-current={tab === key ? "page" : undefined}
+            >
+              <Icon size={15} />
+              {t(key)}
+            </Link>
+          );
+        })}
       </div>
       <div className="row gap">
         <Link
           className="button secondary small"
-          to={`/projects/${encodeURIComponent(project)}/settings`}
+          to={projectSettingsUrl(snapshot.worktree.project)}
         >
           <Settings2 size={14} />
           {t("projectSettings")}
@@ -88,8 +84,13 @@ export function FlowToolbar({
           )}{" "}
           {t(saving ? "saving" : dirty ? "unsavedChanges" : "saved")}
         </span>
-        {!readOnly && branch !== "main" && (
-          <button className="button secondary small" onClick={onMerge}>
+        {canEdit && snapshot.worktree.branch !== "main" && (
+          <button
+            className="button secondary small"
+            onClick={() =>
+              openModal({ kind: "git", worktree: id, mode: "branches" })
+            }
+          >
             <GitMerge size={14} />
             {t("merge")}
           </button>
@@ -98,8 +99,8 @@ export function FlowToolbar({
           <button
             className="button stop"
             title={t("cancelRunHint")}
-            onClick={onStop}
-            disabled={readOnly || active.status === "canceling"}
+            onClick={stop}
+            disabled={!canEdit || active.status === "canceling"}
           >
             <Square size={12} fill="currentColor" />
             {t(active.status === "canceling" ? "canceling" : "stop")}
@@ -107,8 +108,8 @@ export function FlowToolbar({
         ) : (
           <button
             className="button primary"
-            disabled={readOnly || !canRun}
-            onClick={onRun}
+            disabled={!canEdit || starting || !snapshot.bundle}
+            onClick={() => run()}
           >
             <Play size={14} fill="currentColor" />
             {t("run")}
