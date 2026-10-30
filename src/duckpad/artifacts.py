@@ -6,7 +6,7 @@ import os
 import re
 import shutil
 import stat
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
 from typing import BinaryIO
@@ -23,7 +23,7 @@ MEDIA_TYPES = {
 
 
 @contextmanager
-def open_regular(path: Path) -> Iterator[BinaryIO]:
+def open_regular(path: Path) -> Generator[BinaryIO, None, None]:
     """Pin a regular file without following symlinks, including parent directories."""
     path = Path(path).absolute()
     if ".." in path.parts:
@@ -104,7 +104,7 @@ class Artifacts:
     @contextmanager
     def open(
         self, identity: str, worktree: str, environment: str, node: str, run: str
-    ) -> Iterator[tuple[BinaryIO, Record]]:
+    ) -> Generator[tuple[BinaryIO, Record], None, None]:
         record = self.store.get("artifact", identity)
         if (
             not re.fullmatch(r"artifact_[0-9a-f]{16}", identity)

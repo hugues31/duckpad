@@ -4,7 +4,7 @@ keeps consistent when worktrees, projects, connections or extensions change."""
 from __future__ import annotations
 
 import threading
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import AbstractContextManager, contextmanager, nullcontext
 from typing import BinaryIO
 
@@ -64,6 +64,9 @@ class Engine:
     ) -> Record:
         return self.runs.launch(worktree, environment, target, entry_point)
 
+    def scope_variables(self, worktree: str, environment: str, target: str | None = None) -> Record:
+        return self.runs.scope_variables(worktree, environment, target)
+
     def cancel(self, run_id: str) -> Record:
         return self.runs.cancel(run_id)
 
@@ -101,7 +104,7 @@ class Engine:
         return self.exports.open(worktree, environment, node, run)
 
     @contextmanager
-    def exclusive(self, project: str | None = None) -> Iterator[None]:
+    def exclusive(self, project: str | None = None) -> Generator[None, None, None]:
         """Hold a project's repository lock when given, then the engine lock.
 
         Changes that reset execution state take this pair, always in this order.

@@ -22,6 +22,15 @@ class Cursor:
     def __getattr__(self, name: str) -> Any:
         return getattr(self.cursor, name)
 
+    def fetchone(self) -> tuple[Any, ...] | None:
+        return self.cursor.fetchone()
+
+    def fetchall(self) -> list[tuple[Any, ...]]:
+        return self.cursor.fetchall()
+
+    def close(self) -> None:
+        self.cursor.close()
+
     def execute(self, query: str, parameters: Any = None) -> Cursor:
         finished = threading.Event()
         with self.lock:

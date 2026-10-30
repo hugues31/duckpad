@@ -30,7 +30,7 @@ SECRET_TYPE = re.compile(r"\bTYPE\s+[\"']?(\w+)", re.IGNORECASE)
 
 def remote_prefixes(captured: Connections) -> list[str]:
     """Remote URL prefixes covered by the connections' storage secret types, whatever their IDs."""
-    prefixes = []
+    prefixes: list[str] = []
     for connection in captured.values():
         sql = re.sub(r"--[^\n]*|/\*.*?\*/", "", connection["definition"].get("init_sql", ""), flags=re.DOTALL)
         for options in SECRET_OPTIONS.findall(sql):
@@ -99,7 +99,7 @@ class ContextPool:
             with self.lock:
                 context, stopped = self.contexts.get(key), None
                 if context is None or getattr(context.db, "closed", False):
-                    stopped = context and context.db
+                    stopped = context.db if context is not None else None
                     context = self.contexts[key] = Context(*key, db=None)
             if stopped:
                 # Reap the replaced worker's process and release its descriptors.

@@ -11,7 +11,7 @@ from typing import BinaryIO
 from ..access import Access
 from ..artifacts import Artifacts
 from ..catalog import Catalog
-from ..components import expand
+from ..components import expand_for
 from ..graph import connection_references, reachable
 from ..projects import Projects
 from ..store import Store
@@ -62,7 +62,7 @@ class Exports:
         Runs inside the caller's store transaction, deleting the records of the download
         copies it replaces; pass the returned identities to discard() once committed.
         """
-        replaced = []
+        replaced: list[str] = []
         for key, state in run["nodes"].items():
             if state.get("kind") != "export":
                 continue
@@ -107,7 +107,7 @@ class Exports:
             snapshot = self.projects.snapshot(worktree)
             if not snapshot["bundle"]:
                 return {"status": "stale"}
-            nodes, edges, _ = expand(snapshot["bundle"], tolerant=True)
+            nodes, edges, _ = expand_for(snapshot["bundle"], environment)
             definition = nodes.get(node)
             if not definition:
                 raise Problem("Node not found", 404)

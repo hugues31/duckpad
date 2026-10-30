@@ -6,7 +6,7 @@ import json
 import logging
 import os
 import re
-from collections.abc import AsyncIterator, Iterator, Mapping
+from collections.abc import AsyncGenerator, Iterator, Mapping
 from contextlib import ExitStack, asynccontextmanager
 from pathlib import Path, PureWindowsPath
 from typing import Annotated, Any, Literal
@@ -22,7 +22,7 @@ from starlette.datastructures import UploadFile as FormFile
 from starlette.exceptions import HTTPException
 from starlette.middleware.base import RequestResponseEndpoint
 
-from . import __version__, schemas
+from . import __version__, schemas, variables
 from .archive import archive_bundle, import_warnings, read_archive, write_archive
 from .artifacts import CHUNK_SIZE
 from .auth import SESSION_LIFETIME, Auth
@@ -95,7 +95,7 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
     credentials = projects.remotes.credentials
 
     @asynccontextmanager
-    async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         if watch:
             projects.start_watcher()
         yield
@@ -510,6 +510,7 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
         result = projects.snapshot(worktree, committed=True)
         project = result["worktree"]["project"]
         result["role"] = access.role(request.state.user, project)
+        granted_connections = access.record(project)["connections"]
         result["connections"] = [
             {
                 "id": c["id"],
@@ -517,9 +518,12 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
                 "capabilities": store.get("connector", c["connector"], {}).get("capabilities", []),
             }
             for c in store.all("connection")
-            if c["id"] in access.record(project)["connections"]
+            if c["id"] in granted_connections
         ]
         result["parsed_templates"] = parse_templates((result["bundle"] or {}).get("templates", {}))
+        result["variables"] = (
+            variables.summary(result["bundle"], catalog.environment_names()) if result["bundle"] else None
+        )
         return result
 
     @app.put("/api/worktrees/{worktree}", response_model=None)
@@ -631,6 +635,22 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
         result["selected"] = selected
         return result
 
+    @app.post("/api/worktrees/{worktree}/variables/{name}/rename", response_model=None)
+    def rename_variable(worktree: str, name: str, data: schemas.VariableRename) -> Record:
+        # The declaration and every reference change in one commit, from one locked read.
+        with projects.locked(worktree):
+            snapshot = projects.snapshot(worktree)
+            if data.revision != snapshot["revision"]:
+                raise Problem("Reload the project before renaming a variable", 409)
+            if snapshot["bundle"] is None:
+                raise Problem("Project files are invalid", 422, snapshot["diagnostics"])
+            bundle = variables.rename(snapshot["bundle"], name, data.name)
+            return projects.write(worktree, data.revision, bundle_to_files(bundle))
+
+    @app.get("/api/worktrees/{worktree}/variables/scope", response_model=None)
+    def scope_variables(worktree: str, environment: str, node: str | None = None) -> Record:
+        return engine.scope_variables(worktree, environment, node)
+
     @app.post("/api/worktrees/{worktree}/import", response_model=None)
     def import_item(worktree: str, data: schemas.Import, request: Request) -> Record:
         access.worktree(request.state.user, data.source_worktree)
@@ -663,7 +683,15 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
         settings = catalog.environment(data.environment)
         # The interface asks before running in a protected environment; API clients run directly.
         if entry_point == "ui" and settings["confirm_before_run"] and not data.confirmed:
-            raise Problem("Confirm this environment before running", 409, {"confirmation_required": settings})
+            try:
+                used = engine.scope_variables(worktree, data.environment, data.node)
+            except Problem:
+                used = {}
+            raise Problem(
+                "Confirm this environment before running",
+                409,
+                {"confirmation_required": settings, "variables": used},
+            )
         return engine.launch(worktree, data.environment, data.node, entry_point)
 
     @app.get("/api/runs", response_model=None)

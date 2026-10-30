@@ -11,9 +11,10 @@ from typing import Any, cast
 
 import duckdb
 
+from .. import variables
 from ..bundle import files_to_bundle, topological
 from ..catalog import Catalog, redact
-from ..components import expand, in_subtree
+from ..components import expand_for, in_subtree
 from ..data_preparation import failure_hint
 from ..datasets import Context, Dataset
 from ..graph import connection_references, reachable
@@ -148,7 +149,7 @@ class Runner:
             raise Problem(
                 "Project files are invalid; correct them before execution", 422, snapshot["diagnostics"]
             )
-        nodes, edges, _ = expand(bundle, tolerant=True)
+        nodes, edges, _ = expand_for(bundle, environment)
         scope = launch_scope(nodes, edges, target)
         order = [n for n in topological(nodes, edges, tolerant=True) if n in scope]
         self._check_conflicts(snapshot["conflicts"], scope, environment)
@@ -183,9 +184,15 @@ class Runner:
                     "label": nodes[n].get("label", n),
                     "kind": nodes[n]["parsed"]["kind"],
                     "fingerprint": fingerprints[n],
+                    **(
+                        {"variables": {p: b["name"] for p, b in nodes[n]["variables"].items()}}
+                        if nodes[n].get("variables")
+                        else {}
+                    ),
                 }
                 for n in order
             },
+            "variables": variables.used(bundle, nodes, scope, environment),
             "connections": {
                 ref: {"definition": c["definition"], "settings": c["settings"], "name": c["name"]}
                 for ref, c in captured.items()
@@ -193,8 +200,18 @@ class Runner:
             "definitions": bundle["templates"],
             "components": bundle["components"],
             "flow": bundle["flow"],
+            "variable_declarations": bundle.get("variables"),
         }
         return Execution(token, context, run, nodes, edges, order, captured, secrets, fingerprints)
+
+    def scope_variables(self, worktree: str, environment: str, target: str | None = None) -> Record:
+        """Variables a launch would use, with their values and sources in this environment."""
+        self.catalog.environment(environment)
+        snapshot = self.projects.snapshot(worktree)
+        if snapshot["bundle"] is None:
+            return {}
+        nodes, edges, _ = expand_for(snapshot["bundle"], environment)
+        return variables.used(snapshot["bundle"], nodes, launch_scope(nodes, edges, target), environment)
 
     def _check_conflicts(self, conflicts: list[Record], scope: set[str], environment: str) -> None:
         """Reject a run when a pending edit conflict would change a node in its scope."""
@@ -429,7 +446,7 @@ class Runner:
             directory,
             input_schemas={port: data.columns for port, data in input_datasets.items()},
         )
-        state["statements"] = statements
+        state["statements"] = variables.annotate(statements, node)
         self._persist(run, execution.secrets)
         staged: dict[str, Dataset] = {}
         for statement in statements:

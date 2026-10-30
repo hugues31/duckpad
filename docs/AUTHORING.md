@@ -2,7 +2,7 @@
 
 The **Code** tab, between **Flow** and **Documentation**, displays the worktree's declarative files in a folder tree beside the Monaco editor. Select a file to edit its SQL, JSON, Markdown or TOML, then choose **Save changes**. Drafts are retained when switching files or workspace tabs. Editing files in an external editor is also supported. Every completed save is versioned, including invalid content. Corrections create later commits. Inspect errors and fix the current files; Duckpad never runs an earlier valid graph silently.
 
-Choose **Download project ZIP** in the Code tab to export the selected branch's saved `README.md`, `pyproject.toml`, `flow.json`, `documentation.json`, SQL templates and component definitions, preserving their relative paths. Save or discard pending edits before downloading. The archive excludes Git history, datasets, execution results, virtual environments and instance connection settings. Project readers can browse and download these files; editing requires an editor or administrator role.
+Choose **Download project ZIP** in the Code tab to export the selected branch's saved `README.md`, `pyproject.toml`, `flow.json`, `documentation.json`, `variables.json`, SQL templates and component definitions, preserving their relative paths. Save or discard pending edits before downloading. The archive excludes Git history, datasets, execution results, virtual environments and instance connection settings. Project readers can browse and download these files; editing requires an editor or administrator role.
 
 To recreate a project from such an archive, choose **New project**, then **Import a project ZIP**, and select the file. Leave the name empty to keep the name stored in `flow.json`. Archives whose files sit in a single top-level folder, such as a repository download from a Git host, are accepted. Only the declarative files above are read; Git metadata, data and other entries are ignored. The imported project starts its own Git history, makes you its administrator and can use only the **Local files** connection until an instance administrator grants others. Because the archive contains no connection settings or data, Duckpad then lists the connections the pipeline references that are unavailable to the new project, and the nodes that read uploaded files or other absolute paths, including Windows and network paths. Grant or create those connections, and upload the files again. Archives over 16 MiB (64 MiB once extracted), without `flow.json`, or with invalid JSON or non-UTF-8 files are rejected without creating a project.
 
@@ -17,6 +17,7 @@ README.md              Project documentation in Markdown
 pyproject.toml         Python version and project dependencies
 flow.json              Pipeline graph
 documentation.json     Node, output and column documentation
+variables.json         Project variables (optional)
 templates/*.sql        SQL definitions
 components/*.json      Reusable sub-flows
 ```
@@ -74,6 +75,7 @@ items: `New York, Paris` becomes `["New York", "Paris"]`.
 | Parameter declaration | Value contract |
 | --- | --- |
 | `text`, `number`, `boolean` | Scalar DuckDB bindings; do not quote the placeholder |
+| `date` | A `YYYY-MM-DD` value bound as a DuckDB `DATE` |
 | `choice(a\|b)` | Enumerated scalar binding |
 | `keyword(inner\|left\|right\|full)` | Validated SQL keyword, for structural choices |
 | `file(connection)`, `destination(connection)` | Explicit path or URI; relative local paths resolve against the connection root or worktree/environment export directory |
@@ -112,6 +114,103 @@ Exposed component parameters have the following structure:
 ```
 
 The shared library reads projects' main branches. Importing creates new destination-owned IDs for the component, nested components and templates. Definitions and documentation are copied; data, results and secrets are not. Imports never resolve executable code through the original project. Subsequent edits are independent.
+
+## Project variables
+
+A project variable is a named, typed and documented value declared once and
+bound to node parameters, with an optional value per environment. Declare
+variables in `variables.json` at the project root, next to `flow.json`. Until
+the **Variables** tab described in the [design proposal](../docs/design/PROJECT_VARIABLES.md)
+is available, create the file with an external editor, a project ZIP or the API;
+**Code** then lists and edits it. Saves follow the usual batching, validation
+and conflict rules.
+
+```json
+{
+  "high_value_threshold": {
+    "type": "number",
+    "description": "Minimum order amount kept by the high-value report.",
+    "default": 300,
+    "environments": {"prod": 900}
+  },
+  "report_start": {"type": "date", "default": "2026-10-01"}
+}
+```
+
+Names use lowercase letters, digits and underscores, starting with a letter. A
+declaration accepts `type`, `description`, `default` and `environments`, and
+nothing else. In an environment, a variable takes its value for that
+environment if set, otherwise its default.
+
+| Variable type | JSON value | Binds to parameters of type |
+| --- | --- | --- |
+| `text` | string | `text`, `file`, `destination` |
+| `number` | finite number | `number` |
+| `boolean` | `true` or `false` | `boolean` |
+| `date` | `"YYYY-MM-DD"` | `date` |
+| `choice(a\|b)` | one of the options | `text`, and `choice` or `keyword` parameters offering every option |
+| `identifier` | non-empty string | `identifier`, `column` |
+| `list<text>`, `list<number>` | array | the same list type |
+
+Bind a whole parameter by replacing its value with a reference in `flow.json`,
+including the value of an exposed parameter on a component instance. The
+variable type must suit the template parameter and every typed exposed
+parameter that carries the value to it:
+
+```json
+{"id": "large", "template": "filter_amount", "params": {"threshold": {"$var": "high_value_threshold"}}}
+```
+
+References are allowed only in the root flow. A template parameter default or
+a component definition that references a variable is an error on that
+definition, and blocks the nodes built from it: expose the parameter instead,
+then bind it on the instance. **Group into component** does this for you. Each
+bound parameter of the grouped nodes becomes an exposed parameter, bound to the
+same variable on the new instance, in one save.
+
+Problems never block more than the nodes concerned:
+
+| Problem | Effect |
+| --- | --- |
+| Malformed `variables.json`, invalid name, unknown type or field | File diagnostic; nodes that reference variables are blocked |
+| Default or environment value not matching the type | Diagnostic on the variable; nodes using it are blocked where that value applies |
+| Reference to an undeclared variable, or to an incompatible type | Diagnostic on the node, which is blocked with its descendants |
+| No value in the selected environment | The nodes using it are blocked in that environment only |
+| Value for an environment this instance lacks, name suggesting a credential | Warning only |
+
+An unused variable never blocks anything. Values reach DuckDB as bound
+parameters, quoted identifiers or escaped paths, never as SQL text.
+
+A launch resolves the variables of its scope from the committed files and the
+selected environment. The run record lists each variable used with its type,
+value and source (`default` or `environment`), and the compiled and executed
+SQL list the bound value next to the variable name. Results depend on the
+resolved values only. Changing the `prod` value makes the `prod` results of the
+nodes that use it and of their descendants stale. Other environments and
+unrelated nodes stay valid. Renaming a variable, editing its description, or
+replacing a literal with a variable that holds the same value leaves results
+valid.
+
+**Compare versions** lists changed variables, and their potential impact
+reaches the nodes bound to them. Three-way merges work per variable and per
+field: a `prod` value changed on one side and a description on the other merge
+cleanly, while two different `prod` values are a conflict. Two branches that
+both create `variables.json` also merge variable by variable. Variables are not
+secrets. Their values are stored in Git, shown in SQL and history, and exported
+in ZIP archives; keep credentials in connections.
+
+The API exposes what the interface needs:
+
+- `GET /api/worktrees/{worktree}` returns the declarations in `bundle.variables`.
+  `variables` lists each variable's values per environment, the root flow
+  parameters bound to it, diagnostics and warnings.
+- `POST /api/worktrees/{worktree}/variables/{name}/rename` with `revision` and
+  the new `name` renames the declaration and every reference in one commit.
+- `GET /api/worktrees/{worktree}/variables/scope?environment=prod&node=…` lists
+  the variables a launch would use. The environment confirmation error of a UI
+  launch includes the same list.
+- Run records, `compile/{node}` and the executed SQL of previews include the
+  variables used.
 
 ## Documentation and branches
 

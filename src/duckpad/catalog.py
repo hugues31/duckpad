@@ -8,7 +8,7 @@ import re
 import duckdb
 
 from .templates import IDENTIFIER, REFERENCE
-from .types import Connections
+from .types import Connections, Record
 from .util import Problem, digest, literal, qi
 
 MASK = "••••"
@@ -97,7 +97,7 @@ class Catalog:
         self.store.put(kind, data["id"], data)
         self.on_change()
 
-    def check(self, kind, data, *, create=False):
+    def check(self, kind, data: Record, *, create=False):
         """Validate a connector or connection and complete it for storage, without writing it."""
         if kind not in KINDS:
             raise Problem("Unknown catalog entity", 404)
@@ -106,7 +106,7 @@ class Catalog:
                 "Use an identifier starting with a letter and containing letters, numbers, hyphens or underscores"
             )
         if kind == "connection":
-            previous = self.store.get("connection", data["id"])
+            previous: Record | None = self.store.get("connection", data["id"])
             if create and previous is not None:
                 raise Problem(
                     "A connection with this identifier already exists", 409, {"code": "connection_exists"}

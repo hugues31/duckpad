@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager
 from contextvars import ContextVar
 
@@ -39,7 +39,7 @@ def oidc_identity(user: Record, claims: Record) -> dict[str, str]:
 
 
 @contextmanager
-def commit_author(identity: dict[str, str] | None) -> Iterator[None]:
+def commit_author(identity: dict[str, str] | None) -> Generator[None, None, None]:
     """Context variables propagate to endpoint workers and isolate concurrent requests."""
     token = current_identity.set(identity)
     try:

@@ -7,10 +7,10 @@ import os
 import subprocess
 import tempfile
 import threading
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Generator, Mapping, Sequence
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Literal, TypedDict, Unpack, overload
+from typing import Literal, TypedDict, overload
 
 from ..util import Problem
 
@@ -91,7 +91,12 @@ def run(
     *args: str,
     identity: Mapping[str, str] | None = None,
     binary: Literal[False] = False,
-    **options: Unpack[GitOptions],
+    settings: Sequence[str] = (),
+    env: Mapping[str, str] | None = None,
+    input: str | bytes | None = None,
+    check: bool = True,
+    timeout: float = TIMEOUT,
+    failure: str = FAILURE,
 ) -> str: ...
 
 
@@ -101,7 +106,12 @@ def run(
     *args: str,
     identity: Mapping[str, str] | None = None,
     binary: Literal[True],
-    **options: Unpack[GitOptions],
+    settings: Sequence[str] = (),
+    env: Mapping[str, str] | None = None,
+    input: str | bytes | None = None,
+    check: bool = True,
+    timeout: float = TIMEOUT,
+    failure: str = FAILURE,
 ) -> bytes: ...
 
 
@@ -111,7 +121,12 @@ def run(
     *args: str,
     identity: Mapping[str, str] | None = None,
     binary: bool,
-    **options: Unpack[GitOptions],
+    settings: Sequence[str] = (),
+    env: Mapping[str, str] | None = None,
+    input: str | bytes | None = None,
+    check: bool = True,
+    timeout: float = TIMEOUT,
+    failure: str = FAILURE,
 ) -> str | bytes: ...
 
 
@@ -157,7 +172,7 @@ def run(
 @contextmanager
 def session(
     path: str | Path, *args: str, identity: Mapping[str, str] | None = None, timeout: float = TIMEOUT
-) -> Iterator[subprocess.Popen[str]]:
+) -> Generator[subprocess.Popen[str], None, None]:
     """An interactive Git process, such as a ref transaction, killed if it outlives the timeout."""
     with (
         tempfile.TemporaryFile() as errors,

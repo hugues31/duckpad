@@ -9,7 +9,7 @@ import tarfile
 import threading
 import time
 from collections import OrderedDict
-from collections.abc import Callable, Collection, Iterable, Iterator, Mapping
+from collections.abc import Callable, Collection, Generator, Iterable, Mapping
 from contextlib import contextmanager, suppress
 from pathlib import Path
 from typing import Literal, Unpack, cast, overload
@@ -75,7 +75,7 @@ class Projects:
             return self.locks.setdefault(project_id, threading.RLock())
 
     @contextmanager
-    def locked(self, worktree_id: str) -> Iterator[Record]:
+    def locked(self, worktree_id: str) -> Generator[Record, None, None]:
         """Hold the repository lock of a worktree's project; yield the worktree read under it."""
         with self.repository(self.get(worktree_id)["project"]):
             yield self.get(worktree_id)

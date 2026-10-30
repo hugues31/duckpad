@@ -6,7 +6,7 @@ import logging
 
 from ..bundle import topological
 from ..catalog import Catalog
-from ..components import expand
+from ..components import expand_for
 from ..graph import connection_references
 from ..projects import Projects
 from ..templates import executable_sql
@@ -22,7 +22,8 @@ class Fingerprints:
 
     def of(self, bundle: Record, environment: str, captured: Connections | None = None) -> dict[str, str]:
         """Fingerprint every node of a bundle from its SQL, parameters, connections and inputs."""
-        nodes, edges, _ = expand(bundle, tolerant=True)
+        # Resolved values make renames, descriptions and promoted literals transparent.
+        nodes, edges, _ = expand_for(bundle, environment)
         fingerprints: dict[str, str] = {}
         for key in topological(nodes, edges, tolerant=True):
             node = nodes[key]
