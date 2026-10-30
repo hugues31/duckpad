@@ -2,6 +2,7 @@
 
 import json
 
+from . import variables
 from .util import dumps
 
 MISSING = object()
@@ -66,6 +67,10 @@ def merge_files(base, current, proposal, choices=None, evidence=None):
     result, conflicts = {}, []
     for name in sorted(base.keys() | current.keys() | proposal.keys()):
         values = [v.get(name, MISSING) for v in (base, current, proposal)]
+        if name == variables.FILE and values[0] is MISSING and all(v is not MISSING for v in values[1:]):
+            # Without the file a project declares no variables, so two branches that both
+            # create it merge their declarations one variable at a time.
+            values[0] = "{}"
         try:
             if name.endswith(".json") and all(v is not MISSING for v in values):
                 merged, errors = merge_values(*(json.loads(v) for v in values), name, choices, evidence)

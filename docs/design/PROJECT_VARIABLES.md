@@ -1,6 +1,6 @@
 # Project variables (design proposal)
 
-**Status: proposal, not implemented.** This document describes a proposed user experience and workflow. The screenshots are mockups drawn over the current interface; none of the behavior below exists yet.
+**Status: delivery step 1 (model and engine) implemented; steps 2 and 3 proposed.** `variables.json`, the `date` parameter type, whole-parameter binding, fingerprints, run records, the API, ZIP archives, merge, comparison and grouping work as described below; see [Authoring projects](../AUTHORING.md#project-variables). The interface and `{{ var.name }}` references in expressions do not exist yet: the screenshots are mockups drawn over the current interface.
 
 ## Summary
 

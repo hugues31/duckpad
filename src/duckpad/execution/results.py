@@ -1,7 +1,8 @@
 """Result statuses, paginated previews and compiled SQL of a worktree's nodes."""
 
+from .. import variables
 from ..catalog import redact
-from ..components import expand, in_subtree
+from ..components import expand, expand_for, in_subtree
 from ..graph import connection_references
 from ..templates import compile_template
 from ..util import Problem, clean, qi
@@ -109,13 +110,15 @@ class Results:
         self.catalog.environment(environment)
         if not snapshot["bundle"]:
             raise Problem("Project files are invalid", 422, snapshot["diagnostics"])
-        nodes, edges, _ = expand(snapshot["bundle"])
+        nodes, edges, _ = expand_for(snapshot["bundle"], environment, tolerant=False)
         selected = [key for key in nodes if in_subtree(key, node_id)]
         if not selected:
             raise Problem("Node not found", 404)
         output = []
         for key in selected:
             node = nodes[key]
+            if node.get("error"):
+                raise Problem(node["error"], 422)
             captured, secrets = self.pool.capture(worktree, connection_references(node), environment)
             inputs = {
                 e["targetHandle"]: qi("input_" + e["source"].replace("::", "_") + "_" + e["sourceHandle"])
@@ -145,5 +148,5 @@ class Results:
             )
             for statement in statements:
                 statement["sql"] = redact(statement["sql"], secrets)
-            output.extend(statements)
+            output.extend(variables.annotate(statements, node))
         return output

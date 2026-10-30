@@ -41,15 +41,18 @@ The comparison workspace includes a resizable element list, read-only graph and
 before/after inspector. Added (`+`), removed (`−`), modified (`~`) and unchanged
 (`=`) elements remain distinguishable without color. Deleted nodes and connections
 are inspectable. SQL uses Monaco's read-only diff editor. Component definitions,
-boundary ports, exposed parameters, node parameters and documentation have their
-own logical entries, identified by stable IDs and component paths.
+boundary ports, exposed parameters, node parameters, project variables and
+documentation have their own logical entries, identified by stable IDs and
+component paths. A variable lists the root flow parameters bound to it.
 
 Use **Only changes**, category filters, search, previous/next and **Focus on
 change** to navigate. Processing/configuration, documentation/names and canvas
 layout are separate categories. A layout change alone claims no processing impact.
 
 **Potential impact** follows dependencies in both versions, including expanded
-nested instance paths and before/after wiring. This is partial, static analysis:
+nested instance paths and before/after wiring. A changed variable value, in any
+environment, affects the nodes bound to it; a renamed variable or a new
+description affects none. This is partial, static analysis:
 it does not resolve runtime schemas or prove that result values changed. Invalid
 or unsupported definitions are reported as partial. Comparing never runs SQL,
 reads source data, publishes outputs, switches branches or flushes external edits.

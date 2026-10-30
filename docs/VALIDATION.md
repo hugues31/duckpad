@@ -4,7 +4,7 @@ The recorded benchmark and connector checks were run on Linux x86_64 with Python
 
 ## Acceptance coverage
 
-The Python suite covers authentication persistence, execution admission, immutable configuration during edits, retained multi-output results on failure, independent branches, active SQL cancellation, durable/interrupted run history, source freshness, metadata-only edits, scoped invalid definitions, external-save batching, concurrent-edit recovery, branch isolation and merging, nested component imports, documentation lifecycle, declarative connectors and lineage.
+The Python suite covers authentication persistence, execution admission, immutable configuration during edits, retained multi-output results on failure, independent branches, active SQL cancellation, durable/interrupted run history, source freshness, metadata-only edits, scoped invalid definitions, external-save batching, concurrent-edit recovery, branch isolation and merging, nested component imports, documentation lifecycle, project variables, declarative connectors and lineage.
 
 Native-equivalence tests compare values, types and multiplicities against uninstrumented DuckDB operations. Lineage tests include the extended SQL baseline, repeated values with distinct row identities, hidden grouping keys, window extrema and distinct counts, CTE/derived stages, and pagination of more than five groups and more than five identical source values.
 

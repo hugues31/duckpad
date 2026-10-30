@@ -2,6 +2,7 @@
 
 from collections import Counter
 
+from . import variables
 from .bundle import files_to_bundle
 from .components import expand
 from .graph import reachable
@@ -47,6 +48,14 @@ def entities(bundle):
         graph(value, f"components/{key}.json", f"component/{key}")
     for key, value in sorted(bundle["templates"].items()):
         add(f"template/{key}", "template", label(value, key), value, f"templates/{key}.sql")
+    declared = bundle.get("variables")
+    if isinstance(declared, dict):
+        used_by = variables.usages(bundle)
+        for key, value in sorted(declared.items()):
+            add(f"variable/{key}", "variable", key, value, variables.FILE)
+            result[f"variable/{key}"]["usages"] = used_by.get(key, [])
+    elif declared is not None:
+        add(f"file/{variables.FILE}", "file", variables.FILE, declared, variables.FILE)
 
     def instance_name(identity):
         graph = bundle["flow"]
@@ -134,6 +143,8 @@ def potential_impact(before, after):
     for bundle in (before, after):
         try:
             nodes, edges, boundaries = expand(bundle, tolerant=True)
+            # A variable's values stand for its references, so value changes reach the nodes using it.
+            variables.computation(bundle, nodes)
             errors.extend({"node": key, "message": n["error"]} for key, n in nodes.items() if n.get("error"))
             views.append((nodes, edges, boundaries))
         except (Problem, KeyError, TypeError, ValueError, AttributeError, RecursionError):

@@ -5,12 +5,12 @@ import re
 import tomllib
 from pathlib import Path
 
-from . import __version__
+from . import __version__, variables
 from .components import expand
 from .templates import parse_template
 from .util import Problem, dumps
 
-ROOT_FILES = ("flow.json", "documentation.json", "README.md", "pyproject.toml")
+ROOT_FILES = ("flow.json", "documentation.json", "README.md", "pyproject.toml", variables.FILE)
 DECLARATIVE_PATH = re.compile(r"templates/[A-Za-z0-9_-]+\.sql|components/[A-Za-z0-9_-]+\.json")
 
 
@@ -40,6 +40,7 @@ def files_to_bundle(files):
             },
             "documentation": documentation,
             "pyproject": files.get("pyproject.toml"),
+            "variables": variables.read(files.get(variables.FILE)),
         }
     except (ValueError, KeyError) as error:
         raise Problem(f"Cannot read declarative project files: {error}") from error
@@ -77,6 +78,11 @@ def bundle_to_files(bundle):
         else default_pyproject(name if isinstance(name, str) else "Untitled project"),
         **{f"templates/{key}.sql": value for key, value in templates.items()},
         **{f"components/{key}.json": dumps(value) for key, value in components.items()},
+        **(
+            {variables.FILE: variables.write(bundle["variables"])}
+            if bundle.get("variables") is not None
+            else {}
+        ),
     }
 
 
@@ -140,8 +146,10 @@ def validate(bundle):
             parse_template(sql)
         except Exception as error:
             errors.append({"file": f"templates/{name}.sql", "message": str(error)})
+    errors.extend(variables.problems(bundle))
     try:
         nodes, edges, _ = expand(bundle)
+        errors.extend(variables.node_problems(bundle, nodes))
         identifiers = [n["id"] for n in bundle["flow"].get("nodes", [])]
         if len(set(identifiers)) != len(identifiers):
             raise Problem("Node identifiers must be unique")
