@@ -194,12 +194,15 @@ Each step is a separate issue and pull request, with tests and documentation.
 3. **Expressions.** `{{ var.name }}` in expression parameters, suggestions and value hints, guided Filter support and lineage labels.
 4. **Later, on demand.** Variables inside text and path parameters (for example `sales_{{ var.year }}.csv`), values supplied by schedules and webhooks, instance-wide variables, and read-only built-in values such as the environment name.
 
+## Decisions
+
+- References stay limited to the root flow; components use exposed parameters.
+- Per-environment values are versioned in the project rather than stored per instance.
+- The entry point is a **Variables** workspace tab rather than a section of **Project settings**.
+
 ## Open questions
 
-1. Is a first version without run-time values acceptable, with experiments done on branches?
-2. Should references stay limited to the root flow, with components using exposed parameters?
-3. Should per-environment values be versioned in the project, as proposed, rather than stored per instance?
-4. Is a **Variables** workspace tab the right entry point, rather than a section of **Project settings**?
+1. Can the first version ship without run-time values? Dataiku and Alteryx can launch a run with values typed for that run only, such as a threshold of 500 while the project says 300, without saving them. Here, trying 500 means changing the variable, on a branch to leave `main` untouched, then running and comparing. A one-off value would produce results that are stale immediately and have no lineage, because they do not match the saved configuration. What is lost is letting someone pick, for example, the month to compute without editing the project; schedules and webhooks would bring it back later.
 
 ## Sources
 
