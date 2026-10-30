@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
   AlertCircle,
   ArrowRight,
@@ -7,10 +7,11 @@ import {
   GitBranch,
   GitCommitHorizontal,
 } from "lucide-react";
-import { api, withQuery } from "./api";
+import { withQuery } from "./api";
 import { useT } from "./i18n";
 import { Modal } from "./modals";
 import type { Json } from "./types";
+import { useApiResource } from "./useApiResource";
 
 export default function HistoryPanel({
   readOnly = false,
@@ -27,28 +28,14 @@ export default function HistoryPanel({
 }) {
   const t = useT();
   const [tab, setTab] = useState<"runs" | "git">("runs");
-  const [runs, setRuns] = useState<Json[]>([]);
-  const [commits, setCommits] = useState<Json[]>([]);
   const [selected, setSelected] = useState<Json | null>(null);
-  const [error, setError] = useState("");
-  useEffect(() => {
-    let live = true;
-    Promise.all([
-      api(withQuery("/runs", { worktree })),
-      api(`/worktrees/${worktree}/history`),
-    ])
-      .then(([r, c]) => {
-        if (!live) return;
-        setRuns(r);
-        setCommits(c);
-      })
-      .catch((e) => {
-        if (live) setError(e.message);
-      });
-    return () => {
-      live = false;
-    };
-  }, [worktree]);
+  const runHistory = useApiResource<Json[]>(withQuery("/runs", { worktree }));
+  const gitHistory = useApiResource<{ items: Json[] }>(
+    withQuery(`/worktrees/${worktree}/git/history`, { limit: 100 }),
+  );
+  const runs = runHistory.data || [];
+  const commits = gitHistory.data?.items || [];
+  const error = runHistory.error || gitHistory.error;
   return (
     <section className="full-panel">
       <div className="page-heading">

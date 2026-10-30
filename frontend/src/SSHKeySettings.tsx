@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { api } from "./api";
 import { useT } from "./i18n";
 import { ConfirmModal } from "./modals";
+import { useApiResource } from "./useApiResource";
 import { useAsyncAction } from "./useAsyncAction";
 
 type SSHKey = { public_key: string; fingerprint: string; created: string };
@@ -10,24 +11,13 @@ type SSHKey = { public_key: string; fingerprint: string; created: string };
 /** The account's Duckpad-generated SSH key; only its public half ever reaches the browser. */
 export default function SSHKeySettings() {
   const t = useT();
-  const [key, setKey] = useState<SSHKey | null | undefined>(undefined);
+  const resource = useApiResource<SSHKey | null>("/ssh-key");
+  const { data: key, setData: setKey } = resource;
   const [confirm, setConfirm] = useState<"regenerate" | "delete" | null>(null);
   const [copied, setCopied] = useState(false);
   const field = useRef<HTMLTextAreaElement>(null);
-  const { pending, error, setError, run } = useAsyncAction();
-  useEffect(() => {
-    let live = true;
-    api<SSHKey | null>("/ssh-key")
-      .then((value) => {
-        if (live) setKey(value);
-      })
-      .catch((e: Error) => {
-        if (live) setError(e.message);
-      });
-    return () => {
-      live = false;
-    };
-  }, [setError]);
+  const { pending, run, ...action } = useAsyncAction();
+  const error = action.error || resource.error;
   const generate = async () => {
     setKey(await api<SSHKey>("/ssh-key", { method: "POST" }));
     setCopied(false);
@@ -50,9 +40,9 @@ export default function SSHKeySettings() {
           {error}
         </div>
       )}
-      {key === undefined ? (
+      {resource.pending ? (
         <p>{t("loading")}</p>
-      ) : key ? (
+      ) : resource.error && !key ? null : key ? (
         <>
           <label className="field">
             <span>{t("sshPublicKey")}</span>

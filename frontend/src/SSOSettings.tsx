@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { api, send } from "./api";
 import { useT } from "./i18n";
+import { useResource } from "./useApiResource";
 import { useAsyncAction } from "./useAsyncAction";
 
 type Configuration = {
@@ -16,27 +17,15 @@ type Configuration = {
 
 export default function SSOSettings() {
   const t = useT();
-  const [config, setConfig] = useState<Configuration | null>(null);
+  const resource = useResource("/sso", async (signal) => {
+    const value = await api<Configuration>("/sso", { signal });
+    return { ...value, public_url: value.public_url || location.origin };
+  });
+  const { data: config, setData: setConfig } = resource;
   const [secret, setSecret] = useState("");
   const [saved, setSaved] = useState(false);
-  const { pending, error, setError, run } = useAsyncAction();
-  useEffect(() => {
-    let live = true;
-    api<Configuration>("/sso")
-      .then((value) => {
-        if (live)
-          setConfig({
-            ...value,
-            public_url: value.public_url || location.origin,
-          });
-      })
-      .catch((e: Error) => {
-        if (live) setError(e.message);
-      });
-    return () => {
-      live = false;
-    };
-  }, [setError]);
+  const { pending, run, ...save } = useAsyncAction();
+  const error = save.error || resource.error;
   function change(values: Partial<Configuration>) {
     setConfig((current) => current && { ...current, ...values });
     setSaved(false);

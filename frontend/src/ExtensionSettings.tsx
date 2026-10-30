@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { api, send } from "./api";
 import { useT } from "./i18n";
+import { useApiResource } from "./useApiResource";
 import { useAsyncAction } from "./useAsyncAction";
 import ExtensionImport from "./ExtensionImport";
 
@@ -8,22 +9,11 @@ type Configuration = { allow_unsigned_extensions: boolean };
 
 export default function ExtensionSettings() {
   const t = useT();
-  const [config, setConfig] = useState<Configuration | null>(null);
+  const settings = useApiResource<Configuration>("/extensions/settings");
+  const { data: config, setData: setConfig } = settings;
   const [saved, setSaved] = useState(false);
-  const { pending, error, setError, run } = useAsyncAction();
-  useEffect(() => {
-    let live = true;
-    api<Configuration>("/extensions/settings")
-      .then((value) => {
-        if (live) setConfig(value);
-      })
-      .catch((e: Error) => {
-        if (live) setError(e.message);
-      });
-    return () => {
-      live = false;
-    };
-  }, [setError]);
+  const { pending, run, ...save } = useAsyncAction();
+  const error = save.error || settings.error;
   return (
     <section aria-label={t("extensionSettings")}>
       <h2>{t("extensionSettings")}</h2>

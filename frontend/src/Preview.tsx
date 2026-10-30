@@ -9,10 +9,11 @@ import {
   Search,
   X,
 } from "lucide-react";
-import { api } from "./api";
+import { api, ApiError } from "./api";
 import { formatValue } from "./graph";
 import type { Json } from "./types";
 import { useT } from "./i18n";
+import { useResource } from "./useApiResource";
 
 export default function Preview({
   readOnly = false,
@@ -43,9 +44,6 @@ export default function Preview({
 }) {
   const t = useT();
   const [port, setPort] = useState(ports[0] || "result");
-  const [data, setData] = useState<Json | null>(null);
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
   const [limit, setLimit] = useState(100);
   const [offset, setOffset] = useState(0);
   const [sort, setSort] = useState("");
@@ -66,59 +64,45 @@ export default function Preview({
     }, 250);
     return () => clearTimeout(timer);
   }, [filter]);
-  useEffect(() => {
-    let live = true;
-    setLoading(true);
-    setError("");
-    const params = new URLSearchParams({
-      environment,
-      port,
-      limit: String(limit),
-      offset: String(offset),
-      descending: String(descending),
-      filters: JSON.stringify(
-        filterColumn && debounced ? { [filterColumn]: debounced } : {},
-      ),
-    });
-    if (sort) params.set("sort", sort);
-    api(`/worktrees/${worktree}/preview/${encodeURIComponent(node)}?${params}`)
-      .then((result) => {
-        if (live) {
-          setData(result);
-          onData(result);
-          setFilterColumn((old) =>
-            old && result.columns.some((c: Json) => c.name === old)
-              ? old
-              : result.columns[0]?.name || "",
-          );
-        }
-      })
-      .catch((e) => {
-        if (live) {
-          setData(null);
-          onData(null);
-          if (e.status !== 404) setError(e.message);
-        }
-      })
-      .finally(() => {
-        if (live) setLoading(false);
-      });
-    return () => {
-      live = false;
-    };
-  }, [
-    worktree,
+  const params = new URLSearchParams({
     environment,
-    node,
     port,
-    version,
-    limit,
-    offset,
-    sort,
-    descending,
-    filterColumn,
-    debounced,
-  ]);
+    limit: String(limit),
+    offset: String(offset),
+    descending: String(descending),
+    filters: JSON.stringify(
+      filterColumn && debounced ? { [filterColumn]: debounced } : {},
+    ),
+  });
+  if (sort) params.set("sort", sort);
+  const path = `/worktrees/${worktree}/preview/${encodeURIComponent(node)}?${params}`;
+  // The current page stays visible while another page, order or filter loads.
+  const {
+    data,
+    error,
+    pending: loading,
+  } = useResource(
+    `${worktree}:${node}`,
+    async (signal) => {
+      try {
+        return await api<Json>(path, { signal });
+      } catch (e) {
+        // A node without a result yet has nothing to preview.
+        if (e instanceof ApiError && e.status === 404) return null;
+        throw e;
+      }
+    },
+    { refresh: `${path}:${version}` },
+  );
+  useEffect(() => {
+    onData(data);
+    if (data)
+      setFilterColumn((old) =>
+        old && data.columns.some((c: Json) => c.name === old)
+          ? old
+          : data.columns[0]?.name || "",
+      );
+  }, [data]);
   return (
     <section
       className="preview-panel"

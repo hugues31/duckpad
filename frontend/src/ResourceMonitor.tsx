@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useRef, useState } from "react";
 import { X } from "lucide-react";
 import { api } from "./api";
 import { useT } from "./i18n";
+import { usePolling } from "./usePolling";
 
 interface Counters {
   sampled_at: number;
@@ -84,14 +85,9 @@ export default function ResourceMonitor() {
   const [samples, setSamples] = useState<Sample[]>([]);
   const [failed, setFailed] = useState(false);
   const [open, setOpen] = useState(false);
-  useEffect(() => {
-    let stopped = false;
-    let timer: ReturnType<typeof setTimeout>;
-    let previous: Counters | null = null;
-    let request: AbortController;
-    const poll = async () => {
-      request = new AbortController();
-      const timeout = setTimeout(() => request.abort(), 5000);
+  const previous = useRef<Counters | null>(null);
+  usePolling(
+    async (signal) => {
       let sample: Sample = {
         at: Date.now(),
         cpu: null,
@@ -101,23 +97,24 @@ export default function ResourceMonitor() {
       };
       try {
         const current = await api<Counters>("/resources", {
-          signal: request.signal,
+          signal: AbortSignal.any([signal, AbortSignal.timeout(5000)]),
         });
-        if (stopped) return;
+        if (signal.aborted) return;
+        const before = previous.current;
         sample = {
           at: Date.now(),
           cpu:
-            previous &&
-            previous.cpu_seconds !== null &&
+            before &&
+            before.cpu_seconds !== null &&
             current.cpu_seconds !== null &&
-            previous.cpu_total_seconds !== null &&
+            before.cpu_total_seconds !== null &&
             current.cpu_total_seconds !== null &&
-            current.sampled_at > previous.sampled_at &&
-            current.cpu_total_seconds > previous.cpu_total_seconds &&
-            current.cpu_seconds >= previous.cpu_seconds
+            current.sampled_at > before.sampled_at &&
+            current.cpu_total_seconds > before.cpu_total_seconds &&
+            current.cpu_seconds >= before.cpu_seconds
               ? percent(
-                  (100 * (current.cpu_seconds - previous.cpu_seconds)) /
-                    (current.cpu_total_seconds - previous.cpu_total_seconds),
+                  (100 * (current.cpu_seconds - before.cpu_seconds)) /
+                    (current.cpu_total_seconds - before.cpu_total_seconds),
                 )
               : null,
           memory:
@@ -131,14 +128,12 @@ export default function ResourceMonitor() {
           memoryBytes: current.memory_bytes,
           memoryTotalBytes: current.memory_total_bytes,
         };
-        previous = current;
+        previous.current = current;
         setFailed(false);
       } catch {
-        if (stopped) return;
-        previous = null;
+        if (signal.aborted) return;
+        previous.current = null;
         setFailed(true);
-      } finally {
-        clearTimeout(timeout);
       }
       setSamples((history) =>
         [
@@ -146,15 +141,10 @@ export default function ResourceMonitor() {
           sample,
         ].slice(-61),
       );
-      timer = setTimeout(poll, interval);
-    };
-    void poll();
-    return () => {
-      stopped = true;
-      clearTimeout(timer);
-      request?.abort();
-    };
-  }, []);
+    },
+    { interval },
+    [],
+  );
   const latest = samples.at(-1);
   return (
     <div className="resource-monitor">

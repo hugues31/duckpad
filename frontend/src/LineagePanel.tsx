@@ -25,6 +25,7 @@ import {
 import { api, send, withQuery } from "./api";
 import { formatValue } from "./graph";
 import { useT } from "./i18n";
+import { isFinal, usePolling } from "./usePolling";
 import {
   arrangeLineage,
   buildLineageGraph,
@@ -308,35 +309,31 @@ function LineageDialog({ worktree, environment, cell, onClose }: Props) {
     };
   }, []);
 
-  useEffect(() => {
-    const abort = new AbortController();
-    let timer: number | undefined;
-    const verify = async () => {
+  // Stop exploring once the explained result is recalculated or edited.
+  usePolling(
+    async (signal) => {
       try {
         const result = await api(
           withQuery(`/worktrees/${worktree}/generations/${cell.dataset}`, {
             environment,
           }),
-          { signal: abort.signal },
+          { signal },
         );
-        if (!abort.signal.aborted && !result.valid) {
-          stopped.current = true;
-          controller.current?.abort();
-          setInterrupted(true);
-          setPending(false);
-          return;
-        }
-      } catch {
-        /* Retry temporary verification failures. */
+        if (signal.aborted || result.valid) return;
+        stopped.current = true;
+        controller.current?.abort();
+        setInterrupted(true);
+        setPending(false);
+        return false;
+      } catch (e) {
+        // Temporary failures are retried; a final one stops verification.
+        if (!signal.aborted && isFinal(e)) setError((e as Error).message);
+        throw e;
       }
-      if (!abort.signal.aborted) timer = window.setTimeout(verify, 500);
-    };
-    void verify();
-    return () => {
-      abort.abort();
-      clearTimeout(timer);
-    };
-  }, [worktree, environment, cell.dataset]);
+    },
+    { interval: 500 },
+    [worktree, environment, cell.dataset, revision],
+  );
 
   useEffect(() => {
     if (stopped.current) return;

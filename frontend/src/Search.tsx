@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { Loader2, Search, X } from "lucide-react";
 import { useNavigate } from "react-router";
-import { api, withQuery } from "./api";
+import { withQuery } from "./api";
 import { useT } from "./i18n";
 import { Modal } from "./modals";
 import { worktreeUrl } from "./navigation";
 import type { Workspace } from "./types";
 import { searchShortcutLabel, useSearchShortcut } from "./searchShortcuts";
+import { useApiResource } from "./useApiResource";
 
 export interface SearchOption {
   key: string;
@@ -187,50 +188,26 @@ export default function InstanceSearch({
   workspace,
   environment,
   onClose,
-  onExpired,
 }: {
   workspace: Workspace;
   environment: string;
   onClose: () => void;
-  onExpired: () => void;
 }) {
   const t = useT();
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
-  const [response, setResponse] = useState<SearchResponse | null>(null);
-  const [error, setError] = useState("");
-  const scope = workspace.projects.map((p) => `${p.id}:${p.role}`).join("|");
-  useEffect(() => {
-    setResponse(null);
-    setError("");
-    if (!query.trim()) return;
-    const controller = new AbortController();
-    let timer: ReturnType<typeof setTimeout>;
-    const search = async () => {
-      try {
-        const result = await api<SearchResponse>(
-          withQuery("/search", { q: query.trim() }),
-          { signal: controller.signal },
-        );
-        if (!controller.signal.aborted) {
-          setResponse(result);
-          setError("");
-        }
-      } catch (e) {
-        if (controller.signal.aborted) return;
-        setResponse(null);
-        setError((e as Error).message);
-        if ((e as { status?: number }).status === 401) onExpired();
-      }
-      // Refresh open results so membership revocations do not linger in the UI.
-      if (!controller.signal.aborted) timer = setTimeout(search, 5000);
-    };
-    timer = setTimeout(search, 200);
-    return () => {
-      controller.abort();
-      clearTimeout(timer);
-    };
-  }, [query, scope, onExpired]);
+  const q = query.trim();
+  const {
+    data: response,
+    error,
+    pending,
+  } = useApiResource<SearchResponse>(q ? withQuery("/search", { q }) : null, {
+    // Wait for typing to pause, then refresh open results so membership
+    // revocations do not linger in the UI.
+    delay: 200,
+    interval: 5000,
+    refresh: workspace.projects.map((p) => `${p.id}:${p.role}`).join("|"),
+  });
   const results = (response?.results || []).filter((result) =>
     workspace.projects.some((project) => project.id === result.project),
   );
@@ -242,12 +219,8 @@ export default function InstanceSearch({
           autoFocus
           label={t("instanceSearch")}
           query={query}
-          onQuery={(value) => {
-            setQuery(value);
-            setResponse(null);
-            setError("");
-          }}
-          pending={!!query.trim() && !response && !error}
+          onQuery={setQuery}
+          pending={pending && !response && !error}
           message={
             error ||
             (response?.incomplete

@@ -2,10 +2,11 @@ import { useLocation, useNavigate } from "react-router";
 import { signInReturn, SSO_RETURN_KEY } from "./navigation";
 import { useEffect, useState } from "react";
 import { ArrowRight, Database, Loader2 } from "lucide-react";
-import { api, send } from "./api";
+import { api, apiUrl, send } from "./api";
 import DuckMark from "./DuckMark";
 import { useT } from "./i18n";
 import { PreferenceButtons, type Preferences } from "./preferences";
+import { useApiResource } from "./useApiResource";
 import { useAsyncAction } from "./useAsyncAction";
 
 export default function LoginPage({
@@ -20,27 +21,19 @@ export default function LoginPage({
   const navigate = useNavigate();
   const [username, setUsername] = useState("admin");
   const [password, setPassword] = useState("");
-  const [provider, setProvider] = useState<{ label: string } | null>(null);
+  // Local sign-in remains available during discovery failures.
+  const { data: provider } = useApiResource<{ label: string } | null>(
+    "/oidc/provider",
+  );
   const [ssoError] = useState(() =>
     new URLSearchParams(location.search).has("sso_error"),
   );
   useEffect(() => {
-    let live = true;
-    api<{ label: string } | null>("/oidc/provider")
-      .then((value) => {
-        if (live) setProvider(value);
-      })
-      .catch(() => {
-        /* Local sign-in remains available during discovery failures. */
-      });
     if (new URLSearchParams(location.search).has("sso_error")) {
       const url = new URL(window.location.href);
       url.searchParams.delete("sso_error");
       void navigate(url.pathname + url.search + url.hash, { replace: true });
     }
-    return () => {
-      live = false;
-    };
   }, []);
   const { pending, error, run } = useAsyncAction();
   return (
@@ -65,7 +58,7 @@ export default function LoginPage({
           <div className="sso-login">
             <a
               className="button secondary full large"
-              href="/api/oidc/login"
+              href={apiUrl("/oidc/login")}
               onClick={() => {
                 const target = signInReturn(
                   location.pathname + location.search,

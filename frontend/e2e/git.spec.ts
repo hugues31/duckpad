@@ -603,3 +603,27 @@ test("the branches tab creates branches with the shared branch dialog", async ({
   expect(branch).toBeTruthy();
   await expect(page).toHaveURL(new RegExp(`/worktrees/${branch.id}/flow`));
 });
+
+test("the synchronization button reports a failed status check and retries it", async ({
+  page,
+}) => {
+  await page.route("**/git/remote", (route) =>
+    route.fulfill({
+      status: 503,
+      json: { error: "Remote status temporarily unavailable" },
+    }),
+  );
+  await createProject(page);
+  // The dialog opened below has a tab with the same name.
+  const button = page.locator(".git-status-button");
+  await expect(button).toHaveAttribute(
+    "title",
+    /Status unavailable: Remote status temporarily unavailable/,
+  );
+  await page.unroute("**/git/remote");
+  await button.click();
+  await expect(button).toHaveAttribute("title", /· Disconnected ·/);
+  await expect(
+    page.getByRole("dialog", { name: "Project Git workspace" }),
+  ).toBeVisible();
+});

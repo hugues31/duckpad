@@ -221,6 +221,30 @@ test("recalculation interrupts an open DAG and disables all old graph navigation
   await expect(page.locator(".lineage-card")).toHaveCount(0);
 });
 
+test("verification stops after a missing result and an expired session signs out", async ({
+  page,
+}) => {
+  await example(page);
+  await explain(page);
+  let status = 404;
+  const checks: number[] = [];
+  await page.route("**/generations/**", (route) => {
+    checks.push(status);
+    return route.fulfill({ status, json: { error: "Dataset not found" } });
+  });
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.getByRole("alert")).toContainText("Dataset not found");
+  // Verification runs every 500 ms while it can still succeed.
+  await page.waitForTimeout(1500);
+  expect(checks).toEqual([404]);
+
+  status = 401;
+  await dialog.getByRole("button", { name: "Retry" }).click();
+  await expect(page.getByLabel("Password", { exact: true })).toBeVisible();
+  await page.waitForTimeout(1500);
+  expect(checks).toEqual([404, 401]);
+});
+
 test("closing a loading cell discards its late response before opening another cell", async ({
   page,
 }) => {
