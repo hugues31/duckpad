@@ -1,0 +1,15 @@
+{
+  "verified_at": "2026-10-27T19:49:07.618461+00:00",
+  "version": "v2.0.0",
+  "platform": "linux_amd64",
+  "checks": [
+    "signed_core_and_community_imports_compressed_and_raw",
+    "damaged_signature_and_wrong_platform_preserve_previous_import",
+    "unsupported_abi_version_rejected",
+    "unsigned_import_requires_explicit_policy_and_source",
+    "embedded_imported_pipeline_after_two_reopens",
+    "embedded_unsigned_import_revoked_after_policy_change",
+    "isolated_imported_pipeline_after_two_reopens",
+    "isolated_unsigned_import_revoked_after_policy_change"
+  ]
+}
