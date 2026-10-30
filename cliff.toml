@@ -57,5 +57,7 @@ commit_parsers = [
 filter_commits = false
 tag_pattern = '^v[0-9]+\.[0-9]+\.[0-9]+$'
 use_branch_tags = true
-topo_order = true
+# Order tags by commit time. topo_order does not sort tags topologically: it leaves
+# them in ref storage order, which lists packed v0.10.0 before v0.2.0.
+topo_order = false
 sort_commits = "oldest"
