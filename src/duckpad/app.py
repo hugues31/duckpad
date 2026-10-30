@@ -1,17 +1,22 @@
 """Authenticated FastAPI endpoints for the local workspace."""
 
 import json
+import logging
 import os
+import re
 from contextlib import ExitStack, asynccontextmanager
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import Annotated, Any, Literal
 from urllib.parse import quote, urlparse
 
 from fastapi import FastAPI, File, Form, Query, Request, UploadFile
+from fastapi.concurrency import run_in_threadpool
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.background import BackgroundTask
+from starlette.datastructures import UploadFile as FormFile
+from starlette.exceptions import HTTPException
 
 from . import __version__, schemas
 from .archive import archive_bundle, import_warnings, read_archive, write_archive
@@ -33,11 +38,24 @@ OIDC_COOKIE = "duckpad_oidc"
 PUBLIC_API_PATHS = {"/api/login", "/api/oidc/provider", "/api/oidc/login", CALLBACK_PATH}
 SAFE_METHODS = ("GET", "HEAD", "OPTIONS")
 UPLOAD_CHUNK = 1024 * 1024
+MAX_UPLOAD_BYTES = 1024 * 1024 * 1024
+# File systems commonly limit names to 255 bytes, including the unique prefix.
+MAX_UPLOAD_NAME_BYTES = 200
 STATIC = Path(__file__).parent / "static"
 
+logger = logging.getLogger(__name__)
 
-def problem_response(error: Problem):
-    return JSONResponse({"error": str(error), "detail": clean(error.detail)}, status_code=error.status)
+
+def problem_response(error: Problem, headers=None):
+    return JSONResponse(
+        {"error": str(error), "detail": clean(error.detail)}, status_code=error.status, headers=headers
+    )
+
+
+def upload_name(filename):
+    """The client's base file name, whatever its path separators, without control characters."""
+    name = re.sub(r"[\x00-\x1f\x7f]", "", PureWindowsPath(filename or "").name).strip()
+    return name.encode()[-MAX_UPLOAD_NAME_BYTES:].decode(errors="ignore") or "data.csv"
 
 
 def session_token(request: Request):
@@ -133,6 +151,11 @@ def create_app(home: Path, watch=True, *, trusted_local=False):
         summary = "; ".join(f"{e['location']}: {e['message']}" for e in errors)
         return problem_response(Problem(f"Invalid request: {summary}", 422, errors))
 
+    @app.exception_handler(HTTPException)
+    async def http_problem(request, error):
+        # Framework errors, such as unsupported methods or malformed forms, use the same format.
+        return problem_response(Problem(str(error.detail), error.status_code), error.headers)
+
     @app.middleware("http")
     async def authentication(request: Request, call_next):
         try:
@@ -143,11 +166,15 @@ def create_app(home: Path, watch=True, *, trusted_local=False):
                 origin = request.headers.get("origin")
                 if origin and urlparse(origin).netloc != request.headers.get("host"):
                     raise Problem("Cross-origin writes are not allowed", 403)
+            user = getattr(request.state, "user", None)
+            with commit_author(auth.commit_identity(user) if user else None):
+                response = await call_next(request)
         except Problem as error:
-            return problem_response(error)
-        user = getattr(request.state, "user", None)
-        with commit_author(auth.commit_identity(user) if user else None):
-            response = await call_next(request)
+            response = problem_response(error)
+        except Exception:
+            # The traceback stays in the server log; clients never see internal details.
+            logger.exception("Unexpected error in %s %s", request.method, request.url.path)
+            response = problem_response(Problem("Internal server error", 500))
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = (
             "no-referrer" if request.url.path.startswith("/api/oidc/") else "same-origin"
@@ -239,16 +266,12 @@ def create_app(home: Path, watch=True, *, trusted_local=False):
         q: Annotated[str, Query(max_length=200)] = "",
         limit: Annotated[int, Query(ge=1, le=100)] = 50,
     ):
-        return search_instance(projects, access, request.state.user, q, limit)
+        return search_instance(projects, request.state.user, q, limit)
 
     @app.get("/api/workspace")
     def workspace(request: Request):
         user = request.state.user
-        visible = [
-            {**p, "role": access.role(user, p["id"])}
-            for p in store.all("project")
-            if access.role(user, p["id"])
-        ]
+        visible = store.visible_projects(user)
         ids = {p["id"] for p in visible}
         return {
             "user": user,
@@ -319,16 +342,37 @@ def create_app(home: Path, watch=True, *, trusted_local=False):
             catalog.delete_environment(identity)
         return catalog.public()
 
-    @app.post("/api/worktrees/{worktree}/uploads")
-    async def upload(worktree: str, file: Annotated[UploadFile, File()]):
+    def save_upload(worktree, file):
         folder = store.home / "resources" / projects.get(worktree)["project"]
         folder.mkdir(parents=True, exist_ok=True)
-        name = Path(file.filename or "data.csv").name
-        path = folder / (uid() + "_" + name)
-        with path.open("wb") as stream:
-            while chunk := await file.read(UPLOAD_CHUNK):
-                stream.write(chunk)
+        name = upload_name(file.filename)
+        # A failed or interrupted upload never leaves a partial file under its final name.
+        temporary = folder / f".{uid()}.upload"
+        try:
+            with temporary.open("xb") as stream:
+                while chunk := file.file.read(UPLOAD_CHUNK):
+                    stream.write(chunk)
+            path = folder / f"{uid()}_{name}"
+            temporary.replace(path)
+        finally:
+            temporary.unlink(missing_ok=True)
+        # File parameters still need the server path; the project files already store it.
         return {"path": str(path), "name": name}
+
+    @app.post("/api/worktrees/{worktree}/uploads")
+    async def upload(worktree: str, request: Request):
+        # Without chunked transfer encoding, the server never reads past Content-Length,
+        # so oversized uploads are refused before any of their content is received.
+        length = request.headers.get("content-length", "")
+        if not length.isdigit() or "transfer-encoding" in request.headers:
+            raise Problem("Send the upload with a Content-Length header", 411)
+        if int(length) > MAX_UPLOAD_BYTES:
+            raise Problem("Uploads are limited to 1 GiB", 413)
+        async with request.form(max_files=1) as form:
+            file = form.get("file")
+            if not isinstance(file, FormFile):
+                raise Problem("Choose a file to upload", 422)
+            return await run_in_threadpool(save_upload, worktree, file)
 
     # Projects and worktrees
 
@@ -364,25 +408,17 @@ def create_app(home: Path, watch=True, *, trusted_local=False):
         return [auth.public(u) for u in store.all("user")]
 
     @app.post("/api/users")
-    def create_user(data: dict):
-        return auth.create_user(data.get("username"), data.get("password"), data.get("role", "member"))
+    def create_user(data: schemas.NewUser):
+        return auth.create_user(data.username, data.password, data.role)
 
     @app.patch("/api/users/{identity}")
-    def update_user(identity: str, data: dict):
-        return access.update_user(identity, data)
+    def update_user(identity: str, data: schemas.UserChanges):
+        return access.update_user(identity, data.model_dump(exclude_none=True))
 
     @app.post("/api/password")
-    def change_password(data: dict, request: Request):
-        user = store.get("user", request.state.user["id"])
-        if user.get("oidc"):
-            raise Problem("SSO accounts authenticate with their identity provider")
-        import hmac
-
-        if not hmac.compare_digest(
-            auth.hash_password(str(data.get("current", ""))[:1024], user["salt"]), user["hash"]
-        ):
-            raise Problem("Current password is incorrect", 403)
-        access.update_user(user["id"], {"password": data.get("password")})
+    def change_password(data: schemas.PasswordChange, request: Request):
+        auth.confirm_password(request.state.user["id"], data.current)
+        access.update_user(request.state.user["id"], {"password": data.password})
         return {"ok": True}
 
     @app.get("/api/ssh-key")
@@ -431,10 +467,8 @@ def create_app(home: Path, watch=True, *, trusted_local=False):
         }
 
     @app.put("/api/projects/{project}/members/{identity}")
-    def set_member(project: str, identity: str, data: dict):
-        if "role" not in data or data["role"] is None:
-            raise Problem("Choose a project role")
-        access.member(project, identity, data["role"])
+    def set_member(project: str, identity: str, data: schemas.ProjectRole):
+        access.member(project, identity, data.role)
         return {"ok": True}
 
     @app.delete("/api/projects/{project}/members/{identity}")
@@ -443,10 +477,10 @@ def create_app(home: Path, watch=True, *, trusted_local=False):
         return {"ok": True}
 
     @app.put("/api/projects/{project}/connections")
-    def project_connections(project: str, data: dict):
+    def project_connections(project: str, data: schemas.ConnectionGrants):
         with engine.exclusive(project):
             access.grant_connections(
-                project, data.get("connections"), before_change=lambda: engine.reset_project(project)
+                project, data.connections, before_change=lambda: engine.reset_project(project)
             )
         return {"ok": True}
 
@@ -455,14 +489,11 @@ def create_app(home: Path, watch=True, *, trusted_local=False):
         with engine.exclusive(project):
             engine.reset_project(project)
             projects.delete(project)
-            store.delete("access", project)
-            credentials.forget_project(project)
         return {"ok": True}
 
     @app.get("/api/library")
     def library(request: Request):
-        visible = {p["id"] for p in store.all("project") if access.role(request.state.user, p["id"])}
-        return projects.library(visible)
+        return projects.library({p["id"] for p in store.visible_projects(request.state.user)})
 
     @app.get("/api/worktrees/{worktree}")
     def get_project(worktree: str, request: Request):
@@ -498,12 +529,6 @@ def create_app(home: Path, watch=True, *, trusted_local=False):
     @app.post("/api/conflicts/{conflict}/resolve")
     def resolve_conflict(conflict: str, data: schemas.Resolution):
         return projects.resolve(conflict, data.choice, data.files)
-
-    @app.get("/api/worktrees/{worktree}/history")
-    def history(
-        worktree: str, offset: int = Query(default=0, ge=0), limit: int = Query(default=100, ge=1, le=100)
-    ):
-        return projects.versioning.history(worktree, offset=offset, limit=limit)["items"]
 
     @app.get("/api/worktrees/{worktree}/git/history")
     def git_history(

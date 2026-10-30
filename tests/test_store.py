@@ -10,7 +10,7 @@ from alembic import command
 from alembic.autogenerate import compare_metadata
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
-from sqlalchemy import inspect, text
+from sqlalchemy import event, inspect, text
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import SQLModel
 
@@ -440,3 +440,31 @@ def test_oidc_transaction_count_and_clear_do_not_load_provider_snapshots(store, 
     assert store.count_oidc_transactions() == 2
     store.delete_oidc_transactions()
     assert store.count_oidc_transactions() == 0
+
+
+def test_visible_projects_come_with_their_role_from_one_query(store):
+    auth = Auth(store)
+    member = auth.create_user("member", "test-password-123")
+    projects = Projects(store)
+    created = [projects.create(f"Project {index}")["project"] for index in range(4)]
+    for role, project in (("reader", created[2]), ("editor", created[1])):
+        store.put("access", project, {"members": {member["id"]: role}, "connections": []})
+    store.put("access", created[3], {"members": {"admin": "admin"}, "connections": []})
+    admin = store.get("user", "admin")
+    statements = []
+
+    def record(connection, cursor, statement, *args):
+        if statement.lstrip().upper().startswith("SELECT"):
+            statements.append(statement)
+
+    event.listen(store.engine, "before_cursor_execute", record)
+    try:
+        visible = store.visible_projects(member)
+        assert len(statements) == 1
+        everything = store.visible_projects(admin)
+        assert len(statements) == 2
+    finally:
+        event.remove(store.engine, "before_cursor_execute", record)
+    assert [(p["id"], p["role"]) for p in visible] == [(created[1], "editor"), (created[2], "reader")]
+    assert [(p["id"], p["role"]) for p in everything] == [(project, "admin") for project in created]
+    assert visible[0] == {**store.get("project", created[1]), "role": "editor"}

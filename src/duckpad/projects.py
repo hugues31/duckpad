@@ -25,7 +25,6 @@ from .util import Problem, atomic_write, digest, dumps, inside, now, uid
 
 logger = logging.getLogger(__name__)
 
-HISTORY_LENGTH = 100
 # The watcher polls files every WATCH_INTERVAL and commits a batch after QUIET_PERIOD without changes.
 WATCH_INTERVAL = 0.1
 QUIET_PERIOD = 0.5
@@ -503,14 +502,6 @@ class Projects:
                         }
                     )
         return items
-
-    def history(self, worktree_id):
-        path = self.get(worktree_id)["path"]
-        log = self.git(path, "log", f"-{HISTORY_LENGTH}", "--format=%H%x1f%an%x1f%ae%x1f%aI%x1f%s")
-        return [
-            dict(zip(("commit", "author", "email", "date", "message"), line.split("\x1f", 4), strict=True))
-            for line in log.splitlines()
-        ]
 
     def branch(self, worktree_id, name, revision=None):
         if revision:

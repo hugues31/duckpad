@@ -73,10 +73,10 @@ test("configure OIDC, sign in through a signing provider, administer access and 
       })
     ).json();
     const history = await (
-      await member.request.get(`/api/worktrees/${project.id}/history`)
+      await member.request.get(`/api/worktrees/${project.id}/git/history`)
     ).json();
     // The test provider supplies preferred_username=admin; the account remains distinct.
-    expect(history[0].author).toBe("admin");
+    expect(history.items[0].author).toBe("admin");
     expect(user.username).not.toBe("admin");
     // Remove this account's project before testing account deactivation below.
     expect(

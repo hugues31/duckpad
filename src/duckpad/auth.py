@@ -70,6 +70,8 @@ class Auth:
         return self.public(user)
 
     def login(self, username, password, peer="local"):
+        # Peers are client addresses; behind a reverse proxy, Uvicorn only reports them
+        # when FORWARDED_ALLOW_IPS trusts that proxy (see docs/INSTALLATION.md).
         now = time.time()
         with self.store.lock:
             self.attempts = {
@@ -83,32 +85,51 @@ class Auth:
             attempt = time.time()
             recent.append(attempt)
         user = self.store.find_user(username)
-        # Run the same password derivation for unknown and disabled accounts.
-        record = user if user and not user.get("oidc") else {"salt": "00" * 32, "hash": "00" * 64}
-        valid = hmac.compare_digest(self.hash_password(password[:1024], record["salt"]), record["hash"])
-        if not user or user.get("oidc") or not user["active"] or not valid or len(password) > 1024:
+        valid = self.password_matches(user, password)
+        if not user or user.get("oidc") or not user["active"] or not valid:
             raise Problem("Invalid username or password", 401)
-        token = secrets.token_urlsafe(32)
         with self.store.transaction():
             current = self.store.get("user", user["id"])
             if not current["active"] or current["hash"] != user["hash"]:
                 raise Problem("Invalid username or password", 401)
             self.attempts[peer] = [t for t in self.attempts.get(peer, []) if t != attempt]
-            self._purge_expired(now)
+            return self.start_session(user, credential=user["hash"])
+
+    def password_matches(self, user, password):
+        """Check a local account's password; unknown and SSO accounts run the same derivation."""
+        record = user if user and not user.get("oidc") else {"salt": "00" * 32, "hash": "00" * 64}
+        valid = hmac.compare_digest(self.hash_password(password[:1024], record["salt"]), record["hash"])
+        return valid and len(password) <= 1024
+
+    def confirm_password(self, identity, password):
+        """Require an account's current password before it changes its own credentials."""
+        user = self.store.get("user", identity)
+        if user.get("oidc"):
+            raise Problem("SSO accounts authenticate with their identity provider")
+        if not self.password_matches(user, password):
+            raise Problem("Current password is incorrect", 403)
+
+    def start_session(self, user, **binding):
+        """Store a session for a verified account and return its token.
+
+        The binding records what the session depends on: the password hash for local
+        accounts, or the SSO configuration revision for identity provider accounts.
+        """
+        token = secrets.token_urlsafe(32)
+        now = time.time()
+        with self.store.transaction():
+            self.store.purge_expired("session", now)
             self.store.put(
                 "session",
                 session_key(token),
                 {
                     "user": user["id"],
-                    "credential": user["hash"],
                     "version": user.get("session_version", 0),
                     "expires": now + SESSION_LIFETIME,
+                    **binding,
                 },
             )
         return token
-
-    def _purge_expired(self, now):
-        self.store.purge_expired("session", now)
 
     def check(self, token):
         session = self.store.get("session", session_key(token))

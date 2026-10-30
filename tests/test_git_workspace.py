@@ -88,6 +88,10 @@ def edit(projects, worktree, action):
     return projects.write(worktree["id"], snapshot["revision"], bundle_to_files(snapshot["bundle"]))
 
 
+def last_message(projects, worktree):
+    return projects.versioning.history(worktree["id"], limit=1)["items"][0]["message"]
+
+
 def apply(projects, review, choices=None):
     proposal = projects.versioning.proposal(review["worktree"], review["id"], choices or {})
     return projects.versioning.apply(
@@ -200,7 +204,7 @@ def test_commit_summaries_external_batches_multiple_entities_and_noop(project):
     projects, main = project
     first = projects.git(main["path"], "rev-parse", "HEAD")
     renamed = edit(projects, main, lambda b: b["flow"]["nodes"][1].update(label="Qualifying orders"))
-    assert projects.history(main["id"])[0]["message"] == "docs(node): rename Qualifying orders"
+    assert last_message(projects, main) == "docs(node): rename Qualifying orders"
     edit(projects, main, lambda b: None)
     assert projects.snapshot(main["id"])["commit"] == renamed["commit"]
     snapshot = projects.snapshot(main["id"])
@@ -238,7 +242,7 @@ def test_review_field_choices_keeps_ancestry_and_rejects_stale_heads(project):
         review["target_head"],
         review["source_head"],
     ]
-    assert projects.history(main["id"])[0]["message"] == "chore(merge): merge feature into main"
+    assert last_message(projects, main) == "chore(merge): merge feature into main"
     # Same files, different ancestry still invalidates the reviewed target.
     edit(projects, feature, lambda b: b["documentation"].update(project="New documentation"))
     stale = projects.versioning.prepare(main["id"], "refs/heads/feature")
