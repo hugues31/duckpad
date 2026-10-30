@@ -151,7 +151,7 @@ affinity and Linux cgroup limits taken into account. Missing measurements appear
 as unavailable. History resets on reload or sign-out.
 
 Language defaults to the first supported language in your browser preferences
-(English or French, with English as the fallback), and the theme defaults to your
+(English, French or Portuguese, with English as the fallback), and the theme defaults to your
 system color scheme. Manual choices are saved in this browser and take priority
 on subsequent visits. Open **Account menu → User settings** to choose your
 language and theme.

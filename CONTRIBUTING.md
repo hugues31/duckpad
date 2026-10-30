@@ -43,7 +43,7 @@ Use `uv run ruff format src tests scripts` and `npm run format --prefix frontend
 
 ## Conventions
 
-- Write code, comments, documentation, identifiers and commit messages in English. French is only used for values in `frontend/src/locales/fr.json`; add every new interface string to both locale files.
+- Write code, comments, documentation, identifiers and commit messages in English. French and Portuguese are only used for values in `frontend/src/locales/fr.json` and `frontend/src/locales/pt.json`; add every new interface string to every locale file.
 - Use [Conventional Commits](https://www.conventionalcommits.org/), for example `fix(editor): preserve selection when saving`. Release notes are generated from them.
 - Keep changes focused, and update the documentation in `docs/` when behavior changes.
 - Never commit credentials, personal data or details of a private deployment.
