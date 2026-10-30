@@ -7,7 +7,7 @@ import tempfile
 import threading
 from contextlib import contextmanager
 
-from .util import Problem
+from ..util import Problem
 
 logger = logging.getLogger(__name__)
 

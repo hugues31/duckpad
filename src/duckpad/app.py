@@ -25,7 +25,7 @@ from .auth import SESSION_LIFETIME, Auth
 from .bundle import bundle_to_files
 from .components import group, import_definition
 from .example import create_example
-from .identity import commit_author
+from .git.identity import commit_author
 from .oidc import CALLBACK_PATH, OIDC, TRANSACTION_LIFETIME, OIDCSettings
 from .resources import resource_usage
 from .search import search_instance

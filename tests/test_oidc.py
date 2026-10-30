@@ -13,7 +13,7 @@ from oidc_provider import Provider
 import duckpad.oidc as oidc_module
 from duckpad.app import create_app
 from duckpad.auth import Auth, session_key
-from duckpad.identity import account_identity
+from duckpad.git.identity import account_identity
 from duckpad.logging import PollingAccessFilter
 from duckpad.store import Store
 from duckpad.util import Problem

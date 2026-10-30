@@ -19,7 +19,7 @@ from cryptography.x509.oid import NameOID
 from fastapi.testclient import TestClient
 
 from duckpad.app import create_app
-from duckpad.git_credentials import parse_known_hosts, validate_prefix
+from duckpad.git.credentials import parse_known_hosts, validate_prefix
 from duckpad.services import Services
 from duckpad.util import Problem
 

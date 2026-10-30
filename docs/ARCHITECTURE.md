@@ -10,13 +10,22 @@ Duckpad has a Python API process serving a compiled React application and isolat
 | `services.py` | Wiring of the instance services shared by the API, tests and scripts |
 | `models.py`, `store.py`, `migrations/`, `catalog.py` | SQLModel tables, Alembic migrations, transactions, environments, reusable connections and secret redaction |
 | `projects.py`, `bundle.py`, `archive.py`, `merge.py` | Git worktrees, revision capture, external-save batching and durable conflict proposals; declarative file layout and validation; bounded project ZIP export and import; three-way merge |
-| `git_command.py`, `git_workspace.py`, `remote.py`, `git_credentials.py` | The only Git process runner: time-limited, without hooks or server Git configuration, logging Git output and returning readable errors; branches and reviewed merges; bounded fetch and leased push in an isolated Git and SSH environment; per-account SSH keys, trusted Git hosts and URL-bound consent |
+| `git/` (`command.py`, `workspace.py`, `remote.py`, `credentials.py`, `identity.py`) | The only Git process runner: time-limited, without hooks or server Git configuration, logging Git output and returning readable errors; branches and reviewed merges; bounded fetch and leased push in an isolated Git and SSH environment; per-account SSH keys, trusted Git hosts and URL-bound consent; commit attribution of the current request |
 | `templates.py`, `builtin_templates.py`, `components.py` | Typed SQL compilation, read/write contracts, built-in templates, recursive expansion, parameter exposure, independent imports |
 | `engine.py`, `datasets.py`, `materialize.py` | Admission, immutable execution configuration, DuckDB ownership, cancellation, output publication and invalidation |
 | `lineage.py`, `trace/`, `sqlast.py` | Lineage requests and their cancellation; SQLGlot normalization and targeted provenance queries over materialized dependencies, built as SQLGlot expressions by one visitor per SQL construct |
 | `sandbox.py`, `sql_worker.py` | JSON RPC, separate SQL processes, kernel filesystem restrictions and locked DuckDB configuration |
 | `resources.py` | Portable machine-wide CPU and physical memory counters |
 | `example.py` | Reproducible local sample data and documented Northstar project |
+
+Modules stay flat in `src/duckpad` by default. A sub-package groups either a family
+of implementations of one construct, such as the `trace/` visitors and the
+`migrations/` revisions, or a subsystem of several modules with its own vocabulary
+that the rest of the code reaches through a few entry points, such as `git/`. A
+shared file name prefix such as `git_` signals a missing sub-package, while modules
+used throughout the code, such as `templates.py` or `util.py`, stay at the top
+level. A package's `__init__.py` documents it and re-exports at most a small entry
+point, as `trace/` does; callers otherwise import the module that defines a name.
 
 The frontend in `frontend/src` mirrors this split: `api.ts` is the only HTTP client, `App.tsx` is the signed-in layout, `shell.ts` and `worktree.tsx` share the session and the open working branch with its pages, and each page, panel and dialog has its own module.
 
