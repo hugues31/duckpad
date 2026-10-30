@@ -2,10 +2,39 @@ import copy
 
 import duckdb
 import pytest
-from conftest import wait_run
+from helpers import wait_run
 
+from duckpad.catalog import redact
 from duckpad.lineage import Lineage
 from duckpad.util import Problem
+
+
+def test_absent_numeric_connection_values_use_defaults_without_overriding_explicit_zero(services):
+    store, _, catalog, _ = services
+    definition = {
+        "id": "numeric",
+        "parameters": [{"name": "port", "type": "number", "default": 5432}],
+        "capabilities": ["read"],
+        "init_sql": "",
+    }
+    catalog.save("connector", definition)
+    catalog.save(
+        "connection",
+        {
+            "id": "numeric",
+            "name": "Numeric connection",
+            "connector": "numeric",
+            "environments": {"dev": {}, "prod": {"port": 0}},
+        },
+        create=True,
+    )
+    assert catalog.capture(["numeric"], "dev")[0]["numeric"]["values"]["port"] == 5432
+    assert catalog.capture(["numeric"], "prod")[0]["numeric"]["values"]["port"] == 0
+    assert store.get("connection", "numeric")["environments"]["dev"] == {}
+    definition["parameters"][0].pop("default")
+    catalog.save("connector", definition)
+    with pytest.raises(Problem, match="requires port"):
+        catalog.capture(["numeric"], "dev")
 
 
 def test_declarative_attached_connector_native_insert_and_environment_capture(services, tmp_path):
@@ -26,7 +55,9 @@ def test_declarative_attached_connector_native_insert_and_environment_capture(se
     }
     catalog.save("connector", definition)
     catalog.save(
-        "connection", {"id": "warehouse", "name": "Warehouse", "connector": "native", "environments": paths}
+        "connection",
+        {"id": "warehouse", "name": "Warehouse", "connector": "native", "environments": paths},
+        create=True,
     )
     bundle = {
         "flow": {
@@ -74,7 +105,7 @@ def test_declarative_attached_connector_native_insert_and_environment_capture(se
     assert engine.preview(branch, "prod", "source")["rows"][0]["values"] == [1, 100]
 
 
-def test_setup_rejects_data_operations_and_secret_redaction_survives_definition_deletion(services):
+def test_setup_rejects_data_operations_and_referenced_connector_deletion(services):
     store, _, catalog, _ = services
     for sql in ("SELECT 1;", "CREATE TABLE hidden AS SELECT 1;", "COPY t TO 'hidden.csv';"):
         with pytest.raises(Problem):
@@ -94,11 +125,14 @@ def test_setup_rejects_data_operations_and_secret_redaction_survives_definition_
         "connector": "secret_test",
         "environments": {"dev": {"password": secret}},
     }
-    catalog.save("connection", copy.deepcopy(connection))
+    catalog.save("connection", copy.deepcopy(connection), create=True)
     _, secrets = catalog.capture(["hidden"], "dev")
     assert secret not in str(catalog.public())
-    assert secret.replace("'", "''") not in catalog.redact(secret.replace("'", "''"), secrets)
-    store.delete("connector", "secret_test")
+    assert secret.replace("'", "''") not in redact(secret.replace("'", "''"), secrets)
+    with pytest.raises(Problem, match="Remove this connector's connections"):
+        catalog.delete("connector", "secret_test")
     assert secret not in str(catalog.public())
-    with pytest.raises(Problem, match="Missing connector"):
-        catalog.capture(["hidden"], "dev")
+    assert catalog.capture(["hidden"], "dev")[0]
+    catalog.delete("connection", "hidden")
+    catalog.delete("connector", "secret_test")
+    assert store.get("connector", "secret_test") is None
