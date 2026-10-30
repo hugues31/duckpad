@@ -4,7 +4,7 @@ import threading
 from pathlib import Path
 
 from .auth import Auth
-from .git_credentials import KEY_KIND
+from .git.credentials import KEY_KIND
 from .util import Problem
 
 LEVELS = {"reader": 1, "editor": 2, "admin": 3}

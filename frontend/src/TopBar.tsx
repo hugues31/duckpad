@@ -1,5 +1,5 @@
-import { Link } from "react-router";
-import type { Area } from "./navigation";
+import { Link, useNavigate } from "react-router";
+import { usePageRoute, worktreeUrl } from "./navigation";
 import Select from "./Select";
 import {
   GitBranch,
@@ -14,10 +14,10 @@ import AccountMenu from "./AccountMenu";
 import DuckMark from "./DuckMark";
 import GitSyncButton from "./GitSyncButton";
 import { useT } from "./i18n";
-import type { Preferences } from "./preferences";
 import ResourceMonitor from "./ResourceMonitor";
-import type { Snapshot, Workspace } from "./types";
 import { searchShortcutLabel } from "./searchShortcuts";
+import { useShell } from "./shell";
+import { useWorktree } from "./worktree";
 
 const RAIL = [
   ["pipelines", Workflow],
@@ -25,46 +25,27 @@ const RAIL = [
 ] as const;
 
 export default function TopBar({
-  area,
-  workspace,
-  worktree,
-  snapshot,
-  environment,
-  preferences,
   pipelineUrl,
-  onHelp,
-  onOpenProject,
-  onNewProject,
-  onWorktree,
-  onNewBranch,
-  onGit,
-  gitVersion,
-  onEnvironment,
-  onSignOut,
   onSearch,
+  onSignOut,
 }: {
-  area: Area;
-  workspace: Workspace | null;
-  worktree: string;
-  snapshot: Snapshot | null;
-  environment: string;
-  preferences: Preferences;
+  /** Where the Pipelines link leads. */
   pipelineUrl: string;
-  onHelp: () => void;
-  onOpenProject: (worktree: string) => void;
-  onNewProject: () => void;
-  onWorktree: (worktree: string) => void;
-  onNewBranch: () => void;
-  onGit: () => void;
-  gitVersion: number;
-  onEnvironment: (environment: string) => void;
-  onSignOut: () => void;
   onSearch: () => void;
+  onSignOut: () => void;
 }) {
   const t = useT();
+  const navigate = useNavigate();
+  const { area, tab, projectId } = usePageRoute();
+  const { workspace, environment, preferences, openModal, openWorktree } =
+    useShell();
+  const { id: worktree, snapshot, canEdit, gitVersion } = useWorktree();
   const instanceAdmin = workspace?.user.role === "admin";
-  const canEdit = snapshot?.role === "admin" || snapshot?.role === "editor";
   const projectArea = area === "pipelines" || area === "projectSettings";
+  const project =
+    projectId ||
+    workspace?.worktrees.find((w) => w.id === worktree)?.project ||
+    "";
   return (
     <header className="topbar">
       <nav className="rail" aria-label={t("workspace")}>
@@ -103,7 +84,11 @@ export default function TopBar({
         >
           <Search size={21} />
         </button>
-        <button className="rail-button" title={t("help")} onClick={onHelp}>
+        <button
+          className="rail-button"
+          title={t("help")}
+          onClick={() => openModal({ kind: "about" })}
+        >
           <HelpCircle size={20} />
         </button>
       </nav>
@@ -118,16 +103,12 @@ export default function TopBar({
             <span className="eyebrow">{t("workspace")}</span>
             <Select
               aria-label={t("activeProject")}
-              value={
-                snapshot?.worktree.project ||
-                workspace?.worktrees.find((w) => w.id === worktree)?.project ||
-                ""
-              }
+              value={project}
               onChange={(e) => {
-                const project = workspace?.projects.find(
+                const selected = workspace?.projects.find(
                   (p) => p.id === e.target.value,
                 );
-                if (project) onOpenProject(project.main);
+                if (selected) openWorktree(selected.main);
               }}
             >
               {!workspace?.projects.length && <option>Duckpad</option>}
@@ -141,7 +122,7 @@ export default function TopBar({
           <button
             className="icon"
             title={t("newProject")}
-            onClick={onNewProject}
+            onClick={() => openModal({ kind: "newProject" })}
           >
             <Plus size={16} />
           </button>
@@ -155,7 +136,7 @@ export default function TopBar({
               <Select
                 aria-label={t("branch")}
                 value={worktree}
-                onChange={(e) => onWorktree(e.target.value)}
+                onChange={(e) => openWorktree(e.target.value, tab)}
               >
                 {workspace?.worktrees
                   .filter((w) => w.project === snapshot.worktree.project)
@@ -169,7 +150,7 @@ export default function TopBar({
                 className="icon"
                 title={t("newBranch")}
                 disabled={!canEdit}
-                onClick={onNewBranch}
+                onClick={() => openModal({ kind: "newBranch", worktree })}
               >
                 <Plus size={13} />
               </button>
@@ -178,7 +159,7 @@ export default function TopBar({
               worktree={worktree}
               commit={snapshot.commit}
               version={gitVersion}
-              onClick={onGit}
+              onClick={() => openModal({ kind: "git", worktree, mode: "sync" })}
             />
             <span className="header-divider" />
             <label className="environment-picker">
@@ -193,7 +174,9 @@ export default function TopBar({
               <Select
                 aria-label={t("environment")}
                 value={environment}
-                onChange={(e) => onEnvironment(e.target.value)}
+                onChange={(e) =>
+                  void navigate(worktreeUrl(worktree, tab, e.target.value))
+                }
               >
                 {workspace?.catalog.environment_details.map((env) => (
                   <option key={env.id} value={env.id}>

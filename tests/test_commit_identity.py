@@ -9,7 +9,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from duckpad.app import create_app
-from duckpad.identity import SYSTEM_IDENTITY, account_identity
+from duckpad.git.identity import SYSTEM_IDENTITY, account_identity
 
 PASSWORD = "commit-identity-password"
 

@@ -1,9 +1,4 @@
-import {
-  matchRoutes,
-  redirect,
-  useMatches,
-  type RouteObject,
-} from "react-router";
+import { useMatches } from "react-router";
 
 export const workspaceTabs = [
   "flow",
@@ -28,40 +23,17 @@ export type Area =
   | "userSettings"
   | "projectSettings"
   | "notFound";
-type PageRoute = { area: Area; tab?: WorkspaceTab; section?: string };
-
-// App is the persistent workspace layout; leaf handles select its existing panels.
-const EmptyRoute = () => null;
-const page = (path: string, handle: PageRoute): RouteObject => ({
-  path,
-  handle,
-  Component: EmptyRoute,
-});
-export const pageRoutes: RouteObject[] = [
-  { index: true, handle: { area: "home" }, Component: EmptyRoute },
-  page("projects", { area: "projects" }),
-  page("user-settings", { area: "userSettings" }),
-  {
-    ...page("instance-settings", { area: "instanceSettings" }),
-    loader: () => redirect("/instance-settings/users"),
-  },
-  ...settingsSections.map(([slug, section]) =>
-    page(`instance-settings/${slug}`, {
-      area: "instanceSettings",
-      section,
-    }),
-  ),
-  page("projects/:projectId/settings", { area: "projectSettings" }),
-  ...workspaceTabs.map((tab) =>
-    page(`worktrees/:worktreeId/${tab}`, { area: "pipelines", tab }),
-  ),
-  page("*", { area: "notFound" }),
-];
+/** The `handle` of each page route, which `routes.tsx` defines. */
+export interface PageHandle {
+  area: Area;
+  tab?: WorkspaceTab;
+  section?: string;
+}
 
 export function usePageRoute() {
   const match = useMatches().at(-1)!;
   return {
-    ...(match.handle as PageRoute),
+    ...(match.handle as PageHandle),
     worktreeId: match.params.worktreeId,
     projectId: match.params.projectId,
   };
@@ -76,35 +48,7 @@ export function worktreeUrl(
   return `/worktrees/${encodeURIComponent(id)}/${tab}${query}`;
 }
 
-export function isWorktreePage(pathname: string, worktreeId: string) {
-  const match = matchRoutes(pageRoutes, pathname)?.at(-1);
-  return (
-    (match?.route.handle as PageRoute | undefined)?.area === "pipelines" &&
-    match?.params.worktreeId === worktreeId
-  );
-}
+export const projectSettingsUrl = (project: string) =>
+  `/projects/${encodeURIComponent(project)}/settings`;
 
 export const SSO_RETURN_KEY = "duckpad-sign-in-return";
-
-/** Accept only application routes and the non-secret environment selection. */
-export function signInReturn(value: string | null): string | null {
-  if (
-    !value ||
-    !value.startsWith("/") ||
-    value.startsWith("//") ||
-    value.includes("\\")
-  )
-    return null;
-  const url = new URL(value, window.location.origin);
-  if (url.origin !== window.location.origin) return null;
-  const match = matchRoutes(pageRoutes, url.pathname)?.at(-1);
-  const area = (match?.route.handle as PageRoute | undefined)?.area;
-  if (!area || area === "notFound" || area === "home") return null;
-  const environment = url.searchParams.get("environment");
-  return (
-    url.pathname +
-    (area === "pipelines" && environment
-      ? `?${new URLSearchParams({ environment })}`
-      : "")
-  );
-}

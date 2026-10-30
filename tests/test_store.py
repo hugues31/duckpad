@@ -358,7 +358,7 @@ def test_converted_fields_and_arbitrary_json_snapshots_round_trip(store):
 def test_scoped_queries_and_bulk_deletes_leave_other_projects_untouched(store):
     from sqlalchemy import event
 
-    from duckpad.git_credentials import GitCredentials
+    from duckpad.git.credentials import GitCredentials
 
     Auth(store)
     projects = Projects(store)

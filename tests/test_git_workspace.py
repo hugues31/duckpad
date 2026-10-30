@@ -12,13 +12,13 @@ import pytest
 from fastapi.testclient import TestClient
 from helpers import join_run
 
-from duckpad import git_command
 from duckpad.app import create_app
 from duckpad.bundle import bundle_to_files
 from duckpad.comparison import commit_message, compare_files
 from duckpad.components import group
-from duckpad.git_command import GitError
-from duckpad.remote import validate_url
+from duckpad.git import command
+from duckpad.git.command import GitError
+from duckpad.git.remote import validate_url
 from duckpad.services import Services
 from duckpad.util import Problem
 
@@ -348,16 +348,16 @@ def test_cleanup_survives_a_failed_branch_deletion_and_a_restart(tmp_path, monke
     exports = projects.store.home / "exports" / feature["id"]
     (exports / "dev").mkdir(parents=True)
     (exports / "dev" / "report.csv").write_text("revenue\n1\n")
-    run = git_command.run
+    run = command.run
 
     def refuse_ref_deletion(path, *args, **options):
         if args[:2] == ("update-ref", "-d"):
             raise GitError()
         return run(path, *args, **options)
 
-    monkeypatch.setattr(git_command, "run", refuse_ref_deletion)
+    monkeypatch.setattr(command, "run", refuse_ref_deletion)
     assert projects.versioning.cleanup(main["id"], feature["id"], main["id"], head) == {"ok": True}
-    monkeypatch.setattr(git_command, "run", run)
+    monkeypatch.setattr(command, "run", run)
     assert projects.store.get("worktree", feature["id"]) is None
     assert not Path(feature["path"]).exists() and not exports.exists()
     services.close()

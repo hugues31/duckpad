@@ -1,8 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useT } from "./i18n";
 
-type Panel = "palette" | "inspector" | "preview";
+const PANELS = ["palette", "inspector", "preview"] as const;
+export type Panel = (typeof PANELS)[number];
 type Sizes = Partial<Record<Panel, number>>;
+const WIDE_LAYOUT = "(min-width: 1100px)";
 const storageKey = "duckpad-panel-sizes";
 const clamp = (value: number, min: number, max: number) =>
   Math.min(max, Math.max(min, value));
@@ -12,12 +14,10 @@ export function usePanelSizes() {
     try {
       const saved = JSON.parse(localStorage.getItem(storageKey) || "{}");
       return Object.fromEntries(
-        ["palette", "inspector", "preview"]
-          .filter(
-            (key) =>
-              typeof saved?.[key] === "number" && Number.isFinite(saved[key]),
-          )
-          .map((key) => [key, saved[key]]),
+        PANELS.filter(
+          (key) =>
+            typeof saved?.[key] === "number" && Number.isFinite(saved[key]),
+        ).map((key) => [key, saved[key]]),
       );
     } catch {
       return {};
@@ -95,7 +95,48 @@ export function usePanelSizes() {
   };
 }
 
-export function PanelResizeHandle({
+export type PanelSizes = ReturnType<typeof usePanelSizes>;
+
+/** Whether the screen leaves room for the node library beside the canvas. */
+export const isWideLayout = () => window.matchMedia(WIDE_LAYOUT).matches;
+
+/** Which floating panels of the flow are open. */
+export function usePanelVisibility() {
+  const [open, setOpen] = useState<Record<Panel, boolean>>(() => ({
+    palette: isWideLayout(),
+    inspector: true,
+    preview: true,
+  }));
+  const set = useCallback(
+    (change: Partial<Record<Panel, boolean>>) =>
+      setOpen((current) => ({ ...current, ...change })),
+    [],
+  );
+  return { open, set };
+}
+export type PanelVisibility = ReturnType<typeof usePanelVisibility>;
+
+/** The resize handles of the panels that are shown. */
+export function PanelResizeHandles({
+  panels,
+  shown,
+}: {
+  panels: PanelSizes;
+  shown: Record<Panel, boolean>;
+}) {
+  return PANELS.filter((panel) => shown[panel]).map((panel) => (
+    <PanelResizeHandle
+      key={panel}
+      panel={panel}
+      value={panels.sizes[panel]}
+      limits={panels.limits[panel]}
+      onResize={(value) => panels.resize(panel, value)}
+      onReset={() => panels.reset(panel)}
+    />
+  ));
+}
+
+function PanelResizeHandle({
   panel,
   value,
   limits,

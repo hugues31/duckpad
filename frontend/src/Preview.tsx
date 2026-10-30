@@ -9,83 +9,82 @@ import {
   Search,
   X,
 } from "lucide-react";
-import { api, ApiError } from "./api";
+import { api, ApiError, withQuery } from "./api";
 import { formatValue } from "./graph";
+import type { Cell } from "./lineageGraph";
 import type { Json } from "./types";
 import { useT } from "./i18n";
 import { useResource } from "./useApiResource";
 
-export default function Preview({
-  readOnly = false,
+export interface PreviewQuery {
+  port: string;
+  limit: number;
+  offset: number;
+  sort: string;
+  descending: boolean;
+  filterColumn: string;
+  /** The applied filter text. */
+  filter: string;
+}
+
+/**
+ * The rows of a node, loaded once for the data preview and the Inspector.
+ * The query restarts from the first output port when the node, its outputs or
+ * the environment change; the row limit is kept.
+ */
+export function useNodePreview({
   worktree,
   environment,
   node,
   ports,
   version,
-  active,
-  hidden,
-  onClose,
-  onRun,
-  onExplain,
-  onData,
 }: {
-  readOnly?: boolean;
   worktree: string;
   environment: string;
-  node: string;
+  /** The node to preview, or null when it has no output. */
+  node: string | null;
   ports: string[];
+  /** Changes whenever results may have changed. */
   version: string;
-  active: boolean;
-  hidden: boolean;
-  onClose: () => void;
-  onRun: () => void;
-  onExplain: (cell: Json) => void;
-  onData: (data: Json | null) => void;
 }) {
-  const t = useT();
-  const [port, setPort] = useState(ports[0] || "result");
-  const [limit, setLimit] = useState(100);
-  const [offset, setOffset] = useState(0);
-  const [sort, setSort] = useState("");
-  const [descending, setDescending] = useState(false);
-  const [filterColumn, setFilterColumn] = useState("");
-  const [filter, setFilter] = useState("");
-  const [debounced, setDebounced] = useState("");
-  useEffect(() => {
-    setPort(ports[0] || "result");
-    setOffset(0);
-    setFilter("");
-    setSort("");
-  }, [node, environment, ports.join("|")]);
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebounced(filter);
-      setOffset(0);
-    }, 250);
-    return () => clearTimeout(timer);
-  }, [filter]);
-  const params = new URLSearchParams({
-    environment,
-    port,
-    limit: String(limit),
-    offset: String(offset),
-    descending: String(descending),
-    filters: JSON.stringify(
-      filterColumn && debounced ? { [filterColumn]: debounced } : {},
-    ),
+  const owner = JSON.stringify([worktree, environment, node, ports]);
+  const initial = (limit: number): PreviewQuery => ({
+    port: ports[0] || "result",
+    limit,
+    offset: 0,
+    sort: "",
+    descending: false,
+    filterColumn: "",
+    filter: "",
   });
-  if (sort) params.set("sort", sort);
-  const path = `/worktrees/${worktree}/preview/${encodeURIComponent(node)}?${params}`;
+  const [state, setState] = useState(() => ({ owner, query: initial(100) }));
+  const query =
+    state.owner === owner ? state.query : initial(state.query.limit);
+  const path =
+    node === null
+      ? null
+      : withQuery(
+          `/worktrees/${worktree}/preview/${encodeURIComponent(node)}`,
+          {
+            environment,
+            port: query.port,
+            limit: query.limit,
+            offset: query.offset,
+            descending: query.descending,
+            filters: JSON.stringify(
+              query.filterColumn && query.filter
+                ? { [query.filterColumn]: query.filter }
+                : {},
+            ),
+            sort: query.sort || undefined,
+          },
+        );
   // The current page stays visible while another page, order or filter loads.
-  const {
-    data,
-    error,
-    pending: loading,
-  } = useResource(
-    `${worktree}:${node}`,
+  const { data, error, pending } = useResource(
+    node === null ? null : `${worktree}:${node}`,
     async (signal) => {
       try {
-        return await api<Json>(path, { signal });
+        return await api<Json>(path!, { signal });
       } catch (e) {
         // A node without a result yet has nothing to preview.
         if (e instanceof ApiError && e.status === 404) return null;
@@ -94,15 +93,55 @@ export default function Preview({
     },
     { refresh: `${path}:${version}` },
   );
+  // Merge into the latest query: a delayed filter must not undo other changes.
+  const update = (change: Partial<PreviewQuery>) =>
+    setState((current) => ({
+      owner,
+      query: {
+        ...(current.owner === owner
+          ? current.query
+          : initial(current.query.limit)),
+        ...change,
+      },
+    }));
+  // Filter the first column until another existing one is chosen.
   useEffect(() => {
-    onData(data);
-    if (data)
-      setFilterColumn((old) =>
-        old && data.columns.some((c: Json) => c.name === old)
-          ? old
-          : data.columns[0]?.name || "",
-      );
+    const columns: Json[] = data?.columns || [];
+    if (columns.length && !columns.some((c) => c.name === query.filterColumn))
+      update({ filterColumn: columns[0].name });
   }, [data]);
+  return { data: data as Json | null, error, pending, query, update };
+}
+export type NodePreview = ReturnType<typeof useNodePreview>;
+
+/** The rows of the selected node, loaded by `useNodePreview`. */
+export default function Preview({
+  readOnly = false,
+  preview: { data, error, pending: loading, query, update },
+  ports,
+  active,
+  hidden,
+  onClose,
+  onRun,
+  onExplain,
+}: {
+  readOnly?: boolean;
+  preview: NodePreview;
+  ports: string[];
+  active: boolean;
+  hidden: boolean;
+  onClose: () => void;
+  onRun: () => void;
+  onExplain: (cell: Cell) => void;
+}) {
+  const t = useT();
+  const { port, limit, offset, sort, descending, filterColumn } = query;
+  const [filter, setFilter] = useState(query.filter);
+  useEffect(() => {
+    if (filter === query.filter) return;
+    const timer = setTimeout(() => update({ filter, offset: 0 }), 250);
+    return () => clearTimeout(timer);
+  }, [filter]);
   return (
     <section
       className="preview-panel"
@@ -118,10 +157,7 @@ export default function Preview({
             <Select
               aria-label={t("output")}
               value={port}
-              onChange={(e) => {
-                setPort(e.target.value);
-                setOffset(0);
-              }}
+              onChange={(e) => update({ port: e.target.value, offset: 0 })}
             >
               {ports.map((p) => (
                 <option key={p}>{p}</option>
@@ -169,7 +205,7 @@ export default function Preview({
             <Select
               aria-label={t("filterColumn")}
               value={filterColumn}
-              onChange={(e) => setFilterColumn(e.target.value)}
+              onChange={(e) => update({ filterColumn: e.target.value })}
             >
               {data.columns.map((c: Json) => (
                 <option key={c.name}>{c.name}</option>
@@ -179,10 +215,9 @@ export default function Preview({
             <Select
               aria-label={t("rowLimit")}
               value={limit}
-              onChange={(e) => {
-                setLimit(Number(e.target.value));
-                setOffset(0);
-              }}
+              onChange={(e) =>
+                update({ limit: Number(e.target.value), offset: 0 })
+              }
             >
               {[25, 100, 500, 1000].map((n) => (
                 <option key={n} value={n}>
@@ -200,12 +235,13 @@ export default function Preview({
                   {data.columns.map((column: Json) => (
                     <th key={column.name}>
                       <button
-                        onClick={() => {
-                          setSort(column.name);
-                          setDescending(
-                            sort === column.name ? !descending : false,
-                          );
-                        }}
+                        onClick={() =>
+                          update({
+                            sort: column.name,
+                            descending:
+                              sort === column.name ? !descending : false,
+                          })
+                        }
                       >
                         <span>
                           {column.name}
@@ -269,7 +305,7 @@ export default function Preview({
                 className="icon"
                 disabled={!offset}
                 title={t("previous")}
-                onClick={() => setOffset(Math.max(0, offset - limit))}
+                onClick={() => update({ offset: Math.max(0, offset - limit) })}
               >
                 <ChevronLeft size={15} />
               </button>
@@ -277,7 +313,7 @@ export default function Preview({
                 className="icon"
                 disabled={offset + limit >= data.filtered_count}
                 title={t("next")}
-                onClick={() => setOffset(offset + limit)}
+                onClick={() => update({ offset: offset + limit })}
               >
                 <ChevronRight size={15} />
               </button>
