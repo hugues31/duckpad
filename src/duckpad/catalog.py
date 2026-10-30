@@ -1,11 +1,14 @@
 """Declarative connector definitions and environment-specific connections."""
 
+from __future__ import annotations
+
 import copy
 import re
 
 import duckdb
 
 from .templates import IDENTIFIER, REFERENCE
+from .types import Connections, Record
 from .util import Problem, digest, literal, qi
 
 MASK = "••••"
@@ -21,7 +24,7 @@ def secret_names(definition):
     return {p["name"] for p in definition.get("parameters", []) if p.get("secret")}
 
 
-def redact(text, secrets):
+def redact(text: str, secrets: list[str]) -> str:
     """Mask secret values, including their SQL-escaped form, in displayed text."""
     for value in sorted((str(v) for v in secrets if v is not None and str(v)), key=len, reverse=True):
         text = text.replace(value, MASK).replace(value.replace("'", "''"), MASK)
@@ -94,7 +97,7 @@ class Catalog:
         self.store.put(kind, data["id"], data)
         self.on_change()
 
-    def check(self, kind, data, *, create=False):
+    def check(self, kind, data: Record, *, create=False):
         """Validate a connector or connection and complete it for storage, without writing it."""
         if kind not in KINDS:
             raise Problem("Unknown catalog entity", 404)
@@ -103,7 +106,7 @@ class Catalog:
                 "Use an identifier starting with a letter and containing letters, numbers, hyphens or underscores"
             )
         if kind == "connection":
-            previous = self.store.get("connection", data["id"])
+            previous: Record | None = self.store.get("connection", data["id"])
             if create and previous is not None:
                 raise Problem(
                     "A connection with this identifier already exists", 409, {"code": "connection_exists"}
@@ -195,7 +198,7 @@ class Catalog:
             raise Problem(f"Invalid connector initialization SQL: {error}") from error
         self._validated.add(fingerprint)
 
-    def capture(self, references, environment):
+    def capture(self, references: list[str], environment: str) -> tuple[Connections, list[str]]:
         captured, secrets = {}, []
         for reference in set(references):
             connection = self.store.get("connection", reference)

@@ -1,18 +1,37 @@
 """Export results per node and environment, and the private copies offered for download."""
 
-import threading
-from contextlib import suppress
-from pathlib import Path
+from __future__ import annotations
 
+import threading
+from collections.abc import Iterable
+from contextlib import AbstractContextManager, suppress
+from pathlib import Path
+from typing import BinaryIO
+
+from ..access import Access
 from ..artifacts import Artifacts
+from ..catalog import Catalog
 from ..components import expand_for
 from ..graph import connection_references, reachable
+from ..projects import Projects
+from ..store import Store
 from ..templates import URI
+from ..types import Connections, Record, RunToken
 from ..util import Problem, digest
+from .fingerprints import Fingerprints
 
 
 class Exports:
-    def __init__(self, store, projects, catalog, access, fingerprints, lock, active):
+    def __init__(
+        self,
+        store: Store,
+        projects: Projects,
+        catalog: Catalog,
+        access: Access | None,
+        fingerprints: Fingerprints,
+        lock: threading.RLock,
+        active: dict[str, RunToken],
+    ) -> None:
         self.store, self.projects, self.catalog, self.access = store, projects, catalog, access
         self.fingerprints = fingerprints
         # The engine lock and the active runs it guards.
@@ -21,7 +40,7 @@ class Exports:
         self.write_lock = threading.Lock()
         self.artifacts = Artifacts(store)
 
-    def capture(self, export_file, run, node, captured):
+    def capture(self, export_file: Record, run: Record, node: str, captured: Connections) -> str | None:
         """Copy a completed file export for download; None when the copy is unavailable."""
         roots = [self.store.paths.exports(run["worktree"], run["environment"])]
         if self.access:
@@ -37,13 +56,13 @@ class Exports:
             # The external export succeeded even if its download copy is unavailable.
             return None
 
-    def record(self, run):
+    def record(self, run: Record) -> list[str]:
         """Make a run's export nodes the current results of their environment.
 
         Runs inside the caller's store transaction, deleting the records of the download
         copies it replaces; pass the returned identities to discard() once committed.
         """
-        replaced = []
+        replaced: list[str] = []
         for key, state in run["nodes"].items():
             if state.get("kind") != "export":
                 continue
@@ -66,14 +85,14 @@ class Exports:
             self.store.delete("artifact", artifact)
         return replaced
 
-    def discard(self, artifacts):
+    def discard(self, artifacts: Iterable[str]) -> None:
         """Remove the files of replaced download copies."""
         for identity in artifacts:
             # Windows keeps a file that a download is still reading.
             with suppress(OSError):
                 (self.store.paths.artifacts / identity).unlink(missing_ok=True)
 
-    def mark_stale(self, worktree, environment, nodes):
+    def mark_stale(self, worktree: str, environment: str, nodes: Iterable[str]) -> None:
         """Mark export results stale, keeping their download copies."""
         for key in nodes:
             identity = digest([worktree, environment, key])
@@ -81,7 +100,7 @@ class Exports:
             if previous:
                 self.store.put("export_result", identity, {**previous, "status": "stale"})
 
-    def result(self, worktree, environment, node):
+    def result(self, worktree: str, environment: str, node: str) -> Record:
         """Describe only the current export attempt in this exact execution context."""
         self.catalog.environment(environment)
         with self.projects.locked(worktree), self.lock:
@@ -135,7 +154,9 @@ class Exports:
             except Problem:
                 return {**public, "status": "missing"}
 
-    def open(self, worktree, environment, node, run):
+    def open(
+        self, worktree: str, environment: str, node: str, run: str
+    ) -> AbstractContextManager[tuple[BinaryIO, Record]]:
         """Validate the selected run and pin its private artifact before streaming."""
         with self.projects.locked(worktree), self.lock:
             result = self.result(worktree, environment, node)

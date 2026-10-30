@@ -28,7 +28,25 @@ jobs:
       - run: uv sync --locked --python ${{ matrix.python }}
       - run: uv run ruff check src tests scripts
       - run: uv run ruff format --check src tests scripts
+      - run: uv run ty check --python-version ${{ matrix.python }}
       - run: uv run pytest -q
+
+  typing-policy:
+    name: Python typing exceptions may only shrink
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - name: Compare typing exceptions with the base
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: python scripts/check_typing_policy.py
 
   windows-projects:
     name: Windows projects and trusted local execution

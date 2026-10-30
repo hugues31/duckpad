@@ -1,11 +1,16 @@
 """The single way Duckpad runs Git: bounded, hook-free, isolated from the server's Git setup."""
 
+from __future__ import annotations
+
 import logging
 import os
 import subprocess
 import tempfile
 import threading
+from collections.abc import Generator, Mapping, Sequence
 from contextlib import contextmanager
+from pathlib import Path
+from typing import Literal, TypedDict, overload
 
 from ..util import Problem
 
@@ -27,17 +32,17 @@ ISOLATED_VARIABLES = ("GIT_", "SSH_", "GCM_")
 class GitError(Problem):
     """A failed Git command. Its output can contain server paths, so it stays in the server logs."""
 
-    def __init__(self, message=FAILURE, status=409, output=""):
+    def __init__(self, message: str = FAILURE, status: int = 409, output: str = "") -> None:
         super().__init__(message, status)
         self.output = output
 
 
 class GitTimeout(GitError):
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__(TIMED_OUT, 504)
 
 
-def environment(identity=None):
+def environment(identity: Mapping[str, str] | None = None) -> dict[str, str]:
     """The server environment without Git, SSH and credential settings, plus explicit attribution."""
     env = {key: value for key, value in os.environ.items() if not key.startswith(ISOLATED_VARIABLES)}
     env.update(
@@ -54,56 +59,120 @@ def environment(identity=None):
     return env
 
 
-def command(path, args, identity=None, settings=()):
+def command(
+    path: str | Path,
+    args: Sequence[str],
+    identity: Mapping[str, str] | None = None,
+    settings: Sequence[str] = (),
+) -> list[str]:
     options = ["core.hooksPath=/dev/null", *settings]
     if identity:
         options += [f"user.name={identity['name']}", f"user.email={identity['email']}"]
     return ["git", *(flag for option in options for flag in ("-c", option)), "-C", str(path), *args]
 
 
-def log_failure(path, args, status, output):
+def log_failure(path: str | Path, args: Sequence[str], status: int, output: str) -> None:
     # repr() keeps remote, attacker-controlled text on one log line.
     logger.warning("Git %s failed in %s with status %s: %r", args[0] if args else "", path, status, output)
 
 
+class GitOptions(TypedDict, total=False):
+    settings: Sequence[str]
+    env: Mapping[str, str] | None
+    input: str | bytes | None
+    check: bool
+    timeout: float
+    failure: str
+
+
+@overload
 def run(
-    path,
-    *args,
-    identity=None,
-    settings=(),
-    env=None,
-    input=None,
-    check=True,
-    binary=False,
-    timeout=TIMEOUT,
-    failure=FAILURE,
-):
+    path: str | Path,
+    *args: str,
+    identity: Mapping[str, str] | None = None,
+    binary: Literal[False] = False,
+    settings: Sequence[str] = (),
+    env: Mapping[str, str] | None = None,
+    input: str | bytes | None = None,
+    check: bool = True,
+    timeout: float = TIMEOUT,
+    failure: str = FAILURE,
+) -> str: ...
+
+
+@overload
+def run(
+    path: str | Path,
+    *args: str,
+    identity: Mapping[str, str] | None = None,
+    binary: Literal[True],
+    settings: Sequence[str] = (),
+    env: Mapping[str, str] | None = None,
+    input: str | bytes | None = None,
+    check: bool = True,
+    timeout: float = TIMEOUT,
+    failure: str = FAILURE,
+) -> bytes: ...
+
+
+@overload
+def run(
+    path: str | Path,
+    *args: str,
+    identity: Mapping[str, str] | None = None,
+    binary: bool,
+    settings: Sequence[str] = (),
+    env: Mapping[str, str] | None = None,
+    input: str | bytes | None = None,
+    check: bool = True,
+    timeout: float = TIMEOUT,
+    failure: str = FAILURE,
+) -> str | bytes: ...
+
+
+def run(
+    path: str | Path,
+    *args: str,
+    identity: Mapping[str, str] | None = None,
+    settings: Sequence[str] = (),
+    env: Mapping[str, str] | None = None,
+    input: str | bytes | None = None,
+    check: bool = True,
+    binary: bool = False,
+    timeout: float = TIMEOUT,
+    failure: str = FAILURE,
+) -> str | bytes:
     """Run one Git command and return its output, stripped unless binary.
 
     A failure raises GitError with the given message for the user, unless check is False; a timeout
     always raises GitTimeout. `env` adds variables to the controlled environment.
     """
     try:
-        result = subprocess.run(
+        result: subprocess.CompletedProcess[str] | subprocess.CompletedProcess[bytes] = subprocess.run(
             command(path, args, identity, settings),
             env={**environment(identity), **(env or {})},
             input=input,
             capture_output=True,
             timeout=timeout,
-            **({} if binary else {"encoding": "utf-8", "errors": "replace"}),
+            encoding=None if binary else "utf-8",
+            errors=None if binary else "replace",
         )
     except subprocess.TimeoutExpired as error:
         logger.warning("Git %s timed out after %s seconds in %s", args[0] if args else "", timeout, path)
         raise GitTimeout from error
     if result.returncode and check:
-        output = result.stderr.decode("utf-8", "replace") if binary else result.stderr
+        output = (
+            result.stderr.decode("utf-8", "replace") if isinstance(result.stderr, bytes) else result.stderr
+        )
         log_failure(path, args, result.returncode, output.strip())
         raise GitError(failure, output=output)
     return result.stdout if binary else result.stdout.strip()
 
 
 @contextmanager
-def session(path, *args, identity=None, timeout=TIMEOUT):
+def session(
+    path: str | Path, *args: str, identity: Mapping[str, str] | None = None, timeout: float = TIMEOUT
+) -> Generator[subprocess.Popen[str], None, None]:
     """An interactive Git process, such as a ref transaction, killed if it outlives the timeout."""
     with (
         tempfile.TemporaryFile() as errors,
@@ -123,6 +192,7 @@ def session(path, *args, identity=None, timeout=TIMEOUT):
         try:
             yield process
         finally:
+            assert process.stdin is not None
             process.stdin.close()
             process.wait(timeout=timeout + 5)
             watchdog.cancel()
@@ -132,7 +202,7 @@ def session(path, *args, identity=None, timeout=TIMEOUT):
                 log_failure(path, args, process.returncode, errors.read().decode("utf-8", "replace").strip())
 
 
-def check_branch_name(path, name):
+def check_branch_name(path: str | Path, name: str) -> None:
     """Reject a local branch name Git cannot use with an actionable message.
 
     Git prints the normalized form of a valid reference name and nothing for an invalid one;

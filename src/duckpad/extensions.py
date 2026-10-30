@@ -24,7 +24,10 @@ NAME = re.compile(r"([a-z][a-z0-9_]{0,63})\.duckdb_extension(\.gz)?")
 @cache
 def runtime():
     with duckdb.connect(config={"threads": 1}) as db:
-        return db.execute("PRAGMA version").fetchone()[0], db.execute("PRAGMA platform").fetchone()[0]
+        version = db.execute("PRAGMA version").fetchone()
+        platform = db.execute("PRAGMA platform").fetchone()
+        assert version is not None and platform is not None
+        return version[0], platform[0]
 
 
 def database_config(directory):

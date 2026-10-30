@@ -1,22 +1,39 @@
 """Result statuses, paginated previews and compiled SQL of a worktree's nodes."""
 
+from __future__ import annotations
+
+import threading
+
 from .. import variables
-from ..catalog import redact
+from ..catalog import Catalog, redact
 from ..components import expand, expand_for, in_subtree
+from ..datasets import Context, Dataset
 from ..graph import connection_references
+from ..projects import Projects
+from ..store import Store
 from ..templates import compile_template
+from ..types import Record, RunToken
 from ..util import Problem, clean, qi
+from .contexts import ContextPool
 
 MAX_PREVIEW_ROWS = 10_000
 
 
 class Results:
-    def __init__(self, store, projects, catalog, pool, lock, active):
+    def __init__(
+        self,
+        store: Store,
+        projects: Projects,
+        catalog: Catalog,
+        pool: ContextPool,
+        lock: threading.RLock,
+        active: dict[str, RunToken],
+    ) -> None:
         self.store, self.projects, self.catalog, self.pool = store, projects, catalog, pool
         # The engine lock and the active runs it guards.
         self.lock, self.active = lock, active
 
-    def statuses(self, worktree, environment):
+    def statuses(self, worktree: str, environment: str) -> Record:
         context = self.pool.get(worktree, environment)
         with context.lock:
             result = {
@@ -35,14 +52,16 @@ class Results:
             active = self.active.get(worktree)
         return {"nodes": result, "active": self.store.get("run", active["id"]) if active else None}
 
-    def generation_valid(self, worktree, environment, dataset_id):
+    def generation_valid(self, worktree: str, environment: str, dataset_id: str) -> bool:
         """Whether a result generation is still current, so a lineage view may keep using it."""
         context = self.pool.get(worktree, environment)
         with context.lock:
             dataset = context.datasets.get(dataset_id)
             return bool(dataset and dataset.status == "valid")
 
-    def find_dataset(self, worktree, environment, node, port="result"):
+    def find_dataset(
+        self, worktree: str, environment: str, node: str, port: str = "result"
+    ) -> tuple[Context, Dataset]:
         context = self.pool.get(worktree, environment)
         dataset = context.outputs.get(node, {}).get(port)
         if not dataset:
@@ -58,16 +77,16 @@ class Results:
 
     def preview(
         self,
-        worktree,
-        environment,
-        node,
-        port="result",
-        limit=100,
-        offset=0,
-        sort=None,
-        descending=False,
-        filters=None,
-    ):
+        worktree: str,
+        environment: str,
+        node: str,
+        port: str = "result",
+        limit: int = 100,
+        offset: int = 0,
+        sort: str | None = None,
+        descending: bool = False,
+        filters: Record | None = None,
+    ) -> Record:
         context, dataset = self.find_dataset(worktree, environment, node, port)
         columns = [c["name"] for c in dataset.columns]
         if sort and sort not in columns:
@@ -82,10 +101,13 @@ class Results:
         order = f"{qi(dataset.stored(sort))} {'DESC' if descending else 'ASC'}, rowid" if sort else "rowid"
         relation = qi(dataset.relation)
         with context.lock:
+            assert context.db is not None
             cursor = context.db.cursor()
             projection = ", ".join(qi(dataset.stored(c)) for c in columns)
             try:
-                count = cursor.execute(f"SELECT COUNT(*) FROM {relation}{condition}", values).fetchone()[0]
+                count_row = cursor.execute(f"SELECT COUNT(*) FROM {relation}{condition}", values).fetchone()
+                assert count_row is not None
+                count = count_row[0]
                 rows = cursor.execute(
                     f"SELECT rowid, {projection} FROM {relation}{condition} ORDER BY {order} LIMIT ? OFFSET ?",
                     [*values, max(1, min(limit, MAX_PREVIEW_ROWS)), max(0, offset)],
@@ -104,7 +126,7 @@ class Results:
             finally:
                 cursor.close()
 
-    def compile(self, worktree, environment, node_id):
+    def compile(self, worktree: str, environment: str, node_id: str) -> list[Record]:
         """The statements of a node subtree, compiled from the current files without running them."""
         snapshot = self.projects.snapshot(worktree)
         self.catalog.environment(environment)

@@ -1,23 +1,37 @@
 """Persistent cancellation shared by native execution and the SQL worker."""
 
+from __future__ import annotations
+
 import threading
+from typing import Any
 
 import duckdb
+
+from .types import SQLCursor
 
 
 class Cursor:
     """A DuckDB cursor that, once interrupted, refuses every later statement."""
 
-    def __init__(self, cursor):
+    def __init__(self, cursor: SQLCursor) -> None:
         self.cursor = cursor
         self.lock = threading.Lock()
         self.canceled = False
-        self.finished = None
+        self.finished: threading.Event | None = None
 
-    def __getattr__(self, name):
+    def __getattr__(self, name: str) -> Any:
         return getattr(self.cursor, name)
 
-    def execute(self, query, parameters=None):
+    def fetchone(self) -> tuple[Any, ...] | None:
+        return self.cursor.fetchone()
+
+    def fetchall(self) -> list[tuple[Any, ...]]:
+        return self.cursor.fetchall()
+
+    def close(self) -> None:
+        self.cursor.close()
+
+    def execute(self, query: str, parameters: Any = None) -> Cursor:
         finished = threading.Event()
         with self.lock:
             if self.canceled:
@@ -29,7 +43,7 @@ class Cursor:
         finally:
             finished.set()
 
-    def interrupt(self):
+    def interrupt(self) -> None:
         with self.lock:
             self.canceled = True
             finished = self.finished
