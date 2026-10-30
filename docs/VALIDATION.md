@@ -1,6 +1,6 @@
 # Validation and performance
 
-Validation was run on Linux x86_64 with Python 3.13.12 and DuckDB 2.0.0. The repository contains deterministic acceptance tests, browser scenarios and reproducible integration/performance scripts. Machine-readable reports live in `validation/`.
+The recorded benchmark and connector checks were run on Linux x86_64 with Python 3.13.12 and DuckDB 2.0.0 against the embedded engine. Machine-readable reports in `validation/` are historical measurements, not the current CI status or validation of the isolated HTTP worker. The repository contains deterministic acceptance tests, browser scenarios and reproducible integration/performance scripts; see the [README](../README.md#develop-and-verify) for current check commands.
 
 ## Acceptance coverage
 
@@ -8,9 +8,9 @@ The Python suite covers authentication persistence, execution admission, immutab
 
 Native-equivalence tests compare values, types and multiplicities against uninstrumented DuckDB operations. Lineage tests include the extended SQL baseline, repeated values with distinct row identities, hidden grouping keys, window extrema and distinct counts, CTE/derived stages, and pagination of more than five groups and more than five identical source values.
 
-Playwright runs against a disposable authenticated instance. Its scenarios exercise the complete example, nested navigation and lineage pagination, French/English and theme persistence, environment isolation, stale-preview behavior, branch/merge workflows, drag-and-drop, guided filter configuration, component grouping, recoverable conflicts across reload, and invalidation of an open explanation. Uncaught page errors are checked on the main example path. Browser diagnostics are retained on failure.
+Playwright runs against a disposable authenticated instance. Its scenarios exercise the complete example, nested navigation and lineage pagination, English/French/Portuguese and theme persistence, environment isolation, stale-preview behavior, branch/merge workflows, drag-and-drop, guided filter configuration, component grouping, recoverable conflicts across reload, and invalidation of an open explanation. Uncaught page errors are checked on the main example path. Browser diagnostics are retained on failure.
 
-The installed-wheel smoke test runs outside the checkout, starts the CLI without Node tooling, checks bundled assets and authentication, executes the complete example, rejects a second process for the same instance, then restarts and verifies the original password and history while results remain absent.
+The installed-wheel smoke test (`scripts/smoke_wheel.py`, run by CI and the release workflow) runs outside the checkout, starts the CLI without Node tooling, checks bundled assets and authentication, executes the complete example, rejects a second process for the same instance, then restarts and verifies the original password and history while results remain absent.
 
 ## Performance reference
 
@@ -36,11 +36,9 @@ Recorded hardware: Intel Core i5-1340P, 16 logical CPUs, approximately 15.3 GiB 
 
 The selected aggregate has **150,000 contributing cells**. Peak worker-process resident memory was **1,482,492 KiB (about 1.41 GiB)**. This peak includes materialization, lineage and independent native comparison in the worker; source-fixture generation occurs separately. Results are a local measurement, not a latency guarantee. Filesystem caches, CPU contention, data distributions, query shape and extension behavior can change timings. There is no application-enforced dataset-size limit or implicit query timeout.
 
-## Connector and job prototypes
+## Connector reports
 
 - `validation/oracle.json`: live Oracle 19.3, OraDuck 0.4.0, exact DuckDB 2.0.0; read, transform, native export equivalence, repeated append, schema/data refresh, materialized-source lineage and secret redaction.
 - `validation/s3.json`: local Moto S3 endpoint; CSV/Parquet reads, join, CSV writes, repeated native replacement, connection reuse and lineage. Live AWS has not been claimed as tested.
-- `validation/jobs.json`: dynamic APScheduler/SQLite schedule persistence, Huey queue restart behavior, and the common engine's admission/cancellation/context/history boundary.
-- `validation/wheel.json`: isolated installed-wheel lifecycle smoke test.
 
-See [connector prerequisites](CONNECTORS.md), [the scheduler decision](EXECUTION_SERVICE.md), and [the explicit SQL coverage matrix](LINEAGE.md) for the scope and limits of these checks.
+See [connector prerequisites](CONNECTORS.md) and [the explicit SQL coverage matrix](LINEAGE.md) for the scope and limits of these checks. The completed scheduling comparison is summarized in the [architecture guide](ARCHITECTURE.md#scheduling-decision).
