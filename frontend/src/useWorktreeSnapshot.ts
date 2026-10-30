@@ -12,7 +12,9 @@ const unchanged = (old: Snapshot | null, value: Snapshot) =>
   old?.revision === value.revision &&
   old?.role === value.role &&
   JSON.stringify(old.connections) === JSON.stringify(value.connections) &&
-  JSON.stringify(old.conflicts) === JSON.stringify(value.conflicts);
+  JSON.stringify(old.conflicts) === JSON.stringify(value.conflicts) &&
+  // Variable values per environment also follow the instance's environments.
+  JSON.stringify(old.variables) === JSON.stringify(value.variables);
 
 /**
  * The saved state of a working branch and the result statuses of an

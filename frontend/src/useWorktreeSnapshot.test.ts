@@ -21,6 +21,7 @@ const snapshot = (worktree: string, revision: string): Snapshot => ({
   diagnostics: [],
   conflicts: [],
   parsed_templates: {},
+  variables: null,
 });
 
 const run = (id: string, worktree: string): Run => ({

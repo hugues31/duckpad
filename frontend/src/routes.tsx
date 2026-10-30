@@ -15,6 +15,7 @@ import ProjectSettingsPage from "./pages/ProjectSettingsPage";
 import ProjectsPage from "./pages/ProjectsPage";
 import { NotFoundPage } from "./pages/PageStates";
 import UserSettingsPage from "./pages/UserSettingsPage";
+import VariablesPage from "./pages/VariablesPage";
 import WorktreePage, { CodePage } from "./pages/WorktreePage";
 
 const page = (
@@ -27,6 +28,7 @@ const tabPages: Record<WorkspaceTab, ComponentType> = {
   flow: FlowPage,
   code: CodePage,
   documentation: DocumentationPage,
+  variables: VariablesPage,
   history: HistoryPage,
 };
 

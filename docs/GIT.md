@@ -86,7 +86,9 @@ branch name, tag, or commit.
 
 Choose an explicit source and destination, compare them, then select **Review
 merge**. The review displays the common base and exact heads. For every conflicting
-field, inspect base/current/incoming values and choose one. Each choice recomputes
+field, inspect base/current/incoming values and choose one. A conflict in
+`variables.json` names its variable and field, such as **Variable order_status ·
+prod value**, so each variable is resolved on its own. Each choice recomputes
 the proposed changes and validates the combined definitions, references, ports and
 graph. Correct invalid definitions on their branch and start a fresh review.
 

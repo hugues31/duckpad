@@ -1,5 +1,5 @@
 import Select from "./Select";
-import { lazy, Suspense, useState } from "react";
+import { lazy, Suspense, useRef, useState } from "react";
 import {
   ArrowRight,
   BookOpen,
@@ -23,12 +23,22 @@ import type {
   Documentation,
   FlowEdge,
   FlowNode,
+  Json,
   PreviewPage,
   Snapshot,
   Statement,
   Statuses,
 } from "./types";
 import { useApiResource, useResource } from "./useApiResource";
+import { BoundVariable, VariablePicker } from "./VariableBinding";
+import { StatementVariables } from "./VariableFields";
+import {
+  bindTo,
+  variableReference,
+  variableSummary,
+  variableTypeFor,
+  type Declaration,
+} from "./variables";
 
 const CodeEditor = lazy(() => import("./Editor"));
 
@@ -71,7 +81,12 @@ export default function Inspector({
   connections: Snapshot["connections"];
   statuses: Statuses;
   preview: PreviewPage | null;
-  onSave: (node: FlowNode, base: Snapshot) => Promise<Snapshot>;
+  /** Save the node, with the variables it binds for the first time, in one change. */
+  onSave: (
+    node: FlowNode,
+    base: Snapshot,
+    variables: Record<string, Declaration>,
+  ) => Promise<Snapshot>;
   onSaveDocumentation: (
     change: (documentation: Documentation) => void,
     base: Snapshot,
@@ -86,12 +101,24 @@ export default function Inspector({
 }) {
   const t = useT();
   const [tab, setTab] = useState<(typeof TABS)[number][0]>("parameters");
+  // Variables created from a parameter, declared by the save that binds it.
+  const declared = useRef<Record<string, Declaration>>({});
   // Pending edits are saved when another node is selected or the panel closes.
   const {
     draft,
     update,
     persist: saveDraft,
-  } = useRevisionDraft(node, snapshot, onSave, { autosave: !readOnly });
+  } = useRevisionDraft(
+    node,
+    snapshot,
+    async (value: FlowNode, base: Snapshot) => {
+      const variables = { ...declared.current };
+      const saved = await onSave(value, base, variables);
+      for (const name of Object.keys(variables)) delete declared.current[name];
+      return saved;
+    },
+    { autosave: !readOnly },
+  );
   const [sqlMode, setSqlMode] = useState<"current" | "executed">("current");
   const [saveError, setError] = useState("");
   const worktree = snapshot.worktree.id;
@@ -156,6 +183,18 @@ export default function Inspector({
     }
   };
   const { kind, parameters, inputs } = signature;
+  // Only the root flow binds variables; component definitions stay portable.
+  const bindable = !fullNode.includes("::");
+  const setParameter = (name: string, value: Json | undefined) =>
+    update((current) => {
+      const params = { ...current.params };
+      if (value === undefined) delete params[name];
+      else params[name] = value;
+      return { ...current, params };
+    });
+  const nodeProblems = snapshot.diagnostics.filter(
+    (item) => item.file === "flow.json" && item.node === node.id,
+  );
   const statements: Statement[] =
     sqlMode === "executed"
       ? preview?.executed_sql || []
@@ -291,6 +330,10 @@ export default function Inspector({
               }}
             />
             {parameters.map((parameter) => {
+              const value = draft.params?.[parameter.name] ?? parameter.default;
+              const type = parameter.type || "text";
+              const reference = variableReference(value);
+              const variableType = bindable ? variableTypeFor(type) : null;
               // Column parameters name the input port they choose from.
               const port = parameter.type.match(/\((\w+)\)/)?.[1];
               return (
@@ -298,15 +341,60 @@ export default function Inspector({
                   key={parameter.name}
                   worktree={snapshot.worktree.id}
                   parameter={parameter}
-                  value={draft.params?.[parameter.name] ?? parameter.default}
-                  onChange={(value) =>
-                    update((current) => {
-                      const params = { ...current.params };
-                      if (value === undefined) delete params[parameter.name];
-                      else params[parameter.name] = value;
-                      return { ...current, params };
-                    })
+                  value={value}
+                  variable={
+                    variableType || reference
+                      ? {
+                          control: variableType && (
+                            <VariablePicker
+                              snapshot={snapshot}
+                              parameter={parameter.name}
+                              parameterType={type}
+                              variableType={variableType}
+                              value={reference ? undefined : value}
+                              disabled={readOnly}
+                              onBind={(name) => {
+                                setParameter(parameter.name, bindTo(name));
+                                void persist();
+                              }}
+                              onCreate={async (name, declaration) => {
+                                declared.current[name] = declaration;
+                                setParameter(parameter.name, bindTo(name));
+                                await saveDraft();
+                              }}
+                            />
+                          ),
+                          bound: reference && (
+                            <BoundVariable
+                              snapshot={snapshot}
+                              worktree={worktree}
+                              environment={environment}
+                              parameter={parameter.name}
+                              parameterType={type}
+                              name={reference}
+                              problem={
+                                nodeProblems.find((item) =>
+                                  String(item.message).includes(
+                                    `parameter ${parameter.name}`,
+                                  ),
+                                )?.message
+                              }
+                              disabled={readOnly}
+                              onUnbind={() => {
+                                // Keep computing the same value, now written in the node.
+                                const current = variableSummary(
+                                  snapshot,
+                                  reference,
+                                )?.values[environment];
+                                setParameter(parameter.name, current?.value);
+                                void persist();
+                              }}
+                            />
+                          ),
+                        }
+                      : undefined
                   }
+                  onChange={(value) => setParameter(parameter.name, value)}
                   onBlur={persist}
                   connections={connections}
                   columns={port ? inputColumns[port] : undefined}
@@ -373,6 +461,14 @@ export default function Inspector({
                 height="330px"
               />
             </Suspense>
+            <StatementVariables
+              statements={statements}
+              environment={
+                sqlMode === "executed" && preview
+                  ? preview.environment
+                  : environment
+              }
+            />
             {statements.some(
               (s) => Object.keys(s.bindings || {}).length > 0,
             ) && (

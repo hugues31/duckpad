@@ -144,6 +144,96 @@ test("capture parameters, node documentation and nested components", async ({
   await capture(page, "component");
 });
 
+test("capture project variables, a parameter binding and a run confirmation", async ({
+  page,
+}) => {
+  const worktree = await example(page);
+  const url = `/api/worktrees/${worktree.id}`;
+  const snapshot = await (await page.request.get(url)).json();
+  snapshot.bundle.variables = {
+    high_value_threshold: {
+      type: "number",
+      description: "Minimum order amount kept by the high-value report.",
+      default: 300,
+      environments: { prod: 900 },
+    },
+    order_status: {
+      type: "choice(paid|refunded|pending)",
+      description: "Order status counted as revenue.",
+      default: "paid",
+    },
+    report_start: {
+      type: "date",
+      description: "First order date included in the reports.",
+      default: "2026-10-01",
+      environments: { prod: "2026-01-01" },
+    },
+    oracle_schema: {
+      type: "identifier",
+      description: "Schema of the Oracle sales tables.",
+      default: "DEMO",
+      environments: { prod: "SALES" },
+    },
+  };
+  const saved = await page.request.put(url, {
+    data: { revision: snapshot.revision, bundle: snapshot.bundle },
+  });
+  expect(saved.ok()).toBeTruthy();
+  await run(page);
+  await node(page, "Paid orders").click();
+  await page.getByLabel("Output", { exact: true }).selectOption("orders");
+  await expect(page.locator(".preview-header .badge")).toHaveText("Valid");
+  const inspector = page.locator(".inspector");
+  await inspector
+    .getByRole("button", { name: "Bind status to a variable", exact: true })
+    .click();
+  const picker = inspector.getByRole("group", {
+    name: "Bind status to a variable",
+  });
+  await expect(picker).toContainText("paid in every environment");
+  await expect(picker).toContainText("identifier · incompatible");
+  await capture(page, "variable-binding");
+  await picker.getByRole("button", { name: /^order_status/ }).click();
+  await expect(
+    inspector.getByRole("group", { name: "status is bound to order_status" }),
+  ).toContainText("= paid in dev");
+  await expect(
+    page.getByText("All changes saved", { exact: true }),
+  ).toBeVisible();
+
+  await page.getByRole("link", { name: "Variables", exact: true }).click();
+  await page
+    .locator(".variables-table")
+    .getByRole("button", { name: "order_status" })
+    .click();
+  const editor = page.getByRole("complementary", { name: "order_status" });
+  await editor
+    .getByRole("switch", { name: "Use the default value in dev" })
+    .click();
+  await editor.getByLabel("dev value", { exact: true }).selectOption("pending");
+  await expect(editor.getByRole("status")).toContainText(
+    "Saving marks Paid orders and 5 descendants as stale in dev.",
+  );
+  await capture(page, "variables");
+  await editor
+    .getByRole("button", { name: "Save changes", exact: true })
+    .click();
+  await expect(
+    page.getByText("All changes saved", { exact: true }),
+  ).toBeVisible();
+
+  await page.getByLabel("Environment", { exact: true }).selectOption("prod");
+  await page.getByRole("button", { name: "Run pipeline", exact: true }).click();
+  const confirmation = page.getByRole("dialog", { name: "Confirm execution" });
+  await expect(
+    confirmation.getByRole("row").filter({ hasText: "order_status" }),
+  ).toContainText("paid");
+  await capture(page, "run-variables", confirmation);
+  await confirmation
+    .getByRole("button", { name: "Cancel", exact: true })
+    .click();
+});
+
 test("capture connection setup and environment policies", async ({ page }) => {
   await openInstanceSettings(page, "Connections");
   await page

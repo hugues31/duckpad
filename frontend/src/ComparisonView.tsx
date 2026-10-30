@@ -406,6 +406,16 @@ export default function ComparisonView({
                   </tbody>
                 </table>
               )}
+              {active.kind === "variable" && (
+                <p className="comparison-usages">
+                  <strong>{t("affectedNodes")}</strong>:{" "}
+                  {active.usages?.length
+                    ? active.usages
+                        .map((usage) => `${usage.label} (${usage.param})`)
+                        .join(", ")
+                    : t("notUsed")}
+                </p>
+              )}
             </section>
           )}
         </div>

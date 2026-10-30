@@ -73,6 +73,39 @@ export interface Bundle {
   components: Record<string, ComponentDefinition>;
   documentation: Documentation;
   pyproject?: string | null;
+  /** The declarations of variables.json, its raw text when malformed, or null without the file. */
+  variables?: Record<string, Json> | string | null;
+}
+/** A root flow node parameter bound to a project variable. */
+export interface VariableUsage {
+  node: string;
+  label: string;
+  param: string;
+}
+/** A variable's value in one environment, or why it has none. */
+export interface VariableValue {
+  value?: Json;
+  source?: "default" | "environment";
+  error?: string;
+}
+export interface VariableSummary {
+  type: string;
+  description: string;
+  default?: Json;
+  environments: Record<string, Json>;
+  errors: string[];
+  warnings: string[];
+  values: Record<string, VariableValue>;
+  usages: VariableUsage[];
+}
+/** What the snapshot reports about variables.json, for the interface. */
+export interface VariablesSummary {
+  file_error: string | null;
+  declarations: Record<string, VariableSummary>;
+  /** References to variables that variables.json does not declare. */
+  undeclared: Record<string, VariableUsage[]>;
+  diagnostics: Json[];
+  warnings: Json[];
 }
 export type ProjectRole = "admin" | "editor" | "reader";
 export interface Worktree {
@@ -90,6 +123,8 @@ export interface Conflict {
 export interface Diagnostic {
   file: string;
   message: string;
+  variable?: string;
+  node?: string;
 }
 export type Capability = "read" | "write";
 export interface Snapshot {
@@ -104,6 +139,8 @@ export interface Snapshot {
   diagnostics: Diagnostic[];
   conflicts: Conflict[];
   parsed_templates: Record<string, ParsedTemplate>;
+  /** Null while the project files cannot be read. */
+  variables: VariablesSummary | null;
 }
 export interface Project {
   role: ProjectRole;
@@ -185,6 +222,11 @@ export interface Statement {
   bindings: Record<string, Json>;
   /** What a run executed to store the statement's output. */
   materialization_sql?: string[];
+  variables?: (VariableValue & {
+    name: string;
+    type: string | null;
+    parameter: string;
+  })[];
 }
 /** A page of rows of a node output, with the dataset holding them. */
 export interface PreviewPage extends Dataset {
@@ -226,6 +268,7 @@ export interface NodeRun {
   duration?: number;
   external_outcome?: "completed" | "failed" | "partial or unknown" | "unknown";
   statements?: Statement[];
+  variables?: Record<string, string>;
 }
 export interface Run {
   id: string;
@@ -245,6 +288,7 @@ export interface Run {
   /** Why the run stopped before running its nodes. */
   error?: string;
   nodes: Record<string, NodeRun>;
+  variables?: Record<string, VariableValue & { type: string | null }>;
   /** The connections, templates and components the run used, without secrets. */
   connections: Record<string, Json>;
   definitions: Record<string, string>;
