@@ -25,7 +25,10 @@ class GitWorkspace:
         self.reviews = OrderedDict()
         # Requests on different repositories record reports concurrently.
         self.reports_lock = threading.Lock()
+        # Validation outcomes per commit, which is immutable: accepted histories, and the error of
+        # each rejected head and offending commit.
         self.safe_heads = set()
+        self.rejected = OrderedDict()
 
     def remember(self, cache, key, value):
         with self.reports_lock:
@@ -244,19 +247,27 @@ class GitWorkspace:
     def prevalidate(self, path, ref):
         """Validate a branch's history before the caller takes the repository lock.
 
-        Validated commits are cached, so the check repeated under the lock is immediate. Errors
-        are left to that check, which reports them in its usual order.
+        Accepted and rejected commits are both cached, so the check repeated under the lock is
+        immediate. Errors are left to that check, which reports them in its usual order.
         """
         with suppress(Problem):
             self.validate_history(path, self.resolve(path, ref))
 
     def validate_history(self, path, head):
-        """Reject non-declarative history, symlinks and submodules before adoption/publication."""
+        """Reject non-declarative history, symlinks and submodules before adoption/publication.
+
+        A history that descends from a rejected commit is rejected without inspecting any tree.
+        """
         if head in self.safe_heads:
             return
+        if message := self.rejected.get(head):
+            raise Problem(message, 422)
         commits = self.git(path, "rev-list", f"--max-count={MAX_HISTORY + 1}", head).splitlines()
         if len(commits) > MAX_HISTORY:
-            raise Problem("History exceeds the validation limit; use a smaller project repository.", 422)
+            self.reject("History exceeds the validation limit; use a smaller project repository.", head)
+        for commit in commits:
+            if message := self.rejected.get(commit):
+                self.reject(message, head)
         for commit in commits:
             if commit in self.safe_heads:
                 continue
@@ -264,11 +275,17 @@ class GitWorkspace:
                 metadata, name = row.split("\t", 1)
                 mode, kind, _ = metadata.split()
                 if mode != "100644" or kind != "blob" or not (is_declarative(name) or name == ".gitignore"):
-                    raise Problem(
+                    self.reject(
                         "Git history contains unsupported files or file modes. Synchronize only declarative Duckpad project history.",
-                        422,
+                        head,
+                        commit,
                     )
         self.safe_heads.update(commits)
+
+    def reject(self, message, *commits):
+        for commit in commits:
+            self.remember(self.rejected, commit, message)
+        raise Problem(message, 422)
 
     def prepare(self, destination, source_ref, remote_guard=None):
         if source_ref.startswith(("refs/heads/", "refs/remotes/origin/")):
