@@ -137,6 +137,43 @@ def test_conflict_survives_service_restart_and_refreshes_on_new_external_edit(se
     assert resolved["bundle"]["flow"]["nodes"][1]["params"]["threshold"] == 20
 
 
+def test_snapshots_record_no_revision_and_a_restarted_save_finds_its_base(services, tmp_path):
+    store, projects, _, _ = services
+    worktree = projects.create("Revisions", example_bundle(tmp_path / "input.csv"))
+    snapshot = projects.snapshot(worktree["id"], committed=True)
+    external = copy.deepcopy(snapshot["bundle"])
+    external["flow"]["nodes"][1]["params"]["threshold"] = 15
+    (Path(worktree["path"]) / "flow.json").write_text(bundle_to_files(external)["flow.json"])
+    projects.flush(worktree["id"])
+    snapshot["bundle"]["flow"]["nodes"][1]["label"] = "Renamed filter"
+    # A restarted service finds the edited revision among the branch's latest commits.
+    restarted = Projects(store)
+    result = restarted.write(worktree["id"], snapshot["revision"], bundle_to_files(snapshot["bundle"]))
+    assert result["bundle"]["flow"]["nodes"][1]["params"]["threshold"] == 15
+    assert result["bundle"]["flow"]["nodes"][1]["label"] == "Renamed filter"
+    with pytest.raises(Problem, match="unavailable"):
+        restarted.write(worktree["id"], "unknown", bundle_to_files(snapshot["bundle"]))
+    assert store.items("revision") == []
+
+
+def test_watcher_observes_other_projects_while_a_repository_is_busy(services, tmp_path):
+    _, projects, _, _ = services
+    busy = projects.create("Busy", example_bundle(tmp_path / "busy.csv"))
+    free = projects.create("Free", example_bundle(tmp_path / "free.csv"))
+    heads = {w["id"]: projects.git(w["path"], "rev-parse", "HEAD") for w in (busy, free)}
+
+    def saved(worktree):
+        return projects.git(worktree["path"], "rev-parse", "HEAD") != heads[worktree["id"]]
+
+    projects.start_watcher()
+    with projects.repository(busy["project"]):
+        for worktree in (busy, free):
+            (Path(worktree["path"]) / "README.md").write_text("External save")
+        wait_until(lambda: saved(free), message="A busy repository delayed the watcher")
+        assert not saved(busy)
+    wait_until(lambda: saved(busy), message="The released repository was not observed again")
+
+
 def test_branch_isolation_and_doc_merge_does_not_invalidate(services, tmp_path):
     store, projects, _, engine = services
     main = projects.create("Branch", example_bundle(tmp_path / "input.csv"))

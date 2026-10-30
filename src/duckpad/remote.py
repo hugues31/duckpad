@@ -6,6 +6,7 @@ import shlex
 import shutil
 import tempfile
 import time
+from contextlib import suppress
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -16,6 +17,8 @@ from .git_credentials import SCP_URL, GitCredentials, transport
 from .util import Problem, digest, now, uid
 
 NETWORK_TIMEOUT = 30
+# Each fetch receives origin's branches under its own namespace, outside the repository lock.
+FETCH_NAMESPACE = "refs/duckpad/fetch/"
 # Every Git command drops the server's Git, SSH and credential-manager variables except these.
 INHERITED_GIT_VARIABLES = {"GIT_SSL_CAINFO", "GIT_SSL_CAPATH"}
 
@@ -166,8 +169,7 @@ class Remotes:
         return config
 
     def configure(self, worktree_id, url, remote_branch, expected):
-        with self.projects.lock:
-            worktree = self.projects.get(worktree_id)
+        with self.projects.locked(worktree_id) as worktree:
             config = self.config(worktree)
             if digest(config) != expected:
                 raise Problem("Remote configuration changed. Reload before saving.", 409)
@@ -258,8 +260,7 @@ class Remotes:
                 raise network_problem(error.output, key) from error
 
     def status(self, worktree_id):
-        with self.projects.lock:
-            worktree = self.projects.get(worktree_id)
+        with self.projects.locked(worktree_id) as worktree:
             config = self.config(worktree)
             path = worktree["path"]
             local = self.workspace.resolve(path, "HEAD")
@@ -320,47 +321,69 @@ class Remotes:
 
     def consent(self, worktree_id, user, url):
         """Record that this account allows its key to be used for the origin URL that it saw."""
-        with self.projects.lock:
-            worktree = self.projects.get(worktree_id)
+        with self.projects.locked(worktree_id) as worktree:
             config = self.config(worktree)
             if not config["url"] or url != config["url"]:
                 raise Problem("Origin changed. Review the new URL before confirming.", 409)
             self.credentials.consent(user["id"], worktree["project"], url)
             return {"url": url}
 
+    def refs(self, path, prefix):
+        """Heads of the refs under a prefix, by name relative to it."""
+        rows = self.git(path, "for-each-ref", "--format=%(objectname) %(refname)", prefix).splitlines()
+        return {ref.removeprefix(prefix): head for head, ref in (row.split(" ", 1) for row in rows)}
+
+    def update_refs(self, path, commands):
+        """Apply update-ref commands in one Git transaction."""
+        if commands:
+            self.git(path, "update-ref", "--stdin", input="".join(f"{command}\n" for command in commands))
+
     def fetch(self, worktree_id, expected, user=None):
-        with self.projects.lock:
-            worktree = self.projects.get(worktree_id)
+        with self.projects.locked(worktree_id) as worktree:
             config = self.checked_config(worktree, expected)
             key = self.credentials.credentials(user, worktree["project"], config["url"])
+        path, namespace = worktree["path"], FETCH_NAMESPACE + uid() + "/"
+        try:
             self.network(
-                worktree["path"],
+                path,
                 "fetch",
                 "--atomic",
-                "--prune",
                 "--no-tags",
                 "--no-recurse-submodules",
                 "--",
                 config["url"],
-                "+refs/heads/*:refs/remotes/origin/*",
+                f"+refs/heads/*:{namespace}*",
                 key=key,
             )
-            refs = self.git(
-                worktree["path"], "for-each-ref", "--format=%(refname)", "refs/remotes/origin/"
-            ).splitlines()
-            config.update(
-                checked=now(),
-                version=uid(),
-                seen=sorted(
-                    set(config.get("seen", [])) | {r.removeprefix("refs/remotes/origin/") for r in refs}
-                ),
-            )
-            self.store.put("git_remote", worktree["project"], config)
-            return self.status(worktree_id)
+            with self.projects.locked(worktree_id) as worktree:
+                # Install the fetched branches only if no fetch or configuration change came first.
+                config = self.checked_config(worktree, expected)
+                fetched, origin = self.refs(path, namespace), self.refs(path, "refs/remotes/origin/")
+                # Pruning first lets a fetched feature/x replace a deleted feature branch.
+                self.update_refs(
+                    path, [f"delete refs/remotes/origin/{name}" for name in origin.keys() - fetched.keys()]
+                )
+                self.update_refs(
+                    path, [f"update refs/remotes/origin/{name} {head}" for name, head in fetched.items()]
+                )
+                config.update(
+                    checked=now(),
+                    version=uid(),
+                    seen=sorted(set(config.get("seen", [])) | fetched.keys()),
+                )
+                self.store.put("git_remote", worktree["project"], config)
+                return self.status(worktree_id)
+        finally:
+            # Refs left by a failed cleanup are never read; the fetch outcome is reported instead.
+            with suppress(Problem):
+                self.update_refs(path, [f"delete {namespace}{name}" for name in self.refs(path, namespace)])
 
     def pull(self, worktree_id, expected, local_head, remote_head):
-        with self.projects.lock:
-            worktree = self.projects.get(worktree_id)
+        worktree = self.projects.get(worktree_id)
+        branch = self.config(worktree)["mappings"].get(worktree["branch"])
+        if branch:
+            self.workspace.prevalidate(worktree["path"], "refs/remotes/origin/" + branch)
+        with self.projects.locked(worktree_id) as worktree:
             config = self.checked_config(worktree, expected)
             status = self.status(worktree_id)
             if (
@@ -374,8 +397,7 @@ class Remotes:
             return self.workspace.prepare(worktree_id, status["remote_ref"], digest(config))
 
     def push(self, worktree_id, expected, local_head, remote_head, recreate=False, user=None):
-        with self.projects.lock:
-            worktree = self.projects.get(worktree_id)
+        with self.projects.locked(worktree_id) as worktree:
             config = self.checked_config(worktree, expected)
             key = self.credentials.credentials(user, worktree["project"], config["url"])
             status = self.status(worktree_id)
@@ -392,37 +414,41 @@ class Remotes:
                 raise Problem(
                     "Push requires integration of the fetched remote head. Review a pull first.", 409
                 )
-            self.workspace.validate_history(worktree["path"], local_head)
-            try:
-                errors = validate(files_to_bundle(files))
-            except (Problem, KeyError, TypeError, AttributeError) as error:
-                raise Problem("Fix project definitions before publishing", 422) from error
-            if errors:
-                raise Problem("Fix project definitions before publishing", 422, errors)
-            ref = "refs/heads/" + status["remote_branch"]
-            actual = self.network(worktree["path"], "ls-remote", "--refs", "--", config["url"], ref, key=key)
-            actual_head = actual.split()[0] if actual else None
-            if actual_head != remote_head:
-                raise Problem("Remote head changed. Fetch and review before publishing.", 409)
-            if self.workspace.clean(worktree)[0] != local_head:
-                raise Problem("Local head changed. Reload before publishing.", 409)
-            # This lease is a compare-and-swap, never permission for a non-fast-forward update:
-            # the ancestry check above is mandatory, and the server checks the exact expected head.
-            self.network(
-                worktree["path"],
-                "push",
-                "--porcelain",
-                f"--force-with-lease={ref}:{remote_head or ''}",
-                "--",
-                config["url"],
-                f"{local_head}:{ref}",
-                key=key,
-            )
-            self.git(worktree["path"], "update-ref", status["remote_ref"], local_head)
-            config.update(
-                checked=now(),
-                version=uid(),
-                seen=sorted(set(config.get("seen", [])) | {status["remote_branch"]}),
-            )
-            self.store.put("git_remote", worktree["project"], config)
+        # The reviewed head is an immutable commit: later local saves cannot change what is
+        # published, so validation and network Git run without the repository lock.
+        path = worktree["path"]
+        self.workspace.validate_history(path, local_head)
+        try:
+            errors = validate(files_to_bundle(files))
+        except (Problem, KeyError, TypeError, AttributeError) as error:
+            raise Problem("Fix project definitions before publishing", 422) from error
+        if errors:
+            raise Problem("Fix project definitions before publishing", 422, errors)
+        ref = "refs/heads/" + status["remote_branch"]
+        actual = self.network(path, "ls-remote", "--refs", "--", config["url"], ref, key=key)
+        actual_head = actual.split()[0] if actual else None
+        if actual_head != remote_head:
+            raise Problem("Remote head changed. Fetch and review before publishing.", 409)
+        # This lease is a compare-and-swap, never permission for a non-fast-forward update:
+        # the ancestry check above is mandatory, and the server checks the exact expected head.
+        self.network(
+            path,
+            "push",
+            "--porcelain",
+            f"--force-with-lease={ref}:{remote_head or ''}",
+            "--",
+            config["url"],
+            f"{local_head}:{ref}",
+            key=key,
+        )
+        with self.projects.locked(worktree_id) as worktree:
+            # After a concurrent fetch or configuration change, origin's refs are left to them.
+            if digest(self.config(worktree)) == expected:
+                self.git(path, "update-ref", status["remote_ref"], local_head)
+                config.update(
+                    checked=now(),
+                    version=uid(),
+                    seen=sorted(set(config.get("seen", [])) | {status["remote_branch"]}),
+                )
+                self.store.put("git_remote", worktree["project"], config)
             return self.status(worktree_id)

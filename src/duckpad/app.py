@@ -289,31 +289,31 @@ def create_app(home: Path, watch=True, *, trusted_local=False):
 
     @app.put("/api/catalog/{kind}")
     def save_catalog(kind: str, data: dict[str, Any], create: bool = False):
-        with projects.lock, engine.lock:
+        with engine.exclusive():
             catalog.save(kind, data, create=create, before_change=engine.reset_catalog)
         return catalog.public()
 
     @app.delete("/api/catalog/{kind}/{identity}")
     def delete_catalog(kind: str, identity: str):
-        with projects.lock, engine.lock:
+        with engine.exclusive():
             catalog.delete(kind, identity, before_change=engine.reset_catalog)
         return catalog.public()
 
     @app.post("/api/environments")
     def create_environment(data: schemas.NewEnvironment):
-        with projects.lock, engine.lock:
+        with engine.exclusive():
             catalog.save_environment(data.model_dump(), create=True)
         return catalog.public()
 
     @app.put("/api/environments/{identity}")
     def update_environment(identity: str, data: schemas.EnvironmentSettings):
-        with projects.lock, engine.lock:
+        with engine.exclusive():
             catalog.save_environment({**data.model_dump(), "id": identity})
         return catalog.public()
 
     @app.delete("/api/environments/{identity}")
     def delete_environment(identity: str):
-        with projects.lock, engine.lock:
+        with engine.exclusive():
             catalog.validate_environment_deletion(identity)
             engine.reset_catalog()
             catalog.delete_environment(identity)
@@ -442,7 +442,7 @@ def create_app(home: Path, watch=True, *, trusted_local=False):
 
     @app.put("/api/projects/{project}/connections")
     def project_connections(project: str, data: dict):
-        with projects.lock, engine.lock:
+        with engine.exclusive(project):
             access.grant_connections(
                 project, data.get("connections"), before_change=lambda: engine.reset_project(project)
             )
@@ -450,7 +450,7 @@ def create_app(home: Path, watch=True, *, trusted_local=False):
 
     @app.delete("/api/projects/{project}")
     def delete_project(project: str):
-        with projects.lock, engine.lock:
+        with engine.exclusive(project):
             engine.reset_project(project)
             projects.delete(project)
             store.delete("access", project)
@@ -527,7 +527,7 @@ def create_app(home: Path, watch=True, *, trusted_local=False):
 
     @app.post("/api/worktrees/{worktree}/git/cleanup")
     def git_cleanup(worktree: str, data: schemas.BranchCleanup):
-        with projects.lock, engine.lock:
+        with engine.exclusive(projects.get(worktree)["project"]):
             if data.remove_worktree in engine.active:
                 raise Problem("Stop the worktree's execution before removing it", 409)
             result = projects.versioning.cleanup(

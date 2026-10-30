@@ -578,6 +578,119 @@ def test_unsupported_files_in_ancestry_are_never_synchronized(local_remote):
             push(projects, main, state)
 
 
+def test_rejected_history_is_never_walked_under_the_repository_lock(local_remote, monkeypatch):
+    projects, main, remote, state = local_remote
+    state = push(projects, main, projects.remotes.fetch(main["id"], state["config_revision"]))
+    incoming = projects.branch(main["id"], "incoming")
+    Path(incoming["path"], "secret.txt").write_text("private")
+    projects.git(incoming["path"], "add", "secret.txt")
+    projects.git(incoming["path"], "commit", "-m", "chore: accidental file")
+    projects.git(incoming["path"], "rm", "secret.txt")
+    projects.git(incoming["path"], "commit", "-m", "chore: remove accidental file")
+    projects.git(incoming["path"], "push", str(remote), "HEAD:main")
+    state = projects.remotes.fetch(main["id"], state["config_revision"])
+    lock, git, walks = projects.repository(main["project"]), projects.versioning.git, []
+
+    def record(path, *args, **options):
+        if args[0] == "ls-tree":
+            # A walk under the lock would stall saves and statuses of every worktree of the project.
+            walks.append(lock._is_owned())
+        return git(path, *args, **options)
+
+    monkeypatch.setattr(projects.versioning, "git", record)
+    for _ in range(2):
+        with pytest.raises(Problem, match="unsupported files"):
+            projects.remotes.pull(
+                main["id"], state["config_revision"], state["local_head"], state["remote_head"]
+            )
+    assert walks and not any(walks)
+    walks.clear()
+    # A descendant of the offending commit is rejected without inspecting any tree.
+    edit(projects, incoming, lambda b: b["documentation"].update(project="Descendant"))
+    with pytest.raises(Problem, match="unsupported files"):
+        projects.versioning.prepare(main["id"], "refs/heads/incoming")
+    assert not walks
+
+
+@pytest.mark.parametrize("operation", ["fetch", "push"])
+def test_stalled_network_git_blocks_no_project_or_worktree(local_remote, services, monkeypatch, operation):
+    projects, main, remote, state = local_remote
+    engine = services[3]
+    push(projects, main, projects.remotes.fetch(main["id"], state["config_revision"]))
+    edit(projects, main, lambda b: b["documentation"].update(project="Published"))
+    state = projects.remotes.status(main["id"])
+    sibling = projects.branch(main["id"], "sibling")
+    other = projects.create("Other", bundle())
+    network, stalled, release = projects.remotes.network, threading.Event(), threading.Event()
+
+    def stall(path, *args, key=None):
+        if args[0] == operation:
+            stalled.set()
+            # Bounded, so that a request waiting for this transfer fails the test instead of hanging it.
+            release.wait(10)
+        return network(path, *args, key=key)
+
+    monkeypatch.setattr(projects.remotes, "network", stall)
+    call = {
+        "fetch": lambda: projects.remotes.fetch(main["id"], state["config_revision"]),
+        "push": lambda: push(projects, main, state),
+    }[operation]
+    outcome = {}
+    transfer = threading.Thread(target=lambda: outcome.update(state=call()))
+    transfer.start()
+    try:
+        assert stalled.wait(10)
+        # Saves and statuses of another project, another worktree and the same worktree proceed.
+        for worktree in (other, sibling, main):
+            edit(projects, worktree, lambda b: b["documentation"].update(project="Saved meanwhile"))
+            snapshot = projects.snapshot(worktree["id"], committed=True)
+            assert snapshot["bundle"]["documentation"]["project"] == "Saved meanwhile"
+            projects.remotes.status(worktree["id"])
+            engine.statuses(worktree["id"], "dev")
+        assert transfer.is_alive() and not release.is_set()
+    finally:
+        release.set()
+        transfer.join(10)
+    assert outcome["state"]["state"] == "ahead"
+    if operation == "push":
+        assert projects.git(remote, "rev-parse", "main") == state["local_head"]
+
+
+def test_fetch_installs_refs_only_without_concurrent_configuration_changes(local_remote, monkeypatch):
+    projects, main, remote, state = local_remote
+    state = push(projects, main, projects.remotes.fetch(main["id"], state["config_revision"]))
+    other = projects.branch(main["id"], "other")
+    edit(projects, other, lambda b: b["documentation"].update(project="Remote"))
+    projects.git(other["path"], "push", str(remote), "HEAD:main")
+    origin = projects.remotes.refs(main["path"], "refs/remotes/origin/")
+    network = projects.remotes.network
+
+    def reconfigure(path, *args, key=None):
+        result = network(path, *args, key=key)
+        # The transfer runs without the repository lock, so origin can be reconfigured meanwhile.
+        projects.remotes.configure(main["id"], state["url"], "renamed", state["config_revision"])
+        return result
+
+    monkeypatch.setattr(projects.remotes, "network", reconfigure)
+    with pytest.raises(Problem, match="configuration"):
+        projects.remotes.fetch(main["id"], state["config_revision"])
+    assert projects.remotes.refs(main["path"], "refs/remotes/origin/") == origin
+    assert projects.remotes.config(main)["mappings"] == {"main": "renamed"}
+    assert not projects.remotes.refs(main["path"], "refs/duckpad/")
+
+
+def test_fetch_replaces_a_deleted_branch_with_a_nested_one(local_remote):
+    projects, main, remote, state = local_remote
+    state = push(projects, main, projects.remotes.fetch(main["id"], state["config_revision"]))
+    projects.git(remote, "branch", "feature", "main")
+    state = projects.remotes.fetch(main["id"], state["config_revision"])
+    projects.git(remote, "branch", "-D", "feature")
+    projects.git(remote, "branch", "feature/nested", "main")
+    state = projects.remotes.fetch(main["id"], state["config_revision"])
+    assert set(projects.remotes.refs(main["path"], "refs/remotes/origin/")) == {"main", "feature/nested"}
+    assert state["state"] == "up_to_date"
+
+
 def test_commit_comparison_shows_only_project_definitions(project):
     projects, main = project
     template = Path(main["path"], "templates", "orders.sql")

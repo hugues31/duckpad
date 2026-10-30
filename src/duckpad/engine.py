@@ -5,7 +5,7 @@ import logging
 import re
 import threading
 import time
-from contextlib import suppress
+from contextlib import contextmanager, nullcontext, suppress
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -244,8 +244,17 @@ class Engine:
             "imports": list(self.store.get("settings", "offline_extensions", {}).values()),
         }
 
+    @contextmanager
+    def exclusive(self, project=None):
+        """Hold a project's repository lock when given, then the engine lock.
+
+        Changes that reset execution state take this pair, always in this order.
+        """
+        with self.projects.repository(project) if project else nullcontext(), self.lock:
+            yield
+
     def import_extension(self, filename, source, stream):
-        with self.projects.lock, self.lock:
+        with self.exclusive():
             if self.active:
                 raise Problem("Stop active executions before importing extensions", 409)
             entry = install(
@@ -262,7 +271,7 @@ class Engine:
             return self.extension_runtime()
 
     def configure_extensions(self, allow_unsigned):
-        with self.projects.lock, self.lock:
+        with self.exclusive():
             if self.extension_settings()["allow_unsigned_extensions"] == allow_unsigned:
                 return self.extension_settings()
             if self.active:
@@ -352,23 +361,27 @@ class Engine:
             return {}
 
     def invalidate(self, worktree=None):
-        with self.projects.lock:
-            with self.lock:
-                contexts = list(self.contexts.values())
-            for context in contexts:
-                if worktree and context.worktree != worktree:
-                    continue
-                if not self.store.get("worktree", context.worktree):
-                    self.discard_worktree(context.worktree)
-                    continue
-                fingerprints = self._current_fingerprints(context.worktree, context.environment)
-                with context.lock:
-                    changed = set()
-                    for dataset in context.datasets.values():
-                        if fingerprints.get(dataset.node) != dataset.fingerprint:
-                            dataset.status = "stale"
-                            changed.add(dataset.node)
-                    self.cancel_lineage(context, changed)
+        """Mark results of changed definitions stale.
+
+        It takes no repository lock, since catalog changes call it under the engine lock. Project
+        changes call it under their repository lock, which publication also holds.
+        """
+        with self.lock:
+            contexts = list(self.contexts.values())
+        for context in contexts:
+            if worktree and context.worktree != worktree:
+                continue
+            if not self.store.get("worktree", context.worktree):
+                self.discard_worktree(context.worktree)
+                continue
+            fingerprints = self._current_fingerprints(context.worktree, context.environment)
+            with context.lock:
+                changed = set()
+                for dataset in context.datasets.values():
+                    if fingerprints.get(dataset.node) != dataset.fingerprint:
+                        dataset.status = "stale"
+                        changed.add(dataset.node)
+                self.cancel_lineage(context, changed)
 
     def cancel_lineage(self, context, affected=None):
         for request in list(context.lineage.values()):
@@ -776,7 +789,7 @@ class Engine:
         """Atomically replace a node's outputs; return the previous output set."""
         context = execution.context
         # A later edit must not turn a result for the old snapshot valid.
-        with self.projects.lock:
+        with self.projects.locked(context.worktree):
             current = self._current_fingerprints(context.worktree, context.environment)
             with self.lock, context.lock:
                 if execution.canceled:
@@ -829,7 +842,7 @@ class Engine:
     def export_result(self, worktree, environment, node):
         """Describe only the current export attempt in this exact execution context."""
         self.catalog.environment(environment)
-        with self.projects.lock, self.lock:
+        with self.projects.locked(worktree), self.lock:
             snapshot = self.projects.snapshot(worktree)
             if not snapshot["bundle"]:
                 return {"status": "stale"}
@@ -882,7 +895,7 @@ class Engine:
 
     def open_export(self, worktree, environment, node, run):
         """Validate the selected run and pin its private artifact before streaming."""
-        with self.projects.lock, self.lock:
+        with self.projects.locked(worktree), self.lock:
             result = self.export_result(worktree, environment, node)
             if result.get("run") != run or result["status"] != "available":
                 raise Problem(
@@ -921,7 +934,7 @@ class Engine:
 
     def cleanup_column_docs(self, worktree, node, outputs, environment):
         """Prune only against a schema resolved by a successful publication."""
-        with self.projects.lock:
+        with self.projects.locked(worktree):
             snapshot = self.projects.snapshot(worktree)
             bundle = snapshot["bundle"]
             if not bundle or not outputs:
