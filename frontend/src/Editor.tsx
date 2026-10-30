@@ -1,4 +1,5 @@
-import Editor, { DiffEditor, loader } from "@monaco-editor/react";
+import { useEffect, useRef } from "react";
+import Editor, { loader } from "@monaco-editor/react";
 import * as monaco from "monaco-editor/esm/vs/editor/editor.api";
 import "monaco-editor/esm/vs/basic-languages/sql/sql.contribution";
 import "monaco-editor/esm/vs/basic-languages/markdown/markdown.contribution";
@@ -21,26 +22,35 @@ export function CodeDiff({
   after: string;
   language?: string;
 }) {
-  return (
-    <DiffEditor
-      height="300px"
-      original={before}
-      modified={after}
-      language={language}
-      theme={
-        document.documentElement.dataset.theme === "dark" ? "vs-dark" : "light"
-      }
-      options={{
-        readOnly: true,
-        originalEditable: false,
-        automaticLayout: true,
-        minimap: { enabled: false },
-        renderSideBySide: true,
-        useInlineViewWhenSpaceIsLimited: true,
-        scrollBeyondLastLine: false,
-      }}
-    />
-  );
+  const container = useRef<HTMLDivElement>(null);
+  const theme =
+    document.documentElement.dataset.theme === "dark" ? "vs-dark" : "light";
+
+  useEffect(() => {
+    if (!container.current) return;
+    const original = monaco.editor.createModel(before, language);
+    const modified = monaco.editor.createModel(after, language);
+    const editor = monaco.editor.createDiffEditor(container.current, {
+      theme,
+      readOnly: true,
+      originalEditable: false,
+      automaticLayout: true,
+      minimap: { enabled: false },
+      renderSideBySide: true,
+      useInlineViewWhenSpaceIsLimited: true,
+      scrollBeyondLastLine: false,
+    });
+    editor.setModel({ original, modified });
+    return () => {
+      // Detach the models before disposing them, including on content changes.
+      editor.setModel(null);
+      editor.dispose();
+      original.dispose();
+      modified.dispose();
+    };
+  }, [before, after, language, theme]);
+
+  return <div ref={container} style={{ height: 300, width: "100%" }} />;
 }
 export default function CodeEditor({
   value,
