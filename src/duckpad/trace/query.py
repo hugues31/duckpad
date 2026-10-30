@@ -7,7 +7,7 @@ from sqlglot import exp
 
 from ..datasets import Dataset
 from ..materialize import drop_relations, plan_materialization, publish_view, to_physical
-from ..sqlast import sql
+from ..sqlast import explained, sql
 from ..util import digest, qi
 from . import builders as b
 from .aggregate import AggregateVisitor
@@ -43,7 +43,7 @@ class TraceQuery:
             result = SetOperationVisitor(self).visit(tree, column_index)
         else:
             self.step = Step.analyze(self, tree, column_index, all_context, distinct_value)
-            self.expression = sql(self.step.target)
+            self.expression = explained(self.step.target)
             visitor = next(visitor for visitor in VISITORS if visitor.accepts(self.step))
             self.kind = visitor.kind
             result = visitor(self).visit(self.step)

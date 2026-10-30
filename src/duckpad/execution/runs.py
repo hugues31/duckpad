@@ -184,11 +184,7 @@ class Runner:
                     "label": nodes[n].get("label", n),
                     "kind": nodes[n]["parsed"]["kind"],
                     "fingerprint": fingerprints[n],
-                    **(
-                        {"variables": {p: b["name"] for p, b in nodes[n]["variables"].items()}}
-                        if nodes[n].get("variables")
-                        else {}
-                    ),
+                    **variables.run_usages(nodes[n]),
                 }
                 for n in order
             },
@@ -445,6 +441,7 @@ class Runner:
             execution.captured,
             directory,
             input_schemas={port: data.columns for port, data in input_datasets.items()},
+            variables=variables.expression_values(node),
         )
         state["statements"] = variables.annotate(statements, node)
         self._persist(run, execution.secrets)
@@ -478,6 +475,7 @@ class Runner:
                 run=run["id"],
                 query=statement["query"],
                 bindings=statement["bindings"],
+                labels=statement.get("variable_bindings", {}),
                 dependencies={data.table: data.id for data in data_inputs.values()},
                 fingerprint=execution.fingerprints[key],
                 storage=plan["storage"],

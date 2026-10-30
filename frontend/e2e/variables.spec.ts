@@ -740,3 +740,138 @@ test("the editor normalizes imported types and rejects invalid choice declaratio
   ).toBeVisible();
   expect((await snapshot(page, url)).variables!.file_error).toBeNull();
 });
+
+test("filter on a period with a variable, typed or chosen in the guided form (workflow 4)", async ({
+  page,
+}) => {
+  const { id, url } = await example(page, (bundle) => {
+    bundle.variables = {
+      report_start: {
+        type: "date",
+        description: "First order date included in the reports.",
+        default: "2026-10-15",
+        environments: { prod: "2026-10-01" },
+      },
+      oracle_schema: { type: "identifier", default: "DEMO" },
+    };
+    bundle.flow.nodes.push({
+      id: "recent",
+      template: "filter",
+      label: "Recent orders",
+      params: { condition: "amount >= 0" },
+      position: { x: 280, y: 420 },
+    });
+    bundle.flow.edges.push({
+      id: "orders_result_recent_source",
+      source: "orders",
+      target: "recent",
+      sourceHandle: "result",
+      targetHandle: "source",
+    });
+  });
+  await run(page, url, "dev");
+  await page.goto(`/worktrees/${id}/flow?environment=dev`);
+  await node(page, "Recent orders").click();
+  const inspector = page.locator(".inspector");
+  const condition = inspector.getByRole("textbox", { name: /condition/ });
+  await condition.fill("order_date >= ");
+  await condition.pressSequentially("{{ var.");
+  // Only variables an expression can bind are suggested, with their value.
+  const suggestions = inspector.getByRole("listbox", { name: "Variables" });
+  await expect(suggestions.getByRole("option")).toHaveCount(1);
+  await expect(
+    suggestions.getByRole("option", { name: /report_start/ }),
+  ).toContainText("date · dev 2026-10-15");
+  await condition.press("Enter");
+  await expect(condition).toHaveValue("order_date >= {{ var.report_start }}");
+  await expect(suggestions).toBeHidden();
+  const values = inspector.getByRole("list", {
+    name: "Variables used by this expression",
+  });
+  await expect(values).toContainText("report_start");
+  await expect(values.locator(".active")).toHaveText(
+    "dev 2026-10-15 (default)",
+  );
+  await expect(values).toContainText("prod 2026-10-01");
+  await inspector
+    .getByRole("button", { name: "Save changes", exact: true })
+    .click();
+  await saved(page);
+  const recent = (await snapshot(page, url)).bundle!.flow.nodes.find(
+    (n) => n.id === "recent",
+  )!;
+  expect(recent.params.condition).toBe("order_date >= {{ var.report_start }}");
+  expect(
+    (await snapshot(page, url)).variables!.declarations.report_start.usages,
+  ).toEqual([
+    {
+      node: "recent",
+      label: "Recent orders",
+      param: "condition",
+      expression: true,
+    },
+  ]);
+
+  // Each environment binds its own date.
+  await run(page, url, "dev");
+  await run(page, url, "prod");
+  const rows = async (environment: string) =>
+    (
+      await (
+        await page.request.get(
+          `${url}/preview/recent?environment=${environment}&limit=200`,
+        )
+      ).json()
+    ).filtered_count as number;
+  expect(await rows("dev")).toBe(50);
+  expect(await rows("prod")).toBe(120);
+
+  await inspector.getByRole("button", { name: "SQL", exact: true }).click();
+  const bound = inspector.locator(".variable-values");
+  await expect(bound).toContainText("report_start");
+  await expect(bound).toContainText("condition · $var_report_start");
+  await expect(bound).toContainText("2026-10-15");
+
+  // Lineage shows the date that was used, labeled with its variable.
+  await page
+    .getByRole("button", { name: /Explain this value: amount, rows 1,/ })
+    .click();
+  const dialog = page.getByRole("dialog");
+  await expect(page.locator(".lineage-loading")).toHaveCount(0);
+  await dialog
+    .getByRole("button", { name: /Source and selection details/ })
+    .first()
+    .click();
+  await expect(dialog.locator(".lineage-details")).toContainText(
+    "order_date >= CAST('2026-10-15' AS DATE) (report_start)",
+  );
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
+
+  // The guided form offers the same variables as a filter value.
+  await inspector
+    .getByRole("button", { name: "Parameters", exact: true })
+    .click();
+  await inspector
+    .getByLabel("Column", { exact: true })
+    .selectOption("order_date");
+  await inspector.getByLabel("Operator", { exact: true }).selectOption("<");
+  await inspector
+    .getByLabel("Value source", { exact: true })
+    .selectOption("report_start");
+  await expect(inspector.getByLabel("Value", { exact: true })).toBeHidden();
+  await inspector
+    .getByRole("button", { name: "Apply to parameters", exact: true })
+    .click();
+  await expect(condition).toHaveValue('"order_date" < {{ var.report_start }}');
+  await saved(page);
+  await expect
+    .poll(
+      async () =>
+        (await snapshot(page, url)).bundle!.flow.nodes.find(
+          (n) => n.id === "recent",
+        )!.params.condition,
+    )
+    .toBe('"order_date" < {{ var.report_start }}');
+  await expect(page.locator(".preview-header .badge")).toHaveText("Stale");
+});

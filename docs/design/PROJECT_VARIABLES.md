@@ -1,6 +1,6 @@
 # Project variables (design proposal)
 
-**Status: delivery steps 1 (model and engine) and 2 (interface) implemented; step 3 proposed.** `variables.json`, the `date` parameter type, whole-parameter binding, fingerprints, run records, the API, ZIP archives, merge, comparison and grouping work as described below, and so do the **Variables** tab, the inspector's variable button and chip, stale reasons, run confirmations and run details; see [Authoring projects](../AUTHORING.md#project-variables). `{{ var.name }}` references in expressions do not exist yet: the screenshots are mockups drawn over the interface.
+**Status: delivery steps 1 (model and engine), 2 (interface) and 3 (expressions) implemented; step 4 proposed.** `variables.json`, the `date` parameter type, whole-parameter binding, fingerprints, run records, the API, ZIP archives, merge, comparison and grouping work as described below, and so do the **Variables** tab, the inspector's variable button and chip, stale reasons, run confirmations and run details, and `{{ var.name }}` references in expressions with their suggestions, value hints, guided Filter values and lineage labels; see [Authoring projects](../AUTHORING.md#project-variables). The screenshots in this proposal are mockups drawn before the implementation; the user guide shows the actual interface.
 
 ## Summary
 
@@ -95,7 +95,7 @@ For the selected environment, a variable's value is its environment value if one
 
 **References inside expressions.** `expression` and `expressions` parameters can contain `{{ var.name }}`, for example `order_date >= {{ var.report_start }}`. The compiler replaces the reference with a named DuckDB parameter before validating the expression, so the value is bound with its type and never inserted into the SQL text. The guided Filter form offers the same variables in its value field.
 
-**Where references are allowed.** In the first version, references live only in the root flow, including the values of exposed component parameters. Templates (`templates/*.sql`) and component definitions (`components/*.json`) cannot reference project variables, so they remain portable between projects. To use a variable inside a component, expose the parameter and bind the exposed parameter on the component instance. **Group into component** does this automatically: each bound parameter of the grouped nodes becomes an exposed parameter, bound to the same variable on the new instance, in one save.
+**Where references are allowed.** In the first version, references live only in the root flow, including the values of exposed component parameters. Templates (`templates/*.sql`) and component definitions (`components/*.json`) cannot reference project variables, so they remain portable between projects. To use a variable inside a component, expose the parameter and bind the exposed parameter on the component instance. **Group into component** does this automatically: each bound parameter of the grouped nodes, and each expression that references variables, becomes an exposed parameter of the new instance, which keeps the same binding or expression, in one save.
 
 ## User experience
 

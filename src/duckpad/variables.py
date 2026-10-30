@@ -1,10 +1,14 @@
-"""Project variables: typed values declared in variables.json and bound to whole node parameters.
+"""Project variables: typed values declared in variables.json and used by root flow parameters.
 
 A parameter of the root flow, including an exposed parameter of a component instance, takes a
 variable's value with `{"$var": "name"}`. Binding replaces the reference with the value of the
 selected environment before fingerprinting and compilation. The fingerprint therefore covers the
 JSON type and value actually bound: renaming a variable or editing its description never
 invalidates a result, and promoting a literal to a variable holding the same value keeps it valid.
+
+Expression parameters can also reference variables inside their text, as `{{ var.name }}`.
+Binding resolves each reference without changing the text; compilation turns it into a named
+DuckDB parameter holding the typed value, and fingerprints cover the type and value in its place.
 """
 
 import copy
@@ -13,7 +17,7 @@ import math
 import re
 from collections.abc import Iterable
 
-from .templates import base_type, directives, is_date, parse_parameter, type_argument
+from .templates import VARIABLE_REFERENCE, base_type, directives, is_date, parse_parameter, type_argument
 from .types import Record
 from .util import Problem, dumps
 
@@ -24,8 +28,11 @@ FIELDS = {"type", "description", "default", "environments"}
 SCALAR_TYPES = ("text", "number", "boolean", "date", "identifier")
 LIST_TYPE = re.compile(r"list\s*<\s*(text|number)\s*>")
 CHOICE_TYPE = re.compile(r"choice\s*\((.*)\)")
-# Expression references are delivery step 3; templates and components never accept them.
-EXPRESSION_REFERENCE = re.compile(r"{{\s*var\.(\w+)\s*}}")
+# `{{ var.name }}` inside expression parameters; templates and components never accept them.
+EXPRESSION_REFERENCE = VARIABLE_REFERENCE
+EXPRESSION_PARAMETERS = ("expression", "expressions")
+# Variable types an expression can reference: each becomes a DuckDB parameter of the same type.
+EXPRESSION_TYPES = ("text", "number", "boolean", "date", "choice")
 SECRET_HINTS = ("password", "passwd", "secret", "token", "apikey", "api_key", "credential", "private_key")
 # Parameter types each variable type binds to. Choices also bind to choice and keyword
 # parameters offering every option, and lists to the same list type.
@@ -51,6 +58,36 @@ def references(params):
     if not isinstance(params, dict):
         return {}
     return {param: name for param, value in params.items() if (name := reference(value)) is not None}
+
+
+def parameter_texts(value):
+    """The texts of a parameter value that can hold expression references."""
+    if isinstance(value, str):
+        return [value]
+    return [item for item in value if isinstance(item, str)] if isinstance(value, list) else []
+
+
+def expression_references(value):
+    """Variable names referenced as `{{ var.name }}` in a parameter value, each once, in order."""
+    return list(
+        dict.fromkeys(name for text in parameter_texts(value) for name in EXPRESSION_REFERENCE.findall(text))
+    )
+
+
+def referenced(params):
+    """Parameter name -> variable names referenced inside its text, for the parameters that have some."""
+    if not isinstance(params, dict):
+        return {}
+    return {param: names for param, value in params.items() if (names := expression_references(value))}
+
+
+def substitute(value, replace):
+    """A parameter value with each `{{ var.name }}` replaced by `replace(name)`."""
+    if isinstance(value, list):
+        return [substitute(item, replace) if isinstance(item, str) else item for item in value]
+    return (
+        EXPRESSION_REFERENCE.sub(lambda match: replace(match[1]), value) if isinstance(value, str) else value
+    )
 
 
 def read(text):
@@ -239,14 +276,18 @@ def component_references(definition):
         f"{node.get('id')}.{param}"
         for node in (nodes if isinstance(nodes, list) else [])
         if isinstance(node, dict)
-        for param in references(node.get("params"))
+        for param in sorted(references(node.get("params")).keys() | referenced(node.get("params")).keys())
     ]
     parameters = definition.get("parameters", {})
     if isinstance(parameters, dict):
         found += [
             f"default of {name}"
             for name, parameter in parameters.items()
-            if isinstance(parameter, dict) and reference(parameter.get("default")) is not None
+            if isinstance(parameter, dict)
+            and (
+                reference(parameter.get("default")) is not None
+                or expression_references(parameter.get("default"))
+            )
         ]
     return found
 
@@ -364,6 +405,42 @@ def reference_error(bundle, variables, file_error, node, param, name):
     return None
 
 
+def expression_error(variables, file_error, parameter, name):
+    """Why a `{{ var.name }}` reference inside a node parameter cannot take a value in any environment."""
+    param, type_name = parameter["name"], parameter["type"]
+    if base_type(type_name) not in EXPRESSION_PARAMETERS:
+        return (
+            f"Parameter {param} ({type_name}) cannot reference variable {name} inside its text: only "
+            "expression parameters can. Bind the whole parameter to the variable instead."
+        )
+    if file_error:
+        return f"Cannot use variable {name} in {param}: {file_error}"
+    if name not in variables:
+        return f"Parameter {param} references undeclared variable {name}"
+    variable_type = variables[name]["type"]
+    kind = base_type(variable_type)
+    if kind == "identifier":
+        return (
+            f"Variable {name} (identifier) cannot be used inside expression {param}. Bind it to a column "
+            "or identifier parameter instead."
+        )
+    if kind not in EXPRESSION_TYPES:
+        return (
+            f"Variable {name} ({variable_type}) cannot be used inside expression {param}. Bind it to a "
+            "parameter of the same list type instead."
+        )
+    return None
+
+
+def expression_references_of(node):
+    """Declared parameter -> variable names referenced inside its text, for an expanded node.
+
+    Compilation ignores undeclared parameters, so their text references nothing.
+    """
+    declared = {p["name"] for p in node["parsed"]["parameters"]}
+    return {param: names for param, names in referenced(node.get("params")).items() if param in declared}
+
+
 def problems(bundle):
     """Errors of variables.json and of references inside definitions. Warnings are separate."""
     variables, file_error = declarations(bundle)
@@ -379,22 +456,28 @@ def problems(bundle):
 
 
 def node_problems(bundle, nodes):
-    """Environment-independent errors of the bound parameters of expanded nodes."""
+    """Environment-independent errors of the bound parameters and expression references of expanded nodes."""
     variables, file_error = declarations(bundle)
     excluded = unportable(bundle)
     result = []
     for key, node in nodes.items():
-        bound = references(node.get("params"))
-        if not bound or node.get("error") or file_error:
+        bound, texts = references(node.get("params")), expression_references_of(node)
+        if not (bound or texts) or node.get("error"):
             continue
         if portability_error(bundle, node, excluded):
             # Reported once, on the definition.
             continue
-        result += [
-            {"file": "flow.json", "node": key, "message": message}
+        parameters = {p["name"]: p for p in node["parsed"]["parameters"]}
+        messages = [
+            reference_error(bundle, variables, None, node, param, name)
             for param, name in sorted(bound.items())
-            if (message := reference_error(bundle, variables, None, node, param, name))
+            if not file_error
         ]
+        for param, names in sorted(texts.items()):
+            # A file error is reported once, on the file; a misplaced reference does not depend on it.
+            if not file_error or base_type(parameters[param]["type"]) not in EXPRESSION_PARAMETERS:
+                messages += [expression_error(variables, None, parameters[param], name) for name in names]
+        result += [{"file": "flow.json", "node": key, "message": message} for message in messages if message]
     return result
 
 
@@ -404,45 +487,85 @@ def bind(bundle, nodes, environment):
     Each bound node records `variables`: parameter -> name, type, and value and source, or the
     binding error. A binding error becomes the node's error, which blocks the node and its
     descendants in that environment only; its parameter is unset so it is never compiled.
+
+    Expression parameters keep their text. Their `{{ var.name }}` references are recorded in
+    `references`: parameter -> list of the same bindings, in order of first appearance.
     """
     variables, file_error = declarations(bundle)
     excluded = unportable(bundle)
+
+    def resolved(name, message):
+        variable = variables.get(name)
+        binding = {"name": name, "type": variable["type"] if variable else None}
+        if message is None:
+            value = resolve(variable, environment)
+            if "error" in value:
+                message = f"Variable {name}: {value['error']}"
+            else:
+                binding.update(value)
+        if message:
+            binding["error"] = message
+        return binding
+
     for node in nodes.values():
         portability = portability_error(bundle, node, excluded) if any(excluded) else None
         if portability and not node.get("error"):
             node["error"] = portability
-        bound = references(node.get("params"))
-        if not bound:
+        bound, texts = references(node.get("params")), expression_references_of(node)
+        if not (bound or texts):
             continue
         errors = [portability] if portability else []
-        node["variables"] = {}
+        if bound:
+            node["variables"] = {}
         for param, name in sorted(bound.items()):
-            variable = variables.get(name)
-            binding = {"name": name, "type": variable["type"] if variable else None}
-            message = portability or reference_error(bundle, variables, file_error, node, param, name)
-            if message is None:
-                resolved = resolve(variable, environment)
-                if "error" in resolved:
-                    message = f"Variable {name}: {resolved['error']}"
-                else:
-                    binding.update(resolved)
-            if message:
-                binding["error"] = message
-                if message not in errors:
-                    errors.append(message)
-                node["params"][param] = None
-            else:
-                node["params"][param] = binding["value"]
+            binding = resolved(
+                name, portability or reference_error(bundle, variables, file_error, node, param, name)
+            )
+            node["params"][param] = binding.get("value")
             node["variables"][param] = binding
+        if texts:
+            parameters = {p["name"]: p for p in node["parsed"]["parameters"]}
+            node["references"] = {
+                param: [
+                    resolved(
+                        name, portability or expression_error(variables, file_error, parameters[param], name)
+                    )
+                    for name in names
+                ]
+                for param, names in sorted(texts.items())
+            }
+        for binding in [*node.get("variables", {}).values(), *expression_bindings(node)]:
+            if "error" in binding and binding["error"] not in errors:
+                errors.append(binding["error"])
         if errors and not node.get("error"):
             node["error"] = "; ".join(errors)
     return nodes
 
 
+def expression_bindings(node):
+    """The bindings of a bound node's expression references, across its parameters."""
+    return [binding for bindings in node.get("references", {}).values() for binding in bindings]
+
+
+def expression_values(node):
+    """Variable name -> type and value, for the expression references of a bound node to compile."""
+    return {
+        binding["name"]: {"type": binding["type"], "value": binding["value"]}
+        for binding in expression_bindings(node)
+        if "value" in binding
+    }
+
+
 def used(bundle: Record, nodes: dict[str, Record], keys: Iterable[str], environment: str) -> Record:
     """Variables used by bound nodes: name -> type, and value and source or the reason it has none."""
     variables, file_error = declarations(bundle)
-    names = sorted({b["name"] for key in keys for b in nodes[key].get("variables", {}).values()})
+    names = sorted(
+        {
+            b["name"]
+            for key in keys
+            for b in [*nodes[key].get("variables", {}).values(), *expression_bindings(nodes[key])]
+        }
+    )
     result = {}
     for name in names:
         if name in variables:
@@ -452,23 +575,52 @@ def used(bundle: Record, nodes: dict[str, Record], keys: Iterable[str], environm
     return result
 
 
+def run_usages(node):
+    """What a run records about a node's variables: bound parameters, and expression references."""
+    result = {}
+    if node.get("variables"):
+        result["variables"] = {param: binding["name"] for param, binding in node["variables"].items()}
+    if node.get("references"):
+        result["references"] = {
+            param: [binding["name"] for binding in bindings] for param, bindings in node["references"].items()
+        }
+    return result
+
+
 def annotate(statements: list[Record], node: Record) -> list[Record]:
-    """List the variables of a node's bound parameters next to its compiled statements."""
-    listed = [{"parameter": param, **binding} for param, binding in sorted(node.get("variables", {}).items())]
-    if listed:
+    """List the variables of a node's bound parameters and expressions next to its compiled statements.
+
+    An expression reference also names the DuckDB parameter that binds its value in a statement.
+    """
+    bound = [{"parameter": param, **binding} for param, binding in sorted(node.get("variables", {}).items())]
+    texts = [
+        {"parameter": param, **binding}
+        for param, bindings in sorted(node.get("references", {}).items())
+        for binding in bindings
+    ]
+    if bound or texts:
         for statement in statements:
-            statement["variables"] = copy.deepcopy(listed)
+            placeholders = {name: key for key, name in statement.get("variable_bindings", {}).items()}
+            statement["variables"] = copy.deepcopy(bound) + [
+                {
+                    **copy.deepcopy(item),
+                    **({"binding": placeholders[item["name"]]} if item["name"] in placeholders else {}),
+                }
+                for item in texts
+            ]
     return statements
 
 
 def usages(bundle):
-    """Variable name -> the root flow node parameters bound to it."""
+    """Variable name -> the root flow node parameters bound to it or referencing it in their text."""
     result: dict[str, list[Record]] = {}
     for node in bundle["flow"].get("nodes", []):
+        usage = {"node": node["id"], "label": node.get("label") or node["id"]}
         for param, name in sorted(references(node.get("params")).items()):
-            result.setdefault(name, []).append(
-                {"node": node["id"], "label": node.get("label") or node["id"], "param": param}
-            )
+            result.setdefault(name, []).append({**usage, "param": param})
+        for param, names in sorted(referenced(node.get("params")).items()):
+            for name in names:
+                result.setdefault(name, []).append({**usage, "param": param, "expression": True})
     return result
 
 
@@ -541,6 +693,10 @@ def rename(bundle, old, new):
         for param, name in references(node.get("params")).items():
             if name == old:
                 node["params"][param] = {KEY: new}
+        for param in referenced(node.get("params")):
+            node["params"][param] = substitute(
+                node["params"][param], lambda name: f"{{{{ var.{new if name == old else name} }}}}"
+            )
     return result
 
 
@@ -551,12 +707,42 @@ def computation(bundle, nodes):
     environment affect the node, while renames and documentation edits do not.
     """
     variables, file_error = declarations(bundle)
+
+    def computed(name):
+        variable = variables.get(name)
+        return (
+            {k: v for k, v in variable.items() if k != "description"}
+            if variable
+            else file_error or "undeclared"
+        )
+
     for node in nodes.values():
         for param, name in references(node.get("params")).items():
-            variable = variables.get(name)
-            node["params"][param] = {
-                KEY: {k: v for k, v in variable.items() if k != "description"}
-                if variable
-                else file_error or "undeclared"
-            }
+            node["params"][param] = {KEY: computed(name)}
+        for param in referenced(node.get("params")):
+            node["params"][param] = substitute(
+                node["params"][param],
+                lambda name: "{{ var " + json.dumps(computed(name), sort_keys=True) + " }}",
+            )
     return nodes
+
+
+def fingerprinted(node, params):
+    """Parameters with each expression reference replaced by the type and value it binds.
+
+    Renaming a variable keeps a fingerprint, while changing the value it binds in this
+    environment changes it. Parameters without references are returned unchanged.
+    """
+    bindings = {binding["name"]: binding for binding in expression_bindings(node)}
+    if not bindings:
+        return params
+
+    def bound(name):
+        binding = bindings[name]
+        computed = {k: binding[k] for k in ("type", "value", "error") if k in binding}
+        return "{{ var " + json.dumps(computed, sort_keys=True) + " }}"
+
+    return {
+        param: substitute(value, bound) if param in node["references"] else value
+        for param, value in params.items()
+    }

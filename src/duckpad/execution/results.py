@@ -167,6 +167,7 @@ class Results:
                 captured,
                 self.store.paths.exports(worktree, environment),
                 input_schemas=input_schemas,
+                variables=variables.expression_values(node),
             )
             for statement in statements:
                 statement["sql"] = redact(statement["sql"], secrets)

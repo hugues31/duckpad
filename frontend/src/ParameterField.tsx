@@ -6,6 +6,11 @@ import { FileUp } from "lucide-react";
 import { uploadFile } from "./api";
 import { useT } from "./i18n";
 import type { Column, Json, Parameter, Snapshot } from "./types";
+import {
+  ExpressionInput,
+  ExpressionValues,
+  type ExpressionVariables,
+} from "./VariableExpression";
 
 export default function ParameterField({
   parameter,
@@ -17,6 +22,7 @@ export default function ParameterField({
   columns,
   worktree,
   variable,
+  expressionVariables,
 }: {
   parameter: Parameter;
   /** The value set on the node, or else the declared default. */
@@ -30,6 +36,8 @@ export default function ParameterField({
   worktree?: string;
   /** The variable button shown next to the name, and the bound variable replacing the input. */
   variable?: { control: ReactNode; bound: ReactNode };
+  /** The variables an expression can reference; only root flow expressions can. */
+  expressionVariables?: ExpressionVariables;
 }) {
   const t = useT();
   const columnList = useId();
@@ -107,6 +115,16 @@ export default function ParameterField({
           onChange={onChange}
           onBlur={onBlur}
         />
+      ) : (base === "expressions" || base === "expression") &&
+        expressionVariables &&
+        (value == null || typeof value !== "object") ? (
+        <ExpressionInput
+          id={id}
+          value={text}
+          variables={expressionVariables}
+          onChange={onChange}
+          onBlur={onBlur}
+        />
       ) : base === "expressions" ||
         base === "expression" ||
         base === "schema" ? (
@@ -157,6 +175,10 @@ export default function ParameterField({
           />
         </span>
       )}
+      {(base === "expressions" || base === "expression") &&
+        expressionVariables && (
+          <ExpressionValues value={text} variables={expressionVariables} />
+        )}
       {uploadError && <span className="notice error">{uploadError}</span>}
       {base === "column" && schemas && (
         <datalist id={columnList}>
