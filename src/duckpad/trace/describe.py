@@ -2,7 +2,7 @@
 
 from sqlglot import exp
 
-from ..sqlast import sql
+from ..sqlast import explained, sql
 from ..util import Problem
 from . import builders as b
 
@@ -16,12 +16,12 @@ def describe(tracer, response):
     display = Display(tracer, step.tree)
     calculation = {
         "operation": "expression",
-        "formula": sql(display(step.target)),
+        "formula": explained(display(step.target)),
         "passthrough": isinstance(step.target, exp.Column)
         and tracer.kind in {"projection", "filter", "join"}
         and response["total"] == 1,
     }
-    selection = [sql(display(predicate)) for predicate in step.predicates()]
+    selection = [explained(display(predicate)) for predicate in step.predicates()]
     selection.extend(group_selection(tracer, step, display))
     if selection:
         calculation["selection"] = selection
@@ -30,7 +30,7 @@ def describe(tracer, response):
         calculation["operation"] = operation
     evaluated = evaluate(tracer, step, response)
     if evaluated is not None:
-        calculation["evaluated"] = sql(evaluated)
+        calculation["evaluated"] = explained(evaluated)
     return calculation
 
 

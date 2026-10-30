@@ -1,7 +1,12 @@
 import Select from "./Select";
 import { useState } from "react";
 import { useT } from "./i18n";
-import type { Json } from "./types";
+import type { Json, VariablesSummary } from "./types";
+import {
+  expressionReference,
+  formatVariableValue,
+  usableInExpressions,
+} from "./variables";
 
 const quote = (name: string) => '"' + name.replaceAll('"', '""') + '"';
 const literal = (value: string) => {
@@ -14,10 +19,15 @@ const literal = (value: string) => {
 export default function QueryBuilder({
   kind,
   schemas,
+  variables,
+  environment,
   onApply,
 }: {
   kind: string;
   schemas: Record<string, string[]>;
+  /** The variables a filter value can reference; only root flow nodes can. */
+  variables?: VariablesSummary | null;
+  environment?: string;
   onApply: (parameters: Record<string, Json>) => void;
 }) {
   const t = useT();
@@ -25,6 +35,10 @@ export default function QueryBuilder({
   const [right, setRight] = useState("");
   const [operator, setOperator] = useState("=");
   const [value, setValue] = useState("");
+  const [variable, setVariable] = useState("");
+  const usable = Object.entries(variables?.declarations || {}).filter(
+    ([, declared]) => usableInExpressions(declared.type),
+  );
   const [groups, setGroups] = useState<string[]>([]);
   const [measures, setMeasures] = useState([
     { function: "SUM", column: "", alias: "total" },
@@ -81,17 +95,53 @@ export default function QueryBuilder({
             </Select>
           </label>
           {!operator.includes("NULL") && (
-            <label className="field">
+            <div className="field">
               <span>{t("value")}</span>
-              <input value={value} onChange={(e) => setValue(e.target.value)} />
-            </label>
+              <div className="filter-value">
+                {!!usable.length && (
+                  <Select
+                    aria-label={t("filterValueSource")}
+                    value={variable}
+                    onChange={(e) => setVariable(e.target.value)}
+                  >
+                    <option value="">{t("fixedValue")}</option>
+                    <optgroup label={t("variables")}>
+                      {usable.map(([name, declared]) => (
+                        <option key={name} value={name}>
+                          {name} ·{" "}
+                          {declared.values[environment || ""]?.error
+                            ? t("noVariableValue")
+                            : formatVariableValue(
+                                declared.values[environment || ""]?.value,
+                              )}
+                        </option>
+                      ))}
+                    </optgroup>
+                  </Select>
+                )}
+                {!variable && (
+                  <input
+                    aria-label={t("value")}
+                    value={value}
+                    onChange={(e) => setValue(e.target.value)}
+                  />
+                )}
+              </div>
+            </div>
           )}
           <button
             className="button secondary full"
             disabled={!column}
             onClick={() =>
               onApply({
-                condition: `${quote(column)} ${operator}${operator.includes("NULL") ? "" : " " + literal(value)}`,
+                condition: `${quote(column)} ${operator}${
+                  operator.includes("NULL")
+                    ? ""
+                    : " " +
+                      (variable
+                        ? expressionReference(variable)
+                        : literal(value))
+                }`,
               })
             }
           >

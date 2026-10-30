@@ -28,6 +28,8 @@ class Dataset:
     column_map: dict[str, str] = field(default_factory=dict)
     witnesses: Record = field(default_factory=dict)
     groups: Record = field(default_factory=dict)
+    # Placeholder -> project variable, for the bindings that hold a variable's value.
+    labels: dict[str, str] = field(default_factory=dict)
 
     @property
     def table(self) -> str:

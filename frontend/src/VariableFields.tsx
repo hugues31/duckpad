@@ -183,7 +183,11 @@ export function StatementVariables({
     for (const item of statement.variables || []) {
       variables[item.name] = item;
       const bound = (parameters[item.name] ||= []);
-      if (!bound.includes(item.parameter)) bound.push(item.parameter);
+      // A reference inside an expression shows the SQL parameter holding its value.
+      const usage = item.binding
+        ? `${item.parameter} · $${item.binding}`
+        : item.parameter;
+      if (!bound.includes(usage)) bound.push(usage);
     }
   if (!Object.keys(variables).length) return null;
   return (

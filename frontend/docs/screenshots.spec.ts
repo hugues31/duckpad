@@ -232,6 +232,27 @@ test("capture project variables, a parameter binding and a run confirmation", as
   await confirmation
     .getByRole("button", { name: "Cancel", exact: true })
     .click();
+
+  // An expression references a variable and shows its value per environment.
+  await page.getByRole("link", { name: "Flow", exact: true }).click();
+  await node(page, "High-value orders").click();
+  const condition = inspector.getByRole("textbox", { name: /condition/ });
+  await condition.fill("amount >= ");
+  await condition.pressSequentially("{{ var.high");
+  await expect(
+    inspector.getByRole("listbox", { name: "Variables" }),
+  ).toContainText("high_value_threshold");
+  await condition.press("Enter");
+  await expect(
+    inspector.getByRole("list", { name: "Variables used by this expression" }),
+  ).toContainText("prod 900");
+  await inspector
+    .getByRole("button", { name: "Save changes", exact: true })
+    .click();
+  await expect(
+    page.getByText("All changes saved", { exact: true }),
+  ).toBeVisible();
+  await capture(page, "variable-expression");
 });
 
 test("capture connection setup and environment policies", async ({ page }) => {

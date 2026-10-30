@@ -460,3 +460,56 @@
   margin-left: 8px;
   font-size: 10px;
 }
+
+/* Variables referenced inside expressions and the guided filter value. */
+.expression-input {
+  position: relative;
+}
+.expression-suggestions {
+  top: calc(100% + 4px);
+  max-height: 240px;
+  overflow-y: auto;
+}
+.expression-suggestions .variable-option {
+  cursor: pointer;
+}
+.expression-suggestions .variable-option.active {
+  background: var(--accent-soft);
+}
+.expression-values {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 11px;
+}
+.expression-values li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 3px 12px;
+  padding: 6px 9px;
+  border-radius: 6px;
+  background: var(--surface-alt);
+}
+.expression-values code {
+  color: var(--accent);
+  font-weight: 650;
+}
+.expression-values strong {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-weight: 600;
+}
+.expression-values span.active {
+  color: var(--accent);
+}
+.filter-value {
+  display: flex;
+  gap: 6px;
+}
+.filter-value > * {
+  flex: 1;
+  min-width: 0;
+}

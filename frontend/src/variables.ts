@@ -247,3 +247,41 @@ export function conflictLabel(path: string, t: Translate) {
             : field;
   return `${t("variable")} ${name}${detail ? ` · ${detail}` : ""}`;
 }
+
+/** Variable types an expression can reference, each bound as a typed DuckDB parameter. */
+const EXPRESSION_TYPES = ["text", "number", "boolean", "date", "choice"];
+export const usableInExpressions = (type: string) =>
+  EXPRESSION_TYPES.includes(baseType(type));
+
+/** How an expression references a variable. */
+export const expressionReference = (name: string) => `{{ var.${name} }}`;
+
+/** Variable names referenced as `{{ var.name }}` in an expression, each once, in order. */
+export function referencedVariables(text: string): string[] {
+  const names = [...text.matchAll(/\{\{\s*var\.(\w+)\s*\}\}/g)].map(
+    (match) => match[1],
+  );
+  return [...new Set(names)];
+}
+
+/** The reference being typed just before the caret, such as `{{ var.thr`, or null. */
+export function partialReference(before: string) {
+  const match = /\{\{\s*var\.(\w*)$/.exec(before);
+  return match ? { start: match.index, prefix: match[1] } : null;
+}
+
+/**
+ * Complete the reference typed before the caret with a variable name, replacing
+ * the rest of a name and closing braces already written after the caret.
+ */
+export function completeReference(text: string, caret: number, name: string) {
+  const partial = partialReference(text.slice(0, caret));
+  if (!partial) return null;
+  const after = text.slice(caret);
+  const rest = /^\w*(\s*\}\})?/.exec(after)![0];
+  const inserted = expressionReference(name);
+  return {
+    text: text.slice(0, partial.start) + inserted + after.slice(rest.length),
+    caret: partial.start + inserted.length,
+  };
+}

@@ -9,7 +9,7 @@ from sqlglot import exp
 from sqlglot.optimizer.qualify import qualify
 
 from ..materialize import outer_aggregates
-from ..sqlast import is_volatile, sql
+from ..sqlast import VARIABLE_LABEL, is_volatile, labeled, sql
 from . import builders as b
 from .coverage import Coverage
 
@@ -38,13 +38,24 @@ def parse(dataset):
         raise Coverage(
             "Volatile expressions have no deterministic replay provenance. The displayed result is unchanged."
         )
-    return tree.transform(
-        lambda e: (
-            exp.convert(dataset.bindings[e.name])
-            if isinstance(e, exp.Placeholder) and e.name in dataset.bindings
-            else e
-        )
-    )
+    tree = tree.transform(lambda e: bound_value(e, dataset))
+    for literal in list(tree.find_all(exp.Literal)):
+        # A date variable is cast like a date parameter: label the date rather than its text.
+        if isinstance(literal.parent, exp.Cast) and any(
+            comment.startswith(VARIABLE_LABEL) for comment in literal.comments or ()
+        ):
+            literal.parent.add_comments(literal.comments)
+            literal.comments = None
+    return tree
+
+
+def bound_value(expression, dataset):
+    """A placeholder's bound value as a literal, labeled when it holds a project variable."""
+    if not isinstance(expression, exp.Placeholder) or expression.name not in dataset.bindings:
+        return expression
+    value = exp.convert(dataset.bindings[expression.name])
+    name = dataset.labels.get(expression.name)
+    return labeled(value, name) if name else value
 
 
 def rename_tables(expression, tables):

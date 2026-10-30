@@ -81,6 +81,8 @@ export interface VariableUsage {
   node: string;
   label: string;
   param: string;
+  /** Whether the parameter references the variable inside its expression text. */
+  expression?: boolean;
 }
 /** A variable's value in one environment, or why it has none. */
 export interface VariableValue {
@@ -226,6 +228,8 @@ export interface Statement {
     name: string;
     type: string | null;
     parameter: string;
+    /** The named parameter binding a variable referenced inside an expression. */
+    binding?: string;
   })[];
 }
 /** A page of rows of a node output, with the dataset holding them. */
@@ -268,7 +272,10 @@ export interface NodeRun {
   duration?: number;
   external_outcome?: "completed" | "failed" | "partial or unknown" | "unknown";
   statements?: Statement[];
+  /** Parameter -> the variable bound to it. */
   variables?: Record<string, string>;
+  /** Parameter -> the variables its expression references. */
+  references?: Record<string, string[]>;
 }
 export interface Run {
   id: string;

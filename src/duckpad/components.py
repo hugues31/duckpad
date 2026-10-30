@@ -243,14 +243,17 @@ def group(bundle, selection, label, exposed=None, parent=None):
 
 
 def expose_variables(bundle, internal, exposed):
-    """Move variable bindings of grouped nodes to exposed parameters of the new instance.
+    """Move variable bindings and references of grouped nodes to exposed parameters of the new instance.
 
-    Definitions never reference variables, so each bound parameter becomes an exposed parameter,
-    or reuses one already targeting it, and the instance binds it to the same variable.
+    Definitions never reference variables, so each bound parameter, and each expression that
+    references variables, becomes an exposed parameter, or reuses one already targeting it. The
+    instance binds it to the same variable or holds the same expression.
     """
     instance_params = {}
     for node in internal:
-        for param in variables.references(node.get("params")):
+        params = node.get("params")
+        using = variables.references(params).keys() | variables.referenced(params).keys()
+        for param in [param for param in (params or {}) if param in using]:
             target = {"node": node["id"], "param": param}
             key = next(
                 (k for k, p in exposed.items() if isinstance(p, dict) and target in p.get("targets", [])),

@@ -321,6 +321,8 @@ export default function Inspector({
             <QueryBuilder
               kind={node.template || ""}
               schemas={schemas}
+              variables={bindable ? snapshot.variables : null}
+              environment={environment}
               onApply={(values) => {
                 update((current) => ({
                   ...current,
@@ -396,6 +398,11 @@ export default function Inspector({
                   }
                   onChange={(value) => setParameter(parameter.name, value)}
                   onBlur={persist}
+                  expressionVariables={
+                    bindable
+                      ? { summary: snapshot.variables, environment }
+                      : undefined
+                  }
                   connections={connections}
                   columns={port ? inputColumns[port] : undefined}
                   schemas={
