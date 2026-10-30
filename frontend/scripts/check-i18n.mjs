@@ -4,8 +4,8 @@
  * - every locale defines the same keys, each exactly once;
  * - every key passed to t() as a string literal, including each branch of a
  *   condition or fallback, exists in every locale;
- * - every key is used: written as a string literal in the sources, read from an
- *   imported locale (messages.reload), or listed in DYNAMIC_KEYS.
+ * - every key is used: written as a string literal in the sources or listed in
+ *   DYNAMIC_KEYS.
  */
 import { readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
@@ -130,21 +130,9 @@ for (const name of readdirSync(sourceDir, { recursive: true })) {
     true,
     name.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
   );
-  // Components that cannot call useT() read keys from an imported locale.
-  const readsLocale = file.statements.some(
-    (statement) =>
-      ts.isImportDeclaration(statement) &&
-      /\/locales\/[^/]+\.json$/.test(statement.moduleSpecifier.text),
-  );
   const visit = (node) => {
     if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node))
       used.add(node.text);
-    else if (
-      readsLocale &&
-      ts.isPropertyAccessExpression(node) &&
-      ts.isIdentifier(node.expression)
-    )
-      used.add(node.name.text);
     if (
       ts.isCallExpression(node) &&
       ts.isIdentifier(node.expression) &&

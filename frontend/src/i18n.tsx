@@ -1,8 +1,9 @@
 import { createContext, useCallback, useContext } from "react";
 import en from "./locales/en.json";
 import fr from "./locales/fr.json";
+import pt from "./locales/pt.json";
 
-const locales = { en, fr };
+const locales = { en, fr, pt };
 export type Language = keyof typeof locales;
 /** The interface languages, one per translation catalog. */
 export const languages = Object.keys(locales) as Language[];
