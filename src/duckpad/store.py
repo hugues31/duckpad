@@ -164,8 +164,6 @@ class Store:
     def items(self, kind):
         """Read entities in stable insertion order, including composite identifiers."""
         with self.session() as session:
-            if kind == "access":
-                return [(p.id, self._access(p.id, session)) for p in session.exec(select(m.Project))]
             rows = session.exec(select(MODELS[kind]).order_by(literal_column("rowid"))).all()
             result = []
             for row in rows:
@@ -245,13 +243,9 @@ class Store:
 
     def delete(self, kind, key):
         with self.session() as session:
-            if kind == "access":
-                session.exec(delete(m.ProjectMember).where(m.ProjectMember.project == key))
-                session.exec(delete(m.ProjectConnection).where(m.ProjectConnection.project == key))
-            else:
-                row = session.get(MODELS[kind], self._key(kind, key))
-                if row is not None:
-                    session.delete(row)
+            row = session.get(MODELS[kind], self._key(kind, key))
+            if row is not None:
+                session.delete(row)
             session.flush()
 
     def find_user(self, username):
@@ -270,6 +264,20 @@ class Store:
         model = {"session": m.LoginSession, "oidc_transaction": m.OIDCTransaction}[kind]
         with self.session() as session:
             session.exec(delete(model).where(model.expires < now))
+
+    def visible_projects(self, user):
+        """Projects an account can open, with its project role, in one query and creation order."""
+        with self.session() as session:
+            if user["role"] == "admin":
+                rows = session.exec(select(m.Project).order_by(literal_column("rowid")))
+                return [{**self._record("project", row, session), "role": "admin"} for row in rows]
+            rows = session.exec(
+                select(m.Project, m.ProjectMember.role)
+                .join(m.ProjectMember, m.ProjectMember.project == m.Project.id)
+                .where(m.ProjectMember.user == user["id"])
+                .order_by(literal_column("project.rowid"))
+            )
+            return [{**self._record("project", row, session), "role": role} for row, role in rows]
 
     def runs_with_statuses(self, statuses):
         with self.session() as session:

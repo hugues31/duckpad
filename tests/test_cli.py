@@ -5,6 +5,11 @@ import subprocess
 import sys
 from contextlib import closing
 
+import pytest
+from fastapi.testclient import TestClient
+
+from duckpad import cli
+
 
 def test_legacy_schema_startup_reports_new_home_without_traceback(tmp_path):
     path = tmp_path / "instance.sqlite"
@@ -26,3 +31,26 @@ def test_legacy_schema_startup_reports_new_home_without_traceback(tmp_path):
         assert connection.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall() == [
             ("records",)
         ]
+
+
+@pytest.mark.parametrize(
+    ("host", "forwarded", "warned"),
+    [("0.0.0.0", None, True), ("0.0.0.0", "192.0.2.10", False), ("127.0.0.1", None, False)],
+)
+def test_network_binds_warn_when_no_proxy_is_trusted(tmp_path, monkeypatch, capsys, host, forwarded, warned):
+    monkeypatch.setattr(
+        sys, "argv", ["duckpad", "start", "--home", str(tmp_path), "--host", host, "--no-browser"]
+    )
+    if forwarded:
+        monkeypatch.setenv("FORWARDED_ALLOW_IPS", forwarded)
+    else:
+        monkeypatch.delenv("FORWARDED_ALLOW_IPS", raising=False)
+
+    def serve(app, **options):
+        # Run the lifespan so that the instance closes its services.
+        with TestClient(app):
+            pass
+
+    monkeypatch.setattr(cli.uvicorn, "run", serve)
+    cli.main()
+    assert ("FORWARDED_ALLOW_IPS is not set" in capsys.readouterr().out) is warned
