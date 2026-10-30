@@ -35,10 +35,12 @@ export default function QueryBuilder({
   const [right, setRight] = useState("");
   const [operator, setOperator] = useState("=");
   const [value, setValue] = useState("");
-  const [variable, setVariable] = useState("");
+  const [chosen, setVariable] = useState("");
   const usable = Object.entries(variables?.declarations || {}).filter(
     ([, declared]) => usableInExpressions(declared.type),
   );
+  // A variable deleted or retyped since it was chosen is no longer offered.
+  const variable = usable.some(([name]) => name === chosen) ? chosen : "";
   const [groups, setGroups] = useState<string[]>([]);
   const [measures, setMeasures] = useState([
     { function: "SUM", column: "", alias: "total" },
