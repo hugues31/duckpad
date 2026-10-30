@@ -24,6 +24,7 @@ from .git.identity import SYSTEM_IDENTITY, current_identity
 from .git.remote import Remotes
 from .git.workspace import GitWorkspace, diagnose, require_valid
 from .merge import merge_files
+from .node_code import owned_paths
 from .store import Store
 from .templates import parse_template
 from .types import Files, Record
@@ -236,7 +237,12 @@ class Projects:
         names = list(ROOT_FILES)
         names += [
             p.relative_to(path).as_posix()
-            for folder, pattern in [("templates", "*.sql"), ("components", "*.json")]
+            for folder, pattern in [
+                ("templates", "*.sql"),
+                ("nodes", "*.sql"),
+                ("components", "*.json"),
+                ("components", "*/*.sql"),
+            ]
             for p in sorted((path / folder).glob(pattern))
         ]
         if any(
@@ -259,6 +265,11 @@ class Projects:
             bundle = files_to_bundle(existing)
             head = self.git(path, "rev-parse", "--verify", "HEAD", check=False)
             previous = files_to_bundle(self.revision_files(path, head)) if head else None
+            if previous is not None:
+                for name in owned_paths(previous) - owned_paths(bundle):
+                    if name in existing:
+                        (Path(path) / name).unlink(missing_ok=True)
+                        existing.pop(name)
             before = dumps(bundle["documentation"])
             reconcile_documentation(previous, bundle)
             if before != dumps(bundle["documentation"]):
@@ -395,6 +406,14 @@ class Projects:
             base = self.base(worktree, revision, current)
             if base is None:
                 raise Problem("The editing revision is unavailable. Reload before saving.", 409)
+            proposal = dict(proposal)
+            try:
+                removed = owned_paths(files_to_bundle(base)) - owned_paths(files_to_bundle(proposal))
+                for name in removed:
+                    proposal.pop(name, None)
+            except (Problem, KeyError, TypeError, AttributeError):
+                # Malformed graph edits cannot establish ownership changes.
+                pass
             merged, paths = merge_files(base, current, proposal)
             if paths:
                 conflict = {

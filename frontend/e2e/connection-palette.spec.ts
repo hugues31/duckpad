@@ -191,7 +191,8 @@ test("search and keyboard selection create and persist a node and the exact conn
   const created = after.bundle!.flow.nodes.find(
     (node) => !before.bundle!.flow.nodes.some((old) => node.id === old.id),
   )!;
-  expect(created.template).toBe("join");
+  expect(created.template).toBeUndefined();
+  expect(created.origin).toBe("join");
   expect(created.position.x).toBeCloseTo(position.x, 1);
   expect(created.position.y).toBeCloseTo(position.y, 1);
   expect(after.bundle!.flow.edges).toEqual(

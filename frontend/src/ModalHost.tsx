@@ -1,3 +1,5 @@
+import ConvertNodeDialog from "./ConvertNodeDialog";
+import { nodeCode, nodeCodePath, nodeGraph } from "./nodeCode";
 import { useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { Boxes } from "lucide-react";
@@ -52,6 +54,11 @@ type WorktreeModal = { worktree: string } & (
   | { kind: "conflict"; conflict: string }
   | { kind: "combinedResolution"; conflict: string }
   | { kind: "template"; template: string; create?: boolean }
+  | {
+      kind: "nodeCode" | "convertNode" | "relinkNode";
+      node: string;
+      parent?: string;
+    }
   | { kind: "componentDefinition"; component: string }
   /** Group nodes of the graph at `prefix` into a component. */
   | { kind: "group"; nodes: string[]; parent?: string; prefix: string }
@@ -231,6 +238,38 @@ function WorktreeDialog({
         <ConflictDialog conflict={conflict} onClose={onClose} />
       ) : (
         <CombinedResolutionDialog conflict={conflict} onClose={onClose} />
+      );
+    }
+    case "convertNode":
+    case "relinkNode":
+      return (
+        <ConvertNodeDialog
+          snapshot={snapshot}
+          node={modal.node}
+          parent={modal.parent}
+          relink={modal.kind === "relinkNode"}
+          onClose={onClose}
+        />
+      );
+    case "nodeCode": {
+      const node =
+        snapshot.bundle &&
+        nodeGraph(snapshot.bundle, modal.parent).nodes.find(
+          (n) => n.id === modal.node,
+        );
+      if (!node) return null;
+      return (
+        <RevisionEditor
+          snapshot={snapshot}
+          title={t(node.template ? "viewNodeCode" : "editNodeCode")}
+          readOnly={!canEdit || !!node.template}
+          read={(bundle) => nodeCode(bundle, node, modal.parent)}
+          write={(bundle, text) => {
+            (bundle.node_sql ||= {})[nodeCodePath(node.id, modal.parent)] =
+              text;
+          }}
+          onClose={onClose}
+        />
       );
     }
     case "template":

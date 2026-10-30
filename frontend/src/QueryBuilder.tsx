@@ -18,12 +18,14 @@ const literal = (value: string) => {
 /** Optional form helpers write the same expression parameters as the SQL form. */
 export default function QueryBuilder({
   kind,
+  parameters,
   schemas,
   variables,
   environment,
   onApply,
 }: {
   kind: string;
+  parameters?: string[];
   schemas: Record<string, string[]>;
   /** The variables a filter value can reference; only root flow nodes can. */
   variables?: VariablesSummary | null;
@@ -66,7 +68,16 @@ export default function QueryBuilder({
       </Select>
     </label>
   );
-  if (!["filter", "aggregate", "join"].includes(kind)) return null;
+  const required: Record<string, string[]> = {
+    filter: ["condition"],
+    join: ["condition"],
+    aggregate: ["groups", "measures"],
+  };
+  if (
+    !required[kind] ||
+    (parameters && !required[kind].every((name) => parameters.includes(name)))
+  )
+    return null;
   return (
     <details className="query-builder" open>
       <summary>{t("guidedConfiguration")}</summary>

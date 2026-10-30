@@ -26,6 +26,7 @@ import {
   Sigma,
   FileOutput,
   Code2,
+  Link,
   Boxes,
   Check,
   AlertCircle,
@@ -82,6 +83,7 @@ type PipelineData = {
   /** The template ID, or "component". */
   icon: string;
   subtitle?: string;
+  linked?: string;
 };
 type PipelineNode = Node<PipelineData, "pipeline">;
 
@@ -114,6 +116,15 @@ function PipelineNode({ data, selected }: NodeProps<PipelineNode>) {
         {data.label}
       </div>
       <div className="node-subtitle">{data.subtitle || t(data.kind)}</div>
+      {data.linked && (
+        <div
+          className="node-link-badge"
+          title={`${t("linkedNode")}: ${data.linked}`}
+        >
+          <Link size={11} />
+          {data.linked}
+        </div>
+      )}
       {data.inputs.map((port: string, i: number) => (
         <Handle
           key={"in" + port}
@@ -155,6 +166,7 @@ interface CanvasProps {
   nodes: FlowNode[];
   edges: FlowEdge[];
   parsed: Record<string, ParsedTemplate>;
+  local?: Record<string, ParsedTemplate>;
   components: Record<string, ComponentDefinition>;
   excludedComponents: string[];
   statuses: Statuses;
@@ -250,7 +262,12 @@ function CanvasInner(props: CanvasProps) {
   const displayNodes = useMemo(
     () =>
       props.nodes.map((node) => {
-        const signature = nodeInterface(node, props.parsed, props.components);
+        const signature = nodeInterface(
+          node,
+          props.parsed,
+          props.components,
+          props.local,
+        );
         const { kind, inputs, outputs } = signature;
         const result = props.statuses.nodes?.[props.prefix + node.id];
         const nested = Object.entries(props.statuses.nodes || {})
@@ -298,7 +315,7 @@ function CanvasInner(props: CanvasProps) {
                 ? signature.definition?.name
                 : undefined) ||
               templateLabel(
-                node.template || "sql",
+                node.preset || node.template || node.origin || "sql",
                 signature.kind === "component"
                   ? undefined
                   : signature.definition?.label,
@@ -308,7 +325,16 @@ function CanvasInner(props: CanvasProps) {
             inputs,
             outputs,
             status,
-            icon: node.component ? "component" : node.template || "",
+            icon: node.component
+              ? "component"
+              : node.preset || node.template || node.origin || "",
+            linked: node.template
+              ? templateLabel(
+                  node.template,
+                  props.parsed[node.template]?.label,
+                  t,
+                )
+              : undefined,
             subtitle:
               node.component || outputs.length > 1
                 ? `${outputs.length} ${t("outputs")}`
@@ -321,6 +347,7 @@ function CanvasInner(props: CanvasProps) {
     [
       props.nodes,
       props.parsed,
+      props.local,
       props.components,
       props.statuses,
       props.prefix,

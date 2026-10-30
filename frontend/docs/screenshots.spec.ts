@@ -131,6 +131,11 @@ test("capture parameters, node documentation and nested components", async ({
     .click();
   await expect(inspector.locator(".documentation-editor")).not.toHaveValue("");
   await capture(page, "node-documentation");
+  await node(page, "Customer reach").click();
+  await expect(
+    inspector.getByRole("button", { name: "Edit code", exact: true }),
+  ).toBeVisible();
+  await capture(page, "node-code");
   await node(page, "Regional revenue").dblclick();
   await expect(
     page.getByText(

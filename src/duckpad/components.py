@@ -3,6 +3,7 @@
 import copy
 
 from . import variables
+from .node_code import code_path, node_sql
 from .templates import IDENTIFIER, directives, parse_template
 from .util import Problem, uid
 
@@ -72,9 +73,7 @@ def expand(bundle, tolerant=False):
                     local_ports[node["id"]] = ports
                     boundaries[key] = ports
                 else:
-                    if node.get("template") not in bundle["templates"]:
-                        raise Problem(f"Missing template: {node.get('template')}")
-                    text = bundle["templates"][node["template"]]
+                    text = node_sql(bundle, node, stack[-1] if stack else None)
                     add_leaf(node, key, parse_template(text), text, local_ports)
             except (Problem, KeyError, TypeError) as error:
                 if not tolerant:
@@ -87,7 +86,10 @@ def expand(bundle, tolerant=False):
                     for e in edges
                     if not (e["source"].startswith(key + "::") or e["target"].startswith(key + "::"))
                 ]
-                text = bundle["templates"].get(node.get("template"), "")
+                try:
+                    text = node_sql(bundle, node, stack[-1] if stack else None)
+                except Problem:
+                    text = ""
                 declared = directives(text)
                 inputs = {port for kind, port in declared if kind == "input" and IDENTIFIER.fullmatch(port)}
                 outputs = {port for kind, port in declared if kind == "output" and IDENTIFIER.fullmatch(port)}
@@ -212,13 +214,13 @@ def group(bundle, selection, label, exposed=None, parent=None):
             else:
                 targets.append(target)
         parameter["targets"] = targets
-    instance_params = expose_variables(bundle, internal, definition["parameters"])
+    instance_params = expose_variables(bundle, internal, definition["parameters"], parent)
     # Expose unconnected terminal outputs too, so a grouped result is inspectable.
     for node in internal:
         outputs = (
             bundle["components"][node["component"]].get("outputs", {})
             if node.get("component")
-            else parse_template(bundle["templates"][node["template"]])["outputs"]
+            else parse_template(node_sql(bundle, node, parent))["outputs"]
         )
         for output in outputs:
             key = (node["id"], output)
@@ -227,6 +229,10 @@ def group(bundle, selection, label, exposed=None, parent=None):
             ):
                 port = f"output_{len(definition['outputs']) + 1}"
                 definition["outputs"][port] = {"node": key[0], "port": key[1]}
+    for node in internal:
+        if not node.get("template") and not node.get("component"):
+            code = bundle.setdefault("node_sql", {})
+            code[code_path(node["id"], component_id)] = code.pop(code_path(node["id"], parent))
     bundle["components"][component_id] = definition
     graph["nodes"] = [n for n in graph["nodes"] if n["id"] not in selected] + [
         {
@@ -242,7 +248,7 @@ def group(bundle, selection, label, exposed=None, parent=None):
     return bundle, instance_id
 
 
-def expose_variables(bundle, internal, exposed):
+def expose_variables(bundle, internal, exposed, parent=None):
     """Move variable bindings and references of grouped nodes to exposed parameters of the new instance.
 
     Definitions never reference variables, so each bound parameter, and each expression that
@@ -265,22 +271,20 @@ def expose_variables(bundle, internal, exposed):
                 while key in exposed:
                     key, suffix = f"{param}_{suffix}", suffix + 1
                 exposed[key] = {"targets": [target]}
-                parameter_type = parameter_types(bundle, node).get(param)
+                parameter_type = parameter_types(bundle, node, parent).get(param)
                 if parameter_type:
                     exposed[key]["type"] = parameter_type
             instance_params[key] = node["params"].pop(param)
     return instance_params
 
 
-def parameter_types(bundle, node):
+def parameter_types(bundle, node, parent=None):
     """Parameter name -> declared type of a template node or component instance."""
     if node.get("component"):
         parameters = bundle["components"].get(node["component"], {}).get("parameters", {})
         return {name: p["type"] for name, p in parameters.items() if isinstance(p, dict) and p.get("type")}
     try:
-        return {
-            p["name"]: p["type"] for p in parse_template(bundle["templates"][node["template"]])["parameters"]
-        }
+        return {p["name"]: p["type"] for p in parse_template(node_sql(bundle, node, parent))["parameters"]}
     except (Problem, KeyError):
         return {}
 
@@ -309,8 +313,19 @@ def import_definition(destination, source, kind, identity, origin):
                                 path[len(prefix) :]
                             ] = copy.deepcopy(text)
             for node in value["nodes"]:
-                field = "component" if node.get("component") else "template"
-                node[field] = transfer("components" if field == "component" else "templates", node[field])
+                if not node.get("component") and (
+                    preset := node.get("preset") or node.get("template") or node.get("origin")
+                ):
+                    node["preset"] = preset
+                if not node.get("component") and not node.get("template"):
+                    result.setdefault("node_sql", {})[code_path(node["id"], new_id)] = node_sql(
+                        source, node, key
+                    )
+                    # An imported copy never points at an unrelated template with the same ID.
+                    node.pop("origin", None)
+                else:
+                    field = "component" if node.get("component") else "template"
+                    node[field] = transfer("components" if field == "component" else "templates", node[field])
         result[category][new_id] = value
         return new_id
 

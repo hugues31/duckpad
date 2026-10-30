@@ -194,6 +194,7 @@ class Runner:
                 for ref, c in captured.items()
             },
             "definitions": bundle["templates"],
+            "node_sql": bundle.get("node_sql", {}),
             "components": bundle["components"],
             "flow": bundle["flow"],
             "variable_declarations": bundle.get("variables"),

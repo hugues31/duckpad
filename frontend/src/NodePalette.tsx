@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Boxes, Code2, Plus, Search, X } from "lucide-react";
+import { Boxes, Code2, Link, Plus, Search, X } from "lucide-react";
 import { NodeIcon } from "./Canvas";
 import { DRAG_TYPE, nodeChoices, type NodeKind } from "./graph";
 import { templateLabel, useT } from "./i18n";
@@ -17,6 +17,7 @@ export default function NodePalette({
   onClose,
   onAdd,
   onNewTemplate,
+  onNewNode,
   onLibrary,
 }: {
   readOnly: boolean;
@@ -25,7 +26,8 @@ export default function NodePalette({
   excludedComponents: string[];
   hidden: boolean;
   onClose: () => void;
-  onAdd: (kind: NodeKind, id: string) => void;
+  onAdd: (kind: NodeKind, id: string, linked?: boolean) => void;
+  onNewNode: () => void;
   onNewTemplate: () => void;
   onLibrary: () => void;
 }) {
@@ -83,35 +85,51 @@ export default function NodePalette({
             {items
               .filter((item) => item.category === category)
               .map((item) => (
-                <button
-                  className="palette-item"
-                  key={item.id}
-                  draggable={!readOnly}
-                  disabled={readOnly}
-                  onDragStart={(e) => {
-                    e.dataTransfer.setData(
-                      DRAG_TYPE,
-                      JSON.stringify({ kind: item.kind, id: item.id }),
-                    );
-                    e.dataTransfer.effectAllowed = "move";
-                  }}
-                  onClick={() => onAdd(item.kind, item.id)}
-                  title={item.description}
-                >
-                  <span className={`palette-icon ${item.category}`}>
-                    <NodeIcon
-                      kind={item.kind === "component" ? "component" : item.id}
-                      size={17}
-                    />
-                  </span>
-                  <span>{item.label}</span>
-                  <Plus size={12} className="palette-plus" />
-                </button>
+                <div className="palette-entry" key={item.id}>
+                  <button
+                    className="palette-item"
+                    draggable={!readOnly}
+                    disabled={readOnly}
+                    onDragStart={(e) => {
+                      e.dataTransfer.setData(
+                        DRAG_TYPE,
+                        JSON.stringify({ kind: item.kind, id: item.id }),
+                      );
+                      e.dataTransfer.effectAllowed = "move";
+                    }}
+                    onClick={() => onAdd(item.kind, item.id)}
+                    title={item.description}
+                  >
+                    <span className={`palette-icon ${item.category}`}>
+                      <NodeIcon
+                        kind={item.kind === "component" ? "component" : item.id}
+                        size={17}
+                      />
+                    </span>
+                    <span>{item.label}</span>
+                    <Plus size={12} className="palette-plus" />
+                  </button>
+                  {item.kind === "template" && (
+                    <button
+                      className="icon palette-link"
+                      disabled={readOnly}
+                      title={t("addLinked")}
+                      aria-label={`${t("addLinked")}: ${item.label}`}
+                      onClick={() => onAdd(item.kind, item.id, true)}
+                    >
+                      <Link size={14} />
+                    </button>
+                  )}
+                </div>
               ))}
           </section>
         ))}
       </div>
       <fieldset className="palette-bottom" disabled={readOnly}>
+        <button className="text-button" onClick={onNewNode}>
+          <Code2 size={14} />
+          {t("newSqlNode")}
+        </button>
         <button className="text-button" onClick={onNewTemplate}>
           <Code2 size={14} />
           {t("newTemplate")}

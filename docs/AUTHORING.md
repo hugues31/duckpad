@@ -2,7 +2,7 @@
 
 The **Code** tab, between **Flow** and **Documentation**, displays the worktree's declarative files in a folder tree beside the Monaco editor. Select a file to edit its SQL, JSON, Markdown or TOML, then choose **Save changes**. Drafts are retained when switching files or workspace tabs. Editing files in an external editor is also supported. Every completed save is versioned, including invalid content. Corrections create later commits. Inspect errors and fix the current files; Duckpad never runs an earlier valid graph silently.
 
-Choose **Download project ZIP** in the Code tab to export the selected branch's saved `README.md`, `pyproject.toml`, `flow.json`, `documentation.json`, `variables.json`, SQL templates and component definitions, preserving their relative paths. Save or discard pending edits before downloading. The archive excludes Git history, datasets, execution results, virtual environments and instance connection settings. Project readers can browse and download these files; editing requires an editor or administrator role.
+Choose **Download project ZIP** in the Code tab to export the selected branch's saved `README.md`, `pyproject.toml`, `flow.json`, `documentation.json`, `variables.json`, node SQL, SQL templates and component definitions, preserving their relative paths. Save or discard pending edits before downloading. The archive excludes Git history, datasets, execution results, virtual environments and instance connection settings. Project readers can browse and download these files; editing requires an editor or administrator role.
 
 To recreate a project from such an archive, choose **New project**, then **Import a project ZIP**, and select the file. Leave the name empty to keep the name stored in `flow.json`. Archives whose files sit in a single top-level folder, such as a repository download from a Git host, are accepted. Only the declarative files above are read; Git metadata, data and other entries are ignored. The imported project starts its own Git history, makes you its administrator and can use only the **Local files** connection until an instance administrator grants others. Because the archive contains no connection settings or data, Duckpad then lists the connections the pipeline references that are unavailable to the new project, and the nodes that read uploaded files or other absolute paths, including Windows and network paths. Grant or create those connections, and upload the files again. Archives over 16 MiB (64 MiB once extracted), without `flow.json`, or with invalid JSON or non-UTF-8 files are rejected without creating a project.
 
@@ -18,8 +18,10 @@ pyproject.toml         Python version and project dependencies
 flow.json              Pipeline graph
 documentation.json     Node, output and column documentation
 variables.json         Project variables (optional)
-templates/*.sql        SQL definitions
+templates/*.sql        Shared SQL templates
+nodes/*.sql            Code owned by normal nodes
 components/*.json      Reusable sub-flows
+components/<id>/*.sql   Code owned by nodes inside a component
 ```
 
 The **Documentation** tab edits the same `README.md` shown in **Code**. Project
@@ -48,6 +50,18 @@ environment or run Python scripts. The CLI does not yet open an extracted ZIP
 as a project automatically; import the ZIP from the interface instead.
 Connections, credentials and input data must also be configured separately on
 another instance.
+
+## Editing node code
+
+The palette and **Add a connected node** create normal nodes by copying the selected entry's SQL. **Duplicate node** also creates independent code. Choose **New SQL node** for a minimal `source` input and `result` output without naming a template. **Edit code** in the inspector changes only that node. Its `-- @param` declarations generate the parameter form; guided forms remain available while their supporting parameters are present.
+
+Use **Add linked** next to a palette entry to share a template deliberately. A linked node shows a link badge and template name. **View code** is read-only; **Edit template (N nodes)** edits the shared definition and displays the number of placed nodes affected. **Detach from template** copies the current SQL while keeping parameters and connections.
+
+For a normal node, **Convert to template** asks for a name and links the node to the new shared definition. If its origin still exists, **Link to original template** asks before discarding local code. Detaching and converting preserve valid results. Relinking to changed executable code makes results stale; incompatible definitions must be corrected before execution. There are no partial overrides on linked code.
+
+The **Code** tab exposes the same files, and **Compare versions** shows their changes. SQL files are versioned, merged and checked for conflicts, and included in project ZIPs. Deleting a node deletes its file. Northstar's Customer reach node owns its code, while Paid orders uses a linked template; Rank regions owns code inside the Regional report component.
+
+![A normal node owns its code and offers explicit template conversions](images/node-code.png)
 
 ## SQL template contract
 
@@ -93,11 +107,11 @@ Compilation is available without executing the flow. The SQL inspector distingui
 
 ## Graph and components
 
-`flow.json` holds `nodes` and `edges`. Nodes reference local `template` or `component` IDs and own their parameters and position. Edges use stable `source`, `sourceHandle`, `target` and `targetHandle` IDs. Selecting an input in the inspector edits the same edge as dragging a port connection. An input has at most one source; an output can feed many inputs.
+`flow.json` holds `nodes` and `edges`. Normal nodes own `nodes/<node-id>.sql` and have no `template` field. Linked nodes reference a local `template`; component instances reference a local `component`. All own their parameters and position. An optional `origin` records where normal code came from without linking it. An optional `preset` retains the palette icon and guided form after conversions or imports; it never selects executable code. Edges use stable `source`, `sourceHandle`, `target` and `targetHandle` IDs. Selecting an input in the inspector edits the same edge as dragging a port connection. An input has at most one source; an output can feed many inputs.
 
 Drag an input or output connection onto empty canvas space to open **Add a connected node**. Search the local templates and components, then choose a port to create the node at the drop position and connect it in one save. The list only offers nodes with ports in the required direction. Use the arrow keys and Enter, or click a result; Escape or a click outside cancels without changing the graph. Starting from an occupied input replaces its previous connection when the new node is added.
 
-Select nodes using Shift, then choose **Group into component**. Incoming and outgoing edges are preserved as named boundary ports; terminal outputs remain inspectable. Double-click the resulting node to open the sub-flow. Breadcrumbs identify the instance path. Definition edits affect every usage in this project branch, while parameters belong to the selected instance.
+Select nodes using Shift, then choose **Group into component**. Node-owned code moves to `components/<component-id>/<node-id>.sql`. Incoming and outgoing edges are preserved as named boundary ports; terminal outputs remain inspectable. Double-click the resulting node to open the sub-flow. Breadcrumbs identify the instance path. Definition edits affect every usage in this project branch, while parameters belong to the selected instance.
 
 ![The nested Regional summary component, its breadcrumb path and metrics output](images/component.png)
 
@@ -113,7 +127,7 @@ Exposed component parameters have the following structure:
 }
 ```
 
-The shared library reads projects' main branches. Importing creates new destination-owned IDs for the component, nested components and templates. Definitions and documentation are copied; data, results and secrets are not. Imports never resolve executable code through the original project. Subsequent edits are independent.
+The shared library reads projects' main branches. Importing creates new destination-owned IDs for the component, nested components and templates. Node-owned SQL, definitions and documentation are copied; data, results and secrets are not. Imports never resolve executable code through the original project. Subsequent edits are independent.
 
 ## Project variables
 
@@ -347,6 +361,6 @@ The reusable parameter types are `column_selection(input_port)` and
 `value_cleaning(input_port)`. Selection rows contain `source` and optional
 `name` / `type`. Cleaning rows contain `source` and optional `trim`,
 `date_format`, and `replacement`; omitting a setting disables that operation.
-The **SQL** tab shows the generated query. **Edit template** remains available
+The **SQL** tab shows the generated query. **Edit code** (or **Edit template** for a linked node) remains available
 for custom SQL, including replacing a structured parameter with `expressions`
 when a free-form projection is needed.

@@ -6,6 +6,8 @@ import shutil
 import duckdb
 
 from .builtin_templates import BUILTINS
+from .node_code import code_path
+from .types import Record
 from .util import literal, uid
 
 
@@ -274,7 +276,7 @@ EXCEPT SELECT customer_id FROM {{ source }} WHERE amount > 400;
             },
         },
     }
-    bundle = {
+    bundle: Record = {
         "flow": {
             "name": name or "Northstar analytics",
             "description": "From raw orders to explainable revenue",
@@ -285,6 +287,16 @@ EXCEPT SELECT customer_id FROM {{ source }} WHERE amount > 400;
         "components": {"regional_summary": metrics, "regional_report": report},
         "documentation": documentation,
     }
+
+    # Demonstrate both local SQL and linked definitions, including code inside a component.
+    graphs: list[tuple[Record, str | None, str]] = [
+        (bundle["flow"], None, "reach"),
+        (bundle["components"]["regional_report"], "regional_report", "rank"),
+    ]
+    for graph, parent, identity in graphs:
+        owned = next(node for node in graph["nodes"] if node["id"] == identity)
+        owned["origin"] = owned.pop("template")
+        bundle.setdefault("node_sql", {})[code_path(identity, parent)] = templates[owned["origin"]]
 
     def register(worktree):
         projects.store.put("connection", connection_id, connection)
