@@ -8,9 +8,9 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from duckpad import git_command
 from duckpad.app import create_app
-from duckpad.git_command import GitError, GitTimeout
+from duckpad.git import command
+from duckpad.git.command import GitError, GitTimeout
 
 
 @pytest.fixture
@@ -72,7 +72,7 @@ def test_invalid_branch_names_are_explained_wherever_they_are_entered(app, clien
         response = client.request(method, f"/api/worktrees/{worktree['id']}/{path}", json=body)
         assert response.status_code == 422, (path, response.text)
         assert response.json()["detail"]["code"] == "invalid_branch_name"
-        assert response.json()["error"] == git_command.INVALID_BRANCH_NAME
+        assert response.json()["error"] == command.INVALID_BRANCH_NAME
     status = client.get(f"/api/worktrees/{worktree['id']}/git/remote").json()
     assert status["url"] is None and status["config_revision"] == remote["config_revision"]
 
@@ -96,10 +96,10 @@ def test_git_failures_keep_server_paths_in_the_logs(app, client, worktree, caplo
     # A Git client that crashed leaves its index lock behind.
     lock = Path(worktree["path"], ".git", "index.lock")
     lock.touch()
-    with caplog.at_level(logging.WARNING, logger="duckpad.git_command"):
+    with caplog.at_level(logging.WARNING, logger="duckpad.git.command"):
         response = save(client, worktree, "Locked")
     assert response.status_code == 409, response.text
-    assert response.json()["error"] == git_command.FAILURE
+    assert response.json()["error"] == command.FAILURE
     assert home not in response.text and "index.lock" not in response.text
     assert str(lock) in caplog.text and "File exists" in caplog.text
 
@@ -142,7 +142,7 @@ def test_git_ignores_hooks_and_server_git_settings(app, worktree, tmp_path, monk
     projects.git(worktree["path"], "commit", "--allow-empty", "-m", "chore: hook-free commit")
     assert projects.git(worktree["path"], "rev-parse", "HEAD^") == before
     assert not (tmp_path / "elsewhere.index").exists()
-    env = git_command.environment({"name": "Ada", "email": "ada@example.com"})
+    env = command.environment({"name": "Ada", "email": "ada@example.com"})
     assert "GIT_DIR" not in env and "GIT_INDEX_FILE" not in env
     assert env["GIT_CONFIG_GLOBAL"] == os.devnull and env["GIT_CONFIG_NOSYSTEM"] == "1"
     assert env["GIT_AUTHOR_EMAIL"] == env["GIT_COMMITTER_EMAIL"] == "ada@example.com"

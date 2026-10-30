@@ -6,7 +6,7 @@ import re
 import secrets
 import time
 
-from .identity import account_identity
+from .git.identity import account_identity
 from .util import Problem, uid
 
 SESSION_LIFETIME = 7 * 24 * 3600

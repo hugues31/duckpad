@@ -16,7 +16,7 @@ from joserfc.jwk import KeySet
 from pydantic import BaseModel, ConfigDict, Field, SecretStr
 
 from .auth import SESSION_LIFETIME, session_key
-from .identity import oidc_identity
+from .git.identity import oidc_identity
 from .util import Problem, uid
 
 CALLBACK_PATH = "/api/oidc/callback"
