@@ -118,12 +118,48 @@ The shared library reads projects' main branches. Importing creates new destinat
 ## Project variables
 
 A project variable is a named, typed and documented value declared once and
-bound to node parameters, with an optional value per environment. Declare
-variables in `variables.json` at the project root, next to `flow.json`. Until
-the **Variables** tab described in the [design proposal](../docs/design/PROJECT_VARIABLES.md)
-is available, create the file with an external editor, a project ZIP or the API;
-**Code** then lists and edits it. Saves follow the usual batching, validation
-and conflict rules.
+bound to node parameters, with an optional value per environment. Variables are
+declared in `variables.json` at the project root, next to `flow.json`, and change
+through the usual save and commit cycle. The [design proposal](../docs/design/PROJECT_VARIABLES.md)
+explains the choices behind them.
+
+![The Variables tab lists each value per environment; the editor names the nodes that a change makes stale](images/variables.png)
+
+The **Variables** tab, between **Documentation** and **History**, lists each
+variable with its type, default, value in every environment and the number of
+nodes using it. The selected environment's column is highlighted, and *default*
+marks an environment that inherits the default. Select a variable to edit its
+type, description, default and environment values: turn off **Default** for an
+environment to give it its own value. Before you save, a note names the nodes
+that the change makes stale and in which environments; nothing runs
+automatically. **Used by** lists the bound parameters and opens each node in the
+flow. **Rename…** changes the declaration and every reference in one commit, and
+**Delete** stays disabled while a parameter uses the variable. Readers can browse
+the tab; editors and project administrators change it.
+
+![The variable button of the status parameter lists compatible variables and creates one from the current value](images/variable-binding.png)
+
+In the inspector, each root flow parameter that a variable can feed has a
+variable button next to its name. It lists the compatible variables with their
+values, says which ones are incompatible, and offers **Create a variable from
+"…"…**. That action declares a variable holding the current value and binds the
+parameter in one save, so results stay valid. A bound parameter shows the
+variable and its value in the selected environment; the cross restores a fixed
+value initialized with that value. Parameters of an opened component definition
+have no variable button: expose them, then bind the instance.
+
+When a variable change makes a result stale, the data preview names the
+variable, the environment, and its previous and current values. The **SQL** tab
+lists each bound variable with its value. An environment that requires
+confirmation lists the variables of the requested scope, with their values and
+whether each comes from the default or the environment. The run details in
+**History** keep the same list.
+
+![Production run confirmation listing the variables of the run and their sources](images/run-variables.png)
+
+**Code** shows `variables.json` and can create it. You can also edit the file in
+an external editor, a project ZIP or through the API. Saves follow the usual
+batching, validation and conflict rules.
 
 ```json
 {
@@ -178,8 +214,10 @@ Problems never block more than the nodes concerned:
 | No value in the selected environment | The nodes using it are blocked in that environment only |
 | Value for an environment this instance lacks, name suggesting a credential | Warning only |
 
-An unused variable never blocks anything. Values reach DuckDB as bound
-parameters, quoted identifiers or escaped paths, never as SQL text.
+The **Variables** tab shows these diagnostics on the file or the variable
+concerned, and the inspector shows them on the bound parameter. An unused
+variable never blocks anything. Values reach DuckDB as bound parameters, quoted
+identifiers or escaped paths, never as SQL text.
 
 A launch resolves the variables of its scope from the committed files and the
 selected environment. The run record lists each variable used with its type,
@@ -191,10 +229,11 @@ unrelated nodes stay valid. Renaming a variable, editing its description, or
 replacing a literal with a variable that holds the same value leaves results
 valid.
 
-**Compare versions** lists changed variables, and their potential impact
-reaches the nodes bound to them. Three-way merges work per variable and per
-field: a `prod` value changed on one side and a description on the other merge
-cleanly, while two different `prod` values are a conflict. Two branches that
+**Compare versions** lists changed variables with the nodes using them, and their
+potential impact reaches the nodes bound to them. Three-way merges work per
+variable and per field: a `prod` value changed on one side and a description on
+the other merge cleanly, while two different `prod` values are a conflict that
+the merge review names after the variable and its field. Two branches that
 both create `variables.json` also merge variable by variable. Variables are not
 secrets. Their values are stored in Git, shown in SQL and history, and exported
 in ZIP archives; keep credentials in connections.

@@ -475,10 +475,14 @@ def test_changing_a_production_value_invalidates_only_production_results_that_us
     assert set(statuses(engine, worktree, "dev").values()) == {"valid"}
 
 
-def test_renames_descriptions_and_promoted_literals_keep_results_valid(services):
+@pytest.mark.parametrize("use_default", [False, True])
+def test_renames_descriptions_and_promoted_literals_keep_results_valid(services, use_default):
     store, projects, _, engine = services
     bundle = project_bundle()
-    node(bundle, "paid")["params"]["status"] = "paid"
+    if use_default:
+        del node(bundle, "paid")["params"]["status"]
+    else:
+        node(bundle, "paid")["params"]["status"] = "paid"
     del bundle["variables"]["order_status"]
     worktree = projects.create("Variables", bundle)["id"]
     for environment in ("dev", "prod"):

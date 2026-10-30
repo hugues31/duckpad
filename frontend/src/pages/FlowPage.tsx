@@ -33,6 +33,7 @@ import {
   PanelResizeHandles,
   usePanelSizes,
 } from "../WorkspacePanels";
+import { declarations } from "../variables";
 import { useLoadedWorktree } from "../worktree";
 import { InvalidProject } from "./PageStates";
 
@@ -398,6 +399,8 @@ export default function FlowPage() {
           <Preview
             readOnly={!canEdit}
             key={[worktree, fullNode, environment, ...ports].join(":")}
+            snapshot={snapshot}
+            environment={environment}
             preview={preview}
             ports={ports}
             active={!!statuses.active}
@@ -435,7 +438,7 @@ export default function FlowPage() {
             connections={connections}
             statuses={statuses}
             preview={preview.data}
-            onSave={(updated, base) =>
+            onSave={(updated, base, variables) =>
               fromInspector(
                 inspected,
                 save(base, (value) => {
@@ -443,6 +446,11 @@ export default function FlowPage() {
                   target.nodes = target.nodes.map((n) =>
                     n.id === updated.id ? updated : n,
                   );
+                  if (!Object.keys(variables).length) return;
+                  // A malformed file is never overwritten with new declarations.
+                  const current = declarations(value);
+                  if (!current) throw new Error(t("invalidVariablesFile"));
+                  value.variables = { ...current, ...variables };
                 }),
               )
             }

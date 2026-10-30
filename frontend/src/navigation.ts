@@ -4,6 +4,7 @@ export const workspaceTabs = [
   "flow",
   "code",
   "documentation",
+  "variables",
   "history",
 ] as const;
 export type WorkspaceTab = (typeof workspaceTabs)[number];
@@ -43,9 +44,14 @@ export function worktreeUrl(
   id: string,
   tab: WorkspaceTab = "flow",
   environment?: string,
+  /** Extra query parameters, such as the node to reveal in the flow. */
+  search: Record<string, string> = {},
 ) {
-  const query = environment ? `?${new URLSearchParams({ environment })}` : "";
-  return `/worktrees/${encodeURIComponent(id)}/${tab}${query}`;
+  const query = new URLSearchParams({
+    ...(environment ? { environment } : {}),
+    ...search,
+  }).toString();
+  return `/worktrees/${encodeURIComponent(id)}/${tab}${query ? `?${query}` : ""}`;
 }
 
 export const projectSettingsUrl = (project: string) =>

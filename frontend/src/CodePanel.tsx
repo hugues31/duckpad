@@ -1,11 +1,12 @@
 import { lazy, Suspense, useState } from "react";
-import { Download, FileCode2, Loader2, Save } from "lucide-react";
+import { Download, FileCode2, Loader2, Plus, Save } from "lucide-react";
 import { downloadProject } from "./api";
 import { useT } from "./i18n";
 import ProjectFileTree from "./ProjectFileTree";
 import { projectFileLanguage } from "./projectFiles";
 import { useRevisionDraft } from "./useRevisionDraft";
 import type { Snapshot } from "./types";
+import { VARIABLES_FILE } from "./variables";
 
 const CodeEditor = lazy(() => import("./Editor"));
 type Files = Record<string, string>;
@@ -129,6 +130,20 @@ export default function CodePanel({
             selected={path}
             onSelect={setSelected}
           />
+          {!readOnly && !(VARIABLES_FILE in files) && (
+            <button
+              className="button secondary small"
+              disabled={pending}
+              title={t("createVariablesFileHint")}
+              onClick={() => {
+                update((current) => ({ ...current, [VARIABLES_FILE]: "{}\n" }));
+                setSelected(VARIABLES_FILE);
+              }}
+            >
+              <Plus size={13} />
+              {t("createVariablesFile")}
+            </button>
+          )}
         </aside>
         <div className="code-editor-column">
           {path ? (

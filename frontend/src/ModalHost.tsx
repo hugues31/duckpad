@@ -19,6 +19,8 @@ import type {
 } from "./types";
 import { useApiResource } from "./useApiResource";
 import { useAsyncAction } from "./useAsyncAction";
+import { ScopeVariables } from "./VariableFields";
+import { conflictLabel } from "./variables";
 import { useWorktree } from "./worktree";
 
 const NEW_TEMPLATE = `-- @label Custom transform
@@ -212,6 +214,11 @@ function WorktreeDialog({
             {snapshot.bundle?.flow.name || ""} · {snapshot.worktree.branch} ·{" "}
             {modal.node || t("run")}
           </p>
+          <ScopeVariables
+            worktree={modal.worktree}
+            environment={modal.environment.id}
+            node={modal.node}
+          />
         </ConfirmModal>
       );
     case "conflict":
@@ -355,7 +362,11 @@ function ConflictDialog({
     <Modal title={t("conflict")} onClose={onClose} wide>
       <div className="modal-content">
         <p>{t("conflictHint")}</p>
-        <pre className="expression">{conflict.paths.join("\n")}</pre>
+        <pre className="expression">
+          {conflict.paths
+            .map((path: string) => conflictLabel(path, t) || path)
+            .join("\n")}
+        </pre>
         <div className="conflict-comparison">
           <div>
             <h4>{t("keepCurrent")}</h4>

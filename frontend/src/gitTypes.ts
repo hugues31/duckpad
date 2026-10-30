@@ -1,4 +1,4 @@
-import type { Diagnostic, FlowEdge, Json } from "./types";
+import type { Diagnostic, FlowEdge, Json, VariableUsage } from "./types";
 
 export type ChangeStatus = "added" | "removed" | "modified" | "unchanged";
 export type ChangeCategory = "processing" | "documentation" | "layout";
@@ -35,7 +35,8 @@ export type EntityChange =
   | NodeChange
   | EdgeChange
   | Change<"template", string>
-  | Change<"flow" | "component" | "variable" | "documentation" | "file", Json>;
+  | (Change<"variable", Json> & { usages?: VariableUsage[] })
+  | Change<"flow" | "component" | "documentation" | "file", Json>;
 
 /** The leaf node and port behind each port of a component instance. */
 interface Boundary {
