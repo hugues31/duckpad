@@ -75,9 +75,13 @@ lists a breaking change in the same release. Breaking headers without a footer a
 listed without repeating their summary as a migration note. All other Conventional
 Commit types are retained. Both stable releases and release candidates describe
 changes since the previous stable tag, so promoting a candidate does not lose its
-feature notes. The first release includes the full history.
+feature notes. The previous stable tag is the highest stable version below the
+released one among the tag's ancestors. Versions are compared numerically, so
+`v0.10.0` follows `v0.9.0`, however Git stores the tags. The first release includes
+the full history.
 
-Preview notes for work not yet tagged, without publishing:
+Preview notes for work not yet tagged, without publishing. The preview starts from
+the most recent stable tag reachable from `HEAD`, by commit date:
 
 ```sh
 uv sync --locked
