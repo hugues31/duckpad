@@ -22,7 +22,7 @@ import {
 import { Modal } from "./modals";
 import { AlertCircle, Loader2 } from "lucide-react";
 import { api, ApiError, importProjectArchive, send, withQuery } from "./api";
-import { ProjectSettings } from "./Administration";
+import ProjectSettings from "./ProjectSettings";
 import Canvas from "./Canvas";
 import CanvasHeader from "./CanvasHeader";
 import CodePanel from "./CodePanel";
@@ -338,9 +338,10 @@ function WorkspaceApp({
   const blocker = useBlocker(({ currentLocation, nextLocation }) => {
     // Router history can advance before an unmounted editor's cleanup runs.
     // Only drafts belonging to the page being left may block a transition.
-    if (!authenticated || !isWorktreePage(currentLocation.pathname, worktree))
-      return false;
+    if (!authenticated) return false;
     const leavesPage = currentLocation.pathname !== nextLocation.pathname;
+    if (!isWorktreePage(currentLocation.pathname, worktree))
+      return area === "projectSettings" && leavesPage && drafts.dirty("page");
     const leavesWorktree = !isWorktreePage(nextLocation.pathname, worktree);
     return (
       (drafts.dirty("worktree") && leavesWorktree) ||

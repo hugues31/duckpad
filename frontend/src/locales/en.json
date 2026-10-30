@@ -169,8 +169,6 @@
   "light": "Light",
   "dark": "Dark",
   "language": "Language",
-  "english": "English",
-  "french": "French",
   "localPreferences": "Theme and language are saved in this browser and shared by accounts using it.",
   "gitHistory": "Git history",
   "runHistory": "Execution history",

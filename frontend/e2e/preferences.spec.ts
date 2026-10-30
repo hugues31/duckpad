@@ -33,7 +33,7 @@ for (const scenario of [
       await page.locator(".account .avatar").click();
       await expect(
         page.getByRole("menuitemradio", {
-          name: labels[scenario.language === "fr" ? "french" : "english"],
+          name: scenario.language === "fr" ? "Français" : "English",
           exact: true,
         }),
       ).toHaveAttribute("aria-checked", "true");
@@ -113,5 +113,58 @@ test.describe("manual preferences", () => {
     await submitLogin(page, en);
     await expect(page.locator("html")).toHaveAttribute("lang", "en");
     await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+  });
+});
+
+test.describe("preference controls", () => {
+  test.use({ locale: "en-US", colorScheme: "light" });
+
+  test("the account menu, user settings and login page offer every translated language", async ({
+    page,
+  }) => {
+    await page.goto("/");
+    await page.getByTitle(en.language, { exact: true }).click();
+    await expect(page.locator("html")).toHaveAttribute("lang", "fr");
+    await page.getByTitle(fr.language, { exact: true }).click();
+    await expect(page.locator("html")).toHaveAttribute("lang", "en");
+    await submitLogin(page, en);
+
+    await page
+      .getByRole("button", { name: en.accountMenu, exact: true })
+      .click();
+    const menu = page.getByRole("menu");
+    const options = (labels: typeof en, group: "language" | "theme") =>
+      menu
+        .getByRole("group", { name: labels[group], exact: true })
+        .getByRole("menuitemradio");
+    await expect(options(en, "language")).toHaveText(["English", "French"]);
+    await expect(options(en, "theme")).toHaveText([en.light, en.dark]);
+    await menu
+      .getByRole("menuitemradio", { name: "French", exact: true })
+      .click();
+    await page
+      .getByRole("button", { name: fr.accountMenu, exact: true })
+      .click();
+    await expect(options(fr, "language")).toHaveText(["Anglais", "Français"]);
+    await expect(options(fr, "theme")).toHaveText([fr.light, fr.dark]);
+    await menu
+      .getByRole("menuitem", { name: fr.userSettings, exact: true })
+      .click();
+
+    const language = page.getByLabel(fr.language, { exact: true });
+    const theme = page.getByLabel(fr.theme, { exact: true });
+    await expect(language.locator("option")).toHaveText([
+      "Anglais",
+      "Français",
+    ]);
+    await expect(language).toHaveValue("fr");
+    await expect(theme.locator("option")).toHaveText([fr.light, fr.dark]);
+    await theme.selectOption("dark");
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+    await language.selectOption("en");
+    await expect(page.locator("html")).toHaveAttribute("lang", "en");
+    await expect(
+      page.getByLabel(en.language, { exact: true }).locator("option"),
+    ).toHaveText(["English", "French"]);
   });
 });
