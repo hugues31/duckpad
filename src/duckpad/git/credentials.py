@@ -15,7 +15,7 @@ from urllib.parse import urlsplit
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ed25519
 
-from .util import Problem, now, uid
+from ..util import Problem, now, uid
 
 KEY_KIND = "ssh_key"
 CONSENT_KIND = "git_consent"

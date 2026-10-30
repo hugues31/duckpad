@@ -6,12 +6,12 @@ from collections import OrderedDict
 from contextlib import suppress
 from pathlib import Path
 
-from . import git_command
-from .bundle import files_to_bundle, is_declarative, validate
-from .comparison import compare_files
-from .git_command import GitError
-from .merge import merge_files
-from .util import Problem, digest, now, uid
+from ..bundle import files_to_bundle, is_declarative, validate
+from ..comparison import compare_files
+from ..merge import merge_files
+from ..util import Problem, digest, now, uid
+from . import command
+from .command import GitError
 
 MAX_REPORTS = 128
 MAX_HISTORY = 10000
@@ -206,7 +206,7 @@ class GitWorkspace:
 
     def open_branch(self, worktree_id, name):
         with self.projects.locked(worktree_id) as worktree:
-            git_command.check_branch_name(worktree["path"], name)
+            command.check_branch_name(worktree["path"], name)
             tree = self.store.find_worktree(worktree["project"], name)
             if tree:
                 return tree
@@ -411,9 +411,7 @@ class GitWorkspace:
     def install(self, target, review, commit):
         """Hold both Git ref locks across checkout, so another Git client cannot advance either head."""
         path = target["path"]
-        with git_command.session(
-            path, "update-ref", "--stdin", identity=self.projects.identity()
-        ) as transaction:
+        with command.session(path, "update-ref", "--stdin", identity=self.projects.identity()) as transaction:
             installed = False
 
             def request(commands, acknowledgement):

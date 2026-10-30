@@ -1,11 +1,17 @@
 import { test, expect } from "@playwright/test";
 import en from "../src/locales/en.json" with { type: "json" };
 import fr from "../src/locales/fr.json" with { type: "json" };
+import pt from "../src/locales/pt.json" with { type: "json" };
 import { submitLogin } from "./helpers";
+
+const catalogs = { en, fr, pt };
+/** Each language's name in its own catalog, as the account menu lists it. */
+const nativeNames = { en: "English", fr: "Français", pt: "Português" };
 
 for (const scenario of [
   { locale: "fr-CA", colorScheme: "dark", language: "fr", theme: "dark" },
   { locale: "en-GB", colorScheme: "light", language: "en", theme: "light" },
+  { locale: "pt-BR", colorScheme: "dark", language: "pt", theme: "dark" },
   {
     locale: "de-DE",
     colorScheme: "no-preference",
@@ -19,7 +25,7 @@ for (const scenario of [
     test("login and workspace use browser defaults without saving an override", async ({
       page,
     }) => {
-      const labels = scenario.language === "fr" ? fr : en;
+      const labels = catalogs[scenario.language];
       await page.goto("/");
       await expect(page.locator("html")).toHaveAttribute(
         "lang",
@@ -33,7 +39,7 @@ for (const scenario of [
       await page.locator(".account .avatar").click();
       await expect(
         page.getByRole("menuitemradio", {
-          name: scenario.language === "fr" ? "Français" : "English",
+          name: nativeNames[scenario.language],
           exact: true,
         }),
       ).toHaveAttribute("aria-checked", "true");
@@ -64,8 +70,9 @@ for (const scenario of [
 for (const scenario of [
   { languages: ["de-DE", "fr-CA", "en-US"], expected: "fr" },
   { languages: ["en-GB", "fr-FR"], expected: "en" },
+  { languages: ["de-DE", "pt-PT", "fr-FR"], expected: "pt" },
   { languages: [], expected: "fr" },
-]) {
+] as const) {
   test(`uses ordered browser languages ${JSON.stringify(scenario.languages)} and ignores invalid saved values`, async ({
     page,
   }) => {
@@ -82,7 +89,7 @@ for (const scenario of [
       scenario.expected,
     );
     await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
-    const labels = scenario.expected === "fr" ? fr : en;
+    const labels = catalogs[scenario.expected];
     await expect(
       page.getByRole("button", { name: labels.signInAction, exact: true }),
     ).toBeVisible();
@@ -97,6 +104,7 @@ test.describe("manual preferences", () => {
   }) => {
     await page.goto("/");
     await page.getByTitle(fr.language, { exact: true }).click();
+    await page.getByTitle(pt.language, { exact: true }).click();
     await page.getByTitle(en.light, { exact: true }).click();
     await page.reload();
     await expect(page.locator("html")).toHaveAttribute("lang", "en");
@@ -126,6 +134,11 @@ test.describe("preference controls", () => {
     await page.getByTitle(en.language, { exact: true }).click();
     await expect(page.locator("html")).toHaveAttribute("lang", "fr");
     await page.getByTitle(fr.language, { exact: true }).click();
+    await expect(page.locator("html")).toHaveAttribute("lang", "pt");
+    await expect(
+      page.getByRole("button", { name: pt.signInAction, exact: true }),
+    ).toBeVisible();
+    await page.getByTitle(pt.language, { exact: true }).click();
     await expect(page.locator("html")).toHaveAttribute("lang", "en");
     await submitLogin(page, en);
 
@@ -137,7 +150,11 @@ test.describe("preference controls", () => {
       menu
         .getByRole("group", { name: labels[group], exact: true })
         .getByRole("menuitemradio");
-    await expect(options(en, "language")).toHaveText(["English", "French"]);
+    await expect(options(en, "language")).toHaveText([
+      "English",
+      "French",
+      "Portuguese",
+    ]);
     await expect(options(en, "theme")).toHaveText([en.light, en.dark]);
     await menu
       .getByRole("menuitemradio", { name: "French", exact: true })
@@ -145,7 +162,11 @@ test.describe("preference controls", () => {
     await page
       .getByRole("button", { name: fr.accountMenu, exact: true })
       .click();
-    await expect(options(fr, "language")).toHaveText(["Anglais", "Français"]);
+    await expect(options(fr, "language")).toHaveText([
+      "Anglais",
+      "Français",
+      "Portugais",
+    ]);
     await expect(options(fr, "theme")).toHaveText([fr.light, fr.dark]);
     await menu
       .getByRole("menuitem", { name: fr.userSettings, exact: true })
@@ -156,15 +177,24 @@ test.describe("preference controls", () => {
     await expect(language.locator("option")).toHaveText([
       "Anglais",
       "Français",
+      "Portugais",
     ]);
     await expect(language).toHaveValue("fr");
     await expect(theme.locator("option")).toHaveText([fr.light, fr.dark]);
     await theme.selectOption("dark");
     await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
-    await language.selectOption("en");
+    await language.selectOption("pt");
+    await expect(page.locator("html")).toHaveAttribute("lang", "pt");
+    await expect(
+      page.getByRole("heading", { name: pt.userSettings, exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByLabel(pt.language, { exact: true }).locator("option"),
+    ).toHaveText(["Inglês", "Francês", "Português"]);
+    await page.getByLabel(pt.language, { exact: true }).selectOption("en");
     await expect(page.locator("html")).toHaveAttribute("lang", "en");
     await expect(
       page.getByLabel(en.language, { exact: true }).locator("option"),
-    ).toHaveText(["English", "French"]);
+    ).toHaveText(["English", "French", "Portuguese"]);
   });
 });

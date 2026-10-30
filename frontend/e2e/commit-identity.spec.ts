@@ -52,9 +52,11 @@ test("local collaborators save under their own identities and see them in Git hi
         async () =>
           (
             await (
-              await member.request.get(`/api/worktrees/${project.id}/history`)
+              await member.request.get(
+                `/api/worktrees/${project.id}/git/history`,
+              )
             ).json()
-          )[0].author,
+          ).items[0].author,
       )
       .toBe(username);
     await member

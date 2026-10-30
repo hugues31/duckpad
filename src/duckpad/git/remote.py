@@ -10,11 +10,11 @@ from contextlib import suppress
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from . import git_command
-from .git_command import GitError, GitTimeout
-from .git_credentials import SCP_URL, GitCredentials, transport
-from .git_workspace import require_valid
-from .util import Problem, digest, now, uid
+from ..util import Problem, digest, now, uid
+from . import command
+from .command import GitError, GitTimeout
+from .credentials import SCP_URL, GitCredentials, transport
+from .workspace import require_valid
 
 NETWORK_TIMEOUT = 30
 # Each fetch receives origin's branches under its own namespace, outside the repository lock.
@@ -57,7 +57,7 @@ def validate_url(value):
 def network_environment(home, ssh_command):
     """Variables isolating one network Git process from the server account's credentials.
 
-    They extend git_command.environment, which already ignores system and global Git configuration.
+    They extend command.environment, which already ignores system and global Git configuration.
     """
     return {
         **{key: os.environ[key] for key in INHERITED_GIT_VARIABLES if key in os.environ},
@@ -91,10 +91,10 @@ def ssh_command(identity, known_hosts):
         "ControlPath=none",
         "ConnectTimeout=10",
     ]
-    command = ["ssh", "-F", os.devnull, "-i", str(identity)]
+    arguments = ["ssh", "-F", os.devnull, "-i", str(identity)]
     for option in options:
-        command += ["-o", option]
-    return shlex.join(command)
+        arguments += ["-o", option]
+    return shlex.join(arguments)
 
 
 def network_problem(output, key):
@@ -176,7 +176,7 @@ class Remotes:
             if url:
                 validate_url(url)
                 self.credentials.check_origin(url)
-                git_command.check_branch_name(worktree["path"], remote_branch)
+                command.check_branch_name(worktree["path"], remote_branch)
             changed = (url or None) != config["url"]
             if changed:
                 self.credentials.forget_project(worktree["project"])
@@ -245,7 +245,7 @@ class Remotes:
                 with os.fdopen(os.open(identity, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "w") as stream:
                     stream.write(key)
             try:
-                return git_command.run(
+                return command.run(
                     path,
                     *args,
                     settings=settings,
@@ -336,7 +336,7 @@ class Remotes:
     def update_refs(self, path, commands):
         """Apply update-ref commands in one Git transaction."""
         if commands:
-            self.git(path, "update-ref", "--stdin", input="".join(f"{command}\n" for command in commands))
+            self.git(path, "update-ref", "--stdin", input="".join(f"{update}\n" for update in commands))
 
     def fetch(self, worktree_id, expected, user=None):
         with self.projects.locked(worktree_id) as worktree:

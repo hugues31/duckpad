@@ -11,13 +11,13 @@ import duckdb
 import pytest
 from fastapi.testclient import TestClient
 
-from duckpad import git_command
 from duckpad.app import create_app
 from duckpad.bundle import bundle_to_files
 from duckpad.comparison import commit_message, compare_files
 from duckpad.components import group
-from duckpad.git_command import GitError
-from duckpad.remote import validate_url
+from duckpad.git import command
+from duckpad.git.command import GitError
+from duckpad.git.remote import validate_url
 from duckpad.services import Services
 from duckpad.util import Problem
 
@@ -86,6 +86,10 @@ def edit(projects, worktree, action):
     snapshot = projects.snapshot(worktree["id"])
     action(snapshot["bundle"])
     return projects.write(worktree["id"], snapshot["revision"], bundle_to_files(snapshot["bundle"]))
+
+
+def last_message(projects, worktree):
+    return projects.versioning.history(worktree["id"], limit=1)["items"][0]["message"]
 
 
 def apply(projects, review, choices=None):
@@ -200,7 +204,7 @@ def test_commit_summaries_external_batches_multiple_entities_and_noop(project):
     projects, main = project
     first = projects.git(main["path"], "rev-parse", "HEAD")
     renamed = edit(projects, main, lambda b: b["flow"]["nodes"][1].update(label="Qualifying orders"))
-    assert projects.history(main["id"])[0]["message"] == "docs(node): rename Qualifying orders"
+    assert last_message(projects, main) == "docs(node): rename Qualifying orders"
     edit(projects, main, lambda b: None)
     assert projects.snapshot(main["id"])["commit"] == renamed["commit"]
     snapshot = projects.snapshot(main["id"])
@@ -238,7 +242,7 @@ def test_review_field_choices_keeps_ancestry_and_rejects_stale_heads(project):
         review["target_head"],
         review["source_head"],
     ]
-    assert projects.history(main["id"])[0]["message"] == "chore(merge): merge feature into main"
+    assert last_message(projects, main) == "chore(merge): merge feature into main"
     # Same files, different ancestry still invalidates the reviewed target.
     edit(projects, feature, lambda b: b["documentation"].update(project="New documentation"))
     stale = projects.versioning.prepare(main["id"], "refs/heads/feature")
@@ -343,16 +347,16 @@ def test_cleanup_survives_a_failed_branch_deletion_and_a_restart(tmp_path, monke
     exports = projects.store.home / "exports" / feature["id"]
     (exports / "dev").mkdir(parents=True)
     (exports / "dev" / "report.csv").write_text("revenue\n1\n")
-    run = git_command.run
+    run = command.run
 
     def refuse_ref_deletion(path, *args, **options):
         if args[:2] == ("update-ref", "-d"):
             raise GitError()
         return run(path, *args, **options)
 
-    monkeypatch.setattr(git_command, "run", refuse_ref_deletion)
+    monkeypatch.setattr(command, "run", refuse_ref_deletion)
     assert projects.versioning.cleanup(main["id"], feature["id"], main["id"], head) == {"ok": True}
-    monkeypatch.setattr(git_command, "run", run)
+    monkeypatch.setattr(command, "run", run)
     assert projects.store.get("worktree", feature["id"]) is None
     assert not Path(feature["path"]).exists() and not exports.exists()
     services.close()

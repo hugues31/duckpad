@@ -42,14 +42,14 @@ def node_entries(bundle):
                 pending.append((definition, [*path, node["id"]], [*labels, label], ancestors | {component}))
 
 
-def search_instance(projects, access, user, query, limit):
+def search_instance(projects, user, query, limit):
     terms = query.casefold().split()
     response = {"results": [], "has_more": False, "incomplete": False}
     if not terms:
         return response
 
     # Apply the same project visibility as /workspace before touching any files.
-    visible = {p["id"]: p for p in projects.store.all("project") if access.role(user, p["id"])}
+    visible = {p["id"]: p for p in projects.store.visible_projects(user)}
 
     def add(entry):
         text = " ".join(

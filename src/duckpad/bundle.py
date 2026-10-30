@@ -58,16 +58,26 @@ def default_pyproject(name):
 
 
 def bundle_to_files(bundle):
-    documentation = bundle.get("documentation", {})
+    flow, documentation = bundle.get("flow"), bundle.get("documentation", {})
+    templates, components = bundle.get("templates", {}), bundle.get("components", {})
+    if not all(isinstance(section, dict) for section in (flow, documentation, templates, components)):
+        raise Problem("A project bundle needs flow, documentation, templates and components objects", 422)
+    readme, pyproject = documentation.get("project"), bundle.get("pyproject")
+    readme = "" if readme is None else readme
+    if not all(isinstance(text, str) for text in (*templates.values(), readme)) or not isinstance(
+        pyproject, str | None
+    ):
+        raise Problem("Templates, project documentation and pyproject must be text", 422)
+    name = flow.get("name")
     return {
-        "flow.json": dumps(bundle["flow"]),
+        "flow.json": dumps(flow),
         "documentation.json": dumps({k: v for k, v in documentation.items() if k != "project"}),
-        "README.md": documentation.get("project", ""),
-        "pyproject.toml": bundle.get("pyproject")
-        if bundle.get("pyproject") is not None
-        else default_pyproject(bundle["flow"].get("name", "Untitled project")),
-        **{f"templates/{key}.sql": value for key, value in bundle.get("templates", {}).items()},
-        **{f"components/{key}.json": dumps(value) for key, value in bundle.get("components", {}).items()},
+        "README.md": readme,
+        "pyproject.toml": pyproject
+        if pyproject is not None
+        else default_pyproject(name if isinstance(name, str) else "Untitled project"),
+        **{f"templates/{key}.sql": value for key, value in templates.items()},
+        **{f"components/{key}.json": dumps(value) for key, value in components.items()},
         **(
             {variables.FILE: variables.write(bundle["variables"])}
             if bundle.get("variables") is not None

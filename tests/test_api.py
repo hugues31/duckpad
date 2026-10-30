@@ -1,5 +1,7 @@
+import copy
 import io
 import json
+import logging
 import tomllib
 import zipfile
 from pathlib import Path
@@ -9,7 +11,7 @@ from fastapi.testclient import TestClient
 from helpers import wait_run
 
 import duckpad
-from duckpad.app import SESSION_COOKIE, create_app
+from duckpad.app import SESSION_COOKIE, create_app, upload_name
 from duckpad.builtin_templates import BUILTINS
 from duckpad.util import Problem
 
@@ -408,12 +410,18 @@ def executed_projects(app, client):
     return worktrees
 
 
+def admin_records(app):
+    """Unredacted catalog storage, and every project's memberships and connection grants."""
+    store, access = app.state.services.store, app.state.access
+    return {
+        **{kind: store.items(kind) for kind in ("connector", "connection", "settings")},
+        "access": [(p["id"], access.record(p["id"])) for p in store.all("project")],
+    }
+
+
 def admin_state(app, client, worktrees):
     """Include unredacted storage and every computed node, not just public metadata."""
-    state = {
-        kind: app.state.services.store.items(kind)
-        for kind in ("connector", "connection", "settings", "access")
-    }
+    state = admin_records(app)
     for worktree in worktrees:
         for suffix in ("status", "preview/source", "preview/double"):
             path = f"/api/worktrees/{worktree['id']}/{suffix}"
@@ -476,11 +484,17 @@ def test_invalid_environment_creation_preserves_results(app, client, executed_pr
 
 
 @pytest.mark.parametrize(
-    "body", [{}, {"connections": "local"}, {"connections": ["local", "missing"]}, {"connections": [1]}]
+    ("body", "status"),
+    [
+        ({}, 422),
+        ({"connections": "local"}, 422),
+        ({"connections": ["local", "missing"]}, 400),
+        ({"connections": [1]}, 422),
+    ],
 )
-def test_invalid_connection_grants_preserve_results(app, client, executed_projects, body):
+def test_invalid_connection_grants_preserve_results(app, client, executed_projects, body, status):
     path = f"/api/projects/{executed_projects[0]['project']}/connections"
-    assert_rejected_admin_edit(app, client, executed_projects, "PUT", path, body, 400)
+    assert_rejected_admin_edit(app, client, executed_projects, "PUT", path, body, status)
 
 
 @pytest.mark.parametrize(
@@ -506,10 +520,8 @@ def test_admin_edits_reset_results_only_when_idle(app, client, executed_projects
         before = admin_state(app, client, executed_projects)
         response = client.request(method, path, json=body)
         assert response.status_code == 200, response.text
-        assert any(
-            app.state.services.store.items(kind) != before[kind]
-            for kind in ("connector", "connection", "settings", "access")
-        )
+        after = admin_records(app)
+        assert any(after[kind] != before[kind] for kind in after)
         affected = executed_projects[:1] if path.startswith("/api/projects/") else executed_projects
         for item in affected:
             base = f"/api/worktrees/{item['id']}"
@@ -922,3 +934,188 @@ def test_import_rejects_duplicate_and_oversized_archives(app, client, worktree, 
     assert response.status_code == 413
     assert response.json()["error"] == "Project archives are limited to 16 MiB"
     assert len(client.get("/api/workspace").json()["projects"]) == 1
+
+
+def test_unexpected_errors_are_logged_and_hidden_from_clients(app, client, monkeypatch, caplog):
+    def fail():
+        raise RuntimeError("internal detail /srv/secret")
+
+    monkeypatch.setattr(app.state.services.catalog, "public", fail)
+    with caplog.at_level(logging.ERROR, logger="duckpad.app"):
+        response = client.get("/api/catalog")
+    assert response.status_code == 500
+    assert response.json() == {"error": "Internal server error", "detail": None}
+    assert response.headers["cache-control"] == "no-store"
+    assert response.headers["x-content-type-options"] == "nosniff"
+    assert "Unexpected error in GET /api/catalog" in caplog.text
+    assert "RuntimeError: internal detail /srv/secret" in caplog.text
+
+
+def test_framework_errors_use_the_problem_format(client):
+    response = client.delete("/api/workspace")
+    assert response.status_code == 405
+    assert response.json() == {"error": "Method Not Allowed", "detail": None}
+    assert "GET" in response.headers["allow"]
+
+
+@pytest.mark.parametrize(
+    "bundle",
+    [
+        {},
+        {"flow": []},
+        {"flow": {}, "templates": []},
+        {"flow": {}, "templates": {"source": 1}},
+        {"flow": {}, "documentation": {"project": ["README"]}},
+        {"flow": {}, "pyproject": {"project": {}}},
+    ],
+)
+def test_malformed_save_bundles_are_rejected_without_changes(client, worktree, bundle):
+    snapshot = client.get(f"/api/worktrees/{worktree}").json()
+    response = client.put(
+        f"/api/worktrees/{worktree}", json={"revision": snapshot["revision"], "bundle": bundle}
+    )
+    assert response.status_code == 422, response.text
+    assert client.get(f"/api/worktrees/{worktree}").json()["files"] == snapshot["files"]
+
+
+def test_saved_flow_names_need_not_be_text(client, worktree):
+    snapshot = client.get(f"/api/worktrees/{worktree}").json()
+    bundle = {**snapshot["bundle"], "flow": {**snapshot["bundle"]["flow"], "name": 7}, "pyproject": None}
+    response = client.put(
+        f"/api/worktrees/{worktree}", json={"revision": snapshot["revision"], "bundle": bundle}
+    )
+    assert response.status_code == 200, response.text
+    assert 'name = "duckpad-project-untitled-project"' in response.json()["files"]["pyproject.toml"]
+
+
+def test_concurrent_edits_of_lists_with_numeric_ids_conflict(client, worktree):
+    snapshot = client.get(f"/api/worktrees/{worktree}").json()
+    bundle = snapshot["bundle"]
+    bundle["flow"]["notes"] = [{"id": 1, "text": "first"}, {"id": 2, "text": "second"}]
+    url = f"/api/worktrees/{worktree}"
+    base = client.put(url, json={"revision": snapshot["revision"], "bundle": bundle}).json()
+    responses = []
+    for index in (0, 1):
+        edited = copy.deepcopy(bundle)
+        edited["flow"]["notes"][index]["text"] = "edited"
+        responses.append(client.put(url, json={"revision": base["revision"], "bundle": edited}))
+    assert responses[0].status_code == 200, responses[0].text
+    assert responses[1].status_code == 409, responses[1].text
+    assert responses[1].json()["detail"]["paths"] == ["flow.json/notes"]
+
+
+@pytest.mark.parametrize(
+    ("method", "path", "body"),
+    [
+        ("post", "/api/users", {"username": "new"}),
+        ("post", "/api/users", {"username": 7, "password": "long-enough-password"}),
+        ("post", "/api/users", {"username": "new", "password": "long-enough-password", "role": "owner"}),
+        ("patch", "/api/users/admin", {"active": "no"}),
+        ("patch", "/api/users/admin", {"username": "renamed"}),
+        ("post", "/api/password", {"password": "long-enough-password"}),
+        ("put", "/api/projects/{project}/members/admin", {}),
+        ("put", "/api/projects/{project}/members/admin", {"role": "owner"}),
+        ("put", "/api/projects/{project}/connections", {"connections": ["local", 7]}),
+    ],
+)
+def test_malformed_account_and_access_bodies_are_rejected_without_changes(
+    app, client, worktree, method, path, body
+):
+    store = app.state.services.store
+    project = store.get("worktree", worktree)["project"]
+    users = store.all("user")
+    access = app.state.access.record(project)
+    response = client.request(method, path.format(project=project), json=body)
+    assert response.status_code == 422, response.text
+    assert response.json()["error"].startswith("Invalid request: body")
+    assert store.all("user") == users
+    assert app.state.access.record(project) == access
+
+
+def test_password_change_checks_the_current_password(app, client):
+    current, replacement = app.state.auth.initial_password, "replacement-password"
+    wrong = client.post("/api/password", json={"current": "incorrect-password", "password": replacement})
+    assert wrong.status_code == 403
+    assert wrong.json()["error"] == "Current password is incorrect"
+    short = client.post("/api/password", json={"current": current, "password": "short"})
+    assert short.status_code == 400
+    assert client.post("/api/password", json={"current": current, "password": replacement}).status_code == 200
+    assert app.state.auth.login("admin", replacement, peer="test")
+
+
+def upload_folder(app, worktree):
+    services = app.state.services
+    return services.store.home / "resources" / services.projects.get(worktree)["project"]
+
+
+def upload_files(app, worktree):
+    folder = upload_folder(app, worktree)
+    return sorted(path.name for path in folder.iterdir()) if folder.exists() else []
+
+
+def test_upload_stores_a_complete_file_under_the_project_resources(app, client, worktree):
+    response = client.post(
+        f"/api/worktrees/{worktree}/uploads", files={"file": ("nested/orders.csv", b"id\n1\n", "text/csv")}
+    )
+    assert response.status_code == 200, response.text
+    result = response.json()
+    path = Path(result["path"])
+    assert result["name"] == "orders.csv"
+    assert path.parent == upload_folder(app, worktree)
+    assert path.name.endswith("_orders.csv")
+    assert path.read_bytes() == b"id\n1\n"
+    assert upload_files(app, worktree) == [path.name]
+
+
+@pytest.mark.parametrize(
+    ("filename", "name"),
+    [
+        ("C:\\Users\\me\\orders.csv", "orders.csv"),
+        ("../../orders.csv", "orders.csv"),
+        ("ord\x00ers\x1f.csv", "orders.csv"),
+        ("", "data.csv"),
+        ("..", ".."),
+        ("é" * 150 + ".csv", "é" * 98 + ".csv"),
+    ],
+)
+def test_upload_names_keep_only_a_safe_base_name(filename, name):
+    assert upload_name(filename) == name
+    assert len(upload_name(filename).encode()) <= 200
+
+
+def test_oversized_uploads_are_refused_before_storing_anything(app, client, worktree, monkeypatch):
+    monkeypatch.setattr("duckpad.app.MAX_UPLOAD_BYTES", 1000)
+    response = client.post(
+        f"/api/worktrees/{worktree}/uploads", files={"file": ("large.csv", b"x" * 1000, "text/csv")}
+    )
+    assert response.status_code == 413
+    assert response.json()["error"] == "Uploads are limited to 1 GiB"
+    assert upload_files(app, worktree) == []
+
+
+def test_uploads_need_a_declared_length_and_a_file(app, client, worktree):
+    url = f"/api/worktrees/{worktree}/uploads"
+
+    def chunks():
+        yield b"--boundary\r\n"
+
+    chunked = client.post(url, content=chunks(), headers={"content-type": "multipart/form-data; boundary=x"})
+    assert chunked.status_code == 411
+    missing = client.post(url, data={"name": "orders.csv"})
+    assert missing.status_code == 422
+    assert missing.json()["error"] == "Choose a file to upload"
+    assert upload_files(app, worktree) == []
+
+
+def test_failed_upload_leaves_no_partial_file(app, client, worktree, monkeypatch, caplog):
+    def fail(self, target):
+        raise OSError("No space left on device")
+
+    monkeypatch.setattr(Path, "replace", fail)
+    with caplog.at_level(logging.ERROR, logger="duckpad.app"):
+        response = client.post(
+            f"/api/worktrees/{worktree}/uploads", files={"file": ("orders.csv", b"id\n1\n", "text/csv")}
+        )
+    assert response.status_code == 500
+    assert str(upload_folder(app, worktree)) not in response.text
+    assert upload_files(app, worktree) == []
