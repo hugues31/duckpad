@@ -15,12 +15,19 @@ import type { Run } from "./types";
 import { useApiResource } from "./useApiResource";
 import { VariableValues } from "./VariableFields";
 
-/** The node parameters bound to each variable of a run, as "Node · parameter". */
+/** The node parameters using each variable of a run, as "Node · parameter". */
 function boundParameters(run: Run) {
   const result: Record<string, string[]> = Object.create(null);
-  for (const state of Object.values(run.nodes || {}))
+  const add = (name: string, usage: string) => {
+    const usages = (result[name] ||= []);
+    if (!usages.includes(usage)) usages.push(usage);
+  };
+  for (const state of Object.values(run.nodes || {})) {
     for (const [parameter, name] of Object.entries(state.variables || {}))
-      (result[name] ||= []).push(`${state.label} · ${parameter}`);
+      add(name, `${state.label} · ${parameter}`);
+    for (const [parameter, names] of Object.entries(state.references || {}))
+      for (const name of names) add(name, `${state.label} · ${parameter}`);
+  }
   return result;
 }
 

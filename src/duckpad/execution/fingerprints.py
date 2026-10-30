@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 
+from .. import variables
 from ..bundle import topological
 from ..catalog import Catalog
 from ..components import expand_for
@@ -35,6 +36,8 @@ class Fingerprints:
                 if "default" in parameter
             }
             params.update(node.get("params", {}))
+            # Expression references count by the type and value they bind, not by their name.
+            params = variables.fingerprinted(node, params)
             connections = {}
             for reference in connection_references(node):
                 try:

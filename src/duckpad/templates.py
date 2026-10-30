@@ -7,11 +7,14 @@ from pathlib import Path
 
 import sqlglot
 from sqlglot import exp
+from sqlglot.tokens import TokenType
 
 from .data_preparation import PREPARATION_TYPES, render_preparation
 from .util import Problem, literal, qi
 
 REFERENCE = re.compile(r"{{\s*(\w+)\s*}}")
+# A project variable referenced inside an expression parameter value.
+VARIABLE_REFERENCE = re.compile(r"{{\s*var\.(\w+)\s*}}")
 IDENTIFIER = re.compile(r"[A-Za-z_]\w*")
 DIRECTIVE = re.compile(r"^\s*--\s*@([\w]+)\s*(.*?)\s*$")
 PARAMETER = re.compile(r"(\w+)\s*:\s*([^=]+?)(?:\s*=\s*(.*))?")
@@ -222,17 +225,99 @@ def expression_list(value):
     return [x.sql(dialect="duckdb") for x in parsed.expressions]
 
 
+def variable_placeholders(variables, parameters):
+    """Variable name -> the named DuckDB parameter binding its value, distinct from template parameters."""
+    # DuckDB treats parameter names as case-insensitive, including generated suffixes.
+    parameter_names = {name.lower() for name in parameters}
+    taken = parameter_names | {"var_" + name for name in variables}
+    result = {}
+    for name in sorted(variables):
+        placeholder = "var_" + name
+        if placeholder in parameter_names:
+            suffix = 2
+            while f"{placeholder}_{suffix}" in taken:
+                suffix += 1
+            placeholder = f"{placeholder}_{suffix}"
+            taken.add(placeholder)
+        result[name] = placeholder
+    return result
+
+
+def bind_variables(name, value, variables, placeholders):
+    """An expression parameter value with its `{{ var.name }}` references turned into named parameters.
+
+    The text never receives a variable's value:
+    DuckDB binds it with its type, and dates are cast like date parameters.
+    """
+
+    def replace(match):
+        variable = match[1]
+        if variable not in placeholders:
+            raise Problem(f"{name} references variable {variable}, which has no value here")
+        placeholder = "$" + placeholders[variable]
+        return (
+            f"CAST({placeholder} AS DATE)"
+            if base_type(variables[variable]["type"]) == "date"
+            else placeholder
+        )
+
+    def substitute(text):
+        if not isinstance(text, str):
+            return text
+        check_variables(name, text)
+        return VARIABLE_REFERENCE.sub(replace, text)
+
+    return [substitute(item) for item in value] if isinstance(value, list) else substitute(value)
+
+
+def check_variables(name, text):
+    """Check each reference's source position before substitution or SQL normalization."""
+    matches = list(VARIABLE_REFERENCE.finditer(text))
+    if not matches:
+        return
+    try:
+        tokens = sqlglot.tokenize(text, read="duckdb")
+    except sqlglot.errors.TokenError as error:
+        raise Problem(f"Invalid SQL expression: {text}") from error
+    # Only a reference in SQL code starts with a brace token. Braces in strings,
+    # quoted identifiers, dollar-quoted strings and comments are not code tokens.
+    starts = {token.start for token in tokens if token.token_type == TokenType.L_BRACE}
+    missing = sorted({match[1] for match in matches if match.start() not in starts})
+    if missing:
+        variables = ", ".join(f"{{{{ var.{variable} }}}}" for variable in missing)
+        raise Problem(
+            f"{name}: write {variables} as a value, outside quotes and comments. "
+            "Its value is bound with its type, never inserted into the SQL text."
+        )
+
+
 def connection_for(connections, reference):
     if reference not in connections:
         raise Problem(f"Missing connection: {reference}")
     return connections[reference]
 
 
-def render_parameter(template, parameter, parameters, connections, directory, input_schemas=None):
+def render_parameter(
+    template,
+    parameter,
+    parameters,
+    connections,
+    directory,
+    input_schemas=None,
+    variables=None,
+    placeholders=None,
+):
     """Return the SQL text of a structural parameter, or None for a bound scalar value."""
     name, type_name = parameter["name"], parameter["type"]
     kind, argument = base_type(type_name), type_argument(type_name)
     value = parameters[name]
+    if kind in ("expression", "expressions"):
+        value = bind_variables(name, value, variables or {}, placeholders or {})
+        return (
+            expression(value)
+            if kind == "expression"
+            else ", ".join(expression(x) for x in expression_list(value))
+        )
     if kind in PREPARATION_TYPES:
         return render_preparation(kind, value, (input_schemas or {}).get(argument))
     if kind == "connection":
@@ -251,10 +336,6 @@ def render_parameter(template, parameter, parameters, connections, directory, in
         return literal(path)
     if kind in ("column", "identifier"):
         return ".".join(qi(part) for part in str(value).split("."))
-    if kind == "expression":
-        return expression(value)
-    if kind == "expressions":
-        return ", ".join(expression(x) for x in expression_list(value))
     if kind == "schema":
         return render_schema(name, value)
     if kind == "keyword":
@@ -400,14 +481,26 @@ def is_local_table(table, local_names):
     )
 
 
-def compile_template(template, params, inputs, physical_outputs, connections, directory, input_schemas=None):
+def compile_template(
+    template, params, inputs, physical_outputs, connections, directory, input_schemas=None, variables=None
+):
+    """Compile a template's blocks into statements with their bound parameters.
+
+    `variables` maps the variables referenced inside expression parameters to their type and
+    value; each statement lists the named parameters binding them in `variable_bindings`.
+    """
     values, bindings = dict(inputs), {}
     parameters = {p["name"]: params.get(p["name"], p.get("default")) for p in template["parameters"]}
+    variables = variables or {}
+    placeholders = variable_placeholders(variables, parameters)
+    bindings.update({placeholders[name]: variable["value"] for name, variable in variables.items()})
     for parameter in template["parameters"]:
         name = parameter["name"]
         if parameters[name] is None:
             raise Problem(f"Parameter {name} is required")
-        rendered = render_parameter(template, parameter, parameters, connections, directory, input_schemas)
+        rendered = render_parameter(
+            template, parameter, parameters, connections, directory, input_schemas, variables, placeholders
+        )
         if rendered is None:
             bindings[name] = parameters[name]
             # Dates are bound as ISO text, which a bound VARCHAR would not compare with a DATE.
@@ -426,6 +519,7 @@ def compile_template(template, params, inputs, physical_outputs, connections, di
             for name, value in bindings.items()
             if re.search(r"\$" + re.escape(name) + r"\b", query)
         }
+        labels = {placeholder: name for name, placeholder in placeholders.items() if placeholder in used}
         output = block["output"]
         physical = physical_outputs.get(output)
         statements.append(
@@ -436,6 +530,7 @@ def compile_template(template, params, inputs, physical_outputs, connections, di
                 # Runs materialize outputs from this query and record the statements they execute.
                 "sql": query,
                 "bindings": used,
+                **({"variable_bindings": labels} if labels else {}),
                 **file_export(tree, resources),
             }
         )
