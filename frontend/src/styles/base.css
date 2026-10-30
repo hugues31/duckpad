@@ -13,17 +13,12 @@ input,
 select,
 textarea {
   font: inherit;
+  color: inherit;
 }
 button {
   cursor: pointer;
   border: 0;
   background: none;
-}
-button,
-select,
-input,
-textarea {
-  color: inherit;
 }
 button:disabled {
   cursor: not-allowed;
