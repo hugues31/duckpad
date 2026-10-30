@@ -33,6 +33,23 @@ def test_project_files_require_documentation():
         files_to_bundle({"flow.json": '{"nodes": [], "edges": []}'})
 
 
+def test_rejected_save_writes_and_commits_nothing(services, tmp_path):
+    _, projects, _, _ = services
+    worktree = projects.create("Rejected", example_bundle(tmp_path / "input.csv"))
+    path = Path(worktree["path"])
+    snapshot = projects.snapshot(worktree["id"])
+    head = projects.git(path, "rev-parse", "HEAD")
+    # A pending external edit would be committed before a valid save.
+    (path / "README.md").write_text("External edit")
+    proposal = {**snapshot["files"], "flow.json": "{}", "notes.txt": "Not a project definition"}
+    with pytest.raises(Problem, match="Only declarative project files"):
+        projects.write(worktree["id"], snapshot["revision"], proposal)
+    assert projects.git(path, "rev-parse", "HEAD") == head
+    assert projects.read_files(worktree) == {**snapshot["files"], "README.md": "External edit"}
+    assert not (path / "notes.txt").exists()
+    assert projects.store.conflicts(worktree["id"]) == []
+
+
 def test_external_batch_commits_final_invalid_content_once(services, tmp_path):
     _, projects, _, _ = services
     worktree = projects.create("Batch", example_bundle(tmp_path / "input.csv"))

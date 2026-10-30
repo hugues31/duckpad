@@ -1,19 +1,16 @@
 """A reproducible, fully local example spanning the major pipeline features."""
 
 import csv
+import shutil
 
 import duckdb
 
 from .builtin_templates import BUILTINS
-from .util import literal
+from .util import literal, uid
 
 
-def create_example(projects, catalog, private=False, name=None):
-    worktree = projects.create(name or "Northstar analytics") if private else None
-    connection_id = "sample_" + worktree["project"] if worktree else "northstar"
-    root = projects.store.home / "examples" / "northstar"
-    if worktree:
-        root = projects.store.home / "resources" / worktree["project"] / "sample"
+def write_samples(root):
+    """Synthetic orders and customers for each environment; prod amounts are larger."""
     for environment, multiplier in (("dev", 1), ("prod", 3)):
         folder = root / environment
         folder.mkdir(parents=True, exist_ok=True)
@@ -67,7 +64,14 @@ def create_example(projects, catalog, private=False, name=None):
             db.execute(f"COPY customers TO {literal(str(folder / 'customers.parquet'))} (FORMAT PARQUET)")
         finally:
             db.close()
-    catalog.save(
+
+
+def create_example(projects, catalog, name=None, record=None):
+    """Create a project with its own sample data and connection; record joins its transaction."""
+    project_id = uid("project_")
+    connection_id = "sample_" + project_id
+    root = projects.store.home / "resources" / project_id / "sample"
+    connection = catalog.check(
         "connection",
         {
             "id": connection_id,
@@ -272,7 +276,7 @@ EXCEPT SELECT customer_id FROM {{ source }} WHERE amount > 400;
     }
     bundle = {
         "flow": {
-            "name": name or "Northstar",
+            "name": name or "Northstar analytics",
             "description": "From raw orders to explainable revenue",
             "nodes": nodes,
             "edges": edges,
@@ -281,11 +285,16 @@ EXCEPT SELECT customer_id FROM {{ source }} WHERE amount > 400;
         "components": {"regional_summary": metrics, "regional_report": report},
         "documentation": documentation,
     }
-    if worktree:
-        from .projects import bundle_to_files
 
-        bundle["flow"]["id"] = worktree["project"]
-        snapshot = projects.snapshot(worktree["id"])
-        projects.write(worktree["id"], snapshot["revision"], bundle_to_files(bundle))
-        return worktree
-    return projects.create(name or "Northstar · Revenue operations", bundle)
+    def register(worktree):
+        projects.store.put("connection", connection_id, connection)
+        if record is not None:
+            record(worktree)
+
+    try:
+        write_samples(root)
+        return projects.create(bundle["flow"]["name"], bundle, project_id=project_id, record=register)
+    except Exception:
+        # An example that could not be created leaves no sample data behind.
+        shutil.rmtree(root.parent, ignore_errors=True)
+        raise

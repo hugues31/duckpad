@@ -11,9 +11,9 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from . import git_command
-from .bundle import files_to_bundle, validate
 from .git_command import GitError, GitTimeout
 from .git_credentials import SCP_URL, GitCredentials, transport
+from .git_workspace import require_valid
 from .util import Problem, digest, now, uid
 
 NETWORK_TIMEOUT = 30
@@ -418,12 +418,7 @@ class Remotes:
         # published, so validation and network Git run without the repository lock.
         path = worktree["path"]
         self.workspace.validate_history(path, local_head)
-        try:
-            errors = validate(files_to_bundle(files))
-        except (Problem, KeyError, TypeError, AttributeError) as error:
-            raise Problem("Fix project definitions before publishing", 422) from error
-        if errors:
-            raise Problem("Fix project definitions before publishing", 422, errors)
+        require_valid(files, "Fix project definitions before publishing")
         ref = "refs/heads/" + status["remote_branch"]
         actual = self.network(path, "ls-remote", "--refs", "--", config["url"], ref, key=key)
         actual_head = actual.split()[0] if actual else None

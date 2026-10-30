@@ -7,15 +7,16 @@ import tarfile
 import threading
 import time
 from collections import OrderedDict
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from pathlib import Path
 
 from . import git_command
 from .builtin_templates import BUILTINS
-from .bundle import ROOT_FILES, bundle_to_files, files_to_bundle, is_declarative, validate
+from .bundle import ROOT_FILES, bundle_to_files, files_to_bundle, is_declarative
 from .comparison import commit_message
 from .components import reconcile_documentation
-from .git_workspace import GitWorkspace
+from .git_command import GitError
+from .git_workspace import GitWorkspace, diagnose, require_valid
 from .identity import SYSTEM_IDENTITY, current_identity
 from .merge import merge_files
 from .remote import Remotes
@@ -32,6 +33,7 @@ CACHED_REVISIONS = 256
 # After a restart, the base of a save is searched in this many latest commits of its branch.
 BASE_SEARCH = 32
 EXTERNAL_SAVE = "feat(project): save external changes"
+OPEN_FAILURE = "Git could not open this branch. It may be checked out outside Duckpad."
 
 
 def decode(name, content):
@@ -78,8 +80,12 @@ class Projects:
         """Run Git as the request's account; see git_command.run for the options."""
         return git_command.run(path, *args, identity=identity or self.identity(), **options)
 
-    def create(self, name, bundle=None, action="create"):
-        project_id, worktree_id = uid("project_"), uid("worktree_")
+    def create(self, name, bundle=None, action="create", *, project_id=None, record=None):
+        """Create a project repository and record it; record(worktree) joins the same transaction.
+
+        A project is either recorded with its repository and related records, or leaves nothing behind.
+        """
+        project_id, worktree_id = project_id or uid("project_"), uid("worktree_")
         path = self.store.home / "projects" / project_id
         path.mkdir(parents=True)
         try:
@@ -103,8 +109,9 @@ class Projects:
             with self.store.transaction():
                 self.store.put("project", project_id, project)
                 self.store.put("worktree", worktree_id, worktree)
+                if record is not None:
+                    record(worktree)
         except Exception:
-            # A project is either recorded with its repository or leaves nothing behind.
             shutil.rmtree(path, ignore_errors=True)
             raise
         self.observed[worktree_id] = self.read_files(worktree)
@@ -112,18 +119,58 @@ class Projects:
 
     def delete(self, project_id):
         with self.repository(project_id):
-            worktrees = self.store.worktrees(project_id)
-            artifacts = self.store.artifact_ids(project=project_id)
-            self.store.delete("project", project_id)
-            for identity in artifacts:
-                (self.store.home / "artifacts" / identity).unlink(missing_ok=True)
-            for worktree in worktrees:
-                self.observed.pop(worktree["id"], None)
-                self.pending.pop(worktree["id"], None)
-            for worktree in worktrees:
-                shutil.rmtree(worktree["path"], ignore_errors=True)
-                shutil.rmtree(self.store.home / "exports" / worktree["id"], ignore_errors=True)
+            with self.store.transaction():
+                worktrees = self.store.worktrees(project_id)
+                artifacts = self.store.artifact_ids(project=project_id)
+                self.store.delete("project", project_id)
+            self.discard(worktrees, artifacts)
             shutil.rmtree(self.store.home / "resources" / project_id, ignore_errors=True)
+
+    def open_worktree(self, worktree, branch, start=None):
+        """Check out a branch, created at start when given, in a new recorded worktree.
+
+        The caller holds the repository lock. The record follows the checkout and is never left
+        without its directory: a failure removes the checkout and the branch it created.
+        """
+        repository, key = worktree["path"], uid("worktree_")
+        path = self.store.home / "worktrees" / key
+        path.parent.mkdir(parents=True, exist_ok=True)
+        # Forget directories removed by an interrupted cleanup; Git would keep their branch checked out.
+        self.git(repository, "worktree", "prune")
+        self.git(
+            repository,
+            "worktree",
+            "add",
+            *(["-b", branch, str(path), start] if start else [str(path), branch]),
+            failure=git_command.FAILURE if start else OPEN_FAILURE,
+        )
+        result = {"id": key, "project": worktree["project"], "branch": branch, "path": str(path)}
+        try:
+            files = self.read_files(result)
+            self.store.put("worktree", key, result)
+        except Exception:
+            shutil.rmtree(path, ignore_errors=True)
+            with suppress(GitError):
+                self.git(repository, "worktree", "prune")
+            if start:
+                with suppress(GitError):
+                    self.git(repository, "update-ref", "-d", "refs/heads/" + branch, start)
+            raise
+        self.observed[key] = files
+        return result
+
+    def discard(self, worktrees, artifacts):
+        """Remove the files of deleted worktree and artifact records, after their deletion.
+
+        Every step tolerates files that are already gone, so an interrupted cleanup can run again.
+        """
+        for identity in artifacts:
+            (self.store.home / "artifacts" / identity).unlink(missing_ok=True)
+        for worktree in worktrees:
+            self.observed.pop(worktree["id"], None)
+            self.pending.pop(worktree["id"], None)
+            shutil.rmtree(worktree["path"], ignore_errors=True)
+            shutil.rmtree(self.store.home / "exports" / worktree["id"], ignore_errors=True)
 
     def get(self, worktree_id):
         result = self.store.get("worktree", worktree_id)
@@ -249,11 +296,7 @@ class Projects:
                 files = self.read_files(worktree)
         revision = digest(files)
         self.cached(self.revisions, (worktree_id, revision), dict(files))
-        try:
-            bundle = files_to_bundle(files)
-            errors = validate(bundle)
-        except Problem as error:
-            bundle, errors = None, [{"file": "flow.json", "message": str(error)}]
+        bundle, errors = diagnose(files)
         return {
             "worktree": worktree,
             "revision": revision,
@@ -282,6 +325,9 @@ class Projects:
         return None
 
     def write(self, worktree_id, revision, proposal, message="feat(project): save workspace changes"):
+        # A rejected save writes nothing, not even part of the proposal.
+        if not all(is_declarative(name) for name in proposal):
+            raise Problem("Only declarative project files can be edited here")
         with self.locked(worktree_id) as worktree:
             current = self.read_files(worktree)
             base = self.base(worktree, revision, current)
@@ -312,10 +358,9 @@ class Projects:
             return self.snapshot(worktree_id)
 
     def _write_files(self, worktree, files, previous):
+        """Write merged files, whose names come from the checked proposal and the project files."""
         path = Path(worktree["path"])
         for name in files.keys() | previous.keys():
-            if not is_declarative(name):
-                raise Problem("Only declarative project files can be edited here")
             target = inside(path, name)
             if name in files:
                 atomic_write(target, files[name])
@@ -371,9 +416,24 @@ class Projects:
             return self.snapshot(worktree_id, committed=True)
 
     def start_watcher(self):
-        for worktree in self.store.all("worktree"):
-            head = self.git(worktree["path"], "rev-parse", "HEAD")
-            self.observed[worktree["id"]] = self.revision_files(worktree["path"], head)
+        worktrees = self.store.all("worktree")
+        # Finish cleanups interrupted after their records were deleted: the directories of
+        # unrecorded worktrees are removed, and Git forgets them before it next opens a branch.
+        recorded = {worktree["id"] for worktree in worktrees}
+        for folder in ("worktrees", "exports"):
+            for path in (self.store.home / folder).glob("worktree_*"):
+                if path.name not in recorded:
+                    shutil.rmtree(path, ignore_errors=True)
+        for worktree in worktrees:
+            path = worktree["path"]
+            try:
+                if not Path(path).is_dir():
+                    raise FileNotFoundError(f"No directory at {path}")
+                head = self.git(path, "rev-parse", "HEAD")
+                self.observed[worktree["id"]] = self.revision_files(path, head)
+            except (OSError, Problem) as error:
+                # The watcher skips unobserved worktrees, so one lost directory never stops the instance.
+                logger.error("Worktree %s is unavailable and is not observed: %s", worktree["id"], error)
 
         def watch():
             while not self.stop_event.wait(WATCH_INTERVAL):
@@ -466,22 +526,13 @@ class Projects:
                     {"code": "branch_exists"},
                 )
             self.versioning.clean(worktree)
-            key = uid("worktree_")
-            path = self.store.home / "worktrees" / key
-            path.parent.mkdir(parents=True, exist_ok=True)
             ref = self.versioning.resolve(worktree["path"], revision or "HEAD")
             if not self.git(
                 worktree["path"], "for-each-ref", "--format=%(refname)", "--contains", ref, "refs/heads/"
             ):
                 self.versioning.validate_history(worktree["path"], ref)
-                try:
-                    errors = validate(files_to_bundle(self.revision_files(worktree["path"], ref)))
-                except (Problem, KeyError, TypeError, AttributeError) as error:
-                    raise Problem("Incoming project definitions are invalid", 422) from error
-                if errors:
-                    raise Problem("Fix incoming project definitions before opening a branch", 422, errors)
-            self.git(worktree["path"], "worktree", "add", "-b", name, str(path), ref)
-            result = {"id": key, "project": worktree["project"], "branch": name, "path": str(path)}
-            self.store.put("worktree", key, result)
-            self.observed[key] = self.read_files(result)
-            return result
+                require_valid(
+                    self.revision_files(worktree["path"], ref),
+                    "Fix incoming project definitions before opening a branch",
+                )
+            return self.open_worktree(worktree, name, ref)
