@@ -13,6 +13,8 @@ To create a connection, use `PUT /api/catalog/connection?create=true` (409 if th
 identifier exists). For updates, use `?create=false` or omit `create` (404 if the
 connection does not exist). Masked secrets in an update retain their stored values.
 
+![Create an Excel connection with separate development and production settings](images/connection.png)
+
 ## Environments
 
 Instance admins manage environments in **Instance settings → Environments**.
@@ -40,6 +42,8 @@ Administrators can create an environment with `POST /api/environments`
 edit its settings with `PUT /api/environments/{id}`, or delete it with
 `DELETE /api/environments/{id}`. `/api/workspace` exposes `catalog.environment_details`
 alongside the identifier list.
+
+![Environment labels, colors and confirmation policies in instance settings](images/environments.png)
 
 ## Validated scope
 

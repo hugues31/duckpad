@@ -8,6 +8,8 @@ To recreate a project from such an archive, choose **New project**, then **Impor
 
 After running **Export CSV**, **Export XLSX**, or another export template whose single `COPY ... TO` statement writes CSV or XLSX to a `destination` parameter, select the export node and choose **Download exported data** in its inspector. The file contains the entire executed export, including its delimiter, headers and worksheet name. The inspector identifies the execution and environment. Changing inputs or settings, rerunning upstream nodes, or a failed execution requires another successful export before downloading. Missing files also require a rerun. Downloads are private to project members, survive a backend restart, and use a saved copy of the exported bytes so later writes to the destination cannot replace that execution's result. Oracle and remote-storage destinations do not offer this action.
 
+![Project files and the SQL template editor in the Code workspace](images/code.png)
+
 ## Project layout and Python dependencies
 
 ```text
@@ -47,6 +49,8 @@ Connections, credentials and input data must also be configured separately on
 another instance.
 
 ## SQL template contract
+
+![The Paid orders inspector exposes its input and status parameter](images/parameters.png)
 
 ```sql
 -- @label Paid orders
@@ -93,6 +97,8 @@ Drag an input or output connection onto empty canvas space to open **Add a conne
 
 Select nodes using Shift, then choose **Group into component**. Incoming and outgoing edges are preserved as named boundary ports; terminal outputs remain inspectable. Double-click the resulting node to open the sub-flow. Breadcrumbs identify the instance path. Definition edits affect every usage in this project branch, while parameters belong to the selected instance.
 
+![The nested Regional summary component, its breadcrumb path and metrics output](images/component.png)
+
 Exposed component parameters have the following structure:
 
 ```json
@@ -108,6 +114,8 @@ Exposed component parameters have the following structure:
 The shared library reads projects' main branches. Importing creates new destination-owned IDs for the component, nested components and templates. Definitions and documentation are copied; data, results and secrets are not. Imports never resolve executable code through the original project. Subsequent edits are independent.
 
 ## Documentation and branches
+
+![Business documentation for Paid orders alongside its result table](images/node-documentation.png)
 
 Business documentation is separate from SQL and covers the project, node instances, outputs and columns. Grouping preserves the documented instance paths; imports carry component documentation. Successfully confirmed schema removals prune missing column documentation in a versioned save. Renames start undocumented. Invalid SQL, failed runs and backend restarts do not imply deletion.
 

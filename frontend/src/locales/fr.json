@@ -169,8 +169,6 @@
   "light": "Clair",
   "dark": "Sombre",
   "language": "Langue",
-  "english": "Anglais",
-  "french": "Français",
   "localPreferences": "Le thème et la langue sont enregistrés dans ce navigateur et partagés par les comptes qui l’utilisent.",
   "gitHistory": "Historique Git",
   "runHistory": "Historique d’exécution",

@@ -2,11 +2,11 @@ import { Link } from "react-router";
 import { useEffect, useRef, useState } from "react";
 import { Check, LogOut, Settings2 } from "lucide-react";
 import { useT } from "./i18n";
-import type { Preferences } from "./preferences";
+import { usePreferenceChoices, type Preferences } from "./preferences";
 
 export default function AccountMenu({
   username,
-  preferences: { language, setLanguage, theme, setTheme },
+  preferences,
   onSignOut,
 }: {
   username: string;
@@ -14,6 +14,7 @@ export default function AccountMenu({
   onSignOut: () => void;
 }) {
   const t = useT();
+  const choices = usePreferenceChoices(preferences);
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
@@ -87,46 +88,28 @@ export default function AccountMenu({
             items[index].focus();
           }}
         >
-          <div role="group" aria-label={t("language")}>
-            <span className="account-menu-label">{t("language")}</span>
-            <div className="account-options">
-              {(["en", "fr"] as const).map((value) => (
-                <button
-                  key={value}
-                  role="menuitemradio"
-                  tabIndex={-1}
-                  aria-checked={language === value}
-                  onClick={() => {
-                    setLanguage(value);
-                    close();
-                  }}
-                >
-                  {t(value === "en" ? "english" : "french")}
-                  {language === value && <Check size={13} />}
-                </button>
-              ))}
+          {choices.map((choice) => (
+            <div key={choice.name} role="group" aria-label={choice.label}>
+              <span className="account-menu-label">{choice.label}</span>
+              <div className="account-options">
+                {choice.options.map(({ value, label }) => (
+                  <button
+                    key={value}
+                    role="menuitemradio"
+                    tabIndex={-1}
+                    aria-checked={choice.value === value}
+                    onClick={() => {
+                      choice.choose(value);
+                      close();
+                    }}
+                  >
+                    {label}
+                    {choice.value === value && <Check size={13} />}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
-          <div role="group" aria-label={t("theme")}>
-            <span className="account-menu-label">{t("theme")}</span>
-            <div className="account-options">
-              {(["light", "dark"] as const).map((value) => (
-                <button
-                  key={value}
-                  role="menuitemradio"
-                  tabIndex={-1}
-                  aria-checked={theme === value}
-                  onClick={() => {
-                    setTheme(value);
-                    close();
-                  }}
-                >
-                  {t(value)}
-                  {theme === value && <Check size={13} />}
-                </button>
-              ))}
-            </div>
-          </div>
+          ))}
           <div className="account-actions">
             <Link
               to="/user-settings"

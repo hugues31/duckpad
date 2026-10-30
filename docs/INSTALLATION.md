@@ -95,6 +95,8 @@ accounts, reset passwords, change instance roles, or deactivate/reactivate accou
 Passwords require at least 12 characters. Users can change their own password in
 **Account menu → User settings**; resets and deactivations revoke existing sessions.
 
+![Instance administrators manage users, instance roles and active accounts](images/users.png)
+
 - **Instance Admin** manages accounts, configuration, connections and every project.
 - **Instance Member** sees only their projects and can create private projects.
   The creator becomes the project's admin.
@@ -108,6 +110,8 @@ remove access. Every instance and project must retain an active admin. Instance
 admins choose the connections authorized for each project on this screen. A project
 admin cannot grant connections or promote an instance admin. Readers can copy data
 they can see; read access is not an extraction restriction.
+
+![Project participants with separate administrator, editor and reader roles](images/project-access.png)
 
 Memberships, password hashes and connection grants remain in instance SQLite,
 outside project Git.
@@ -125,6 +129,9 @@ as unavailable. History resets on reload or sign-out.
 Language defaults to the first supported language in your browser preferences
 (English or French, with English as the fallback), and the theme defaults to your
 system color scheme. Manual choices are saved in this browser and take priority
-on subsequent visits.
+on subsequent visits. Open **Account menu → User settings** to choose your
+language and theme.
+
+![Language and theme choices in personal preferences](images/preferences.png)
 
 Results live in memory per worktree and environment. After a backend restart, history remains available but previews and lineage require another manual run. Editing or changing an external source does not launch a run automatically.

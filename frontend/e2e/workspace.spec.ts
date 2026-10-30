@@ -128,7 +128,7 @@ test("theme and language persist without a project commit and environments have 
     .filter({ has: page.getByText("Orders", { exact: true }) })
     .click();
   await expect(page.getByText(fr.noResult, { exact: true })).toBeVisible();
-  await choosePreference(page, fr.english);
+  await choosePreference(page, "Anglais");
   await choosePreference(page, "Light");
   await run(page);
   await expect(page.locator(".data-table tbody tr")).toHaveCount(100);
