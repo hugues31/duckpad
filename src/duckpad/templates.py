@@ -7,6 +7,7 @@ from pathlib import Path
 
 import sqlglot
 from sqlglot import exp
+from sqlglot.tokens import TokenType
 
 from .data_preparation import PREPARATION_TYPES, render_preparation
 from .util import Problem, literal, qi
@@ -226,11 +227,13 @@ def expression_list(value):
 
 def variable_placeholders(variables, parameters):
     """Variable name -> the named DuckDB parameter binding its value, distinct from template parameters."""
-    taken = set(parameters) | {"var_" + name for name in variables}
+    # DuckDB treats parameter names as case-insensitive, including generated suffixes.
+    parameter_names = {name.lower() for name in parameters}
+    taken = parameter_names | {"var_" + name for name in variables}
     result = {}
     for name in sorted(variables):
         placeholder = "var_" + name
-        if placeholder in parameters:
+        if placeholder in parameter_names:
             suffix = 2
             while f"{placeholder}_{suffix}" in taken:
                 suffix += 1
@@ -243,16 +246,14 @@ def variable_placeholders(variables, parameters):
 def bind_variables(name, value, variables, placeholders):
     """An expression parameter value with its `{{ var.name }}` references turned into named parameters.
 
-    Returns the value and the variables it uses. The text never receives a variable's value:
+    The text never receives a variable's value:
     DuckDB binds it with its type, and dates are cast like date parameters.
     """
-    used = {}
 
     def replace(match):
         variable = match[1]
         if variable not in placeholders:
             raise Problem(f"{name} references variable {variable}, which has no value here")
-        used[variable] = placeholders[variable]
         placeholder = "$" + placeholders[variable]
         return (
             f"CAST({placeholder} AS DATE)"
@@ -260,23 +261,28 @@ def bind_variables(name, value, variables, placeholders):
             else placeholder
         )
 
-    if isinstance(value, list):
-        value = [VARIABLE_REFERENCE.sub(replace, item) if isinstance(item, str) else item for item in value]
-    elif isinstance(value, str):
-        value = VARIABLE_REFERENCE.sub(replace, value)
-    return value, used
+    def substitute(text):
+        if not isinstance(text, str):
+            return text
+        check_variables(name, text)
+        return VARIABLE_REFERENCE.sub(replace, text)
+
+    return [substitute(item) for item in value] if isinstance(value, list) else substitute(value)
 
 
-def check_variables(name, rendered, used):
-    """Reject references written inside quotes or comments, where they would not be bound values."""
-    if not used:
+def check_variables(name, text):
+    """Check each reference's source position before substitution or SQL normalization."""
+    matches = list(VARIABLE_REFERENCE.finditer(text))
+    if not matches:
         return
     try:
-        tree = sqlglot.parse_one("SELECT " + rendered, read="duckdb")
-    except sqlglot.errors.ParseError as error:
-        raise Problem(f"Invalid SQL expression: {rendered}") from error
-    found = {placeholder.name for placeholder in tree.find_all(exp.Placeholder)}
-    missing = sorted(variable for variable, placeholder in used.items() if placeholder not in found)
+        tokens = sqlglot.tokenize(text, read="duckdb")
+    except sqlglot.errors.TokenError as error:
+        raise Problem(f"Invalid SQL expression: {text}") from error
+    # Only a reference in SQL code starts with a brace token. Braces in strings,
+    # quoted identifiers, dollar-quoted strings and comments are not code tokens.
+    starts = {token.start for token in tokens if token.token_type == TokenType.L_BRACE}
+    missing = sorted({match[1] for match in matches if match.start() not in starts})
     if missing:
         variables = ", ".join(f"{{{{ var.{variable} }}}}" for variable in missing)
         raise Problem(
@@ -306,14 +312,12 @@ def render_parameter(
     kind, argument = base_type(type_name), type_argument(type_name)
     value = parameters[name]
     if kind in ("expression", "expressions"):
-        value, used = bind_variables(name, value, variables or {}, placeholders or {})
-        rendered = (
+        value = bind_variables(name, value, variables or {}, placeholders or {})
+        return (
             expression(value)
             if kind == "expression"
             else ", ".join(expression(x) for x in expression_list(value))
         )
-        check_variables(name, rendered, used)
-        return rendered
     if kind in PREPARATION_TYPES:
         return render_preparation(kind, value, (input_schemas or {}).get(argument))
     if kind == "connection":

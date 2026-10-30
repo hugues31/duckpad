@@ -206,17 +206,81 @@ def test_placeholders_never_collide_with_template_parameters():
     assert statement["variable_bindings"] == {"var_threshold_2": "threshold"}
 
 
+def test_case_insensitive_placeholder_collisions_preserve_values_in_runs(services):
+    store, projects, _, engine = services
+    bundle = project_bundle()
+    bundle["templates"]["values"] = (
+        "-- @kind source\n-- @param VAR_THRESHOLD: number = 1\n"
+        "-- @param Var_Threshold_2: number = 2\n-- @param projection: expressions\n-- @output result\n"
+        "SELECT {{ VAR_THRESHOLD }} AS configured, {{ Var_Threshold_2 }} AS reserved, {{ projection }};"
+    )
+    bundle["variables"]["threshold_3"] = {"type": "number", "default": 3}
+    bundle["flow"]["nodes"] = [
+        {
+            "id": "values",
+            "template": "values",
+            "params": {"projection": "{{ var.threshold }} AS value, {{ var.threshold_3 }} AS other"},
+        }
+    ]
+    bundle["flow"]["edges"] = []
+    worktree = projects.create("Case collisions", bundle)["id"]
+    assert projects.snapshot(worktree)["diagnostics"] == []
+    run = wait_run(store, engine.launch(worktree, "prod"))
+    assert run["status"] == "success", run
+    assert run["variables"]["threshold"]["value"] == 900
+    assert [row["values"] for row in engine.preview(worktree, "prod", "values")["rows"]] == [[1, 2, 900, 3]]
+    assert run["nodes"]["values"]["statements"][0]["bindings"] == {
+        "VAR_THRESHOLD": 1,
+        "Var_Threshold_2": 2,
+        "var_threshold_3": 3,
+        "var_threshold_4": 900,
+    }
+
+
 @pytest.mark.parametrize(
     "condition",
     [
         "status = '{{ var.segment }}'",
         'status = "{{ var.segment }}"',
         "status = 'x' /* {{ var.segment }} */",
+        "{{ var.segment }} = '{{ var.segment }}'",
+        "'{{ var.segment }}' = {{ var.segment }}",
+        '{{ var.segment }} = "{{ var.segment }}"',
+        "{{ var.segment }} = 'paid' /* {{ var.segment }} */",
+        "{{ var.segment }} = 'paid' -- {{ var.segment }}",
+        "/* outer /* {{ var.segment }} */ comment */ {{ var.segment }} = 'paid'",
+        "{{ var.segment }} = $$ {{ var.segment }} $$",
+        "{{ var.segment }} = $label${{ var.segment }}$label$",
+        "{{ var.segment }} = 'it''s {{ var.segment }}'",
+        "{{ var.segment }} = '{{ var.segment }}' OR $var_segment = 'paid'",
     ],
 )
 def test_references_inside_quotes_or_comments_are_rejected(condition):
     with pytest.raises(Problem, match=r"condition: write \{\{ var\.segment \}\} as a value, outside quotes"):
         compile_filter(condition, {"segment": {"type": "text", "value": "paid"}})
+
+
+@pytest.mark.parametrize(
+    "projection",
+    [
+        "{{ var.segment }} AS first, '{{ var.segment }}' AS second",
+        ["{{ var.segment }} AS first", "'{{ var.segment }}' AS second"],
+    ],
+)
+def test_each_reference_in_an_expression_list_is_checked(projection):
+    template = parse_template(
+        "-- @kind source\n-- @param projection: expressions\n-- @output result\nSELECT {{ projection }};"
+    )
+    with pytest.raises(Problem, match=r"projection: write .* outside quotes and comments"):
+        compile_template(
+            template,
+            {"projection": projection},
+            {},
+            {},
+            {},
+            ".",
+            variables={"segment": {"type": "text", "value": "paid"}},
+        )
 
 
 def test_a_reference_without_a_bound_value_never_compiles():
