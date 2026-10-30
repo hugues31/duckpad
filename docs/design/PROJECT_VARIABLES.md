@@ -196,13 +196,10 @@ Each step is a separate issue and pull request, with tests and documentation.
 
 ## Decisions
 
+- The first version has no run-time values: to try another value, change the variable on a branch, run and compare. Values supplied by schedules and webhooks come later (delivery step 4).
 - References stay limited to the root flow; components use exposed parameters.
 - Per-environment values are versioned in the project rather than stored per instance.
 - The entry point is a **Variables** workspace tab rather than a section of **Project settings**.
-
-## Open questions
-
-1. Can the first version ship without run-time values? Dataiku and Alteryx can launch a run with values typed for that run only, such as a threshold of 500 while the project says 300, without saving them. Here, trying 500 means changing the variable, on a branch to leave `main` untouched, then running and comparing. A one-off value would produce results that are stale immediately and have no lineage, because they do not match the saved configuration. What is lost is letting someone pick, for example, the month to compute without editing the project; schedules and webhooks would bring it back later.
 
 ## Sources
 
