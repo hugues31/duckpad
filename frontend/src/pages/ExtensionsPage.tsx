@@ -33,6 +33,7 @@ export default function ExtensionsPage() {
   const {
     data,
     error: loadError,
+    pending: refreshing,
     reload,
   } = useApiResource<Extensions>(`/worktrees/${id}/extensions`, {
     refresh: snapshot.revision,
@@ -42,7 +43,7 @@ export default function ExtensionsPage() {
   const { pending, error, run } = useAsyncAction();
   const [failed, setFailed] = useState<string | null>(null);
   if (!snapshot.bundle) return <InvalidProject />;
-  const busy = pending || !!statuses.active;
+  const busy = pending || refreshing || !!statuses.active;
   const valid = /^[a-z][a-z0-9_]{0,63}$/.test(name);
 
   async function change(
