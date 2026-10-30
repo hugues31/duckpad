@@ -116,7 +116,7 @@ For a single CSV output, `COPY tbl TO 'output.csv' (HEADER, DELIMITER ',');` ove
 
 A reusable SQL template describes its label, description, inputs, parameters, outputs, and SQL. Its definition belongs to a project and is shared by instances within that project branch. Adding it to the flow creates an instance linked to the local definition; parameter values and graph connections remain specific to the instance. Editing the definition updates all its local usages, while editing an instance's parameters changes only that instance. Templates follow the same project-local ownership, Git branching, and independent-copy import rules as components. Importing a template from another project creates an autonomous local definition. The editor distinguishes instance parameters from the shared local definition.
 
-Ports are declared with `-- @input name` and `-- @output name`; their table type is implicit. Parameters use `-- @param name: type = default_value`. Types include text, number, boolean, choice, file, connection reference, input column, SQL expression, and typed lists. Suggested columns depend on input schemas. All references use `{{ name }}` directly, without a prefix. Inputs, outputs, and parameters share a single namespace within the node; duplicates and undeclared references are rejected.
+Ports are declared with `-- @input name` and `-- @output name`; their table type is implicit. Parameters use `-- @param name: type = default_value`. Types include text, number, boolean, date, choice, file, connection reference, input column, SQL expression, and typed lists. Suggested columns depend on input schemas. All references use `{{ name }}` directly, without a prefix. Inputs, outputs, and parameters share a single namespace within the node; duplicates and undeclared references are rejected.
 
 ```sql
 -- @label Validated entries
@@ -161,6 +161,12 @@ A transformation reads only its declared inputs and its earlier outputs from the
 - Components can contain other local components. Direct or indirect recursive references and DAG cycles are validation errors that block affected executions; saved invalid definitions remain versioned.
 
 - Ports and parameters retain stable identifiers. An incompatible definition change flags the affected local instances requiring correction and blocks their execution until corrected.
+
+# Project variables
+
+- A project variable is a named, typed and documented value declared in the versioned `variables.json`, with a default and optional values per environment. A root flow parameter, including an exposed parameter of a component instance, can be bound to it with `{"$var": "name"}`; templates and component definitions cannot reference variables.
+
+- A launch resolves each variable used by its scope from the captured commit and the selected environment, binds the value like any parameter, and records its type, value and source in the run. Computation fingerprints include the resolved values, so changing a value invalidates only the results that use it in that environment. See [Authoring projects](AUTHORING.md#project-variables) and the [design proposal](design/PROJECT_VARIABLES.md).
 
 # Documentation and data lineage
 

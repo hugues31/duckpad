@@ -2,6 +2,7 @@
 
 import copy
 
+from . import variables
 from .templates import IDENTIFIER, directives, parse_template
 from .util import Problem, uid
 
@@ -204,6 +205,7 @@ def group(bundle, selection, label, exposed=None, parent=None):
             else:
                 targets.append(target)
         parameter["targets"] = targets
+    instance_params = expose_variables(bundle, internal, definition["parameters"])
     # Expose unconnected terminal outputs too, so a grouped result is inspectable.
     for node in internal:
         outputs = (
@@ -224,13 +226,53 @@ def group(bundle, selection, label, exposed=None, parent=None):
             "id": instance_id,
             "component": component_id,
             "label": label,
-            "params": {},
+            "params": instance_params,
             "position": internal[0].get("position", {"x": 100, "y": 100}),
         }
     ]
     graph["edges"] = outer
     expand(bundle)
     return bundle, instance_id
+
+
+def expose_variables(bundle, internal, exposed):
+    """Move variable bindings of grouped nodes to exposed parameters of the new instance.
+
+    Definitions never reference variables, so each bound parameter becomes an exposed parameter,
+    or reuses one already targeting it, and the instance binds it to the same variable.
+    """
+    instance_params = {}
+    for node in internal:
+        for param in variables.references(node.get("params")):
+            target = {"node": node["id"], "param": param}
+            key = next(
+                (k for k, p in exposed.items() if isinstance(p, dict) and target in p.get("targets", [])),
+                None,
+            )
+            if key is None:
+                key = param
+                suffix = 2
+                while key in exposed:
+                    key, suffix = f"{param}_{suffix}", suffix + 1
+                exposed[key] = {"targets": [target]}
+                parameter_type = parameter_types(bundle, node).get(param)
+                if parameter_type:
+                    exposed[key]["type"] = parameter_type
+            instance_params[key] = node["params"].pop(param)
+    return instance_params
+
+
+def parameter_types(bundle, node):
+    """Parameter name -> declared type of a template node or component instance."""
+    if node.get("component"):
+        parameters = bundle["components"].get(node["component"], {}).get("parameters", {})
+        return {name: p["type"] for name, p in parameters.items() if isinstance(p, dict) and p.get("type")}
+    try:
+        return {
+            p["name"]: p["type"] for p in parse_template(bundle["templates"][node["template"]])["parameters"]
+        }
+    except (Problem, KeyError):
+        return {}
 
 
 def import_definition(destination, source, kind, identity, origin):

@@ -2,6 +2,7 @@
 
 import json
 import re
+from datetime import date
 from pathlib import Path
 
 import sqlglot
@@ -15,11 +16,13 @@ IDENTIFIER = re.compile(r"[A-Za-z_]\w*")
 DIRECTIVE = re.compile(r"^\s*--\s*@([\w]+)\s*(.*?)\s*$")
 PARAMETER = re.compile(r"(\w+)\s*:\s*([^=]+?)(?:\s*=\s*(.*))?")
 URI = re.compile(r"[a-zA-Z][a-zA-Z0-9+.-]*://")
+ISO_DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
 KINDS = ("source", "transform", "export")
 PARAMETER_TYPES = {
     "text",
     "number",
     "boolean",
+    "date",
     "choice",
     "keyword",
     "file",
@@ -302,8 +305,20 @@ def check_scalar(name, kind, argument, value):
             raise Problem(f"{name} requires a number")
     elif kind == "boolean" and not isinstance(value, bool):
         raise Problem(f"{name} requires a boolean")
+    elif kind == "date" and not is_date(value):
+        raise Problem(f"{name} requires a date written YYYY-MM-DD")
     elif kind == "choice" and argument and str(value) not in argument.split("|"):
         raise Problem(f"{name} must be one of {argument}")
+
+
+def is_date(value):
+    if not isinstance(value, str) or not ISO_DATE.fullmatch(value):
+        return False
+    try:
+        date.fromisoformat(value)
+    except ValueError:
+        return False
+    return True
 
 
 def parse_block(sql):
@@ -395,7 +410,8 @@ def compile_template(template, params, inputs, physical_outputs, connections, di
         rendered = render_parameter(template, parameter, parameters, connections, directory, input_schemas)
         if rendered is None:
             bindings[name] = parameters[name]
-            values[name] = "$" + name
+            # Dates are bound as ISO text, which a bound VARCHAR would not compare with a DATE.
+            values[name] = f"CAST(${name} AS DATE)" if base_type(parameter["type"]) == "date" else "$" + name
         else:
             values[name] = rendered
     resources = [values[p["name"]] for p in template["parameters"] if base_type(p["type"]) in RESOURCE_TYPES]

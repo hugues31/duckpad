@@ -105,6 +105,11 @@ class Group(BaseModel):
     parent: str | None = None
 
 
+class VariableRename(BaseModel):
+    revision: str
+    name: str = Field(max_length=200)
+
+
 class Import(BaseModel):
     revision: str
     source_worktree: str

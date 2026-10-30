@@ -11,6 +11,7 @@ from pathlib import Path
 
 import duckdb
 
+from . import variables
 from .artifacts import Artifacts
 from .bundle import bundle_to_files, files_to_bundle, topological
 from .catalog import redact
@@ -65,6 +66,23 @@ def connection_references(node):
         for parameter in node["parsed"]["parameters"]
         if parameter["type"] == "connection"
     ]
+
+
+def expand_for(bundle, environment, tolerant=True):
+    """Expand a bundle with its variable references bound to their values in an environment."""
+    nodes, edges, boundaries = expand(bundle, tolerant=tolerant)
+    variables.bind(bundle, nodes, environment)
+    return nodes, edges, boundaries
+
+
+def launch_scope(nodes, edges, target=None):
+    """The nodes a launch computes: the whole project, or a node subtree and its upstream nodes."""
+    if not target:
+        return set(nodes)
+    scope = {n for n in nodes if in_subtree(n, target)}
+    if not scope:
+        raise Problem("Node not found", 404)
+    return reachable(scope, edges, upstream=True)
 
 
 def reachable(seeds, edges, upstream):
@@ -317,7 +335,8 @@ class Engine:
                         del self.contexts[key]
 
     def fingerprints(self, bundle, environment, captured=None):
-        nodes, edges, _ = expand(bundle, tolerant=True)
+        # Bound values replace variable references, so renames and descriptions never count.
+        nodes, edges, _ = expand_for(bundle, environment)
         fingerprints = {}
         for key in topological(nodes, edges, tolerant=True):
             node = nodes[key]
@@ -410,16 +429,20 @@ class Engine:
 
     def launch(self, worktree_id, environment, target=None, entry_point="api", *, confirmed=False):
         self.projects.get(worktree_id)
+        settings = self.catalog.environment(environment)
+        if entry_point == "ui" and settings["confirm_before_run"] and not confirmed:
+            try:
+                used = self.scope_variables(worktree_id, environment, target)
+            except Problem:
+                used = {}
+            raise Problem(
+                "Confirm this environment before running",
+                409,
+                {"confirmation_required": settings, "variables": used},
+            )
         run_id = uid("run_")
         token = {"id": run_id, "cancel": threading.Event(), "cursor": None}
         with self.lock:
-            settings = self.catalog.environment(environment)
-            if entry_point == "ui" and settings["confirm_before_run"] and not confirmed:
-                raise Problem(
-                    "Confirm this environment before running",
-                    409,
-                    {"confirmation_required": settings},
-                )
             if worktree_id in self.active:
                 raise Problem(
                     "This worktree already has an active execution. Wait or stop it before running again.",
@@ -434,16 +457,10 @@ class Engine:
                 raise Problem(
                     "Project files are invalid; correct them before execution", 422, snapshot["diagnostics"]
                 )
-            nodes, edges, _ = expand(bundle, tolerant=True)
+            nodes, edges, _ = expand_for(bundle, environment)
             order = topological(nodes, edges, tolerant=True)
-            if target:
-                scope = {n for n in nodes if in_subtree(n, target)}
-                if not scope:
-                    raise Problem("Node not found", 404)
-                scope = reachable(scope, edges, upstream=True)
-                order = [n for n in order if n in scope]
-            else:
-                scope = set(nodes)
+            scope = launch_scope(nodes, edges, target)
+            order = [n for n in order if n in scope]
             self._check_conflicts(snapshot["conflicts"], scope, environment)
             captured, secrets = self._capture_connections(
                 worktree_id, nodes, scope, environment, strict=bool(target)
@@ -480,9 +497,16 @@ class Engine:
                         "label": nodes[n].get("label", n),
                         "kind": nodes[n]["parsed"]["kind"],
                         "fingerprint": fingerprints[n],
+                        **(
+                            {"variables": {p: b["name"] for p, b in nodes[n]["variables"].items()}}
+                            if nodes[n].get("variables")
+                            else {}
+                        ),
                     }
                     for n in order
                 },
+                # Values captured from the launched commit and environment, for the history.
+                "variables": variables.used(bundle, nodes, scope, environment),
                 "connections": {
                     ref: {"definition": c["definition"], "settings": c["settings"], "name": c["name"]}
                     for ref, c in captured.items()
@@ -490,6 +514,7 @@ class Engine:
                 "definitions": bundle["templates"],
                 "components": bundle["components"],
                 "flow": bundle["flow"],
+                "variable_declarations": bundle.get("variables"),
             }
             self._persist(run, secrets)
             execution = Execution(token, context, run, nodes, edges, order, captured, secrets, fingerprints)
@@ -502,6 +527,15 @@ class Engine:
             with self.lock:
                 self.active.pop(worktree_id, None)
             raise
+
+    def scope_variables(self, worktree, environment, target=None):
+        """Variables a launch of the project or a node would use, with their values and sources."""
+        self.catalog.environment(environment)
+        snapshot = self.projects.snapshot(worktree)
+        if snapshot["bundle"] is None:
+            return {}
+        nodes, edges, _ = expand_for(snapshot["bundle"], environment)
+        return variables.used(snapshot["bundle"], nodes, launch_scope(nodes, edges, target), environment)
 
     def _check_conflicts(self, conflicts, scope, environment):
         """Reject a run when a pending edit conflict would change a node in its scope."""
@@ -720,7 +754,7 @@ class Engine:
             directory,
             input_schemas={port: data.columns for port, data in input_datasets.items()},
         )
-        state["statements"] = statements
+        state["statements"] = variables.annotate(statements, node)
         self._persist(run, execution.secrets)
         staged = {}
         for statement in statements:
@@ -846,7 +880,7 @@ class Engine:
             snapshot = self.projects.snapshot(worktree)
             if not snapshot["bundle"]:
                 return {"status": "stale"}
-            nodes, edges, _ = expand(snapshot["bundle"], tolerant=True)
+            nodes, edges, _ = expand_for(snapshot["bundle"], environment)
             definition = nodes.get(node)
             if not definition:
                 raise Problem("Node not found", 404)
@@ -1034,13 +1068,15 @@ class Engine:
         self.catalog.environment(environment)
         if not snapshot["bundle"]:
             raise Problem("Project files are invalid", 422, snapshot["diagnostics"])
-        nodes, edges, _ = expand(snapshot["bundle"])
+        nodes, edges, _ = expand_for(snapshot["bundle"], environment, tolerant=False)
         selected = [key for key in nodes if in_subtree(key, node_id)]
         if not selected:
             raise Problem("Node not found", 404)
         output = []
         for key in selected:
             node = nodes[key]
+            if node.get("error"):
+                raise Problem(node["error"], 422)
             captured, secrets = self.capture(worktree, connection_references(node), environment)
             inputs = {
                 e["targetHandle"]: qi("input_" + e["source"].replace("::", "_") + "_" + e["sourceHandle"])
@@ -1070,7 +1106,7 @@ class Engine:
             )
             for statement in statements:
                 statement["sql"] = redact(statement["sql"], secrets)
-            output.extend(statements)
+            output.extend(variables.annotate(statements, node))
         return output
 
     def close(self):
