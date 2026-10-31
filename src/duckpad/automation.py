@@ -21,7 +21,7 @@ class Trigger(BaseModel):
     reference: str | None = Field(default=None, max_length=2048)
 
 
-class Launch(BaseModel):
+class LaunchRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     trigger: Trigger | None = None
 
@@ -233,7 +233,7 @@ def router(jobs, access):
     def launch_job(
         slug: str,
         request: Request,
-        data: Annotated[Launch, Body(default_factory=Launch)],
+        data: Annotated[LaunchRequest, Body(default_factory=LaunchRequest)],
         idempotency_key: Annotated[str | None, Header(min_length=1, max_length=256)] = None,
     ):
         requester = {
