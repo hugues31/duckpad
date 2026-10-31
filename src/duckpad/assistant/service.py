@@ -233,12 +233,17 @@ class Assistant:
                 for previous in record["turns"]:
                     for tool in previous.get("tools", []):
                         run_id = tool.get("args", {}).get("run")
-                        if run_id and tool["name"] in (
-                            "read_runs",
-                            "inspect_run",
-                            "read_run_sql",
-                            "compare_run",
-                            "wait_for_run",
+                        if (
+                            run_id
+                            and tool.get("status") == "complete"
+                            and tool["name"]
+                            in (
+                                "read_runs",
+                                "inspect_run",
+                                "read_run_sql",
+                                "compare_run",
+                                "wait_for_run",
+                            )
                         ):
                             run_record(deps, run_id)
             if identity in self.active:

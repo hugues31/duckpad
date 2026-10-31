@@ -328,3 +328,22 @@ def test_cancel_active_run_and_bounded_wait(instance, monkeypatch):
     finally:
         release.set()
     assert join_run(services.store, run["id"])["status"] == "canceled"
+
+
+def test_failed_run_lookup_does_not_block_the_next_turn(instance):
+    app, client = instance
+    configure(client)
+    _, context = project(client)
+
+    async def stream(messages, info):
+        if any(isinstance(part, ToolReturnPart) for part in messages[-1].parts):
+            yield "No run was found."
+        else:
+            yield {0: DeltaToolCall(name="read_runs", json_args='{"run":"latest"}', tool_call_id="missing")}
+
+    app.state.assistant.configuration.model_override = FunctionModel(stream_function=stream)
+    identity = conversation(client, context)
+    first = turn(client, identity, context)[-1]["turn"]
+    assert first["tools"][0]["status"] == "error"
+    assert first["status"] == "complete"
+    assert turn(client, identity, context, "Then propose a new run")[-1]["turn"]["status"] == "complete"
