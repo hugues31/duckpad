@@ -14,6 +14,7 @@ interface Member {
   username: string;
   active: boolean;
   role: ProjectRole;
+  auth_method?: "oidc" | "service";
 }
 
 interface Settings {
@@ -22,7 +23,7 @@ interface Settings {
   role: ProjectRole;
   members: Member[];
   /** Active accounts that can join the project; listed for its admins only. */
-  users: { id: string; username: string }[];
+  users: { id: string; username: string; auth_method?: "oidc" | "service" }[];
   /** The granted connections. */
   connections: string[];
 }
@@ -47,6 +48,7 @@ export default function ProjectSettings({
   onDeleted: () => void;
 }) {
   const t = useT();
+  const [selectedUser, setSelectedUser] = useState("");
   const [settings, setSettings] = useState<Settings | null>(null);
   const [confirmation, setConfirmation] = useState<Confirmation | null>(null);
   const { pending, error, setError, run } = useAsyncAction();
@@ -145,6 +147,8 @@ export default function ProjectSettings({
                   <Select
                     aria-label={t("user")}
                     name="user"
+                    value={selectedUser}
+                    onChange={(e) => setSelectedUser(e.target.value)}
                     required
                     disabled={!available.length}
                   >
@@ -163,9 +167,14 @@ export default function ProjectSettings({
                   <Select
                     aria-label={t("projectRole")}
                     name="role"
+                    key={selectedUser}
                     defaultValue="reader"
                   >
-                    {PROJECT_ROLES.map((role) => (
+                    {(available.find((u) => u.id === selectedUser)
+                      ?.auth_method === "service"
+                      ? (["reader"] as const)
+                      : PROJECT_ROLES
+                    ).map((role) => (
                       <option key={role} value={role}>
                         {t(`role_${role}`)}
                       </option>
@@ -206,7 +215,12 @@ export default function ProjectSettings({
                         <RoleSelect
                           label={`${t("projectRole")} · ${member.username}`}
                           value={member.role}
-                          disabled={!admin || pending || !member.active}
+                          disabled={
+                            !admin ||
+                            pending ||
+                            !member.active ||
+                            member.auth_method === "service"
+                          }
                           onChange={(role) =>
                             act(() =>
                               api(

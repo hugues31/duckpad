@@ -20,6 +20,7 @@ MODELS = {
     "assistant_conversation": m.AssistantConversation,
     "user": m.User,
     "session": m.LoginSession,
+    "api_token": m.APIToken,
     "project": m.Project,
     "worktree": m.Worktree,
     "connector": m.Connector,
@@ -160,6 +161,22 @@ class Store:
                 return self._access(key, session)
             row = session.get(MODELS[kind], self._key(kind, key))
             return self._record(kind, row, session) if row is not None else default
+
+    def api_tokens(self, user):
+        with self.session() as session:
+            rows = session.exec(
+                select(m.APIToken).where(m.APIToken.user == user).order_by(m.APIToken.created)
+            )
+            return [row.model_dump() for row in rows]
+
+    def find_api_token(self, token_hash):
+        with self.session() as session:
+            row = session.exec(select(m.APIToken).where(m.APIToken.hash == token_hash)).first()
+            return row.model_dump() if row is not None else None
+
+    def delete_api_tokens(self, user):
+        with self.session() as session:
+            session.exec(delete(m.APIToken).where(m.APIToken.user == user))
 
     def all(self, kind):
         return [value for _, value in self.items(kind)]

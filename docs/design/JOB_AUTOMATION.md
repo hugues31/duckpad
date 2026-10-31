@@ -1,6 +1,6 @@
 # Job automation (design proposal)
 
-**Status: proposed; the decisions below were agreed in review. Nothing is implemented yet.**
+**Status: delivery step 1.1 implemented (API tokens, service accounts restricted to Reader, and run requesters). The remaining steps are proposed; the decisions below were agreed in review.**
 
 ## Summary
 

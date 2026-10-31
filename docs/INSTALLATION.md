@@ -119,6 +119,24 @@ accounts, reset passwords, change instance roles, or deactivate/reactivate accou
 Passwords require at least 12 characters. Users can change their own password in
 **Account menu → User settings**; resets and deactivations revoke existing sessions.
 
+**API tokens.** Local and SSO users can create named tokens under **User settings → API tokens**.
+The form proposes an expiration date 90 days away; clear it for a token without expiration.
+Copy the `dpk_` secret when it is created: it is shown only once, and the database stores
+only its hash. Send it as `Authorization: Bearer dpk_…` to use the account's current permissions.
+Tokens are never accepted from cookies and do not authorize SSH key management or network Git.
+The list shows creation, expiration and last use (updated at most once per minute), and allows revocation.
+Changing a password leaves API tokens valid. Deactivation deletes all tokens permanently,
+including after reactivation. An SSO account's tokens work only while SSO is enabled.
+Instance administrators can list and revoke any account's tokens through its **API tokens** button.
+
+**Service accounts.** Instance administrators use **Add service account** in **Users and permissions**
+to supply a name and description. These accounts have no password or SSO identity and cannot
+sign in interactively. They are always instance Members, cannot create projects, and may only
+be granted Reader access to existing projects. Administrators create and revoke their tokens
+from the account's **API tokens** view. Service accounts cannot run pipelines until the Operator
+role is available. Every HTTP-launched run records its requesting account and, when applicable,
+the token name; **History** displays this attribution even after the token is revoked.
+
 ![Instance administrators manage users, instance roles and active accounts](images/users.png)
 
 - **Instance Admin** manages accounts, configuration, connections and every project.

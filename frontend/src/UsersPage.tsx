@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import APITokenSettings from "./APITokenSettings";
 import { Plus, Users } from "lucide-react";
 import { api, send } from "./api";
 import { useT } from "./i18n";
@@ -12,7 +13,9 @@ const readUsers = () => api<User[]>("/users");
 
 /** The open dialog and the account it acts on. */
 type Dialog =
-  { kind: "create" } | { kind: "password" | "deactivate"; user: User };
+  | { kind: "create" }
+  | { kind: "createService" }
+  | { kind: "password" | "deactivate"; user: User };
 
 /** Instance accounts: creation, instance roles, passwords and deactivation. */
 export default function UsersPage({
@@ -22,6 +25,7 @@ export default function UsersPage({
 }) {
   const t = useT();
   const [users, setUsers] = useState<User[]>([]);
+  const [tokenUser, setTokenUser] = useState<User | null>(null);
   const [query, setQuery] = useState("");
   const [modal, setModal] = useState<Dialog | null>(null);
   const { pending, error, setError, run } = useAsyncAction();
@@ -46,13 +50,17 @@ export default function UsersPage({
   }
   async function submit(modal: Dialog, data: FormData) {
     const saved = await dialog.run(() =>
-      modal.kind === "create"
+      modal.kind === "create" || modal.kind === "createService"
         ? api(
             "/users",
             send({
               username: data.get("username"),
-              password: data.get("password"),
-              role: data.get("role"),
+              password:
+                modal.kind === "createService" ? null : data.get("password"),
+              role:
+                modal.kind === "createService" ? "member" : data.get("role"),
+              service: modal.kind === "createService",
+              description: data.get("description") || "",
             }),
           )
         : api(
@@ -82,13 +90,22 @@ export default function UsersPage({
           </h2>
           <p className="muted">{t("usersDescription")}</p>
         </div>
-        <button
-          className="button primary"
-          onClick={() => open({ kind: "create" })}
-        >
-          <Plus size={16} />
-          {t("addUser")}
-        </button>
+        <div className="settings-actions">
+          <button
+            className="button secondary"
+            onClick={() => open({ kind: "createService" })}
+          >
+            <Plus size={16} />
+            {t("addServiceAccount")}
+          </button>
+          <button
+            className="button primary"
+            onClick={() => open({ kind: "create" })}
+          >
+            <Plus size={16} />
+            {t("addUser")}
+          </button>
+        </div>
       </div>
       <div className="notice">{t("instanceRolesHint")}</div>
       {error && (
@@ -118,6 +135,9 @@ export default function UsersPage({
               <tr key={user.id}>
                 <td>
                   <strong>{user.username}</strong>
+                  {user.auth_method === "service" && (
+                    <small className="muted"> · {t("serviceAccount")}</small>
+                  )}
                   {user.auth_method === "oidc" && (
                     <small className="muted"> · SSO</small>
                   )}
@@ -127,7 +147,7 @@ export default function UsersPage({
                     instance
                     label={`${t("instanceRole")} · ${user.username}`}
                     value={user.role}
-                    disabled={busy}
+                    disabled={busy || user.auth_method === "service"}
                     onChange={(role) => update(user.id, { role })}
                   />
                 </td>
@@ -142,7 +162,14 @@ export default function UsersPage({
                   <div className="row gap">
                     <button
                       className="button secondary small"
-                      disabled={busy || user.auth_method === "oidc"}
+                      disabled={busy}
+                      onClick={() => setTokenUser(user)}
+                    >
+                      {t("apiTokens")}
+                    </button>
+                    <button
+                      className="button secondary small"
+                      disabled={busy || !!user.auth_method}
                       title={
                         user.auth_method === "oidc"
                           ? t("ssoPasswordManaged")
@@ -171,14 +198,34 @@ export default function UsersPage({
         </table>
         {!visible.length && <p className="muted">{t("noUsers")}</p>}
       </div>
+      {tokenUser && (
+        <Modal
+          title={`${tokenUser.username} · ${t("apiTokens")}`}
+          onClose={() => setTokenUser(null)}
+          wide
+        >
+          <div className="modal-content">
+            {tokenUser.description && <p>{tokenUser.description}</p>}
+            <APITokenSettings
+              key={tokenUser.id}
+              user={tokenUser.id}
+              canCreate={
+                tokenUser.auth_method === "service" && tokenUser.active
+              }
+            />
+          </div>
+        </Modal>
+      )}
       {modal && (
         <Modal
           title={t(
-            modal.kind === "create"
-              ? "addUser"
-              : modal.kind === "password"
-                ? "resetPassword"
-                : "deactivate",
+            modal.kind === "createService"
+              ? "addServiceAccount"
+              : modal.kind === "create"
+                ? "addUser"
+                : modal.kind === "password"
+                  ? "resetPassword"
+                  : "deactivate",
           )}
           onClose={() => setModal(null)}
         >
@@ -189,7 +236,7 @@ export default function UsersPage({
             }}
           >
             <div className="modal-content">
-              {modal.kind === "create" && (
+              {(modal.kind === "create" || modal.kind === "createService") && (
                 <>
                   <label className="field">
                     <span>{t("username")}</span>
@@ -201,23 +248,32 @@ export default function UsersPage({
                       autoComplete="off"
                     />
                   </label>
-                  <label className="field">
-                    <span>{t("instanceRole")}</span>
-                    <Select
-                      aria-label={t("instanceRole")}
-                      name="role"
-                      defaultValue="member"
-                    >
-                      <option value="member">{t("role_member")}</option>
-                      <option value="admin">{t("role_admin")}</option>
-                    </Select>
-                  </label>
+                  {modal.kind === "createService" ? (
+                    <label className="field">
+                      <span>{t("serviceDescription")}</span>
+                      <textarea name="description" maxLength={1000} />
+                    </label>
+                  ) : (
+                    <label className="field">
+                      <span>{t("instanceRole")}</span>
+                      <Select
+                        aria-label={t("instanceRole")}
+                        name="role"
+                        defaultValue="member"
+                      >
+                        <option value="member">{t("role_member")}</option>
+                        <option value="admin">{t("role_admin")}</option>
+                      </Select>
+                    </label>
+                  )}
                 </>
               )}
               {modal.kind === "deactivate" ? (
                 <p>
                   {t("deactivateHint")} <strong>{modal.user.username}</strong>
                 </p>
+              ) : modal.kind === "createService" ? (
+                <p>{t("serviceAccountHint")}</p>
               ) : (
                 <label className="field">
                   <span>{t("newPassword")}</span>
@@ -249,7 +305,7 @@ export default function UsersPage({
               </button>
               <button className="button primary" disabled={busy}>
                 {t(
-                  modal.kind === "create"
+                  modal.kind === "create" || modal.kind === "createService"
                     ? "create"
                     : modal.kind === "deactivate"
                       ? "deactivate"

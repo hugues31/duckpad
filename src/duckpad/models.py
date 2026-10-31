@@ -12,8 +12,9 @@ class User(SQLModel, table=True):
         CheckConstraint("role IN ('admin', 'member')", name="user_role"),
         UniqueConstraint("oidc_issuer", "oidc_subject", name="user_oidc_identity"),
         CheckConstraint(
-            "(oidc_issuer IS NULL AND oidc_subject IS NULL AND salt IS NOT NULL AND hash IS NOT NULL) "
-            "OR (oidc_issuer IS NOT NULL AND oidc_subject IS NOT NULL AND salt IS NULL AND hash IS NULL)",
+            "(service = 0 AND ((oidc_issuer IS NULL AND oidc_subject IS NULL AND salt IS NOT NULL AND hash IS NOT NULL) "
+            "OR (oidc_issuer IS NOT NULL AND oidc_subject IS NOT NULL AND salt IS NULL AND hash IS NULL))) "
+            "OR (service = 1 AND role = 'member' AND oidc_issuer IS NULL AND oidc_subject IS NULL AND salt IS NULL AND hash IS NULL)",
             name="user_credentials",
         ),
     )
@@ -22,6 +23,8 @@ class User(SQLModel, table=True):
     username_key: str = Field(unique=True)
     role: str
     active: bool
+    service: bool = False
+    description: str = ""
     salt: str | None = None
     hash: str | None = None
     oidc_issuer: str | None = None
@@ -38,6 +41,17 @@ class LoginSession(SQLModel, table=True):
     version: int
     credential: str | None = None
     oidc_revision: str | None = None
+
+
+class APIToken(SQLModel, table=True):
+    __tablename__ = "api_token"
+    id: str = Field(primary_key=True)
+    user: str = Field(foreign_key="user.id", ondelete="CASCADE", index=True)
+    hash: str = Field(unique=True)
+    name: str
+    created: float
+    expires: float | None = None
+    last_used: float | None = None
 
 
 class Project(SQLModel, table=True):
