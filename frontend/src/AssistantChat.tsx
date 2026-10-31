@@ -85,13 +85,17 @@ function ToolCard({
   const status =
     tool.approval?.decision === null
       ? "assistantRunConfirmation"
-      : tool.status === "running"
-        ? "assistantReading"
-        : tool.status === "complete"
-          ? "assistantComplete"
-          : tool.status === "stopped"
-            ? "assistantStopped"
-            : "assistantFailed";
+      : tool.status === "approved"
+        ? "assistantRunApproved"
+        : tool.status === "denied"
+          ? "assistantRunDeclined"
+          : tool.status === "running"
+            ? "assistantReading"
+            : tool.status === "complete"
+              ? "assistantComplete"
+              : tool.status === "stopped"
+                ? "assistantStopped"
+                : "assistantFailed";
   return (
     <div className="assistant-tool">
       <details open={action || tool.approval ? true : undefined}>
@@ -263,9 +267,8 @@ export default function AssistantChat() {
     (DebugRequest & { worktree: string }) | null
   >(null);
   const defaultPrompts = useDefaultPrompts();
-  const awaitingApproval = ["awaiting_approval", "resuming"].includes(
-    conversation?.turns.at(-1)?.status || "",
-  );
+  const awaitingApproval =
+    conversation?.turns.at(-1)?.status === "awaiting_approval";
   useEffect(() => {
     const receive = (event: Event) => {
       if (busy || undoing) return;

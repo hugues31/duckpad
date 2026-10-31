@@ -107,6 +107,27 @@ def test_partial_batch_never_executes_and_replays_are_rejected(instance):
     assert len(client.get("/api/runs").json()) == 1
 
 
+def test_lost_resume_is_closed_without_replay(instance):
+    app, client = instance
+    configure(client)
+    _, context = project(client)
+    identity, requested = request_run(app, client, context)
+    # A restart or disconnect can end an accepted resume before its stream records an outcome.
+    store = app.state.services.store
+    record = store.get("assistant_conversation", identity)
+    record["turns"][-1]["status"] = "resuming"
+    record["turns"][-1]["tools"][0].update(status="approved")
+    record["turns"][-1]["tools"][0]["approval"]["decision"] = True
+    store.put("assistant_conversation", identity, record)
+    assert decide(client, identity, requested).status_code == 409
+    result = turn(client, identity, context, "What happened?")[-1]["turn"]
+    assert result["status"] == "complete", result
+    assert "interrupted" in result["text"]
+    lost = client.get(f"/api/assistant/conversations/{identity}").json()["turns"][0]
+    assert lost["status"] == "stopped" and lost["tools"][0]["status"] == "stopped"
+    assert client.get("/api/runs").json() == []
+
+
 def test_protected_environment_and_changed_configuration(instance):
     app, client = instance
     configure(client)

@@ -474,8 +474,10 @@ lineage contributions and upstream node SQL.
 The server persists tool calls and confirmation cards with the conversation, and
 resumes the original model history through `DeferredToolResults` after the author
 accepts or refuses. A reload preserves pending decisions. A batch waits for every
-decision; consumed requests cannot be replayed. Permission is checked again at
-launch, using the same editor role and connection grants as the execution API.
+decision; consumed requests cannot be replayed. If a server restart or disconnect
+interrupts the resumed response, the next message closes that turn as stopped
+without replaying its decisions. Permission is checked again at launch, using
+the same editor role and connection grants as the execution API.
 Approval is bound to the proposed definitions, environment and connection
 configuration; a changed plan requires a new confirmation. Cards show environment,
 scope, used variables, protected-environment confirmation and irreversible exports

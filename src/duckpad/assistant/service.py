@@ -24,6 +24,7 @@ from pydantic_ai.messages import (
     PartStartEvent,
     TextPart,
     TextPartDelta,
+    repair_messages,
 )
 from pydantic_ai.usage import UsageLimits
 from sqlmodel import col, select
@@ -199,11 +200,8 @@ class Assistant:
     def prepare(self, user, token, identity, data, *, resume=None):
         with self.lock:
             record = self.owned(user, identity)
-            if (
-                resume is None
-                and record["turns"]
-                and record["turns"][-1]["status"] in ("awaiting_approval", "resuming")
-            ):
+            last = record["turns"][-1] if resume is None and record["turns"] else {}
+            if last.get("status") == "awaiting_approval":
                 raise Problem("Answer the pending run confirmation before sending another message", 409)
             config = self.configuration.get()
             if not config["enabled"]:
@@ -248,6 +246,14 @@ class Assistant:
                             run_record(deps, run_id)
             if identity in self.active:
                 raise Problem("A response is already in progress", 409)
+            if last.get("status") == "resuming":
+                # The approved response lost its stream (restart or disconnect). Close it without
+                # replaying its decisions; the new prompt closes out its unanswered tool calls.
+                last["status"] = "stopped"
+                for card in last["tools"]:
+                    if card["status"] in ("running", "approved", "denied"):
+                        card["status"] = "stopped"
+                self.save_turn(identity, last)
             cancellation = CancellationToken()
             self.active[identity] = cancellation
         return self.stream(
@@ -323,6 +329,10 @@ class Assistant:
                 if deps.context["worktree"]
                 else []
             )
+            history = ModelMessagesTypeAdapter.validate_python(record["messages"])
+            if resume is None:
+                # A new prompt can never answer older tool calls, e.g. after an interrupted resume.
+                history = repair_messages(history)
             async with self.configuration.model(provider, data.model) as model:
                 agent = Agent[Dependencies, str | DeferredToolRequests](
                     model,
@@ -340,7 +350,7 @@ class Assistant:
                     None if resume is not None else turn["user"],
                     deps=deps,
                     deferred_tool_results=deferred,
-                    message_history=ModelMessagesTypeAdapter.validate_python(record["messages"]),
+                    message_history=history,
                     usage_limits=UsageLimits(request_limit=12, tool_calls_limit=30),
                     timeout=TURN_TIMEOUT,
                     cancellation_token=cancellation,
