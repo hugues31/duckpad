@@ -44,6 +44,8 @@ export interface ParsedTemplate {
   parameters?: Parameter[];
   /** The destination parameter and format of an export Duckpad can download. */
   download?: { parameter: string; format: string } | null;
+  /** SQL blocks in declaration order; `-- @test` blocks carry their name. */
+  blocks?: { output: string | null; test_name?: string }[];
 }
 /** A port of a component, bound to a port of one of its nodes. */
 export interface ComponentPort {
@@ -278,9 +280,15 @@ export interface ExecutionResult {
   origin: { kind: string; block?: number; name?: string };
   output?: string | null;
   observed?: Json;
+  status?: "ok" | "warning" | "error";
   /** A final summary preserves counts for results beyond the display limit. */
   omitted?: number;
   counts?: Partial<Record<ExecutionResult["level"], number>>;
+}
+export interface TestExecution {
+  run: string;
+  started: string;
+  results: ExecutionResult[];
 }
 /** What a run did with one node. */
 export interface NodeRun {

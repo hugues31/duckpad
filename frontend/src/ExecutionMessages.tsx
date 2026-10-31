@@ -25,8 +25,10 @@ export function WarningBadge({ count }: { count: number }) {
 
 export default function ExecutionMessages({
   results = [],
+  tests = false,
 }: {
   results?: ExecutionResult[];
+  tests?: boolean;
 }) {
   const t = useT();
   const levels = {
@@ -35,10 +37,11 @@ export default function ExecutionMessages({
     error: t("messageError"),
   };
   if (!results.length) return null;
+  const title = t(tests ? "dataTests" : "executionMessages");
   return (
-    <section className="execution-messages" aria-label={t("executionMessages")}>
+    <section className="execution-messages" aria-label={title}>
       <h4>
-        {t("executionMessages")} <WarningBadge count={warningCount(results)} />
+        {title} <WarningBadge count={warningCount(results)} />
       </h4>
       <ul>
         {results.map((result, index) => (
@@ -49,14 +52,30 @@ export default function ExecutionMessages({
               </span>
             ) : (
               <>
-                <strong>{levels[result.level]}</strong>
-                <span>{result.message}</span>
-                <small>
-                  {result.origin.name ||
-                    t("messageBlock").replace(
-                      "{block}",
-                      String(result.origin.block),
+                <strong>
+                  {result.status === "ok" ? t("testOK") : levels[result.level]}
+                </strong>
+                <span>
+                  {result.origin.kind === "test"
+                    ? result.origin.name
+                    : result.message}
+                </span>
+                {result.origin.kind === "test" && (
+                  <span>
+                    {t("testFailingRows").replace(
+                      "{count}",
+                      String(result.observed),
                     )}
+                  </span>
+                )}
+                <small>
+                  {result.origin.kind === "test"
+                    ? t("dataTest")
+                    : result.origin.name ||
+                      t("messageBlock").replace(
+                        "{block}",
+                        String(result.origin.block),
+                      )}
                   {result.output && ` · ${result.output}`}
                 </small>
               </>
