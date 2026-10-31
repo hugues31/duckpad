@@ -18,6 +18,7 @@ import { templateLabel, useT } from "./i18n";
 import NodeDocumentation from "./NodeDocumentation";
 import ExportDownload from "./ExportDownload";
 import ExecutionMessages from "./ExecutionMessages";
+import NodeTests from "./NodeTests";
 import ParameterField from "./ParameterField";
 import QueryBuilder from "./QueryBuilder";
 import { useRevisionDraft } from "./useRevisionDraft";
@@ -291,8 +292,23 @@ export default function Inspector({
           <p className="notice error">{statuses.nodes[fullNode].error}</p>
         )}
         <ExecutionMessages
-          results={preview?.results ?? statuses.nodes[fullNode]?.results}
+          results={(
+            preview?.results ?? statuses.nodes[fullNode]?.results
+          )?.filter((result) => result.origin.kind !== "test")}
         />
+        {/* History is only requested for nodes whose code declares tests. */}
+        {signature.kind !== "component" &&
+          signature.definition?.blocks?.some((block) => block.test_name) && (
+            <NodeTests
+              worktree={worktree}
+              node={fullNode}
+              environment={environment}
+              refresh={JSON.stringify([
+                statuses.active?.id,
+                statuses.nodes[fullNode],
+              ])}
+            />
+          )}
         {tab === "parameters" ? (
           <fieldset className="readonly-fields" disabled={readOnly}>
             <label className="field">

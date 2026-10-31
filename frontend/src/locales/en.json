@@ -806,5 +806,10 @@
   "assistantErrorDisabled": "The assistant is disabled",
   "assistantErrorChooseModel": "Choose an allowed assistant model",
   "assistantErrorProvideKey": "Provide an API key for this provider",
-  "assistantCustomProvider": "OpenAI-compatible"
+  "assistantCustomProvider": "OpenAI-compatible",
+  "dataTests": "Data tests",
+  "dataTest": "Data test",
+  "testOK": "OK",
+  "testFailingRows": "Failing rows: {count}",
+  "testHistory": "Previous test executions"
 }

@@ -50,6 +50,7 @@ ROUTE_ACCESS = {
         "GET /api/worktrees/{worktree}/exports/{node}",
         "GET /api/worktrees/{worktree}/exports/{node}/download",
         "GET /api/worktrees/{worktree}/preview/{node}",
+        "GET /api/worktrees/{worktree}/test-history/{node}",
         "GET /api/worktrees/{worktree}/generations/{identity}",
         "GET /api/worktrees/{worktree}/variables/scope",
         "GET /api/worktrees/{worktree}/extensions",
@@ -218,6 +219,7 @@ def test_private_discovery_and_all_direct_resource_routes(instance):
         ("GET", f"/worktrees/{worktree['id']}/git/compare?a=HEAD&b=HEAD"),
         ("GET", f"/worktrees/{worktree['id']}/compile/source"),
         ("GET", f"/worktrees/{worktree['id']}/preview/source"),
+        ("GET", f"/worktrees/{worktree['id']}/test-history/source?environment=dev"),
         ("GET", f"/worktrees/{worktree['id']}/generations/private"),
         ("GET", f"/projects/{worktree['project']}/settings"),
         ("GET", f"/runs/{run['id']}"),
@@ -253,7 +255,13 @@ def test_project_role_matrix_and_cross_project_import(instance, role):
     app.state.access.member(project, participant["id"], role)
     snapshot = request(client, headers, "GET", f"/worktrees/{worktree}").json()
     assert snapshot["role"] == role
-    for suffix in ("git/history", "git/compare", "git/branches", "git/remote"):
+    for suffix in (
+        "git/history",
+        "git/compare",
+        "git/branches",
+        "git/remote",
+        "test-history/source?environment=dev",
+    ):
         assert request(client, headers, "GET", f"/worktrees/{worktree}/{suffix}").status_code == 200
     for suffix in (
         "git/open",

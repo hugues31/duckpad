@@ -350,5 +350,24 @@ class Store:
             rows = session.exec(statement.order_by(m.Run.started.desc(), m.Run.id.desc()))
             return [self._record("run", row, session) for row in rows]
 
+    def test_history(self, worktree, environment, node, limit=10):
+        """Recent executions of this node's tests, including failures without published outputs."""
+        history = []
+        with self.session() as session:
+            statement = (
+                select(m.Run)
+                .where(m.Run.worktree == worktree, m.Run.environment == environment)
+                .order_by(m.Run.started.desc(), m.Run.id.desc())
+            )
+            for run in session.exec(statement):
+                state = run.snapshot.get("nodes", {}).get(node, {})
+                results = [r for r in state.get("results", []) if r["origin"]["kind"] == "test"]
+                if not results or state.get("status") in ("pending", "running"):
+                    continue
+                history.append({"run": run.id, "started": run.started, "results": results})
+                if len(history) >= max(1, min(limit, 50)):
+                    break
+        return history
+
     def close(self):
         self.engine.dispose()

@@ -31,27 +31,30 @@ def record_result(run: Record, node: str, result: Record) -> None:
     """Record an already redacted result once, preserving totals beyond the display limit.
 
     A result has a level, message, origin (kind, block and optional name), an optional
-    output, and an optional observed value. Future checks use this same boundary.
+    output, and an optional observed value. Every named test is retained; only
+    message rows are subject to the display limit.
     """
     results = run["nodes"][node]["results"]
-    if len(results) < RESULT_LIMIT:
-        results.append(result)
+    summary: Record | None = next((item for item in results if item.get("omitted")), None)
+    messages = sum(item["origin"]["kind"] == "message" for item in results)
+    if result["origin"]["kind"] == "test" or messages < RESULT_LIMIT:
+        results.insert(len(results) - bool(summary), result)
     else:
-        if len(results) == RESULT_LIMIT:
-            results.append(
-                {
-                    "level": "info",
-                    "message": "",
-                    "origin": {"kind": "summary"},
-                    "output": None,
-                    "omitted": 0,
-                    "counts": dict.fromkeys(LEVELS, 0),
-                }
-            )
-        summary = results[-1]
+        if summary is None:
+            summary = {
+                "level": "info",
+                "message": "",
+                "origin": {"kind": "summary"},
+                "output": None,
+                "omitted": 0,
+                "counts": dict.fromkeys(LEVELS, 0),
+            }
+            results.append(summary)
         summary["omitted"] += 1
         summary["counts"][result["level"]] += 1
         summary["message"] = f"… and {summary['omitted']} more"
+    if result["origin"]["kind"] == "test" and result["level"] == "info":
+        return
     logger.log(
         LEVELS[result["level"]],
         json.dumps(
@@ -108,3 +111,38 @@ def execute_messages(
         if level == "error" and failure is None:
             failure = message
     return failure
+
+
+def execute_test(
+    cursor: SQLCursor,
+    statement: Record,
+    run: Record,
+    node: str,
+    secrets: list[str],
+    canceled: Callable[[], bool],
+) -> str | None:
+    """Count failing rows inside DuckDB, without fetching or storing their contents."""
+    row = cursor.execute(
+        f'SELECT count(*) FROM ({statement["sql"]}) AS "_duckpad_test"',
+        statement["bindings"],
+    ).fetchone()
+    if canceled():
+        raise Problem("Execution canceled")
+    assert row is not None
+    observed = row[0]
+    level = statement["test_severity"] if observed else "info"
+    name = redact(statement["test_name"], secrets)
+    message = f"Test {name} failed: {observed} failing rows" if observed else f"Test {name} passed"
+    record_result(
+        run,
+        node,
+        {
+            "level": level,
+            "status": level if observed else "ok",
+            "message": message,
+            "origin": {"kind": "test", "name": name},
+            "output": statement.get("message_output"),
+            "observed": observed,
+        },
+    )
+    return message if level == "error" else None

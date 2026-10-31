@@ -82,18 +82,20 @@ def parse_template(sql):
     }
     current, buffer = None, []
     message_block = 0
-    in_message = False
+    check = {}
+    test_names = set()
 
     def flush():
         sql = "\n".join(buffer).strip()
-        if in_message and not sql:
-            raise Problem("Each @message block must contain a query")
+        if check and not sql:
+            kind = "test" if "test_name" in check else "message"
+            raise Problem(f"Each @{kind} block must contain a query")
         if sql:
             template["blocks"].append(
                 {
                     "output": current,
                     "sql": sql,
-                    **({"message_block": message_block} if in_message else {}),
+                    **check,
                 }
             )
         buffer.clear()
@@ -113,14 +115,30 @@ def parse_template(sql):
         elif key == "output":
             flush()
             current = value
-            in_message = False
+            check = {}
             template["outputs"].append(value)
         elif key == "message":
             if value:
                 raise Problem("The @message directive does not take a name or arguments")
             flush()
-            current, in_message = None, True
+            current = None
             message_block += 1
+            check = {"message_block": message_block}
+        elif key == "test":
+            flush()
+            name, separator, severity = value.partition(":")
+            name, severity = name.strip(), severity.strip() if separator else "error"
+            if not IDENTIFIER.fullmatch(name):
+                raise Problem(
+                    "An @test name must be an identifier containing letters, numbers or underscores"
+                )
+            if name in test_names:
+                raise Problem(f"Duplicate @test name: {name}")
+            if severity not in ("warning", "error"):
+                raise Problem(f"Unknown @test severity: {severity!r}; expected warning or error")
+            test_names.add(name)
+            current = None
+            check = {"test_name": name, "test_severity": severity}
         else:
             raise Problem(f"Unknown template directive: @{key}")
     flush()
@@ -167,7 +185,7 @@ def validate_interface(template):
             raise Problem("Undeclared, self or forward reference: " + ", ".join(sorted(missing)))
         if block["output"]:
             available.add(block["output"])
-        elif not block.get("message_block") and template["kind"] != "export":
+        elif not is_check(block) and template["kind"] != "export":
             raise Problem("A tabular query needs an @output declaration")
     if not template["blocks"]:
         raise Problem("Template has no SQL statements")
@@ -188,11 +206,15 @@ def parse_templates(templates):
     return parsed
 
 
+def is_check(block):
+    return bool(block.get("message_block") or block.get("test_name"))
+
+
 def execution_blocks(template):
-    """Outputs first, messages in declaration order, external writes last."""
+    """Outputs first, checks in declaration order, external writes last."""
     return sorted(
         template["blocks"],
-        key=lambda block: 1 if block.get("message_block") else (0 if block["output"] else 2),
+        key=lambda block: 1 if is_check(block) else (0 if block["output"] else 2),
     )
 
 
@@ -211,7 +233,7 @@ def downloadable_export(template):
 
     Decided from the template text, so copies imported under another identifier keep it.
     """
-    blocks = [block for block in template["blocks"] if not block.get("message_block")]
+    blocks = [block for block in template["blocks"] if not is_check(block)]
     if template["kind"] != "export" or len(blocks) != 1:
         return None
     # Inputs become tables, resources a literal of their own name, every other parameter a placeholder.
@@ -541,7 +563,9 @@ def compile_template(
         tree = parse_block(REFERENCE.sub(lambda m: values[m[1]], block["sql"]))
         message_block = block.get("message_block")
         access = (
-            {**template, "kind": "transform"} if message_block and template["kind"] == "export" else template
+            {**template, "kind": "transform"}
+            if is_check(block) and template["kind"] == "export"
+            else template
         )
         check_access(access, tree, allowed, connections, resources)
         query = tree.sql(dialect="duckdb")
@@ -564,12 +588,19 @@ def compile_template(
                 "bindings": used,
                 **(
                     {
-                        "message_block": message_block,
+                        **(
+                            {"message_block": message_block}
+                            if message_block
+                            else {
+                                "test_name": block["test_name"],
+                                "test_severity": block["test_severity"],
+                            }
+                        ),
                         "message_output": next(iter(referenced_outputs))
                         if len(referenced_outputs) == 1
                         else None,
                     }
-                    if message_block
+                    if is_check(block)
                     else {}
                 ),
                 **({"variable_bindings": labels} if labels else {}),
