@@ -19,13 +19,10 @@ from ..native import Cursor as NativeCursor
 from ..templates import VARIABLE_REFERENCE, base_type, bind_variables, check_variables, variable_placeholders
 from ..types import Record, SQLCursor
 from ..util import Problem, qi, uid
+from ..views import DIRECTIONS, MAX_FILTER_LENGTH, MAX_SAMPLE_ROWS, METHODS
 from .contexts import interrupt
 
-MAX_SAMPLE_ROWS = 10_000
-MAX_FILTER_LENGTH = 4_000
-METHODS = ("first", "random")
-DIRECTIONS = ("asc", "desc")
-# Samples stop after this many seconds.
+# Samples, statistics and failing rows stop after this many seconds.
 READ_TIMEOUT = 30.0
 # Scalar functions that read settings, the environment or other relations instead of the dataset.
 DENIED_FUNCTIONS = {
