@@ -21,6 +21,7 @@
 @import "./flow.css";
 @import "./inspector.css";
 @import "./preview.css";
+@import "./results.css";
 @import "./workspace.css";
 @import "./history.css";
 @import "./execution-messages.css";
