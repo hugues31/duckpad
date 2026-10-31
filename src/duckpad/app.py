@@ -709,6 +709,10 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
             access.worktree(request.state.user, worktree)
         return store.runs(request.state.user, worktree)
 
+    @app.get("/api/worktrees/{worktree}/test-history/{node}", response_model=None)
+    def test_history(worktree: str, node: str, environment: str, limit: int = 10) -> list[Record]:
+        return store.test_history(worktree, environment, node, limit)
+
     @app.get("/api/runs/{run}", response_model=None)
     def get_run(run: str) -> Record:
         record = store.get("run", run)

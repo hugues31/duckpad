@@ -28,7 +28,7 @@ from ..util import Problem, now, qi, uid
 from .contexts import ContextPool, cancel_lineage, interrupt, wait_for_readers
 from .exports import Exports
 from .fingerprints import Fingerprints
-from .messages import execute_messages, result_counts
+from .messages import execute_messages, execute_test, result_counts
 
 UNFINISHED_RUN_STATUSES = ("preparing", "running", "canceling")
 
@@ -461,21 +461,22 @@ class Runner:
         state["statements"] = variables.annotate(statements, node)
         self._persist(run, execution.secrets)
         staged: dict[str, Dataset] = {}
-        message_failure = None
+        check_failure = None
         for statement in statements:
             if execution.canceled:
                 raise Problem("Execution canceled")
-            if statement.get("message_block"):
-                failure = execute_messages(
+            if statement.get("message_block") or statement.get("test_name"):
+                execute_check = execute_test if statement.get("test_name") else execute_messages
+                failure = execute_check(
                     cursor, statement, run, key, execution.secrets, lambda: execution.canceled
                 )
-                if message_failure is None:
-                    message_failure = failure
+                if check_failure is None:
+                    check_failure = failure
                 self._persist(run, execution.secrets)
                 continue
             if not statement["output"]:
-                if message_failure is not None:
-                    raise Problem(message_failure or "An @message block reported an error")
+                if check_failure is not None:
+                    raise Problem(check_failure or "An execution check reported an error")
                 self._export(execution, key, statement)
                 continue
             table = statement["table"]
@@ -510,8 +511,8 @@ class Runner:
                 witnesses=plan["witnesses"],
                 groups=plan["groups"],
             )
-        if message_failure is not None:
-            raise Problem(message_failure or "An @message block reported an error")
+        if check_failure is not None:
+            raise Problem(check_failure or "An execution check reported an error")
         return staged
 
     def _export(self, execution: Execution, key: str, statement: Record) -> None:

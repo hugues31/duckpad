@@ -167,9 +167,9 @@ outputs as stale, and blocks descendants. Warnings alone preserve `success` and
 increment a warning counter. Editing messages invalidates results.
 
 Node execution records hold a shared `results` list. Each result has `level`,
-`message`, `origin` (kind and block, with a future optional check name), `output`
+`message`, `origin` (kind and block, or a test name), `output`
 when a single output is known, and an optional `observed` value. No separate
-message or test storage is required. The list retains 100 results per node and
+message or test storage is required. The list retains 100 message results per node and
 run, followed by a structured omission summary with counts by level. Every row
 is still checked, so truncation never hides an execution failure. Badge and
 warning totals derive from this list, including the summary counts.
@@ -178,11 +178,54 @@ The inspector and canvas use the messages of the displayed result generation;
 nodes outside a later launch's scope retain their original messages. The latest
 failure remains visible beside a stale preview. Run history shows each node's
 results and the run warning count, including failed runs, and survives restart.
-The server emits one JSON log line per actual result with run, project, branch,
+The server emits one JSON log line per actual message with run, project, branch,
 environment, node, level, message and origin. Secrets use the same redaction as
 execution errors. UI labels are localized into English, French and Portuguese.
 There is no dedicated Message node or separate inspector input. Scheduled runs,
-headless execution, journal export and `-- @test` are outside this contract.
+headless execution and journal export are outside this contract.
+
+## Data tests
+
+Normal node code and shared templates support `-- @test <name>: <severity>`.
+Names follow port identifier syntax and are unique among the node's tests.
+Severity is `warning` or `error`, with `error` as the default when omitted.
+An empty block, duplicate name or unknown severity is invalid. Each block holds
+one read-only query returning failing rows. Zero rows passes; otherwise the test
+fails with its declared severity. No specific columns are required.
+
+```sql
+-- @input source
+-- @output orders
+SELECT * FROM {{ source }};
+-- @test amount_present
+SELECT * FROM {{ orders }} WHERE amount IS NULL;
+-- @test customer_known: warning
+SELECT * FROM {{ orders }} WHERE customer_id IS NULL;
+```
+
+Tests and messages execute together in declaration order, after all outputs and
+before their atomic publication or any export write, under the same access
+contract. An error test failure fails the node, publishes no new outputs and
+blocks descendants. A warning failure adds one to the warning count and preserves
+run success. All checks run even after an earlier test reports failure. Test
+edits invalidate results for normal nodes and all nodes linked to a template.
+
+Every executed test appends to the shared node `results` list: `origin.kind` is
+`test`, `origin.name` identifies the test, `output` is the single referenced output
+or null, and `observed` counts failing rows. `status` is `ok`, `warning` or `error`;
+`level` is `info` for passing tests and otherwise matches the severity. Unlike a
+message query, a passing test still records a result. Every named test is retained
+even beyond the message display limit. No failing row samples are fetched or
+stored. Logs emit one structured result per failed test, using message context
+and redaction. Results persist with runs and survive a restart.
+
+The inspector shows the latest test attempt and the previous nine test executions
+for the selected node and environment, including failures alongside a stale
+preview. Runs that do not execute that node's tests do not replace its history.
+Run details include passing and failing tests and their observed counts. Canvas
+warning badges include tests; error tests appear as node failures. Labels are
+localized into English, French and Portuguese. Predefined tests and a project
+quality overview are outside this contract.
 
 # Reusable components
 

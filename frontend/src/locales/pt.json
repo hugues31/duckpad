@@ -734,5 +734,10 @@
   "messageWarning": "Aviso",
   "messageError": "Erro",
   "moreMessages": "… e mais {count}",
-  "messageBlock": "Bloco de mensagem {block}"
+  "messageBlock": "Bloco de mensagem {block}",
+  "dataTests": "Testes de dados",
+  "dataTest": "Teste de dados",
+  "testOK": "OK",
+  "testFailingRows": "Linhas com falha: {count}",
+  "testHistory": "Execuções anteriores dos testes"
 }
