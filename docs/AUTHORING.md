@@ -465,3 +465,9 @@ The reusable parameter types are `column_selection(input_port)` and
 The **SQL** tab shows the generated query. **Edit code** (or **Edit template** for a linked node) remains available
 for custom SQL, including replacing a structured parameter with `expressions`
 when a free-form projection is needed.
+
+## Ask the assistant
+
+When enabled by an instance administrator, the floating [AI assistant](ASSISTANT.md)
+can explain the current flow, saved SQL, documentation and existing results. It
+uses your project access and cannot edit or execute the pipeline.

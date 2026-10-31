@@ -21,6 +21,7 @@ async function capture(
   page: Page,
   name: string,
   region: Page | Locator = page,
+  extraStyle = "",
 ) {
   await mkdir(resolve("../docs/images"), { recursive: true });
   await page.evaluate(() => document.fonts.ready);
@@ -31,7 +32,8 @@ async function capture(
     caret: "hide",
     // Hide transient notifications and variable Git metadata, not product state.
     style:
-      ".toast, .resource-monitor, .git-revisions small { visibility: hidden !important; }",
+      ".toast, .resource-monitor, .git-revisions small { visibility: hidden !important; }" +
+      extraStyle,
   });
 }
 
@@ -547,4 +549,46 @@ test("capture SSO configuration and the enabled sign-in choice", async ({
       (await page.request.put("/api/sso", { data: { enabled: false } })).ok(),
     ).toBeTruthy();
   }
+});
+
+test("assistant settings and contextual chat", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 1250 });
+  const response = await page.request.put("/api/assistant/settings", {
+    data: {
+      enabled: true,
+      allow_data: true,
+      max_rows: 50,
+      providers: [
+        {
+          id: "primary",
+          kind: "deepseek",
+          api_key: "documentation-test-key",
+          models: ["deepseek-chat"],
+        },
+      ],
+      default_provider: "primary",
+      default_model: "deepseek-chat",
+    },
+  });
+  expect(response.ok()).toBeTruthy();
+  await page.goto("/instance-settings/assistant");
+  await expect(page.getByLabel("Allowed models", { exact: true })).toHaveValue(
+    "deepseek-chat",
+  );
+  await capture(
+    page,
+    "assistant-settings",
+    page.locator(".settings-card"),
+    ".assistant-launcher { visibility: hidden !important; }",
+  );
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await example(page);
+  await node(page, "Paid orders").click();
+  await page
+    .getByRole("button", { name: "Open AI assistant", exact: true })
+    .click();
+  await expect(
+    page.getByRole("dialog", { name: "AI assistant" }),
+  ).toBeVisible();
+  await capture(page, "assistant-chat");
 });

@@ -1,6 +1,7 @@
 import { NavLink } from "react-router";
 import {
   Blocks,
+  MessageSquare,
   Database,
   GitBranch,
   KeyRound,
@@ -8,6 +9,7 @@ import {
   Users,
 } from "lucide-react";
 import { settingsSections } from "./navigation";
+import AssistantSettings from "./AssistantSettings";
 import UsersPage from "./UsersPage";
 import ConnectionsPanel from "./ConnectionsPanel";
 import EnvironmentsPanel from "./EnvironmentsPanel";
@@ -19,6 +21,7 @@ import type { Workspace } from "./types";
 
 const sectionIcons = {
   usersPermissions: Users,
+  assistant: MessageSquare,
   ssoSettings: KeyRound,
   gitHosts: GitBranch,
   environments: Server,
@@ -72,6 +75,7 @@ export default function InstanceSettings({
           </nav>
           <div className="settings-content" key={section}>
             {section === "usersPermissions" && <UsersPage refresh={refresh} />}
+            {section === "assistant" && <AssistantSettings />}
             {section === "extensions" && <ExtensionSettings />}
             {section === "ssoSettings" && <SSOSettings />}
             {section === "gitHosts" && <GitHostsSettings />}
