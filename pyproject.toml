@@ -75,6 +75,7 @@ include = [
     "/scripts/build_hook.py",
     "/scripts/release.py",
     "/scripts/check_typing_policy.py",
+    "/scripts/check_commit_trailers.py",
     "/cliff.toml",
     "/README.md",
     "/LICENSE",

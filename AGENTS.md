@@ -8,6 +8,9 @@ Apply it to every change, even when it is not explicitly invoked.
   translation resource files, where French and Portuguese are allowed. Keep
   translation keys, file names, code, comments, and documentation in English.
 - Use Conventional Commits for every commit message, written in English.
+- Never add `Co-authored-by` trailers for AI assistants, coding agents, or bots,
+  in commits or merge messages. GitHub lists co-authors as repository contributors,
+  and CI rejects these trailers.
 
 ## Multica development
 

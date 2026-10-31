@@ -48,6 +48,23 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: python scripts/check_typing_policy.py
 
+  commit-trailers:
+    name: Co-authors are people
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - name: Reject AI assistant and bot co-author trailers
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: python scripts/check_commit_trailers.py
+
   windows-projects:
     name: Windows projects and trusted local execution
     runs-on: windows-latest
