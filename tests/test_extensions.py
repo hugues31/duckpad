@@ -104,6 +104,10 @@ def test_extension_upload_validation_preserves_settings_and_cache(tmp_path, monk
         client.post("/api/login", json={"password": app.state.auth.initial_password})
         runtime = client.get("/api/extensions/runtime").json()
         assert runtime["version"] and runtime["platform"] and runtime["imports"] == []
+        # DuckDB's built-in list lets the UI suggest core names without network access.
+        core = {entry["name"]: entry for entry in runtime["core_extensions"]}
+        assert "s3" in core["httpfs"]["aliases"] and not core["httpfs"]["built_in"]
+        assert core["json"]["built_in"] and core["json"]["description"]
         for filename, body, source in [
             ("../../outside.duckdb_extension", b"invalid", "core"),
             ("C:\\outside.duckdb_extension", b"invalid", "core"),
