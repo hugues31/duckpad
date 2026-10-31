@@ -2,12 +2,30 @@ import { expect, test } from "@playwright/test";
 import { openInstanceSettings, signIn } from "./helpers";
 import { verifyAssistantRuns } from "./assistant-runs-flow";
 
+let originalEnvironment: {
+  label: string;
+  color: string;
+  confirm_before_run: boolean;
+};
+test.beforeEach(async ({ page }) => {
+  await signIn(page);
+  const catalog = await (await page.request.get("/api/catalog")).json();
+  const dev = catalog.environment_details.find(
+    (environment: { id: string }) => environment.id === "dev",
+  );
+  originalEnvironment = {
+    label: dev.label,
+    color: dev.color,
+    confirm_before_run: dev.confirm_before_run,
+  };
+});
+
 test.afterEach(async ({ page }) => {
   await page.request.put("/api/assistant/settings", {
     data: { enabled: false, providers: [] },
   });
   await page.request.put("/api/environments/dev", {
-    data: { label: "Development", color: "#3b82f6", confirm_before_run: false },
+    data: originalEnvironment,
   });
 });
 
@@ -15,7 +33,6 @@ test("approve a run after reloading, decline another and ask about a real error"
   page,
 }) => {
   test.setTimeout(180000);
-  await signIn(page);
   expect(
     (
       await page.request.put("/api/assistant/settings", {
@@ -41,7 +58,6 @@ test("approve a run after reloading, decline another and ask about a real error"
 test("administrators customize, reorder and restore quick prompts", async ({
   page,
 }) => {
-  await signIn(page);
   await openInstanceSettings(page, "AI assistant");
   await page
     .getByRole("button", { name: "Add quick prompt", exact: true })
