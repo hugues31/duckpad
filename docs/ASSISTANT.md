@@ -3,8 +3,9 @@
 The assistant answers questions about the saved project: the flow, SQL,
 documentation, variables, execution history and, when enabled, existing output
 values and their lineage. Project editors and administrators can also ask it to
-change the open branch, with an Undo button for each saved change. It cannot run
-a pipeline, execute arbitrary SQL, or change instance settings. Responses can be mistaken; inspect the cited
+change the open branch, with an Undo button for each saved change, and propose a
+run for your explicit approval. It cannot execute arbitrary SQL or change
+instance settings. Responses can be mistaken; inspect the cited
 nodes and tool results before relying on an explanation.
 
 ## Configure a provider
@@ -47,7 +48,7 @@ For Northstar, try “How do paid orders reach the regional report?” or, after
 running the flow yourself, “Why does this region have this revenue?” The
 assistant reads bounded pages of project content as needed. Expand a tool card
 to inspect what was read. Data tools inspect existing materialized results;
-missing or stale results may require you to run the flow manually first.
+missing or stale results may require a run, which you can request in the chat.
 
 Choose a model in the composer, type a message and press **Send** or Enter.
 Shift+Enter inserts a line break. **Stop** cancels the current provider request.
@@ -87,6 +88,57 @@ branch exists and you still have editing rights. Stopping a response or a
 provider failure does not roll back actions already saved; their cards still
 offer Undo. Deleting the conversation removes its cards, but does not delete
 its commits or undo its changes.
+
+## Run with confirmation
+
+Ask, for example, “Run the regional report node in dev” or “Run this whole flow
+in prod”. The assistant proposes a run; it does not start it yet. Its confirmation
+card names the environment and scope, includes the required upstream nodes,
+shows the variables used, and highlights exports and external writes. Those
+external effects cannot be undone. Protected environments show their additional
+confirmation notice in the same card.
+
+Choose **Confirm and run** or **Decline run**. A refusal goes back to the model.
+Pending confirmations survive a page reload: maximize the assistant and reopen
+the conversation to answer. Each request can be answered only once. If the flow
+or connection configuration changes after the proposal, ask for a fresh run and
+review its new confirmation. Runs require the same project editing rights as
+running from the workspace; Readers cannot launch or cancel them.
+
+The card follows execution status and offers **Cancel run** while it is active.
+The assistant can wait up to 15 seconds per tool call and then inspect the result;
+it reports a still-running execution honestly when that wait expires. **Stop**
+stops the assistant response, while **Cancel run** stops execution. Neither action
+reverses completed external writes. History records the entry point as
+`assistant`, together with the requesting user.
+
+## Debug an execution
+
+Choose **Ask the assistant** from an error in the node inspector or a failed run
+in History. The chat opens with the run, node and environment as context. Send
+the prepared question to inspect run/node errors, the SQL actually executed,
+`-- @message` messages and `-- @test` data-test results. You can also ask for a
+comparison with the preceding successful run in the same environment and scope.
+Historical SQL is taken from the run, so later edits do not change that evidence.
+
+For “why this value?”, identify the output row and column. The assistant uses
+the existing output preview, follows lineage contributions and reads upstream
+SQL to explain the calculation. With data reading disabled, error/message text,
+test values and executed SQL are withheld; the assistant can still discuss code
+and execution status metadata.
+
+## Quick prompts
+
+New conversations offer buttons such as **Optimize the flow**, **Debug the latest
+run** and **Explain a value**. Clicking one sends its full prompt. The default
+buttons and prompts follow the interface language.
+
+Instance administrators manage **Quick prompts** in **Instance settings → AI
+assistant**. Edit each button label and full prompt, add or delete entries, and
+use **Move up** or **Move down** to reorder them. **Save changes** applies the list
+to everyone on the instance. A customized list keeps its authored language;
+**Restore translated defaults** restores language-aware defaults. Saving an empty
+list hides the buttons. These settings are not stored in project Git files.
 
 ## Conversations
 
