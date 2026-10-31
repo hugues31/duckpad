@@ -44,6 +44,8 @@ export interface ParsedTemplate {
   parameters?: Parameter[];
   /** The destination parameter and format of an export Duckpad can download. */
   download?: { parameter: string; format: string } | null;
+  /** SQL blocks in declaration order; `-- @test` blocks carry their name. */
+  blocks?: { output: string | null; test_name?: string }[];
 }
 /** A port of a component, bound to a port of one of its nodes. */
 export interface ComponentPort {

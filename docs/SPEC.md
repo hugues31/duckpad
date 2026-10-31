@@ -219,9 +219,9 @@ even beyond the message display limit. No failing row samples are fetched or
 stored. Logs emit one structured result per failed test, using message context
 and redaction. Results persist with runs and survive a restart.
 
-The inspector shows the latest test attempt and the previous nine test executions
-for the selected node and environment, including failures alongside a stale
-preview. Runs that do not execute that node's tests do not replace its history.
+For a node whose code declares tests, the inspector shows the latest test attempt
+and the previous nine test executions for the selected environment, including
+failures alongside a stale preview. Runs that do not execute that node's tests do not replace its history.
 Run details include passing and failing tests and their observed counts. Canvas
 warning badges include tests; error tests appear as node failures. Labels are
 localized into English, French and Portuguese. Predefined tests and a project

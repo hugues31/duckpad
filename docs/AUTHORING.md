@@ -168,8 +168,9 @@ test adds one warning, regardless of its row count, and leaves the run successfu
 All checks still run after a test reports failure. Editing tests invalidates
 results, just like changing other SQL.
 
-The inspector shows the latest test attempt and up to nine previous attempts for
-that node and environment, including failed attempts with no published output.
+When a node's code declares tests, the inspector shows the latest test attempt
+and up to nine previous attempts for that node and environment, including failed
+attempts with no published output.
 An out-of-scope launch does not replace this history. History also includes each
 test's status, name, associated output (when the query references exactly one),
 and observed count in run details. The canvas warning badge includes failed

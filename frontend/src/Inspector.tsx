@@ -296,17 +296,19 @@ export default function Inspector({
             preview?.results ?? statuses.nodes[fullNode]?.results
           )?.filter((result) => result.origin.kind !== "test")}
         />
-        {signature.kind !== "component" && (
-          <NodeTests
-            worktree={worktree}
-            node={fullNode}
-            environment={environment}
-            refresh={JSON.stringify([
-              statuses.active?.id,
-              statuses.nodes[fullNode],
-            ])}
-          />
-        )}
+        {/* History is only requested for nodes whose code declares tests. */}
+        {signature.kind !== "component" &&
+          signature.definition?.blocks?.some((block) => block.test_name) && (
+            <NodeTests
+              worktree={worktree}
+              node={fullNode}
+              environment={environment}
+              refresh={JSON.stringify([
+                statuses.active?.id,
+                statuses.nodes[fullNode],
+              ])}
+            />
+          )}
         {tab === "parameters" ? (
           <fieldset className="readonly-fields" disabled={readOnly}>
             <label className="field">
