@@ -106,7 +106,7 @@ After a failed recomputation, the inspector keeps the node's last successful res
 | Aggregate | Grouping columns, functions, columns, and aliases | 1 → 1 |
 | Export CSV | Connection, destination, delimiter, header | 1 → 0 |
 | Export Oracle | Oracle connection, existing destination table, column mapping | 1 → 0 |
-| SQL transform | A reusable SQL template with named ports and typed parameters | 1 → 1 |
+| SQL transform | Independent SQL with named ports and typed parameters; optionally linked to a project template | 1 → 1 |
 
 Reads and writes use native DuckDB features or extensions through the selected SQL connector. The CSV and Parquet nodes work with local-file and S3 connections. The Oracle source and export nodes are supplied SQL templates using the `oraduck` connector through the same generic node and connector contracts.
 
@@ -114,7 +114,15 @@ For a single CSV output, `COPY tbl TO 'output.csv' (HEADER, DELIMITER ',');` ove
 
 # SQL templates
 
-A reusable SQL template describes its label, description, inputs, parameters, outputs, and SQL. Its definition belongs to a project and is shared by instances within that project branch. Adding it to the flow creates an instance linked to the local definition; parameter values and graph connections remain specific to the instance. Editing the definition updates all its local usages, while editing an instance's parameters changes only that instance. Templates follow the same project-local ownership, Git branching, and independent-copy import rules as components. Importing a template from another project creates an autonomous local definition. The editor distinguishes instance parameters from the shared local definition.
+A normal node owns its SQL. Adding a built-in node or a project template from the palette, creating a connected node, or duplicating a SQL node copies the current code into an independent node by default. Its parameters, connections, label and form belong to that node. **New SQL node** creates a minimal input/output transform without asking for a template name. **New SQL template** remains available for reusable definitions.
+
+A linked node explicitly references a project template. **Add linked** in the palette creates one. Its parameters and connections remain independent, while editing the template updates all linked usages in the branch. Existing projects keep their linked nodes. The canvas and inspector show a link badge and the template name. The node offers read-only code, **Edit template (N nodes)** and **Detach from template**.
+
+Detaching copies the current code and keeps the origin as information. **Convert to template** asks for a name, creates a project template and links that node to it. **Link to original template** is available while the origin exists and requires confirmation before discarding local code. Parameters and connections survive conversions. Detaching and converting preserve execution fingerprints; relinking invalidates results only when executable code changes. Incompatible parameters or interfaces follow normal validation and block affected executions until corrected.
+
+Normal code lives in `nodes/<node-id>.sql`, or `components/<component-id>/<node-id>.sql` inside a component. A normal node in `flow.json` has no `template`; an optional `origin` is informational. These SQL files use the same editor, Git, comparison, conflict, archive, validation and execution contracts as templates. Deleting a node removes its code file. Grouping moves its code into the component; importing a component copies it with the other definitions.
+
+Templates describe their label, description, inputs, parameters, outputs and SQL. They follow the same project-local ownership, branching and independent-copy import rules as components. Importing a template from another project creates an autonomous local definition. There are no partial code overrides on a linked node.
 
 Ports are declared with `-- @input name` and `-- @output name`; their table type is implicit. Parameters use `-- @param name: type = default_value`. Types include text, number, boolean, date, choice, file, connection reference, input column, SQL expression, and typed lists. Suggested columns depend on input schemas. All references use `{{ name }}` directly, without a prefix. Inputs, outputs, and parameters share a single namespace within the node; duplicates and undeclared references are rejected.
 
@@ -152,7 +160,7 @@ A transformation reads only its declared inputs and its earlier outputs from the
 
 - Components use the project's ordinary Git workflow. A definition change on a working branch remains isolated until merged into another branch of that same project. Merging into `main` updates usages in that project's `main` only. Editing a component never requires selecting a branch or worktree in another project.
 
-- The active project's palette exposes its local component definitions for drag and drop. A catalog shared by the Duckpad instance exposes components from projects' `main` branches for explicit import into another project. Importing copies the selected definition into the destination project's active branch, together with all nested component and SQL template definitions it needs. Imported definitions receive distinct local identities, and their internal references are remapped consistently so that the imported component has no executable definition dependency on its source project.
+- The active project's palette exposes its local component definitions for drag and drop. A catalog shared by the Duckpad instance exposes components from projects' `main` branches for explicit import into another project. Importing copies the selected definition into the destination project's active branch, together with node-owned SQL files and all nested component and SQL template definitions it needs. Imported definitions receive distinct local identities, and their internal references are remapped consistently so that the imported component has no executable definition dependency on its source project.
 
 - Each import creates an independent local copy and does not overwrite existing definitions. Subsequent changes in the source or destination project affect only that project's instances and do not update or invalidate copies in other projects. The source project and commit may be retained as informational origin metadata, with no role in resolving executable definitions. Adopting later improvements requires explicit changes in the destination project, such as importing a new copy; the MVP has no automatic cross-project update or coordinated publication mechanism. Imports copy definitions and documentation, not results, external source data, or secrets; declared connection and resource references retain their normal meaning.
 

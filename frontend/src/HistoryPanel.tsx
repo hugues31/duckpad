@@ -187,6 +187,7 @@ export default function HistoryPanel({
                     finished: selected.finished,
                     connections: selected.connections,
                     definitions: selected.definitions,
+                    node_sql: selected.node_sql,
                     components: selected.components,
                   },
                   null,

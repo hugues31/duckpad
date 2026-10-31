@@ -7,6 +7,7 @@ from pathlib import Path
 
 from . import __version__, project_extensions, variables
 from .components import expand
+from .node_code import node_sql
 from .templates import parse_template
 from .util import Problem, dumps
 
@@ -18,7 +19,9 @@ ROOT_FILES = (
     variables.FILE,
     project_extensions.FILE,
 )
-DECLARATIVE_PATH = re.compile(r"templates/[A-Za-z0-9_-]+\.sql|components/[A-Za-z0-9_-]+\.json")
+DECLARATIVE_PATH = re.compile(
+    r"(?:templates|nodes)/[A-Za-z0-9_-]+\.sql|components/[A-Za-z0-9_-]+(?:\.json|/[A-Za-z0-9_-]+\.sql)"
+)
 
 
 def is_declarative(name):
@@ -39,6 +42,9 @@ def files_to_bundle(files):
                 Path(n).stem: text
                 for n, text in files.items()
                 if n.startswith("templates/") and n.endswith(".sql")
+            },
+            "node_sql": {
+                n: text for n, text in files.items() if n.endswith(".sql") and not n.startswith("templates/")
             },
             "components": {
                 Path(n).stem: json.loads(text)
@@ -68,6 +74,16 @@ def default_pyproject(name):
 def bundle_to_files(bundle):
     flow, documentation = bundle.get("flow"), bundle.get("documentation", {})
     templates, components = bundle.get("templates", {}), bundle.get("components", {})
+    code = bundle.get("node_sql", {})
+    if not isinstance(code, dict) or any(
+        not isinstance(path, str)
+        or not is_declarative(path)
+        or not path.endswith(".sql")
+        or path.startswith("templates/")
+        or not isinstance(text, str)
+        for path, text in code.items()
+    ):
+        raise Problem("Node code must map node SQL paths to text", 422)
     if not all(isinstance(section, dict) for section in (flow, documentation, templates, components)):
         raise Problem("A project bundle needs flow, documentation, templates and components objects", 422)
     readme, pyproject = documentation.get("project"), bundle.get("pyproject")
@@ -78,6 +94,7 @@ def bundle_to_files(bundle):
         raise Problem("Templates, project documentation and pyproject must be text", 422)
     name = flow.get("name")
     return {
+        **code,
         "flow.json": dumps(flow),
         "documentation.json": dumps({k: v for k, v in documentation.items() if k != "project"}),
         "README.md": readme,
@@ -112,10 +129,10 @@ def validate(bundle):
         ):
             raise Problem("Project sections must be objects")
         graphs = [
-            ("flow.json", bundle["flow"]),
-            *[(f"components/{key}.json", value) for key, value in bundle["components"].items()],
+            ("flow.json", bundle["flow"], None),
+            *[(f"components/{key}.json", value, key) for key, value in bundle["components"].items()],
         ]
-        for file, graph in graphs:
+        for file, graph, parent in graphs:
             if not isinstance(graph, dict):
                 raise Problem(f"{file}: graph must be an object")
             for collection in ("nodes", "edges"):
@@ -127,8 +144,8 @@ def validate(bundle):
                 if len({v["id"] for v in values}) != len(values):
                     raise Problem(f"{file}: {collection} identifiers must be unique")
             for node in graph.get("nodes", []):
-                if bool(node.get("component")) == bool(node.get("template")):
-                    raise Problem(f"{file}: each node needs exactly one template or component")
+                if node.get("component") and node.get("template"):
+                    raise Problem(f"{file}: a node cannot have both a template and a component")
                 if not isinstance(node.get("params", {}), dict):
                     raise Problem(f"{file}: node parameters must be an object")
             for definition in graph.get("parameters", {}).values():
@@ -140,8 +157,7 @@ def validate(bundle):
                         bundle["components"][node["component"]].get("parameters", {})
                         if node.get("component")
                         else {
-                            p["name"]: p
-                            for p in parse_template(bundle["templates"][node["template"]])["parameters"]
+                            p["name"]: p for p in parse_template(node_sql(bundle, node, parent))["parameters"]
                         }
                     )
                     if target["param"] not in parameters:
@@ -154,11 +170,14 @@ def validate(bundle):
             topological(nodes, edges)
     except (Problem, KeyError, TypeError, AttributeError, RecursionError) as error:
         return [{"file": "flow.json", "message": str(error)}]
-    for name, sql in bundle["templates"].items():
+    for name, sql in {
+        **{f"templates/{key}.sql": text for key, text in bundle["templates"].items()},
+        **bundle.get("node_sql", {}),
+    }.items():
         try:
             parse_template(sql)
         except Exception as error:
-            errors.append({"file": f"templates/{name}.sql", "message": str(error)})
+            errors.append({"file": name, "message": str(error)})
     errors.extend(project_extensions.problems(bundle))
     errors.extend(variables.problems(bundle))
     try:

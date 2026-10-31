@@ -683,3 +683,33 @@ test("the synchronization button reports a failed status check and retries it", 
     page.getByRole("dialog", { name: "Project Git workspace" }),
   ).toBeVisible();
 });
+
+test("normal node code has a readable SQL diff in Compare versions", async ({
+  page,
+}) => {
+  const tree = await createProject(page);
+  const before = await change(page, tree.id, (bundle) => {
+    bundle.node_sql = { "nodes/revenue.sql": bundle.templates.query };
+    bundle.flow.nodes[0].origin = "query";
+    delete bundle.flow.nodes[0].template;
+  });
+  const after = await change(page, tree.id, (bundle) => {
+    bundle.node_sql["nodes/revenue.sql"] = bundle.node_sql[
+      "nodes/revenue.sql"
+    ].replace("AS revenue", "+ 1 AS revenue");
+  });
+  const dialog = await openGit(page);
+  await dialog.getByLabel("A: reference").fill(before.commit);
+  await dialog.getByLabel("B: target").fill(after.commit);
+  await dialog
+    .locator(".change-row")
+    .filter({ hasText: "nodes/revenue.sql" })
+    .click();
+  await expect(dialog.locator(".monaco-diff-editor")).toBeVisible();
+  await expect(
+    dialog.locator(".monaco-diff-editor .editor.modified"),
+  ).toContainText(/\+\s*1\s+AS\s+revenue/);
+  await expect(dialog.locator(".comparison-values")).not.toContainText(
+    "SELECT",
+  );
+});

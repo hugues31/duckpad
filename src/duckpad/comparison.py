@@ -6,6 +6,7 @@ from . import project_extensions, variables
 from .bundle import files_to_bundle
 from .components import expand
 from .graph import reachable
+from .node_code import code_path
 from .templates import DESCRIPTIVE, directives, executable_sql
 from .util import Problem
 
@@ -35,10 +36,17 @@ def entities(bundle):
             definition = (
                 bundle["components"].get(node.get("component"), {})
                 if node.get("component")
-                else bundle["templates"].get(node.get("template"), "")
+                else bundle["templates"].get(node["template"], "")
+                if node.get("template")
+                else bundle.get("node_sql", {}).get(
+                    code_path(key, scope.removeprefix("component/") or None), ""
+                )
             )
             name = label(node, label(definition, key))
-            add(f"{scope + '/' if scope else ''}node/{key}", "node", name, node, file, scope)
+            if not node.get("template") and not node.get("component"):
+                node = {**node, "sql": definition}
+            node_file = code_path(key, scope.removeprefix("component/") or None) if "sql" in node else file
+            add(f"{scope + '/' if scope else ''}node/{key}", "node", name, node, node_file, scope)
         for edge in value.get("edges", []):
             name = f"{label(nodes.get(edge['source'], {}), edge['source'])} → {label(nodes.get(edge['target'], {}), edge['target'])}"
             add(f"{scope + '/' if scope else ''}edge/{edge['id']}", "edge", name, edge, file, scope)
@@ -124,6 +132,14 @@ def fields(before, after, prefix=""):
 def categories(kind, paths, before, after):
     if kind == "documentation":
         return ["documentation"]
+    if kind == "node" and "sql" in paths and isinstance(before, dict) and isinstance(after, dict):
+        other = [p for p in paths if p != "sql"]
+        return sorted(
+            set(
+                categories("node", other, before, after)
+                + categories("template", ["value"], before.get("sql"), after.get("sql"))
+            )
+        )
     if kind == "template":
         result = ["processing"] if executable_sql(before) != executable_sql(after) else []
 
@@ -138,7 +154,7 @@ def categories(kind, paths, before, after):
             "layout"
             if p.split("/")[0] in ("position", "selected")
             else "documentation"
-            if p.split("/")[0] in ("name", "label", "description", "documentation")
+            if p.split("/")[0] in ("name", "label", "description", "documentation", "preset")
             else "processing"
             for p in paths
         }
@@ -181,6 +197,9 @@ def potential_impact(before, after):
                     "parsed",
                     "error",
                     "template_sql",
+                    "template",
+                    "origin",
+                    "preset",
                 )
             } | {"sql": executable_sql(node.get("template_sql", ""))}
 

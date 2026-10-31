@@ -94,7 +94,7 @@ test("configure Excel, upload a worksheet and export it through the canvas", asy
       .poll(async () => {
         const current = await (await page.request.get(endpoint)).json();
         const parameters = current.bundle.flow.nodes.find(
-          (node: any) => node.template === "export_xlsx",
+          (node: any) => (node.template || node.origin) === "export_xlsx",
         )?.params;
         return [parameters?.connection, parameters?.sheet];
       })
@@ -134,7 +134,7 @@ test("configure Excel, upload a worksheet and export it through the canvas", asy
     const bytes = await readFile((await downloaded.path())!);
     snapshot = await (await page.request.get(endpoint)).json();
     const exportedFile = await page.request.get(
-      `${endpoint}/exports/${snapshot.bundle.flow.nodes.find((node: any) => node.template === "export_xlsx")!.id}/download?run=${run.id}&environment=dev`,
+      `${endpoint}/exports/${snapshot.bundle.flow.nodes.find((node: any) => (node.template || node.origin) === "export_xlsx")!.id}/download?run=${run.id}&environment=dev`,
     );
     expect(exportedFile.ok()).toBeTruthy();
     expect(bytes.equals(await exportedFile.body())).toBeTruthy();

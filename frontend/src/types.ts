@@ -6,6 +6,9 @@ export type Theme = "light" | "dark";
 export interface FlowNode {
   id: string;
   template?: string;
+  origin?: string;
+  /** Original palette appearance and guided form; never resolves executable code. */
+  preset?: string;
   component?: string;
   label?: string;
   params: Record<string, Json>;
@@ -71,6 +74,7 @@ export interface Bundle {
     description?: string;
   };
   templates: Record<string, string>;
+  node_sql?: Record<string, string>;
   components: Record<string, ComponentDefinition>;
   documentation: Documentation;
   pyproject?: string | null;
@@ -144,6 +148,7 @@ export interface Snapshot {
   diagnostics: Diagnostic[];
   conflicts: Conflict[];
   parsed_templates: Record<string, ParsedTemplate>;
+  parsed_nodes?: Record<string, ParsedTemplate>;
   /** Null while the project files cannot be read. */
   variables: VariablesSummary | null;
 }
@@ -301,6 +306,7 @@ export interface Run {
   variables?: Record<string, VariableValue & { type: string | null }>;
   /** The connections, templates and components the run used, without secrets. */
   connections: Record<string, Json>;
+  node_sql?: Record<string, string>;
   definitions: Record<string, string>;
   components: Record<string, ComponentDefinition>;
 }

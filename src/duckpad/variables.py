@@ -304,6 +304,15 @@ def definition_problems(bundle):
                     "Declare a parameter, then bind it to the variable on the node in the flow.",
                 }
             )
+    for path, text in sorted(bundle.get("node_sql", {}).items()):
+        if found := template_references(text):
+            problems.append(
+                {
+                    "file": path,
+                    "message": f"Node code cannot reference project variables ({', '.join(found)}). "
+                    "Declare a parameter, then bind it to the variable on the node in the flow.",
+                }
+            )
     for key, definition in sorted(bundle.get("components", {}).items()):
         if found := component_references(definition):
             problems.append(
@@ -381,6 +390,8 @@ def portability_error(bundle, node, excluded):
                 f"Component {identity} references project variables. Expose the parameter, then bind "
                 "it to the variable on the component instance."
             )
+    if not node.get("template") and template_references(node.get("template_sql", "")):
+        return "Node code references project variables. Declare a parameter, then bind it to the variable on the node in the flow."
     if node.get("template") in templates:
         return (
             f"Template {node['template']} references project variables. Declare a parameter, then "

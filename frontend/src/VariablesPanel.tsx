@@ -1,3 +1,4 @@
+import { localDefinitions } from "./nodeCode";
 import { useEffect, useId, useMemo, useState } from "react";
 import { useSearchParams } from "react-router";
 import {
@@ -723,6 +724,7 @@ function VariableEditor({
                   node,
                   snapshot.parsed_templates,
                   snapshot.bundle?.components,
+                  localDefinitions(snapshot),
                 ).parameters.find((item) => item.name === usage.param)?.type
               : undefined;
             return (
