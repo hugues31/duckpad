@@ -101,6 +101,29 @@ export interface Commit {
   tags?: string[];
 }
 
+/** A commit that changed an element: it differs from every parent's version. */
+export interface ElementChange extends Commit {
+  status: Exclude<ChangeStatus, "unchanged">;
+  /** What a modification changed; empty when added or removed. */
+  categories: ChangeCategory[];
+}
+
+/** Who created a node or template and who changed it last. */
+export interface ElementSummary {
+  entity: string;
+  head: string;
+  /** Whether the element exists in the head commit. */
+  exists: boolean;
+  last: ElementChange | null;
+  created: ElementChange | null;
+  /** The number of commits its element history lists, merges included. */
+  changes: number;
+  /** Authors of these commits, the latest first. */
+  authors: string[];
+  /** False when the history is longer than the summary reads. */
+  complete: boolean;
+}
+
 export interface GitTag {
   name: string;
   ref: string;
