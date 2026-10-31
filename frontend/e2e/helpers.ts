@@ -41,3 +41,49 @@ export async function openUserSettings(page: Page) {
     .getByRole("menuitem", { name: "User settings", exact: true })
     .click();
 }
+
+/**
+ * Answer the browser's requests to DuckDB's websites, so that tests never
+ * depend on them: the community list holds these extensions, and only the
+ * `published` downloads exist. Offline, every request fails.
+ */
+export async function stubDuckDBWebsites(
+  page: Page,
+  {
+    community = {
+      h3: "Hierarchical hexagonal indexing for geospatial data",
+      duckfn_statrs: "Statistical distribution functions",
+      gsheets: "Read and write Google Sheets",
+    },
+    published = ["httpfs", "h3", "duckfn_statrs"],
+    offline = false,
+  }: {
+    community?: Record<string, string>;
+    published?: string[];
+    offline?: boolean;
+  } = {},
+) {
+  const rows = Object.entries(community)
+    .map(([name, text]) => `<tr><td>${name}</td><td></td><td>${text}</td></tr>`)
+    .join("");
+  await page.route(
+    (url) =>
+      url.hostname === "duckdb.org" || url.hostname.endsWith(".duckdb.org"),
+    (route) => {
+      if (offline) return route.abort("internetdisconnected");
+      const url = new URL(route.request().url());
+      const headers = { "access-control-allow-origin": "*" };
+      if (url.hostname === "duckdb.org")
+        return route.fulfill({
+          headers,
+          contentType: "text/html",
+          body: `<table><tbody>${rows}</tbody></table>`,
+        });
+      const name = url.pathname.split("/").pop()!.split(".")[0];
+      return route.fulfill({
+        headers,
+        status: published.includes(name) ? 200 : 404,
+      });
+    },
+  );
+}
