@@ -1,6 +1,6 @@
 ---
 name: repository-conventions
-description: Apply this repository's English writing rules, UI translation exception, and Conventional Commits rules whenever creating or editing files, reviewing changes, or preparing commit messages.
+description: Apply this repository's English writing rules, UI translation exception, Conventional Commits rules, and branch names whenever creating or editing files, reviewing changes, preparing commit messages, or publishing branches.
 ---
 
 # Repository Conventions
@@ -50,6 +50,27 @@ fix(editor): preserve selection when saving
 feat(api)!: require authentication for note updates
 ```
 
+## Name branches
+
+Name every pull request branch `<type>/<issue-key>-<short-description>`:
+
+- Start with the Conventional Commit type of the main change, the one used in the
+  pull request title: `feat`, `fix`, `docs`, `refactor`, and so on.
+- Add the issue tracker key in lowercase when the change comes from an issue. The
+  tracker links the pull request to its issue through the branch name, so the
+  title does not need the key. Omit it when there is no issue.
+- End with a few English words in kebab-case that describe the change.
+- Leave tool and agent names out: no `agent/`, `codex/`, or `claude/` prefixes.
+- Keep the same branch for review follow-ups.
+
+Examples:
+
+```text
+feat/general-432-assistant-chat
+fix/general-431-node-status-badges
+docs/readme-badges
+```
+
 Before finishing a change, verify that any French or Portuguese text is limited
 to localized UI values in dedicated translation resources, and check any proposed commit
-message against the format above.
+message and branch name against the formats above.
