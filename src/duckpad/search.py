@@ -1,6 +1,7 @@
 """Permission-scoped discovery of projects, open branches and placed nodes."""
 
 from .bundle import files_to_bundle
+from .node_code import code_path
 from .templates import parse_templates
 from .util import Problem
 
@@ -8,12 +9,13 @@ from .util import Problem
 def node_entries(bundle):
     """Walk component instances independently, tolerating invalid or cyclic graphs."""
     templates = parse_templates(bundle.get("templates", {}))
+    local = parse_templates(bundle.get("node_sql", {}))
     components = bundle.get("components", {})
     if not isinstance(components, dict):
         return
-    pending = [(bundle.get("flow"), [], [], frozenset())]
+    pending = [(bundle.get("flow"), [], [], frozenset(), None)]
     while pending:
-        graph, path, labels, ancestors = pending.pop()
+        graph, path, labels, ancestors, parent = pending.pop()
         if not isinstance(graph, dict) or not isinstance(graph.get("nodes"), list):
             continue
         for node in graph["nodes"]:
@@ -22,7 +24,11 @@ def node_entries(bundle):
             component, template = node.get("component"), node.get("template")
             definition = components.get(component, {}) if isinstance(component, str) else {}
             definition = definition if isinstance(definition, dict) else {}
-            parsed = templates.get(template, {}) if isinstance(template, str) else {}
+            parsed = (
+                templates.get(template, {})
+                if isinstance(template, str)
+                else local.get(code_path(node["id"], parent), {})
+            )
             label = node.get("label") or definition.get("name") or parsed.get("label") or node["id"]
             label = label if isinstance(label, str) else node["id"]
             yield {
@@ -39,7 +45,9 @@ def node_entries(bundle):
                 "definition_label": definition.get("name") or parsed.get("label") or "",
             }
             if definition and component not in ancestors:
-                pending.append((definition, [*path, node["id"]], [*labels, label], ancestors | {component}))
+                pending.append(
+                    (definition, [*path, node["id"]], [*labels, label], ancestors | {component}, component)
+                )
 
 
 def search_instance(projects, user, query, limit):

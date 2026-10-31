@@ -22,6 +22,14 @@ import {
 } from "../graph";
 import { useT } from "../i18n";
 import Inspector from "../Inspector";
+import {
+  NEW_NODE_SQL,
+  detachNode,
+  localDefinitions,
+  nodeCode,
+  nodeCodePath,
+  nodeGraph,
+} from "../nodeCode";
 import LineagePanel from "../LineagePanel";
 import type { Cell } from "../lineageGraph";
 import NodePalette, { type NodeKind } from "../NodePalette";
@@ -122,10 +130,12 @@ export default function FlowPage() {
   const bundle = snapshot.bundle;
   const graph = bundle ? graphAt(bundle, path) : undefined;
   const prefix = pathPrefix(path);
+  const parent = path.at(-1)?.definition;
+  const local = localDefinitions(snapshot, parent);
   const node = graph?.nodes.find((n) => n.id === selected);
   const fullNode = prefix + (selected || "");
   const signature = node
-    ? nodeInterface(node, snapshot.parsed_templates, bundle?.components)
+    ? nodeInterface(node, snapshot.parsed_templates, bundle?.components, local)
     : undefined;
   const definition = signature?.definition;
   const ports = signature?.outputs || [];
@@ -226,6 +236,7 @@ export default function FlowPage() {
       y: 120 + Math.floor((graph?.nodes.length || 0) / 4) * 210,
     },
     connection?: NodeConnection,
+    linked = false,
   ) {
     if (connection && !graph?.nodes.some((n) => n.id === connection.nodeId))
       return;
@@ -235,7 +246,16 @@ export default function FlowPage() {
       params: {},
       position,
     };
-    await updateGraph((g) => {
+    await save(snapshot, (value) => {
+      const g = graphAt(value, path);
+      if (kind === "template" && !linked) {
+        if (id) detachNode(value, created, parent);
+        else {
+          delete created.template;
+          (value.node_sql ||= {})[nodeCodePath(created.id, parent)] =
+            NEW_NODE_SQL;
+        }
+      }
       g.nodes.push(created);
       if (connection)
         connectInput(
@@ -258,7 +278,9 @@ export default function FlowPage() {
     select(created.id);
   }
   async function removeNodes(ids: string[], edges: string[] = []) {
-    await updateGraph((g) => {
+    await save(snapshot, (value) => {
+      const g = graphAt(value, path);
+      ids.forEach((id) => delete value.node_sql?.[nodeCodePath(id, parent)]);
       g.nodes = g.nodes.filter((n) => !ids.includes(n.id));
       g.edges = g.edges.filter(
         (e) =>
@@ -314,7 +336,10 @@ export default function FlowPage() {
         excludedComponents={path.map((part) => part.definition)}
         hidden={!panels.open.palette}
         onClose={() => panels.set({ palette: false })}
-        onAdd={(kind, id) => safe(() => addNode(kind, id))}
+        onAdd={(kind, id, linked) =>
+          safe(() => addNode(kind, id, undefined, undefined, linked))
+        }
+        onNewNode={() => safe(() => addNode("template", ""))}
         onNewTemplate={() =>
           openModal({
             kind: "template",
@@ -363,6 +388,7 @@ export default function FlowPage() {
             nodes={graph.nodes}
             edges={graph.edges}
             parsed={snapshot.parsed_templates}
+            local={local}
             components={bundle.components}
             excludedComponents={path.map((part) => part.definition)}
             statuses={statuses}
@@ -432,6 +458,7 @@ export default function FlowPage() {
             signature={signature}
             snapshot={snapshot}
             graphNodes={graph.nodes}
+            local={local}
             graphEdges={graph.edges}
             fullNode={fullNode}
             environment={environment}
@@ -483,11 +510,65 @@ export default function FlowPage() {
             onRun={() => run(fullNode)}
             onOpen={() => openComponent(node.id)}
             onEditTemplate={() =>
-              node.template &&
+              openModal(
+                node.template
+                  ? {
+                      kind: "template",
+                      worktree,
+                      template: node.template,
+                    }
+                  : { kind: "nodeCode", worktree, node: node.id, parent },
+              )
+            }
+            onViewCode={() =>
+              openModal({ kind: "nodeCode", worktree, node: node.id, parent })
+            }
+            onDetach={() =>
+              safe(() =>
+                save(snapshot, (value) => {
+                  detachNode(
+                    value,
+                    nodeGraph(value, parent).nodes.find(
+                      (n) => n.id === node.id,
+                    )!,
+                    parent,
+                  );
+                }),
+              )
+            }
+            onConvert={() =>
               openModal({
-                kind: "template",
+                kind: "convertNode",
                 worktree,
-                template: node.template,
+                node: node.id,
+                parent,
+              })
+            }
+            onRelink={() =>
+              openModal({ kind: "relinkNode", worktree, node: node.id, parent })
+            }
+            onDuplicate={() =>
+              safe(async () => {
+                const duplicate = {
+                  ...structuredClone(node),
+                  id: identifier(),
+                  position: {
+                    x: node.position.x + 40,
+                    y: node.position.y + 40,
+                  },
+                };
+                await save(snapshot, (value) => {
+                  if (!duplicate.component) {
+                    const sql = nodeCode(value, node, parent);
+                    duplicate.origin = node.template || node.origin;
+                    delete duplicate.template;
+                    (value.node_sql ||= {})[
+                      nodeCodePath(duplicate.id, parent)
+                    ] = sql;
+                  }
+                  nodeGraph(value, parent).nodes.push(duplicate);
+                });
+                select(duplicate.id);
               })
             }
             onHistory={() =>

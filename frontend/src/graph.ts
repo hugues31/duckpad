@@ -74,9 +74,10 @@ export type NodeInterface = {
  * templates list them.
  */
 export function nodeInterface(
-  node: Pick<FlowNode, "template" | "component">,
+  node: Pick<FlowNode, "template" | "component"> & { id?: string },
   parsed: Record<string, ParsedTemplate>,
   components: Record<string, ComponentDefinition> = {},
+  local: Record<string, ParsedTemplate> = {},
 ): NodeInterface {
   if (node.component) {
     const definition = components[node.component];
@@ -90,7 +91,9 @@ export function nodeInterface(
       ),
     };
   }
-  const definition = parsed[node.template || ""];
+  const definition = node.template
+    ? parsed[node.template]
+    : local[node.id || ""];
   return {
     definition,
     kind: definition?.kind || "transform",

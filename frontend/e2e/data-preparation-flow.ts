@@ -12,7 +12,7 @@ export async function verifyDataPreparation(page: Page) {
   const inspector = page.locator(".inspector");
   const nodeId = async (template: string) =>
     (await snapshot()).bundle.flow.nodes.find(
-      (node: any) => node.template === template,
+      (node: any) => (node.template || node.origin) === template,
     ).id;
   const save = async () => {
     await inspector
@@ -116,7 +116,7 @@ export async function verifyDataPreparation(page: Page) {
     .poll(
       async () =>
         (await snapshot()).bundle.flow.nodes.find(
-          (node: any) => node.template === "clean_values",
+          (node: any) => (node.template || node.origin) === "clean_values",
         ).params.columns,
     )
     .toEqual([

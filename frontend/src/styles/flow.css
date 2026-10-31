@@ -745,3 +745,30 @@ fieldset.palette-bottom {
     font-size: 10px;
   }
 }
+
+.palette-entry {
+  display: flex;
+  align-items: center;
+}
+
+.palette-entry .palette-item {
+  flex: 1;
+  min-width: 0;
+}
+
+.palette-link {
+  flex-shrink: 0;
+}
+
+.node-link-badge {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 3px;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 10px;
+  max-width: 160px;
+  overflow: hidden;
+  white-space: nowrap;
+}

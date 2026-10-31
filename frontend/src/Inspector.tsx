@@ -1,10 +1,12 @@
 import Select from "./Select";
+import { templateUsage } from "./nodeCode";
 import { lazy, Suspense, useRef, useState } from "react";
 import {
   ArrowRight,
   BookOpen,
   Boxes,
   Code2,
+  Link,
   Play,
   Settings2,
   Trash2,
@@ -12,7 +14,7 @@ import {
 } from "lucide-react";
 import { api, withQuery } from "./api";
 import { nodeInterface, type NodeInterface } from "./graph";
-import { useT } from "./i18n";
+import { templateLabel, useT } from "./i18n";
 import NodeDocumentation from "./NodeDocumentation";
 import ExportDownload from "./ExportDownload";
 import ParameterField from "./ParameterField";
@@ -26,6 +28,7 @@ import type {
   Json,
   PreviewPage,
   Snapshot,
+  ParsedTemplate,
   Statement,
   Statuses,
 } from "./types";
@@ -54,6 +57,7 @@ export default function Inspector({
   signature,
   snapshot,
   graphNodes,
+  local,
   graphEdges,
   fullNode,
   environment,
@@ -67,6 +71,11 @@ export default function Inspector({
   onRun,
   onOpen,
   onEditTemplate,
+  onViewCode,
+  onDetach,
+  onConvert,
+  onRelink,
+  onDuplicate,
   onHistory,
   onClose,
 }: {
@@ -75,6 +84,7 @@ export default function Inspector({
   signature: NodeInterface;
   snapshot: Snapshot;
   graphNodes: FlowNode[];
+  local: Record<string, ParsedTemplate>;
   graphEdges: FlowEdge[];
   fullNode: string;
   environment: string;
@@ -96,6 +106,11 @@ export default function Inspector({
   onRun: () => void;
   onOpen: () => void;
   onEditTemplate: () => void;
+  onViewCode: () => void;
+  onDetach: () => void;
+  onConvert: () => void;
+  onRelink: () => void;
+  onDuplicate: () => void;
   onHistory: () => void;
   onClose: () => void;
 }) {
@@ -183,6 +198,9 @@ export default function Inspector({
     }
   };
   const { kind, parameters, inputs } = signature;
+  const linkedCount = node.template
+    ? templateUsage(snapshot.bundle!, node.template)
+    : 0;
   // Only the root flow binds variables; component definitions stay portable.
   const bindable = !fullNode.includes("::");
   const setParameter = (name: string, value: Json | undefined) =>
@@ -218,7 +236,20 @@ export default function Inspector({
         </span>
         <div>
           <strong>{t(kind)}</strong>
-          <small>{node.template || node.component}</small>
+          <small>
+            {node.template ? (
+              <>
+                <Link size={12} /> {t("linkedNode")} ·{" "}
+                {templateLabel(
+                  node.template,
+                  snapshot.parsed_templates[node.template]?.label,
+                  t,
+                )}
+              </>
+            ) : (
+              node.component || t("normalNode")
+            )}
+          </small>
         </div>
         <button
           className="icon run-node"
@@ -302,6 +333,7 @@ export default function Inspector({
                               n,
                               snapshot.parsed_templates,
                               snapshot.bundle?.components,
+                              local,
                             ).outputs.map((p) => (
                               <option
                                 key={n.id + ":" + p}
@@ -319,7 +351,8 @@ export default function Inspector({
             )}
             {!!parameters.length && <h4>{t("parameters")}</h4>}
             <QueryBuilder
-              kind={node.template || ""}
+              kind={node.preset || node.template || node.origin || ""}
+              parameters={parameters.map((p) => p.name)}
               schemas={schemas}
               variables={bindable ? snapshot.variables : null}
               environment={environment}
@@ -420,9 +453,47 @@ export default function Inspector({
                 onClick={onEditTemplate}
               >
                 <Code2 size={15} />
-                {t("editTemplate")}
+                {node.template
+                  ? t(
+                      linkedCount === 1
+                        ? "editTemplateOne"
+                        : "editTemplateCount",
+                    ).replace("{count}", String(linkedCount))
+                  : t("editNodeCode")}
               </button>
             )}
+            {!node.component &&
+              (node.template ? (
+                <>
+                  <button
+                    className="button secondary full"
+                    onClick={onViewCode}
+                  >
+                    {t("viewNodeCode")}
+                  </button>
+                  <button className="button secondary full" onClick={onDetach}>
+                    {t("detachTemplate")}
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button className="button secondary full" onClick={onConvert}>
+                    {t("convertTemplate")}
+                  </button>
+                  {node.origin &&
+                    snapshot.bundle?.templates[node.origin] !== undefined && (
+                      <button
+                        className="button secondary full"
+                        onClick={onRelink}
+                      >
+                        {t("relinkTemplate")}
+                      </button>
+                    )}
+                </>
+              ))}
+            <button className="button secondary full" onClick={onDuplicate}>
+              {t("duplicateNode")}
+            </button>
             <div className="inspector-danger">
               <button className="text-button danger" onClick={onDelete}>
                 <Trash2 size={14} />

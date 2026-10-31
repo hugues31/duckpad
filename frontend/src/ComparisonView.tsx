@@ -387,25 +387,41 @@ export default function ComparisonView({
                           ]),
                         ).sort()
                       : ["value"]
-                    ).map((field) => (
-                      <tr key={field}>
-                        <th>{field}</th>
-                        {[active.before, active.after].map((value, i) => (
-                          <td key={i}>
-                            <pre>
-                              {valueText(
-                                field === "value" && typeof value !== "object"
-                                  ? value
-                                  : fieldOf(value, field),
-                              )}
-                            </pre>
-                          </td>
-                        ))}
-                      </tr>
-                    ))}
+                    )
+                      .filter(
+                        (field) => active.kind !== "node" || field !== "sql",
+                      )
+                      .map((field) => (
+                        <tr key={field}>
+                          <th>{field}</th>
+                          {[active.before, active.after].map((value, i) => (
+                            <td key={i}>
+                              <pre>
+                                {valueText(
+                                  field === "value" && typeof value !== "object"
+                                    ? value
+                                    : fieldOf(value, field),
+                                )}
+                              </pre>
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
                   </tbody>
                 </table>
               )}
+              {active.kind === "node" &&
+                [active.before, active.after].some(
+                  (value) => typeof fieldOf(value, "sql") === "string",
+                ) && (
+                  <Suspense fallback={<p>{t("loading")}</p>}>
+                    <CodeDiff
+                      before={valueText(fieldOf(active.before, "sql") ?? "")}
+                      after={valueText(fieldOf(active.after, "sql") ?? "")}
+                      language="sql"
+                    />
+                  </Suspense>
+                )}
               {active.kind === "variable" && (
                 <p className="comparison-usages">
                   <strong>{t("affectedNodes")}</strong>:{" "}
