@@ -30,6 +30,23 @@ def runtime():
         return version[0], platform[0]
 
 
+@cache
+def core_catalog():
+    """List the core extensions this DuckDB build knows about, without contacting a repository."""
+    with (
+        TemporaryDirectory() as empty,
+        duckdb.connect(config={"extension_directory": empty, "threads": 1}) as db,
+    ):
+        rows = db.execute(
+            "SELECT extension_name, description, aliases, install_mode = 'STATICALLY_LINKED' "
+            "FROM duckdb_extensions() ORDER BY extension_name"
+        ).fetchall()
+    return [
+        {"name": name, "description": description or "", "aliases": aliases, "built_in": built_in}
+        for name, description, aliases, built_in in rows
+    ]
+
+
 def database_config(directory):
     return {
         "extension_directory": str(directory),
