@@ -1,46 +1,35 @@
 """Private storage and row witnesses, separate from the public SQL relation.
 
 Only deterministic SELECTs with a proven cardinality-preserving augmentation
-receive hidden witnesses. DISTINCT and set operations keep their native query.
+receive hidden witnesses, and only when DuckDB binds the augmented query to the
+original columns. DISTINCT and set operations keep their native query.
 Public views expose exactly the original columns, including a user column named
 rowid. Hidden storage identities never become inputs to SELECT *.
 """
 
+import duckdb
 import sqlglot
 from sqlglot import exp
 from sqlglot.optimizer.qualify import qualify
 
+from .sqlast import has_filtering_join, has_grouping_sets, is_volatile, sql
 from .util import qi, uid
-
-
-def sql(expression):
-    return expression.sql(dialect="duckdb")
 
 
 def plan_materialization(cursor, statement, dependencies, instrument=True):
     query, bindings = statement["query"], statement["bindings"]
+    storage = statement["table"] + "_storage"
     if not instrument:
-        storage = statement["table"] + "_storage"
-        return {
-            "storage": storage,
-            "columns": None,
-            "query": query,
-            "sql": f"CREATE TABLE {qi(storage)} AS {query}",
-            "witnesses": {},
-            "groups": {},
-        }
+        return _plan(storage, None, query)
     columns = [{"name": c[0], "type": c[1]} for c in cursor.execute("DESCRIBE " + query, bindings).fetchall()]
     witnesses, groups = {}, {}
     tree = sqlglot.parse_one(query, read="duckdb")
     eligible = (
-        instrument
-        and isinstance(tree, exp.Select)
+        isinstance(tree, exp.Select)
         and not any(tree.args.get(k) for k in ("distinct", "with_", "qualify"))
         and not tree.find(exp.Subquery)
-        and not any(j.args.get("kind") in ("SEMI", "ANTI") for j in tree.find_all(exp.Join))
-        and not any(
-            isinstance(f, (exp.Rand, exp.Uuid, exp.CurrentTimestamp, exp.CurrentDate)) for f in tree.walk()
-        )
+        and not has_filtering_join(tree)
+        and not is_volatile(tree)
     )
     if eligible:
         tables = list(tree.find_all(exp.Table))
@@ -59,40 +48,81 @@ def plan_materialization(cursor, statement, dependencies, instrument=True):
             )
             aliases = {t.alias_or_name: dependencies[t.name] for t in augmented.find_all(exp.Table)}
             grouping = augmented.args.get("group")
-            has_aggregate = any(a.find_ancestor(exp.Window) is None for a in augmented.find_all(exp.AggFunc))
-            if grouping and not any(grouping.args.get(k) for k in ("grouping_sets", "cube", "rollup")):
-                for expression in grouping.expressions:
-                    hidden = uid("__dp_group_")
-                    groups[sql(expression)] = hidden
-                    augmented.append("expressions", expression.copy().as_(hidden, quoted=True))
-            elif not grouping and not has_aggregate:
-                for alias, data in aliases.items():
-                    hidden = uid("__dp_witness_")
-                    witnesses[alias] = {"column": hidden, "dataset": data.id}
-                    augmented.append("expressions", exp.column("rowid", table=alias).as_(hidden, quoted=True))
+            keys = []
+            if grouping and not has_grouping_sets(grouping):
+                keys = [(expression, uid("__dp_group_")) for expression in grouping.expressions]
+                groups = {sql(expression): hidden for expression, hidden in keys}
+            elif not grouping and not outer_aggregates(augmented):
+                witnesses = {
+                    alias: {"column": uid("__dp_witness_"), "dataset": data.id}
+                    for alias, data in aliases.items()
+                }
             if witnesses or groups:
                 # Rewrite original rowid columns before appending physical rowids.
-                for column in augmented.find_all(exp.Column):
-                    data = aliases.get(column.table)
-                    is_witness = isinstance(column.parent, exp.Alias) and column.parent.alias in {
-                        w["column"] for w in witnesses.values()
-                    }
-                    if data and not is_witness and column.name in data.column_map:
-                        column.set("this", exp.to_identifier(data.column_map[column.name], quoted=True))
-                for table in augmented.find_all(exp.Table):
-                    data = dependencies[table.name]
-                    table.set("this", exp.to_identifier(data.storage or data.table, quoted=True))
-                query = sql(augmented)
+                to_physical(augmented, dependencies)
+                for expression, hidden in keys:
+                    augmented.append("expressions", expression.copy().as_(hidden, quoted=True))
+                for alias, witness in witnesses.items():
+                    augmented.append(
+                        "expressions", exp.column("rowid", table=alias).as_(witness["column"], quoted=True)
+                    )
+                instrumented = sql(augmented)
+                if _binds_columns(cursor, instrumented, bindings, columns, len(augmented.expressions)):
+                    query = instrumented
+                else:
+                    # Losing this node's lineage is better than publishing shifted columns.
+                    witnesses, groups = {}, {}
         except (sqlglot.errors.SqlglotError, KeyError, IndexError):
             witnesses, groups = {}, {}
-    storage = statement["table"] + "_storage"
+    return _plan(storage, columns, query, witnesses, groups)
+
+
+def outer_aggregates(tree):
+    """Aggregates computed by grouping rows, as opposed to aggregates evaluated inside a window."""
+    return [a for a in tree.find_all(exp.AggFunc) if a.find_ancestor(exp.Window) is None]
+
+
+def to_physical(tree, datasets):
+    """Point a qualified query at physical storage in place; return its datasets by table alias.
+
+    `datasets` maps table names to datasets. Tables read their dataset's storage, and public
+    columns renamed in storage, such as a user column named rowid, read their stored name.
+    """
+    aliases = {t.alias_or_name: datasets[t.name] for t in tree.find_all(exp.Table)}
+    for column in tree.find_all(exp.Column):
+        data = aliases.get(column.table)
+        if data and column.name in data.column_map:
+            column.set("this", exp.to_identifier(data.stored(column.name), quoted=True))
+    for table in tree.find_all(exp.Table):
+        table.set("this", exp.to_identifier(datasets[table.name].relation, quoted=True))
+    return aliases
+
+
+def _binds_columns(cursor, query, bindings, columns, width):
+    """Whether an instrumented query yields the original columns, then one per hidden alias.
+
+    Positional aliases shift after an expression that expands to several columns, such
+    as COLUMNS(...), struct.* or UNNEST(struct). Qualification can also rewrite valid
+    DuckDB SQL into a query that no longer binds.
+    """
+    try:
+        described = cursor.execute("DESCRIBE " + query, bindings).fetchall()
+    except duckdb.InterruptException:
+        raise
+    except duckdb.Error:
+        return False
+    public = [{"name": c[0], "type": c[1]} for c in described[: len(columns)]]
+    return public == columns and len(described) == width
+
+
+def _plan(storage, columns, query, witnesses=None, groups=None):
     return {
         "storage": storage,
         "columns": columns,
         "query": query,
         "sql": f"CREATE TABLE {qi(storage)} AS {query}",
-        "witnesses": witnesses,
-        "groups": groups,
+        "witnesses": witnesses or {},
+        "groups": groups or {},
     }
 
 
@@ -119,8 +149,10 @@ def publish_view(cursor, table, plan):
 
 
 def drop_dataset(cursor, dataset):
-    if dataset.storage:
-        cursor.execute(f"DROP VIEW IF EXISTS {qi(dataset.table)}")
-        cursor.execute(f"DROP TABLE IF EXISTS {qi(dataset.storage)}")
-    else:
-        cursor.execute(f"DROP TABLE IF EXISTS {qi(dataset.table)}")
+    drop_relations(cursor, dataset.table, dataset.storage)
+
+
+def drop_relations(cursor, view, storage):
+    """Drop a published view and the private storage table behind it."""
+    cursor.execute(f"DROP VIEW IF EXISTS {qi(view)}")
+    cursor.execute(f"DROP TABLE IF EXISTS {qi(storage)}")

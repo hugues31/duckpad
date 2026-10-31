@@ -1,0 +1,24 @@
+{
+  "verified_at": "2026-10-27T18:15:13.312394+00:00",
+  "python_version": "3.12.12",
+  "network_interfaces": [
+    "lo"
+  ],
+  "extension": "h3",
+  "checks": [
+    "uncached_repository_install_fails_without_network",
+    "transferred_cache_install_load_and_query_with_signature_checks",
+    "fresh_database_loads_installed_extension",
+    "tampered_signature_rejected",
+    "bare_community_binary_without_install_metadata_rejected",
+    "duckpad_embedded_pipeline_after_two_reopens",
+    "duckpad_embedded_unsigned_opt_in_restart_and_revocation",
+    "duckpad_isolated_worker_pipeline_after_two_reopens",
+    "duckpad_isolated_worker_unsigned_opt_in_restart_and_revocation"
+  ],
+  "duckdb_version": "v2.0.0",
+  "duckdb_platform": "linux_amd64",
+  "binary_sha256": "abba3f5702e6917804a1e05be20013b51d2174e296b175f0a3fdfc2eeffd6352",
+  "metadata_sha256": "6159c77faeaaa760d1a9dc73142345133043fa349b16e06b1ab155785fc21a62",
+  "extension_version": "v1.5.6"
+}
