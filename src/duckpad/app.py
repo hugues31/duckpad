@@ -152,6 +152,7 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
             "runs",
             "password",
             "ssh-key",
+            "api-tokens",
         ):
             raise Problem("Not found", 404)
 
@@ -177,7 +178,20 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
     async def authentication(request: Request, call_next: RequestResponseEndpoint) -> Response:
         try:
             if request.url.path.startswith("/api/") and request.url.path not in PUBLIC_API_PATHS:
-                request.state.user = auth.check(session_token(request))
+                header = request.headers.get("authorization", "")
+                scheme, _, bearer = header.partition(" ")
+                request.state.token_name = None
+                if scheme.lower() == "bearer" and bearer.startswith("dpk_"):
+                    request.state.user, request.state.token_name = auth.check_api_token(bearer)
+                    parts = request.url.path.strip("/").split("/")
+                    if parts[1] == "ssh-key" or (
+                        parts[1] == "worktrees"
+                        and parts[3:4] == ["git"]
+                        and parts[4:] in (["consent"], ["fetch"], ["push"])
+                    ):
+                        raise Problem("API tokens cannot authorize Git credentials or network Git", 403)
+                else:
+                    request.state.user = auth.check(session_token(request))
                 authorize(request, request.state.user)
             if request.method not in SAFE_METHODS:
                 origin = request.headers.get("origin")
@@ -428,11 +442,46 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
 
     @app.post("/api/users", response_model=None)
     def create_user(data: schemas.NewUser) -> Record:
-        return auth.create_user(data.username, data.password, data.role)
+        return auth.create_user(
+            data.username, data.password, data.role, service=data.service, description=data.description
+        )
 
     @app.patch("/api/users/{identity}", response_model=None)
     def update_user(identity: str, data: schemas.UserChanges) -> Record:
         return access.update_user(identity, data.model_dump(exclude_none=True))
+
+    @app.get("/api/api-tokens", response_model=None)
+    def api_tokens(request: Request) -> list[Record]:
+        return auth.list_api_tokens(request.state.user, request.state.user["id"])
+
+    @app.post("/api/api-tokens", response_model=None)
+    def create_api_token(data: schemas.NewAPIToken, request: Request) -> Record:
+        return auth.create_api_token(
+            request.state.user,
+            request.state.user["id"],
+            data.name,
+            data.expires.timestamp() if data.expires else None,
+        )
+
+    @app.delete("/api/api-tokens/{token}", response_model=None)
+    def revoke_api_token(token: str, request: Request) -> Record:
+        auth.revoke_api_token(request.state.user, request.state.user["id"], token)
+        return {"ok": True}
+
+    @app.get("/api/users/{identity}/api-tokens", response_model=None)
+    def user_api_tokens(identity: str, request: Request) -> list[Record]:
+        return auth.list_api_tokens(request.state.user, identity)
+
+    @app.post("/api/users/{identity}/api-tokens", response_model=None)
+    def create_user_api_token(identity: str, data: schemas.NewAPIToken, request: Request) -> Record:
+        return auth.create_api_token(
+            request.state.user, identity, data.name, data.expires.timestamp() if data.expires else None
+        )
+
+    @app.delete("/api/users/{identity}/api-tokens/{token}", response_model=None)
+    def revoke_user_api_token(identity: str, token: str, request: Request) -> Record:
+        auth.revoke_api_token(request.state.user, identity, token)
+        return {"ok": True}
 
     @app.post("/api/password", response_model=None)
     def change_password(data: schemas.PasswordChange, request: Request) -> Record:
@@ -474,12 +523,17 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
                     "id": u["id"],
                     "username": u["username"],
                     "active": u["active"],
+                    "auth_method": u.get("auth_method"),
                     "role": record["members"][u["id"]],
                 }
                 for u in directory
                 if u["id"] in record["members"]
             ],
-            "users": [{"id": u["id"], "username": u["username"]} for u in directory if u["active"]]
+            "users": [
+                {"id": u["id"], "username": u["username"], "auth_method": u.get("auth_method")}
+                for u in directory
+                if u["active"]
+            ]
             if role == "admin"
             else [],
             "connections": record["connections"],
@@ -696,7 +750,7 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
         return engine.statuses(worktree, environment)
 
     @app.post("/api/worktrees/{worktree}/runs", response_model=None)
-    def launch(worktree: str, data: schemas.Launch) -> Record:
+    def launch(worktree: str, data: schemas.Launch, request: Request) -> Record:
         entry_point = "ui" if data.entry_point == "ui" else "api"
         settings = catalog.environment(data.environment)
         # The interface asks before running in a protected environment; API clients run directly.
@@ -710,7 +764,12 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
                 409,
                 {"confirmation_required": settings, "variables": used},
             )
-        return engine.launch(worktree, data.environment, data.node, entry_point)
+        requester = {
+            "id": request.state.user["id"],
+            "username": request.state.user["username"],
+            "token_name": request.state.token_name,
+        }
+        return engine.launch(worktree, data.environment, data.node, entry_point, requester=requester)
 
     @app.get("/api/runs", response_model=None)
     def runs(request: Request, worktree: str | None = None) -> list[Record]:

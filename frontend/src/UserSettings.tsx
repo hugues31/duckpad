@@ -3,6 +3,7 @@ import PasswordForm from "./PasswordForm";
 import { usePreferenceChoices, type Preferences } from "./preferences";
 import Select from "./Select";
 import SSHKeySettings from "./SSHKeySettings";
+import APITokenSettings from "./APITokenSettings";
 import type { Workspace } from "./types";
 
 export default function UserSettings({
@@ -58,6 +59,7 @@ export default function UserSettings({
             <PasswordForm onChanged={onPasswordChanged} />
           )}
           <SSHKeySettings />
+          <APITokenSettings />
         </div>
       </div>
     </section>

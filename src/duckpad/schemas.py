@@ -2,7 +2,7 @@
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, StrictBool, field_validator, model_validator
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, StrictBool, field_validator, model_validator
 
 
 class Login(BaseModel):
@@ -11,9 +11,20 @@ class Login(BaseModel):
 
 
 class NewUser(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     username: str
-    password: str
+    password: str | None = None
     role: Literal["admin", "member"] = "member"
+    service: StrictBool = False
+    description: str = Field(default="", max_length=1000)
+
+
+class NewAPIToken(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, max_length=128)
+    expires: AwareDatetime | None = None
 
 
 class UserChanges(BaseModel):

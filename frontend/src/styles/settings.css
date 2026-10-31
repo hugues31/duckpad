@@ -104,6 +104,16 @@
   line-height: 1.7;
 }
 
+.api-token-settings {
+  grid-column: 1 / -1;
+  min-width: 0;
+}
+
+.api-token-settings form {
+  max-width: 480px;
+  margin-bottom: 24px;
+}
+
 .settings-card .check-row {
   display: flex;
   align-items: start;

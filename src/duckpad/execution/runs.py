@@ -110,13 +110,20 @@ class Runner:
             self._persist(run, [])
 
     def launch(
-        self, worktree: str, environment: str, target: str | None = None, entry_point: str = "api"
+        self,
+        worktree: str,
+        environment: str,
+        target: str | None = None,
+        entry_point: str = "api",
+        *,
+        requester: Record | None = None,
     ) -> Record:
         self.projects.get(worktree)
         token: RunToken = {"id": uid("run_"), "cancel": threading.Event(), "cursor": None}
         self._admit(worktree, environment, token)
         try:
             execution = self._prepare(token, worktree, environment, target, entry_point)
+            execution.run["requester"] = copy.deepcopy(requester)
             self._persist(execution.run, execution.secrets)
             thread = threading.Thread(target=self._execute, args=(execution,), name=token["id"], daemon=True)
             with self.lock:

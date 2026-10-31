@@ -190,8 +190,9 @@ export interface User {
   username: string;
   role: "admin" | "member";
   active: boolean;
-  /** Present when the account signs in with single sign-on. */
-  auth_method?: "oidc";
+  /** Present for SSO identities and accounts that authenticate only with API tokens. */
+  auth_method?: "oidc" | "service";
+  description?: string;
 }
 export interface Workspace {
   assistant?: import("./assistantTypes").AssistantOptions;
@@ -308,6 +309,11 @@ export interface NodeRun {
   references?: Record<string, string[]>;
 }
 export interface Run {
+  requester?: {
+    id: string;
+    username: string;
+    token_name: string | null;
+  } | null;
   warning_count?: number;
   id: string;
   project: string;
