@@ -163,6 +163,8 @@ A lineage request registers its result generation and dependency nodes. Recalcul
 
 ## HTTP surface
 
+The stable `/api/v1` automation contract covers Job discovery, launch, asynchronous waiting, cancellation and text logs. Its separate OpenAPI schema is available at `/api/v1/openapi.json`; other routes remain internal to the interface. See [Automate Jobs](AUTOMATION.md) for authentication, idempotency, error codes and examples.
+
 Protected `/api` routes require a session cookie, a bearer session token, or an API token sent as `Authorization: Bearer dpk_…`. API tokens authenticate as their owning account with its current permissions; only their SHA-256 hashes and lifecycle metadata are stored. They are never accepted from cookies and cannot authorize SSH key management or network Git. Service accounts authenticate only with API tokens. Public login and OIDC callback routes remain unauthenticated. Mutation requests reject a mismatched browser Origin. The static login shell is public; project content is authenticated.
 
 The administrator-only resource widget samples machine-wide counters every two

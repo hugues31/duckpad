@@ -39,10 +39,11 @@ def test_initial_migration_matches_models_and_survives_restart(store):
     store.put("settings", "arbitrary_config", {"enabled": True, "values": [1, 2]})
     with store.engine.connect() as connection:
         assert (
-            connection.exec_driver_sql("SELECT version_num FROM alembic_version").scalar_one() == "0004_jobs"
+            connection.exec_driver_sql("SELECT version_num FROM alembic_version").scalar_one()
+            == "0005_job_idempotency"
         )
         assert "records" not in inspect(connection).get_table_names()
-        assert len(SQLModel.metadata.tables) == 23
+        assert len(SQLModel.metadata.tables) == 24
         assert compare_metadata(MigrationContext.configure(connection), SQLModel.metadata) == []
         assert connection.exec_driver_sql("PRAGMA foreign_keys").scalar_one() == 1
         assert connection.exec_driver_sql("PRAGMA journal_mode").scalar_one() == "wal"

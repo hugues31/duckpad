@@ -172,6 +172,18 @@ class Store:
             )
             return [row.model_dump() for row in rows]
 
+    def job_launch(self, job, key, instant):
+        with self.session() as session:
+            row = session.get(m.JobIdempotency, (job, key))
+            return row.model_dump() if row is not None and row.expires > instant else None
+
+    def remember_job_launch(self, data, run, instant):
+        """Called in the transaction that first persists a run, before execution starts."""
+        with self.session() as session:
+            session.exec(delete(m.JobIdempotency).where(m.JobIdempotency.expires <= instant))
+            session.add(m.JobIdempotency(**data, run=run, expires=instant + 7 * 24 * 60 * 60))
+            session.flush()
+
     def find_api_token(self, token_hash):
         with self.session() as session:
             row = session.exec(select(m.APIToken).where(m.APIToken.hash == token_hash)).first()
