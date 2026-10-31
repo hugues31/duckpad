@@ -99,11 +99,14 @@ for (const secureContext of [false, true]) {
 
     // Assistant providers also receive client-generated identifiers.
     await openInstanceSettings(page, "AI assistant");
-    await page
-      .getByRole("button", { name: "Add provider", exact: true })
-      .click();
+    // Earlier tests may leave a provider, which hides the provider choice.
+    const add = page.getByRole("button", { name: "Add provider", exact: true });
+    const openai = page.getByRole("button", { name: "OpenAI", exact: true });
+    await expect(add.or(openai)).toBeVisible();
+    if (await add.isVisible()) await add.click();
+    await openai.click();
     await expect(
-      page.getByRole("group", { name: "Provider 1", exact: true }),
+      page.getByRole("group", { name: "OpenAI", exact: true }).last(),
     ).toBeVisible();
     expect(errors).toEqual([]);
   });

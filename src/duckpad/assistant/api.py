@@ -6,7 +6,7 @@ from starlette.background import BackgroundTask
 
 from .actions import UndoRequest
 from .approvals import ApprovalRequest
-from .config import Settings
+from .config import ConnectionCheck, ProviderSettings, Settings
 from .service import Assistant, Rename, TurnRequest
 from .tools import PageContext
 
@@ -30,14 +30,20 @@ def router(assistant: Assistant):
         return configuration.save(data)
 
     @routes.post("/test")
-    async def test(request: Request):
+    async def test(request: Request, check: ConnectionCheck | None = None):
         assistant.services.engine.access.instance_admin(request.state.user)
-        return await configuration.test()
+        return await configuration.test(check)
 
     @routes.get("/models/{provider}")
     async def models(request: Request, provider: str):
         assistant.services.engine.access.instance_admin(request.state.user)
         return await configuration.models(provider)
+
+    @routes.post("/models")
+    async def discover(request: Request, provider: ProviderSettings):
+        """List the models of unsaved provider settings, reusing the saved key when allowed."""
+        assistant.services.engine.access.instance_admin(request.state.user)
+        return await configuration.discover(configuration.draft(provider))
 
     @routes.get("/conversations")
     def conversations(request: Request, offset: int = Query(default=0, ge=0)):
