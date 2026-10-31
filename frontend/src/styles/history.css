@@ -1,0 +1,63 @@
+/* Run history tab. */
+.history-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 17px 19px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: 8px;
+  width: 100%;
+  text-align: left;
+  margin-bottom: 9px;
+  font-size: 12px;
+}
+.history-row strong {
+  font-size: 12px;
+  font-weight: 600;
+  display: block;
+}
+.history-row small {
+  display: block;
+  color: var(--muted);
+  font-size: 10px;
+  margin-top: 7px;
+}
+.history-icon {
+  height: 34px;
+  width: 34px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface-alt);
+  color: var(--muted);
+}
+.history-icon.success {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+.history-icon.partial_failure,
+.history-icon.failed {
+  color: #c57871;
+  background: #c5787115;
+}
+.run-step {
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  margin: 10px 0;
+  padding: 12px;
+}
+.run-step summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  font-size: 12px;
+}
+.run-step summary strong {
+  flex: 1;
+}
+.run-step .expression {
+  max-height: 450px;
+}
