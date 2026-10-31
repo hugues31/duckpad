@@ -4,6 +4,9 @@ export const NEW_NODE_SQL =
   "-- @input source\n-- @output result\nSELECT * FROM {{ source }};\n";
 export const nodeCodePath = (id: string, parent?: string) =>
   parent ? `components/${parent}/${id}.sql` : `nodes/${id}.sql`;
+/** A node's element ID in Git comparisons and histories. */
+export const nodeEntity = (id: string, parent?: string) =>
+  `${parent ? `component/${parent}/` : ""}node/${id}`;
 export const nodeGraph = (bundle: Bundle, parent?: string) =>
   parent ? bundle.components[parent] : bundle.flow;
 export const nodeCode = (bundle: Bundle, node: FlowNode, parent?: string) =>

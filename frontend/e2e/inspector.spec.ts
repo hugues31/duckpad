@@ -199,3 +199,47 @@ test("Inspector does not queue later edits for a duplicate blur and click save",
     .click();
   await expect(status).toHaveValue("refunded");
 });
+
+test("Info tab tells who changed the node and opens its history", async ({
+  page,
+}) => {
+  const { endpoint, inspector, label } = await openInspector(page);
+  const saved = page.waitForResponse(
+    (response) =>
+      response.url().endsWith(endpoint) &&
+      response.request().method() === "PUT",
+  );
+  await label.fill("Reviewed orders");
+  await label.blur();
+  const snapshot: Snapshot = await (await saved).json();
+  const node = snapshot.bundle!.flow.nodes.find(
+    (n) => n.label === "Reviewed orders",
+  )!;
+  await inspector.getByRole("button", { name: "Info", exact: true }).click();
+  const changes = inspector.getByRole("region", { name: "Changes" });
+  const last = changes.locator("dt", { hasText: "Last modified" });
+  await expect(last.locator("+ dd")).toContainText("now by admin");
+  await expect(last.locator("+ dd")).toContainText("Documentation");
+  await expect(changes.locator("dt", { hasText: "Created" })).toBeVisible();
+  await expect(
+    changes.locator("dt", { hasText: "Contributors" }).locator("+ dd"),
+  ).toHaveText("admin");
+  const details = inspector.getByRole("region", { name: "Details" });
+  await expect(details).toContainText(node.id);
+  await expect(details).toContainText(`templates/${node.template}.sql`);
+
+  const revisions = await changes
+    .locator("dt", { hasText: "Revisions" })
+    .locator("+ dd")
+    .innerText();
+  await changes
+    .getByRole("button", { name: "View change history", exact: true })
+    .click();
+  const dialog = page.getByRole("dialog", { name: "Project Git workspace" });
+  await expect(dialog.getByLabel("History element")).toHaveValue(
+    `node/${node.id}`,
+  );
+  await expect(dialog.locator(".git-commit").first()).toContainText("admin");
+  // The history lists exactly the commits counted as revisions.
+  await expect(dialog.locator(".git-commit")).toHaveCount(Number(revisions));
+});
