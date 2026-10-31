@@ -1,17 +1,30 @@
 import { DEBUG_ASSISTANT_EVENT, type DebugRequest } from "./AskAssistant";
+import {
+  AssistantLauncher,
+  chatPlacement,
+  useLauncherPosition,
+} from "./AssistantLauncher";
 import { useDefaultPrompts } from "./AssistantPrompts";
 import { AssistantRun, type RunControls } from "./AssistantRun";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
+  ArrowDown,
+  ArrowUp,
+  ChevronRight,
+  CircleAlert,
+  CircleCheck,
+  CirclePause,
+  CircleX,
+  LoaderCircle,
   Maximize2,
-  MessageSquare,
   Minimize2,
   Plus,
-  Send,
+  Sparkles,
   Square,
   Trash2,
   Undo2,
   X,
+  type LucideIcon,
 } from "lucide-react";
 import { useNavigate } from "react-router";
 import Markdown from "react-markdown";
@@ -57,6 +70,17 @@ const toolLabels: Record<string, TranslationKey> = {
   compare_run: "assistantCompareRun",
 };
 
+const statusIcons: Partial<Record<TranslationKey, LucideIcon>> = {
+  assistantRunConfirmation: CirclePause,
+  assistantRunApproved: CircleCheck,
+  assistantRunDeclined: CircleX,
+  assistantReading: LoaderCircle,
+  assistantComplete: CircleCheck,
+  assistantStopped: CircleX,
+};
+// Within this distance of the end, the log follows new content.
+const FOLLOW_DISTANCE = 48;
+
 interface ActionControls extends RunControls {
   canUndo?: boolean;
   onUndo?: (action?: string) => void;
@@ -96,11 +120,18 @@ function ToolCard({
               : tool.status === "stopped"
                 ? "assistantStopped"
                 : "assistantFailed";
+  const Icon = statusIcons[status] || CircleAlert;
   return (
     <div className="assistant-tool">
       <details open={action || tool.approval ? true : undefined}>
         <summary>
-          <span>
+          <span className="assistant-tool-icon" data-status={status}>
+            <Icon
+              size={14}
+              className={status === "assistantReading" ? "spin" : undefined}
+            />
+          </span>
+          <span className="assistant-tool-label">
             {t(toolLabels[tool.name] || "assistantReadFlow")}
             {target ? ` · ${String(target)}` : ""}
           </span>
@@ -113,6 +144,7 @@ function ToolCard({
                   : status,
             )}
           </small>
+          <ChevronRight size={14} className="assistant-tool-chevron" />
         </summary>
         {tool.approval ? (
           <AssistantRun
@@ -189,56 +221,78 @@ function ToolCard({
   );
 }
 
+/** The answer is on its way: a morphing gradient orb and a shimmering label. */
+function AssistantThinking() {
+  const t = useT();
+  return (
+    <p className="assistant-thinking" role="status">
+      <span className="assistant-orb" aria-hidden="true" />
+      <span className="assistant-shimmer">{t("assistantThinking")}</span>
+    </p>
+  );
+}
+
 export function AssistantMessage({
   turn,
+  thinking = false,
+  entering = false,
   ...controls
-}: { turn: AssistantTurn } & ActionControls) {
+}: {
+  turn: AssistantTurn;
+  thinking?: boolean;
+  entering?: boolean;
+} & ActionControls) {
   const t = useT();
   const explainError = useAssistantError();
   const remaining = turn.tools.filter(
     (tool) => tool.action?.commit && tool.action.status === "applied",
   ).length;
   return (
-    <article className="assistant-turn">
+    <article className={`assistant-turn${entering ? " entering" : ""}`}>
       <p className="assistant-question">{turn.user}</p>
-      {turn.tools.map((tool) => (
-        <ToolCard key={tool.id} tool={tool} {...controls} />
-      ))}
-      {remaining > 1 && (
-        <button
-          className="button secondary small"
-          disabled={!controls.canUndo}
-          onClick={() => controls.onUndo?.()}
-        >
-          <Undo2 size={14} />
-          {t("assistantUndoTurn").replace("{count}", String(remaining))}
-        </button>
-      )}
-      <div className="assistant-markdown">
-        <Markdown
-          remarkPlugins={[remarkGfm]}
-          skipHtml
-          urlTransform={(url) => (/^(https?:\/\/|#)/i.test(url) ? url : "")}
-          components={{
-            img: () => null,
-            a: ({ children, href }) => (
-              <a href={href} target="_blank" rel="noreferrer">
-                {children}
-              </a>
-            ),
-          }}
-        >
-          {turn.text}
-        </Markdown>
+      <div className="assistant-answer">
+        {turn.tools.map((tool) => (
+          <ToolCard key={tool.id} tool={tool} {...controls} />
+        ))}
+        {remaining > 1 && (
+          <button
+            className="button secondary small"
+            disabled={!controls.canUndo}
+            onClick={() => controls.onUndo?.()}
+          >
+            <Undo2 size={14} />
+            {t("assistantUndoTurn").replace("{count}", String(remaining))}
+          </button>
+        )}
+        {turn.text && (
+          <div className="assistant-markdown">
+            <Markdown
+              remarkPlugins={[remarkGfm]}
+              skipHtml
+              urlTransform={(url) => (/^(https?:\/\/|#)/i.test(url) ? url : "")}
+              components={{
+                img: () => null,
+                a: ({ children, href }) => (
+                  <a href={href} target="_blank" rel="noreferrer">
+                    {children}
+                  </a>
+                ),
+              }}
+            >
+              {turn.text}
+            </Markdown>
+          </div>
+        )}
+        {turn.error && (
+          <p className="notice error" role="alert">
+            {explainError(turn.error)}
+          </p>
+        )}
+        {turn.status === "stopped" && (
+          <p className="muted">{t("assistantStopped")}</p>
+        )}
+        {thinking && <AssistantThinking />}
       </div>
-      {turn.error && (
-        <p className="notice error" role="alert">
-          {explainError(turn.error)}
-        </p>
-      )}
-      {turn.status === "stopped" && (
-        <p className="muted">{t("assistantStopped")}</p>
-      )}
     </article>
   );
 }
@@ -263,10 +317,19 @@ export default function AssistantChat() {
   const [undoing, setUndoing] = useState(false);
   const [error, setError] = useState("");
   const [pending, setPending] = useState<AssistantTurn | null>(null);
+  // The turn that streams again after a run approval.
+  const [continuing, setContinuing] = useState("");
+  const [answers, setAnswers] = useState(0);
+  const [seenAnswers, setSeenAnswers] = useState(0);
+  const [atEnd, setAtEnd] = useState(true);
+  const launcherPosition = useLauncherPosition();
   const [debug, setDebug] = useState<
     (DebugRequest & { worktree: string }) | null
   >(null);
   const defaultPrompts = useDefaultPrompts();
+  // Whether the log follows new content, and where the reader left it.
+  const following = useRef(true);
+  const readingAt = useRef(0);
   const awaitingApproval =
     conversation?.turns.at(-1)?.status === "awaiting_approval";
   useEffect(() => {
@@ -277,6 +340,7 @@ export default function AssistantChat() {
       setConversation(null);
       setPending(null);
       setDraft(detail.prompt);
+      following.current = true;
       setOpen(true);
     };
     window.addEventListener(DEBUG_ASSISTANT_EVENT, receive);
@@ -294,9 +358,34 @@ export default function AssistantChat() {
   useEffect(() => {
     if (open) input.current?.focus();
   }, [open]);
-  useEffect(() => {
-    if (log.current) log.current.scrollTop = log.current.scrollHeight;
-  }, [pending, conversation]);
+  // Reopening the chat returns to where the reader left the conversation.
+  useLayoutEffect(() => {
+    const element = log.current;
+    if (!open || !element) return;
+    element.scrollTop = following.current
+      ? element.scrollHeight
+      : readingAt.current;
+  }, [open]);
+  useLayoutEffect(() => {
+    const element = log.current;
+    if (element && following.current) element.scrollTop = element.scrollHeight;
+  }, [pending, conversation, busy, error, maximized]);
+  const followLog = () => {
+    const element = log.current;
+    if (!element) return;
+    following.current =
+      element.scrollHeight - element.scrollTop - element.clientHeight <
+      FOLLOW_DISTANCE;
+    readingAt.current = element.scrollTop;
+    setAtEnd(following.current);
+  };
+  const showLatest = () => {
+    following.current = true;
+    log.current?.scrollTo({
+      top: log.current.scrollHeight,
+      behavior: "smooth",
+    });
+  };
   const context: AssistantContext = {
     page: route.area,
     ...(route.tab ? { tab: route.tab } : {}),
@@ -377,6 +466,7 @@ export default function AssistantChat() {
       const value = await api<Conversation>(
         `/assistant/conversations/${item.id}`,
       );
+      following.current = true;
       setConversation(value);
       setDebug(null);
       setTitle(value.title);
@@ -422,6 +512,7 @@ export default function AssistantChat() {
         setConversation(value);
       }
       identity.current = value.id;
+      following.current = true;
       setPending(current);
       setDraft("");
       const receive = (event: AssistantEvent) => {
@@ -460,7 +551,8 @@ export default function AssistantChat() {
       setConversation(updated);
       setTitle(updated.title);
       setPending(null);
-      if (maximized) await list();
+      setAnswers((count) => count + 1);
+      if (maximized) void list().catch((e: Error) => setError(e.message));
     } catch (e) {
       if (!abort.signal.aborted) setError((e as Error).message);
     } finally {
@@ -476,6 +568,7 @@ export default function AssistantChat() {
   ) {
     if (!conversation || !turn.id || busy || undoing || !bound) return;
     setBusy(true);
+    setContinuing(turn.id);
     setError("");
     const abort = new AbortController();
     controller.current = abort;
@@ -514,11 +607,13 @@ export default function AssistantChat() {
       setConversation(
         await api<Conversation>(`/assistant/conversations/${conversation.id}`),
       );
+      setAnswers((count) => count + 1);
     } catch (e) {
       if (!abort.signal.aborted) setError((e as Error).message);
     } finally {
       controller.current = null;
       identity.current = "";
+      setContinuing("");
       setBusy(false);
       void worktree.refresh();
     }
@@ -580,24 +675,33 @@ export default function AssistantChat() {
   }
   const close = () => {
     setOpen(false);
+    setSeenAnswers(answers);
     launcher.current?.focus();
   };
   if (!options?.enabled) return null;
   return (
     <>
-      <button
+      <AssistantLauncher
         ref={launcher}
-        className="assistant-launcher button primary"
-        aria-label={t("assistantOpen")}
-        aria-expanded={open}
-        onClick={() => setOpen((value) => !value)}
-      >
-        <MessageSquare size={20} />
-        <span>{t("assistant")}</span>
-      </button>
+        open={open}
+        busy={busy && !open}
+        unread={answers > seenAnswers}
+        position={launcherPosition.position}
+        viewport={launcherPosition.viewport}
+        onMove={launcherPosition.move}
+        onToggle={() => (open ? close() : setOpen(true))}
+      />
       {open && (
         <section
           className={`assistant-chat${maximized ? " maximized" : ""}`}
+          style={
+            maximized
+              ? undefined
+              : chatPlacement(
+                  launcherPosition.position,
+                  launcherPosition.viewport.height,
+                )
+          }
           role="dialog"
           aria-modal={maximized}
           aria-label={t("assistant")}
@@ -609,14 +713,35 @@ export default function AssistantChat() {
           }}
         >
           <header className="assistant-header">
-            <strong>{t("assistant")}</strong>
-            <div className="row gap">
+            <span className="assistant-avatar" aria-hidden="true">
+              <Sparkles size={17} />
+            </span>
+            <div className="assistant-heading">
+              <strong>{t("assistant")}</strong>
+              <p className="assistant-context" title={t("assistantContext")}>
+                {t(
+                  route.tab || route.area === "pipelines"
+                    ? route.tab || "flow"
+                    : route.area === "notFound"
+                      ? "routeNotFound"
+                      : route.area === "home"
+                        ? "projects"
+                        : route.area,
+                )}
+                {context.node && <> · {nodeLabel}</>}
+                {context.file && <> · {context.file}</>}
+                {context.worktree && context.environment !== environment && (
+                  <> · {context.environment}</>
+                )}
+              </p>
+            </div>
+            <div className="assistant-header-actions">
               <button
-                className="icon-button"
                 title={t("assistantNew")}
                 aria-label={t("assistantNew")}
                 disabled={busy || undoing}
                 onClick={() => {
+                  following.current = true;
                   setConversation(null);
                   setDebug(null);
                   setPending(null);
@@ -628,7 +753,6 @@ export default function AssistantChat() {
                 <Plus size={17} />
               </button>
               <button
-                className="icon-button"
                 title={t(maximized ? "assistantMinimize" : "assistantMaximize")}
                 aria-label={t(
                   maximized ? "assistantMinimize" : "assistantMaximize",
@@ -639,10 +763,9 @@ export default function AssistantChat() {
                     void list().catch((e: Error) => setError(e.message));
                 }}
               >
-                {maximized ? <Minimize2 size={17} /> : <Maximize2 size={17} />}
+                {maximized ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
               </button>
               <button
-                className="icon-button"
                 title={t("close")}
                 aria-label={t("close")}
                 onClick={close}
@@ -737,94 +860,95 @@ export default function AssistantChat() {
                   </button>
                 </form>
               )}
-              <p className="assistant-context" title={t("assistantContext")}>
-                <span>
-                  {t(
-                    route.tab || route.area === "pipelines"
-                      ? route.tab || "flow"
-                      : route.area === "notFound"
-                        ? "routeNotFound"
-                        : route.area === "home"
-                          ? "projects"
-                          : route.area,
-                  )}
-                </span>
-                {context.branch && <> · {context.branch}</>}
-                {context.node && <> · {nodeLabel}</>}
-                {context.file && <> · {context.file}</>}
-                {context.worktree && <> · {context.environment}</>}
-              </p>
               {!bound && (
-                <p className="assistant-context">
+                <p className="assistant-notice">
                   {t("assistantDifferentBranch")}
                 </p>
               )}
               {context.worktree && worktree.snapshot && !worktree.canEdit && (
-                <p className="assistant-context">{t("assistantReadOnly")}</p>
+                <p className="assistant-notice">{t("assistantReadOnly")}</p>
               )}
-              <div
-                ref={log}
-                className="assistant-messages"
-                role="log"
-                aria-label={t("assistantMessages")}
-                aria-live="polite"
-                aria-relevant="additions"
-              >
-                {!conversation?.turns.length && !pending && (
-                  <div className="assistant-welcome">
-                    <MessageSquare size={28} />
-                    <h3>{t("assistantWelcome")}</h3>
-                    <p>{t("assistantWelcomeHint")}</p>
-                    <div className="assistant-quick-prompts">
-                      {(options.quick_prompts ?? defaultPrompts).map(
-                        (prompt, index) => (
-                          <button
-                            key={index}
-                            type="button"
-                            className="button secondary small"
-                            disabled={busy || undoing || !selected}
-                            onClick={() => void submit(prompt.prompt)}
-                          >
-                            {prompt.label}
-                          </button>
-                        ),
-                      )}
+              <div className="assistant-log">
+                <div
+                  ref={log}
+                  className="assistant-messages"
+                  role="log"
+                  aria-label={t("assistantMessages")}
+                  aria-live="polite"
+                  aria-relevant="additions"
+                  onScroll={followLog}
+                >
+                  {!conversation?.turns.length && !pending && (
+                    <div className="assistant-welcome">
+                      <span
+                        className="assistant-welcome-mark"
+                        aria-hidden="true"
+                      >
+                        <Sparkles size={24} />
+                      </span>
+                      <h3>{t("assistantWelcome")}</h3>
+                      <p>{t("assistantWelcomeHint")}</p>
+                      <div className="assistant-quick-prompts">
+                        {(options.quick_prompts ?? defaultPrompts).map(
+                          (prompt, index) => (
+                            <button
+                              key={index}
+                              type="button"
+                              className="assistant-chip"
+                              disabled={busy || undoing || !selected}
+                              onClick={() => void submit(prompt.prompt)}
+                            >
+                              {prompt.label}
+                            </button>
+                          ),
+                        )}
+                      </div>
+                      <small>
+                        {t(
+                          options.allow_data
+                            ? "assistantDataOn"
+                            : "assistantDataOff",
+                        )}
+                      </small>
                     </div>
-                    <small>
-                      {t(
-                        options.allow_data
-                          ? "assistantDataOn"
-                          : "assistantDataOff",
-                      )}
-                    </small>
-                  </div>
-                )}
-                {conversation?.turns.map((turn, index) => (
-                  <AssistantMessage
-                    key={turn.id || index}
-                    turn={turn}
-                    {...actionControls(turn)}
-                    onDecision={
-                      !busy &&
-                      !undoing &&
-                      bound &&
-                      turn.status === "awaiting_approval"
-                        ? (tool, approved) =>
-                            void handleDecision(turn, tool, approved)
-                        : undefined
-                    }
-                  />
-                ))}
-                {pending && (
-                  <AssistantMessage
-                    turn={pending}
-                    {...actionControls(pending)}
-                  />
-                )}
-                {busy && (
-                  <p className="muted" role="status">
-                    {t("assistantThinking")}
-                  </p>
+                  )}
+                  {conversation?.turns.map((turn, index) => (
+                    <AssistantMessage
+                      key={turn.id || index}
+                      turn={turn}
+                      thinking={busy && !!turn.id && turn.id === continuing}
+                      {...actionControls(turn)}
+                      onDecision={
+                        !busy &&
+                        !undoing &&
+                        bound &&
+                        turn.status === "awaiting_approval"
+                          ? (tool, approved) =>
+                              void handleDecision(turn, tool, approved)
+                          : undefined
+                      }
+                    />
+                  ))}
+                  {pending && (
+                    <AssistantMessage
+                      turn={pending}
+                      thinking={busy}
+                      entering
+                      {...actionControls(pending)}
+                    />
+                  )}
+                  {busy && !pending && !continuing && <AssistantThinking />}
+                </div>
+                {!atEnd && (
+                  <button
+                    type="button"
+                    className="assistant-latest"
+                    title={t("assistantLatest")}
+                    aria-label={t("assistantLatest")}
+                    onClick={showLatest}
+                  >
+                    <ArrowDown size={16} />
+                  </button>
                 )}
               </div>
               {error && (
@@ -833,7 +957,7 @@ export default function AssistantChat() {
                 </p>
               )}
               {awaitingApproval && (
-                <p className="assistant-context">
+                <p className="assistant-notice">
                   {t("assistantAnswerConfirmation")}
                 </p>
               )}
@@ -844,73 +968,72 @@ export default function AssistantChat() {
                   void submit();
                 }}
               >
-                <label
-                  className="assistant-prompt-label"
-                  htmlFor="assistant-prompt"
-                >
-                  {t("assistantMessage")}
-                </label>
-                <textarea
-                  id="assistant-prompt"
-                  ref={input}
-                  rows={3}
-                  maxLength={16000}
-                  value={draft}
-                  disabled={busy || undoing}
-                  placeholder={t("assistantMessageHint")}
-                  onChange={(e) => setDraft(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (
-                      e.key === "Enter" &&
-                      !e.shiftKey &&
-                      !e.nativeEvent.isComposing
-                    ) {
-                      e.preventDefault();
-                      void submit();
-                    }
-                  }}
-                />
-                <footer>
-                  <select
-                    aria-label={t("assistantModel")}
-                    disabled={busy || undoing}
-                    value={selectedKey}
-                    onChange={(e) => setModel(e.target.value)}
-                  >
-                    {choices.map((m) => (
-                      <option
-                        key={`${m.provider}/${m.model}`}
-                        value={JSON.stringify([m.provider, m.model])}
-                      >
-                        {m.kind} · {m.model}
-                      </option>
-                    ))}
-                  </select>
-                  {busy ? (
-                    <button
-                      className="button secondary"
-                      type="button"
-                      onClick={() => void stop()}
-                    >
-                      <Square size={14} />
-                      {t("assistantStop")}
-                    </button>
-                  ) : (
-                    <button
-                      className="button primary"
-                      disabled={
-                        awaitingApproval ||
-                        !draft.trim() ||
-                        !selected ||
-                        undoing ||
-                        (!!worktree.id && !worktree.snapshot)
+                <div className={`assistant-input${busy ? " busy" : ""}`}>
+                  <textarea
+                    id="assistant-prompt"
+                    ref={input}
+                    rows={2}
+                    maxLength={16000}
+                    value={draft}
+                    disabled={undoing}
+                    aria-label={t("assistantMessage")}
+                    placeholder={t("assistantMessageHint")}
+                    onChange={(e) => setDraft(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (
+                        e.key === "Enter" &&
+                        !e.shiftKey &&
+                        !e.nativeEvent.isComposing
+                      ) {
+                        e.preventDefault();
+                        void submit();
                       }
+                    }}
+                  />
+                  <footer>
+                    <select
+                      aria-label={t("assistantModel")}
+                      disabled={busy || undoing}
+                      value={selectedKey}
+                      onChange={(e) => setModel(e.target.value)}
                     >
-                      <Send size={14} />
-                      {t("assistantSend")}
-                    </button>
-                  )}
-                </footer>
+                      {choices.map((m) => (
+                        <option
+                          key={`${m.provider}/${m.model}`}
+                          value={JSON.stringify([m.provider, m.model])}
+                        >
+                          {m.kind} · {m.model}
+                        </option>
+                      ))}
+                    </select>
+                    {busy ? (
+                      <button
+                        className="assistant-send stop"
+                        type="button"
+                        title={t("assistantStop")}
+                        aria-label={t("assistantStop")}
+                        onClick={() => void stop()}
+                      >
+                        <Square size={12} fill="currentColor" />
+                      </button>
+                    ) : (
+                      <button
+                        className="assistant-send"
+                        title={t("assistantSend")}
+                        aria-label={t("assistantSend")}
+                        disabled={
+                          awaitingApproval ||
+                          !draft.trim() ||
+                          !selected ||
+                          undoing ||
+                          (!!worktree.id && !worktree.snapshot)
+                        }
+                      >
+                        <ArrowUp size={17} />
+                      </button>
+                    )}
+                  </footer>
+                </div>
               </form>
             </div>
           </div>

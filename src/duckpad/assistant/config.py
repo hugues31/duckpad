@@ -42,6 +42,14 @@ class ProviderSettings(BaseModel):
     models: list[str] = Field(default_factory=list, max_length=100)
 
 
+class ConnectionCheck(BaseModel):
+    """Unsaved provider settings to try; without them, the saved default is tested."""
+
+    model_config = ConfigDict(extra="forbid")
+    provider: ProviderSettings | None = None
+    model: str = Field(default="", max_length=200)
+
+
 class QuickPrompt(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
     label: str = Field(min_length=1, max_length=100)
@@ -115,46 +123,53 @@ class Configuration:
             "quick_prompts": config["quick_prompts"],
         }
 
+    @staticmethod
+    def normalize(item: ProviderSettings, previous):
+        """Validate a provider; a blank key keeps the saved one only for the same endpoint."""
+        value = item.model_dump(exclude={"api_key"})
+        value["base_url"] = item.base_url.strip().rstrip("/")
+        if item.kind not in ("ollama", "custom"):
+            value["base_url"] = ""
+        if item.kind == "custom" and not value["base_url"]:
+            raise Problem("Provide a base URL for the custom provider")
+        if value["base_url"]:
+            try:
+                url = urlsplit(value["base_url"])
+                if (
+                    url.scheme not in ("http", "https")
+                    or not url.hostname
+                    or url.username
+                    or url.password
+                    or url.query
+                    or url.fragment
+                    or "\\" in value["base_url"]
+                    or any(ord(c) <= 32 for c in value["base_url"])
+                ):
+                    raise ValueError
+                _ = url.port
+            except ValueError:
+                raise Problem(
+                    "Use an HTTP or HTTPS base URL without credentials, query or fragment"
+                ) from None
+        key = item.api_key.get_secret_value().strip() if item.api_key else ""
+        if len(key) > 4096:
+            raise Problem("API key is too long")
+        old = previous.get(item.id, {})
+        same = all(value[k] == old.get(k) for k in ("kind", "base_url"))
+        value["api_key"] = key or (old.get("api_key", "") if same else "")
+        value["models"] = list(dict.fromkeys(m.strip() for m in item.models if m.strip()))
+        if any(len(m) > 200 or any(ord(c) < 32 for c in m) for m in value["models"]):
+            raise Problem("Use model identifiers of at most 200 characters")
+        return value
+
+    def draft(self, item: ProviderSettings):
+        """Resolve unsaved provider settings against the saved key, for discovery and tests."""
+        return self.normalize(item, {p["id"]: p for p in self.get()["providers"]})
+
     def save(self, settings: Settings):
         previous = {p["id"]: p for p in self.get()["providers"]}
         config = settings.model_dump(exclude={"providers"})
-        providers = []
-        for item in settings.providers:
-            value = item.model_dump(exclude={"api_key"})
-            value["base_url"] = item.base_url.strip().rstrip("/")
-            if item.kind not in ("ollama", "custom"):
-                value["base_url"] = ""
-            if item.kind == "custom" and not value["base_url"]:
-                raise Problem("Provide a base URL for the custom provider")
-            if value["base_url"]:
-                try:
-                    url = urlsplit(value["base_url"])
-                    if (
-                        url.scheme not in ("http", "https")
-                        or not url.hostname
-                        or url.username
-                        or url.password
-                        or url.query
-                        or url.fragment
-                        or "\\" in value["base_url"]
-                        or any(ord(c) <= 32 for c in value["base_url"])
-                    ):
-                        raise ValueError
-                    _ = url.port
-                except ValueError:
-                    raise Problem(
-                        "Use an HTTP or HTTPS base URL without credentials, query or fragment"
-                    ) from None
-            key = item.api_key.get_secret_value().strip() if item.api_key else ""
-            if len(key) > 4096:
-                raise Problem("API key is too long")
-            old = previous.get(item.id, {})
-            same = all(value[k] == old.get(k) for k in ("kind", "base_url"))
-            value["api_key"] = key or (old.get("api_key", "") if same else "")
-            value["models"] = list(dict.fromkeys(m.strip() for m in item.models if m.strip()))
-            if any(len(m) > 200 or any(ord(c) < 32 for c in m) for m in value["models"]):
-                raise Problem("Use model identifiers of at most 200 characters")
-            providers.append(value)
+        providers = [self.normalize(item, previous) for item in settings.providers]
         if len({p["id"] for p in providers}) != len(providers):
             raise Problem("Provider identifiers must be unique")
         config["providers"] = providers
@@ -169,9 +184,13 @@ class Configuration:
         item = next((p for p in config["providers"] if p["id"] == provider), None)
         if not item or model not in item["models"]:
             raise Problem("Choose an allowed assistant model")
-        if item["kind"] not in ("ollama", "custom") and not item.get("api_key"):
-            raise Problem("Provide an API key for this provider")
+        Configuration.require_key(item)
         return item
+
+    @staticmethod
+    def require_key(provider):
+        if provider["kind"] not in ("ollama", "custom") and not provider.get("api_key"):
+            raise Problem("Provide an API key for this provider")
 
     @asynccontextmanager
     async def model(self, provider, name):
@@ -210,11 +229,18 @@ class Configuration:
                 model = OpenAIChatModel(name, provider=sdk)
             yield model
 
-    async def test(self):
-        config = self.get()
-        provider = self.select(config, config["default_provider"], config["default_model"])
+    async def test(self, check: ConnectionCheck | None = None):
+        if check and check.provider:
+            provider, name = self.draft(check.provider), check.model.strip()
+            if not name:
+                raise Problem("Choose an allowed assistant model")
+            self.require_key(provider)
+        else:
+            config = self.get()
+            provider = self.select(config, config["default_provider"], config["default_model"])
+            name = config["default_model"]
         try:
-            async with self.model(provider, config["default_model"]) as model:
+            async with self.model(provider, name) as model:
                 await Agent(model).run("Reply with OK.", timeout=30, model_settings={"max_tokens": 64})
         except Exception as error:
             raise Problem(provider_error(error), 502) from None
@@ -224,25 +250,45 @@ class Configuration:
         provider = next((p for p in self.get()["providers"] if p["id"] == identity), None)
         if provider is None:
             raise Problem("Provider not found", 404)
+        return await self.discover(provider)
+
+    async def discover(self, provider):
+        """List chat models; `listed` is false when the server has no model-list endpoint."""
+        self.require_key(provider)
         kind, key = provider["kind"], provider.get("api_key", "")
         base = provider["base_url"] or BASE_URLS.get(kind, "")
         headers = {"Authorization": f"Bearer {key}"} if key else {}
+        # Anthropic and Google paginate; one large page covers their catalogs.
+        params = {}
         if kind == "anthropic":
-            headers = {"x-api-key": key, "anthropic-version": "2023-06-01"}
+            headers, params = {"x-api-key": key, "anthropic-version": "2023-06-01"}, {"limit": 1000}
         elif kind == "google":
-            headers = {"x-goog-api-key": key}
+            headers, params = {"x-goog-api-key": key}, {"pageSize": 1000}
         try:
             async with httpx2.AsyncClient(timeout=15, follow_redirects=False) as client:
-                response = await client.get(base + "/models", headers=headers)
+                response = await client.get(base + "/models", headers=headers, params=params)
                 if response.status_code in (404, 405):
-                    return {"models": [], "manual": True}
+                    return {"models": [], "listed": False}
                 response.raise_for_status()
                 payload = response.json()
                 values = payload.get("models" if kind == "google" else "data", [])
-                names = [v.get("id") or v.get("name", "").removeprefix("models/") for v in values]
+                names = [
+                    v.get("id") or v.get("name", "").removeprefix("models/")
+                    for v in values
+                    if isinstance(v, dict) and chat_model(v)
+                ]
                 return {
                     "models": sorted({n for n in names if isinstance(n, str) and n})[:500],
-                    "manual": True,
+                    "listed": True,
                 }
         except Exception as error:
             raise Problem(provider_error(error), 502) from None
+
+
+def chat_model(item):
+    """Skip embedding-only and similar models when the provider describes capabilities."""
+    methods = item.get("supportedGenerationMethods")
+    if isinstance(methods, list) and "generateContent" not in methods:
+        return False
+    capabilities = item.get("capabilities")
+    return not (isinstance(capabilities, dict) and capabilities.get("completion_chat") is False)
