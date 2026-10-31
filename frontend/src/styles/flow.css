@@ -566,11 +566,6 @@ fieldset.palette-bottom {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.node-subtitle {
-  font-size: 11px;
-  color: var(--muted);
-  margin-top: 4px;
-}
 .node-status-slot {
   display: flex;
   justify-content: center;

@@ -92,7 +92,6 @@ type PipelineData = {
     | "running";
   /** The template ID, or "component". */
   icon: string;
-  subtitle?: string;
 };
 type PipelineNode = Node<PipelineData, "pipeline">;
 
@@ -115,7 +114,6 @@ function PipelineNode({ data, selected }: NodeProps<PipelineNode>) {
       <div className="node-title" title={data.label}>
         {data.label}
       </div>
-      <div className="node-subtitle">{data.subtitle || t(data.kind)}</div>
       <div className="node-status-slot">
         {data.status && (
           <span className={`node-status ${data.status}`} title={t(data.status)}>
@@ -324,12 +322,6 @@ function CanvasInner(props: CanvasProps) {
             outputs,
             status,
             icon: node.component ? "component" : node.template || "",
-            subtitle:
-              node.component || outputs.length > 1
-                ? `${outputs.length} ${t("outputs")}`
-                : Object.values(result?.outputs || {}).length === 1
-                  ? `${Object.values(result!.outputs)[0].count.toLocaleString()} ${t("rows")}`
-                  : undefined,
           },
         };
       }),
