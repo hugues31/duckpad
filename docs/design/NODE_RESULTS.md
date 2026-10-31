@@ -46,7 +46,7 @@ What we keep: a sample that users choose and can share (Dataiku), a column view 
 1. **One panel per question.** The inspector answers "what is this node?", the results panel "what did it produce here?". No information is shown in both, except the inspector's one-line summary linking to the results.
 2. **A sample is a view, never a computation.** Changing the sample never changes what runs compute, what descendants read, or whether a result is valid. It only changes which retained rows are displayed.
 3. **Every displayed row stays explainable.** Filters, sorts and random samples keep the row identity, so **Explain this value** works on any cell of a valid result, as today.
-4. **The panel always says where the rows come from:** environment, run time, duration and commit, in the header, next to the Valid or Stale badge.
+4. **The panel always says which run produced the rows:** run time, duration and commit, in the header, next to the Valid or Stale badge. Neither panel repeats the environment: both always show the one selected in the top bar, and switching it there reloads them.
 5. **Bridges, not duplicates.** A check done by hand in the sample can become a Filter node or a test; a failing test opens its rows in the Data tab; the inspector summary opens the right results tab.
 
 ## Two panels, two roles
@@ -66,13 +66,13 @@ What we keep: a sample that users choose and can share (Dataiku), a column view 
 | Rows, status, row count | Data preview | Results · Data and header | Depends on the run |
 | Run with ancestors | Inspector and empty preview | Both | Action on the node |
 
-The inspector keeps a compact **result summary** under the node kind: environment, Valid or Stale badge, number of outputs, warning badges for messages and tests, and a **Results** link. Each badge opens the results panel on the matching tab. Canvas warning badges do the same.
+The inspector keeps a compact **result summary** under the node kind: Valid or Stale badge, number of outputs, warning badges for messages and tests, and a **Results** link. Each badge opens the results panel on the matching tab. Canvas warning badges do the same.
 
 ## The results panel
 
 ### Header
 
-The header names the node and the dataset shown, then where the rows come from: `Paid orders · orders ▾ · Valid · dev · Run at 18:18:03 · 2.6 s · 4eb70b6`, the row and column counts, **Run with ancestors** and **Hide**.
+The header names the node and the dataset shown, then which run produced the rows: `Paid orders · orders ▾ · Valid · Run at 18:18:03 · 2.6 s · 4eb70b6`, the row and column counts, **Run with ancestors** and **Hide**.
 
 The dataset selector lists the node's outputs with their row counts and, under **Inputs, to compare**, the datasets connected to its inputs. Showing an input keeps the current sample when its columns allow it, so the same rows can be checked before and after an operation.
 
@@ -152,7 +152,7 @@ A summary line (`2 passed · 1 warning · 0 errors`, checked by which run), then
 
 The Log tab tells the story of the run that produced the displayed result:
 
-- **Run summary:** status, environment, start and end times, duration, commit (and whether it matches the current configuration), who or which Job launched it, the scope (node or project), and the warning count. **Open run in History** opens the full run.
+- **Run summary:** status, start and end times, duration, commit (and whether it matches the current configuration), who or which Job launched it, the scope (node or project), and the warning count. **Open run in History** opens the full run.
 - **Timeline:** inputs ready, each output computed with its row count, each `-- @message` result in declaration order with its level and block, the tests summary (detailed in the Tests tab), then publication, or the error that prevented it. A filter shows all entries, messages, warnings or errors. The 100-message limit and its "… and N more" summary apply as today.
 - **Executed SQL:** the statements, bound values and variables of that run, with secrets masked, moved from the inspector's SQL tab.
 - **Errors:** after a failed run, the error and **Ask the assistant** appear at the top of the Log, and the header shows the retained result as Stale with "Last run failed at …".
