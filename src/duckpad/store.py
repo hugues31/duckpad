@@ -402,5 +402,28 @@ class Store:
                     break
         return history
 
+    def previous_outputs(self, worktree, environment, node, run_id):
+        """The node's outputs in the latest successful run before `run_id`, with that run's id."""
+        current = self.get("run", run_id)
+        if not current:
+            return None
+        with self.session() as session:
+            statement = (
+                select(m.Run)
+                .where(
+                    m.Run.worktree == worktree,
+                    m.Run.environment == environment,
+                    m.Run.started < current["started"],
+                )
+                .order_by(m.Run.started.desc(), m.Run.id.desc())
+                # Bounded: an older comparison is not worth scanning every run record.
+                .limit(100)
+            )
+            for run in session.exec(statement):
+                state = run.snapshot.get("nodes", {}).get(node, {})
+                if state.get("status") == "success" and state.get("outputs"):
+                    return {"run": run.id, "outputs": state["outputs"]}
+        return None
+
     def close(self):
         self.engine.dispose()

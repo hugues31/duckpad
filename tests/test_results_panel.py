@@ -1,11 +1,15 @@
-"""Samples and failing rows of the results panel.
+"""Samples, column statistics, failing rows and output durations of the results panel.
 
 None of them changes a result: they read the retained datasets on bounded cursors.
 """
 
-import pytest
-from helpers import join_run
+import threading
 
+import pytest
+from fastapi.testclient import TestClient
+from helpers import join_run, wait_until
+
+from duckpad.app import create_app
 from duckpad.bundle import bundle_to_files
 from duckpad.execution import samples
 from duckpad.execution.samples import Sample
@@ -193,6 +197,78 @@ def test_slow_reads_stop_after_the_timeout(services, project, monkeypatch):
     assert engine.preview(project, "dev", "checked", sample=Sample(rows=1))["filtered_count"] == 1
 
 
+def test_column_statistics_are_computed_once_per_result(services, project, tmp_path):
+    store, projects, _, engine = services
+    empty = engine.statistics(project, "dev", "checked")
+    assert empty["statistics"] is None
+    assert [c["name"] for c in empty["columns"]] == ["id", "channel", "amount", "note"]
+    assert empty["schema"] is None
+    computed = engine.compute_statistics(project, "dev", "checked")["statistics"]
+    columns = computed["columns"]
+    assert columns["id"]["unique"] and columns["id"]["min"] == "1" and columns["id"]["max"] == "30"
+    assert sum(columns["amount"]["histogram"]) == 30
+    assert {item["value"]: item["rows"] for item in columns["channel"]["top"]} == {
+        "Web": 10,
+        "Retail": 10,
+        "Partner": 10,
+    }
+    assert columns["note"]["nulls"] == 23.33
+    assert computed["count"] == 30
+    # Other readers get the cached statistics of the same result generation.
+    assert engine.statistics(project, "dev", "checked")["statistics"] == computed
+    assert (
+        engine.compute_statistics(project, "dev", "checked")["statistics"]["computed"] == computed["computed"]
+    )
+    snapshot = projects.snapshot(project)
+    snapshot["bundle"]["node_sql"]["nodes/checked.sql"] = CODE.replace(
+        "SELECT * FROM {{ source }};",
+        "SELECT id, channel, CAST(amount AS DOUBLE) AS amount, 1 AS flag FROM {{ source }};",
+    )
+    projects.write(project, snapshot["revision"], bundle_to_files(snapshot["bundle"]))
+    assert join_run(store, engine.launch(project, "dev")["id"])["status"] == "success"
+    replaced = engine.statistics(project, "dev", "checked")
+    assert replaced["statistics"] is None
+    assert replaced["schema"]["added"] == ["flag"]
+    assert replaced["schema"]["removed"] == ["note"]
+    assert replaced["schema"]["retyped"] == [{"name": "amount", "before": "BIGINT", "after": "DOUBLE"}]
+
+
+def test_statistics_computation_can_be_canceled(services, project, monkeypatch):
+    engine = services[3]
+    started = threading.Event()
+    original = engine.results._compute_statistics
+
+    def slow(context, dataset, computation):
+        def statistics(cursor, data):
+            started.set()
+            cursor.execute(
+                "SELECT count(*) FROM range(5000000000) a WHERE a.range % 13 = 99999999999"
+            ).fetchall()
+            return {}
+
+        monkeypatch.setattr("duckpad.execution.results.column_statistics", statistics)
+        return original(context, dataset, computation)
+
+    monkeypatch.setattr(engine.results, "_compute_statistics", slow)
+    errors = []
+
+    def compute():
+        try:
+            engine.compute_statistics(project, "dev", "checked")
+        except Problem as error:
+            errors.append(error)
+
+    thread = threading.Thread(target=compute)
+    thread.start()
+    assert started.wait(10)
+    wait_until(lambda: engine.cancel_statistics(project, "dev", "checked")["canceled"])
+    thread.join(20)
+    assert not thread.is_alive()
+    assert [str(error) for error in errors] == ["Statistics computation canceled"]
+    assert engine.statistics(project, "dev", "checked")["statistics"] is None
+    assert engine.cancel_statistics(project, "dev", "checked") == {"canceled": False}
+
+
 def test_failing_rows_are_recomputed_from_the_retained_result(services, project):
     store, projects, _, engine = services
     recorded = store.get("run", engine.preview(project, "dev", "checked")["run"])
@@ -214,3 +290,57 @@ def test_failing_rows_are_recomputed_from_the_retained_result(services, project)
     with pytest.raises(Problem, match="stale") as error:
         engine.test_rows(project, "dev", "checked", "large_amount")
     assert error.value.status == 409
+
+
+def test_runs_record_each_output_duration(services, project):
+    store, _, _, engine = services
+    run = store.get("run", engine.preview(project, "dev", "checked")["run"])
+    output = run["nodes"]["checked"]["outputs"]["result"]
+    assert output["duration"] >= 0
+    assert output["created"]
+
+
+def test_readers_compute_statistics_and_read_failing_rows(tmp_path):
+    app = create_app(tmp_path / "instance", watch=False)
+    with TestClient(app) as client:
+        assert (
+            client.post("/api/login", json={"password": app.state.auth.initial_password}).status_code == 200
+        )
+        worktree = client.post("/api/projects", json={"name": "Shared"}).json()
+        services = app.state.services
+        snapshot = services.projects.snapshot(worktree["id"])
+        # Isolated SQL workers read only the project's resources.
+        folder = services.store.paths.resources(worktree["project"])
+        folder.mkdir(parents=True, exist_ok=True)
+        files = bundle_to_files(bundle(folder / "orders.csv"))
+        services.projects.write(worktree["id"], snapshot["revision"], files)
+        run = client.post(f"/api/worktrees/{worktree['id']}/runs", json={"environment": "dev"}).json()
+        assert join_run(services.store, run["id"])["status"] == "success"
+        reader = app.state.auth.create_user("reader", "individual-test-password", "member")
+        app.state.access.member(worktree["project"], reader["id"], "reader")
+        token = app.state.auth.login("reader", "individual-test-password", peer="reader")
+        headers = {"authorization": "Bearer " + token, "cookie": ""}
+        base = f"/api/worktrees/{worktree['id']}"
+        response = client.get(
+            base + "/preview/checked",
+            params={"environment": "dev", "filter": "amount > 250", "order": '[["amount", "desc"]]'},
+            headers=headers,
+        )
+        assert response.status_code == 200, response.text
+        assert [row["values"][0] for row in response.json()["rows"]] == [30, 29, 28, 27, 26]
+        assert (
+            client.get(
+                base + "/preview/checked", params={"environment": "dev", "order": "{"}, headers=headers
+            ).status_code
+            == 400
+        )
+        computed = client.post(base + "/statistics/checked", params={"environment": "dev"}, headers=headers)
+        assert computed.status_code == 200, computed.text
+        assert computed.json()["statistics"]["columns"]["amount"]["max"] == "300"
+        canceled = client.delete(base + "/statistics/checked", params={"environment": "dev"}, headers=headers)
+        assert canceled.json() == {"canceled": False}
+        failing = client.get(
+            base + "/test-rows/checked/large_amount", params={"environment": "dev"}, headers=headers
+        )
+        assert failing.status_code == 200
+        assert failing.json()["filtered_count"] == 5

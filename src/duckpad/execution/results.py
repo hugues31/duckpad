@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import re
 import threading
+import time
+from dataclasses import dataclass, field
 
 import duckdb
 import sqlglot
@@ -16,10 +19,11 @@ from ..graph import connection_references
 from ..projects import Projects
 from ..store import Store
 from ..templates import VARIABLE_REFERENCE, compile_template
-from ..types import Record, RunToken
-from ..util import Problem, clean, qi
-from .contexts import ContextPool
+from ..types import Record, RunToken, SQLCursor
+from ..util import Problem, clean, now, qi
+from .contexts import ContextPool, interrupt
 from .samples import (
+    READ_TIMEOUT,
     Sample,
     check_sample,
     reading,
@@ -30,6 +34,39 @@ from .samples import (
 )
 
 MAX_PREVIEW_ROWS = 10_000
+HISTOGRAM_BINS = 12
+TOP_VALUES = 5
+NUMERIC_TYPES = re.compile(
+    r"(TINYINT|SMALLINT|INTEGER|BIGINT|HUGEINT|UTINYINT|USMALLINT|UINTEGER|UBIGINT|UHUGEINT|FLOAT|DOUBLE|DECIMAL.*)"
+)
+TEMPORAL_TYPES = re.compile(r"(DATE|TIMESTAMP.*)")
+NESTED_TYPE = re.compile(r"(STRUCT|MAP|UNION)\(.*|.*\[\d*\]")
+
+
+@dataclass
+class Computation:
+    """A column statistics computation in progress, which a request can cancel."""
+
+    done: threading.Event = field(default_factory=threading.Event)
+    cursor: SQLCursor | None = None
+    canceled: bool = False
+    error: str | None = None
+
+
+def schema_changes(before: list[Record], after: list[Record], run: str) -> Record:
+    """Columns added, removed or retyped since the previous successful run of the node."""
+    old = {c["name"]: c["type"] for c in before}
+    new = {c["name"]: c["type"] for c in after}
+    return {
+        "previous_run": run,
+        "added": [name for name in new if name not in old],
+        "removed": [name for name in old if name not in new],
+        "retyped": [
+            {"name": name, "before": old[name], "after": new[name]}
+            for name in new
+            if name in old and old[name] != new[name]
+        ],
+    }
 
 
 def reads_only(sql: str, tables: set[str]) -> bool:
@@ -49,6 +86,53 @@ def reads_only(sql: str, tables: set[str]) -> bool:
     return True
 
 
+def column_statistics(cursor: SQLCursor, dataset: Dataset) -> dict[str, Record]:
+    """Nulls, distinct values, range, distribution or top values of each column of a whole result."""
+    view = qi(dataset.table)
+    summary = cursor.execute(f"SUMMARIZE SELECT * FROM {view}").fetchall()
+    result: dict[str, Record] = {}
+    histograms, bindings, tops = [], {}, []
+    for index, (name, type_name, low, high, distinct, *_, count, nulls) in enumerate(summary):
+        entry: Record = {
+            "type": type_name,
+            "nulls": float(nulls) if nulls is not None else None,
+            "distinct": distinct,
+            "count": count,
+        }
+        numeric, temporal = NUMERIC_TYPES.fullmatch(type_name), TEMPORAL_TYPES.fullmatch(type_name)
+        if (numeric or temporal) and low is not None:
+            entry.update(min=low, max=high)
+            if low != high:
+                cast = "DOUBLE" if numeric else "TIMESTAMP"
+                bindings[f"low_{index}"], bindings[f"high_{index}"] = low, high
+                histograms.append(
+                    (
+                        name,
+                        f"map_values(histogram(CAST({qi(name)} AS {cast}), equi_width_bins("
+                        f"CAST($low_{index} AS {cast}), CAST($high_{index} AS {cast}), {HISTOGRAM_BINS}, true)))",
+                    )
+                )
+        elif not NESTED_TYPE.fullmatch(type_name) and count and distinct < count:
+            tops.append(
+                f"(SELECT {index} AS position, CAST({qi(name)} AS VARCHAR) AS value, count(*) AS frequency "
+                f"FROM {view} WHERE {qi(name)} IS NOT NULL GROUP BY ALL ORDER BY frequency DESC, value LIMIT {TOP_VALUES})"
+            )
+        entry["unique"] = bool(count) and distinct >= count and not nulls
+        result[name] = entry
+    if histograms:
+        row = cursor.execute(
+            "SELECT " + ", ".join(expression for _, expression in histograms) + f" FROM {view}", bindings
+        ).fetchone()
+        assert row is not None
+        for (name, _), counts in zip(histograms, row, strict=True):
+            result[name]["histogram"] = counts
+    if tops:
+        names = [row[0] for row in summary]
+        for position, value, frequency in cursor.execute(" UNION ALL ".join(tops)).fetchall():
+            result[names[position]].setdefault("top", []).append({"value": value, "rows": frequency})
+    return result
+
+
 class Results:
     def __init__(
         self,
@@ -62,6 +146,8 @@ class Results:
         self.store, self.projects, self.catalog, self.pool = store, projects, catalog, pool
         # The engine lock and the active runs it guards.
         self.lock, self.active = lock, active
+        # Column statistics being computed, by result generation.
+        self.computations: dict[str, Computation] = {}
 
     def statuses(self, worktree: str, environment: str) -> Record:
         context = self.pool.get(worktree, environment)
@@ -186,6 +272,93 @@ class Results:
             "commit": run["commit"],
             "environment": environment,
             "error": error,
+        }
+
+    def statistics(self, worktree: str, environment: str, node: str, port: str = "result") -> Record:
+        """Column statistics of a result when they were computed, and its schema changes."""
+        _, dataset = self.find_dataset(worktree, environment, node, port)
+        return self._statistics_response(worktree, environment, dataset)
+
+    def compute_statistics(self, worktree: str, environment: str, node: str, port: str = "result") -> Record:
+        """Compute the column statistics of a whole retained result, once per result generation.
+
+        A concurrent request for the same result waits for the first one instead of scanning again.
+        """
+        context, dataset = self.find_dataset(worktree, environment, node, port)
+        if dataset.statistics is None:
+            with self.lock:
+                computation = self.computations.get(dataset.id)
+                owner = computation is None
+                if computation is None:
+                    computation = self.computations[dataset.id] = Computation()
+            if owner:
+                self._compute_statistics(context, dataset, computation)
+            else:
+                computation.done.wait(READ_TIMEOUT + 5)
+                if dataset.statistics is None:
+                    raise Problem(computation.error or "Statistics are still being computed", 409)
+        return self._statistics_response(worktree, environment, dataset)
+
+    def cancel_statistics(self, worktree: str, environment: str, node: str, port: str = "result") -> Record:
+        _, dataset = self.find_dataset(worktree, environment, node, port)
+        with self.lock:
+            computation = self.computations.get(dataset.id)
+            if computation is None:
+                return {"canceled": False}
+            computation.canceled = True
+            cursor = computation.cursor
+        if cursor is not None:
+            interrupt(cursor)
+        return {"canceled": True}
+
+    def _compute_statistics(self, context: Context, dataset: Dataset, computation: Computation) -> None:
+        started, computed = time.monotonic(), now()
+        try:
+            with reading(context, [dataset]) as cursor:
+                with self.lock:
+                    computation.cursor = cursor
+                    canceled = computation.canceled
+                if canceled:
+                    raise duckdb.InterruptException("Statistics computation canceled")
+                try:
+                    columns = column_statistics(cursor, dataset)
+                except duckdb.InterruptException:
+                    raise
+                except duckdb.Error as error:
+                    raise Problem(f"Cannot compute statistics: {error}", 422) from error
+            dataset.statistics = {
+                "computed": computed,
+                "duration": time.monotonic() - started,
+                "count": dataset.count,
+                "columns": columns,
+            }
+        except duckdb.InterruptException as error:
+            computation.error = (
+                "Statistics computation canceled"
+                if computation.canceled
+                else "Statistics computation stopped"
+            )
+            raise Problem(computation.error, 409) from error
+        except Problem as error:
+            computation.error = str(error)
+            raise
+        finally:
+            with self.lock:
+                self.computations.pop(dataset.id, None)
+            computation.done.set()
+
+    def _statistics_response(self, worktree: str, environment: str, dataset: Dataset) -> Record:
+        previous = self.store.previous_outputs(worktree, environment, dataset.node, dataset.run)
+        before = (previous or {}).get("outputs", {}).get(dataset.port)
+        return {
+            "dataset": dataset.id,
+            "status": dataset.status,
+            "count": dataset.count,
+            "columns": dataset.columns,
+            "statistics": dataset.statistics,
+            "schema": schema_changes(before["columns"], dataset.columns, previous["run"])
+            if previous and before
+            else None,
         }
 
     def test_rows(

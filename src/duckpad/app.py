@@ -134,7 +134,12 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
             if len(parts) >= 4 and parts[3] == "connections" and request.method != "GET":
                 access.instance_admin(user)
         elif route == "worktrees" and len(parts) >= 3:
-            read = request.method == "GET" or (request.method == "POST" and parts[3:] == ["lineage"])
+            # Explaining a value and computing column statistics read results without changing them.
+            read = (
+                request.method == "GET"
+                or (request.method == "POST" and parts[3:] == ["lineage"])
+                or (request.method in ("POST", "DELETE") and parts[3:4] == ["statistics"])
+            )
             access.worktree(user, parts[2], "reader" if read else "editor")
             if parts[3:] == ["git", "remote"] and request.method == "PUT":
                 access.worktree(user, parts[2], "admin")
@@ -920,6 +925,18 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
         return engine.preview(
             worktree, environment, node, port, limit, offset, sort, descending, filter_values, sample
         )
+
+    @app.get("/api/worktrees/{worktree}/statistics/{node}", response_model=None)
+    def statistics(worktree: str, node: str, environment: str, port: str = "result") -> Record:
+        return engine.statistics(worktree, environment, node, port)
+
+    @app.post("/api/worktrees/{worktree}/statistics/{node}", response_model=None)
+    def compute_statistics(worktree: str, node: str, environment: str, port: str = "result") -> Record:
+        return engine.compute_statistics(worktree, environment, node, port)
+
+    @app.delete("/api/worktrees/{worktree}/statistics/{node}", response_model=None)
+    def cancel_statistics(worktree: str, node: str, environment: str, port: str = "result") -> Record:
+        return engine.cancel_statistics(worktree, environment, node, port)
 
     @app.get("/api/worktrees/{worktree}/test-rows/{node}/{test}", response_model=None)
     def test_rows(

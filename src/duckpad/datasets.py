@@ -30,6 +30,10 @@ class Dataset:
     groups: Record = field(default_factory=dict)
     # Placeholder -> project variable, for the bindings that hold a variable's value.
     labels: dict[str, str] = field(default_factory=dict)
+    # Seconds the run spent computing this output.
+    duration: float | None = None
+    # Column statistics computed on request; released with the result generation.
+    statistics: Record | None = None
 
     @property
     def table(self) -> str:

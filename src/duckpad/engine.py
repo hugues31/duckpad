@@ -100,6 +100,15 @@ class Engine:
             worktree, environment, node, port, limit, offset, sort, descending, filters, sample
         )
 
+    def statistics(self, worktree: str, environment: str, node: str, port: str = "result") -> Record:
+        return self.results.statistics(worktree, environment, node, port)
+
+    def compute_statistics(self, worktree: str, environment: str, node: str, port: str = "result") -> Record:
+        return self.results.compute_statistics(worktree, environment, node, port)
+
+    def cancel_statistics(self, worktree: str, environment: str, node: str, port: str = "result") -> Record:
+        return self.results.cancel_statistics(worktree, environment, node, port)
+
     def test_rows(
         self, worktree: str, environment: str, node: str, test: str, limit: int = 100, offset: int = 0
     ) -> Record:
