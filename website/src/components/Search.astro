@@ -1,0 +1,121 @@
+---
+import { url } from "../lib/docs";
+---
+
+<dialog
+  class="search-dialog"
+  aria-labelledby="search-title"
+  data-index={url("search.json")}
+>
+  <div class="search-top">
+    <span id="search-title">Search the documentation</span>
+    <button class="icon-button" data-close aria-label="Close search">
+      ×
+    </button>
+  </div>
+  <label class="sr-only" for="doc-search">
+    Search documentation
+  </label>
+  <input
+    id="doc-search"
+    type="search"
+    placeholder="Try lineage, CSV, or branches…"
+    autocomplete="off"
+  />
+  <p class="search-status" role="status">
+    Type to search the guides.
+  </p>
+  <ul class="search-results"></ul>
+</dialog>
+<style>
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+</style>
+<script>
+  const dialog = document.querySelector<HTMLDialogElement>(".search-dialog")!;
+  const input = dialog.querySelector<HTMLInputElement>("input")!;
+  const status = dialog.querySelector<HTMLElement>(".search-status")!;
+  const results = dialog.querySelector<HTMLUListElement>(".search-results")!;
+  type Entry = {
+    title: string;
+    description: string;
+    url: string;
+    body: string;
+  };
+  let entries: Entry[] | undefined;
+  let pending: Promise<void> | undefined;
+  function render() {
+    const terms = input.value.toLowerCase().trim().split(/\s+/).filter(Boolean);
+    results.replaceChildren();
+    const found = (entries || [])
+      .filter((entry) =>
+        terms.every((term) =>
+          `${entry.title} ${entry.description} ${entry.body}`
+            .toLowerCase()
+            .includes(term),
+        ),
+      )
+      .sort(
+        (a, b) =>
+          Number(terms.some((t) => b.title.toLowerCase().includes(t))) -
+          Number(terms.some((t) => a.title.toLowerCase().includes(t))),
+      );
+    status.textContent = found.length
+      ? `${found.length} guides found`
+      : "No guides found. Try a different word.";
+    found.forEach((entry) => {
+      const li = document.createElement("li");
+      const a = document.createElement("a");
+      a.href = entry.url;
+      a.textContent = entry.title;
+      const detail = document.createElement("small");
+      detail.textContent = entry.description;
+      a.append(detail);
+      li.append(a);
+      results.append(li);
+    });
+  }
+  async function openSearch() {
+    if (!dialog.open) dialog.showModal();
+    input.focus();
+    if (!entries) {
+      status.textContent = "Loading guides…";
+      pending ??= fetch(dialog.dataset.index!)
+        .then(async (response) => {
+          if (!response.ok) throw new Error("Search unavailable");
+          entries = await response.json();
+        })
+        .finally(() => {
+          pending = undefined;
+        });
+      try {
+        await pending;
+      } catch {
+        status.textContent =
+          "Search is unavailable. Please use the guide navigation.";
+        return;
+      }
+    }
+    render();
+  }
+  document
+    .querySelectorAll(".search-trigger")
+    .forEach((button) => button.addEventListener("click", openSearch));
+  dialog
+    .querySelector("[data-close]")!
+    .addEventListener("click", () => dialog.close());
+  input.addEventListener("input", () => {
+    if (entries) render();
+  });
+  document.addEventListener("keydown", (event) => {
+    if ((event.metaKey || event.ctrlKey) && event.key === "k") {
+      event.preventDefault();
+      void openSearch();
+    }
+  });
+</script>
