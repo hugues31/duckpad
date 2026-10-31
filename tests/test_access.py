@@ -49,6 +49,7 @@ ROUTE_ACCESS = {
         "GET /api/worktrees/{worktree}",
         "GET /api/worktrees/{worktree}/archive.zip",
         "GET /api/worktrees/{worktree}/git/history",
+        "GET /api/worktrees/{worktree}/git/history/summary",
         "GET /api/worktrees/{worktree}/git/tags",
         "GET /api/worktrees/{worktree}/git/compare",
         "GET /api/worktrees/{worktree}/git/branches",
@@ -232,6 +233,7 @@ def test_private_discovery_and_all_direct_resource_routes(instance):
         ("GET", f"/worktrees/{branch['id']}"),
         ("GET", f"/worktrees/{worktree['id']}/status"),
         ("GET", f"/worktrees/{worktree['id']}/git/history"),
+        ("GET", f"/worktrees/{worktree['id']}/git/history/summary?entity=node/source"),
         ("GET", f"/worktrees/{worktree['id']}/archive.zip"),
         ("GET", f"/worktrees/{worktree['id']}/git/compare?a=HEAD&b=HEAD"),
         ("GET", f"/worktrees/{worktree['id']}/compile/source"),
@@ -274,6 +276,7 @@ def test_project_role_matrix_and_cross_project_import(instance, role):
     assert snapshot["role"] == role
     for suffix in (
         "git/history",
+        "git/history/summary?entity=node/source",
         "git/compare",
         "git/branches",
         "git/remote",

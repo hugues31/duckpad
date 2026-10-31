@@ -639,6 +639,10 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
     ) -> Record:
         return projects.versioning.history(worktree, ref, offset, limit, entity)
 
+    @app.get("/api/worktrees/{worktree}/git/history/summary", response_model=None)
+    def git_history_summary(worktree: str, entity: str, ref: str = "HEAD") -> Record:
+        return projects.versioning.element_summary(worktree, entity, ref)
+
     @app.get("/api/worktrees/{worktree}/git/tags", response_model=None)
     def git_tags(worktree: str) -> list[Record]:
         return projects.versioning.tags(worktree)
