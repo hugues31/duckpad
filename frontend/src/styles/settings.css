@@ -1,0 +1,218 @@
+.settings-container {
+  max-width: 1440px;
+  margin-inline: auto;
+}
+
+.settings-heading {
+  margin-bottom: 32px;
+}
+
+.settings-heading h1 {
+  margin: 8px 0 10px;
+}
+
+.settings-heading p {
+  margin: 0;
+  line-height: 1.6;
+}
+
+.settings-layout {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  align-items: start;
+  gap: 32px;
+}
+
+.settings-navigation {
+  position: sticky;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.settings-navigation a {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 14px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 550;
+  line-height: 1.5;
+}
+
+.settings-navigation svg {
+  flex-shrink: 0;
+}
+
+.settings-navigation a:hover {
+  color: var(--text);
+  background: var(--surface-alt);
+}
+
+.settings-navigation a.active {
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-color: var(--border);
+}
+
+.settings-content {
+  min-width: 0;
+  container-type: inline-size;
+}
+
+.settings-content h2,
+.settings-card > h2:first-child,
+.settings-card > h3:first-child,
+.settings-card > div > h3:first-child {
+  margin-top: 0;
+}
+
+.settings-grid,
+.settings-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
+  align-items: start;
+  gap: 24px;
+}
+
+.settings-fields {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 20px 24px;
+  margin: 20px 0;
+}
+
+.settings-fields > .field {
+  margin: 0;
+}
+
+@container (min-width: 640px) {
+  .settings-fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.settings-card {
+  overflow-wrap: anywhere;
+}
+
+.settings-card p {
+  line-height: 1.7;
+}
+
+.api-token-settings {
+  grid-column: 1 / -1;
+  min-width: 0;
+}
+
+.api-token-settings form {
+  max-width: 480px;
+  margin-bottom: 24px;
+}
+
+.settings-card .check-row {
+  display: flex;
+  align-items: start;
+  gap: 10px;
+  line-height: 1.5;
+}
+
+.settings-card .check-row input {
+  flex-shrink: 0;
+  margin-top: 3px;
+}
+
+.settings-content .environment-list {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr));
+}
+
+.settings-content .connection-grid {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr));
+}
+
+.project-settings .role-guide {
+  max-width: none;
+  margin-bottom: 24px;
+}
+
+.project-settings-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(300px, 1fr);
+  align-items: start;
+  gap: 24px;
+}
+
+.project-settings-secondary {
+  display: grid;
+  gap: 24px;
+  min-width: 0;
+}
+
+.project-settings-grid .member-form {
+  flex-wrap: wrap;
+}
+
+.project-settings-grid .member-form .field {
+  min-width: 160px;
+}
+
+@media (max-width: 1100px) {
+  .settings-layout {
+    grid-template-columns: 190px minmax(0, 1fr);
+    gap: 24px;
+  }
+
+  .project-settings-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .project-settings-secondary {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
+    align-items: start;
+  }
+}
+
+@media (max-width: 800px) {
+  .settings-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .settings-navigation {
+    position: static;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    padding-bottom: 20px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .settings-navigation a {
+    padding: 10px;
+    gap: 8px;
+  }
+}
+
+@media (max-width: 600px) {
+  .settings-heading {
+    margin-bottom: 24px;
+  }
+
+  .settings-card {
+    padding: 20px;
+  }
+
+  .settings-navigation a {
+    font-size: 12px;
+  }
+
+  .settings-navigation svg {
+    width: 16px;
+  }
+
+  .settings-content .administration-heading {
+    gap: 16px;
+  }
+}
