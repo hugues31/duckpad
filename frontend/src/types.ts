@@ -118,8 +118,9 @@ export interface VariablesSummary {
   diagnostics: Json[];
   warnings: Json[];
 }
-export type ProjectRole = "admin" | "editor" | "reader";
+export type ProjectRole = "admin" | "editor" | "operator" | "reader";
 export interface Worktree {
+  read_only?: boolean;
   id: string;
   project: string;
   branch: string;
@@ -309,6 +310,14 @@ export interface NodeRun {
   references?: Record<string, string[]>;
 }
 export interface Run {
+  job?: {
+    slug: string;
+    name: string;
+    tag: string | null;
+    branch: string | null;
+    commit: string;
+  };
+  tag?: string | null;
   requester?: {
     id: string;
     username: string;

@@ -94,7 +94,7 @@ export default function GitWorkspace({
   const open = useRef(false);
   const base = `/worktrees/${worktree}/git`;
   const storageKey = `duckpad.git.${worktree}`;
-  const canEdit = role !== "reader";
+  const canEdit = role === "admin" || role === "editor";
   const [tab, setTab] = useState<Mode>(mode);
   // Tabs stay mounted once shown, keeping their own state and errors.
   const [visited, setVisited] = useState<Mode[]>([mode]);

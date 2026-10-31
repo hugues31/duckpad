@@ -21,6 +21,7 @@ export const settingsSections = [
 export type Area =
   | "home"
   | "projects"
+  | "jobs"
   | "pipelines"
   | "instanceSettings"
   | "userSettings"

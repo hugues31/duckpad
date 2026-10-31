@@ -8,7 +8,7 @@ import threading
 from contextlib import contextmanager
 from pathlib import Path
 
-from sqlalchemy import URL, delete, event, func, literal_column
+from sqlalchemy import URL, and_, delete, event, func, literal_column, or_
 from sqlmodel import Session, create_engine, select
 
 from . import models as m
@@ -23,6 +23,7 @@ MODELS = {
     "api_token": m.APIToken,
     "project": m.Project,
     "worktree": m.Worktree,
+    "job": m.Job,
     "connector": m.Connector,
     "connection": m.Connection,
     "environment": m.Environment,
@@ -124,6 +125,8 @@ class Store:
         data = row.model_dump()
         if kind in SNAPSHOTS:
             data = {**data.pop(SNAPSHOTS[kind]), **data}
+        if kind == "worktree" and not data["read_only"]:
+            data.pop("read_only")
         if kind == "connector" and data["name"] is None:
             data.pop("name")
         if kind == "user":
@@ -355,7 +358,7 @@ class Store:
         with self.session() as session:
             session.exec(delete(m.OIDCTransaction))
 
-    def runs(self, user, worktree=None):
+    def runs(self, user, worktree=None, include_jobs=False, limit=None):
         with self.session() as session:
             statement = select(m.Run)
             if user["role"] != "admin":
@@ -363,8 +366,21 @@ class Store:
                     m.ProjectMember.user == user["id"]
                 )
             if worktree:
-                statement = statement.where(m.Run.worktree == worktree)
-            rows = session.exec(statement.order_by(m.Run.started.desc(), m.Run.id.desc()))
+                condition = m.Run.worktree == worktree
+                if include_jobs:
+                    tree = session.get(m.Worktree, worktree)
+                    if tree:
+                        condition = or_(
+                            condition,
+                            and_(
+                                m.Run.project == tree.project, m.Run.snapshot["trigger"].as_string() == "job"
+                            ),
+                        )
+                statement = statement.where(condition)
+            statement = statement.order_by(m.Run.started.desc(), m.Run.id.desc())
+            if limit is not None:
+                statement = statement.limit(limit)
+            rows = session.exec(statement)
             return [self._record("run", row, session) for row in rows]
 
     def test_history(self, worktree, environment, node, limit=10):

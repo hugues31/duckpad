@@ -88,9 +88,12 @@ class Dependencies:
         user, _ = self.check()
         access = self.services.engine.access
         assert access is not None
-        return bool(self.context.get("worktree")) and access.role(user, self.context["project"]) in (
-            "editor",
-            "admin",
+        worktree = self.context.get("worktree")
+        # Job results are read-only for every role; their runs start from the Job.
+        return (
+            bool(worktree)
+            and not self.services.projects.get(worktree).get("read_only")
+            and access.role(user, self.context["project"]) in ("editor", "admin")
         )
 
     def snapshot(self):
