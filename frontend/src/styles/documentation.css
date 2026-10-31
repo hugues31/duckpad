@@ -1,0 +1,14 @@
+/* Documentation tab. */
+.documentation-page h1 {
+  margin-top: 12px;
+}
+.project-documentation {
+  display: block;
+  width: 100%;
+  min-height: 50vh;
+  max-width: 1000px;
+  padding: 24px;
+  font-size: 13px;
+  line-height: 1.9;
+  margin: 25px 0 20px;
+}
