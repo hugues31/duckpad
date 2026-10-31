@@ -200,24 +200,6 @@
   min-width: 0;
   font-size: 12px;
 }
-.assistant-settings-fields {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  border: 0;
-  padding: 0;
-  margin: 0;
-}
-.assistant-provider {
-  display: grid;
-  gap: 12px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 16px;
-}
-.assistant-provider legend {
-  font-weight: 600;
-}
 @media (width <= 700px) {
   .assistant-chat.maximized {
     inset: 8px;
@@ -249,8 +231,299 @@
   width: 100%;
 }
 
-.assistant-prompt-setting {
+/* Instance settings: numbered setup steps and a sticky save bar. */
+.assistant-settings-heading {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 16px;
+}
+.assistant-settings-heading .badge {
+  margin-top: 2px;
+  font-size: 11px;
+}
+.assistant-settings form {
+  max-width: 920px;
+}
+.assistant-settings-fields {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+.assistant-step {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 14px;
+  padding-block: 24px;
+  border-top: 1px solid var(--border);
+}
+.assistant-step h3 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  font-size: 14px;
+}
+.assistant-step > p,
+.assistant-step .field {
+  margin: 0;
+}
+.assistant-step-number {
+  display: inline-grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+}
+.assistant-provider-picker-heading,
+.assistant-provider-heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.assistant-provider-picker-heading {
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.assistant-provider-picker-heading h4 {
+  margin: 0;
+}
+.assistant-provider-heading h4 {
+  margin: 0;
+  color: var(--text);
+  font-size: 14px;
+  letter-spacing: normal;
+  text-transform: none;
+}
+.assistant-provider-choices {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 170px), 1fr));
+  gap: 10px;
+}
+.assistant-provider-choice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  font-weight: 600;
+  text-align: start;
+}
+.assistant-provider-choice:is(:hover, :focus-visible) {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.assistant-provider-logo {
+  display: inline-grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: var(--surface-alt);
+}
+.assistant-provider {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+}
+.assistant-provider-heading .badge {
+  gap: 4px;
+}
+.assistant-provider-remove {
+  margin-left: auto;
+}
+.assistant-provider-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+  align-items: start;
+  gap: 16px;
+}
+.assistant-provider-fields .field {
+  margin: 0;
+}
+.assistant-provider-fields small a {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--accent);
+}
+.assistant-models {
+  display: grid;
+  gap: 10px;
+}
+.assistant-models > p {
+  margin: 0;
+}
+.assistant-models-label {
+  font-size: 12px;
+  font-weight: 550;
+}
+.assistant-model-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.assistant-model-chips li {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px 3px 3px 10px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 550;
+}
+.assistant-model-chips button {
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  color: inherit;
+}
+.assistant-model-chips button:is(:hover, :focus-visible) {
+  background: var(--surface);
+}
+.assistant-inline-action {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+.assistant-catalog {
   display: grid;
   gap: 8px;
-  margin-bottom: 16px;
+}
+.assistant-catalog-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 230px), 1fr));
+  align-content: start;
+  gap: 6px 16px;
+  max-height: 220px;
+  overflow: auto;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  font-size: 12px;
+}
+.assistant-catalog-list p {
+  margin: 0;
+}
+.assistant-manual-model {
+  display: flex;
+  gap: 8px;
+  max-width: 460px;
+}
+.assistant-manual-model input {
+  flex: 1;
+  min-width: 0;
+}
+.assistant-success {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  color: var(--accent);
+}
+.assistant-max-rows {
+  max-width: 260px;
+}
+.assistant-prompt-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.assistant-prompt-setting + .assistant-prompt-setting {
+  border-top: 1px solid var(--border);
+}
+.assistant-prompt-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 8px 6px 14px;
+}
+.assistant-prompt-summary {
+  display: flex;
+  flex: 1;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+  margin-right: 8px;
+  font-size: 12px;
+}
+.assistant-prompt-summary strong {
+  flex-shrink: 0;
+  max-width: 45%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.assistant-prompt-summary span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.assistant-prompt-actions {
+  display: inline-flex;
+  gap: 2px;
+}
+.assistant-prompt-actions .icon:disabled {
+  opacity: 0.35;
+}
+.assistant-prompt-editor {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+}
+.assistant-prompt-editor .field {
+  margin: 0;
+}
+.assistant-prompt-editor .assistant-action-buttons {
+  justify-content: space-between;
+  margin-top: 0;
+}
+.assistant-prompts > .assistant-action-buttons {
+  margin-top: 10px;
+}
+.assistant-prompts > p {
+  margin: 0;
+}
+/* Actions start on the left, clear of the floating assistant launcher. */
+.assistant-save-bar {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding-block: 14px;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+}
+.assistant-save-bar [role="status"] {
+  font-size: 12px;
+  color: var(--muted);
+}
+.assistant-save-bar .notice {
+  flex-basis: 100%;
+  margin: 0;
 }

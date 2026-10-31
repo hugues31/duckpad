@@ -8,23 +8,60 @@ test("configure the assistant, inspect a flow and resume a private conversation"
   test.setTimeout(90000);
   await signIn(page);
   await openInstanceSettings(page, "AI assistant");
-  await page.getByRole("button", { name: "Add provider", exact: true }).click();
+  const enable = page.getByLabel("Enable the assistant", { exact: true });
+  await expect(enable).toBeDisabled();
+  // Without providers, the provider choice is the first visible step.
+  await page.getByRole("button", { name: "DeepSeek", exact: true }).click();
+  const provider = page.getByRole("group", { name: "DeepSeek", exact: true });
+  const key = provider.getByLabel("API key", { exact: true });
+  await expect(key).toBeFocused();
+  await key.fill("browser-test-key");
+  await expect(provider.getByText("Key not saved yet")).toBeVisible();
+  // Enter adds a model identifier and never submits the settings form.
+  await provider.getByLabel("Model identifier", { exact: true }).press("Enter");
+  await provider.getByLabel("Model identifier", { exact: true }).fill("test");
+  await provider.getByLabel("Model identifier", { exact: true }).press("Enter");
+  await expect(provider.getByRole("listitem")).toHaveText(["test"]);
+  // The first allowed model becomes the default and can be tested unsaved.
+  await expect(
+    page
+      .getByLabel("Instance default model", { exact: true })
+      .locator("option:checked"),
+  ).toHaveText("DeepSeek · test");
   await page
-    .getByLabel("Provider type", { exact: true })
-    .selectOption("deepseek");
-  await page.getByLabel("API key", { exact: true }).fill("browser-test-key");
-  await page.getByLabel("Allowed models", { exact: true }).fill("test");
-  await page
-    .getByLabel("Instance default model", { exact: true })
-    .selectOption({ label: "DeepSeek · test" });
-  await page.getByLabel("Enable the assistant", { exact: true }).check();
-  await page
-    .getByRole("button", { name: "Save and test", exact: true })
+    .getByRole("button", { name: "Test connection", exact: true })
     .click();
   await expect(
-    page.getByText("Provider connection verified.", { exact: true }),
+    page.getByText("Connection verified with DeepSeek · test.", {
+      exact: true,
+    }),
   ).toBeVisible();
-  await expect(page.getByLabel("API key", { exact: true })).toHaveValue("");
+  expect(
+    (await (await page.request.get("/api/assistant/settings")).json())
+      .providers,
+  ).toEqual([]);
+  await enable.check();
+  await expect(
+    page.getByText("Unsaved changes", { exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Save changes", exact: true }).click();
+  await expect(
+    page.getByText("Assistant settings saved.", { exact: true }),
+  ).toBeVisible();
+  await expect(page.locator(".assistant-settings-heading .badge")).toHaveText(
+    "Enabled",
+  );
+  await expect(key).toHaveValue("");
+  await expect(provider.getByText("Key saved", { exact: true })).toBeVisible();
+  await page.reload();
+  await expect(
+    page
+      .getByRole("group", { name: "DeepSeek", exact: true })
+      .getByText("Key saved", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Save changes", exact: true }),
+  ).toBeDisabled();
   const response = await page.request.post("/api/example", { data: {} });
   expect(response.ok()).toBeTruthy();
   const example = await response.json();

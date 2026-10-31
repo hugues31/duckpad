@@ -460,6 +460,82 @@ def test_discovery_and_connection_test_are_sanitized(instance, monkeypatch):
     assert "refused the API key" in response.text and "private-test-key" not in response.text
 
 
+def test_unsaved_provider_discovery_and_test_reuse_only_matching_keys(instance, monkeypatch):
+    import httpx2
+
+    app, client = instance
+    configure(client)
+    original = httpx2.AsyncClient
+    seen = []
+    catalogs = {
+        "api.deepseek.com": {"data": [{"id": "deepseek-chat"}]},
+        "generativelanguage.googleapis.com": {
+            "models": [
+                {"name": "models/gemini-chat", "supportedGenerationMethods": ["generateContent"]},
+                {"name": "models/text-embedding", "supportedGenerationMethods": ["embedContent"]},
+            ]
+        },
+        "api.mistral.ai": {
+            "data": [
+                {"id": "mistral-chat", "capabilities": {"completion_chat": True}},
+                {"id": "mistral-embed", "capabilities": {"completion_chat": False}},
+            ]
+        },
+        "api.anthropic.com": {"data": [{"id": "claude-test"}]},
+    }
+
+    def handle(request):
+        seen.append(request)
+        if request.url.host in catalogs:
+            return httpx2.Response(200, json=catalogs[request.url.host])
+        return httpx2.Response(404)
+
+    monkeypatch.setattr(
+        httpx2, "AsyncClient", lambda **kwargs: original(transport=httpx2.MockTransport(handle), **kwargs)
+    )
+
+    def discover(**provider):
+        return client.post("/api/assistant/models", json={"models": [], **provider})
+
+    # The saved key serves the unchanged provider, even before saving other edits.
+    response = discover(id="primary", kind="deepseek")
+    assert response.json() == {"models": ["deepseek-chat"], "listed": True}
+    assert seen[-1].headers["Authorization"] == "Bearer private-test-key"
+    # Another provider identity or type never receives it.
+    assert discover(id="other", kind="deepseek").json()["error"] == "Provide an API key for this provider"
+    assert discover(id="primary", kind="mistral").status_code == 400
+    count = len(seen)
+    response = discover(id="primary", kind="custom", base_url="https://models.example.invalid/v1")
+    assert response.json() == {"models": [], "listed": False}
+    assert len(seen) == count + 1 and "Authorization" not in seen[-1].headers
+    # A typed key is used as is and model lists keep only chat models.
+    assert discover(id="new", kind="google", api_key="typed-key").json()["models"] == ["gemini-chat"]
+    assert seen[-1].headers["x-goog-api-key"] == "typed-key"
+    assert seen[-1].url.params["pageSize"] == "1000"
+    assert discover(id="new", kind="mistral", api_key="typed-key").json()["models"] == ["mistral-chat"]
+    assert discover(id="new", kind="anthropic", api_key="typed-key").json()["models"] == ["claude-test"]
+    assert seen[-1].url.params["limit"] == "1000"
+    assert app.state.assistant.configuration.get()["providers"][0]["kind"] == "deepseek"
+
+    check = {"provider": {"id": "draft", "kind": "openai", "models": []}, "model": "gpt-test"}
+    assert (
+        client.post("/api/assistant/test", json=check).json()["error"]
+        == "Provide an API key for this provider"
+    )
+    check["provider"]["api_key"] = "typed-key"
+    assert client.post("/api/assistant/test", json=check).json() == {"ok": True}
+    check["model"] = " "
+    assert client.post("/api/assistant/test", json=check).status_code == 400
+    assert client.post("/api/assistant/test", json={}).json() == {"ok": True}
+    app.state.auth.create_user("reader", "reader-password-123")
+    with TestClient(app) as reader:
+        reader.post("/api/login", json={"username": "reader", "password": "reader-password-123"})
+        assert (
+            reader.post("/api/assistant/models", json={"id": "primary", "kind": "deepseek"}).status_code
+            == 403
+        )
+
+
 def test_unlisted_models_and_concurrent_turns_are_rejected(instance):
     app, client = instance
     configure(client)

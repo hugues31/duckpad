@@ -11,26 +11,38 @@ nodes and tool results before relying on an explanation.
 ## Configure a provider
 
 An instance administrator opens **Instance settings → AI assistant**. The
-assistant starts disabled. Choose **Add provider**, select OpenAI, Anthropic,
-Google, Mistral, DeepSeek, Ollama or an OpenAI-compatible endpoint, and enter its
-API key. Ollama and custom endpoints can work without a key. For those providers,
-set the API base URL, including `/v1` when the server requires it. Ollama defaults
-to `http://localhost:11434/v1`; that address is relative to the Duckpad server,
-not the browser.
+assistant starts disabled; the badge next to the title shows the saved state.
+The page follows the setup order in numbered steps.
 
-Enter allowed model identifiers, one per line. **Save and discover models**
-queries the provider's model list; select entries to add them to the allowed
-list. Servers without a model-list endpoint still accept manually entered model
-identifiers. Choose the **Instance default model**, enable the assistant and
-select **Save and test**. The test sends only a short connection-check prompt.
-It does not read any project content. All users share the instance's configured
-providers; they choose an allowed model and never enter personal keys.
+1. **Connect a provider**: choose OpenAI, Anthropic, Google, Mistral, DeepSeek,
+   Ollama or an OpenAI-compatible server, then enter its API key. Hosted
+   providers link to the page where you create one. Ollama and custom servers
+   can work without a key; set their API base URL, including `/v1` when the
+   server requires it. Ollama defaults to `http://localhost:11434/v1`; that
+   address is relative to the Duckpad server, not the browser. Use **Add
+   provider** to connect another one.
+2. Under **Allowed models**, **Load available models** lists the provider's chat
+   models without saving anything first; check those people can use and filter
+   long lists. Add identifiers the provider does not list by typing them in
+   **Model identifier**. Remove an allowed model with its × button.
+3. **Choose the default model**: the first allowed model is preselected.
+   **Test connection** sends a short connection-check prompt with the settings
+   on screen, saved or not. It does not read any project content.
+4. **Set data access** and, optionally, adjust the **Quick prompts**.
+5. **Make it available**: check **Enable the assistant**, which requires a
+   default model, then choose **Save changes** in the bar that stays at the
+   bottom of the page. **Discard changes** restores the saved settings.
 
-A saved key is write-only: the browser receives only its presence. Leaving the
-field blank keeps it. Changing the provider type or API base URL clears the old
-key; enter it again if the new endpoint needs authentication. Removing a provider
-removes its saved key. Configuration and conversations live in the private
-instance database and never enter project Git history or ZIP exports.
+All users share the instance's configured providers; they choose an allowed model
+and never enter personal keys.
+
+A saved key is write-only: the browser receives only its presence, shown as
+**Key saved** on the provider, and the empty field keeps it. Typing a new key
+replaces it when you save. Changing the API base URL clears the old key; enter it
+again if the new endpoint needs authentication. Model discovery and the test
+reuse a saved key under the same rule. Removing a provider removes its saved key.
+Configuration and conversations live in the private instance database and never
+enter project Git history or ZIP exports.
 
 ![Instance assistant configuration with a saved provider key](images/assistant-settings.png)
 
@@ -134,9 +146,9 @@ run** and **Explain a value**. Clicking one sends its full prompt. The default
 buttons and prompts follow the interface language.
 
 Instance administrators manage **Quick prompts** in **Instance settings → AI
-assistant**. Edit each button label and full prompt, add or delete entries, and
-use **Move up** or **Move down** to reorder them. **Save changes** applies the list
-to everyone on the instance. A customized list keeps its authored language;
+assistant**. Each prompt takes one line; **Edit** opens its button label and full
+prompt. Add or delete entries, and use **Move up** or **Move down** to reorder
+them. **Save changes** applies the list to everyone on the instance. A customized list keeps its authored language;
 **Restore translated defaults** restores language-aware defaults. Saving an empty
 list hides the buttons. These settings are not stored in project Git files.
 
