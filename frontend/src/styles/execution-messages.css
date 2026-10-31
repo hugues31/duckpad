@@ -1,0 +1,48 @@
+/* Execution results shared by the inspector, run history and canvas badges. */
+.warning-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 6px;
+  border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
+  border-radius: 6px;
+  color: light-dark(#885600, #f4cf7b);
+  background: var(--surface);
+  font-size: 11px;
+  white-space: nowrap;
+}
+.execution-messages {
+  margin-bottom: 16px;
+}
+.execution-messages h4 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.execution-messages ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 280px;
+  overflow: auto;
+}
+.execution-message {
+  display: grid;
+  gap: 5px;
+  padding: 10px;
+  margin-top: 6px;
+  border-left: 3px solid var(--accent);
+  background: var(--surface-alt);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.execution-message.warning {
+  border-color: light-dark(#885600, #f4cf7b);
+}
+.execution-message.error {
+  border-color: light-dark(#b43b43, #ff9aa3);
+}
+.execution-message small {
+  color: var(--muted);
+}
