@@ -11,10 +11,11 @@ description: Apply this repository's English writing rules, UI translation excep
   gives instructions in French, except for the UI translation resources below.
 - Use English for documentation, comments, identifiers, file names, test names,
   example text, default user-facing strings, log messages, and error messages.
-- Allow French only in localized UI values stored in dedicated translation
-  resource files, including translations of user-facing error messages. Keep
-  translation keys, file names, and comments in English. Use translation keys
-  from application code instead of embedding French strings there.
+- Allow French and Portuguese only in localized UI values stored in dedicated
+  translation resource files, including translations of user-facing error
+  messages. Keep translation keys, file names, and comments in English. Use
+  translation keys from application code instead of embedding translated strings
+  there.
 - Translate French wording into English before adding it elsewhere in the
   repository.
 - Keep conversational replies in the user's preferred language.
@@ -49,6 +50,6 @@ fix(editor): preserve selection when saving
 feat(api)!: require authentication for note updates
 ```
 
-Before finishing a change, verify that any French text is limited to localized
-UI values in dedicated translation resources, and check any proposed commit
+Before finishing a change, verify that any French or Portuguese text is limited
+to localized UI values in dedicated translation resources, and check any proposed commit
 message against the format above.
