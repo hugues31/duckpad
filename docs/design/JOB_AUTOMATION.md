@@ -64,7 +64,9 @@ A fourth project role, **Operator**, sits between Reader and Editor. It is meant
 
 **Personal API tokens.** Any account, local or SSO, can create tokens in **User settings → API tokens**. A token has a name and an optional expiry date (the form proposes 90 days). It is shown once, as `dpk_` followed by a random secret, and only its hash is stored, like sessions. The list shows its creation date, expiry and last use, and a token can be revoked at any time. A token authenticates as its account with the same rights, through `Authorization: Bearer dpk_…`; it is never accepted from a cookie and never used for Git.
 
-**Service accounts.** Instance administrators create them in **Instance settings → Users and permissions**. A service account has a name and a description, no password and no SSO identity, and cannot sign in to the interface. It authenticates only with tokens, which instance administrators create and revoke on its page. Its instance role is always Member, and its project roles are limited to Reader and Operator.
+**Service accounts.** Instance administrators create them in **Instance settings → Users and permissions**. A service account has a name and a description, no password and no SSO identity, and cannot sign in to the interface. It authenticates only with tokens, which instance administrators create and revoke on its page. Its instance role is always Member, and its project roles are limited to Reader and Operator (Reader only until the Operator role exists).
+
+**Requesters.** Every run records the account that requested it, and the token name when a token was used. Run details show them.
 
 **Revocation.** Deactivating an account rejects all its tokens, and they stay rejected after reactivation, like its SSH key. SSO accounts' tokens work only while SSO is enabled. Changing a password does not revoke tokens: revoke them explicitly. Instance administrators can list and revoke any account's tokens.
 
@@ -134,12 +136,11 @@ HTTP/1.1 202 Accepted
   "id": "run_…",
   "job": "sales-daily-prod",
   "status": "preparing",
-  "finished": false,
   "tag": "sales/2026.10.31",
   "commit": "9f3c…",
   "environment": "prod",
   "started": "2026-10-31T02:00:04Z",
-  "ended": null,
+  "finished": null,
   "nodes": {"total": 12, "success": 0, "failed": 0, "running": 0},
   "links": {"self": "/api/v1/runs/run_…", "log": "/api/v1/runs/run_…/log", "cancel": "/api/v1/runs/run_…/cancel"}
 }
@@ -299,11 +300,13 @@ Two instances add machine isolation (a large preview on A cannot slow down or bl
 Each item is a separate issue and pull request, with tests and documentation.
 
 1. **Single instance.**
-   1. Operator role, service accounts and API tokens; the rights matrix in the installation guide.
+   1. Service accounts and API tokens, and the requester recorded on every run.
    2. Annotated tags: creation from history and runs, display, comparison; no move or delete.
-   3. Jobs: instance metadata, read-only Job worktrees, tag or branch targets, promotion with comparison and rollback, the Jobs page, run records.
+   3. The Operator role and Jobs: instance metadata, read-only Job worktrees, tag or branch targets, promotion with comparison and rollback, the Jobs page, Job run records, and the rights matrix in the installation guide. The role ships with Jobs because running Jobs is its only additional right.
    4. Automation API v1: routes, idempotency, waiting, text logs, error codes, OpenAPI schema and an automation guide.
    5. `duckpad run`: exit codes, signals, token file, Airflow and Control-M examples in the guide.
+
+   Steps 1.1 and 1.2 are independent; 1.3 needs both, then 1.4 and 1.5 follow in order.
 2. **Two instances.** Projects created from a Git URL, the deployed project mode, per-project read-only deploy keys, publishing and fetching tags, new versions listed for promotion.
 3. **Run-time values and notifications.** Variables marked `"runtime": true` in `variables.json` and allowed by a Job can be set at launch (typed, validated, bound, captured and fingerprinted, as deferred by [project variables](PROJECT_VARIABLES.md#alternatives-considered)); signed outgoing webhooks when a run ends; a History filter by trigger.
 4. **Ready-made integrations.** An Airflow provider in a separate repository (operator, hook, sensor, deferrable mode, OpenLineage events), a Control-M Application Integrator template, then an internal scheduler and an inbound webhook once time zones, missed occurrences and rejected triggers are specified.
