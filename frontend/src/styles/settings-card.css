@@ -1,0 +1,18 @@
+/* Settings cards. */
+.instance-settings .administration-page {
+  padding: 0;
+  overflow: visible;
+}
+.settings-card {
+  min-width: 0;
+  padding: 25px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+}
+.settings-card h2 {
+  font-size: 17px;
+}
+.settings-card p {
+  font-size: 12px;
+}

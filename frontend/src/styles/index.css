@@ -1,0 +1,38 @@
+/*
+ * The only stylesheet entry point, imported once by main.tsx. The import order
+ * is the cascade order: a rule overrides an earlier rule of equal specificity.
+ * Add new styles to the file of their zone, and list a new file here; never
+ * import CSS from a component.
+ */
+@import "@xyflow/react/dist/style.css";
+/*
+ * These feature sheets keep the position they had when their components
+ * imported them: their selectors win by specificity, and loading them later
+ * would reorder declarations of equal specificity.
+ */
+@import "./variables.css";
+@import "./lineage.css";
+@import "./git.css";
+@import "./branch.css";
+@import "./tokens.css";
+@import "./base.css";
+@import "./components.css";
+@import "./shell.css";
+@import "./flow.css";
+@import "./inspector.css";
+@import "./preview.css";
+@import "./workspace.css";
+@import "./history.css";
+@import "./execution-messages.css";
+@import "./connections.css";
+@import "./settings-card.css";
+@import "./documentation.css";
+@import "./empty-state.css";
+@import "./dashboard.css";
+@import "./modal.css";
+@import "./code.css";
+@import "./toast.css";
+@import "./login.css";
+@import "./query-builder.css";
+@import "./administration.css";
+@import "./settings.css";
