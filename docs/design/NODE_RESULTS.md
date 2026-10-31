@@ -1,6 +1,6 @@
 # Node results panel (design proposal)
 
-**Status: proposed. Nothing is implemented. The screenshots are mockups drawn over the current interface with the Northstar example, where the Paid orders node declares two `-- @message` blocks and three `-- @test` blocks.**
+**Status: accepted on 31 October 2026 (see [Decisions](#decisions)), not implemented yet. The screenshots are mockups drawn over the current interface with the Northstar example, where the Paid orders node declares two `-- @message` blocks and three `-- @test` blocks.**
 
 ## Summary
 
@@ -210,7 +210,7 @@ Four tabs need compact labels at the default inspector width (320 px at 1,440 px
 
 ## Delivery plan
 
-Each step is a separate issue and pull request, with tests (API and Playwright), English, French and Portuguese strings, and the user guide updated.
+The steps are implemented in this order under a single implementation issue. Each comes with tests (API and Playwright), English, French and Portuguese strings, and the user guide updated.
 
 1. **Two roles.** Results panel with the Data, Columns (name, type, description), Tests and Log tabs; move messages, tests, errors, executed SQL, dataset and column documentation and export downloads out of the inspector; inspector result summary; results panel for export nodes. Frontend only. Lands after the inspector's Info tab to avoid conflicts in the same component.
 2. **Custom samples.** Search across columns, Sample popover (first or random rows, filter, multi-column sort), chips, inputs in the dataset selector, per-user persistence, **Add as a Filter node** and **Copy SQL**.
