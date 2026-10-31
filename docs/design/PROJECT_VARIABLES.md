@@ -192,7 +192,7 @@ Each step is a separate issue and pull request, with tests and documentation.
 1. **Model and engine.** Parse and validate `variables.json`; add the `date` parameter type; resolve whole-parameter bindings in the root flow; include variables in fingerprints, launch capture and run records; expose them in the bundle, compile and run APIs; include the file in ZIP export/import and per-variable merge; auto-expose bindings when grouping into a component.
 2. **Interface.** Variables tab and editor, usage list, rename and delete rules, inspector picker and chip, **Create a variable from…**, stale reasons, confirmation dialog, run details, English and French strings, Playwright scenarios and guide screenshots.
 3. **Expressions.** `{{ var.name }}` in expression parameters, suggestions and value hints, guided Filter support and lineage labels.
-4. **Later, on demand.** Variables inside text and path parameters (for example `sales_{{ var.year }}.csv`), values supplied by schedules and webhooks, instance-wide variables, and read-only built-in values such as the environment name.
+4. **Later, on demand.** Variables inside text and path parameters (for example `sales_{{ var.year }}.csv`), values supplied when a Job is launched (see [Job automation](JOB_AUTOMATION.md)), instance-wide variables, and read-only built-in values such as the environment name.
 
 ## Decisions
 
