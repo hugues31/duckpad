@@ -822,6 +822,8 @@
   "assistantSaved": "Assistant settings saved.",
   "assistantTestSuccess": "Connection verified with {model}.",
   "assistantOpen": "Open AI assistant",
+  "assistantLauncherHint": "Drag to move (or Alt + arrow keys)",
+  "assistantLatest": "Jump to the latest message",
   "assistantNew": "New conversation",
   "assistantMaximize": "Maximize assistant",
   "assistantMinimize": "Minimize assistant",

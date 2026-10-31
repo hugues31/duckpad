@@ -191,6 +191,78 @@ test("a pending Code file is saved before the assistant turn", async ({
   });
 });
 
+test("the assistant bubble moves aside and the chat keeps the reading position", async ({
+  page,
+}) => {
+  test.setTimeout(90000);
+  await signIn(page);
+  const configured = await page.request.put("/api/assistant/settings", {
+    data: {
+      enabled: true,
+      providers: [
+        {
+          id: "primary",
+          kind: "deepseek",
+          api_key: "browser-test-key",
+          models: ["test"],
+        },
+      ],
+      default_provider: "primary",
+      default_model: "test",
+    },
+  });
+  expect(configured.ok()).toBeTruthy();
+  await page.goto("/projects");
+  const launcher = page.getByRole("button", {
+    name: "Open AI assistant",
+    exact: true,
+  });
+  // A drag moves the bubble to the nearest edge without opening the chat.
+  const start = (await launcher.boundingBox())!;
+  await page.mouse.move(start.x + 24, start.y + 24);
+  await page.mouse.down();
+  await page.mouse.move(300, 300, { steps: 10 });
+  await page.mouse.up();
+  await expect(launcher).toHaveAttribute("aria-expanded", "false");
+  const left = async () => (await launcher.boundingBox())!.x;
+  await expect.poll(left).toBe(20);
+  await page.reload();
+  await expect.poll(left).toBe(20);
+  await launcher.click();
+  const chat = page.getByRole("dialog", { name: "AI assistant", exact: true });
+  const answers = chat.getByText("The flow contains read-only project nodes.");
+  for (const [index, question] of ["One", "Two", "Three", "Four"].entries()) {
+    await chat
+      .getByRole("textbox", { name: "Message", exact: true })
+      .fill(question);
+    await chat.getByRole("button", { name: "Send", exact: true }).click();
+    await expect(answers).toHaveCount(index + 1);
+  }
+  const log = chat.getByRole("log", { name: "Conversation messages" });
+  const remaining = () =>
+    log.evaluate((e) => e.scrollHeight - e.scrollTop - e.clientHeight);
+  await expect.poll(remaining).toBeLessThan(2);
+  // Reopening the chat returns to where the reader left the conversation.
+  await log.evaluate((e) => e.scrollTo({ top: 0 }));
+  const latest = chat.getByRole("button", {
+    name: "Jump to the latest message",
+    exact: true,
+  });
+  await expect(latest).toBeVisible();
+  await chat.getByRole("button", { name: "Close", exact: true }).click();
+  await launcher.click();
+  expect(await log.evaluate((e) => e.scrollTop)).toBe(0);
+  await latest.click();
+  await expect.poll(remaining).toBeLessThan(2);
+  await expect(latest).toHaveCount(0);
+  await chat.getByRole("button", { name: "Close", exact: true }).click();
+  await launcher.click();
+  await expect(answers.last()).toBeInViewport();
+  await page.request.put("/api/assistant/settings", {
+    data: { enabled: false, providers: [] },
+  });
+});
+
 test("assistant writes appear on the canvas and undo preserves a manual SQL edit", async ({
   page,
 }) => {

@@ -48,13 +48,20 @@ enter project Git history or ZIP exports.
 
 ## Ask about the current page
 
-Open a project branch and choose the **AI assistant** button at the bottom right.
-The button also appears on other signed-in pages when the assistant is enabled.
-The context strip shows the current page, branch, selected node or Code file,
-and execution environment. Before sending a message, Duckpad saves pending editor
-changes. A failed save stops the message so you can resolve it first. The server
-validates the context and reads saved content. On pages without an open working branch,
-the assistant can answer general questions but has no project-reading tools.
+Open a project branch and choose the **AI assistant** bubble at the bottom right.
+The bubble also appears on other signed-in pages when the assistant is enabled.
+Drag it to another height or to the left edge if it covers something you need;
+with the keyboard, focus it and press Alt with an arrow key. This browser
+remembers its place, and the chat opens next to it.
+
+Under the chat title, Duckpad shows the context sent with each message: the
+current page and the selected node or Code file. The branch and environment are
+those of the top bar; the title names the environment only when it differs, for
+example after **Ask the assistant** on a prod run. Before sending a message,
+Duckpad saves pending editor changes. A failed save stops the message so you can
+resolve it first. The server validates the context and reads saved content. On
+pages without an open working branch, the assistant can answer general questions
+but has no project-reading tools.
 
 For Northstar, try “How do paid orders reach the regional report?” or, after
 running the flow yourself, “Why does this region have this revenue?” The
@@ -62,8 +69,13 @@ assistant reads bounded pages of project content as needed. Expand a tool card
 to inspect what was read. Data tools inspect existing materialized results;
 missing or stale results may require a run, which you can request in the chat.
 
-Choose a model in the composer, type a message and press **Send** or Enter.
-Shift+Enter inserts a line break. **Stop** cancels the current provider request.
+Choose a model in the composer, type a message and press Enter or the **Send**
+arrow. Shift+Enter inserts a line break. While the assistant works, an animated
+indicator and a glowing composer show that an answer is coming, and **Stop**
+cancels the current provider request. You can close the chat meanwhile: the
+bubble keeps glowing, then shows a dot when the answer is ready. Reopening the
+chat returns to where you left the conversation, and **Jump to the latest
+message** appears when you have scrolled up.
 Responses stream into the chat as safe Markdown, with formatted code blocks.
 Raw HTML and remote images are not rendered. Each turn is limited to 12 provider
 requests, 30 tool calls and two minutes.

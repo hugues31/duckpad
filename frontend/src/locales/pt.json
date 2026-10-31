@@ -822,6 +822,8 @@
   "assistantSaved": "Configurações do assistente salvas.",
   "assistantTestSuccess": "Conexão verificada com {model}.",
   "assistantOpen": "Abrir assistente IA",
+  "assistantLauncherHint": "Arraste para mover (ou Alt + setas)",
+  "assistantLatest": "Ir para a última mensagem",
   "assistantNew": "Nova conversa",
   "assistantMaximize": "Expandir assistente",
   "assistantMinimize": "Recolher assistente",

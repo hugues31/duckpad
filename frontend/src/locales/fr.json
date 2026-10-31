@@ -822,6 +822,8 @@
   "assistantSaved": "Réglages de l’assistant enregistrés.",
   "assistantTestSuccess": "Connexion vérifiée avec {model}.",
   "assistantOpen": "Ouvrir l’assistant IA",
+  "assistantLauncherHint": "Glisser pour déplacer (ou Alt + flèches)",
+  "assistantLatest": "Aller au dernier message",
   "assistantNew": "Nouvelle conversation",
   "assistantMaximize": "Agrandir l’assistant",
   "assistantMinimize": "Réduire l’assistant",
