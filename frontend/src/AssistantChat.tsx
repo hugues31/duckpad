@@ -5,6 +5,7 @@ import {
   useLauncherPosition,
 } from "./AssistantLauncher";
 import { useDefaultPrompts } from "./AssistantPrompts";
+import { useProviderName } from "./assistantProviders";
 import { AssistantRun, type RunControls } from "./AssistantRun";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
@@ -299,6 +300,7 @@ export function AssistantMessage({
 
 export default function AssistantChat() {
   const t = useT();
+  const providerName = useProviderName();
   const explainError = useAssistantError();
   const { workspace, environment, drafts, openModal } = useShell();
   const worktree = useWorktree();
@@ -1002,7 +1004,7 @@ export default function AssistantChat() {
                           key={`${m.provider}/${m.model}`}
                           value={JSON.stringify([m.provider, m.model])}
                         >
-                          {m.kind} · {m.model}
+                          {providerName(m.kind)} · {m.model}
                         </option>
                       ))}
                     </select>

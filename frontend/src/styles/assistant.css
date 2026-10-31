@@ -931,10 +931,11 @@
 .assistant-prompts > p {
   margin: 0;
 }
-/* Actions start on the left, clear of the floating assistant launcher. */
+/* Actions start on the left, clear of the floating assistant launcher. The bar
+   reaches past the page padding so content never shows below it. */
 .assistant-save-bar {
   position: sticky;
-  bottom: 0;
+  bottom: calc(-1 * var(--full-panel-padding, 0px));
   z-index: 2;
   display: flex;
   flex-wrap: wrap;
