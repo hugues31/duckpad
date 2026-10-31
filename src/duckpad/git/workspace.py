@@ -62,12 +62,12 @@ class GitWorkspace:
 
     def resolve(self, path, ref):
         if not ref or ref.startswith("-") or len(ref) > 256:
-            raise Problem("Choose a branch or commit")
+            raise Problem("Choose a branch, tag or commit")
         commit = self.git(
             path, "rev-parse", "--verify", "--quiet", "--end-of-options", f"{ref}^{{commit}}", check=False
         )
         if not commit:
-            raise Problem("Branch or commit not found. Choose an existing branch or commit.", 404)
+            raise Problem("Branch, tag or commit not found. Choose an existing branch, tag or commit.", 404)
         return commit
 
     def metadata(self, path, commit, name=None):
@@ -143,9 +143,12 @@ class GitWorkspace:
         commits = self.git(
             path, "rev-list", f"--skip={max(offset, 0)}", f"--max-count={limit + 1}", head, "--"
         ).splitlines()
+        tags = {}
+        for tag in self.tags(worktree_id):
+            tags.setdefault(tag["commit"], []).append(tag["name"])
         items = []
         for commit in commits[:limit]:
-            metadata = self.metadata(path, commit)
+            metadata = {**self.metadata(path, commit), "tags": tags.get(commit, [])}
             if entity:
                 parents = metadata["parents"] or [None]
                 if not any(
@@ -162,6 +165,93 @@ class GitWorkspace:
                     continue
             items.append(metadata)
         return {"items": items, "head": head, "next": offset + limit if len(commits) > limit else None}
+
+    def tags(self, worktree_id):
+        """All commit tags in the shared project repository, including closed branches."""
+        path = self.projects.get(worktree_id)["path"]
+        fields = (
+            "refname",
+            "objecttype",
+            "objectname",
+            "*objectname",
+            "*objecttype",
+            "taggername",
+            "taggeremail:trim",
+            "taggerdate:iso-strict",
+            "contents",
+        )
+        rows = self.git(
+            path,
+            "for-each-ref",
+            "--sort=refname",
+            "--format=" + "%00".join(f"%({field})" for field in fields) + "%00",
+            "refs/tags/",
+            binary=True,
+        ).decode("utf-8", "replace")
+        result = []
+        for row in rows.split("\0\n"):
+            if not row:
+                continue
+            ref, kind, object_id, peeled, peeled_kind, name, email, date, message = row.split("\0", 8)
+            if kind == "commit":
+                commit = object_id
+            elif kind == "tag" and peeled_kind == "commit":
+                commit = peeled
+            else:
+                continue
+            result.append(
+                {
+                    "name": ref.removeprefix("refs/tags/"),
+                    "ref": ref,
+                    "commit": commit,
+                    "message": message.rstrip("\n") if kind == "tag" else "",
+                    "tagger": {"name": name, "email": email} if kind == "tag" else None,
+                    "date": date or None,
+                }
+            )
+        return result
+
+    def create_tag(self, worktree_id, name, commit, message):
+        """Annotate an existing project commit without moving a ref or saving working files."""
+        with self.projects.locked(worktree_id) as worktree:
+            path = worktree["path"]
+            ref = "refs/tags/" + name
+            if (
+                not name
+                or "\0" in name
+                or name.startswith("-")
+                or self.git(path, "check-ref-format", "--normalize", ref, check=False) != ref
+            ):
+                raise Problem("Enter a valid tag name, such as sales/2026.10.31 or v1.4.", 422)
+            if not message.strip() or "\0" in message:
+                raise Problem("Enter acceptance notes for this tag without null characters.", 422)
+            if self.git(path, "rev-parse", "--verify", "--quiet", ref, check=False):
+                raise Problem("A tag with this name already exists. Choose another name.", 409)
+            commit = self.resolve(path, commit)
+            if not self.git(
+                path,
+                "for-each-ref",
+                "--format=%(refname)",
+                "--contains=" + commit,
+                "refs/heads/",
+                "refs/remotes/origin/",
+                "refs/tags/",
+            ):
+                raise Problem("Choose a commit from this project's history.", 422)
+            # No force: Git also rejects a concurrent creator outside Duckpad's repository lock.
+            self.git(
+                path,
+                "tag",
+                "--no-sign",
+                "--annotate",
+                "--cleanup=verbatim",
+                "--file=-",
+                "--",
+                name,
+                commit,
+                input=message,
+            )
+            return next(tag for tag in self.tags(worktree_id) if tag["name"] == name)
 
     def clean(self, worktree):
         if (

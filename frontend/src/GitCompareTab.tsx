@@ -2,9 +2,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { api, withQuery } from "./api";
 import ComparisonView from "./ComparisonView";
 import { TabStatus } from "./gitTabs";
-import type { Branch, Comparison, HistoryPage } from "./gitTypes";
+import type { Branch, Comparison, GitTag, HistoryPage } from "./gitTypes";
 import { useT } from "./i18n";
 import Select from "./Select";
+import TagBadges from "./TagBadges";
+import { useApiResource } from "./useApiResource";
 
 /**
  * The revisions chosen for a comparison, as the user names them. `pinned`
@@ -62,6 +64,7 @@ export default function GitCompareTab({
   onSelect: (selection: Selection) => void;
 }) {
   const t = useT();
+  const tags = useApiResource<GitTag[]>(`${base}/tags`, { refresh: version });
   // The previous report stays in place while another comparison loads.
   const [report, setReport] = useState<Comparison | null>(null);
   const [attempt, setAttempt] = useState(0);
@@ -224,6 +227,11 @@ export default function GitCompareTab({
               {v.name}
             </option>
           ))}
+          {(tags.data || []).map((tag) => (
+            <option key={tag.ref} value={tag.ref}>
+              {tag.name}
+            </option>
+          ))}
           {items.map((v) => (
             <option key={v.commit} value={v.commit}>
               {v.message}
@@ -256,6 +264,7 @@ export default function GitCompareTab({
           {t("captureWorking")}
         </button>
       </div>
+      <TabStatus error={tags.error} onRetry={tags.reload} />
       {currentCommit && currentCommit.parents.length > 1 && (
         <label>
           {t("actualParent")}{" "}
@@ -299,6 +308,7 @@ export default function GitCompareTab({
           <div className="git-commit" key={item.commit}>
             <div>
               <strong>{item.message}</strong>
+              <TagBadges names={item.tags} />
               <small>
                 {item.author}
                 {item.assistant ? ` ${t("assistantAttribution")}` : ""} ·{" "}

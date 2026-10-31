@@ -101,6 +101,14 @@ class Resolution(BaseModel):
     files: dict[str, str] | None = None
 
 
+class NewTag(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, max_length=200)
+    commit: str = Field(pattern=r"^(?:[0-9a-f]{40}|[0-9a-f]{64})$")
+    message: str = Field(min_length=1, max_length=10000)
+
+
 class NewBranch(BaseModel):
     name: str
     revision: str | None = None

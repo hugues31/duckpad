@@ -98,6 +98,16 @@ export interface Commit {
   parents: string[];
   /** The subject line. */
   message: string;
+  tags?: string[];
+}
+
+export interface GitTag {
+  name: string;
+  ref: string;
+  commit: string;
+  message: string;
+  tagger: { name: string; email: string } | null;
+  date: string | null;
 }
 
 export interface HistoryPage {

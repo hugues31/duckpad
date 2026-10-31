@@ -1,6 +1,6 @@
 # Job automation (design proposal)
 
-**Status: delivery step 1.1 implemented (API tokens, service accounts restricted to Reader, and run requesters). The remaining steps are proposed; the decisions below were agreed in review.**
+**Status: delivery steps 1.1 (API tokens, service accounts restricted to Reader, and run requesters) and 1.2 (immutable annotated tags, creation from History and runs, and comparison by tag) implemented. The remaining steps are proposed; the decisions below were agreed in review.**
 
 ## Summary
 

@@ -143,8 +143,8 @@ the token name; **History** displays this attribution even after the token is re
 - **Instance Member** sees only their projects and can create private projects.
   The creator becomes the project's admin.
 - **Project Reader** can inspect the flow, SQL, history and existing results.
-- **Project Editor** can also edit content, run/cancel pipelines and export through
-  authorized connections.
+- **Project Editor** can also edit content, create tags, run/cancel pipelines and
+  export through authorized connections.
 - **Project Admin** can also manage participants and delete the project.
 
 Open a project and select **Project settings** to add participants, change roles or
