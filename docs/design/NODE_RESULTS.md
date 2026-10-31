@@ -14,7 +14,7 @@ The rule fits in one sentence: *if it changes when you switch environment or run
 The results panel also adds what the current preview lacks:
 
 1. **Custom samples:** first or random rows, a SQL filter, a multi-column sort, and saved views shared with the project.
-2. **Column list:** each column's type, nulls, distinct values, range or top values, and its description.
+2. **Column list:** each column's name, type and description at once and, on request, its nulls, distinct values, range or top values.
 3. **Log:** the run that produced the result, the node's `-- @message` results and the SQL it executed.
 4. **Tests:** each `-- @test` with its recent history and, on demand, the failing rows.
 
@@ -35,11 +35,11 @@ The results panel also adds what the current preview lacks:
 | --- | --- | --- | --- | --- | --- |
 | Rows shown | Results window per tool output, capped in size | Explore tab on a configurable sample (first 10,000 rows by default) | Preview of the first rows | `dbt show` | Retained result of the last run, paged |
 | Choosing the sample | Browse tool, filters in the grid | Sampling settings saved with the dataset: first records, random, stratified… | Filters become applied steps | SQL | First or random rows, SQL filter, sort; personal or saved views |
-| Columns and types | Metadata view: name, type, size, source, description | Schema and column analysis | Column quality, distribution and profile, on the first 1,000 rows unless switched | YAML documentation | Columns tab: type, profile on the whole result, description |
+| Columns and types | Metadata view: name, type, size, source, description | Schema; column analysis on the sample, on the whole dataset on request | Column quality, distribution and profile, on the first 1,000 rows unless switched | YAML documentation | Columns tab: type and description at once, statistics of the whole result on request |
 | Messages | Messages view with information, warnings and errors per tool | Job log | Errors per step | Run log | Log tab: run summary, `-- @message` results, executed SQL |
 | Tests | Test tool, messages | Metrics and checks on the dataset | — | Tests are queries returning failing rows; `--store-failures` saves them | Tests tab with history; failing rows recomputed on demand, never stored |
 
-What we keep: a sample that users choose and can share (Dataiku), a column view with type and quality indicators next to the data (Alteryx, Power Query), and tests expressed as "rows that fail" (dbt). What we change: profiles cover the whole result rather than the first rows, because Duckpad results are already materialized in DuckDB, and failing rows are recomputed rather than stored.
+What we keep: a sample that users choose and can share (Dataiku), a column view with type and quality indicators next to the data (Alteryx, Power Query), and tests expressed as "rows that fail" (dbt). What we change: statistics cover the whole result rather than the first rows, because Duckpad results are already materialized in DuckDB, but only on request; failing rows are recomputed rather than stored.
 
 ## Principles
 
@@ -125,11 +125,15 @@ Views are stored in a new `views.json` file at the project root, keyed like data
 
 ### Columns tab
 
-![Columns tab: type, nulls, distinct values, range or top values, and descriptions](node-results/columns.png)
+![Columns tab: name, type and description at once, statistics on request](node-results/columns.png)
 
-One row per column of the selected dataset: position, name, type, null percentage, distinct values, range (numbers and dates) or top values (text), a small distribution, and the column description. The dataset description sits above the table.
+One row per column of the selected dataset: position, name, type and description, with the dataset description above the table. All of it shows at once: names and types come from the result's schema and descriptions from `documentation.json`, without reading any rows.
 
-- **Profile on the whole result.** Statistics come from DuckDB's `SUMMARIZE` and a top-values query on the retained dataset, computed when the tab first opens and cached for that result generation (results are immutable until replaced). Large results show a **Compute profile** button instead of starting automatically above a size threshold.
+- **Statistics on request.** **Compute statistics** adds each column's null percentage, distinct values, range (numbers and dates) or top values (text), and a small distribution. They come from DuckDB's `SUMMARIZE` and a top-values query on the whole retained dataset, not on the displayed sample. On an 8-core server under load, `SUMMARIZE` takes 2.5 s on 10 million rows and 9 columns, plus 0.5 s for the top values, and the cost grows with the number of columns. The tab never starts this on its own: opening it is often only about a type, and the computation shares the CPU with runs.
+- **Computed once per result.** Statistics are cached for that result generation (results are immutable until replaced): reopening the tab, coming back to the node or another user sees them at once, with the time they were computed. The run that replaces the result discards them. The computation can be cancelled and stops after the same timeout as samples.
+
+![Columns tab after Compute statistics](node-results/columns-statistics.png)
+
 - **Descriptions are edited inline** (pencil), saved in `documentation.json` as today. The inspector's Documentation tab keeps only the node documentation, without the node/dataset/column selector.
 - **Schema changes.** A chip compares the columns with the previous successful run of the node in the same environment, from run records: added, removed or retyped columns are listed; otherwise "Same columns as the previous run".
 - Selecting a column name scrolls the Data tab to it.
@@ -182,7 +186,7 @@ Four tabs need compact labels at the default inspector width (320 px at 1,440 px
 ## API and storage
 
 - `GET /api/worktrees/{id}/preview/{node}` accepts `search` (all columns), `filter` (SQL condition), `order` (list of column and direction), `method` (`first` or `random`) and `seed`. The current `filters` and `sort` parameters keep working.
-- `GET /api/worktrees/{id}/profile/{node}?environment&port` returns column statistics, cached per dataset generation.
+- `POST /api/worktrees/{id}/statistics/{node}?environment&port` computes column statistics on request; `GET` on the same path returns them when they were already computed for the current result generation.
 - `GET /api/worktrees/{id}/test-rows/{node}/{test}?environment&limit&offset` returns the failing rows of a test for a valid result, paged.
 - `views.json` joins the bundle, validation, merge, comparison and ZIP archives, like `variables.json`.
 - Run records add per-output durations.
@@ -192,13 +196,14 @@ Four tabs need compact labels at the default inspector width (320 px at 1,440 px
 - **Sample filters** are validated like Filter conditions: one SQL expression, no query, DDL, DML or command; column references must belong to the dataset; `{{ var.name }}` references are bound, never pasted. The query runs on a cursor of the execution context against the retained relation only, with the existing row cap, and is interrupted after a timeout.
 - **Random samples** use DuckDB's reservoir sampling with a seed on the filtered relation, so a seed always shows the same rows of the same result, and each row keeps its identity for lineage.
 - **Failing rows** use the definitions recorded with the run, not the current files, so they match the displayed result. They require the same permission as reading results and are never stored or logged.
-- **Profiles** read only the retained dataset and are released with it.
-- Readers, Operators and Job results (read-only worktrees) can use samples, profiles and failing rows; saving views, editing descriptions, adding a Filter node or creating a test require edit rights.
+- **Column statistics** are computed only on request, read only the retained dataset, can be cancelled, stop after the sample timeout, and are released with the result.
+- Readers, Operators and Job results (read-only worktrees) can use samples, column statistics and failing rows; saving views, editing descriptions, adding a Filter node or creating a test require edit rights.
 
 ## Alternatives considered
 
 - **Keep run outcomes in the inspector and add tabs there.** Rejected: the inspector is narrow (260 to 560 px), rows and logs need width, and it would keep mixing definition and outcome.
-- **Samples that also drive downstream computations** (in the reference mockup that prompted this proposal, sample settings also apply to downstream preview computations). Not proposed: results computed from a sample would not match the saved configuration, so under Duckpad's validity rules they would be stale at once and without lineage. Smaller data for development already comes from the `dev` connections. To revisit with a "sampled development run" design if large sources make full runs too slow (see the open question below).
+- **Samples that also drive downstream computations** (in the reference mockup that prompted this proposal, sample settings also apply to downstream preview computations). Rejected (decision 1): results computed from a sample would not match the saved configuration, so under Duckpad's validity rules they would be stale at once and without lineage. Smaller data for development already comes from the `dev` connections. To revisit with a separate "sampled development run" design if large sources make full runs too slow.
+- **Column statistics computed when the Columns tab opens**, or only below a size threshold. Rejected (decision 3): the cost grows with the result's size and width and competes with runs, while names, types and descriptions, the common need, cost nothing.
 - **Storing failing rows** (dbt `--store-failures`). Rejected: memory and privacy costs, and stored rows go out of date; retained results already allow an exact recomputation.
 - **A free SQL console in the panel.** Deferred: **Copy SQL**, **Add as a Filter node** and a SQL node on a branch cover the need with lineage and history.
 - **Views in `documentation.json`.** Rejected: views are not documentation; a dedicated file keeps diffs and merges readable.
@@ -210,18 +215,20 @@ Each step is a separate issue and pull request, with tests (API and Playwright),
 1. **Two roles.** Results panel with the Data, Columns (name, type, description), Tests and Log tabs; move messages, tests, errors, executed SQL, dataset and column documentation and export downloads out of the inspector; inspector result summary; results panel for export nodes. Frontend only. Lands after the inspector's Info tab to avoid conflicts in the same component.
 2. **Custom samples.** Search across columns, Sample popover (first or random rows, filter, multi-column sort), chips, inputs in the dataset selector, per-user persistence, **Add as a Filter node** and **Copy SQL**.
 3. **Shared views and test bridges.** `views.json`, views bar, **Create a test from this filter**, **Show the failing rows**.
-4. **Profile and timings.** Column statistics and top values, schema changes against the previous run, per-output durations in the Log.
+4. **Statistics and timings.** **Compute statistics** (column statistics and top values, cached per result), schema changes against the previous run, per-output durations in the Log.
 
-## Open questions
+## Decisions
 
-1. **Should a sample act only on the display** (proposed), **or also on downstream computations**, as in the reference mockup? The proposal keeps runs on full data and leaves sampled development runs for a separate design.
-2. **Shared views in the project** (`views.json`, versioned and shared on the branch, proposed in addition to personal samples), **or personal samples only**?
-3. **Dataset and column descriptions edited from the Columns tab** (proposed), the only versioned content edited outside the inspector?
+Decided on 31 October 2026:
+
+1. **A sample acts only on the display.** Runs always compute on full data; a sampled development run, if needed, gets its own design.
+2. **Shared views in the project** (`views.json`), in addition to personal samples remembered in the browser.
+3. **Dataset and column descriptions are edited from the Columns tab.** Names, types and descriptions show at once; column statistics are computed only with **Compute statistics**.
 
 ## Sources
 
 - Alteryx Designer: [Results window](https://help.alteryx.com/2021.3/Getting_Started/Output.htm), [interactive results grid](https://help.alteryx.com/aac/en/designer-experience/workflows/interactive-results-grid.html)
-- Dataiku DSS: [sampling in Explore](https://doc.dataiku.com/dss/13/explore/sampling.html)
+- Dataiku DSS: [sampling in Explore](https://doc.dataiku.com/dss/13/explore/sampling.html), [column analysis](https://knowledge.dataiku.com/9.0/courses/basics/explore-data/concept-analyze.html)
 - Power Query: [data profiling tools](https://learn.microsoft.com/en-us/power-query/data-profiling-tools)
 - dbt: [data tests](https://docs.getdbt.com/docs/build/data-tests), [`store_failures`](https://docs.getdbt.com/reference/resource-configs/store_failures)
 - Duckpad: [execution messages and data tests](../AUTHORING.md#execution-messages), [specification](../SPEC.md)
