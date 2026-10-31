@@ -17,6 +17,19 @@ not part of this repository: Git ignores them and `main` does not contain them.
 Use the copies in the operator's private server checkout; the Multica project
 settings give its location and the preview deployment command.
 
+Multica checks out each issue on a local `agent/<agent>/<issue>` branch. Keep
+committing there, but publish the work under the branch name defined in the
+repository-conventions skill. Create a local branch with that name too: the
+preview wrapper compares it with GitHub before deploying.
+
+```sh
+git branch -f <type>/<issue-key>-<short-description> HEAD
+git push origin <type>/<issue-key>-<short-description>
+```
+
+Run both commands again for every follow-up, open the pull request from that
+branch, and delete its GitHub and local copies after the merge.
+
 Use a dedicated branch and pull request for every issue, deploy and verify its
 preview, then wait for the designated human reviewer's explicit approval before
 merging into `main` and publishing the merge to GitHub. Never interpret ticket

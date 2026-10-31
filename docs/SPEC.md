@@ -422,7 +422,9 @@ cannot read other users’ conversations. All tools recheck session and project
 permissions; data and compilation tools recheck project connection grants.
 The validated page context contains only page/tab/section, project/worktree/branch,
 selected node, open Code file, selected environment and their names. Saved
-content is fetched on demand, in bounded pages. There is no unsaved draft upload.
+content is fetched on demand, in bounded pages. The frontend saves pending local
+drafts before sending a message; failed saves prevent the turn. Unsaved drafts
+are never included directly in provider payloads.
 
 The exact provider payload consists of the assistant instructions and tool
 schemas, the current question, the validated context, previous conversation
@@ -440,6 +442,7 @@ messages (including tool exchanges), and whichever tool results are requested:
 | Value lineage: selected value, SQL/expression, contributing values, source/schema metadata and limitations | Tool absent | Bounded contribution pages |
 | Search excerpts from saved project definitions | Yes | Yes |
 | Current-branch Git commit metadata (including authors, messages and hashes) | Yes | Yes |
+| Requested write arguments and resulting change summaries, SQL diffs and commit IDs | For project editors/admins | For project editors/admins |
 | Provider keys, resolved connection secrets, instance users, sessions, other projects and unsaved editor drafts | Never | Never |
 
 Provider model discovery sends the saved key to the configured endpoint; the
@@ -449,10 +452,39 @@ because data reading is disabled. If data reading is turned off, previous
 conversations that allowed it cannot resume; a new conversation prevents their
 old values or responses from being resent. Provider redirects are disabled.
 
-Only read tools exist: `read_flow`, `read_file`, `read_sql`, `read_documentation`,
+Read tools are `read_flow`, `read_file`, `read_sql`, `read_documentation`,
 `read_schemas`, `read_runs`, `search_project`, `read_history`, and optionally
-`preview_output` and `explain_value`. There is no arbitrary SQL, file write,
-network, run-launch or undo tool. Each turn has `UsageLimits` of 12 requests
+`preview_output` and `explain_value`. Project editors and administrators also
+receive `edit_flow`, `write_sql`, `write_documentation`, `edit_variable` and
+`group_nodes`. Readers receive no writing tools; forced writes and undo requests
+still recheck editing permission. Writes cannot target another worktree or
+branch, change instance configuration or launch execution. There is no arbitrary
+SQL execution, unrestricted file write, network or run-launch tool.
+
+All tools run sequentially. Reads start from a captured committed snapshot;
+successful writes advance it. Writes use `projects.write` with that base revision,
+three-way merging and bundle validation. Flow edits can batch nodes and edges to
+produce a valid graph in one action. Grouping and variable renaming reuse the
+same transformations as the UI. Template edits report linked instance counts.
+Each changed action produces one commit with the authenticated user's Git
+identity and a `Duckpad-Assistant: <conversation>` trailer, displayed in History
+as the user **via the assistant**. No-op calls create no commit or undo card.
+
+Action receipts in the conversation store the actual before/after commit pair,
+change summary, bounded SQL diff and status before returning to the provider.
+They remain available after an interrupted response or conversation resumption.
+Undo is an authenticated UI action, not a model tool: base = action's after
+files, current = branch's current files, proposal = action's before files. The
+same writer creates the inverse commit. Independent later edits survive.
+Conflict proposals are durable, preserve independent changes and use the normal
+resolution UI; choosing the proposal never silently reverts unrelated edits.
+Resolution updates the card; keeping current leaves it undoable. Whole-turn undo
+works newest-first, skips already undone actions and stops at a conflict.
+Commit-backed bases remain usable after cache eviction or server restart.
+The workspace refreshes after actions and retains concurrent editor drafts for
+their normal optimistic save. Cards link to Compare versions for each commit.
+
+Each turn has `UsageLimits` of 12 requests
 and 30 tool calls, a 120-second deadline and a Stop action that cancels the
 provider stream. Errors identify rejected credentials, quota, unavailable models
 or connection failures without exposing provider response bodies.

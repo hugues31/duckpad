@@ -4,6 +4,7 @@ from fastapi import APIRouter, Query, Request
 from fastapi.responses import StreamingResponse
 from starlette.background import BackgroundTask
 
+from .actions import UndoRequest
 from .config import Settings
 from .service import Assistant, Rename, TurnRequest
 from .tools import PageContext
@@ -60,6 +61,10 @@ def router(assistant: Assistant):
     @routes.post("/conversations/{identity}/stop")
     def stop(request: Request, identity: str):
         return assistant.stop(request.state.user, identity)
+
+    @routes.post("/conversations/{identity}/undo")
+    def undo(request: Request, identity: str, data: UndoRequest):
+        return assistant.actions.undo(request.state.user, identity, data)
 
     @routes.post("/conversations/{identity}/messages")
     def message(request: Request, identity: str, data: TurnRequest):

@@ -447,6 +447,52 @@ function Editor({
 }
 
 describe("useDraftRegistry", () => {
+  it("saves pending page and worktree drafts before continuing", async () => {
+    const page = createRef<Draft>();
+    const branch = createRef<Draft>();
+    const save = vi.fn(async () => 2);
+    render(
+      <Registry>
+        <Editor handle={page} scope="page" save={save} />
+        <Editor handle={branch} scope="worktree" save={save} />
+      </Registry>,
+    );
+    act(() => {
+      page.current!.update(() => "page edit");
+      branch.current!.update(() => "branch edit");
+    });
+    await act(() => registry.current!.persist());
+    expect(save.mock.calls).toEqual([
+      ["page edit", 1],
+      ["branch edit", 1],
+    ]);
+    expect(registry.current!.dirty()).toBe(false);
+  });
+
+  it("stops before later drafts when a save conflicts", async () => {
+    const page = createRef<Draft>();
+    const branch = createRef<Draft>();
+    const save = vi.fn(async () => {
+      throw new Error("Conflict");
+    });
+    const later = vi.fn(async () => 2);
+    render(
+      <Registry>
+        <Editor handle={page} scope="page" save={save} />
+        <Editor handle={branch} scope="worktree" save={later} />
+      </Registry>,
+    );
+    act(() => {
+      page.current!.update(() => "page edit");
+      branch.current!.update(() => "branch edit");
+    });
+    await act(async () => {
+      await expect(registry.current!.persist()).rejects.toThrow("Conflict");
+    });
+    expect(later).not.toHaveBeenCalled();
+    expect(registry.current!.dirty()).toBe(true);
+  });
+
   it("reports no unsaved draft while every editor is clean", () => {
     const page = createRef<Draft>();
     render(

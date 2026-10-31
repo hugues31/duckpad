@@ -256,7 +256,7 @@ class Projects:
             if is_declarative(name) and (path / name).is_file()
         }
 
-    def commit(self, path: str | Path, message: str) -> str:
+    def commit(self, path: str | Path, message: str, *, assistant: str | None = None) -> str:
         tracked = self.git(path, "ls-files").splitlines()
         existing = self.read_files({"path": str(path)})
         head = self.git(path, "rev-parse", "--verify", "HEAD", check=False)
@@ -301,6 +301,8 @@ class Projects:
             )
             if head:
                 message = commit_message(previous_files, self.read_files({"path": str(path)}), context)
+            if assistant:
+                message += "\n\nDuckpad-Assistant: " + assistant
             self.git(
                 path,
                 "commit",
@@ -397,6 +399,9 @@ class Projects:
         revision: str,
         proposal: Files,
         message: str = "feat(project): save workspace changes",
+        *,
+        validate: bool = False,
+        assistant: str | None = None,
     ) -> Record:
         # A rejected save writes nothing, not even part of the proposal.
         if not all(is_declarative(name) for name in proposal):
@@ -416,6 +421,11 @@ class Projects:
                 pass
             merged, paths = merge_files(base, current, proposal)
             if paths:
+                if assistant:
+                    # Choosing the incoming side must still preserve independent later edits.
+                    proposal, _ = merge_files(
+                        base, current, proposal, choices=dict.fromkeys(paths, "incoming"), evidence=[]
+                    )
                 conflict = {
                     "id": uid("conflict_"),
                     "worktree": worktree_id,
@@ -425,14 +435,17 @@ class Projects:
                     "paths": paths,
                     "revision": digest(current),
                     "created": now(),
+                    "assistant": assistant,
                 }
                 self.store.put("conflict", conflict["id"], conflict)
                 raise Problem("Concurrent edits conflict. Both versions have been retained.", 409, conflict)
+            if validate:
+                require_valid(merged, "The proposed changes are invalid")
             # Finalize the independent external save unit before the UI action.
             if self.git(worktree["path"], "status", "--porcelain"):
                 self.commit(worktree["path"], EXTERNAL_SAVE)
             self._write_files(worktree, merged, current)
-            self.commit(worktree["path"], message)
+            self.commit(worktree["path"], message, assistant=assistant)
             self.observed[worktree_id] = self.read_files(worktree)
             self.pending.pop(worktree_id, None)
             self.on_change(worktree_id)
@@ -499,6 +512,15 @@ class Projects:
             conflict = self.conflict(conflict_id)
             snapshot = self.snapshot(conflict["worktree"])
             if snapshot["revision"] != conflict["revision"]:
+                if conflict.get("assistant"):
+                    _, paths = merge_files(conflict["current"], snapshot["files"], conflict["proposal"])
+                    conflict["proposal"], _ = merge_files(
+                        conflict["current"],
+                        snapshot["files"],
+                        conflict["proposal"],
+                        choices=dict.fromkeys(paths, "incoming"),
+                        evidence=[],
+                    )
                 conflict.update(current=snapshot["files"], revision=snapshot["revision"])
                 self.store.put("conflict", conflict_id, conflict)
                 raise Problem(
@@ -508,7 +530,12 @@ class Projects:
             if proposal is None:
                 raise Problem("Combined file contents are required")
             result = self.write(
-                conflict["worktree"], snapshot["revision"], proposal, "fix(project): resolve concurrent edits"
+                conflict["worktree"],
+                snapshot["revision"],
+                proposal,
+                "fix(project): resolve concurrent edits",
+                validate=bool(conflict.get("assistant")),
+                assistant=conflict.get("assistant"),
             )
             self.store.delete("conflict", conflict_id)
             result["conflicts"] = [c for c in result["conflicts"] if c["id"] != conflict_id]

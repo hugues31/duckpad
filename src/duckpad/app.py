@@ -559,8 +559,8 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
         )
 
     @app.post("/api/conflicts/{conflict}/resolve", response_model=None)
-    def resolve_conflict(conflict: str, data: schemas.Resolution) -> Record:
-        return projects.resolve(conflict, data.choice, data.files)
+    def resolve_conflict(conflict: str, data: schemas.Resolution, request: Request) -> Record:
+        return assistant.actions.resolve(request.state.user, conflict, data.choice, data.files)
 
     @app.get("/api/worktrees/{worktree}/git/history", response_model=None)
     def git_history(

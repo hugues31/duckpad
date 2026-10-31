@@ -201,7 +201,11 @@ export default function GitCompareTab({
               <small>
                 {report[side].name} ·{" "}
                 <code>{report[side].commit?.slice(0, 12) || "—"}</code> ·{" "}
-                {report[side].author} ·{" "}
+                {report[side].author}
+                {report[side].assistant
+                  ? ` ${t("assistantAttribution")}`
+                  : ""}{" "}
+                ·{" "}
                 {report[side].date
                   ? new Date(report[side].date).toLocaleString()
                   : ""}
@@ -296,7 +300,9 @@ export default function GitCompareTab({
             <div>
               <strong>{item.message}</strong>
               <small>
-                {item.author} · {new Date(item.date).toLocaleString()} ·{" "}
+                {item.author}
+                {item.assistant ? ` ${t("assistantAttribution")}` : ""} ·{" "}
+                {new Date(item.date).toLocaleString()} ·{" "}
                 {item.commit.slice(0, 12)}
               </small>
             </div>

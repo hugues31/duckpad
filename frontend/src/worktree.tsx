@@ -2,6 +2,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -32,6 +33,8 @@ export interface Worktree {
   gitVersion: number;
   /** Reload the snapshot after a change; a failed read is left to polling. */
   refresh: () => Promise<void>;
+  /** Wait for saves already started by the canvas or an editor. */
+  flush: () => Promise<void>;
   /** Save a change applied to a copy of the bundle of `base`. */
   save: (base: Snapshot, change: (bundle: Bundle) => void) => Promise<Snapshot>;
   saveFiles: (
@@ -89,6 +92,7 @@ export function WorktreeProvider({
     [id],
   );
   const [saves, setSaves] = useState(0);
+  const pendingWrites = useRef(new Set<Promise<Snapshot>>());
   const [starting, setStarting] = useState(false);
   const [gitVersion, setGitVersion] = useState(0);
   const {
@@ -122,12 +126,15 @@ export function WorktreeProvider({
   ) {
     if (!canEdit) throw new Error(t("readerNotice"));
     setSaves((count) => count + 1);
+    const pending = api<Snapshot>(
+      `/worktrees/${base.worktree.id}`,
+      send({ revision: base.revision, ...change }, "PUT"),
+    );
+    pendingWrites.current.add(pending);
     try {
-      return await api<Snapshot>(
-        `/worktrees/${base.worktree.id}`,
-        send({ revision: base.revision, ...change }, "PUT"),
-      );
+      return await pending;
     } finally {
+      pendingWrites.current.delete(pending);
       // Show the saved revision, or the one that rejected the change.
       await refresh(base.worktree.id);
       setSaves((count) => count - 1);
@@ -172,6 +179,10 @@ export function WorktreeProvider({
     starting,
     gitVersion,
     refresh: () => refresh(),
+    flush: async () => {
+      while (pendingWrites.current.size)
+        await Promise.all([...pendingWrites.current]);
+    },
     save: (base, change) => {
       const bundle = structuredClone(base.bundle!);
       change(bundle);

@@ -65,9 +65,20 @@ class GitWorkspace:
         return commit
 
     def metadata(self, path, commit, name=None):
-        text = self.git(path, "show", "-s", "--format=%H%x1f%an%x1f%aI%x1f%P%x1f%s", commit, "--")
+        text = self.git(
+            path,
+            "show",
+            "-s",
+            "--format=%H%x1f%an%x1f%aI%x1f%P%x1f%(trailers:key=Duckpad-Assistant,valueonly)%x1f%s",
+            commit,
+            "--",
+        )
         value = dict(
-            zip(("commit", "author", "date", "parents", "message"), text.split("\x1f", 4), strict=True)
+            zip(
+                ("commit", "author", "date", "parents", "assistant", "message"),
+                text.split("\x1f", 5),
+                strict=True,
+            )
         )
         return {**value, "parents": value["parents"].split(), "ref": commit, "name": name or commit[:8]}
 

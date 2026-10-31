@@ -163,6 +163,16 @@
   font-size: 11px;
   margin-bottom: 0;
 }
+.assistant-action-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+.assistant-changes {
+  padding-left: 20px;
+  font-size: 12px;
+}
 .assistant-composer {
   border-top: 1px solid var(--border);
   padding: 12px;

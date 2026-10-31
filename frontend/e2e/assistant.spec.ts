@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { openInstanceSettings, signIn } from "./helpers";
+import { verifyAssistantEditing } from "./assistant-editing-flow";
 
 test("configure the assistant, inspect a flow and resume a private conversation", async ({
   page,
@@ -99,7 +100,7 @@ test("configure the assistant, inspect a flow and resume a private conversation"
   ).toHaveCount(0);
 });
 
-test("an unsaved Code file stays out of the assistant context", async ({
+test("a pending Code file is saved before the assistant turn", async ({
   page,
 }) => {
   await signIn(page);
@@ -144,7 +145,35 @@ test("an unsaved Code file stays out of the assistant context", async ({
     chat.getByText("The flow contains read-only project nodes."),
   ).toBeVisible();
   await expect(chat.getByRole("alert")).toHaveCount(0);
+  const saved = await (
+    await page.request.get(`/api/worktrees/${example.id}`)
+  ).json();
+  expect(saved.files["variables.json"]).toBeDefined();
   await page.request.put("/api/assistant/settings", {
     data: { enabled: false, providers: [] },
   });
+});
+
+test("assistant writes appear on the canvas and undo preserves a manual SQL edit", async ({
+  page,
+}) => {
+  test.setTimeout(180000);
+  await signIn(page);
+  const configured = await page.request.put("/api/assistant/settings", {
+    data: {
+      enabled: true,
+      providers: [
+        {
+          id: "primary",
+          kind: "deepseek",
+          api_key: "browser-test-key",
+          models: ["test"],
+        },
+      ],
+      default_provider: "primary",
+      default_model: "test",
+    },
+  });
+  expect(configured.ok()).toBeTruthy();
+  await verifyAssistantEditing(page);
 });

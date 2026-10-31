@@ -134,7 +134,9 @@ export default function HistoryPanel({
             <span className="grow">
               <strong>{commit.message}</strong>
               <small>
-                {commit.author} · {new Date(commit.date).toLocaleString()} ·{" "}
+                {commit.author}
+                {commit.assistant ? ` ${t("assistantAttribution")}` : ""} ·{" "}
+                {new Date(commit.date).toLocaleString()} ·{" "}
                 {commit.commit.slice(0, 8)}
               </small>
             </span>

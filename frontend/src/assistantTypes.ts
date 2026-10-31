@@ -51,8 +51,27 @@ export interface AssistantTool {
   args: Record<string, unknown>;
   status: string;
   summary: string;
+  action?: AssistantAction;
+}
+export interface AssistantAction {
+  id: string;
+  before: string;
+  commit: string;
+  status: "applied" | "undone" | "conflict" | "undo_conflict" | "discarded";
+  conflict?: string;
+  undo_commit?: string;
+  affected_nodes?: number;
+  change_count: number;
+  changes: {
+    id: string;
+    name: string;
+    kind: string;
+    status: "added" | "removed" | "modified";
+  }[];
+  sql_diffs: { path: string; diff: string; truncated: boolean }[];
 }
 export interface AssistantTurn {
+  id?: string;
   user: string;
   text: string;
   tools: AssistantTool[];

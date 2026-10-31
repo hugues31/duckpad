@@ -18,6 +18,12 @@ const errors: Record<string, TranslationKey> = {
   "The assistant is disabled": "assistantErrorDisabled",
   "Choose an allowed assistant model": "assistantErrorChooseModel",
   "Provide an API key for this provider": "assistantErrorProvideKey",
+  "The proposed changes are invalid": "assistantErrorInvalidEdit",
+  "Resolve the pending project conflict before editing":
+    "assistantErrorConflict",
+  "Wait for the assistant response before undoing": "assistantErrorWait",
+  "Open the conversation's original branch before undoing":
+    "assistantErrorUndoBranch",
 };
 
 export function useAssistantError() {
