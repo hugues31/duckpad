@@ -172,7 +172,7 @@ export default function ProjectSettings({
                   >
                     {(available.find((u) => u.id === selectedUser)
                       ?.auth_method === "service"
-                      ? (["reader"] as const)
+                      ? (["reader", "operator"] as const)
                       : PROJECT_ROLES
                     ).map((role) => (
                       <option key={role} value={role}>
@@ -215,12 +215,8 @@ export default function ProjectSettings({
                         <RoleSelect
                           label={`${t("projectRole")} · ${member.username}`}
                           value={member.role}
-                          disabled={
-                            !admin ||
-                            pending ||
-                            !member.active ||
-                            member.auth_method === "service"
-                          }
+                          service={member.auth_method === "service"}
+                          disabled={!admin || pending || !member.active}
                           onChange={(role) =>
                             act(() =>
                               api(

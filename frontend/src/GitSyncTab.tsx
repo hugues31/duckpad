@@ -30,7 +30,7 @@ export default function GitSyncTab({
   const translateValue = useTranslateValue();
   const { pending, error, run, retry } = useTabAction();
   const { remote } = repository;
-  const canEdit = role !== "reader";
+  const canEdit = role === "admin" || role === "editor";
   const admin = role === "admin";
   const [url, setUrl] = useState(remote?.url || "");
   const [mapping, setMapping] = useState(

@@ -32,6 +32,7 @@ from .bundle import bundle_to_files
 from .components import group, import_definition
 from .example import create_example
 from .git.identity import commit_author
+from .jobs import Jobs
 from .oidc import CALLBACK_PATH, OIDC, TRANSACTION_LIFETIME, OIDCSettings
 from .resources import resource_usage
 from .search import search_instance
@@ -96,6 +97,7 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
     assert access is not None
     credentials = projects.remotes.credentials
     assistant = Assistant(services, auth)
+    jobs = Jobs(services)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
@@ -135,11 +137,22 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
             access.worktree(user, parts[2], "reader" if read else "editor")
             if parts[3:] == ["git", "remote"] and request.method == "PUT":
                 access.worktree(user, parts[2], "admin")
+        elif route == "jobs" and len(parts) >= 3:
+            job = jobs.get(parts[2])
+            role = (
+                "reader"
+                if request.method == "GET"
+                else ("operator" if request.method == "POST" and parts[3:] == ["runs"] else "admin")
+            )
+            access.require(user, job["project"], role)
         elif route in ("runs", "conflicts") and len(parts) >= 3:
             record = store.get("run" if route == "runs" else "conflict", parts[2])
             if not record:
                 raise Problem("Resource not found", 404)
-            access.worktree(user, record["worktree"], "reader" if request.method == "GET" else "editor")
+            if route == "runs" and record.get("trigger") == "job":
+                access.require(user, record["project"], "reader" if request.method == "GET" else "operator")
+            else:
+                access.worktree(user, record["worktree"], "reader" if request.method == "GET" else "editor")
         elif route not in (
             "assistant",
             "session",
@@ -757,6 +770,52 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
     def status(worktree: str, environment: str) -> Record:
         return engine.statuses(worktree, environment)
 
+    # Jobs are instance metadata; their detached worktrees only expose read routes.
+    @app.get("/api/projects/{project}/jobs", response_model=None)
+    def list_jobs(project: str) -> list[Record]:
+        return [jobs.public(job) for job in store.all("job") if job["project"] == project]
+
+    @app.post("/api/projects/{project}/jobs", response_model=None, status_code=201)
+    def create_job(project: str, data: schemas.NewJob, request: Request) -> Record:
+        return jobs.create(project, data, request.state.user)
+
+    @app.get("/api/jobs/{slug}", response_model=None)
+    def get_job(slug: str) -> Record:
+        return jobs.public(jobs.get(slug))
+
+    @app.patch("/api/jobs/{slug}", response_model=None)
+    def update_job(slug: str, data: schemas.JobChanges) -> Record:
+        return jobs.update(slug, data)
+
+    @app.delete("/api/jobs/{slug}", response_model=None)
+    def delete_job(slug: str) -> Record:
+        jobs.delete(slug)
+        return {"ok": True}
+
+    @app.get("/api/jobs/{slug}/version", response_model=None)
+    def compare_job_version(slug: str, ref: str, kind: str = "tag") -> Record:
+        return jobs.compare(slug, kind, ref)
+
+    @app.post("/api/jobs/{slug}/version", response_model=None)
+    def promote_job(slug: str, data: schemas.JobPromotion, request: Request) -> Record:
+        return jobs.promote(slug, data, request.state.user)
+
+    @app.get("/api/jobs/{slug}/runs", response_model=None)
+    def job_runs(slug: str) -> list[Record]:
+        return jobs.runs(jobs.get(slug))
+
+    @app.post("/api/jobs/{slug}/runs", response_model=None, status_code=202)
+    def launch_job(slug: str, data: schemas.JobLaunch, request: Request) -> Record:
+        return jobs.launch(
+            slug,
+            data,
+            {
+                "id": request.state.user["id"],
+                "username": request.state.user["username"],
+                "token_name": request.state.token_name,
+            },
+        )
+
     @app.post("/api/worktrees/{worktree}/runs", response_model=None)
     def launch(worktree: str, data: schemas.Launch, request: Request) -> Record:
         entry_point = "ui" if data.entry_point == "ui" else "api"
@@ -780,10 +839,10 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
         return engine.launch(worktree, data.environment, data.node, entry_point, requester=requester)
 
     @app.get("/api/runs", response_model=None)
-    def runs(request: Request, worktree: str | None = None) -> list[Record]:
+    def runs(request: Request, worktree: str | None = None, include_jobs: bool = False) -> list[Record]:
         if worktree:
             access.worktree(request.state.user, worktree)
-        return store.runs(request.state.user, worktree)
+        return store.runs(request.state.user, worktree, include_jobs)
 
     @app.get("/api/worktrees/{worktree}/test-history/{node}", response_model=None)
     def test_history(worktree: str, node: str, environment: str, limit: int = 10) -> list[Record]:

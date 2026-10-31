@@ -39,7 +39,9 @@ const DYNAMIC_KEYS = [
   // Roles: role_<role> and project_<role>_hint.
   "role_editor",
   "role_reader",
+  "role_operator",
   "project_reader_hint",
+  "project_operator_hint",
   "project_editor_hint",
   "project_admin_hint",
   // Remote branch states: sync_<state> and recovery_<state>.
