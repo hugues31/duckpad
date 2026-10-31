@@ -37,7 +37,8 @@ class PollingAccessFilter(logging.Filter):
         return True
 
 
-def server_log_config():
+def server_log_config(level="info"):
+    """Uvicorn logging, plus node results as JSON lines filtered by the server log level."""
     config = deepcopy(LOGGING_CONFIG)
     config["filters"] = {"polling": {"()": PollingAccessFilter}}
     config["loggers"]["uvicorn.access"]["filters"] = ["polling"]
@@ -49,7 +50,7 @@ def server_log_config():
     }
     config["loggers"]["duckpad.execution"] = {
         "handlers": ["execution"],
-        "level": "INFO",
+        "level": level.upper(),
         "propagate": False,
     }
     return config

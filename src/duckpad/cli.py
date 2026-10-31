@@ -81,7 +81,11 @@ def main():
             timer.daemon = True
             timer.start()
         uvicorn.run(
-            app, host=args.host, port=args.port, log_level=args.log_level, log_config=server_log_config()
+            app,
+            host=args.host,
+            port=args.port,
+            log_level=args.log_level,
+            log_config=server_log_config(args.log_level),
         )
     finally:
         lease.release()

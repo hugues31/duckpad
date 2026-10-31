@@ -13,7 +13,7 @@ import pytest
 from helpers import wait_until
 
 from duckpad.app import create_app
-from duckpad.logging import PollingAccessFilter
+from duckpad.logging import PollingAccessFilter, server_log_config
 
 
 @pytest.mark.parametrize("level", [None, "debug"])
@@ -168,3 +168,8 @@ def test_other_access_logs_retain_their_level(caplog, method, path, status):
         logger.removeFilter(access_filter)
     assert len(caplog.records) == 1
     assert caplog.records[0].levelno == logging.INFO
+
+
+@pytest.mark.parametrize(("level", "expected"), [("debug", "DEBUG"), ("info", "INFO"), ("error", "ERROR")])
+def test_node_result_logs_follow_the_server_level(level, expected):
+    assert server_log_config(level)["loggers"]["duckpad.execution"]["level"] == expected
