@@ -1,6 +1,6 @@
 # Node results panel (design proposal)
 
-**Status: accepted on 31 October 2026 (see [Decisions](#decisions)), not implemented yet. The screenshots are mockups drawn over the current interface with the Northstar example, where the Paid orders node declares two `-- @message` blocks and three `-- @test` blocks.**
+**Status: accepted on 31 October 2026 (see [Decisions](#decisions)) and implemented, all four delivery steps.** The inspector keeps the node's definition with its one-line result summary, and the results panel shows the **Data**, **Columns**, **Tests** and **Log** tabs with custom samples, views shared in `views.json`, failing rows on demand, column statistics on request and per-output durations; see [Node results](../AUTHORING.md#node-results). The screenshots in this proposal are mockups drawn before the implementation over the Northstar example, where the Paid orders node declares two `-- @message` blocks and three `-- @test` blocks; the user guide shows the actual interface.
 
 ## Summary
 
