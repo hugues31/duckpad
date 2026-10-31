@@ -11,7 +11,7 @@ from typing import Any, cast
 
 import duckdb
 
-from .. import variables
+from .. import project_extensions, variables
 from ..bundle import files_to_bundle, topological
 from ..catalog import Catalog, redact
 from ..components import expand_for, in_subtree
@@ -158,7 +158,12 @@ class Runner:
             worktree, nodes, scope, environment, strict=bool(target)
         )
         fingerprints = self.fingerprints.of(bundle, environment, captured)
-        context = self.pool.get(worktree, environment, create=True)
+        context = self.pool.get(
+            worktree,
+            environment,
+            create=True,
+            requirements=project_extensions.enabled(bundle.get("extensions")),
+        )
         affected = reachable(scope, edges, upstream=False)
         self.exports.mark_stale(worktree, environment, affected - scope)
         with context.lock:
@@ -200,6 +205,7 @@ class Runner:
             "components": bundle["components"],
             "flow": bundle["flow"],
             "variable_declarations": bundle.get("variables"),
+            "extensions": bundle.get("extensions"),
         }
         return Execution(token, context, run, nodes, edges, order, captured, secrets, fingerprints)
 

@@ -52,11 +52,13 @@ ROUTE_ACCESS = {
         "GET /api/worktrees/{worktree}/preview/{node}",
         "GET /api/worktrees/{worktree}/generations/{identity}",
         "GET /api/worktrees/{worktree}/variables/scope",
+        "GET /api/worktrees/{worktree}/extensions",
         "POST /api/worktrees/{worktree}/lineage",
         "GET /api/runs/{run}",
     ],
     EDITOR: [
         "PUT /api/worktrees/{worktree}",
+        "POST /api/worktrees/{worktree}/extensions/check",
         "POST /api/worktrees/{worktree}/uploads",
         "POST /api/worktrees/{worktree}/git/open",
         "POST /api/worktrees/{worktree}/git/cleanup",

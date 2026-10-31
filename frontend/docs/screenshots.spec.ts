@@ -423,6 +423,45 @@ test("capture offline extension download and import settings", async ({
   await capture(page, "extensions", page.locator(".settings-layout"));
 });
 
+test("capture project extension activation and missing imports", async ({
+  page,
+}) => {
+  const response = await page.request.post("/api/projects", {
+    data: { name: "Project capabilities" },
+  });
+  expect(response.ok()).toBeTruthy();
+  const worktree = await response.json();
+  const url = `/api/worktrees/${worktree.id}`;
+  const snapshot = await (await page.request.get(url)).json();
+  snapshot.bundle.extensions = {
+    json: { source: "core", enabled: true },
+    duckfn_statrs: { source: "community", enabled: false },
+  };
+  expect(
+    (
+      await page.request.put(url, {
+        data: { revision: snapshot.revision, bundle: snapshot.bundle },
+      })
+    ).ok(),
+  ).toBeTruthy();
+  await page.goto(`/worktrees/${worktree.id}/extensions`);
+  await expect(
+    page
+      .getByRole("article", { name: "json", exact: true })
+      .getByRole("status"),
+  ).toHaveText("Active for this project");
+  await expect(
+    page
+      .getByRole("article", { name: "duckfn_statrs", exact: true })
+      .getByRole("status"),
+  ).toHaveText("Import required");
+  await capture(
+    page,
+    "project-extensions",
+    page.locator(".project-extensions-page"),
+  );
+});
+
 test("capture SSO configuration and the enabled sign-in choice", async ({
   page,
   browser,

@@ -12,6 +12,7 @@ Duckpad has a Python API process serving a compiled React application and isolat
 | `projects.py`, `bundle.py`, `archive.py`, `merge.py` | Git worktrees, revision capture, external-save batching and durable conflict proposals; declarative file layout and validation; bounded project ZIP export and import; three-way merge |
 | `git/` (`command.py`, `workspace.py`, `remote.py`, `credentials.py`, `identity.py`) | The only Git process runner: time-limited, without hooks or server Git configuration, logging Git output and returning readable errors; branches and reviewed merges; bounded fetch and leased push in an isolated Git and SSH environment; per-account SSH keys, trusted Git hosts and URL-bound consent; commit attribution of the current request |
 | `templates.py`, `builtin_templates.py`, `components.py`, `graph.py` | Typed SQL compilation, read/write contracts, built-in templates, recursive expansion, parameter exposure, independent imports, dependency and connection queries over expanded flows |
+| `extensions.py`, `project_extensions.py` | Instance binary imports and trust roots; portable extension requirements, local availability and loading checks |
 | `variables.py` | Project variables: `variables.json` validation, parameter binding and expression references per environment, usages, renames and comparison values |
 | `engine.py`, `execution/`, `datasets.py`, `materialize.py` | The engine facade over its services: run admission, immutable execution configuration, cancellation and output publication; the pool of DuckDB contexts and SQL workers; export results and their download copies; previews and compiled SQL; computation fingerprints and invalidation |
 | `lineage.py`, `trace/`, `sqlast.py` | Lineage requests and their cancellation; SQLGlot normalization and targeted provenance queries over materialized dependencies, built as SQLGlot expressions by one visitor per SQL construct |
@@ -34,7 +35,7 @@ The frontend in `frontend/src` mirrors this split: `api.ts` is the only HTTP cli
 
 An instance contains `instance.sqlite`, a private extension cache, `projects/`, separate `worktrees/`, uploads, example source files and `exports/<worktree>/<environment>/`. The database file is created with mode 0600 and the instance directory with mode 0700. Secrets are instance configuration; no project file contains resolved credentials. SQLite user records contain scrypt hashes and salts, never plaintext passwords. Sessions are stored by token hash, identify their owner and expire after seven days. A session also records the credential and revocation version; resetting a password or deactivating an account invalidates its sessions, including after reactivation. Account SSH private keys, trusted Git host keys and origin consents are records of the same database; deactivating an account deletes its key. Network Git copies a key to a 0600 file under `git-network/` only for the duration of one operation; copies left by a crash are removed at startup.
 
-Each project repository versions `flow.json`, `README.md`, `pyproject.toml`, `documentation.json`, `variables.json`, `templates/*.sql`, and `components/*.json`; `flow.json` and `documentation.json` are required. Project prose lives in `README.md`; node, output and column descriptions stay in `documentation.json`. The API combines them in `bundle.documentation` for UI editing and carries the manifest as raw `bundle.pyproject` text to preserve comments and custom settings. Older JSON project prose is read until a bundle save writes the new layout. Results, source data, virtual environments and export files are outside that versioned definition set. Connector definitions and environment settings have no configuration-version history. Historical project code always uses the current instance catalog when explicitly run.
+Each project repository versions `flow.json`, `README.md`, `pyproject.toml`, `documentation.json`, `variables.json`, `extensions.json`, `templates/*.sql`, and `components/*.json`; `flow.json` and `documentation.json` are required. Project prose lives in `README.md`; node, output and column descriptions stay in `documentation.json`. The API combines them in `bundle.documentation` for UI editing and carries the manifest as raw `bundle.pyproject` text to preserve comments and custom settings. Older JSON project prose is read until a bundle save writes the new layout. Results, source data, virtual environments and export files are outside that versioned definition set. Connector definitions and environment settings have no configuration-version history. Historical project code always uses the current instance catalog when explicitly run.
 
 ## Settings scopes
 
@@ -44,6 +45,7 @@ Settings follow the same instance, project and user boundaries as authorization:
 | --- | --- | --- |
 | Instance | **Instance settings** in the main navigation | User accounts and instance roles (member/admin), OIDC single sign-on, trusted Git hosts and origin prefixes, environment names, connections and connector definitions, and DuckDB extension imports and unsigned policy. Only instance administrators can configure these. |
 | Project | **Project settings** in the open project's toolbar | Participants and project roles (reader/editor/admin), authorized connections, and project deletion. Project administrators manage participants; only instance administrators grant access to instance connections. Readers and editors can inspect their project's access without changing it. |
+| Project definition | **Variables** and **Extensions** in the working branch | Versioned values and extension requirements; editors change them and readers inspect them. Extension installation and trust remain instance settings. |
 | User | **Account menu → User settings** | Language, theme, the signed-in account's password and its SSH key for Git. SSO accounts manage their password with the identity provider. |
 
 Instance configuration applies across projects. Selecting a branch or run
@@ -70,7 +72,7 @@ active states, and opening in another tab. Titles and focus follow page changes.
 | `/instance-settings/:section` | `users`, `sso`, `environments`, `connections` or `extensions` |
 | `/user-settings` | Preferences and password for the signed-in account |
 | `/projects/:projectId/settings` | Project settings with role-specific controls |
-| `/worktrees/:worktreeId/:tab` | Pipeline workspace: `flow`, `code`, `documentation` or `history` |
+| `/worktrees/:worktreeId/:tab` | Pipeline workspace: `flow`, `code`, `documentation`, `variables`, `extensions` or `history` |
 
 After authentication, `/` redirects to `/projects`, except when completing a
 validated SSO return. There is no worktree restoration from local storage. Unknown paths, sections, and tabs show a not-found
@@ -192,7 +194,7 @@ credentials. The server account's SSH keys, agent and Git credentials are never
 used. See [Git synchronization](GIT.md#network-credentials).
 
 SQL runs in a separate process per worktree/environment. The worker receives only
-the project's authorized connection configuration and communicates through a
+the project's authorized connection configuration and enabled extension requirements, and communicates through a
 JSON-only protocol. It does not inherit the API's environment credentials or
 SQLite descriptors. Before DuckDB creates threads, Linux Landlock restricts file
 access to project resources/exports, explicit administrator-authorized local roots,
@@ -206,7 +208,10 @@ This default mode requires Landlock ABI 2+ on Linux x86-64 or arm64, including
 inside containers. A missing or blocked sandbox causes an explicit execution
 error; there is no automatic unrestricted fallback. Workers use two DuckDB
 threads and a 512 MB memory limit.
-Connection extensions remain trusted administrator-installed code. Approved remote
+Project and connection extensions remain trusted administrator-installed code. Project
+requirements load before configuration is locked, using local binaries from the declared
+origin. They never install on demand. A changed requirement recreates the session at
+the next execution and participates in result fingerprints. Approved remote
 connections carry the privileges of their configured service credentials; operators
 must scope those credentials and any network egress policy accordingly. This does
 not provide tenant resource quotas or a complete hostile-code hosting boundary.

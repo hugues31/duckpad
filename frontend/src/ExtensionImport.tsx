@@ -1,11 +1,16 @@
 import { useState } from "react";
+import { useSearchParams } from "react-router";
+import {
+  extensionDownload,
+  extensionSourceKey,
+  type ExtensionSource as Source,
+} from "./extensions";
 import { importExtension } from "./api";
 import { useT } from "./i18n";
 import { useApiResource } from "./useApiResource";
 import { useAsyncAction } from "./useAsyncAction";
 import Select from "./Select";
 
-type Source = "core" | "community" | "unsigned";
 type Runtime = {
   version: string;
   platform: string;
@@ -19,29 +24,20 @@ export default function ExtensionImport() {
     error: loadError,
     setData: setRuntime,
   } = useApiResource<Runtime>("/extensions/runtime");
-  const [source, setSource] = useState<Source>("core");
-  const [name, setName] = useState("");
+  const [search] = useSearchParams();
+  const initialSource = search.get("source");
+  const [source, setSource] = useState<Source>(
+    initialSource === "community" || initialSource === "unsigned"
+      ? initialSource
+      : "core",
+  );
+  const [name, setName] = useState(search.get("name") || "");
   const [file, setFile] = useState<File | null>(null);
   const [saved, setSaved] = useState(false);
   const { pending, run, ...save } = useAsyncAction();
   const error = save.error || loadError;
-  const validName = /^[a-z][a-z0-9_]{0,63}$/.test(name);
-  const host =
-    source === "community"
-      ? "community-extensions.duckdb.org"
-      : "extensions.duckdb.org";
-  const download =
-    runtime && validName && source !== "unsigned"
-      ? `https://${host}/${runtime.version}/${runtime.platform}/${name}.duckdb_extension.gz`
-      : null;
-  const sourceLabel = (value: Source) =>
-    t(
-      value === "core"
-        ? "extensionCore"
-        : value === "community"
-          ? "extensionCommunity"
-          : "extensionUnsigned",
-    );
+  const download = runtime ? extensionDownload(runtime, name, source) : null;
+  const sourceLabel = (value: Source) => t(extensionSourceKey(value));
   return (
     <div>
       <h3>{t("extensionDownloadStep")}</h3>

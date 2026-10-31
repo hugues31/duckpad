@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 
-from .. import variables
+from .. import project_extensions, variables
 from ..bundle import topological
 from ..catalog import Catalog
 from ..components import expand_for
@@ -51,6 +51,7 @@ class Fingerprints:
                     "error": node.get("error"),
                     "params": params,
                     "connections": connections,
+                    "extensions": project_extensions.enabled(bundle.get("extensions")),
                     "inputs": [
                         (
                             e["targetHandle"],

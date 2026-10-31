@@ -46,7 +46,8 @@ Wrong-platform, wrong-version, malformed, oversized and invalid-signature files
 are rejected before replacing an existing import. An active execution returns
 HTTP 409. After validation, Duckpad closes existing databases and registers the
 new import outside project Git. No network download or native `LOAD` is part of
-importing: test the actual connection/pipeline afterward to verify execution,
+importing: activate it from a project's **Extensions** tab or test the actual
+connection/pipeline afterward to verify execution,
 CPU support, system libraries and credentials.
 
 Imports persist across restarts and apply to both embedded and isolated execution.
@@ -77,7 +78,37 @@ read-only access to the cache and a locked configuration. Connections without an
 import still use Duckpad's existing repository-install fallback; enforce any
 instance-wide egress restrictions outside Duckpad.
 
+Project editors can activate only a local binary matching the declared source.
+The project-scoped `GET /api/worktrees/{id}/extensions` endpoint reports
+availability without loading native code. Editors can use
+`POST /api/worktrees/{id}/extensions/check` with a `name` and `source` to check
+loading in a disposable process. Requirements are saved through the normal
+versioned project save, so the same authorization and conflict handling apply.
+Missing or incompatible requirements stop execution with import guidance; there
+is no automatic installation fallback for project activations. Disabled unsigned
+policy continues to block unsigned project requirements.
+
 ## Reproduce the offline verification
+
+For project activation, download `duckfn_statrs.duckdb_extension.gz` from the
+community repository for the server runtime, then run:
+
+```sh
+unshare --user --map-root-user --net \
+  .venv/bin/python scripts/verify_project_extensions.py \
+  downloads/duckfn_statrs.duckdb_extension.gz --output project-extensions.json
+```
+
+This check verifies normal CDF, density and quantile results without a connection,
+restarts, execution through the scheduler entry point, isolation between projects,
+deactivation, connector regression and sharing to an instance without the binary.
+It runs in both embedded and isolated modes, with only a loopback interface and
+an uncached repository installation as a failing network control.
+
+Set `DUCKPAD_TEST_STATRS_BINARY` to the absolute path of that binary when running
+the Playwright `project-extensions.spec.ts` scenario to also exercise the real
+browser import, project activation and SQL result. Without it, the suite runs the
+portable built-in and missing-extension UI checks and skips the binary integration.
 
 Download H3 and httpfs for the Linux test runtime, plus H3 for Windows as a negative
 test. After repository setup, run on Linux with user/network namespaces and Landlock:

@@ -12,6 +12,7 @@ import {
   Square,
   Settings2,
   Variable,
+  Puzzle,
   Workflow,
   type LucideIcon,
 } from "lucide-react";
@@ -31,6 +32,7 @@ const TAB_ICONS: Record<WorkspaceTab, LucideIcon> = {
   code: FileCode2,
   documentation: BookOpen,
   variables: Variable,
+  extensions: Puzzle,
   history: Activity,
 };
 
