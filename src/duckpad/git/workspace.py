@@ -26,9 +26,15 @@ def diagnose(files):
         return None, [{"file": "flow.json", "message": str(error)}]
 
 
-def require_valid(files, message):
-    """Reject project files that cannot be adopted, with their validation errors."""
+def require_valid(files, message, baseline=None):
+    """Reject project files that cannot be adopted, with their validation errors.
+
+    With `baseline`, only the errors that its files do not already have are rejected.
+    """
     _, errors = diagnose(files)
+    if errors and baseline is not None:
+        known = diagnose(baseline)[1]
+        errors = [error for error in errors if error not in known]
     if errors:
         raise Problem(message, 422, errors)
 
@@ -80,7 +86,13 @@ class GitWorkspace:
                 strict=True,
             )
         )
-        return {**value, "parents": value["parents"].split(), "ref": commit, "name": name or commit[:8]}
+        return {
+            **value,
+            "parents": value["parents"].split(),
+            "assistant": value["assistant"].strip(),
+            "ref": commit,
+            "name": name or commit[:8],
+        }
 
     def revision(self, worktree, ref):
         path = worktree["path"]

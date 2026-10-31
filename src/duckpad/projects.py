@@ -440,7 +440,8 @@ class Projects:
                 self.store.put("conflict", conflict["id"], conflict)
                 raise Problem("Concurrent edits conflict. Both versions have been retained.", 409, conflict)
             if validate:
-                require_valid(merged, "The proposed changes are invalid")
+                # Problems already saved, such as an input not connected yet, do not block the change.
+                require_valid(merged, "The proposed changes are invalid", baseline=current)
             # Finalize the independent external save unit before the UI action.
             if self.git(worktree["path"], "status", "--porcelain"):
                 self.commit(worktree["path"], EXTERNAL_SAVE)

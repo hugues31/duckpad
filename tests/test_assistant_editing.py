@@ -135,7 +135,7 @@ def test_each_write_is_one_attributed_commit_and_can_be_undone(instance, name, a
     metadata = projects.git(worktree["path"], "show", "-s", "--format=%an%n%ae%n%B", action["commit"])
     assert metadata.startswith(author["name"] + "\n" + author["email"] + "\n")
     assert f"Duckpad-Assistant: {identity}" in metadata
-    assert projects.versioning.history(worktree["id"])["items"][0]["assistant"].strip() == identity
+    assert projects.versioning.history(worktree["id"])["items"][0]["assistant"] == identity
     # The API receipt is durable, not merely an event from the response stream.
     resumed = client.get(f"/api/assistant/conversations/{identity}").json()["turns"][0]
     assert resumed["tools"][0]["action"] == action
@@ -315,6 +315,32 @@ def test_forward_conflict_and_invalid_bundle_never_overwrite(instance):
     )
     assert invalid["tools"][0]["status"] == "error"
     assert "diagnostics" in invalid["tools"][0]["summary"]
+    assert projects.snapshot(worktree["id"])["commit"] == before
+
+
+def test_saved_problems_block_neither_unrelated_edits_nor_undo(instance):
+    app, client = instance
+    worktree, context = seed(app, client)
+    # The canvas saves an added node before its input is connected.
+    change(app, worktree, lambda b: b["flow"]["nodes"].append({"id": "pending", "template": "filter"}))
+    identity, result = write_turn(
+        app, client, context, [("write_sql", {"node": "first", "sql": SQL.replace("1", "2")})]
+    )
+    assert result["tools"][0]["action"]["commit"], result
+    undo(client, identity, result, context)
+    projects = app.state.services.projects
+    assert projects.snapshot(worktree["id"])["files"]["nodes/first.sql"] == SQL
+    before = projects.snapshot(worktree["id"])["commit"]
+    _, invalid = write_turn(
+        app,
+        client,
+        context,
+        [("edit_flow", {"nodes": [{"operation": "add", "id": "other", "template": "filter"}]})],
+    )
+    # Only the problem the edit introduces is reported, and it is still rejected.
+    assert json.loads(invalid["tools"][0]["summary"])["diagnostics"] == [
+        {"file": "flow.json", "node": "other", "message": "Connect input 'source' on other"}
+    ]
     assert projects.snapshot(worktree["id"])["commit"] == before
 
 
