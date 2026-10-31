@@ -31,7 +31,9 @@ import {
   Check,
   AlertCircle,
   Loader2,
-  Circle,
+  Clock3,
+  Ban,
+  Square,
   Sparkles,
   Maximize,
   Workflow,
@@ -67,9 +69,10 @@ function StatusIcon({ status, ...props }: LucideProps & { status: string }) {
   if (status === "valid" || status === "success") return <Check {...props} />;
   if (status === "running" || status === "preparing")
     return <Loader2 {...props} />;
-  if (status === "stale" || status === "failed" || status === "blocked")
-    return <AlertCircle {...props} />;
-  return <Circle {...props} />;
+  if (status === "stale") return <Clock3 {...props} />;
+  if (status === "blocked") return <Ban {...props} />;
+  if (status === "failed") return <AlertCircle {...props} />;
+  return <Square {...props} />;
 }
 
 /** What the canvas shows of a node. */
@@ -79,10 +82,17 @@ type PipelineData = {
   inputs: string[];
   outputs: string[];
   /** The run or result state shown on the node, if any. */
-  status: string;
+  status:
+    | ""
+    | "valid"
+    | "success"
+    | "stale"
+    | "failed"
+    | "blocked"
+    | "canceled"
+    | "running";
   /** The template ID, or "component". */
   icon: string;
-  subtitle?: string;
   linked?: string;
 };
 type PipelineNode = Node<PipelineData, "pipeline">;
@@ -102,20 +112,10 @@ function PipelineNode({ data, selected }: NodeProps<PipelineNode>) {
     >
       <div className="node-shape">
         <NodeIcon kind={data.icon} size={27} strokeWidth={1.6} />
-        {data.status && (
-          <span className={`node-status ${data.status}`}>
-            <StatusIcon
-              status={data.status}
-              size={12}
-              className={data.status === "running" ? "spin" : ""}
-            />
-          </span>
-        )}
       </div>
       <div className="node-title" title={data.label}>
         {data.label}
       </div>
-      <div className="node-subtitle">{data.subtitle || t(data.kind)}</div>
       {data.linked && (
         <div
           className="node-link-badge"
@@ -125,6 +125,19 @@ function PipelineNode({ data, selected }: NodeProps<PipelineNode>) {
           {data.linked}
         </div>
       )}
+      <div className="node-status-slot">
+        {data.status && (
+          <span className={`node-status ${data.status}`} title={t(data.status)}>
+            <StatusIcon
+              status={data.status}
+              size={13}
+              className={data.status === "running" ? "spin" : ""}
+              aria-hidden="true"
+            />
+            <span>{t(data.status)}</span>
+          </span>
+        )}
+      </div>
       {data.inputs.map((port: string, i: number) => (
         <Handle
           key={"in" + port}
@@ -261,7 +274,7 @@ function CanvasInner(props: CanvasProps) {
   );
   const displayNodes = useMemo(
     () =>
-      props.nodes.map((node) => {
+      props.nodes.map((node): PipelineNode => {
         const signature = nodeInterface(
           node,
           props.parsed,
@@ -335,12 +348,6 @@ function CanvasInner(props: CanvasProps) {
                   t,
                 )
               : undefined,
-            subtitle:
-              node.component || outputs.length > 1
-                ? `${outputs.length} ${t("outputs")}`
-                : Object.values(result?.outputs || {}).length === 1
-                  ? `${Object.values(result!.outputs)[0].count.toLocaleString()} ${t("rows")}`
-                  : undefined,
           },
         };
       }),

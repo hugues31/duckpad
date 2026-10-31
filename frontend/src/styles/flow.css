@@ -566,41 +566,49 @@ fieldset.palette-bottom {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.node-subtitle {
-  font-size: 11px;
-  color: var(--muted);
-  margin-top: 4px;
+.node-status-slot {
+  display: flex;
+  justify-content: center;
+  min-height: 24px;
+  max-width: 100%;
+  margin-top: 7px;
 }
 .node-status {
-  position: absolute;
-  bottom: -5px;
-  right: 0;
-  width: 21px;
-  height: 21px;
-  border-radius: 50%;
-  background: var(--surface);
-  border: 2px solid var(--bg);
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: var(--muted);
+  gap: 5px;
+  max-width: 100%;
+  padding: 3px 8px;
+  border-radius: 6px;
+  border: 1px solid color-mix(in srgb, currentColor 23%, var(--surface));
+  background: color-mix(in srgb, currentColor 9%, var(--surface));
+  color: light-dark(#5c6170, #c2c5ce);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 16px;
+  white-space: nowrap;
+}
+.node-status svg {
+  flex-shrink: 0;
+}
+.node-status > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .node-status.valid,
 .node-status.success {
-  background: var(--accent);
-  color: white;
+  color: light-dark(#187044, #7edba5);
 }
 .node-status.stale {
-  background: #e1b45e;
-  color: white;
+  color: light-dark(#885600, #f4cf7b);
 }
-.node-status.failed {
-  background: #d07a70;
-  color: white;
+.node-status.failed,
+.node-status.blocked {
+  color: light-dark(#b43b43, #ff9aa3);
 }
 .node-status.running {
-  background: #718fbd;
-  color: white;
+  color: var(--accent);
 }
 .react-flow__handle {
   width: 16px;
@@ -652,6 +660,7 @@ fieldset.palette-bottom {
   }
 }
 @media (prefers-reduced-motion: reduce) {
+  .node-status .spin,
   .react-flow__edge.animated .react-flow__edge-path {
     animation: none !important;
   }
@@ -756,6 +765,8 @@ fieldset.palette-bottom {
   justify-content: center;
   align-items: center;
   gap: 3px;
+  margin-top: 4px;
+  color: var(--muted);
   font-size: 10px;
   max-width: 160px;
   overflow: hidden;
