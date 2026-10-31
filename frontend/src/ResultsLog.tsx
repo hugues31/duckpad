@@ -120,7 +120,7 @@ export default function ResultsLog({
             const count =
               run.nodes[input.node]?.outputs?.[input.port]?.count ??
               statuses.nodes[input.node]?.outputs?.[input.port]?.count;
-            return `${input.input} ← ${input.label}${count !== undefined ? ` · ${count.toLocaleString()} ${t("rows")}` : ""}`;
+            return `${input.input} ← ${input.label}${count !== undefined ? ` · ${count.toLocaleString()} ${t(count === 1 ? "row" : "rows")}` : ""}`;
           })
           .join(", ")
       : undefined,
@@ -135,7 +135,7 @@ export default function ResultsLog({
           {t("logComputedOutput")} <code>{port}</code>
         </>
       ),
-      detail: `${output.count.toLocaleString()} ${t("rows")} · ${output.columns.length} ${t("columns")}`,
+      detail: `${output.count.toLocaleString()} ${t(output.count === 1 ? "row" : "rows")} · ${output.columns.length} ${t("columns")}`,
       aside:
         typeof output.duration === "number"
           ? seconds(output.duration)
