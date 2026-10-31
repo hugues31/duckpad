@@ -261,6 +261,7 @@ class GitWorkspace:
             return next(tag for tag in self.tags(worktree_id) if tag["name"] == name)
 
     def clean(self, worktree):
+        self.projects.writable(worktree)
         if (
             self.git(worktree["path"], "symbolic-ref", "-q", "HEAD", check=False)
             != "refs/heads/" + worktree["branch"]

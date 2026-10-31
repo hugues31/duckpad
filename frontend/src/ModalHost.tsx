@@ -188,7 +188,7 @@ function WorktreeDialog({
       return (
         <GitWorkspace
           worktree={modal.worktree}
-          role={snapshot.role}
+          role={snapshot.worktree.read_only ? "reader" : snapshot.role}
           mode={modal.mode}
           commit={modal.commit}
           entity={modal.entity}

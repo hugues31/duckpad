@@ -73,6 +73,12 @@ export function FlowToolbar({ tab }: { tab: WorkspaceTab }) {
       <div className="row gap">
         <Link
           className="button secondary small"
+          to={`/projects/${snapshot.worktree.project}/jobs`}
+        >
+          {t("jobs")}
+        </Link>
+        <Link
+          className="button secondary small"
           to={projectSettingsUrl(snapshot.worktree.project)}
         >
           <Settings2 size={14} />
@@ -142,16 +148,33 @@ export function WorkspaceNotices({
   const completed = nodes.filter((n) => n.status === "success").length;
   return (
     <>
-      {snapshot.role === "reader" && (
+      {(snapshot.worktree.read_only ||
+        snapshot.role === "reader" ||
+        snapshot.role === "operator") && (
         <div className="banner">
-          <span>{t("readerNotice")}</span>
+          <span>
+            {t(
+              snapshot.worktree.read_only
+                ? "jobReadOnly"
+                : snapshot.role === "operator"
+                  ? "operatorNotice"
+                  : "readerNotice",
+            )}
+          </span>
         </div>
       )}
       {!!snapshot.conflicts.length && (
         <div className="banner warning">
           <AlertCircle size={16} />
           <span>{t("conflictHint")}</span>
-          <button disabled={snapshot.role === "reader"} onClick={onResolve}>
+          <button
+            disabled={
+              snapshot.worktree.read_only ||
+              snapshot.role === "reader" ||
+              snapshot.role === "operator"
+            }
+            onClick={onResolve}
+          >
             {t("resolve")}
             <ArrowRight size={14} />
           </button>
@@ -198,4 +221,8 @@ export const noticeCount = (snapshot: Snapshot, active: Run | null) =>
   Number(!!snapshot.conflicts.length) +
   Number(!!snapshot.diagnostics.length) +
   Number(!!active) +
-  Number(snapshot.role === "reader");
+  Number(
+    snapshot.worktree.read_only ||
+      snapshot.role === "reader" ||
+      snapshot.role === "operator",
+  );

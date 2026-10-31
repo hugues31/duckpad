@@ -45,7 +45,7 @@ Settings follow the same instance, project and user boundaries as authorization:
 | Scope | Entry point | Settings and permissions |
 | --- | --- | --- |
 | Instance | **Instance settings** in the main navigation | User accounts and instance roles (member/admin), OIDC single sign-on, AI assistant providers/models and data policy, trusted Git hosts and origin prefixes, environment names, connections and connector definitions, and DuckDB extension imports and unsigned policy. Only instance administrators can configure these. |
-| Project | **Project settings** in the open project's toolbar | Participants and project roles (reader/editor/admin), authorized connections, and project deletion. Project administrators manage participants; only instance administrators grant access to instance connections. Readers and editors can inspect their project's access without changing it. |
+| Project | **Project settings** in the open project's toolbar | Participants and project roles (reader/operator/editor/admin), authorized connections, and project deletion. Project administrators manage participants; only instance administrators grant access to instance connections. Readers, operators and editors can inspect their project's access without changing it. |
 | Project definition | **Variables** and **Extensions** in the working branch | Versioned values and extension requirements; editors change them and readers inspect them. Extension installation and trust remain instance settings. |
 | User | **Account menu → User settings** | Language, theme, the signed-in account's password and its SSH key for Git. SSO accounts manage their password with the identity provider. |
 
@@ -72,6 +72,7 @@ active states, and opening in another tab. Titles and focus follow page changes.
 | `/instance-settings` | Instance general settings, for instance administrators |
 | `/instance-settings/:section` | `users`, `sso`, `assistant`, `git-hosts`, `environments`, `connections` or `extensions` |
 | `/user-settings` | Preferences and password for the signed-in account |
+| `/projects/:projectId/jobs` | Jobs, version comparison, execution controls and result access |
 | `/projects/:projectId/settings` | Project settings with role-specific controls |
 | `/worktrees/:worktreeId/:tab` | Pipeline workspace: `flow`, `code`, `documentation`, `variables`, `extensions` or `history` |
 
@@ -204,6 +205,21 @@ The server rechecks the account, instance role and project membership on every
 request. Invisible projects and their worktrees, runs and conflicts return 404.
 Readers may inspect existing results and lineage, but cannot launch computation,
 change files, create branches, import definitions, cancel runs or upload files.
+Operators add permission to launch, cancel and rerun Jobs, while ad hoc execution
+and editing require Editor access. Job administration requires Project Admin.
+The `job` table stores stable instance-wide slugs, target references, tag commits,
+environments, scopes and an append-only version audit. Jobs are outside project Git.
+Internal Git refs retain promoted and executed commits against tag movement and
+garbage collection; they are neither branches nor published remote refs.
+Each Job owns a detached `read_only` worktree. The file watcher skips it; route
+permissions reject all writes even by instance admins, and execution never commits
+or prunes its documentation. Under the repository lock, a launch checks admission,
+resolves a branch or uses the pinned tag commit, checks out that commit, then calls
+the existing Runner. Separate Job worktrees can execute concurrently. A busy Job
+returns 409 with its active run ID. Run snapshots retain the Job, tag, commit and
+requester. Deletion retains the worktree record so cascading foreign keys cannot
+erase run history or artifacts; project deletion still removes them.
+
 Imports also require read access to their source project. Workspace, library and
 execution lists filter private resources before returning them. Last-admin checks
 and membership/account writes share a lock, including concurrent demotions.

@@ -7,7 +7,7 @@ from .auth import Auth
 from .git.credentials import KEY_KIND
 from .util import Problem
 
-LEVELS = {"reader": 1, "editor": 2, "admin": 3}
+LEVELS = {"reader": 1, "operator": 2, "editor": 3, "admin": 4}
 
 
 class Access:
@@ -38,6 +38,8 @@ class Access:
         if not record:
             raise Problem("Worktree not found", 404)
         self.require(user, record["project"], role)
+        if record.get("read_only") and LEVELS[role] >= LEVELS["editor"]:
+            raise Problem("Job results are read-only", 403)
         return record["project"]
 
     @staticmethod
@@ -117,8 +119,8 @@ class Access:
             user = self.store.get("user", identity)
             if role is not None and (not user or not user["active"]):
                 raise Problem("Choose an active user")
-            if role is not None and user.get("service") and role != "reader":
-                raise Problem("Service accounts can only be project Readers", 403)
+            if role is not None and user.get("service") and role not in ("reader", "operator"):
+                raise Problem("Service accounts can only be project Readers or Operators", 403)
             record = self.record(project)
             if role is None:
                 record["members"].pop(identity, None)

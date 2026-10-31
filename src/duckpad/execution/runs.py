@@ -117,13 +117,18 @@ class Runner:
         entry_point: str = "api",
         *,
         requester: Record | None = None,
+        job: Record | None = None,
     ) -> Record:
-        self.projects.get(worktree)
+        record = self.projects.get(worktree)
+        if record.get("read_only") and job is None:
+            raise Problem("Launch this worktree from its Job", 403)
         token: RunToken = {"id": uid("run_"), "cancel": threading.Event(), "cursor": None}
         self._admit(worktree, environment, token)
         try:
             execution = self._prepare(token, worktree, environment, target, entry_point)
             execution.run["requester"] = copy.deepcopy(requester)
+            if job is not None:
+                execution.run.update(trigger="job", job=copy.deepcopy(job), tag=job.get("tag"))
             self._persist(execution.run, execution.secrets)
             thread = threading.Thread(target=self._execute, args=(execution,), name=token["id"], daemon=True)
             with self.lock:
