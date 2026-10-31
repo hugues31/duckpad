@@ -11,7 +11,7 @@ import {
   X,
 } from "lucide-react";
 import { WarningBadge, warningCount } from "./ExecutionMessages";
-import type { NodeInterface } from "./graph";
+import { outputSource, type NodeInterface } from "./graph";
 import { useT } from "./i18n";
 import type { Cell } from "./lineageGraph";
 import ResultsColumns from "./ResultsColumns";
@@ -57,6 +57,14 @@ export type SaveProject = (
 export const clock = (value: string) => new Date(value).toLocaleTimeString();
 export const seconds = (value: number) =>
   value < 10 ? `${value.toFixed(1)} s` : `${Math.round(value)} s`;
+
+/** Whether the active run is computing a node, or a node inside a component instance. */
+export const computing = (statuses: Statuses, fullNode: string) =>
+  Object.entries(statuses.active?.nodes || {}).some(
+    ([id, state]) =>
+      (id === fullNode || id.startsWith(fullNode + "::")) &&
+      ["pending", "running"].includes(state.status),
+  );
 
 /**
  * What a node produced in the environment selected in the top bar: its rows,
@@ -138,18 +146,29 @@ export default function ResultsPanel({
     setShownSample({ ...shownSample, environment });
     setFailing(null);
   }
-  const result = statuses.nodes[fullNode];
-  const targetResult = statuses.nodes[target.node];
-  const dataset = targetResult?.outputs?.[target.port];
-  const running =
-    !!statuses.active?.nodes?.[fullNode] &&
-    ["pending", "running"].includes(statuses.active.nodes[fullNode].status);
+  // A component instance stores no rows: its outputs are those of nodes inside it.
+  const stored = (item: { node: string; port: string }) =>
+    snapshot.bundle
+      ? outputSource(snapshot.bundle, item.node, item.port)
+      : item;
+  const datasetOf = (item: { node: string; port: string }) => {
+    const source = stored(item);
+    return statuses.nodes[source.node]?.outputs?.[source.port];
+  };
+  // The node whose run the panel tells: this node, or the one computing the shown output.
+  const producer = stored({
+    node: fullNode,
+    port: target.input ? ports[0] || "result" : target.port,
+  }).node;
+  const result = statuses.nodes[producer];
+  const dataset = datasetOf(target);
+  const running = computing(statuses, fullNode);
   // The run that produced the displayed rows, for the header.
   const generation = useApiResource<Run>(
     dataset ? `/runs/${encodeURIComponent(dataset.run)}` : null,
   );
   const run = generation.data?.id === dataset?.run ? generation.data : null;
-  const state = run?.nodes?.[target.node];
+  const state = run?.nodes?.[stored(target).node];
   const inputs = graphEdges
     .filter((edge) => edge.target === node.id)
     .map((edge) => {
@@ -173,7 +192,7 @@ export default function ResultsPanel({
   const showDataset = (next: ResultsTarget) => {
     setFailing(null);
     setTarget(next);
-    const columns = statuses.nodes[next.node]?.outputs?.[next.port]?.columns;
+    const columns = datasetOf(next)?.columns;
     if (
       !columns ||
       !sampleFits(
@@ -199,11 +218,11 @@ export default function ResultsPanel({
               target={target}
               ports={ports.map((port) => ({
                 port,
-                count: result?.outputs?.[port]?.count,
+                count: datasetOf({ node: fullNode, port })?.count,
               }))}
               inputs={inputs.map((input) => ({
                 ...input,
-                count: statuses.nodes[input.node]?.outputs?.[input.port]?.count,
+                count: datasetOf(input)?.count,
               }))}
               fullNode={fullNode}
               onSelect={showDataset}
@@ -370,13 +389,13 @@ export default function ResultsPanel({
         <ResultsLog
           snapshot={snapshot}
           environment={environment}
-          fullNode={fullNode}
+          fullNode={producer}
           exportNode={exportNode}
           download={
             signature.kind !== "component" && !!signature.definition?.download
           }
           result={result}
-          inputs={inputs}
+          inputs={inputs.map((input) => ({ ...input, ...stored(input) }))}
           statuses={statuses}
           onTests={() => onTab("tests")}
         />

@@ -6,6 +6,7 @@ import {
   identifier,
   nodeChoices,
   nodeInterface,
+  outputSource,
   pathPrefix,
   type PathPart,
 } from "./graph";
@@ -136,6 +137,62 @@ describe("component paths", () => {
   it("prefixes expanded node IDs with every opened instance", () => {
     expect(pathPrefix(path.slice(0, 1))).toBe("first::");
     expect(pathPrefix(path)).toBe("first::nested::");
+  });
+});
+
+describe("outputSource", () => {
+  const inner: ComponentDefinition = {
+    nodes: [node("rank")],
+    edges: [],
+    outputs: { ranked: { node: "rank", port: "result" } },
+  };
+  const outer: ComponentDefinition = {
+    nodes: [node("nested", { component: "inner" }), node("total")],
+    edges: [],
+    outputs: {
+      report: { node: "nested", port: "ranked" },
+      summary: { node: "total", port: "result" },
+    },
+  };
+  const bundle: Bundle = {
+    flow: {
+      id: "flow",
+      name: "Flow",
+      nodes: [node("orders"), node("first", { component: "outer" })],
+      edges: [],
+    },
+    templates: {},
+    components: { outer, inner },
+    documentation: {},
+  };
+
+  it("keeps the output of a template node", () => {
+    expect(outputSource(bundle, "orders", "result")).toEqual({
+      node: "orders",
+      port: "result",
+    });
+  });
+
+  it("follows exposed outputs through nested component instances", () => {
+    expect(outputSource(bundle, "first", "report")).toEqual({
+      node: "first::nested::rank",
+      port: "result",
+    });
+    expect(outputSource(bundle, "first", "summary")).toEqual({
+      node: "first::total",
+      port: "result",
+    });
+    expect(outputSource(bundle, "first::nested", "ranked")).toEqual({
+      node: "first::nested::rank",
+      port: "result",
+    });
+  });
+
+  it("keeps an output that the component does not expose", () => {
+    expect(outputSource(bundle, "first", "missing")).toEqual({
+      node: "first",
+      port: "missing",
+    });
   });
 });
 

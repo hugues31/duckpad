@@ -299,4 +299,14 @@ test("the result summary opens the matching tab of the results panel", async ({
   await expect(results).toBeHidden();
   await summary.getByRole("button", { name: "Results", exact: true }).click();
   await expect(results).toBeVisible();
+
+  // A component instance shows the results of the nodes computing its outputs.
+  await page
+    .locator(".react-flow__node")
+    .filter({ has: page.getByText("Regional revenue", { exact: true }) })
+    .click();
+  await expect(summary.locator(".badge")).toHaveText("Valid");
+  await expect(results.locator(".results-header .badge")).toHaveText("Valid");
+  await summary.getByRole("button", { name: /^Run at / }).click();
+  await expect(results.locator(".log-timeline")).toContainText("Published");
 });

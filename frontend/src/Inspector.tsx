@@ -266,8 +266,9 @@ export default function Inspector({
       </div>
       {(signature.outputs.length > 0 || kind === "export") && (
         <ResultSummary
+          bundle={snapshot.bundle}
           fullNode={fullNode}
-          outputs={signature.outputs.length}
+          ports={signature.outputs}
           exportNode={kind === "export"}
           statuses={statuses}
           onOpen={onResults}

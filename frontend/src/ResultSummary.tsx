@@ -1,8 +1,9 @@
 import { AlertTriangle, ChevronRight, Clock, Loader2 } from "lucide-react";
 import { warningCount } from "./ExecutionMessages";
+import { outputSource } from "./graph";
 import { useT, type TranslationKey } from "./i18n";
-import { clock, TAB_LABELS, type ResultsTab } from "./ResultsPanel";
-import type { Statuses } from "./types";
+import { clock, computing, TAB_LABELS, type ResultsTab } from "./ResultsPanel";
+import type { Dataset, Snapshot, Statuses } from "./types";
 
 /**
  * One line on what the node produced in the selected environment, under the
@@ -10,25 +11,33 @@ import type { Statuses } from "./types";
  * opens its matching tab.
  */
 export default function ResultSummary({
+  bundle,
   fullNode,
-  outputs,
+  ports,
   exportNode,
   statuses,
   onOpen,
 }: {
+  bundle: Snapshot["bundle"];
   fullNode: string;
-  /** The number of output ports the node declares. */
-  outputs: number;
+  /** The output ports the node declares. */
+  ports: string[];
   exportNode: boolean;
   statuses: Statuses;
   onOpen: (tab: ResultsTab) => void;
 }) {
   const t = useT();
-  const result = statuses.nodes[fullNode];
-  const datasets = Object.values(result?.outputs || {});
-  const running =
-    !!statuses.active?.nodes?.[fullNode] &&
-    ["pending", "running"].includes(statuses.active.nodes[fullNode].status);
+  // A component instance stores no rows: its outputs are those of nodes inside it.
+  const sources = ports.map((port) =>
+    bundle ? outputSource(bundle, fullNode, port) : { node: fullNode, port },
+  );
+  const datasets = sources.flatMap((source): Dataset[] => {
+    const dataset = statuses.nodes[source.node]?.outputs?.[source.port];
+    return dataset ? [dataset] : [];
+  });
+  // As in the results panel, which opens on the first output.
+  const result = statuses.nodes[sources[0]?.node ?? fullNode];
+  const running = computing(statuses, fullNode);
   const status = datasets.length
     ? datasets.every((dataset) => dataset.status === "valid")
       ? "valid"
@@ -70,13 +79,13 @@ export default function ResultSummary({
           </button>
         )
       )}
-      {!exportNode && outputs > 0 && (
+      {!exportNode && ports.length > 0 && (
         <button
           className="summary-link"
           title={tabTitle("data")}
           onClick={() => onOpen("data")}
         >
-          {count(outputs, "summaryOutput", "summaryOutputs")}
+          {count(ports.length, "summaryOutput", "summaryOutputs")}
         </button>
       )}
       {!status && !running && !result?.error && (
