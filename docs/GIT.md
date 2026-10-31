@@ -24,12 +24,40 @@ pending external edits finalized before a save or run use
 `Duckpad external changes <external@duckpad.invalid>`, rather than attributing
 them to whichever account happened to make the next request.
 
+## Tags
+
+Tags mark the exact version that passed acceptance testing. Editors and project
+admins can select **Create tag** beside any commit in **History → Git history**;
+use **Load more** to reach older commits. In an execution's details, **Tag this
+run's commit** selects the commit recorded by that run, even if the branch has
+changed since it ran. Creating a tag does not save working files or start a run.
+
+Enter a Git tag name, such as `sales/2026.10.31` or `v1.4`, and acceptance notes.
+Duckpad creates an annotated tag with the authenticated user's commit identity
+as tagger. The commit must be reachable from a project branch, a fetched origin
+branch or an existing tag. An unknown or unreachable commit is refused. An
+existing tag name returns a conflict (409), as does a name nested with an
+existing tag: Git cannot store both `v1` and `v1/rc`. Tags cannot be moved or
+deleted in Duckpad; create a new tag to correct a version.
+
+History displays tags beside their commits. Readers can inspect them too. The
+internal `GET /api/worktrees/{worktree}/git/tags` route lists all tags in the
+worktree's project, across branches, with `name`, `ref`, `commit`, `message`,
+`tagger` (name and email) and `date`. Editors create an annotated tag through
+`POST` to the same route with `name`, the full `commit` ID and `message`.
+
+**Compare versions** suggests tags for either side, using their explicit
+`refs/tags/<name>` references to avoid ambiguity with branch names. The advanced
+starting revision in **New working branch** also accepts tags. Tags stay local:
+fetch still retrieves only origin branches, and publication still pushes only
+the reviewed branch commit.
+
 ## Compare versions
 
 Open **Git synchronization** beside the branch selector, or **Compare versions**
 in History. Choose **A: reference** and **B: target** from local branches, fetched
-remote branches, commit IDs or **Working files**. The resolved commits, author and
-date appear below each selection. **Swap A/B** reverses the comparison.
+remote branches, tags, commit IDs or **Working files**. The resolved commits,
+author and date appear below each selection. **Swap A/B** reverses the comparison.
 
 Working files are captured once. **Capture working files** takes a new snapshot;
 retrying the same comparison retains the existing capture and resolved commits.

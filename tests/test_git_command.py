@@ -88,7 +88,10 @@ def test_existing_branches_and_unknown_revisions_have_readable_errors(client, wo
         client.get(f"{url}/git/compare", params={"a": "missing", "b": "HEAD"}),
     ]:
         assert response.status_code == 404, response.text
-        assert response.json()["error"] == "Branch or commit not found. Choose an existing branch or commit."
+        assert (
+            response.json()["error"]
+            == "Branch, tag or commit not found. Choose an existing branch, tag or commit."
+        )
 
 
 def test_git_failures_keep_server_paths_in_the_logs(app, client, worktree, caplog):

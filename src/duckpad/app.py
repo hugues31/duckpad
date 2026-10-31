@@ -626,6 +626,14 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
     ) -> Record:
         return projects.versioning.history(worktree, ref, offset, limit, entity)
 
+    @app.get("/api/worktrees/{worktree}/git/tags", response_model=None)
+    def git_tags(worktree: str) -> list[Record]:
+        return projects.versioning.tags(worktree)
+
+    @app.post("/api/worktrees/{worktree}/git/tags", status_code=201, response_model=None)
+    def git_create_tag(worktree: str, data: schemas.NewTag) -> Record:
+        return projects.versioning.create_tag(worktree, data.name, data.commit, data.message)
+
     @app.get("/api/worktrees/{worktree}/git/compare", response_model=None)
     def git_compare(worktree: str, a: str = "HEAD", b: str = "working") -> Record:
         return projects.versioning.compare(worktree, a, b)
