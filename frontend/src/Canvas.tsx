@@ -42,6 +42,7 @@ import {
 import { useT, templateLabel } from "./i18n";
 import { DRAG_TYPE, nodeInterface, type NodeConnection } from "./graph";
 import ConnectionPalette from "./ConnectionPalette";
+import { WarningBadge, warningCount } from "./ExecutionMessages";
 import { layoutNodes } from "./graphLayout";
 import { SearchField } from "./Search";
 import type { NodeKind } from "./NodePalette";
@@ -94,6 +95,7 @@ type PipelineData = {
   /** The template ID, or "component". */
   icon: string;
   linked?: string;
+  warnings: number;
 };
 type PipelineNode = Node<PipelineData, "pipeline">;
 
@@ -126,6 +128,7 @@ function PipelineNode({ data, selected }: NodeProps<PipelineNode>) {
         </div>
       )}
       <div className="node-status-slot">
+        <WarningBadge count={data.warnings} />
         {data.status && (
           <span className={`node-status ${data.status}`} title={t(data.status)}>
             <StatusIcon
@@ -338,6 +341,10 @@ function CanvasInner(props: CanvasProps) {
             inputs,
             outputs,
             status,
+            warnings: states.reduce(
+              (count, state) => count + warningCount(state.results),
+              0,
+            ),
             icon: node.component
               ? "component"
               : node.preset || node.template || node.origin || "",

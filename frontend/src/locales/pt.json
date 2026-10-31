@@ -705,5 +705,12 @@
   "gitHostsSaved": "Hosts Git salvos.",
   "gitHost": "Host",
   "hostKeyType": "Tipo de chave",
-  "noTrustedHosts": "Ainda não há hosts confiáveis. Os projetos não podem sincronizar via SSH."
+  "noTrustedHosts": "Ainda não há hosts confiáveis. Os projetos não podem sincronizar via SSH.",
+  "executionMessages": "Mensagens da execução",
+  "warningCount": "Avisos: {count}",
+  "messageInfo": "Informação",
+  "messageWarning": "Aviso",
+  "messageError": "Erro",
+  "moreMessages": "… e mais {count}",
+  "messageBlock": "Bloco de mensagem {block}"
 }

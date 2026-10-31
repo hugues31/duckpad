@@ -221,7 +221,7 @@ class ContextPool:
         request reads them. Only the run that owns the worktree may call this."""
         with context.lock:
             removed = {d.node for d in context.datasets.values()}
-            removed |= {*context.outputs, *context.errors, *context.node_status}
+            removed |= {*context.outputs, *context.errors, *context.node_status, *context.result_runs}
             removed -= set(nodes)
             if not removed:
                 return
@@ -240,7 +240,7 @@ class ContextPool:
             finally:
                 cleanup.close()
             for node in removed:
-                for states in (context.outputs, context.errors, context.node_status):
+                for states in (context.outputs, context.errors, context.node_status, context.result_runs):
                     states.pop(node, None)
 
     def discard(self, worktree: str) -> None:

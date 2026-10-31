@@ -1,5 +1,6 @@
 """Verify polling log levels through the real CLI and Uvicorn access logger."""
 
+import json
 import logging
 import os
 import socket
@@ -9,6 +10,7 @@ import time
 
 import httpx
 import pytest
+from helpers import wait_until
 
 from duckpad.app import create_app
 from duckpad.logging import PollingAccessFilter
@@ -70,10 +72,33 @@ def test_cli_polling_logs(tmp_path, level):
                     f"/api/worktrees/{worktree}/generations/data_missing?environment=dev",
                 ]
                 for path in polling:
-                    assert client.get(path).status_code == 200
+                    response = client.get(path)
+                    assert response.status_code == 200
+                    if path == f"/api/worktrees/{worktree}":
+                        snapshot = response.json()
                 assert client.get("/api/catalog").status_code == 200
                 assert client.get("/api/worktrees/missing/status?environment=dev").status_code == 404
                 assert client.put(f"/api/worktrees/{worktree}", json={}).status_code == 422
+                bundle = snapshot["bundle"]
+                bundle["flow"]["nodes"] = [{"id": "messages", "params": {}}]
+                bundle["node_sql"] = {
+                    "nodes/messages.sql": (
+                        "-- @output result\nSELECT 1 AS value;\n-- @message\n"
+                        "SELECT 'info' AS level, 'First' || chr(10) || 'Second' AS message;"
+                    )
+                }
+                assert (
+                    client.put(
+                        f"/api/worktrees/{worktree}",
+                        json={
+                            "revision": snapshot["revision"],
+                            "bundle": bundle,
+                        },
+                    ).status_code
+                    == 200
+                )
+                execution = client.post(f"/api/worktrees/{worktree}/runs", json={"environment": "dev"}).json()
+                wait_until(lambda: client.get(f"/api/runs/{execution['id']}").json()["status"] == "success")
         finally:
             process.terminate()
             try:
@@ -84,6 +109,20 @@ def test_cli_polling_logs(tmp_path, level):
 
     lines = log.read_text().splitlines()
     assert any("Application startup complete." in line for line in lines)
+    messages = [json.loads(line) for line in lines if line.startswith('{"event": "node_result"')]
+    assert len(messages) == 1
+    assert messages[0] == {
+        "event": "node_result",
+        "run": execution["id"],
+        "project": project.json()["project"],
+        "branch": "main",
+        "environment": "dev",
+        "node": "messages",
+        "level": "info",
+        "message": "First\nSecond",
+        "origin": {"kind": "message", "block": 1},
+        "output": None,
+    }
     for path in polling:
         matching = [line for line in lines if f'"GET {path} HTTP/1.1" 200' in line]
         if level == "debug":

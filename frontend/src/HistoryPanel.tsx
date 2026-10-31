@@ -14,6 +14,10 @@ import type { HistoryPage } from "./gitTypes";
 import type { Run } from "./types";
 import { useApiResource } from "./useApiResource";
 import { VariableValues } from "./VariableFields";
+import ExecutionMessages, {
+  WarningBadge,
+  warningCount,
+} from "./ExecutionMessages";
 
 /** The node parameters using each variable of a run, as "Node · parameter". */
 function boundParameters(run: Run) {
@@ -117,6 +121,7 @@ export default function HistoryPanel({
                 </small>
               </span>
               <span className={`badge ${run.status}`}>{t(run.status)}</span>
+              <WarningBadge count={run.warning_count || 0} />
               <span>{run.duration?.toFixed(2)} s</span>
               <ArrowRight size={15} />
             </button>
@@ -158,6 +163,7 @@ export default function HistoryPanel({
                 {t(selected.status)}
               </span>
               <code>{selected.id}</code>
+              <WarningBadge count={selected.warning_count || 0} />
               <span className="muted">
                 {selected.environment} · {selected.commit.slice(0, 8)}
               </span>
@@ -202,9 +208,11 @@ export default function HistoryPanel({
                     {t(state.status)}
                   </span>
                   <strong>{state.label}</strong>
+                  <WarningBadge count={warningCount(state.results)} />
                   <span className="muted">{state.duration?.toFixed(3)} s</span>
                 </summary>
                 {state.error && <p className="notice error">{state.error}</p>}
+                <ExecutionMessages results={state.results} />
                 {state.external_outcome && (
                   <p className="notice">
                     {t("externalOutcome")}: {t(state.external_outcome)}

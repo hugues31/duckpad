@@ -239,6 +239,7 @@ export interface Statement {
 }
 /** A page of rows of a node output, with the dataset holding them. */
 export interface PreviewPage extends Dataset {
+  results?: ExecutionResult[];
   rows: { id: number; values: Json[] }[];
   /** Rows matching the filters, across all pages. */
   filtered_count: number;
@@ -267,8 +268,20 @@ export type NodeRunStatus =
   | "blocked"
   | "canceled"
   | "interrupted";
+/** A redacted result emitted by a message block or another execution check. */
+export interface ExecutionResult {
+  level: "info" | "warning" | "error";
+  message: string;
+  origin: { kind: string; block?: number; name?: string };
+  output?: string | null;
+  observed?: Json;
+  /** A final summary preserves counts for results beyond the display limit. */
+  omitted?: number;
+  counts?: Partial<Record<ExecutionResult["level"], number>>;
+}
 /** What a run did with one node. */
 export interface NodeRun {
+  results?: ExecutionResult[];
   status: NodeRunStatus;
   label: string;
   kind: TemplateKind;
@@ -283,6 +296,7 @@ export interface NodeRun {
   references?: Record<string, string[]>;
 }
 export interface Run {
+  warning_count?: number;
   id: string;
   project: string;
   worktree: string;
@@ -309,6 +323,8 @@ export interface Run {
 }
 /** The latest results of a node in an environment. */
 export interface NodeResult {
+  results?: ExecutionResult[];
+  result_run?: string;
   outputs: Record<string, Dataset>;
   error: string | null;
   execution_status?: NodeRunStatus | null;

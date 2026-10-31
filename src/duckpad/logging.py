@@ -41,4 +41,15 @@ def server_log_config():
     config = deepcopy(LOGGING_CONFIG)
     config["filters"] = {"polling": {"()": PollingAccessFilter}}
     config["loggers"]["uvicorn.access"]["filters"] = ["polling"]
+    config["formatters"]["execution"] = {"format": "%(message)s"}
+    config["handlers"]["execution"] = {
+        "class": "logging.StreamHandler",
+        "formatter": "execution",
+        "stream": "ext://sys.stderr",
+    }
+    config["loggers"]["duckpad.execution"] = {
+        "handlers": ["execution"],
+        "level": "INFO",
+        "propagate": False,
+    }
     return config

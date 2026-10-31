@@ -705,5 +705,12 @@
   "gitHostsSaved": "Hôtes Git enregistrés.",
   "gitHost": "Hôte",
   "hostKeyType": "Type de clé",
-  "noTrustedHosts": "Aucun hôte de confiance pour l’instant. Les projets ne peuvent pas se synchroniser en SSH."
+  "noTrustedHosts": "Aucun hôte de confiance pour l’instant. Les projets ne peuvent pas se synchroniser en SSH.",
+  "executionMessages": "Messages du traitement",
+  "warningCount": "Avertissements : {count}",
+  "messageInfo": "Information",
+  "messageWarning": "Avertissement",
+  "messageError": "Erreur",
+  "moreMessages": "… et {count} autres",
+  "messageBlock": "Bloc message {block}"
 }

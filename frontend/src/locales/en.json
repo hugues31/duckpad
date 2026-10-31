@@ -705,5 +705,12 @@
   "gitHostsSaved": "Git hosts saved.",
   "gitHost": "Host",
   "hostKeyType": "Key type",
-  "noTrustedHosts": "No trusted host yet. Projects cannot synchronize over SSH."
+  "noTrustedHosts": "No trusted host yet. Projects cannot synchronize over SSH.",
+  "executionMessages": "Execution messages",
+  "warningCount": "Warnings: {count}",
+  "messageInfo": "Info",
+  "messageWarning": "Warning",
+  "messageError": "Error",
+  "moreMessages": "… and {count} more",
+  "messageBlock": "Message block {block}"
 }

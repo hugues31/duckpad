@@ -81,10 +81,21 @@ def parse_template(sql):
         "blocks": [],
     }
     current, buffer = None, []
+    message_block = 0
+    in_message = False
 
     def flush():
-        if "\n".join(buffer).strip():
-            template["blocks"].append({"output": current, "sql": "\n".join(buffer).strip()})
+        sql = "\n".join(buffer).strip()
+        if in_message and not sql:
+            raise Problem("Each @message block must contain a query")
+        if sql:
+            template["blocks"].append(
+                {
+                    "output": current,
+                    "sql": sql,
+                    **({"message_block": message_block} if in_message else {}),
+                }
+            )
         buffer.clear()
 
     for line in sql.splitlines():
@@ -102,7 +113,14 @@ def parse_template(sql):
         elif key == "output":
             flush()
             current = value
+            in_message = False
             template["outputs"].append(value)
+        elif key == "message":
+            if value:
+                raise Problem("The @message directive does not take a name or arguments")
+            flush()
+            current, in_message = None, True
+            message_block += 1
         else:
             raise Problem(f"Unknown template directive: @{key}")
     flush()
@@ -143,13 +161,13 @@ def validate_interface(template):
         if argument is None or parameters.get(argument, {}).get("type") != "connection":
             raise Problem(f"Parameter {parameter['name']} must reference a declared connection parameter")
     available = set(template["inputs"]) | set(parameters)
-    for block in template["blocks"]:
+    for block in execution_blocks(template):
         missing = set(REFERENCE.findall(block["sql"])) - available
         if missing:
             raise Problem("Undeclared, self or forward reference: " + ", ".join(sorted(missing)))
         if block["output"]:
             available.add(block["output"])
-        elif template["kind"] != "export":
+        elif not block.get("message_block") and template["kind"] != "export":
             raise Problem("A tabular query needs an @output declaration")
     if not template["blocks"]:
         raise Problem("Template has no SQL statements")
@@ -170,6 +188,14 @@ def parse_templates(templates):
     return parsed
 
 
+def execution_blocks(template):
+    """Outputs first, messages in declaration order, external writes last."""
+    return sorted(
+        template["blocks"],
+        key=lambda block: 1 if block.get("message_block") else (0 if block["output"] else 2),
+    )
+
+
 def executable_sql(sql):
     """Template text without descriptive directives, so relabeling never invalidates results."""
     return "\n".join(line for line in (sql or "").splitlines() if not is_descriptive(line))
@@ -185,12 +211,13 @@ def downloadable_export(template):
 
     Decided from the template text, so copies imported under another identifier keep it.
     """
-    if template["kind"] != "export" or len(template["blocks"]) != 1:
+    blocks = [block for block in template["blocks"] if not block.get("message_block")]
+    if template["kind"] != "export" or len(blocks) != 1:
         return None
     # Inputs become tables, resources a literal of their own name, every other parameter a placeholder.
     names = [p["name"] for p in template["parameters"] if base_type(p["type"]) in RESOURCE_TYPES]
     values = {name: qi(name) for name in template["inputs"]} | {name: literal(name) for name in names}
-    sql = REFERENCE.sub(lambda m: values.get(m[1], "$" + m[1]), template["blocks"][0]["sql"])
+    sql = REFERENCE.sub(lambda m: values.get(m[1], "$" + m[1]), blocks[0]["sql"])
     try:
         tree = parse_block(sql)
     except (Problem, sqlglot.errors.SqlglotError):
@@ -408,7 +435,7 @@ def parse_block(sql):
     except sqlglot.errors.ParseError as error:
         raise Problem(str(error)) from error
     if len(trees) != 1:
-        raise Problem("Each output block must contain exactly one statement")
+        raise Problem("Each SQL block must contain exactly one statement")
     return trees[0]
 
 
@@ -510,9 +537,13 @@ def compile_template(
     resources = [values[p["name"]] for p in template["parameters"] if base_type(p["type"]) in RESOURCE_TYPES]
     allowed = set(inputs.values())
     statements = []
-    for block in template["blocks"]:
+    for block in execution_blocks(template):
         tree = parse_block(REFERENCE.sub(lambda m: values[m[1]], block["sql"]))
-        check_access(template, tree, allowed, connections, resources)
+        message_block = block.get("message_block")
+        access = (
+            {**template, "kind": "transform"} if message_block and template["kind"] == "export" else template
+        )
+        check_access(access, tree, allowed, connections, resources)
         query = tree.sql(dialect="duckdb")
         used = {
             name: value
@@ -522,6 +553,7 @@ def compile_template(
         labels = {placeholder: name for name, placeholder in placeholders.items() if placeholder in used}
         output = block["output"]
         physical = physical_outputs.get(output)
+        referenced_outputs = set(REFERENCE.findall(block["sql"])) & set(template["outputs"])
         statements.append(
             {
                 "output": output,
@@ -530,6 +562,16 @@ def compile_template(
                 # Runs materialize outputs from this query and record the statements they execute.
                 "sql": query,
                 "bindings": used,
+                **(
+                    {
+                        "message_block": message_block,
+                        "message_output": next(iter(referenced_outputs))
+                        if len(referenced_outputs) == 1
+                        else None,
+                    }
+                    if message_block
+                    else {}
+                ),
                 **({"variable_bindings": labels} if labels else {}),
                 **file_export(tree, resources),
             }
