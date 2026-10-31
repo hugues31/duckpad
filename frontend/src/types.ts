@@ -192,6 +192,7 @@ export interface User {
   auth_method?: "oidc";
 }
 export interface Workspace {
+  assistant?: import("./assistantTypes").AssistantOptions;
   user: User;
   projects: Project[];
   worktrees: Worktree[];

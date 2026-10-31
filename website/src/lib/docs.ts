@@ -47,6 +47,12 @@ export const sections = [
           "Trace result cells to their source, with explicit coverage limits.",
       },
       {
+        slug: "assistant",
+        title: "AI assistant",
+        description:
+          "Configure a provider and explore your project with private conversations.",
+      },
+      {
         slug: "git",
         title: "Version control",
         description:

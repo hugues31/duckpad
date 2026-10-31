@@ -17,6 +17,7 @@ from .paths import InstancePaths
 from .util import dumps
 
 MODELS = {
+    "assistant_conversation": m.AssistantConversation,
     "user": m.User,
     "session": m.LoginSession,
     "project": m.Project,

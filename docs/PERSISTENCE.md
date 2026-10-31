@@ -7,6 +7,12 @@ seeds the default environments, connectors and local connection. It does not
 import the former `records` document table. Use a fresh data directory for this
 breaking change; an existing document database is rejected without deleting it.
 
+Revision `0002_assistant` adds the twenty-first business table,
+`assistant_conversation`, with private model messages, UI turns, author, project,
+branch and title. Foreign keys cascade on author or project deletion; the
+`setting` table retains write-only provider configuration. Neither is part of
+project export.
+
 ## Data model
 
 ```mermaid

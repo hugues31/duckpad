@@ -148,3 +148,38 @@ export async function importExtension(file: File, source: string) {
   if (!response.ok) throw await readError(response);
   return response.json();
 }
+
+/** Stream a response through the same session/error boundary as every other API call. */
+export async function streamAssistant(
+  path: string,
+  body: unknown,
+  onEvent: (event: import("./assistantTypes").AssistantEvent) => void,
+  signal: AbortSignal,
+) {
+  const response = await fetch(apiUrl(path), {
+    credentials: "same-origin",
+    ...send(body),
+    headers: { "Content-Type": "application/json" },
+    signal,
+  });
+  if (!response.ok) throw await readError(response);
+  if (!response.body)
+    throw new ApiError("The assistant stream is unavailable", 502);
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      buffer += decoder.decode(value, { stream: !done });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || "";
+      for (const line of lines) if (line.trim()) onEvent(JSON.parse(line));
+      if (done) break;
+    }
+    if (buffer.trim()) onEvent(JSON.parse(buffer));
+  } finally {
+    await reader.cancel().catch(() => undefined);
+    reader.releaseLock();
+  }
+}

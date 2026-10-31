@@ -1,4 +1,4 @@
-import { lazy, Suspense, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { Download, FileCode2, Loader2, Plus, Save } from "lucide-react";
 import { downloadProject } from "./api";
 import { useT } from "./i18n";
@@ -6,6 +6,7 @@ import ProjectFileTree from "./ProjectFileTree";
 import { projectFileLanguage } from "./projectFiles";
 import { useRevisionDraft } from "./useRevisionDraft";
 import type { Snapshot } from "./types";
+import { useWorktree } from "./worktree";
 import { VARIABLES_FILE } from "./variables";
 
 const CodeEditor = lazy(() => import("./Editor"));
@@ -28,6 +29,7 @@ export default function CodePanel({
   onSave: (files: Files, base: Snapshot) => Promise<Snapshot>;
 }) {
   const t = useT();
+  const { setAssistantFile } = useWorktree();
   // The panel stays mounted across the worktree's tabs.
   const {
     draft: files,
@@ -45,6 +47,10 @@ export default function CodePanel({
   const [downloading, setDownloading] = useState(false);
   const [error, setError] = useState("");
   const path = selected in files ? selected : Object.keys(files).sort()[0];
+
+  useEffect(() => {
+    if (!hidden) setAssistantFile(path);
+  }, [hidden, path, setAssistantFile]);
 
   const edit = (text: string) => {
     if (!path || readOnly || pending || text === files[path]) return;

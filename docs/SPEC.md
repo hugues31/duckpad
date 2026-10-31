@@ -359,3 +359,59 @@ Manual cancellation acceptance must stop a run during a long SQL operation and v
 Execution admission acceptance must verify that simultaneous launch requests for the same worktree admit only one run. Further requests are rejected throughout preparation, execution, and cancellation, including a request for another environment. Rejection must not invalidate results, cancel lineage, replace the active run, or leave a deferred execution. Once the active run has fully ended, nothing starts until a new explicit request is made; that request captures the configuration current at its own launch. A run in another worktree must not be rejected solely because the first worktree is occupied.
 
 Persistent execution history acceptance must cover successful, failed, and canceled runs, then restart the backend and verify that their metadata remains readable through the UI and API with the original execution identifiers, SQL, revisions, timings, and outcomes. Subsequent runs must create separate records. Historical previews and cell lineage must remain unavailable when the corresponding in-memory data is gone. Persisted history must contain no secret values or stored result datasets. Interrupting the backend during a run must leave an interrupted record after restart, preserve already recorded node outcomes, and clearly identify any unconfirmed external-write outcome. Startup must not automatically resume or retry that run or repeat its exports.
+
+# AI assistant
+
+The instance administrator enables the assistant (off by default), configures
+providers and allowed models, selects the instance default, and controls data
+reading and the maximum rows per tool call (50 by default, 1–500). Supported
+providers are OpenAI, Anthropic, Google, Mistral, DeepSeek, Ollama and custom
+OpenAI-compatible servers. Keys are write-only, optional for Ollama/custom,
+retained only for an unchanged provider type and base URL, and excluded from
+project files, archives, model instructions, responses and error logs.
+
+A floating chat on every authenticated page streams safe Markdown and collapsible
+tool cards. The expanded view lists author-private conversations in recent-first
+order and supports resume, rename and deletion. Each conversation belongs to its
+initial project/branch and stores full Pydantic AI message history in SQLite.
+Deletion of a project or account cascades to its conversations. Administrators
+cannot read other users’ conversations. All tools recheck session and project
+permissions; data and compilation tools recheck project connection grants.
+The validated page context contains only page/tab/section, project/worktree/branch,
+selected node, open Code file, selected environment and their names. Saved
+content is fetched on demand, in bounded pages. There is no unsaved draft upload.
+
+The exact provider payload consists of the assistant instructions and tool
+schemas, the current question, the validated context, previous conversation
+messages (including tool exchanges), and whichever tool results are requested:
+
+| Content | Data reading disabled | Data reading enabled |
+| --- | --- | --- |
+| Flow nodes, edges, parameters, component interfaces, template links | Yes | Yes |
+| Saved project definition files: SQL, README, descriptions, variables, extension requirements and manifest | Yes, including literal/variable values in these definitions | Yes |
+| Compiled SQL and bound project parameters | Yes, resolved connection secrets redacted | Yes, resolved connection secrets redacted |
+| Materialized output schemas, counts, generation IDs and statuses | Yes | Yes |
+| Run IDs, environment, timestamps, statuses, durations, commits and per-node status | Yes | Yes |
+| Run error text and node message text | Withheld; only error presence | Yes, bounded |
+| Output preview values and filters | Tool absent | Bounded existing output rows |
+| Value lineage: selected value, SQL/expression, contributing values, source/schema metadata and limitations | Tool absent | Bounded contribution pages |
+| Search excerpts from saved project definitions | Yes | Yes |
+| Current-branch Git commit metadata (including authors, messages and hashes) | Yes | Yes |
+| Provider keys, resolved connection secrets, instance users, sessions, other projects and unsaved editor drafts | Never | Never |
+
+Provider model discovery sends the saved key to the configured endpoint; the
+connection test sends only a short verification prompt. User-authored questions,
+code, documentation and commit messages are not treated as secret-free simply
+because data reading is disabled. If data reading is turned off, previous
+conversations that allowed it cannot resume; a new conversation prevents their
+old values or responses from being resent. Provider redirects are disabled.
+
+Only read tools exist: `read_flow`, `read_file`, `read_sql`, `read_documentation`,
+`read_schemas`, `read_runs`, `search_project`, `read_history`, and optionally
+`preview_output` and `explain_value`. There is no arbitrary SQL, file write,
+network, run-launch or undo tool. Each turn has `UsageLimits` of 12 requests
+and 30 tool calls, a 120-second deadline and a Stop action that cancels the
+provider stream. Errors identify rejected credentials, quota, unavailable models
+or connection failures without exposing provider response bodies.
+
+See the [assistant guide](ASSISTANT.md) for setup and usage.

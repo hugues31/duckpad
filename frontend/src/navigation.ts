@@ -12,6 +12,7 @@ export type WorkspaceTab = (typeof workspaceTabs)[number];
 export const settingsSections = [
   ["users", "usersPermissions"],
   ["sso", "ssoSettings"],
+  ["assistant", "assistant"],
   ["git-hosts", "gitHosts"],
   ["environments", "environments"],
   ["connections", "connections"],
