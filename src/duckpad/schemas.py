@@ -49,7 +49,46 @@ class PasswordChange(BaseModel):
 
 
 class ProjectRole(BaseModel):
-    role: Literal["reader", "editor", "admin"]
+    role: Literal["reader", "operator", "editor", "admin"]
+
+
+class JobTarget(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    kind: Literal["tag", "branch"]
+    ref: str = Field(min_length=1, max_length=240)
+
+
+class JobFields(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    name: str = Field(min_length=1, max_length=120)
+    description: str = Field(default="", max_length=2000)
+    environment: str
+    scope: str | None = None
+
+
+class NewJob(JobFields):
+    slug: str = Field(pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$", max_length=80)
+    target: JobTarget
+    runtime_variables: list[str] = Field(default_factory=list, max_length=0)
+
+
+class JobChanges(JobFields):
+    revision: str
+
+
+class JobPromotion(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    target: JobTarget
+    revision: str
+    previous_commit: str
+    commit: str
+
+
+class JobLaunch(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    entry_point: Literal["ui", "api"] = "api"
+    confirmed: StrictBool = False
+    revision: str | None = None
 
 
 class ConnectionGrants(BaseModel):

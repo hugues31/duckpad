@@ -1,6 +1,6 @@
 # Job automation (design proposal)
 
-**Status: delivery steps 1.1 (API tokens, service accounts restricted to Reader, and run requesters) and 1.2 (immutable annotated tags, creation from History and runs, and comparison by tag) implemented. The remaining steps are proposed; the decisions below were agreed in review.**
+**Status: delivery steps 1.1 (API tokens, service accounts and run requesters), 1.2 (immutable annotated tags and comparison by tag) and 1.3 (Operator access, Jobs, pinned versions, audited promotion and read-only results) implemented. The remaining steps are proposed; the decisions below were agreed in review.**
 
 ## Summary
 
@@ -64,7 +64,7 @@ A fourth project role, **Operator**, sits between Reader and Editor. It is meant
 
 **Personal API tokens.** Any account, local or SSO, can create tokens in **User settings → API tokens**. A token has a name and an optional expiry date (the form proposes 90 days). It is shown once, as `dpk_` followed by a random secret, and only its hash is stored, like sessions. The list shows its creation date, expiry and last use, and a token can be revoked at any time. A token authenticates as its account with the same rights, through `Authorization: Bearer dpk_…`; it is never accepted from a cookie and never used for Git.
 
-**Service accounts.** Instance administrators create them in **Instance settings → Users and permissions**. A service account has a name and a description, no password and no SSO identity, and cannot sign in to the interface. It authenticates only with tokens, which instance administrators create and revoke on its page. Its instance role is always Member, and its project roles are limited to Reader and Operator (Reader only until the Operator role exists).
+**Service accounts.** Instance administrators create them in **Instance settings → Users and permissions**. A service account has a name and a description, no password and no SSO identity, and cannot sign in to the interface. It authenticates only with tokens, which instance administrators create and revoke on its page. Its instance role is always Member, and its project roles are limited to Reader and Operator.
 
 **Requesters.** Every run records the account that requested it, and the token name when a token was used. Run details show them.
 

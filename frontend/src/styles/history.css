@@ -61,3 +61,21 @@
 .run-step .expression {
   max-height: 450px;
 }
+
+/* Jobs share the execution log and settings card surfaces. */
+.jobs-page .job-details {
+  margin-top: 24px;
+}
+.jobs-page .page-heading {
+  flex-wrap: wrap;
+}
+.jobs-page .administration-table code {
+  margin-left: 8px;
+}
+.job-details > details {
+  margin-top: 24px;
+}
+.job-details > details > summary {
+  cursor: pointer;
+  margin-bottom: 12px;
+}

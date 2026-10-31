@@ -135,6 +135,7 @@
 }
 
 .project-settings .role-guide {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
   max-width: none;
   margin-bottom: 24px;
 }
