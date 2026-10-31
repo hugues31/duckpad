@@ -227,6 +227,13 @@ class GitWorkspace:
                 raise Problem("Enter acceptance notes for this tag without null characters.", 422)
             if self.git(path, "rev-parse", "--verify", "--quiet", ref, check=False):
                 raise Problem("A tag with this name already exists. Choose another name.", 409)
+            # Git stores `a` and `a/b` as a file and a directory, so neither can be added beside the other.
+            for other in self.git(path, "for-each-ref", "--format=%(refname)", "refs/tags/").splitlines():
+                if other.startswith(ref + "/") or ref.startswith(other + "/"):
+                    raise Problem(
+                        f"This name conflicts with the tag {other.removeprefix('refs/tags/')}. Choose another name.",
+                        409,
+                    )
             commit = self.resolve(path, commit)
             if not self.git(
                 path,

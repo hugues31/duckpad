@@ -35,9 +35,10 @@ changed since it ran. Creating a tag does not save working files or start a run.
 Enter a Git tag name, such as `sales/2026.10.31` or `v1.4`, and acceptance notes.
 Duckpad creates an annotated tag with the authenticated user's commit identity
 as tagger. The commit must be reachable from a project branch, a fetched origin
-branch or an existing tag. An unknown or unreachable commit is refused, and an
-existing tag name returns a conflict (409). Tags cannot be moved or deleted in
-Duckpad; create a new tag to correct a version.
+branch or an existing tag. An unknown or unreachable commit is refused. An
+existing tag name returns a conflict (409), as does a name nested with an
+existing tag: Git cannot store both `v1` and `v1/rc`. Tags cannot be moved or
+deleted in Duckpad; create a new tag to correct a version.
 
 History displays tags beside their commits. Readers can inspect them too. The
 internal `GET /api/worktrees/{worktree}/git/tags` route lists all tags in the

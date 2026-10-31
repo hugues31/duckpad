@@ -104,6 +104,15 @@ def test_duplicate_and_concurrent_creation_never_move_a_tag(instance):
     assert create(instance, name="legacy").status_code == 409
 
 
+@pytest.mark.parametrize(("existing", "name"), [("sales", "sales/2026.10.31"), ("v1/rc", "v1")])
+def test_names_nested_with_an_existing_tag_are_conflicts(instance, existing, name):
+    assert create(instance, name=existing).status_code == 201
+    response = create(instance, name=name)
+    assert response.status_code == 409, response.text
+    assert response.json()["error"] == f"This name conflicts with the tag {existing}. Choose another name."
+    assert [tag["name"] for tag in instance[0].versioning.tags(instance[3]["id"])] == [existing]
+
+
 def test_unknown_foreign_and_unreachable_commits_are_refused(instance):
     projects, _, _, worktree = instance
     other = projects.create("Another project")
