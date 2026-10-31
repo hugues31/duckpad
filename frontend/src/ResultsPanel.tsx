@@ -32,7 +32,7 @@ import { useApiResource } from "./useApiResource";
 
 export const RESULT_TABS = ["data", "columns", "tests", "log"] as const;
 export type ResultsTab = (typeof RESULT_TABS)[number];
-const TAB_LABELS = {
+export const TAB_LABELS = {
   data: "results_data",
   columns: "results_columns",
   tests: "results_tests",

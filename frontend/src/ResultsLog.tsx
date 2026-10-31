@@ -93,9 +93,18 @@ export default function ResultsLog({
         <Info size={18} aria-hidden="true" />
         <div>
           <strong>{t("notRunHere")}</strong>
-          <p className="muted small">
-            {t(exportNode ? "exportNotRun" : "noResultHint")}
-          </p>
+          {exportNode && download ? (
+            <ExportDownload
+              key={`${worktree}:${environment}:${fullNode}`}
+              worktree={worktree}
+              environment={environment}
+              node={fullNode}
+            />
+          ) : (
+            <p className="muted small">
+              {t(exportNode ? "exportNotRunHint" : "noResultHint")}
+            </p>
+          )}
         </div>
       </div>
     );

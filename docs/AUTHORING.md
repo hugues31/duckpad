@@ -272,6 +272,14 @@ inputs: showing an input keeps the current sample when its columns allow it, to
 check an operation before and after. An export node has no rows: its panel opens
 on **Log**, with **Tests**. A component instance shows its exposed outputs.
 
+Under the node kind, the inspector keeps a one-line **result summary**: the
+**Valid** or **Stale** badge, the number of outputs, warning badges for
+messages and failing tests, **Last run failed** after a failure, the time of the
+run and a **Results** link. Each part opens the results panel on the matching
+tab: the badge and the outputs open **Data**, messages, the failure and the run
+time open **Log**, failing tests open **Tests**. Like both panels, the summary
+follows the environment selected in the top bar without repeating it.
+
 ### Data and samples
 
 The **Data** tab pages through the retained result, 100 rows at a time. Select a

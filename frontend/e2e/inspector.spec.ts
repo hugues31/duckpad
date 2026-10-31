@@ -243,3 +243,60 @@ test("Info tab tells who changed the node and opens its history", async ({
   // The history lists exactly the commits counted as revisions.
   await expect(dialog.locator(".git-commit")).toHaveCount(Number(revisions));
 });
+
+test("the result summary opens the matching tab of the results panel", async ({
+  page,
+}) => {
+  const { endpoint, inspector } = await openInspector(page);
+  await expect(inspector.locator(".inspector-tabs button")).toHaveText([
+    "Parameters",
+    "SQL",
+    "Documentation",
+    "Info",
+  ]);
+  const summary = inspector.getByRole("group", {
+    name: "Result summary",
+    exact: true,
+  });
+  await expect(summary).toContainText("No result yet");
+  // Run outcomes left the inspector: no executed SQL, no dataset documentation.
+  await inspector.getByRole("button", { name: "SQL", exact: true }).click();
+  await expect(
+    inspector.getByRole("button", { name: "Displayed result" }),
+  ).toHaveCount(0);
+  await inspector
+    .getByRole("button", { name: "Documentation", exact: true })
+    .click();
+  await expect(inspector.getByRole("combobox")).toHaveCount(0);
+  await expect(
+    inspector.getByRole("textbox", { name: "Node documentation" }),
+  ).toBeVisible();
+
+  const launched = await (
+    await page.request.post(`${endpoint}/runs`, {
+      data: { environment: "dev" },
+    })
+  ).json();
+  await expect
+    .poll(
+      async () =>
+        (await (await page.request.get(`/api/runs/${launched.id}`)).json())
+          .status,
+      { timeout: 45000 },
+    )
+    .toBe("success");
+  const results = page.getByRole("region", { name: "Results", exact: true });
+  const tab = (name: string) =>
+    results.getByRole("tab", { name: new RegExp(`^${name}`) });
+  await expect(summary.locator(".badge")).toHaveText("Valid");
+  await summary.getByRole("button", { name: /^Run at / }).click();
+  await expect(tab("Log")).toHaveAttribute("aria-selected", "true");
+  await summary.getByRole("button", { name: "2 outputs", exact: true }).click();
+  await expect(tab("Data")).toHaveAttribute("aria-selected", "true");
+  await results
+    .getByRole("button", { name: "Hide data preview", exact: true })
+    .click();
+  await expect(results).toBeHidden();
+  await summary.getByRole("button", { name: "Results", exact: true }).click();
+  await expect(results).toBeVisible();
+});

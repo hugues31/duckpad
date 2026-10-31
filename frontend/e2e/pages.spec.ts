@@ -226,9 +226,7 @@ async function openRunExample(page: Page) {
   return { worktree: example.id as string, node };
 }
 
-test("the data preview and the Inspector share one load of the node", async ({
-  page,
-}) => {
+test("the results panel loads the node's rows once", async ({ page }) => {
   const { worktree, node } = await openRunExample(page);
   const nodeId = await node.getAttribute("data-id");
   const loads: string[] = [];
@@ -241,12 +239,11 @@ test("the data preview and the Inspector share one load of the node", async ({
   });
   await node.click();
   await expect(page.locator(".preview-header .badge")).toHaveText("Valid");
-  const inspector = page.locator(".inspector");
-  await inspector.getByRole("button", { name: "SQL", exact: true }).click();
-  await inspector
-    .getByRole("button", { name: "Displayed result", exact: true })
-    .click();
-  await expect(inspector).toContainText(/Commit [0-9a-f]{8}/);
+  // The executed SQL comes with the run in the Log, not with the rows.
+  const results = page.getByRole("region", { name: "Results", exact: true });
+  await results.getByRole("tab", { name: /^Log/ }).click();
+  await results.getByText("Executed SQL", { exact: true }).click();
+  await expect(results.locator(".executed-sql .monaco-editor")).toBeVisible();
   await page.waitForTimeout(1000);
   expect(loads).toHaveLength(1);
 });

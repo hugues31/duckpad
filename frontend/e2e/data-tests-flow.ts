@@ -62,7 +62,16 @@ export async function verifyDataTests(page: Page) {
       .toBe(true);
     return run!;
   };
-  const tests = inspector.locator(".node-tests > .execution-messages");
+  const results = page.getByRole("region", { name: "Results", exact: true });
+  const summary = inspector.getByRole("group", {
+    name: "Result summary",
+    exact: true,
+  });
+  const tab = (name: string) =>
+    results.getByRole("tab", { name: new RegExp(`^${name}`) });
+  const test = results
+    .locator(".test-row")
+    .filter({ hasText: "orders_checked" });
   await edit("warning", "true");
   const warning = await launch();
   expect(warning.status).toBe("success");
@@ -72,9 +81,14 @@ export async function verifyDataTests(page: Page) {
   await expect(
     node("validated").getByLabel("Warnings: 1", { exact: true }),
   ).toBeVisible();
-  await expect(tests).toContainText("Warning");
-  await expect(tests).toContainText(`Failing rows: ${count}`);
-  await expect(tests).toContainText("Data test · orders");
+  // The inspector only summarizes the outcome; its badge opens the Tests tab.
+  await summary.getByRole("button", { name: "1 test", exact: true }).click();
+  await expect(tab("Tests")).toHaveAttribute("aria-selected", "true");
+  await expect(test.locator(".test-status")).toHaveText("Warning");
+  await expect(test).toContainText("orders");
+  await expect(test.locator("td.number")).toHaveText(
+    Number(count).toLocaleString("en-US"),
+  );
 
   await edit("error", "true");
   const failed = await launch();
@@ -83,8 +97,13 @@ export async function verifyDataTests(page: Page) {
   await expect(node("validated").locator(".node-status")).toContainText(
     "Failed",
   );
-  await expect(tests).toContainText("Error");
-  await expect(tests).toContainText("orders_checked");
+  await expect(test.locator(".test-status")).toHaveText("Error");
+  await summary
+    .getByRole("button", { name: "Last run failed", exact: true })
+    .click();
+  await expect(tab("Log")).toHaveAttribute("aria-selected", "true");
+  await expect(results.locator(".log-error")).toBeVisible();
+  await tab("Tests").click();
   const retained = await (
     await page.request.get(
       `${url}/preview/validated?environment=dev&port=orders`,
@@ -97,17 +116,18 @@ export async function verifyDataTests(page: Page) {
   const passed = await launch();
   expect(passed.status).toBe("success");
   expect(passed.warning_count).toBe(0);
-  await expect(tests).toContainText("OK");
-  await expect(tests).toContainText("Failing rows: 0");
+  await expect(test.locator(".test-status")).toHaveText("OK");
+  await expect(test.locator("td.number")).toHaveText("0");
   await expect(
     node("validated").getByLabel("Warnings: 1", { exact: true }),
   ).toHaveCount(0);
-  await inspector.locator(".test-history summary").click();
-  const previous = inspector.locator(".test-history .execution-messages");
-  await expect(previous).toHaveCount(2);
-  await expect(previous.nth(0)).toContainText("Error");
-  await expect(previous.nth(1)).toContainText("Warning");
-  await expect(previous.nth(0)).toContainText(`Failing rows: ${count}`);
+  await expect(summary.locator(".warning-badge")).toHaveCount(0);
+  // The strip shows the previous executions, oldest first.
+  const strip = test.locator(".test-strip .dot:not(.none)");
+  await expect(strip).toHaveCount(3);
+  await expect(strip.nth(0)).toHaveClass(/warning/);
+  await expect(strip.nth(1)).toHaveClass(/error/);
+  await expect(strip.nth(2)).toHaveClass(/ok/);
 
   await page.getByRole("link", { name: "History", exact: true }).click();
   const details = page.getByRole("dialog");

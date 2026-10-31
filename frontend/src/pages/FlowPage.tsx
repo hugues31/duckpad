@@ -33,7 +33,6 @@ import {
 import LineagePanel from "../LineagePanel";
 import type { Cell } from "../lineageGraph";
 import NodePalette, { type NodeKind } from "../NodePalette";
-import { useNodePreview } from "../Preview";
 import ResultsPanel, { type ResultsTab } from "../ResultsPanel";
 import { useShell, useWorkspace } from "../shell";
 import type { Bundle, FlowNode, Graph } from "../types";
@@ -145,13 +144,6 @@ export default function FlowPage() {
     : undefined;
   const definition = signature?.definition;
   const ports = signature?.outputs || [];
-  const preview = useNodePreview({
-    worktree,
-    environment,
-    node: node && ports.length ? fullNode : null,
-    ports,
-    version: JSON.stringify(statuses.nodes),
-  });
   const project = workspace.projects.find(
     (p) => p.id === snapshot.worktree.project,
   );
@@ -536,7 +528,6 @@ export default function FlowPage() {
             environment={environment}
             connections={connections}
             statuses={statuses}
-            preview={preview.data}
             onSave={(updated, base, variables) =>
               fromInspector(
                 inspected,
@@ -641,6 +632,10 @@ export default function FlowPage() {
                 entity: nodeEntity(node.id, parent),
               })
             }
+            onResults={(tab) => {
+              setResultsTab(tab);
+              panels.set({ preview: true });
+            }}
             onClose={() => panels.set({ inspector: false })}
           />
         ) : null}

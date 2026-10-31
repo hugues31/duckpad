@@ -1,100 +1,37 @@
-import Select from "./Select";
 import { useState } from "react";
 import { useT } from "./i18n";
 import { useRevisionDraft } from "./useRevisionDraft";
-import type { Documentation, PreviewPage, Snapshot } from "./types";
+import type { Documentation, Snapshot } from "./types";
 
-type SaveDocumentation = (
-  change: (documentation: Documentation) => void,
-  base: Snapshot,
-) => Promise<Snapshot>;
-type DocumentationKind = "nodes" | "datasets" | "columns";
-
+/**
+ * The node's own documentation. Its datasets and columns are documented in the
+ * results panel's Columns tab, where they are visible.
+ */
 export default function NodeDocumentation({
   snapshot,
   fullNode,
-  preview,
   onSave,
 }: {
   snapshot: Snapshot;
   fullNode: string;
-  preview: PreviewPage | null;
-  onSave: SaveDocumentation;
-}) {
-  const t = useT();
-  const [kind, setKind] = useState<DocumentationKind>("nodes");
-  const [column, setColumn] = useState("");
-  const key =
-    kind === "nodes" ? fullNode : fullNode + ":" + (preview?.port || "result");
-  return (
-    <>
-      <Select
-        value={kind}
-        onChange={(e) => setKind(e.target.value as DocumentationKind)}
-        aria-label={t("documentation")}
-      >
-        <option value="nodes">{t("nodeDocs")}</option>
-        <option value="datasets">{t("datasetDocs")}</option>
-        <option value="columns">{t("columnDocs")}</option>
-      </Select>
-      {kind === "columns" && (
-        <Select
-          value={column}
-          onChange={(e) => setColumn(e.target.value)}
-          aria-label={t("chooseColumn")}
-        >
-          <option value="">{t("chooseColumn")}</option>
-          {preview?.columns.map((c) => (
-            <option key={c.name}>{c.name}</option>
-          ))}
-        </Select>
-      )}
-      <DocumentationEditor
-        key={`${kind}:${key}:${column}`}
-        snapshot={snapshot}
-        kind={kind}
-        documentKey={key}
-        column={kind === "columns" ? column : ""}
-        onSave={onSave}
-      />
-    </>
-  );
-}
-
-/** Edit one documentation entry; switching entries remounts the editor. */
-function DocumentationEditor({
-  snapshot,
-  kind,
-  documentKey,
-  column,
-  onSave,
-}: {
-  snapshot: Snapshot;
-  kind: DocumentationKind;
-  documentKey: string;
-  column: string;
-  onSave: SaveDocumentation;
+  onSave: (
+    change: (documentation: Documentation) => void,
+    base: Snapshot,
+  ) => Promise<Snapshot>;
 }) {
   const t = useT();
   const [message, setMessage] = useState("");
   const editable =
     !snapshot.worktree.read_only &&
-    (snapshot.role === "admin" || snapshot.role === "editor") &&
-    (kind !== "columns" || !!column);
-  const documentation = snapshot.bundle?.documentation;
-  const current: string =
-    (kind === "columns"
-      ? documentation?.columns?.[documentKey]?.[column]
-      : documentation?.[kind]?.[documentKey]) || "";
-  // Switching nodes or entries saves the notes rather than dropping them.
+    (snapshot.role === "admin" || snapshot.role === "editor");
+  const current = snapshot.bundle?.documentation?.nodes?.[fullNode] || "";
+  // Switching nodes or tabs saves the notes rather than dropping them.
   const { draft, update, persist, pending } = useRevisionDraft(
     current,
     snapshot,
     (text, base) =>
       onSave((value) => {
-        if (kind === "columns")
-          ((value.columns ??= {})[documentKey] ??= {})[column] = text;
-        else (value[kind] ??= {})[documentKey] = text;
+        (value.nodes ??= {})[fullNode] = text;
       }, base),
     { autosave: editable },
   );
@@ -112,6 +49,7 @@ function DocumentationEditor({
       <textarea
         readOnly={!editable}
         className="documentation-editor"
+        aria-label={t("nodeDocs")}
         value={draft}
         placeholder={t("documentationPlaceholder")}
         onChange={(e) => update(() => e.target.value)}

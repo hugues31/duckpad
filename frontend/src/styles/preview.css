@@ -34,27 +34,6 @@
   font-size: 11px;
   padding: 4px 7px;
 }
-.preview-tools {
-  height: 40px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 5px 12px;
-  border-bottom: 1px solid var(--border);
-}
-.preview-tools .search {
-  margin: 0;
-  width: 170px;
-  height: 27px;
-}
-.preview-tools input {
-  font-size: 11px;
-  padding: 5px 0;
-}
-.preview-tools select {
-  font-size: 11px;
-  padding: 5px 6px;
-}
 .data-scroll {
   flex: 1;
   overflow: auto;
@@ -183,12 +162,6 @@
   padding: 7px 14px;
 }
 @media (max-width: 1200px) {
-  .preview-tools .search {
-    width: 130px;
-  }
-  .preview-tools select {
-    max-width: 110px;
-  }
   .preview-empty {
     flex-wrap: wrap;
     gap: 10px;
@@ -209,14 +182,5 @@
   }
   .preview-header .small {
     font-size: 10px;
-  }
-  .preview-tools .search {
-    width: 120px;
-  }
-  .preview-tools {
-    gap: 5px;
-  }
-  .preview-tools select {
-    max-width: 80px;
   }
 }

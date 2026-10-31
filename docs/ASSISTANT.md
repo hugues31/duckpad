@@ -114,7 +114,7 @@ reverses completed external writes. History records the entry point as
 
 ## Debug an execution
 
-Choose **Ask the assistant** from an error in the node inspector or a failed run
+Choose **Ask the assistant** from an error in a node's **Log** or a failed run
 in History. The chat opens with the run, node and environment as context. Send
 the prepared question to inspect run/node errors, the SQL actually executed,
 `-- @message` messages and `-- @test` data-test results. You can also ask for a

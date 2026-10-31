@@ -25,10 +25,8 @@ export function WarningBadge({ count }: { count: number }) {
 
 export default function ExecutionMessages({
   results = [],
-  tests = false,
 }: {
   results?: ExecutionResult[];
-  tests?: boolean;
 }) {
   const t = useT();
   const levels = {
@@ -37,7 +35,7 @@ export default function ExecutionMessages({
     error: t("messageError"),
   };
   if (!results.length) return null;
-  const title = t(tests ? "dataTests" : "executionMessages");
+  const title = t("executionMessages");
   return (
     <section className="execution-messages" aria-label={title}>
       <h4>
