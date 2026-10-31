@@ -16,7 +16,12 @@ export interface AssistantProvider {
   has_key?: boolean;
   api_key?: string;
 }
+export interface QuickPrompt {
+  label: string;
+  prompt: string;
+}
 export interface AssistantSettings {
+  quick_prompts: QuickPrompt[] | null;
   enabled: boolean;
   allow_data: boolean;
   max_rows: number;
@@ -25,6 +30,7 @@ export interface AssistantSettings {
   default_model: string;
 }
 export interface AssistantOptions {
+  quick_prompts?: QuickPrompt[] | null;
   enabled: boolean;
   allow_data: boolean;
   max_rows: number;
@@ -42,6 +48,7 @@ export interface AssistantContext {
   node: string;
   file: string;
   environment: string;
+  run?: string;
   node_name?: string;
   project_name?: string;
 }
@@ -52,6 +59,20 @@ export interface AssistantTool {
   status: string;
   summary: string;
   action?: AssistantAction;
+  approval?: {
+    decision: boolean | null;
+    error?: string;
+    environment?: string;
+    node?: string;
+    node_count?: number;
+    confirm_before_run?: boolean;
+    variables?: import("./types").Run["variables"];
+    exports?: { node: string; label: string; connections: string[] }[];
+  };
+  run?: Pick<
+    import("./types").Run,
+    "id" | "environment" | "scope" | "status" | "entry_point" | "commit"
+  >;
 }
 export interface AssistantAction {
   id: string;

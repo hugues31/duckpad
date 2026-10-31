@@ -1,6 +1,11 @@
 import { useT, type TranslationKey } from "./i18n";
 
 const errors: Record<string, TranslationKey> = {
+  "Answer the pending run confirmation before sending another message":
+    "assistantAnswerConfirmation",
+  "This run request has already been answered": "assistantErrorApprovalUsed",
+  "The run configuration changed. Request a new run and review its confirmation.":
+    "assistantErrorRunChanged",
   "The provider refused the API key. Ask an instance administrator to check it.":
     "assistantErrorKey",
   "The provider quota or rate limit was reached. Try again later.":

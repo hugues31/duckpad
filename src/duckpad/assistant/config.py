@@ -42,6 +42,12 @@ class ProviderSettings(BaseModel):
     models: list[str] = Field(default_factory=list, max_length=100)
 
 
+class QuickPrompt(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    label: str = Field(min_length=1, max_length=100)
+    prompt: str = Field(min_length=1, max_length=4000)
+
+
 class Settings(BaseModel):
     model_config = ConfigDict(extra="forbid")
     enabled: bool = False
@@ -50,6 +56,8 @@ class Settings(BaseModel):
     providers: list[ProviderSettings] = Field(default_factory=list, max_length=20)
     default_provider: str = ""
     default_model: str = Field(default="", max_length=200)
+    # None selects translated built-ins; an empty list deliberately hides all prompts.
+    quick_prompts: list[QuickPrompt] | None = Field(default=None, max_length=30)
 
 
 def provider_error(error):
@@ -77,7 +85,7 @@ class Configuration:
         self.model_override = None
 
     def get(self):
-        return self.store.get("settings", "assistant", {**Settings().model_dump(), "revision": ""})
+        return {**Settings().model_dump(), "revision": "", **self.store.get("settings", "assistant", {})}
 
     def public(self):
         config = self.get()
@@ -104,6 +112,7 @@ class Configuration:
             else [],
             "default_provider": config["default_provider"],
             "default_model": config["default_model"],
+            "quick_prompts": config["quick_prompts"],
         }
 
     def save(self, settings: Settings):

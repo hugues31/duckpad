@@ -1,3 +1,6 @@
+import { DEBUG_ASSISTANT_EVENT, type DebugRequest } from "./AskAssistant";
+import { useDefaultPrompts } from "./AssistantPrompts";
+import { AssistantRun, type RunControls } from "./AssistantRun";
 import { useEffect, useRef, useState } from "react";
 import {
   Maximize2,
@@ -46,9 +49,15 @@ const toolLabels: Record<string, TranslationKey> = {
   write_documentation: "assistantWriteDocs",
   edit_variable: "assistantEditVariable",
   group_nodes: "assistantGroupNodes",
+  launch_run: "assistantLaunchRun",
+  cancel_run: "assistantCancelRun",
+  wait_for_run: "assistantWaitRun",
+  inspect_run: "assistantInspectRun",
+  read_run_sql: "assistantRunSql",
+  compare_run: "assistantCompareRun",
 };
 
-interface ActionControls {
+interface ActionControls extends RunControls {
   canUndo?: boolean;
   onUndo?: (action?: string) => void;
   onCompare?: (action: AssistantAction) => void;
@@ -61,6 +70,9 @@ function ToolCard({
   onUndo,
   onCompare,
   onConflict,
+  canApprove,
+  canCancel,
+  onDecision,
 }: { tool: AssistantTool } & ActionControls) {
   const t = useT();
   const action = tool.action;
@@ -71,16 +83,18 @@ function ToolCard({
     tool.args.section ||
     "";
   const status =
-    tool.status === "running"
-      ? "assistantReading"
-      : tool.status === "complete"
-        ? "assistantComplete"
-        : tool.status === "stopped"
-          ? "assistantStopped"
-          : "assistantFailed";
+    tool.approval?.decision === null
+      ? "assistantRunConfirmation"
+      : tool.status === "running"
+        ? "assistantReading"
+        : tool.status === "complete"
+          ? "assistantComplete"
+          : tool.status === "stopped"
+            ? "assistantStopped"
+            : "assistantFailed";
   return (
     <div className="assistant-tool">
-      <details open={action ? true : undefined}>
+      <details open={action || tool.approval ? true : undefined}>
         <summary>
           <span>
             {t(toolLabels[tool.name] || "assistantReadFlow")}
@@ -96,7 +110,14 @@ function ToolCard({
             )}
           </small>
         </summary>
-        {action ? (
+        {tool.approval ? (
+          <AssistantRun
+            tool={tool}
+            canApprove={canApprove}
+            canCancel={canCancel}
+            onDecision={onDecision}
+          />
+        ) : action ? (
           <>
             <ul className="assistant-changes">
               {action.changes.map((change) => (
@@ -238,6 +259,26 @@ export default function AssistantChat() {
   const [undoing, setUndoing] = useState(false);
   const [error, setError] = useState("");
   const [pending, setPending] = useState<AssistantTurn | null>(null);
+  const [debug, setDebug] = useState<
+    (DebugRequest & { worktree: string }) | null
+  >(null);
+  const defaultPrompts = useDefaultPrompts();
+  const awaitingApproval = ["awaiting_approval", "resuming"].includes(
+    conversation?.turns.at(-1)?.status || "",
+  );
+  useEffect(() => {
+    const receive = (event: Event) => {
+      if (busy || undoing) return;
+      const detail = (event as CustomEvent<DebugRequest>).detail;
+      setDebug({ ...detail, worktree: worktree.id });
+      setConversation(null);
+      setPending(null);
+      setDraft(detail.prompt);
+      setOpen(true);
+    };
+    window.addEventListener(DEBUG_ASSISTANT_EVENT, receive);
+    return () => window.removeEventListener(DEBUG_ASSISTANT_EVENT, receive);
+  }, [busy, undoing, worktree.id]);
   const controller = useRef<AbortController | null>(null);
   const launcher = useRef<HTMLButtonElement>(null);
   const input = useRef<HTMLTextAreaElement>(null);
@@ -263,6 +304,13 @@ export default function AssistantChat() {
     node: route.tab === "flow" ? worktree.assistantNode : "",
     file: route.tab === "code" ? worktree.assistantFile : "",
     environment,
+    ...(debug?.worktree === worktree.id
+      ? {
+          run: debug.run,
+          node: debug.node || "",
+          environment: debug.environment,
+        }
+      : {}),
   };
   let nodeLabel = context.node;
   let graph: Graph | undefined = worktree.snapshot?.bundle?.flow;
@@ -327,6 +375,7 @@ export default function AssistantChat() {
         `/assistant/conversations/${item.id}`,
       );
       setConversation(value);
+      setDebug(null);
       setTitle(value.title);
       setPending(null);
       setError("");
@@ -339,15 +388,16 @@ export default function AssistantChat() {
       setError((e as Error).message);
     }
   }
-  async function submit() {
-    if (busy || undoing || !draft.trim() || !selected) return;
+  async function submit(message = draft) {
+    if (busy || undoing || awaitingApproval || !message.trim() || !selected)
+      return;
     setBusy(true);
     setError("");
     const abort = new AbortController();
     controller.current = abort;
     let value = conversation;
     let current: AssistantTurn = {
-      user: draft.trim(),
+      user: message.trim(),
       text: "",
       tools: [],
       context,
@@ -416,6 +466,60 @@ export default function AssistantChat() {
       setBusy(false);
     }
   }
+  async function handleDecision(
+    turn: AssistantTurn,
+    tool: string,
+    approved: boolean,
+  ) {
+    if (!conversation || !turn.id || busy || undoing || !bound) return;
+    setBusy(true);
+    setError("");
+    const abort = new AbortController();
+    controller.current = abort;
+    identity.current = conversation.id;
+    let current = { ...turn };
+    try {
+      if (approved) {
+        await drafts.persist();
+        await worktree.flush();
+      }
+      await streamAssistant(
+        `/assistant/conversations/${conversation.id}/approvals`,
+        { turn: turn.id, tool, approved },
+        (event) => {
+          if (event.type === "text")
+            current = { ...current, text: current.text + event.text };
+          else if (event.type === "tool")
+            current = {
+              ...current,
+              tools: [
+                ...current.tools.filter((t) => t.id !== event.tool.id),
+                event.tool,
+              ],
+            };
+          else if (event.type === "done") current = event.turn;
+          setConversation(
+            (value) =>
+              value && {
+                ...value,
+                turns: value.turns.map((t) => (t.id === turn.id ? current : t)),
+              },
+          );
+        },
+        abort.signal,
+      );
+      setConversation(
+        await api<Conversation>(`/assistant/conversations/${conversation.id}`),
+      );
+    } catch (e) {
+      if (!abort.signal.aborted) setError((e as Error).message);
+    } finally {
+      controller.current = null;
+      identity.current = "";
+      setBusy(false);
+      void worktree.refresh();
+    }
+  }
   async function undo(turn: AssistantTurn, action = "") {
     if (!conversation || !turn.id || busy || undoing || !bound) return;
     setUndoing(true);
@@ -440,6 +544,8 @@ export default function AssistantChat() {
     }
   }
   const actionControls = (turn: AssistantTurn): ActionControls => ({
+    canCancel: bound && worktree.canEdit,
+    canApprove: !busy && !undoing && bound && worktree.canEdit,
     canUndo: !busy && !undoing && bound && worktree.canEdit,
     onUndo: (action) => void undo(turn, action),
     onCompare: bound
@@ -509,6 +615,7 @@ export default function AssistantChat() {
                 disabled={busy || undoing}
                 onClick={() => {
                   setConversation(null);
+                  setDebug(null);
                   setPending(null);
                   setTitle("");
                   setError("");
@@ -665,6 +772,21 @@ export default function AssistantChat() {
                     <MessageSquare size={28} />
                     <h3>{t("assistantWelcome")}</h3>
                     <p>{t("assistantWelcomeHint")}</p>
+                    <div className="assistant-quick-prompts">
+                      {(options.quick_prompts ?? defaultPrompts).map(
+                        (prompt, index) => (
+                          <button
+                            key={index}
+                            type="button"
+                            className="button secondary small"
+                            disabled={busy || undoing || !selected}
+                            onClick={() => void submit(prompt.prompt)}
+                          >
+                            {prompt.label}
+                          </button>
+                        ),
+                      )}
+                    </div>
                     <small>
                       {t(
                         options.allow_data
@@ -679,6 +801,15 @@ export default function AssistantChat() {
                     key={turn.id || index}
                     turn={turn}
                     {...actionControls(turn)}
+                    onDecision={
+                      !busy &&
+                      !undoing &&
+                      bound &&
+                      turn.status === "awaiting_approval"
+                        ? (tool, approved) =>
+                            void handleDecision(turn, tool, approved)
+                        : undefined
+                    }
                   />
                 ))}
                 {pending && (
@@ -696,6 +827,11 @@ export default function AssistantChat() {
               {error && (
                 <p className="notice error" role="alert">
                   {explainError(error)}
+                </p>
+              )}
+              {awaitingApproval && (
+                <p className="assistant-context">
+                  {t("assistantAnswerConfirmation")}
                 </p>
               )}
               <form
@@ -760,6 +896,7 @@ export default function AssistantChat() {
                     <button
                       className="button primary"
                       disabled={
+                        awaitingApproval ||
                         !draft.trim() ||
                         !selected ||
                         undoing ||

@@ -324,7 +324,7 @@ export interface Run {
   /** The node whose subtree ran, or "project". */
   scope: string;
   trigger: string;
-  entry_point: "ui" | "api";
+  entry_point: "ui" | "api" | "assistant";
   status: RunStatus;
   started: string;
   finished?: string | null;
@@ -343,6 +343,8 @@ export interface Run {
 export interface NodeResult {
   results?: ExecutionResult[];
   result_run?: string;
+  /** The failed execution, which can differ from the last successful output generation. */
+  error_run?: string;
   outputs: Record<string, Dataset>;
   error: string | null;
   execution_status?: NodeRunStatus | null;
