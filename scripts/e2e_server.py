@@ -17,12 +17,17 @@ from duckpad.util import Problem
 
 # A real signing provider is exposed only by this disposable test entry point.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tests"))
+from assistant_model import test_model
 from oidc_provider import Provider
+from pydantic_ai import models
+
+models.ALLOW_MODEL_REQUESTS = False
 
 port = int(os.environ.get("DUCKPAD_E2E_PORT", "8766"))
 
 with tempfile.TemporaryDirectory(prefix="duckpad-e2e-") as directory:
     app = create_app(Path(directory))
+    app.state.assistant.configuration.model_override = test_model()
     provider = Provider(f"http://127.0.0.1:{port}/test-oidc")
     app.router.routes.insert(0, Mount("/test-oidc", app=provider.application()))
     # Browser Git tests use real disposable bare repositories without credentials or a network service.

@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Outlet, useNavigate } from "react-router";
 import CodePanel from "../CodePanel";
 import { FlowToolbar, WorkspaceNotices } from "../FlowToolbar";
@@ -13,9 +14,23 @@ export default function WorktreePage() {
   const navigate = useNavigate();
   const workspace = useWorkspace();
   const { tab = "flow" } = usePageRoute();
-  const { id, environment, snapshot, statuses, loadError, canEdit, saveFiles } =
-    useWorktree();
+  const {
+    id,
+    environment,
+    snapshot,
+    statuses,
+    loadError,
+    canEdit,
+    saveFiles,
+    setAssistantNode,
+  } = useWorktree();
   const flowView = useFlowView(id, environment);
+  const assistantNode = flowView.selected
+    ? [...flowView.path.map((p) => p.instance), flowView.selected].join("::")
+    : "";
+  useEffect(() => {
+    setAssistantNode(assistantNode);
+  }, [assistantNode, setAssistantNode]);
   if (!workspace.worktrees.some((w) => w.id === id) || (loadError && !snapshot))
     return <RouteError />;
   if (!snapshot) return <PageLoading />;

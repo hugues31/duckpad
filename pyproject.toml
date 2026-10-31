@@ -42,6 +42,7 @@ dependencies = [
     "sqlmodel>=0.0.48,<0.1",
     "alembic>=1.20,<2",
     "sqlalchemy>=2.0,<3",
+    "pydantic-ai-slim[anthropic,google,mistral,openai]>=2.64,<3",
 ]
 
 [project.urls]

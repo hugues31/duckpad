@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { submitLogin } from "./helpers";
+import { openInstanceSettings, submitLogin } from "./helpers";
 import type { Snapshot } from "../src/types";
 
 for (const secureContext of [false, true]) {
@@ -96,6 +96,15 @@ for (const secureContext of [false, true]) {
         page.locator(`.react-flow__node[data-id="${node.id}"]`),
       ).toHaveCount(1);
     await expect(page.locator(".react-flow__edge")).toHaveCount(1);
+
+    // Assistant providers also receive client-generated identifiers.
+    await openInstanceSettings(page, "AI assistant");
+    await page
+      .getByRole("button", { name: "Add provider", exact: true })
+      .click();
+    await expect(
+      page.getByRole("group", { name: "Provider 1", exact: true }),
+    ).toBeVisible();
     expect(errors).toEqual([]);
   });
 }

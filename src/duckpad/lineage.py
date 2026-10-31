@@ -27,8 +27,19 @@ class Lineage:
         self.engine = engine
 
     def explain(
-        self, worktree, environment, dataset_id, row, column, offset=0, group=None, context_values=False
+        self,
+        worktree,
+        environment,
+        dataset_id,
+        row,
+        column,
+        offset=0,
+        group=None,
+        context_values=False,
+        *,
+        page_size=PAGE_SIZE,
     ):
+        page_size = max(1, min(PAGE_SIZE, page_size))
         context = self.engine.context(worktree, environment)
         dataset = context.datasets.get(dataset_id)
         if not dataset or dataset.status != "valid":
@@ -72,7 +83,7 @@ class Lineage:
             "complete": True,
             "warnings": [],
             "offset": offset,
-            "page_size": PAGE_SIZE,
+            "page_size": page_size,
         }
         try:
             projection = ", ".join(qi(dataset.stored(c)) for c in columns)
@@ -116,7 +127,7 @@ class Lineage:
                         groups_query = f"SELECT to_json(v) AS value, COUNT(*) AS rows FROM (SELECT {value_expression} AS v {base}) q WHERE v IS NOT NULL GROUP BY v"
                         total = cursor.execute(f"SELECT count(*) FROM ({groups_query})").fetchone()[0]
                         rows = cursor.execute(
-                            groups_query + f" ORDER BY value LIMIT {PAGE_SIZE} OFFSET ?", [offset]
+                            groups_query + f" ORDER BY value LIMIT {page_size} OFFSET ?", [offset]
                         ).fetchall()
                         response.update(
                             kind="distinct_groups",
@@ -128,12 +139,12 @@ class Lineage:
                         contribution_sql, selection_sql, _ = tracer.trace(
                             tree, columns.index(column), False, json.loads(group)
                         )
-                        response.update(self.page(cursor, contribution_sql, offset))
+                        response.update(self.page(cursor, contribution_sql, offset, page_size))
                         response["group"] = json.loads(group)
                 else:
-                    response.update(self.page(cursor, contribution_sql, offset))
+                    response.update(self.page(cursor, contribution_sql, offset, page_size))
                 selection = (
-                    self.page(cursor, selection_sql, 0)
+                    self.page(cursor, selection_sql, 0, page_size)
                     if selection_sql
                     else {"total": 0, "contributions": []}
                 )
@@ -171,13 +182,13 @@ class Lineage:
             cursor.close()
 
     @staticmethod
-    def page(cursor, query, offset):
+    def page(cursor, query, offset, page_size=PAGE_SIZE):
         if not query:
             return {"total": 0, "contributions": []}
         query = f"SELECT DISTINCT * FROM ({query}) contributions"
         total = cursor.execute(f"SELECT COUNT(*) FROM ({query}) counted").fetchone()[0]
         rows = cursor.execute(
-            query + f" ORDER BY dataset, row_id, column_name LIMIT {PAGE_SIZE} OFFSET ?", [max(0, offset)]
+            query + f" ORDER BY dataset, row_id, column_name LIMIT {page_size} OFFSET ?", [max(0, offset)]
         ).fetchall()
         return {
             "total": total,

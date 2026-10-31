@@ -25,6 +25,8 @@ from starlette.middleware.base import RequestResponseEndpoint
 from . import __version__, schemas, variables
 from .archive import archive_bundle, import_warnings, read_archive, write_archive
 from .artifacts import CHUNK_SIZE
+from .assistant.api import router as assistant_router
+from .assistant.service import Assistant
 from .auth import SESSION_LIFETIME, Auth
 from .bundle import bundle_to_files
 from .components import group, import_definition
@@ -93,6 +95,7 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
     access = engine.access
     assert access is not None
     credentials = projects.remotes.credentials
+    assistant = Assistant(services, auth)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
@@ -113,11 +116,15 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
     app.state.auth = auth
     app.state.oidc = oidc
     app.state.access = access
+    app.state.assistant = assistant
+    app.include_router(assistant_router(assistant))
 
     def authorize(request: Request, user: Record) -> None:
         parts = request.url.path.strip("/").split("/")
         route = parts[1] if len(parts) > 1 else ""
-        if route in ("users", "environments", "catalog", "resources", "sso", "extensions", "git-hosts"):
+        if route in ("users", "environments", "catalog", "resources", "sso", "extensions", "git-hosts") or (
+            route == "assistant" and len(parts) >= 3 and parts[2] in ("settings", "test", "models")
+        ):
             access.instance_admin(user)
         elif route == "projects" and len(parts) >= 3 and parts[2:] != ["import"]:
             access.require(user, parts[2], "reader" if request.method == "GET" else "admin")
@@ -134,6 +141,7 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
                 raise Problem("Resource not found", 404)
             access.worktree(user, record["worktree"], "reader" if request.method == "GET" else "editor")
         elif route not in (
+            "assistant",
             "session",
             "logout",
             "workspace",
@@ -285,6 +293,7 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
         ids = {p["id"] for p in visible}
         return {
             "user": user,
+            "assistant": assistant.configuration.options(),
             "projects": visible,
             "worktrees": [w for w in store.all("worktree") if w["project"] in ids],
             "catalog": catalog.public()

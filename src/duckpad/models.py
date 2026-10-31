@@ -189,6 +189,21 @@ class Setting(SQLModel, table=True):
     value: Any = Field(sa_column=Column(JSON, nullable=False))
 
 
+class AssistantConversation(SQLModel, table=True):
+    __tablename__ = "assistant_conversation"
+    __table_args__ = (Index("assistant_owner_updated", "user", "updated"),)
+    id: str = Field(primary_key=True)
+    user: str = Field(foreign_key="user.id", ondelete="CASCADE")
+    project: str | None = Field(default=None, foreign_key="project.id", ondelete="CASCADE")
+    branch: str
+    worktree: str
+    title: str
+    updated: str
+    allow_data: bool
+    messages: list = Field(sa_type=JSON)
+    turns: list = Field(sa_type=JSON)
+
+
 class SSHKey(SQLModel, table=True):
     __tablename__ = "ssh_key"
     user: str = Field(primary_key=True, foreign_key="user.id", ondelete="CASCADE")

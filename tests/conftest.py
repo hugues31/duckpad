@@ -1,6 +1,10 @@
 import pytest
+from pydantic_ai import models
 
 from duckpad.services import Services
+
+# Unit tests must never contact paid model APIs.
+models.ALLOW_MODEL_REQUESTS = False
 
 
 @pytest.fixture
