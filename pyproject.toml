@@ -4,33 +4,197 @@ build-backend = "hatchling.build"
 
 [project]
 name = "duckpad"
-version = "0.1.0"
+version = "0.8.0"
 description = "A local SQL canvas with reproducible execution and cell lineage"
 readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"
-dependencies = ["duckdb>=2.0", "fastapi>=0.115", "uvicorn>=0.34", "sqlglot>=27", "pydantic>=2.10", "python-multipart>=0.0.20", "filelock>=3.18"]
+license-files = ["LICENSE"]
+keywords = ["duckdb", "sql", "data-pipeline", "data-lineage", "etl"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Web Environment",
+    "Framework :: FastAPI",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Database",
+]
+dependencies = [
+    "duckdb>=2.0",
+    "fastapi>=0.115",
+    "uvicorn>=0.34",
+    "sqlglot>=30.27",
+    "pydantic>=2.10",
+    "python-multipart>=0.0.20",
+    "filelock>=3.18",
+    "psutil>=7.2",
+    # DuckDB needs pytz to return TIMESTAMP WITH TIME ZONE values to Python.
+    "pytz>=2024.1",
+    "authlib>=1.9.1,<2",
+    "httpx2>=2.4,<3",
+    "joserfc>=1.7.7,<2",
+    # Ed25519 account keys and validation of trusted SSH host keys.
+    "cryptography>=44",
+    "sqlmodel>=0.0.48,<0.1",
+    "alembic>=1.20,<2",
+    "sqlalchemy>=2.0,<3",
+]
+
+[project.urls]
+Homepage = "https://github.com/hugues31/duckpad"
+Repository = "https://github.com/hugues31/duckpad"
+Issues = "https://github.com/hugues31/duckpad/issues"
+Changelog = "https://github.com/hugues31/duckpad/releases"
 
 [project.scripts]
 duckpad = "duckpad.cli:main"
 
-[project.optional-dependencies]
-dev = ["pytest>=8", "httpx>=0.28", "ruff>=0.11", "build>=1.2", "huey>=2.5", "apscheduler>=3.11,<4", "sqlalchemy>=2"]
+[dependency-groups]
+dev = [
+    "pytest>=8",
+    "httpx>=0.28",
+    "ruff>=0.11",
+    "git-cliff==2.14.2",
+    "ty==0.0.95",
+    "types-psutil>=7.2",
+]
 integration = ["oracledb>=3", "boto3>=1.38", "moto[server]>=5"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/duckpad"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/src",
+    "/tests",
+    "/scripts/build_hook.py",
+    "/scripts/release.py",
+    "/scripts/check_typing_policy.py",
+    "/cliff.toml",
+    "/README.md",
+    "/LICENSE",
+    "/pyproject.toml",
+]
 
 [tool.hatch.build.hooks.custom]
 path = "scripts/build_hook.py"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+addopts = ["-ra", "--strict-markers", "--strict-config"]
+xfail_strict = true
+filterwarnings = [
+    "error",
+    # Starlette's test client still relies on httpx; nothing to change on our side.
+    "ignore:Using `httpx` with `starlette.testclient` is deprecated",
+]
 
 [tool.ruff]
 target-version = "py311"
 line-length = 110
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP", "B"]
-ignore = ["E501"]
+select = ["E", "F", "I", "UP", "B", "C4", "PIE", "RET", "SIM", "RUF", "FURB", "PERF", "PTH", "PT"]
+ignore = ["E501", "PT018"]
+extend-select = ["ANN001", "ANN002", "ANN003", "ANN201", "ANN202", "ANN204", "ANN205", "ANN206", "PYI"]
+
+# Ruff enforces signatures where ty enforces the stricter type rules below.
+# Explicit Any remains permitted at dynamic document boundaries, as before.
+[tool.ruff.lint.per-file-ignores]
+"!src/duckpad/{app.py,datasets.py,engine.py,execution/*.py,git/command.py,git/identity.py,projects.py,types.py}" = ["ANN", "PYI"]
+
+[tool.ty.environment]
+python-version = "3.11"
+
+[tool.ty.src]
+include = ["src/duckpad"]
+respect-ignore-files = false
+
+[tool.ty.analysis]
+respect-type-ignore-comments = false
+
+[tool.ty.rules]
+unused-ignore-comment = "error"
+redundant-cast = "error"
+
+[[tool.ty.overrides]]
+include = [
+    "src/duckpad/datasets.py",
+    "src/duckpad/engine.py",
+    "src/duckpad/execution/*.py",
+    "src/duckpad/git/command.py",
+    "src/duckpad/git/identity.py",
+    "src/duckpad/projects.py",
+    "src/duckpad/types.py",
+]
+[tool.ty.overrides.rules]
+dynamic-function-decorator-return = "error"
+missing-type-argument = "error"
+possibly-unresolved-reference = "error"
+unsound-return-statement = "error"
+[tool.ty.overrides.analysis]
+strict-equality-semantics = true
+strict-generic-narrowing = true
+
+# Existing dynamic document/SQLModel diagnostics. Keep exact file/rule pairs:
+# CI rejects new exceptions, broader patterns, and whole-file exclusions.
+
+[[tool.ty.overrides]]
+include = ["src/duckpad/comparison.py"]
+[tool.ty.overrides.rules]
+unresolved-attribute = "ignore"
+not-subscriptable = "ignore"
+unsupported-operator = "ignore"
+
+[[tool.ty.overrides]]
+include = ["src/duckpad/components.py"]
+[tool.ty.overrides.rules]
+unresolved-attribute = "ignore"
+invalid-assignment = "ignore"
+
+[[tool.ty.overrides]]
+include = ["src/duckpad/git/workspace.py"]
+[tool.ty.overrides.rules]
+unresolved-attribute = "ignore"
+
+[[tool.ty.overrides]]
+include = ["src/duckpad/materialize.py"]
+[tool.ty.overrides.rules]
+invalid-argument-type = "ignore"
+
+[[tool.ty.overrides]]
+include = ["src/duckpad/search.py"]
+[tool.ty.overrides.rules]
+invalid-argument-type = "ignore"
+unresolved-attribute = "ignore"
+
+[[tool.ty.overrides]]
+include = ["src/duckpad/sql_worker.py"]
+[tool.ty.overrides.rules]
+unresolved-attribute = "ignore"
+invalid-argument-type = "ignore"
+
+[[tool.ty.overrides]]
+include = ["src/duckpad/store.py"]
+[tool.ty.overrides.rules]
+invalid-argument-type = "ignore"
+unresolved-attribute = "ignore"
+
+[[tool.ty.overrides]]
+include = ["src/duckpad/templates.py"]
+[tool.ty.overrides.rules]
+unresolved-attribute = "ignore"
+
+[[tool.ty.overrides]]
+include = ["src/duckpad/trace/normalize.py"]
+[tool.ty.overrides.rules]
+invalid-argument-type = "ignore"
+
+[[tool.ty.overrides]]
+include = ["src/duckpad/trace/set_operation.py"]
+[tool.ty.overrides.rules]
+invalid-method-override = "ignore"
