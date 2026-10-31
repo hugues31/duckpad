@@ -1,5 +1,6 @@
 """Frozen comparisons and reviewed Git integration for project repositories."""
 
+import json
 import tempfile
 import threading
 from collections import OrderedDict
@@ -7,14 +8,65 @@ from contextlib import suppress
 from pathlib import Path
 
 from ..bundle import files_to_bundle, is_declarative, validate
-from ..comparison import compare_files
+from ..comparison import categories, compare_files, fields
 from ..merge import merge_files
+from ..node_code import code_path
 from ..util import Problem, digest, now, uid
 from . import command
 from .command import GitError
 
 MAX_REPORTS = 128
 MAX_HISTORY = 10000
+# Blobs read by one cat-file process while summarizing an element's history.
+BLOB_BATCH = 256
+# A version that cannot be parsed: compared with nothing, like a malformed revision in a comparison.
+UNREADABLE = object()
+
+
+def entity_sources(entity):
+    """The graph file, code file and node ID defining a node or template entity.
+
+    Templates have no graph file or node. A code file that Duckpad cannot version is None.
+    """
+    if entity.startswith("template/"):
+        code = f"templates/{entity.removeprefix('template/')}.sql"
+        if not is_declarative(code):
+            raise Problem("Choose a node or template", 422)
+        return None, code, None
+    parent = None
+    if entity.startswith("component/"):
+        parent, _, entity = entity.removeprefix("component/").partition("/")
+    node = entity.removeprefix("node/")
+    graph = f"components/{parent}.json" if parent is not None else "flow.json"
+    if not entity.startswith("node/") or not node or not is_declarative(graph):
+        raise Problem("Choose a node or template", 422)
+    code = code_path(node, parent)
+    return graph, code if is_declarative(code) else None, node
+
+
+def graph_node(content, node):
+    """The node with this ID in a graph file, None when absent, UNREADABLE when malformed."""
+    try:
+        nodes = json.loads(content).get("nodes", [])
+        return next((n for n in nodes if isinstance(n, dict) and n.get("id") == node), None)
+    except (ValueError, AttributeError, TypeError):
+        return UNREADABLE
+
+
+def text(content):
+    try:
+        return content.decode("utf-8")
+    except UnicodeDecodeError:
+        return UNREADABLE
+
+
+def entity_value(found, code):
+    """A node's version as a comparison sees it: normal nodes include their own code."""
+    if found is None or found is UNREADABLE or found.get("template") or found.get("component"):
+        return found
+    if code is UNREADABLE:
+        return UNREADABLE
+    return {**found, "sql": code or ""}
 
 
 def diagnose(files):
@@ -165,6 +217,106 @@ class GitWorkspace:
                     continue
             items.append(metadata)
         return {"items": items, "head": head, "next": offset + limit if len(commits) > limit else None}
+
+    def element_summary(self, worktree_id, entity, ref="HEAD"):
+        """Who created a node or template, who changed it last, and how many commits changed it.
+
+        `changes` counts the commits that the element history lists: their version differs from
+        at least one parent's. Credit goes only to commits whose version differs from every
+        parent's, so a merge that only brings one side's edit leaves it to the commit that made
+        it. Only the element's own files are read, in the latest MAX_HISTORY commits; `complete`
+        tells whether these are the whole history.
+        """
+        graph, code, node = entity_sources(entity)
+        path = self.projects.get(worktree_id)["path"]
+        head = self.resolve(path, ref)
+        rows = self.git(
+            path, "log", f"--max-count={MAX_HISTORY + 1}", "--format=%H%x1f%P%x1f%an", head, "--"
+        ).splitlines()
+        commits = [row.split("\x1f", 2) for row in rows[:MAX_HISTORY]]
+        versions = self.versions(
+            path, {c for commit, parents, _ in commits for c in (commit, *parents.split())}, graph, code, node
+        )
+        changes = []
+        listed = 0
+        for commit, parents, author in commits:
+            value = versions[commit]
+            before = [versions[parent] for parent in parents.split()] or [None]
+            if value is UNREADABLE or UNREADABLE in before or all(v == value for v in before):
+                continue
+            listed += 1
+            if value in before:
+                continue
+            previous = next((v for v in before if v is not None), None)
+            changes.append((commit, author, previous, value))
+
+        def record(change):
+            commit, _, previous, value = change
+            status = "added" if previous is None else "removed" if value is None else "modified"
+            kind = "node" if node is not None else "template"
+            return {
+                **self.metadata(path, commit),
+                "status": status,
+                "categories": categories(kind, fields(previous, value), previous, value)
+                if status == "modified"
+                else [],
+            }
+
+        created = next((c for c in reversed(changes) if c[2] is None), None)
+        return {
+            "entity": entity,
+            "head": head,
+            "exists": versions[head] is not None,
+            "last": record(changes[0]) if changes else None,
+            "created": record(created) if created else None,
+            "changes": listed,
+            "authors": list(dict.fromkeys(author for _, author, _, _ in changes)),
+            "complete": len(rows) <= MAX_HISTORY,
+        }
+
+    def versions(self, path, commits, graph, code, node):
+        """An element's version in each commit, parsing each distinct file content once."""
+        commits = sorted(commits)
+        names = [name for name in (graph, code) if name]
+        listing = self.git(
+            path,
+            "cat-file",
+            "--batch-check=%(objecttype) %(objectname)",
+            input="".join(f"{commit}:{name}\n" for commit in commits for name in names),
+        ).splitlines()
+        # Missing paths print "<commit>:<path> missing"; anything but a blob is no file.
+        objects = iter(line.removeprefix("blob ") if line.startswith("blob ") else None for line in listing)
+        located = {commit: {name: next(objects) for name in names} for commit in commits}
+
+        def contents(name, parse):
+            return self.blobs(path, {files[name] for files in located.values() if files[name]}, parse)
+
+        sources = contents(code, text) if code else {}
+        if node is None:
+            return {commit: sources.get(files[code]) for commit, files in located.items()}
+        nodes = contents(graph, lambda content: graph_node(content, node))
+        return {
+            commit: entity_value(nodes.get(files[graph]), sources.get(files[code]) if code else None)
+            for commit, files in located.items()
+        }
+
+    def blobs(self, path, objects, parse):
+        """parse(content) of each blob, reading at most BLOB_BATCH contents per Git process."""
+        objects = sorted(objects)
+        result = {}
+        for start in range(0, len(objects), BLOB_BATCH):
+            batch = objects[start : start + BLOB_BATCH]
+            output = self.git(
+                path, "cat-file", "--batch", input="".join(f"{o}\n" for o in batch).encode(), binary=True
+            )
+            offset = 0
+            for name in batch:
+                # Each blob is "<object> blob <size>\n<content>\n".
+                end = output.index(b"\n", offset)
+                size = int(output[offset:end].split()[2])
+                result[name] = parse(output[end + 1 : end + 1 + size])
+                offset = end + 2 + size
+        return result
 
     def tags(self, worktree_id):
         """All commit tags in the shared project repository, including closed branches."""

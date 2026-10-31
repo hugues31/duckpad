@@ -23,6 +23,8 @@ ROUTE_ACCESS = {
         "GET /api/oidc/callback",
     ],
     SESSION: [
+        "GET /api/v1/jobs",
+        "GET /api/v1/openapi.json",
         "POST /api/logout",
         "GET /api/session",
         "GET /api/search",
@@ -41,6 +43,9 @@ ROUTE_ACCESS = {
         "DELETE /api/ssh-key",
     ],
     READER: [
+        "GET /api/v1/jobs/{slug}",
+        "GET /api/v1/runs/{run_id}",
+        "GET /api/v1/runs/{run_id}/log",
         "GET /api/projects/{project}/jobs",
         "GET /api/jobs/{slug}",
         "GET /api/jobs/{slug}/version",
@@ -49,6 +54,7 @@ ROUTE_ACCESS = {
         "GET /api/worktrees/{worktree}",
         "GET /api/worktrees/{worktree}/archive.zip",
         "GET /api/worktrees/{worktree}/git/history",
+        "GET /api/worktrees/{worktree}/git/history/summary",
         "GET /api/worktrees/{worktree}/git/tags",
         "GET /api/worktrees/{worktree}/git/compare",
         "GET /api/worktrees/{worktree}/git/branches",
@@ -69,7 +75,11 @@ ROUTE_ACCESS = {
         "POST /api/worktrees/{worktree}/lineage",
         "GET /api/runs/{run}",
     ],
-    OPERATOR: ["POST /api/jobs/{slug}/runs"],
+    OPERATOR: [
+        "POST /api/jobs/{slug}/runs",
+        "POST /api/v1/jobs/{slug}/runs",
+        "POST /api/v1/runs/{run_id}/cancel",
+    ],
     EDITOR: [
         "PUT /api/worktrees/{worktree}",
         "POST /api/worktrees/{worktree}/extensions/check",
@@ -132,6 +142,8 @@ AUTHORIZATION_ERRORS = {
     "Project not found",
     "Worktree not found",
     "Resource not found",
+    "Job not found",
+    "Run not found",
     "Your project role does not allow this action",
     "Instance administrator access required",
 }
@@ -236,6 +248,7 @@ def test_private_discovery_and_all_direct_resource_routes(instance):
         ("GET", f"/worktrees/{branch['id']}"),
         ("GET", f"/worktrees/{worktree['id']}/status"),
         ("GET", f"/worktrees/{worktree['id']}/git/history"),
+        ("GET", f"/worktrees/{worktree['id']}/git/history/summary?entity=node/source"),
         ("GET", f"/worktrees/{worktree['id']}/archive.zip"),
         ("GET", f"/worktrees/{worktree['id']}/git/compare?a=HEAD&b=HEAD"),
         ("GET", f"/worktrees/{worktree['id']}/compile/source"),
@@ -278,6 +291,7 @@ def test_project_role_matrix_and_cross_project_import(instance, role):
     assert snapshot["role"] == role
     for suffix in (
         "git/history",
+        "git/history/summary?entity=node/source",
         "git/compare",
         "git/branches",
         "git/remote",
@@ -365,9 +379,16 @@ def test_project_role_matrix_and_cross_project_import(instance, role):
 
 def test_every_api_route_requires_its_classified_access_level(instance):
     app, client = instance
+    # Newer FastAPI versions retain included routers instead of flattening their routes.
+    automation_routes = [
+        child
+        for route in app.routes
+        if (included := getattr(route, "original_router", None)) is not None and included.prefix == "/api/v1"
+        for child in included.routes
+    ]
     routes = {
         (method, route.path)
-        for route in app.routes
+        for route in [*app.routes, *automation_routes]
         if isinstance(route, APIRoute) and route.path.startswith("/api/")
         for method in route.methods
     }
@@ -398,7 +419,11 @@ def test_every_api_route_requires_its_classified_access_level(instance):
             NewJob(slug=slug, name=slug, environment="dev", target={"kind": "branch", "ref": "main"}),
             {"id": "owner", "username": "owner"},
         )
+    from duckpad.schemas import JobLaunch
+
+    job_run = wait_run(store, jobs.launch("probe-job", JobLaunch(), None))
     values = {
+        "run_id": job_run["id"],
         "slug": "probe-job",
         "project": worktree["project"],
         "worktree": worktree["id"],

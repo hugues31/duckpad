@@ -59,6 +59,12 @@ export const sections = [
           "Branch, compare, review merges and synchronize your project.",
       },
       {
+        slug: "automation",
+        title: "Automate Jobs",
+        description:
+          "Launch approved Jobs, wait for results and collect logs through the API.",
+      },
+      {
         slug: "connectors",
         title: "Connections",
         description:

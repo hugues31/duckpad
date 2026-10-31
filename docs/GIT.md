@@ -85,8 +85,9 @@ it does not resolve runtime schemas or prove that result values changed. Invalid
 or unsupported definitions are reported as partial. Comparing never runs SQL,
 reads source data, publishes outputs, switches branches or flushes external edits.
 
-Expand Git history to load older pages. **Element history**, also available in
-the node inspector, filters by a node, template or component ID. **Compare with
+Expand Git history to load older pages. **Element history**, also opened by
+**View change history** in the node inspector's **Info** tab, filters by a node,
+template or component ID. **Compare with
 parent** uses the actual first Git parent; merge commits also offer their other
 parents. A root commit compares with an empty tree.
 

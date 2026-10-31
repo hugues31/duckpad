@@ -27,6 +27,7 @@ import {
   localDefinitions,
   nodeCode,
   nodeCodePath,
+  nodeEntity,
   nodeGraph,
 } from "../nodeCode";
 import LineagePanel from "../LineagePanel";
@@ -525,6 +526,7 @@ export default function FlowPage() {
             readOnly={!canEdit}
             key={inspected}
             node={node}
+            parent={parent}
             signature={signature}
             snapshot={snapshot}
             graphNodes={graph.nodes}
@@ -636,7 +638,7 @@ export default function FlowPage() {
                 kind: "git",
                 worktree,
                 mode: "compare",
-                entity: `${path.length ? `component/${path[path.length - 1].definition}/` : ""}node/${node.id}`,
+                entity: nodeEntity(node.id, parent),
               })
             }
             onClose={() => panels.set({ inspector: false })}
