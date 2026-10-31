@@ -48,9 +48,11 @@ export default function CodePanel({
   const [error, setError] = useState("");
   const path = selected in files ? selected : Object.keys(files).sort()[0];
 
+  // The server validates the context against saved files; a draft file is not shared.
+  const assistantFile = path && path in snapshot.files ? path : "";
   useEffect(() => {
-    if (!hidden) setAssistantFile(path);
-  }, [hidden, path, setAssistantFile]);
+    if (!hidden) setAssistantFile(assistantFile);
+  }, [hidden, assistantFile, setAssistantFile]);
 
   const edit = (text: string) => {
     if (!path || readOnly || pending || text === files[path]) return;

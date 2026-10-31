@@ -7,6 +7,7 @@ import type {
   AssistantSettings as Configuration,
   ProviderKind,
 } from "./assistantTypes";
+import { identifier } from "./graph";
 import { useT } from "./i18n";
 import { useResource } from "./useApiResource";
 import { useAsyncAction } from "./useAsyncAction";
@@ -279,7 +280,7 @@ export default function AssistantSettings() {
                   providers: [
                     ...config.providers,
                     {
-                      id: crypto.randomUUID(),
+                      id: identifier("provider"),
                       kind: "openai",
                       base_url: "",
                       models: [],

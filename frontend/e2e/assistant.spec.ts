@@ -98,3 +98,53 @@ test("configure the assistant, inspect a flow and resume a private conversation"
     page.getByRole("button", { name: "Open AI assistant", exact: true }),
   ).toHaveCount(0);
 });
+
+test("an unsaved Code file stays out of the assistant context", async ({
+  page,
+}) => {
+  await signIn(page);
+  const configured = await page.request.put("/api/assistant/settings", {
+    data: {
+      enabled: true,
+      providers: [
+        {
+          id: "primary",
+          kind: "deepseek",
+          api_key: "browser-test-key",
+          models: ["test"],
+        },
+      ],
+      default_provider: "primary",
+      default_model: "test",
+    },
+  });
+  expect(configured.ok()).toBeTruthy();
+  const example = await (
+    await page.request.post("/api/example", { data: {} })
+  ).json();
+  await page.goto(`/worktrees/${example.id}/code`);
+  await page
+    .getByRole("button", { name: "Create variables.json", exact: true })
+    .click();
+  await expect(page.locator(".code-file-heading")).toContainText(
+    "variables.json",
+  );
+  await page
+    .getByRole("button", { name: "Open AI assistant", exact: true })
+    .click();
+  const chat = page.getByRole("dialog", { name: "AI assistant", exact: true });
+  await expect(chat.locator(".assistant-context").first()).not.toContainText(
+    "variables.json",
+  );
+  await chat
+    .getByRole("textbox", { name: "Message", exact: true })
+    .fill("Which variables exist?");
+  await chat.getByRole("button", { name: "Send", exact: true }).click();
+  await expect(
+    chat.getByText("The flow contains read-only project nodes."),
+  ).toBeVisible();
+  await expect(chat.getByRole("alert")).toHaveCount(0);
+  await page.request.put("/api/assistant/settings", {
+    data: { enabled: false, providers: [] },
+  });
+});
