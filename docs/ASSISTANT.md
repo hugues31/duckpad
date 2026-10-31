@@ -11,38 +11,57 @@ nodes and tool results before relying on an explanation.
 ## Configure a provider
 
 An instance administrator opens **Instance settings → AI assistant**. The
-assistant starts disabled. Choose **Add provider**, select OpenAI, Anthropic,
-Google, Mistral, DeepSeek, Ollama or an OpenAI-compatible endpoint, and enter its
-API key. Ollama and custom endpoints can work without a key. For those providers,
-set the API base URL, including `/v1` when the server requires it. Ollama defaults
-to `http://localhost:11434/v1`; that address is relative to the Duckpad server,
-not the browser.
+assistant starts disabled; the badge next to the title shows the saved state.
+The page follows the setup order in numbered steps.
 
-Enter allowed model identifiers, one per line. **Save and discover models**
-queries the provider's model list; select entries to add them to the allowed
-list. Servers without a model-list endpoint still accept manually entered model
-identifiers. Choose the **Instance default model**, enable the assistant and
-select **Save and test**. The test sends only a short connection-check prompt.
-It does not read any project content. All users share the instance's configured
-providers; they choose an allowed model and never enter personal keys.
+1. **Connect a provider**: choose OpenAI, Anthropic, Google, Mistral, DeepSeek,
+   Ollama or an OpenAI-compatible server, then enter its API key. Hosted
+   providers link to the page where you create one. Ollama and custom servers
+   can work without a key; set their API base URL, including `/v1` when the
+   server requires it. Ollama defaults to `http://localhost:11434/v1`; that
+   address is relative to the Duckpad server, not the browser. Use **Add
+   provider** to connect another one.
+2. Under **Allowed models**, **Load available models** lists the provider's chat
+   models without saving anything first; check those people can use and filter
+   long lists. Add identifiers the provider does not list by typing them in
+   **Model identifier**. Remove an allowed model with its × button.
+3. **Choose the default model**: the first allowed model is preselected.
+   **Test connection** sends a short connection-check prompt with the settings
+   on screen, saved or not. It does not read any project content.
+4. **Set data access** and, optionally, adjust the **Quick prompts**.
+5. **Make it available**: check **Enable the assistant**, which requires a
+   default model, then choose **Save changes** in the bar that stays at the
+   bottom of the page. **Discard changes** restores the saved settings.
 
-A saved key is write-only: the browser receives only its presence. Leaving the
-field blank keeps it. Changing the provider type or API base URL clears the old
-key; enter it again if the new endpoint needs authentication. Removing a provider
-removes its saved key. Configuration and conversations live in the private
-instance database and never enter project Git history or ZIP exports.
+All users share the instance's configured providers; they choose an allowed model
+and never enter personal keys.
+
+A saved key is write-only: the browser receives only its presence, shown as
+**Key saved** on the provider, and the empty field keeps it. Typing a new key
+replaces it when you save. Changing the API base URL clears the old key; enter it
+again if the new endpoint needs authentication. Model discovery and the test
+reuse a saved key under the same rule. Removing a provider removes its saved key.
+Configuration and conversations live in the private instance database and never
+enter project Git history or ZIP exports.
 
 ![Instance assistant configuration with a saved provider key](images/assistant-settings.png)
 
 ## Ask about the current page
 
-Open a project branch and choose the **AI assistant** button at the bottom right.
-The button also appears on other signed-in pages when the assistant is enabled.
-The context strip shows the current page, branch, selected node or Code file,
-and execution environment. Before sending a message, Duckpad saves pending editor
-changes. A failed save stops the message so you can resolve it first. The server
-validates the context and reads saved content. On pages without an open working branch,
-the assistant can answer general questions but has no project-reading tools.
+Open a project branch and choose the **AI assistant** bubble at the bottom right.
+The bubble also appears on other signed-in pages when the assistant is enabled.
+Drag it to another height or to the left edge if it covers something you need;
+with the keyboard, focus it and press Alt with an arrow key. This browser
+remembers its place, and the chat opens next to it.
+
+Under the chat title, Duckpad shows the context sent with each message: the
+current page and the selected node or Code file. The branch and environment are
+those of the top bar; the title names the environment only when it differs, for
+example after **Ask the assistant** on a prod run. Before sending a message,
+Duckpad saves pending editor changes. A failed save stops the message so you can
+resolve it first. The server validates the context and reads saved content. On
+pages without an open working branch, the assistant can answer general questions
+but has no project-reading tools.
 
 For Northstar, try “How do paid orders reach the regional report?” or, after
 running the flow yourself, “Why does this region have this revenue?” The
@@ -50,8 +69,13 @@ assistant reads bounded pages of project content as needed. Expand a tool card
 to inspect what was read. Data tools inspect existing materialized results;
 missing or stale results may require a run, which you can request in the chat.
 
-Choose a model in the composer, type a message and press **Send** or Enter.
-Shift+Enter inserts a line break. **Stop** cancels the current provider request.
+Choose a model in the composer, type a message and press Enter or the **Send**
+arrow. Shift+Enter inserts a line break. While the assistant works, an animated
+indicator and a glowing composer show that an answer is coming, and **Stop**
+cancels the current provider request. You can close the chat meanwhile: the
+bubble keeps glowing, then shows a dot when the answer is ready. Reopening the
+chat returns to where you left the conversation, and **Jump to the latest
+message** appears when you have scrolled up.
 Responses stream into the chat as safe Markdown, with formatted code blocks.
 Raw HTML and remote images are not rendered. Each turn is limited to 12 provider
 requests, 30 tool calls and two minutes.
@@ -134,9 +158,9 @@ run** and **Explain a value**. Clicking one sends its full prompt. The default
 buttons and prompts follow the interface language.
 
 Instance administrators manage **Quick prompts** in **Instance settings → AI
-assistant**. Edit each button label and full prompt, add or delete entries, and
-use **Move up** or **Move down** to reorder them. **Save changes** applies the list
-to everyone on the instance. A customized list keeps its authored language;
+assistant**. Each prompt takes one line; **Edit** opens its button label and full
+prompt. Add or delete entries, and use **Move up** or **Move down** to reorder
+them. **Save changes** applies the list to everyone on the instance. A customized list keeps its authored language;
 **Restore translated defaults** restores language-aware defaults. Saving an empty
 list hides the buttons. These settings are not stored in project Git files.
 

@@ -411,7 +411,9 @@ reading and the maximum rows per tool call (50 by default, 1–500). Supported
 providers are OpenAI, Anthropic, Google, Mistral, DeepSeek, Ollama and custom
 OpenAI-compatible servers. Keys are write-only, optional for Ollama/custom,
 retained only for an unchanged provider type and base URL, and excluded from
-project files, archives, model instructions, responses and error logs.
+project files, archives, model instructions, responses and error logs. Model
+discovery and the connection test accept unsaved provider settings and reuse a
+saved key only under that same rule.
 
 A floating chat on every authenticated page streams safe Markdown and collapsible
 tool cards. The expanded view lists author-private conversations in recent-first

@@ -642,7 +642,8 @@ test("capture SSO configuration and the enabled sign-in choice", async ({
 });
 
 test("assistant settings and contextual chat", async ({ page }) => {
-  await page.setViewportSize({ width: 1440, height: 1250 });
+  // Tall enough for the whole settings card, sticky save bar included.
+  await page.setViewportSize({ width: 1440, height: 1900 });
   const response = await page.request.put("/api/assistant/settings", {
     data: {
       enabled: true,
@@ -662,9 +663,11 @@ test("assistant settings and contextual chat", async ({ page }) => {
   });
   expect(response.ok()).toBeTruthy();
   await page.goto("/instance-settings/assistant");
-  await expect(page.getByLabel("Allowed models", { exact: true })).toHaveValue(
-    "deepseek-chat",
-  );
+  await expect(
+    page
+      .getByRole("group", { name: "DeepSeek", exact: true })
+      .getByRole("listitem"),
+  ).toHaveText(["deepseek-chat"]);
   await capture(
     page,
     "assistant-settings",

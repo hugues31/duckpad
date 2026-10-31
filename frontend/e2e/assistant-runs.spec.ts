@@ -64,16 +64,19 @@ test("administrators customize, reorder and restore quick prompts", async ({
     .click();
   await page
     .getByLabel("Button label", { exact: true })
-    .last()
     .fill("Custom diagnostic");
   await page
     .getByLabel("Full prompt", { exact: true })
-    .last()
     .fill("Explain this flow");
+  await page
+    .locator(".assistant-prompt-editor")
+    .getByRole("button", { name: "Close", exact: true })
+    .click();
+  const prompts = page.locator(".assistant-prompt-setting");
+  await expect(prompts).toHaveCount(4);
   for (let i = 0; i < 3; i++) {
-    await page
-      .locator(".assistant-prompt-setting")
-      .filter({ has: page.locator('input[value="Custom diagnostic"]') })
+    await prompts
+      .filter({ hasText: "Custom diagnostic" })
       .getByRole("button", { name: "Move up", exact: true })
       .click();
   }
@@ -86,9 +89,7 @@ test("administrators customize, reorder and restore quick prompts", async ({
     )
     .toBe("Custom diagnostic");
   await page.reload();
-  await expect(
-    page.getByLabel("Button label", { exact: true }).first(),
-  ).toHaveValue("Custom diagnostic");
+  await expect(prompts.first()).toContainText("Custom diagnostic");
   await page
     .getByRole("button", { name: "Restore translated defaults", exact: true })
     .click();
