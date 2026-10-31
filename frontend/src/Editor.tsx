@@ -13,6 +13,17 @@ window.MonacoEnvironment = {
     label === "json" ? new JsonWorker() : new EditorWorker(),
 };
 loader.config({ monaco });
+// Disposing the last model stops Monaco's worker and rejects a diff still being
+// computed with "Canceled", which Monaco leaves unhandled. Ignore it, like VS Code.
+window.addEventListener("unhandledrejection", (event) => {
+  const reason: unknown = event.reason;
+  if (
+    reason instanceof Error &&
+    reason.name === "Canceled" &&
+    reason.message === "Canceled"
+  )
+    event.preventDefault();
+});
 export function CodeDiff({
   before,
   after,

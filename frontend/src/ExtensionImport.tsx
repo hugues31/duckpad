@@ -1,8 +1,10 @@
 import { useState } from "react";
 import { useSearchParams } from "react-router";
+import ExtensionCatalog, { ExtensionAvailability } from "./ExtensionCatalog";
 import {
   extensionDownload,
   extensionSourceKey,
+  type CoreExtension,
   type ExtensionSource as Source,
 } from "./extensions";
 import { importExtension } from "./api";
@@ -15,6 +17,7 @@ type Runtime = {
   version: string;
   platform: string;
   imports: { name: string; source: Source }[];
+  core_extensions: CoreExtension[];
 };
 
 export default function ExtensionImport() {
@@ -83,6 +86,26 @@ export default function ExtensionImport() {
           onChange={(event) => setName(event.target.value.trim().toLowerCase())}
         />
       </label>
+      {runtime && (
+        <>
+          <ExtensionCatalog
+            runtime={runtime}
+            name={name}
+            source={source}
+            disabled={pending}
+            onPick={(entry) => {
+              setName(entry.name);
+              setSource(entry.source);
+              setSaved(false);
+            }}
+          />
+          <ExtensionAvailability
+            runtime={runtime}
+            name={name}
+            source={source}
+          />
+        </>
+      )}
       {download && (
         <p>
           <a

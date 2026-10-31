@@ -2,6 +2,13 @@ import { expect, test } from "@playwright/test";
 import { openInstanceSettings, signIn } from "./helpers";
 import { verifyAssistantEditing } from "./assistant-editing-flow";
 
+// Later specs share the server: an enabled assistant adds buttons to their screens.
+test.afterEach(async ({ page }) => {
+  await page.request.put("/api/assistant/settings", {
+    data: { enabled: false, providers: [] },
+  });
+});
+
 test("configure the assistant, inspect a flow and resume a private conversation", async ({
   page,
 }) => {
@@ -149,9 +156,6 @@ test("a pending Code file is saved before the assistant turn", async ({
     await page.request.get(`/api/worktrees/${example.id}`)
   ).json();
   expect(saved.files["variables.json"]).toBeDefined();
-  await page.request.put("/api/assistant/settings", {
-    data: { enabled: false, providers: [] },
-  });
 });
 
 test("assistant writes appear on the canvas and undo preserves a manual SQL edit", async ({

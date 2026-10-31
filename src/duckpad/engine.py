@@ -20,7 +20,7 @@ from .execution.fingerprints import Fingerprints
 from .execution.results import Results
 from .execution.runs import Runner
 from .execution.samples import Sample
-from .extensions import MAX_UPLOAD_BYTES, database_config, install, runtime
+from .extensions import MAX_UPLOAD_BYTES, core_catalog, database_config, install, runtime
 from .projects import Projects
 from .store import Store
 from .types import Record, RunToken
@@ -188,6 +188,7 @@ class Engine:
             "platform": platform,
             "max_upload_bytes": MAX_UPLOAD_BYTES,
             "imports": list(self.store.get("settings", "offline_extensions", {}).values()),
+            "core_extensions": core_catalog(),
         }
 
     def project_extensions(self, worktree: str) -> Record:
@@ -210,7 +211,12 @@ class Engine:
             )
             entries.append({"name": name, **item, **{k: v for k, v in result.items() if k != "sql"}})
         version, platform = runtime()
-        return {"version": version, "platform": platform, "requirements": entries}
+        return {
+            "version": version,
+            "platform": platform,
+            "requirements": entries,
+            "core_extensions": core_catalog(),
+        }
 
     def check_project_extension(self, worktree: str, name: str, source: str) -> Record:
         self.projects.get(worktree)

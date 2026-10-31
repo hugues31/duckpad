@@ -197,7 +197,9 @@ def test_project_api_checks_loading_and_retains_unavailable_imported_requirement
         assert response.status_code == 200, response.text
         identity = response.json()["id"]
         url = f"/api/worktrees/{identity}"
-        state = client.get(url + "/extensions").json()["requirements"][0]
+        state = client.get(url + "/extensions").json()
+        assert state["core_extensions"] == client.get("/api/extensions/runtime").json()["core_extensions"]
+        state = state["requirements"][0]
         assert state["status"] == "missing" and state["enabled"]
         response = client.post(url + "/extensions/check", json={"name": "json", "source": "core"})
         assert response.status_code == 200, response.text

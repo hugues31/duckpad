@@ -2,9 +2,11 @@ import { Download, FlaskConical, Trash2, Upload } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router";
 import { api, send } from "../api";
+import ExtensionCatalog, { ExtensionAvailability } from "../ExtensionCatalog";
 import {
   extensionDownload,
   extensionSourceKey,
+  type CoreExtension,
   type ExtensionSource,
   type ProjectExtension,
 } from "../extensions";
@@ -25,6 +27,7 @@ interface Extensions {
   version: string;
   platform: string;
   requirements: ExtensionState[];
+  core_extensions: CoreExtension[];
 }
 
 export default function ExtensionsPage() {
@@ -156,6 +159,21 @@ export default function ExtensionsPage() {
             {t("projectExtensionAdd")}
           </button>
         </form>
+      )}
+      {canEdit && !loadError && data && (
+        <>
+          <ExtensionAvailability runtime={data} name={name} source={source} />
+          <ExtensionCatalog
+            runtime={data}
+            name={name}
+            source={source}
+            disabled={busy}
+            onPick={(entry) => {
+              setName(entry.name);
+              setSource(entry.source);
+            }}
+          />
+        </>
       )}
       <div className="project-extension-list">
         {data?.requirements.map((item) => {
