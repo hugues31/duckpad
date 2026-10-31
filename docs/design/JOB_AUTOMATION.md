@@ -1,6 +1,6 @@
 # Job automation (design proposal)
 
-**Status: delivery steps 1.1 (API tokens, service accounts and run requesters), 1.2 (immutable annotated tags and comparison by tag) and 1.3 (Operator access, Jobs, pinned versions, audited promotion and read-only results) implemented. The remaining steps are proposed; the decisions below were agreed in review.**
+**Status: delivery steps 1.1 (API tokens, service accounts and run requesters), 1.2 (immutable annotated tags and comparison by tag), 1.3 (Operator access, Jobs, pinned versions, audited promotion and read-only results) and 1.4 (Automation API v1, idempotency, waiting, text logs and OpenAPI) implemented. The remaining steps are proposed; the decisions below were agreed in review.**
 
 ## Summary
 

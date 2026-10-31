@@ -107,7 +107,8 @@ export async function verifyMessages(page: Page) {
     "Failed",
   );
   await expect(node("export").locator(".node-status")).toContainText("Blocked");
-  await expect(inspector.locator(".notice.error")).toHaveText(
+  // The notice may also offer "Ask the assistant" when a preview has it enabled.
+  await expect(inspector.locator(".notice.error p")).toHaveText(
     "Orders need review",
   );
   // The stale preview still shows the messages from its successful generation.

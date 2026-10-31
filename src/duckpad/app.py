@@ -22,7 +22,7 @@ from starlette.datastructures import UploadFile as FormFile
 from starlette.exceptions import HTTPException
 from starlette.middleware.base import RequestResponseEndpoint
 
-from . import __version__, schemas, variables
+from . import __version__, automation, schemas, variables
 from .archive import archive_bundle, import_warnings, read_archive, write_archive
 from .artifacts import CHUNK_SIZE
 from .assistant.api import router as assistant_router
@@ -120,10 +120,21 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
     app.state.access = access
     app.state.assistant = assistant
     app.include_router(assistant_router(assistant))
+    app.include_router(automation.router(jobs, access))
+
+    def request_problem(
+        request: Request, error: Problem, headers: Mapping[str, str] | None = None
+    ) -> JSONResponse:
+        if request.url.path.startswith("/api/v1/"):
+            error = automation.problem(error)
+        return problem_response(error, headers)
 
     def authorize(request: Request, user: Record) -> None:
         parts = request.url.path.strip("/").split("/")
         route = parts[1] if len(parts) > 1 else ""
+        if route == "v1":
+            # The versioned router checks resource visibility and project roles itself.
+            return
         if route in ("users", "environments", "catalog", "resources", "sso", "extensions", "git-hosts") or (
             route == "assistant" and len(parts) >= 3 and parts[2] in ("settings", "test", "models")
         ):
@@ -172,20 +183,20 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
     @app.exception_handler(Problem)
     async def problem_handler(request: Request, error: Exception) -> JSONResponse:
         assert isinstance(error, Problem)
-        return problem_response(error)
+        return request_problem(request, error)
 
     @app.exception_handler(RequestValidationError)
     async def invalid_request(request: Request, error: Exception) -> JSONResponse:
         assert isinstance(error, RequestValidationError)
         errors = [{"location": ".".join(map(str, e["loc"])), "message": e["msg"]} for e in error.errors()]
         summary = "; ".join(f"{e['location']}: {e['message']}" for e in errors)
-        return problem_response(Problem(f"Invalid request: {summary}", 422, errors))
+        return request_problem(request, Problem(f"Invalid request: {summary}", 422, errors))
 
     @app.exception_handler(HTTPException)
     async def http_problem(request: Request, error: Exception) -> JSONResponse:
         # Framework errors, such as unsupported methods or malformed forms, use the same format.
         assert isinstance(error, HTTPException)
-        return problem_response(Problem(str(error.detail), error.status_code), error.headers)
+        return request_problem(request, Problem(str(error.detail), error.status_code), error.headers)
 
     @app.middleware("http")
     async def authentication(request: Request, call_next: RequestResponseEndpoint) -> Response:
@@ -214,7 +225,7 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
             with commit_author(auth.commit_identity(user) if user else None):
                 response = await call_next(request)
         except Problem as error:
-            response = problem_response(error)
+            response = request_problem(request, error)
         except Exception:
             # The traceback stays in the server log; clients never see internal details.
             logger.exception("Unexpected error in %s %s", request.method, request.url.path)

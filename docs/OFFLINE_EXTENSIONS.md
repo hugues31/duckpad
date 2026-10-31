@@ -7,8 +7,9 @@ does not need DuckDB, Python, Linux, or a prepared extension cache.
 ## Download, transfer, import
 
 1. Open **Instance settings → Extensions** as an administrator.
-   Choose **DuckDB core** or **DuckDB community**, enter the extension name, and
-   click **Download server binary** on a computer with Internet access.
+   Pick the extension under **Available extensions**, or choose **DuckDB core**
+   or **DuckDB community** and enter its exact name. Then click **Download
+   server binary** on a computer with Internet access.
    The link uses the **server's version and platform**, not your PC's.
 2. Transfer the downloaded file if necessary. In the same settings panel, choose
    the matching source, select the `.duckdb_extension.gz` or `.duckdb_extension`
@@ -31,12 +32,27 @@ For example, a Windows browser connected to a Linux x86-64 server running DuckDB
 2.0.0 receives a link containing `v2.0.0/linux_amd64`, even though the browser runs
 on Windows. Use this same process for each extension your connectors need.
 
+## Find an extension name
+
+**Available extensions** lists the core extensions known to the server's DuckDB,
+even without Internet access, and marks those built into it: they need no
+download or import. When your browser can reach duckdb.org, it also loads the
+community list there; the Duckpad server never contacts it. Type part of a name
+to filter the list, then choose an extension to fill in its name and source.
+**Core extension list** and **Community extension list** open DuckDB's own pages.
+
+For a selected core or community name, the browser also asks DuckDB's repository
+whether it publishes a download for the server's version and platform. Not every
+community extension is built for every DuckDB release. When the browser is
+offline, the community list and this check are unavailable: choose the source and
+enter the exact name, as before.
+
 ## Activate a project capability
 
 The project's **Extensions** tab separates installing a server binary from
-enabling it in a project. An editor can add an extension by name, select
-**DuckDB core**, **DuckDB community** or **Custom / unsigned builds**, and enable
-an already installed binary. A reader can inspect the requirements. Only an
+enabling it in a project. An editor can pick an extension under **Available
+extensions**, or enter a name and select **DuckDB core**, **DuckDB community** or
+**Custom / unsigned builds**, then enable an already installed binary. A reader can inspect the requirements. Only an
 instance administrator can import binaries or change the signature policy.
 
 Each extension fits on one row: the **Activate for this project** checkbox, its
@@ -61,8 +77,8 @@ import** (up arrow, administrators) and **Remove** (bin).
 Activation and subsequent execution load local binaries; they do not contact a
 repository or catalog. With an online server, binaries already installed through
 a connector are also available. Browser download followed by import works in
-both connected and airgapped installations; cross-origin browser fetching is not
-required.
+both connected and airgapped installations; the browser's requests to duckdb.org
+only help find names and are not required.
 
 For example, add **duckfn_statrs** with origin **DuckDB community**, import its
 server binary, and activate it. Create this SQL model without a connection

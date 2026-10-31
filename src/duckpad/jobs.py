@@ -1,5 +1,11 @@
 """Instance-owned execution targets, pinned versions and audited promotion."""
 
+import hashlib
+import json
+import logging
+import threading
+import time
+
 from sqlalchemy.exc import IntegrityError
 
 from .bundle import files_to_bundle
@@ -9,16 +15,19 @@ from .git.command import check_branch_name
 from .git.workspace import require_valid
 from .util import Problem, now, uid
 
+logger = logging.getLogger("duckpad.execution")
+
 
 class Jobs:
     def __init__(self, services):
         self.store, self.projects = services.store, services.projects
         self.engine, self.catalog = services.engine, services.catalog
+        self.launch_locks = {}
 
     def get(self, slug):
         job = self.store.get("job", slug)
         if not job:
-            raise Problem("Job not found", 404)
+            raise Problem("Job not found", 404, {"code": "job_not_found"})
         return job
 
     def path(self, project):
@@ -138,11 +147,16 @@ class Jobs:
     def runs(self, job, limit=50):
         return self.store.runs({"role": "admin"}, job["worktree"], limit=limit)
 
-    def idle(self, job):
+    def idle(self, job, *, launch=False):
         with self.engine.lock:
             active = self.engine.active.get(job["worktree"])
             if active:
-                raise Problem("This Job already has an active execution", 409, {"run": active["id"]})
+                if launch:
+                    # A refused launch leaves no run record; only this line traces it.
+                    logger.info("Job launch refused: job=%s run=%s code=job_busy", job["id"], active["id"])
+                raise Problem(
+                    "This Job already has an active execution", 409, {"code": "job_busy", "run": active["id"]}
+                )
 
     def update(self, slug, data):
         with self.projects.locked(self.get(slug)["worktree"]):
@@ -204,26 +218,63 @@ class Jobs:
             # Retain the read-only worktree, runs and artifacts for History and results.
             self.store.delete("job", slug)
 
-    def launch(self, slug, data, requester):
+    def launch(self, slug, data, requester, *, external_trigger=None, idempotency_key=None, body=None):
+        # Serialize admission and replay per Job, including simultaneous retries before persistence.
+        # The execution worker starts only after the run and its key commit together.
+        with self.engine.lock:
+            lock = self.launch_locks.setdefault(slug, threading.RLock())
+        with lock:
+            self.get(slug)
+            idempotency = None
+            if idempotency_key is not None:
+                key = hashlib.sha256(idempotency_key.encode()).hexdigest()
+                request_hash = hashlib.sha256(
+                    json.dumps(body, sort_keys=True, separators=(",", ":")).encode()
+                ).hexdigest()
+                previous = self.store.job_launch(slug, key, time.time())
+                if previous:
+                    if previous["request_hash"] != request_hash:
+                        raise Problem(
+                            "Idempotency key was already used with a different body",
+                            422,
+                            {"code": "invalid_request"},
+                        )
+                    return self.store.get("run", previous["run"])
+                idempotency = {"job": slug, "key": key, "request_hash": request_hash}
+            return self._launch(slug, data, requester, external_trigger, idempotency)
+
+    def _launch(self, slug, data, requester, external_trigger, idempotency):
         job = self.get(slug)
         # Refuse an admitted run even while its launch capture holds the repository lock.
-        self.idle(job)
+        self.idle(job, launch=True)
         with self.projects.locked(job["worktree"]) as worktree:
             job = self.get(slug)
-            self.idle(job)
+            self.idle(job, launch=True)
             if data.entry_point == "ui" and data.revision != job["revision"]:
                 raise Problem("This Job changed; review its environment and version before running", 409)
-            settings = self.catalog.environment(job["environment"])
+            try:
+                settings = self.catalog.environment(job["environment"])
+            except Problem as error:
+                raise Problem(
+                    "Job environment is unavailable", 409, {"code": "target_unavailable"}
+                ) from error
             if data.entry_point == "ui" and settings["confirm_before_run"] and not data.confirmed:
                 raise Problem(
                     "Confirm this environment before running", 409, {"confirmation_required": settings}
                 )
             target = job["target"]
-            if target["kind"] == "tag":
-                commit = target["commit"]
-            else:
-                _, commit = self.resolve(job["project"], "branch", target["branch"])
-            self.validate(job["project"], commit, job["environment"], job["scope"])
+            try:
+                if target["kind"] == "tag":
+                    commit = target["commit"]
+                else:
+                    _, commit = self.resolve(job["project"], "branch", target["branch"])
+                self.projects.git(worktree["path"], "cat-file", "-e", commit + "^{commit}")
+            except Problem as error:
+                raise Problem("Job target is unavailable", 409, {"code": "target_unavailable"}) from error
+            try:
+                self.validate(job["project"], commit, job["environment"], job["scope"])
+            except Problem as error:
+                raise Problem(str(error), 422, {"code": "invalid_project", "errors": error.detail}) from error
             self.retain_commit(job, commit)
             self.projects.git(worktree["path"], "checkout", "--detach", "--force", commit)
             self.projects.on_change(worktree["id"])
@@ -233,6 +284,8 @@ class Jobs:
                 job["scope"],
                 data.entry_point,
                 requester=requester,
+                external_trigger=external_trigger,
+                idempotency=idempotency,
                 job={
                     "slug": slug,
                     "name": job["name"],
