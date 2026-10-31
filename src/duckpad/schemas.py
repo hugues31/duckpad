@@ -19,6 +19,12 @@ class NewUser(BaseModel):
     service: StrictBool = False
     description: str = Field(default="", max_length=1000)
 
+    @model_validator(mode="after")
+    def require_local_password(self):
+        if not self.service and self.password is None:
+            raise ValueError("A password is required for local accounts")
+        return self
+
 
 class NewAPIToken(BaseModel):
     model_config = ConfigDict(extra="forbid")
