@@ -77,6 +77,7 @@ def router(assistant: Assistant):
         return StreamingResponse(
             stream,
             media_type="application/x-ndjson",
+            headers={"X-Accel-Buffering": "no", "Cache-Control": "no-store"},
             background=BackgroundTask(assistant.release, identity, cancellation),
         )
 
