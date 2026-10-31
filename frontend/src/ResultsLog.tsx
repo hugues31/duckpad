@@ -250,7 +250,8 @@ export default function ResultsLog({
               aria-pressed={filter === key}
               onClick={() => setFilter(key)}
             >
-              {t(FILTER_LABELS[key])} <span className="tab-count">{counts[key]}</span>
+              {t(FILTER_LABELS[key])}{" "}
+              <span className="tab-count">{counts[key]}</span>
             </button>
           ))}
         </div>
