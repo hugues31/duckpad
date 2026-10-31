@@ -184,8 +184,8 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
                 if scheme.lower() == "bearer" and bearer.startswith("dpk_"):
                     request.state.user, request.state.token_name = auth.check_api_token(bearer)
                     parts = request.url.path.strip("/").split("/")
-                    if parts[1] == "ssh-key" or (
-                        parts[1] == "worktrees"
+                    if parts[1:2] == ["ssh-key"] or (
+                        parts[1:2] == ["worktrees"]
                         and parts[3:4] == ["git"]
                         and parts[4:] in (["consent"], ["fetch"], ["push"])
                     ):

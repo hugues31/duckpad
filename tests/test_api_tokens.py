@@ -70,6 +70,7 @@ def test_unknown_expired_cookie_and_git_credentials_are_refused(instance, monkey
     token = issue_token(client, expires=expiry.isoformat())
     assert token["expires"] == expiry.timestamp()
     assert client.get("/api/session", headers=bearer("dpk_unknown")).status_code == 401
+    assert client.get("/api/", headers=bearer(token["token"])).status_code == 404
     assert (
         client.get("/api/session", headers={"Cookie": f"{SESSION_COOKIE}={token['token']}"}).status_code
         == 401
