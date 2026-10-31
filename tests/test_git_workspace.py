@@ -334,7 +334,10 @@ def test_element_summary_credits_the_commits_that_changed_the_element(project):
     assert result["last"]["author"] == "Bob" and result["last"]["status"] == "modified"
     assert result["last"]["categories"] == ["layout"]
     assert result["created"] == initial["created"]
-    assert result["changes"] == 3 and result["authors"] == ["Bob", "Ada", initial["created"]["author"]]
+    assert result["authors"] == ["Bob", "Ada", initial["created"]["author"]]
+    # The count matches the element history, which also lists the merge.
+    history = projects.versioning.history(main["id"], entity="node/filter")["items"]
+    assert result["changes"] == len(history) == 4 and history[0]["commit"] == merged["commit"]
     assert summary(main["id"], "node/total")["last"]["author"] == "Bob"
     before = summary(main["id"], "node/filter", ref=f"{edited}~1")
     assert before["last"]["author"] == "Ada" and before["last"]["categories"] == ["processing"]

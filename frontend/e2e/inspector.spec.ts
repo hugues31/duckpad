@@ -240,6 +240,6 @@ test("Info tab tells who changed the node and opens its history", async ({
     `node/${node.id}`,
   );
   await expect(dialog.locator(".git-commit").first()).toContainText("admin");
-  // Without merges, the history lists exactly the commits counted as revisions.
+  // The history lists exactly the commits counted as revisions.
   await expect(dialog.locator(".git-commit")).toHaveCount(Number(revisions));
 });

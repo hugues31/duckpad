@@ -116,7 +116,7 @@ export interface ElementSummary {
   exists: boolean;
   last: ElementChange | null;
   created: ElementChange | null;
-  /** The number of commits that changed the element. */
+  /** The number of commits its element history lists, merges included. */
   changes: number;
   /** Authors of these commits, the latest first. */
   authors: string[];

@@ -221,10 +221,11 @@ class GitWorkspace:
     def element_summary(self, worktree_id, entity, ref="HEAD"):
         """Who created a node or template, who changed it last, and how many commits changed it.
 
-        A commit changes the element when its version differs from every parent's version, so a
-        merge that only brings one side's edit leaves the credit to the commit that made it. Only
-        the element's own files are read, in the latest MAX_HISTORY commits; `complete` tells
-        whether these are the whole history.
+        `changes` counts the commits that the element history lists: their version differs from
+        at least one parent's. Credit goes only to commits whose version differs from every
+        parent's, so a merge that only brings one side's edit leaves it to the commit that made
+        it. Only the element's own files are read, in the latest MAX_HISTORY commits; `complete`
+        tells whether these are the whole history.
         """
         graph, code, node = entity_sources(entity)
         path = self.projects.get(worktree_id)["path"]
@@ -237,10 +238,14 @@ class GitWorkspace:
             path, {c for commit, parents, _ in commits for c in (commit, *parents.split())}, graph, code, node
         )
         changes = []
+        listed = 0
         for commit, parents, author in commits:
             value = versions[commit]
             before = [versions[parent] for parent in parents.split()] or [None]
-            if value is UNREADABLE or UNREADABLE in before or value in before:
+            if value is UNREADABLE or UNREADABLE in before or all(v == value for v in before):
+                continue
+            listed += 1
+            if value in before:
                 continue
             previous = next((v for v in before if v is not None), None)
             changes.append((commit, author, previous, value))
@@ -264,7 +269,7 @@ class GitWorkspace:
             "exists": versions[head] is not None,
             "last": record(changes[0]) if changes else None,
             "created": record(created) if created else None,
-            "changes": len(changes),
+            "changes": listed,
             "authors": list(dict.fromkeys(author for _, author, _, _ in changes)),
             "complete": len(rows) <= MAX_HISTORY,
         }
