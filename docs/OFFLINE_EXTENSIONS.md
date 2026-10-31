@@ -14,7 +14,8 @@ does not need DuckDB, Python, Linux, or a prepared extension cache.
    the matching source, select the `.duckdb_extension.gz` or `.duckdb_extension`
    file, and click **Import extension**. Keep the original filename.
 3. Open your project's **Extensions** tab. Add the same name and origin, then
-   choose **Activate for this project** once it shows **Ready to activate**.
+   tick its **Activate for this project** checkbox once it shows
+   **Ready to activate**.
    Its functions can now be used directly in SQL models. For a data-source
    connector, continue to configure its connection under
    **Instance settings → Connections** and grant it to the project; connector
@@ -38,12 +39,17 @@ enabling it in a project. An editor can add an extension by name, select
 an already installed binary. A reader can inspect the requirements. Only an
 instance administrator can import binaries or change the signature policy.
 
+Each extension fits on one row: the **Activate for this project** checkbox, its
+name, origin and status, then icon buttons whose tooltips name them: **Check
+loading** (flask), **Download server binary** (down arrow), **Open instance
+import** (up arrow, administrators) and **Remove** (bin).
+
 ![Project extensions distinguish an active core capability from a community binary that needs importing](images/project-extensions.png)
 
 - **Import required**: use **Download server binary** and ask an administrator
   to import the file. Administrators can follow **Open instance import**, which
   preselects the name and origin. Return to the project and refresh availability.
-- **Ready to activate**: choose **Activate for this project**. Duckpad checks
+- **Ready to activate**: tick **Activate for this project**. Duckpad checks
   loading in a disposable process and saves the requirement after success.
 - **Loading failed**: the error identifies the missing binary, library, signature
   or CPU compatibility problem. Have an administrator correct it, then retry.
@@ -98,7 +104,8 @@ Duckpad does not add a scheduling service: the same execution entry point applie
 to UI, API and externally scheduled runs. Reopening the project or restarting the
 server does not require Internet access once compatible binaries are installed.
 
-**Deactivate for this project** keeps the declaration with `enabled: false`.
+Unticking **Activate for this project** keeps the declaration with
+`enabled: false`.
 Removing the entry also disables it. Existing results become stale when enabled
 requirements change, and the next execution recreates the database so disabled
 functions are no longer retained in that session. Other projects are unaffected.

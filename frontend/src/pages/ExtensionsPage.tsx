@@ -1,3 +1,4 @@
+import { Download, FlaskConical, Trash2, Upload } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router";
 import { api, send } from "../api";
@@ -7,7 +8,7 @@ import {
   type ExtensionSource,
   type ProjectExtension,
 } from "../extensions";
-import { useT } from "../i18n";
+import { useT, type TranslationKey } from "../i18n";
 import Select from "../Select";
 import { useWorkspace } from "../shell";
 import { useApiResource } from "../useApiResource";
@@ -42,6 +43,10 @@ export default function ExtensionsPage() {
   const [source, setSource] = useState<ExtensionSource>("core");
   const { pending, error, run } = useAsyncAction();
   const [failed, setFailed] = useState<string | null>(null);
+  const [toggling, setToggling] = useState<{
+    name: string;
+    data: Extensions | null;
+  } | null>(null);
   if (!snapshot.bundle) return <InvalidProject />;
   const busy = pending || refreshing || !!statuses.active;
   const valid = /^[a-z][a-z0-9_]{0,63}$/.test(name);
@@ -155,78 +160,118 @@ export default function ExtensionsPage() {
       <div className="project-extension-list">
         {data?.requirements.map((item) => {
           const download = extensionDownload(data, item.name, item.source);
-          const status =
+          const [status, tone]: [TranslationKey, string] =
             failed === item.name
-              ? "projectExtensionLoadError"
+              ? ["projectExtensionLoadError", "failed"]
               : item.status === "ready"
                 ? item.enabled
-                  ? "projectExtensionActive"
-                  : "projectExtensionReady"
+                  ? ["projectExtensionActive", "success"]
+                  : ["projectExtensionReady", "neutral"]
                 : item.status === "policy"
-                  ? "projectExtensionPolicy"
+                  ? ["projectExtensionPolicy", "blocked"]
                   : item.status === "incompatible"
-                    ? "projectExtensionIncompatible"
-                    : "projectExtensionMissing";
+                    ? ["projectExtensionIncompatible", "blocked"]
+                    : ["projectExtensionMissing", "blocked"];
+          // Tick the box at once; the saved state replaces it on the next load.
+          const enabled =
+            item.enabled !==
+            (toggling?.name === item.name && toggling.data === data);
+          const askAdmin = user.role !== "admin" && item.status !== "ready";
           return (
             <article
               className="project-extension-card"
               key={item.name}
               aria-label={item.name}
             >
-              <div>
-                <h2>
-                  <code>{item.name}</code>
-                </h2>
-                <p>{t(extensionSourceKey(item.source))}</p>
-                <strong role="status">{t(status)}</strong>
-                {item.enabled && item.status !== "ready" && (
-                  <p>{t("projectExtensionRequired")}</p>
-                )}
-                {item.message && <p>{item.message}</p>}
-              </div>
-              <div className="project-extension-actions">
+              <div className="project-extension-row">
                 {canEdit && (
-                  <>
-                    <button
-                      className="button primary"
+                  <label
+                    className="project-extension-toggle"
+                    data-tooltip={t(
+                      enabled
+                        ? "projectExtensionDeactivate"
+                        : "projectExtensionActivate",
+                    )}
+                  >
+                    <input
+                      type="checkbox"
+                      aria-label={t("projectExtensionActivate")}
+                      checked={enabled}
                       disabled={
                         busy || (!item.enabled && item.status !== "ready")
                       }
+                      onChange={() =>
+                        void run(async () => {
+                          setToggling({ name: item.name, data });
+                          try {
+                            if (!item.enabled) await check(item);
+                            await change((entries) => {
+                              entries[item.name] = {
+                                source: item.source,
+                                enabled: !item.enabled,
+                              };
+                            });
+                          } catch (error) {
+                            setToggling(null);
+                            throw error;
+                          }
+                        })
+                      }
+                    />
+                  </label>
+                )}
+                <h2>
+                  <code>{item.name}</code>
+                </h2>
+                <span className="project-extension-source">
+                  {t(extensionSourceKey(item.source))}
+                </span>
+                <strong role="status" className={`badge ${tone}`}>
+                  {t(status)}
+                </strong>
+                <div className="project-extension-actions">
+                  {canEdit && item.enabled && (
+                    <button
+                      className="project-extension-action"
+                      aria-label={t("projectExtensionCheck")}
+                      data-tooltip={t("projectExtensionCheck")}
+                      disabled={busy || item.status !== "ready"}
                       onClick={() =>
                         void run(async () => {
-                          if (!item.enabled) {
-                            await check(item);
-                          }
-                          await change((entries) => {
-                            entries[item.name] = {
-                              source: item.source,
-                              enabled: !item.enabled,
-                            };
-                          });
+                          await check(item);
                         })
                       }
                     >
-                      {t(
-                        item.enabled
-                          ? "projectExtensionDeactivate"
-                          : "projectExtensionActivate",
-                      )}
+                      <FlaskConical size={16} />
                     </button>
-                    {item.enabled && (
-                      <button
-                        className="button secondary"
-                        disabled={busy || item.status !== "ready"}
-                        onClick={() =>
-                          void run(async () => {
-                            await check(item);
-                          })
-                        }
-                      >
-                        {t("projectExtensionCheck")}
-                      </button>
-                    )}
+                  )}
+                  {download && (
+                    <a
+                      className="project-extension-action"
+                      aria-label={t("extensionDownload")}
+                      data-tooltip={t("extensionDownload")}
+                      href={download}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      <Download size={16} />
+                    </a>
+                  )}
+                  {user.role === "admin" && (
+                    <Link
+                      className="project-extension-action"
+                      aria-label={t("projectExtensionImport")}
+                      data-tooltip={t("projectExtensionImport")}
+                      to={`/instance-settings/extensions?${new URLSearchParams({ name: item.name, source: item.source })}`}
+                    >
+                      <Upload size={16} />
+                    </Link>
+                  )}
+                  {canEdit && (
                     <button
-                      className="button secondary"
+                      className="project-extension-action remove"
+                      aria-label={t("remove")}
+                      data-tooltip={t("remove")}
                       disabled={busy}
                       onClick={() =>
                         void run(() =>
@@ -236,33 +281,22 @@ export default function ExtensionsPage() {
                         )
                       }
                     >
-                      {t("remove")}
+                      <Trash2 size={16} />
                     </button>
-                  </>
-                )}
-                {download && (
-                  <a
-                    className="button secondary"
-                    href={download}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    {t("extensionDownload")}
-                  </a>
-                )}
-                {user.role === "admin" ? (
-                  <Link
-                    className="button secondary"
-                    to={`/instance-settings/extensions?${new URLSearchParams({ name: item.name, source: item.source })}`}
-                  >
-                    {t("projectExtensionImport")}
-                  </Link>
-                ) : (
-                  item.status !== "ready" && (
-                    <p className="muted">{t("projectExtensionAskAdmin")}</p>
-                  )
-                )}
+                  )}
+                </div>
               </div>
+              {((item.enabled && item.status !== "ready") ||
+                item.message ||
+                askAdmin) && (
+                <div className="project-extension-notes">
+                  {item.enabled && item.status !== "ready" && (
+                    <p>{t("projectExtensionRequired")}</p>
+                  )}
+                  {item.message && <p>{item.message}</p>}
+                  {askAdmin && <p>{t("projectExtensionAskAdmin")}</p>}
+                </div>
+              )}
             </article>
           );
         })}

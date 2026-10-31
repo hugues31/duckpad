@@ -11,34 +11,109 @@
 }
 .project-extension-list {
   display: grid;
-  gap: 16px;
+  gap: 10px;
   margin: 24px 0;
 }
 .project-extension-card {
-  display: flex;
-  justify-content: space-between;
-  align-items: start;
-  gap: 24px;
-  padding: 24px;
+  padding: 12px 14px 12px 16px;
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: 10px;
   background: var(--surface);
 }
-.project-extension-card h2 {
-  margin-top: 0;
+/* Activation, identity, status and actions share one line. */
+.project-extension-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  min-height: 34px;
+}
+.project-extension-row h2 {
+  margin: 0;
+  font-size: 14px;
+  letter-spacing: normal;
+  overflow-wrap: anywhere;
+}
+.project-extension-source {
+  font-size: 12px;
+  color: var(--muted);
+  opacity: 0.75;
+}
+.project-extension-toggle {
+  display: inline-flex;
+  cursor: pointer;
+}
+.project-extension-toggle input {
+  width: 17px;
+  height: 17px;
+  margin: 0;
+  padding: 0;
+  accent-color: var(--accent);
+  cursor: inherit;
+}
+.project-extension-toggle:has(input:disabled) {
+  cursor: not-allowed;
+}
+.project-extension-toggle input:disabled {
+  opacity: 0.45;
 }
 .project-extension-actions {
   display: flex;
-  flex-wrap: wrap;
-  justify-content: end;
-  gap: 8px;
-  max-width: 420px;
+  gap: 6px;
+  margin-left: auto;
 }
-@media (max-width: 800px) {
-  .project-extension-card {
-    flex-direction: column;
-  }
-  .project-extension-actions {
-    justify-content: start;
-  }
+.project-extension-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--muted);
+  transition:
+    background 0.15s,
+    border-color 0.15s,
+    color 0.15s;
+}
+.project-extension-action:not(:disabled):hover {
+  background: var(--surface-alt);
+  border-color: var(--muted);
+  color: var(--accent);
+}
+.project-extension-action.remove:not(:disabled):hover {
+  color: light-dark(#a33e36, #f4ada4);
+  border-color: currentcolor;
+}
+/* Fade the icon only, so the tooltip of a disabled action stays readable. */
+.project-extension-action:disabled {
+  opacity: 1;
+}
+.project-extension-action:disabled svg {
+  opacity: 0.45;
+}
+/* Tooltips open toward the page so they never overflow the panel edge. */
+.project-extension-actions [data-tooltip]::after {
+  left: auto;
+  right: 0;
+  translate: none;
+}
+.project-extension-toggle[data-tooltip]::after {
+  left: 0;
+  translate: none;
+}
+.project-extension-notes {
+  margin: 8px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+/* Align the notes with the name, after the activation checkbox. */
+.project-extension-card:has(.project-extension-toggle)
+  .project-extension-notes {
+  margin-left: 29px;
+}
+.project-extension-notes p {
+  margin: 4px 0 0;
 }

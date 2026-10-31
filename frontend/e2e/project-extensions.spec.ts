@@ -29,12 +29,12 @@ test("project extensions distinguish missing imports, check loading and persist 
   const identity = await project(page);
   const missing = await add(page, "missing_capability", "community");
   await expect(missing.getByRole("status")).toHaveText("Import required");
-  await expect(
-    missing.getByRole("button", {
-      name: "Activate for this project",
-      exact: true,
-    }),
-  ).toBeDisabled();
+  const unavailable = missing.getByRole("checkbox", {
+    name: "Activate for this project",
+    exact: true,
+  });
+  await expect(unavailable).toBeDisabled();
+  await expect(unavailable).not.toBeChecked();
   const runtime = await (
     await page.request.get(`/api/worktrees/${identity}/extensions`)
   ).json();
@@ -54,12 +54,28 @@ test("project extensions distinguish missing imports, check loading and persist 
   await page.goto(`/worktrees/${identity}/extensions`);
   const json = await add(page, "json", "core");
   await expect(json.getByRole("status")).toHaveText("Ready to activate");
-  await json
-    .getByRole("button", { name: "Activate for this project", exact: true })
-    .click();
+  const activation = json.getByRole("checkbox", {
+    name: "Activate for this project",
+    exact: true,
+  });
+  await expect(activation).not.toBeChecked();
+  await activation.click();
   await expect(json.getByRole("status")).toHaveText("Active for this project");
+  await expect(activation).toBeChecked();
   await page.reload();
   await expect(json.getByRole("status")).toHaveText("Active for this project");
+  await expect(activation).toBeChecked();
+  // Row actions are icon buttons named by their tooltip.
+  const check = json.getByRole("button", {
+    name: "Check loading",
+    exact: true,
+  });
+  await check.hover();
+  await expect
+    .poll(() =>
+      check.evaluate((element) => getComputedStyle(element, "::after").opacity),
+    )
+    .toBe("1");
   // A loading failure is explicit and does not discard the portable requirement.
   await page.route("**/extensions/check", (route) =>
     route.fulfill({
@@ -86,10 +102,9 @@ test("project extensions distinguish missing imports, check loading and persist 
     .getByRole("button", { name: "Check loading", exact: true })
     .click();
   await expect(json.getByRole("status")).toHaveText("Active for this project");
-  await json
-    .getByRole("button", { name: "Deactivate for this project", exact: true })
-    .click();
+  await activation.click();
   await expect(json.getByRole("status")).toHaveText("Ready to activate");
+  await expect(activation).not.toBeChecked();
 });
 
 test("a downloaded community binary is imported and activated without a connection", async ({
@@ -112,7 +127,7 @@ test("a downloaded community binary is imported and activated without a connecti
   await expect(page.getByRole("status")).toContainText("Extension imported");
   await page.goto(`/worktrees/${identity}/extensions`);
   await stats
-    .getByRole("button", { name: "Activate for this project", exact: true })
+    .getByRole("checkbox", { name: "Activate for this project", exact: true })
     .click();
   await expect(stats.getByRole("status")).toHaveText("Active for this project");
   const url = `/api/worktrees/${identity}`;
