@@ -7,6 +7,7 @@ Duckpad has a Python API process serving a compiled React application and isolat
 | Module | Responsibility |
 | --- | --- |
 | `app.py`, `schemas.py`, `auth.py`, `access.py`, `cli.py` | HTTP API and request bodies, individual accounts, salted password hashes, owned sessions and instance/project authorization, localhost startup, process lease |
+| `assistant/` (`config.py`, `service.py`, `tools.py`, `api.py`) | Write-only instance provider keys; author-owned SQLite conversations; one bounded Pydantic AI agent per turn; validated page context, permission-scoped read tools and cancellable NDJSON streaming |
 | `services.py` | Wiring of the instance services shared by the API, tests and scripts |
 | `models.py`, `store.py`, `paths.py`, `migrations/`, `catalog.py` | SQLModel tables, Alembic migrations, transactions, the instance directory layout, environments, reusable connections and secret redaction |
 | `projects.py`, `bundle.py`, `archive.py`, `merge.py` | Git worktrees, revision capture, external-save batching and durable conflict proposals; declarative file layout and validation; bounded project ZIP export and import; three-way merge |
@@ -43,7 +44,7 @@ Settings follow the same instance, project and user boundaries as authorization:
 
 | Scope | Entry point | Settings and permissions |
 | --- | --- | --- |
-| Instance | **Instance settings** in the main navigation | User accounts and instance roles (member/admin), OIDC single sign-on, trusted Git hosts and origin prefixes, environment names, connections and connector definitions, and DuckDB extension imports and unsigned policy. Only instance administrators can configure these. |
+| Instance | **Instance settings** in the main navigation | User accounts and instance roles (member/admin), OIDC single sign-on, AI assistant providers/models and data policy, trusted Git hosts and origin prefixes, environment names, connections and connector definitions, and DuckDB extension imports and unsigned policy. Only instance administrators can configure these. |
 | Project | **Project settings** in the open project's toolbar | Participants and project roles (reader/editor/admin), authorized connections, and project deletion. Project administrators manage participants; only instance administrators grant access to instance connections. Readers and editors can inspect their project's access without changing it. |
 | Project definition | **Variables** and **Extensions** in the working branch | Versioned values and extension requirements; editors change them and readers inspect them. Extension installation and trust remain instance settings. |
 | User | **Account menu → User settings** | Language, theme, the signed-in account's password and its SSH key for Git. SSO accounts manage their password with the identity provider. |
@@ -69,7 +70,7 @@ active states, and opening in another tab. Titles and focus follow page changes.
 | --- | --- |
 | `/projects` | Project dashboard |
 | `/instance-settings` | Instance general settings, for instance administrators |
-| `/instance-settings/:section` | `users`, `sso`, `environments`, `connections` or `extensions` |
+| `/instance-settings/:section` | `users`, `sso`, `assistant`, `git-hosts`, `environments`, `connections` or `extensions` |
 | `/user-settings` | Preferences and password for the signed-in account |
 | `/projects/:projectId/settings` | Project settings with role-specific controls |
 | `/worktrees/:worktreeId/:tab` | Pipeline workspace: `flow`, `code`, `documentation`, `variables`, `extensions` or `history` |
@@ -106,6 +107,24 @@ final fallback route. `/api` and `/api/*` retain authentication and API errors;
 Playwright covers navigation, authentication returns, history, draft protection,
 permissions, and translations. HTTP tests verify direct-entry fallback and the
 API, asset, and documentation boundaries.
+
+## Assistant boundary
+
+The assistant uses `pydantic-ai-slim` with only the OpenAI, Anthropic, Google and
+Mistral extras (DeepSeek, Ollama and custom endpoints use the OpenAI transport).
+Keys follow the OIDC write-only pattern and are retained only for the same
+provider type and base URL. Each request owns its HTTP client and cancellation
+token. Tool calls revalidate the session, project membership and configuration
+revision; result tools also recheck connection grants. No write, arbitrary SQL,
+network or run-launch tool is registered. `api.ts` owns the streaming HTTP client.
+
+Alembic revision `0002_assistant` adds `assistant_conversation`, with cascading
+foreign keys to the author and optional project. Its messages use Pydantic AI’s
+`ModelMessagesTypeAdapter`; UI turns hold safe text and compact tool cards.
+Ownership checks do not grant an instance-admin override. Concurrent turns in
+one conversation return 409. Provider errors never echo SDK exception bodies.
+Tests globally disable model requests and inject `TestModel` or `FunctionModel`;
+only the disposable browser-test server injects a deterministic model.
 
 ## Save and capture
 
@@ -153,7 +172,7 @@ Duckpad's workers, CPU affinity or container quotas. In containers, the operatin
 system counters exposed by the runtime determine visibility. Missing metrics are
 shown as unavailable, and CPU sampling resumes after two valid snapshots.
 
-The main endpoint groups are `/session`, `/workspace`, `/projects`, `/example`, `/worktrees`, `/catalog`, `/environments`, `/runs`, `/conflicts`, `/library`, `/users`, `/password`, `/ssh-key`, `/git-hosts` and `/resources`. Uploads use `/worktrees/{id}/uploads` and are stored under `resources/<project>/`. `/projects/import` creates a project from the declarative files of an uploaded ZIP and reports referenced connections and absolute input files that the archive cannot carry. Request bodies are validated; invalid requests receive a 422 response in the same `{"error", "detail"}` format as other failures. A worktree exposes definition snapshots and saves, variable summaries, renames and launch scopes, branch/merge history, compiled SQL, status, previews, lineage and manual run launch. See the route definitions in `src/duckpad/app.py` for request shapes. APIs use the same services as the interface; there is no second runner or separate editor state.
+The main endpoint groups are `/session`, `/workspace`, `/projects`, `/example`, `/worktrees`, `/catalog`, `/environments`, `/runs`, `/conflicts`, `/library`, `/users`, `/password`, `/ssh-key`, `/git-hosts` and `/resources`. `/assistant` exposes settings, provider discovery/testing, allowed models and private conversations; `/assistant/conversations/{id}/messages` streams NDJSON and `/stop` cancels the request. Uploads use `/worktrees/{id}/uploads` and are stored under `resources/<project>/`. `/projects/import` creates a project from the declarative files of an uploaded ZIP and reports referenced connections and absolute input files that the archive cannot carry. Request bodies are validated; invalid requests receive a 422 response in the same `{"error", "detail"}` format as other failures. A worktree exposes definition snapshots and saves, variable summaries, renames and launch scopes, branch/merge history, compiled SQL, status, previews, lineage and manual run launch. See the route definitions in `src/duckpad/app.py` for request shapes. APIs use the same services as the interface; there is no second runner or separate editor state.
 
 Execution and result operations require an explicit configured environment. Under
 `/api/worktrees/{worktree}`, GET `status`, `compile/{node}`, `preview/{node}`,

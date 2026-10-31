@@ -15,6 +15,10 @@ import { useWorktreeSnapshot } from "./useWorktreeSnapshot";
 export interface Worktree {
   /** Empty outside the pipeline pages, where nothing is loaded. */
   id: string;
+  assistantNode: string;
+  assistantFile: string;
+  setAssistantNode: (node: string) => void;
+  setAssistantFile: (file: string) => void;
   environment: string;
   snapshot: Snapshot | null;
   statuses: Statuses;
@@ -61,6 +65,29 @@ export function WorktreeProvider({
     openModal,
     closeModal,
   } = useShell();
+  const [assistantSelection, setAssistantSelection] = useState({
+    worktree: id,
+    node: "",
+    file: "",
+  });
+  const setAssistantNode = useCallback(
+    (node: string) =>
+      setAssistantSelection((value) => ({
+        worktree: id,
+        node,
+        file: value.worktree === id ? value.file : "",
+      })),
+    [id],
+  );
+  const setAssistantFile = useCallback(
+    (file: string) =>
+      setAssistantSelection((value) => ({
+        worktree: id,
+        file,
+        node: value.worktree === id ? value.node : "",
+      })),
+    [id],
+  );
   const [saves, setSaves] = useState(0);
   const [starting, setStarting] = useState(false);
   const [gitVersion, setGitVersion] = useState(0);
@@ -130,6 +157,12 @@ export function WorktreeProvider({
 
   const value: Worktree = {
     id,
+    assistantNode:
+      assistantSelection.worktree === id ? assistantSelection.node : "",
+    assistantFile:
+      assistantSelection.worktree === id ? assistantSelection.file : "",
+    setAssistantNode,
+    setAssistantFile,
     environment,
     snapshot,
     statuses,

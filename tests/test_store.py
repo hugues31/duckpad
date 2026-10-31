@@ -40,10 +40,10 @@ def test_initial_migration_matches_models_and_survives_restart(store):
     with store.engine.connect() as connection:
         assert (
             connection.exec_driver_sql("SELECT version_num FROM alembic_version").scalar_one()
-            == "0001_relational"
+            == "0002_assistant"
         )
         assert "records" not in inspect(connection).get_table_names()
-        assert len(SQLModel.metadata.tables) == 20
+        assert len(SQLModel.metadata.tables) == 21
         assert compare_metadata(MigrationContext.configure(connection), SQLModel.metadata) == []
         assert connection.exec_driver_sql("PRAGMA foreign_keys").scalar_one() == 1
         assert connection.exec_driver_sql("PRAGMA journal_mode").scalar_one() == "wal"

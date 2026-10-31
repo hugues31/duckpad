@@ -8,6 +8,7 @@ import {
 } from "react-router";
 import { Loader2 } from "lucide-react";
 import { api, onSessionExpired, send } from "./api";
+import AssistantChat from "./AssistantChat";
 import DuckMark from "./DuckMark";
 import ErrorBoundary from "./ErrorBoundary";
 import { I18n, useT } from "./i18n";
@@ -249,6 +250,7 @@ function SignedIn({
             )}
             {workspace ? <Outlet /> : <PageLoading />}
           </div>
+          <AssistantChat />
           <NavigationGuard drafts={drafts} />
           <PageFocus ready={!!workspace} />
           <Toast message={message} onDismiss={dismiss} />
