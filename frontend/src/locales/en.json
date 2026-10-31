@@ -727,5 +727,12 @@
   "projectExtensionAskAdmin": "Download the server binary and ask an instance administrator to import it.",
   "projectExtensionsEmpty": "No project extensions yet. Add a name and choose its origin to get started.",
   "projectExtensionsOffline": "Downloads target the server runtime, even from a browser on another OS. Import binaries in Instance settings → Extensions, then return here and refresh. Activation and subsequent execution use local binaries without Internet access.",
-  "importExtensionRequirements": "This project requires DuckDB extensions. Their binaries are not included in the archive. Open the project’s Extensions tab to check availability and arrange any missing imports."
+  "importExtensionRequirements": "This project requires DuckDB extensions. Their binaries are not included in the archive. Open the project’s Extensions tab to check availability and arrange any missing imports.",
+  "executionMessages": "Execution messages",
+  "warningCount": "Warnings: {count}",
+  "messageInfo": "Info",
+  "messageWarning": "Warning",
+  "messageError": "Error",
+  "moreMessages": "… and {count} more",
+  "messageBlock": "Message block {block}"
 }

@@ -568,6 +568,7 @@ fieldset.palette-bottom {
 }
 .node-status-slot {
   display: flex;
+  gap: 4px;
   justify-content: center;
   min-height: 24px;
   max-width: 100%;

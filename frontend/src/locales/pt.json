@@ -727,5 +727,12 @@
   "projectExtensionAskAdmin": "Transfira o binário do servidor e peça a um administrador da instância para o importar.",
   "projectExtensionsEmpty": "Ainda não há extensões neste projeto. Adicione um nome e escolha a origem para começar.",
   "projectExtensionsOffline": "As transferências destinam-se ao servidor, mesmo a partir de outro sistema operativo. Importe os binários em Definições da instância → Extensões, volte aqui e atualize. A ativação e as execuções seguintes usam binários locais sem acesso à Internet.",
-  "importExtensionRequirements": "Este projeto requer extensões DuckDB. Os binários não estão incluídos no arquivo. Abra o separador Extensões do projeto para verificar a disponibilidade e preparar as importações em falta."
+  "importExtensionRequirements": "Este projeto requer extensões DuckDB. Os binários não estão incluídos no arquivo. Abra o separador Extensões do projeto para verificar a disponibilidade e preparar as importações em falta.",
+  "executionMessages": "Mensagens da execução",
+  "warningCount": "Avisos: {count}",
+  "messageInfo": "Informação",
+  "messageWarning": "Aviso",
+  "messageError": "Erro",
+  "moreMessages": "… e mais {count}",
+  "messageBlock": "Bloco de mensagem {block}"
 }

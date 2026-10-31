@@ -17,6 +17,7 @@ import { nodeInterface, type NodeInterface } from "./graph";
 import { templateLabel, useT } from "./i18n";
 import NodeDocumentation from "./NodeDocumentation";
 import ExportDownload from "./ExportDownload";
+import ExecutionMessages from "./ExecutionMessages";
 import ParameterField from "./ParameterField";
 import QueryBuilder from "./QueryBuilder";
 import { useRevisionDraft } from "./useRevisionDraft";
@@ -286,6 +287,12 @@ export default function Inspector({
       </div>
       <div className="inspector-body">
         {error && <div className="notice error">{error}</div>}
+        {statuses.nodes[fullNode]?.error && (
+          <p className="notice error">{statuses.nodes[fullNode].error}</p>
+        )}
+        <ExecutionMessages
+          results={preview?.results ?? statuses.nodes[fullNode]?.results}
+        />
         {tab === "parameters" ? (
           <fieldset className="readonly-fields" disabled={readOnly}>
             <label className="field">

@@ -48,6 +48,18 @@ class Results:
                 result.setdefault(
                     node, {"outputs": {}, "error": error, "execution_status": context.node_status.get(node)}
                 )
+            generations = {
+                node: next(iter(context.outputs.get(node, {}).values())).run
+                if context.outputs.get(node)
+                else run
+                for node, run in context.result_runs.items()
+            }
+        runs = {run: self.store.get("run", run) for run in set(generations.values())}
+        for node, run_id in generations.items():
+            state = runs[run_id]["nodes"][node]
+            result.setdefault(node, {"outputs": {}, "error": None, "execution_status": state["status"]})
+            result[node]["results"] = state.get("results", [])
+            result[node]["result_run"] = run_id
         with self.lock:
             active = self.active.get(worktree)
         return {"nodes": result, "active": self.store.get("run", active["id"]) if active else None}
@@ -119,6 +131,7 @@ class Results:
                     "filtered_count": count,
                     "offset": offset,
                     "executed_sql": run["nodes"][dataset.node].get("statements", []),
+                    "results": run["nodes"][dataset.node].get("results", []),
                     "commit": run["commit"],
                     "environment": environment,
                     "error": context.errors.get(dataset.node),

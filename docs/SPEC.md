@@ -150,6 +150,40 @@ Newly computed outputs are available to later blocks inside the same node execut
 
 A transformation reads only its declared inputs and its earlier outputs from the same execution, and produces only its declared outputs. Local CTEs and subqueries remain allowed; access to data outside this contract and undeclared side effects are rejected before execution. External reads and writes go through source or export nodes with declared connections and resources. Duckpad prepares those connections using their SQL connector definitions and manages the required extension installation and loading.
 
+## Execution messages
+
+Normal node code and shared templates support unnamed `-- @message` blocks.
+Each contains one read-only query with unique `level` and `message` columns.
+Every returned row produces a structured result; zero rows produce none.
+`level` is exactly `info`, `warning` or `error`, and `message` is non-null text.
+Missing columns or invalid values fail the node explicitly.
+
+Messages run in declaration order after all output blocks and before atomic
+publication. They can read declared inputs, parameters and newly computed
+outputs, using the same `{{ name }}` references. They follow the node's access
+contract without side effects. Export messages read inputs and run before any
+external write. An `error` prevents output publication or export, retains prior
+outputs as stale, and blocks descendants. Warnings alone preserve `success` and
+increment a warning counter. Editing messages invalidates results.
+
+Node execution records hold a shared `results` list. Each result has `level`,
+`message`, `origin` (kind and block, with a future optional check name), `output`
+when a single output is known, and an optional `observed` value. No separate
+message or test storage is required. The list retains 100 results per node and
+run, followed by a structured omission summary with counts by level. Every row
+is still checked, so truncation never hides an execution failure. Badge and
+warning totals derive from this list, including the summary counts.
+
+The inspector and canvas use the messages of the displayed result generation;
+nodes outside a later launch's scope retain their original messages. The latest
+failure remains visible beside a stale preview. Run history shows each node's
+results and the run warning count, including failed runs, and survives restart.
+The server emits one JSON log line per actual result with run, project, branch,
+environment, node, level, message and origin. Secrets use the same redaction as
+execution errors. UI labels are localized into English, French and Portuguese.
+There is no dedicated Message node or separate inspector input. Scheduled runs,
+headless execution, journal export and `-- @test` are outside this contract.
+
 # Reusable components
 
 - A **component** is a reusable visual function owned by one project. It encapsulates multiple nodes in a sub-DAG, represented by a single node, and is created from a selection of nodes. Its definition is stored in the same Git repository as the project's flows.

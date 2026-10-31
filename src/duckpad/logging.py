@@ -37,8 +37,20 @@ class PollingAccessFilter(logging.Filter):
         return True
 
 
-def server_log_config():
+def server_log_config(level="info"):
+    """Uvicorn logging, plus node results as JSON lines filtered by the server log level."""
     config = deepcopy(LOGGING_CONFIG)
     config["filters"] = {"polling": {"()": PollingAccessFilter}}
     config["loggers"]["uvicorn.access"]["filters"] = ["polling"]
+    config["formatters"]["execution"] = {"format": "%(message)s"}
+    config["handlers"]["execution"] = {
+        "class": "logging.StreamHandler",
+        "formatter": "execution",
+        "stream": "ext://sys.stderr",
+    }
+    config["loggers"]["duckpad.execution"] = {
+        "handlers": ["execution"],
+        "level": level.upper(),
+        "propagate": False,
+    }
     return config

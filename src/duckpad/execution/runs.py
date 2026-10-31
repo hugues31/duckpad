@@ -28,6 +28,7 @@ from ..util import Problem, now, qi, uid
 from .contexts import ContextPool, cancel_lineage, interrupt, wait_for_readers
 from .exports import Exports
 from .fingerprints import Fingerprints
+from .messages import execute_messages, result_counts
 
 UNFINISHED_RUN_STATUSES = ("preparing", "running", "canceling")
 
@@ -189,6 +190,7 @@ class Runner:
                     "label": nodes[n].get("label", n),
                     "kind": nodes[n]["parsed"]["kind"],
                     "fingerprint": fingerprints[n],
+                    "results": [],
                     **variables.run_usages(nodes[n]),
                 }
                 for n in order
@@ -267,6 +269,10 @@ class Runner:
         return cast(Record, run)
 
     def _persist(self, run: Record, secrets: list[str]) -> None:
+        run["warning_count"] = sum(
+            result_counts(state.get("results", []))["warning"] for state in run["nodes"].values()
+        )
+
         def sanitize(value: Any) -> Any:
             if isinstance(value, str):
                 return redact(value, secrets)
@@ -392,6 +398,8 @@ class Runner:
                 )
         state.update(finished=now(), duration=time.monotonic() - node_start)
         self._persist(run, secrets)
+        with context.lock:
+            context.result_runs[key] = run["id"]
 
     @staticmethod
     def _drop_staged(context: Context, created_tables: list[tuple[str, str]]) -> None:
@@ -453,10 +461,21 @@ class Runner:
         state["statements"] = variables.annotate(statements, node)
         self._persist(run, execution.secrets)
         staged: dict[str, Dataset] = {}
+        message_failure = None
         for statement in statements:
             if execution.canceled:
                 raise Problem("Execution canceled")
+            if statement.get("message_block"):
+                failure = execute_messages(
+                    cursor, statement, run, key, execution.secrets, lambda: execution.canceled
+                )
+                if message_failure is None:
+                    message_failure = failure
+                self._persist(run, execution.secrets)
+                continue
             if not statement["output"]:
+                if message_failure is not None:
+                    raise Problem(message_failure or "An @message block reported an error")
                 self._export(execution, key, statement)
                 continue
             table = statement["table"]
@@ -491,6 +510,8 @@ class Runner:
                 witnesses=plan["witnesses"],
                 groups=plan["groups"],
             )
+        if message_failure is not None:
+            raise Problem(message_failure or "An @message block reported an error")
         return staged
 
     def _export(self, execution: Execution, key: str, statement: Record) -> None:

@@ -727,5 +727,12 @@
   "projectExtensionAskAdmin": "Téléchargez le binaire du serveur et demandez à un administrateur de l’instance de l’importer.",
   "projectExtensionsEmpty": "Aucune extension pour ce projet. Ajoutez un nom et choisissez son origine pour commencer.",
   "projectExtensionsOffline": "Les téléchargements ciblent le serveur, même depuis un navigateur sur un autre système. Importez les binaires dans Paramètres de l’instance → Extensions, puis revenez ici et actualisez. L’activation et les exécutions suivantes utilisent les binaires locaux sans accès à Internet.",
-  "importExtensionRequirements": "Ce projet requiert des extensions DuckDB. Leurs binaires ne sont pas inclus dans l’archive. Ouvrez l’onglet Extensions du projet pour vérifier leur disponibilité et prévoir les imports manquants."
+  "importExtensionRequirements": "Ce projet requiert des extensions DuckDB. Leurs binaires ne sont pas inclus dans l’archive. Ouvrez l’onglet Extensions du projet pour vérifier leur disponibilité et prévoir les imports manquants.",
+  "executionMessages": "Messages du traitement",
+  "warningCount": "Avertissements : {count}",
+  "messageInfo": "Information",
+  "messageWarning": "Avertissement",
+  "messageError": "Erreur",
+  "moreMessages": "… et {count} autres",
+  "messageBlock": "Bloc message {block}"
 }
