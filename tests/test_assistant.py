@@ -110,6 +110,28 @@ def test_stream_and_resume_full_model_history(instance):
     assert "messages" not in client.get(f"/api/assistant/conversations/{identity}").json()
 
 
+def test_stream_keeps_paragraphs_between_tool_rounds(instance):
+    from assistant_model import stream
+    from pydantic_ai.models.function import FunctionModel
+
+    app, client = instance
+    configure(client)
+    _, context = project(client)
+    identity = conversation(client, context)
+
+    async def with_preamble(messages, info):
+        async for item in stream(messages, info):
+            if isinstance(item, dict):
+                yield "I will read the flow."
+            yield item
+
+    app.state.assistant.configuration.model_override = FunctionModel(stream_function=with_preamble)
+    events = turn(client, identity, context)
+    expected = "I will read the flow.\n\nThe flow contains read-only project nodes."
+    assert events[-1]["turn"]["text"].startswith(expected)
+    assert "".join(e["text"] for e in events if e["type"] == "text").startswith(expected)
+
+
 def test_admin_only_configuration_and_private_conversations(instance):
     app, admin = instance
     configure(admin)
@@ -261,6 +283,10 @@ def test_preview_limit_lineage_and_connection_revocation(instance):
     ctx = dependencies(app, client, context)
     preview = preview_output(ctx, "source", limit=5000)
     assert len(preview["rows"]) == 1
+    with pytest.raises(Problem, match="exact generation ID"):
+        explain_value(ctx, "source", 0, "value")
+    with pytest.raises(Problem, match=r"groups\[\].key"):
+        explain_value(ctx, preview["id"], 0, "value", group="South")
     explanation = explain_value(ctx, preview["id"], preview["rows"][0]["id"], "value")
     assert explanation["value"] == 0 and len(explanation["contributions"]) == 1
     schema = read_schemas(ctx, "source")

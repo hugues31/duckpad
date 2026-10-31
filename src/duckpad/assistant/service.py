@@ -205,6 +205,7 @@ class Assistant:
         messages = None
         stream = None
         buffer = ""
+        text_parts = 0
         hold = max((len(p.get("api_key", "")) for p in config["providers"]), default=0)
 
         def event(kind, **content):
@@ -244,7 +245,9 @@ class Assistant:
                         deps.check()
                         delta = ""
                         if isinstance(item, PartStartEvent) and isinstance(item.part, TextPart):
-                            delta = item.part.content
+                            separator = "\n\n" if text_parts else ""
+                            text_parts += 1
+                            delta = separator + item.part.content
                         elif isinstance(item, PartDeltaEvent) and isinstance(item.delta, TextPartDelta):
                             delta = item.delta.content_delta
                         elif isinstance(item, FunctionToolCallEvent):

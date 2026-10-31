@@ -344,7 +344,8 @@ def preview_output(
 ) -> dict:
     """Read a bounded page of existing output values. Never executes or launches the flow.
 
-    Filters match column values as text. Returned row IDs and generation ID can be used with explain_value.
+    Filters match column values as text. For explain_value, copy this result's top-level
+    `id` into `dataset` and a `rows[].id` into `row`; do not use the node ID as the dataset.
     """
     worktree, environment = ctx.deps.results(data=True)
     maximum = ctx.deps.configuration.get()["max_rows"]
@@ -385,8 +386,27 @@ def explain_value(
     """Explain a value using its materialized generation and row ID. Follow contributions recursively.
 
     Contributions are paginated; this never runs project SQL or reopens source connections.
+
+    Args:
+        dataset: Exact generation ID from preview_output.id or a contribution's dataset
+            (starts with data_). Never a node ID, port, region or table name.
+        row: Stable rows[].id from preview_output or row ID from a contribution, not a page offset.
+        column: Exact output column name to explain.
+        offset: Contribution page offset, starting at zero.
+        group: Only an exact groups[].key returned by an earlier distinct_groups explanation.
+            Leave unset for the first call and for ordinary aggregates such as SUM.
+        context_values: Include values that influenced row selection when available.
     """
     worktree, environment = ctx.deps.results(data=True)
+    if not dataset.startswith("data_"):
+        raise Problem("Use the exact generation ID from preview_output.id as dataset, not the node ID.")
+    if group is not None:
+        try:
+            json.loads(group)
+        except ValueError:
+            raise Problem(
+                "Use an exact groups[].key returned by explain_value, or leave group unset."
+            ) from None
     result = ctx.deps.services.lineage.explain(
         worktree,
         environment,
