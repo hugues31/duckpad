@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import threading
 
+import duckdb
+
 from .. import variables
 from ..catalog import Catalog, redact
 from ..components import expand, expand_for, in_subtree
@@ -11,10 +13,19 @@ from ..datasets import Context, Dataset
 from ..graph import connection_references
 from ..projects import Projects
 from ..store import Store
-from ..templates import compile_template
+from ..templates import VARIABLE_REFERENCE, compile_template
 from ..types import Record, RunToken
 from ..util import Problem, clean, qi
 from .contexts import ContextPool
+from .samples import (
+    Sample,
+    check_sample,
+    reading,
+    sample_bindings,
+    sample_condition,
+    sample_order,
+    sample_query,
+)
 
 MAX_PREVIEW_ROWS = 10_000
 
@@ -99,46 +110,64 @@ class Results:
         sort: str | None = None,
         descending: bool = False,
         filters: Record | None = None,
+        sample: Sample | None = None,
     ) -> Record:
+        """A page of a node output's sample: first or random rows, filtered and sorted.
+
+        The sample only selects which retained rows are shown; it never changes the result.
+        """
         context, dataset = self.find_dataset(worktree, environment, node, port)
         columns = [c["name"] for c in dataset.columns]
-        if sort and sort not in columns:
-            raise Problem("Unknown sort column")
-        where, values = [], []
+        sample = sample or Sample()
+        sample.order = sample_order(sample.order, columns)
+        if sort:
+            if sort not in columns:
+                raise Problem("Unknown sort column")
+            sample.order = sample.order or [(sort, "desc" if descending else "asc")]
         for column, value in (filters or {}).items():
             if column not in columns:
                 raise Problem("Unknown filter column")
-            where.append(f"CAST({qi(dataset.stored(column))} AS VARCHAR) ILIKE ?")
-            values.append("%" + str(value) + "%")
-        condition = " WHERE " + " AND ".join(where) if where else ""
-        order = f"{qi(dataset.stored(sort))} {'DESC' if descending else 'ASC'}, rowid" if sort else "rowid"
-        relation = qi(dataset.relation)
-        with context.lock:
-            assert context.db is not None
-            cursor = context.db.cursor()
-            projection = ", ".join(qi(dataset.stored(c)) for c in columns)
+            sample.contains[column] = str(value)
+        check_sample(sample.method, sample.rows, sample.seed)
+        bundle = (
+            self.projects.snapshot(worktree)["bundle"] if VARIABLE_REFERENCE.search(sample.filter) else None
+        )
+        condition, bindings = sample_condition(sample.filter, columns, bundle, environment)
+        common, row, ordering = sample_query(dataset, sample, condition)
+        bindings = sample_bindings(sample, columns, bindings)
+        projection = ", ".join(qi(c) for c in columns)
+        page = max(1, min(limit, MAX_PREVIEW_ROWS))
+        with reading(context, [dataset]) as cursor:
             try:
-                count_row = cursor.execute(f"SELECT COUNT(*) FROM {relation}{condition}", values).fetchone()
+                count_row = cursor.execute(common + "SELECT count(*) FROM matched", bindings).fetchone()
                 assert count_row is not None
-                count = count_row[0]
+                matched = count_row[0]
                 rows = cursor.execute(
-                    f"SELECT rowid, {projection} FROM {relation}{condition} ORDER BY {order} LIMIT ? OFFSET ?",
-                    [*values, max(1, min(limit, MAX_PREVIEW_ROWS)), max(0, offset)],
+                    common
+                    + f"SELECT {qi(row)}, {projection} FROM chosen ORDER BY {ordering} "
+                    + f"LIMIT {page} OFFSET {max(0, int(offset))}",
+                    bindings,
                 ).fetchall()
-                run = self.store.get("run", dataset.run)
-                return {
-                    **dataset.public(),
-                    "rows": [{"id": row[0], "values": clean(row[1:])} for row in rows],
-                    "filtered_count": count,
-                    "offset": offset,
-                    "executed_sql": run["nodes"][dataset.node].get("statements", []),
-                    "results": run["nodes"][dataset.node].get("results", []),
-                    "commit": run["commit"],
-                    "environment": environment,
-                    "error": context.errors.get(dataset.node),
-                }
-            finally:
-                cursor.close()
+            except duckdb.InterruptException:
+                raise
+            except duckdb.Error as error:
+                raise Problem(f"Cannot read this sample: {error}", 422) from error
+        run = self.store.get("run", dataset.run)
+        with context.lock:
+            error = context.errors.get(dataset.node)
+        return {
+            **dataset.public(),
+            "rows": [{"id": row[0], "values": clean(row[1:])} for row in rows],
+            # Rows to page through: the sample's rows, or every matching row without a size.
+            "filtered_count": matched if sample.rows is None else min(matched, sample.rows),
+            "matched_count": matched,
+            "offset": offset,
+            "executed_sql": run["nodes"][dataset.node].get("statements", []),
+            "results": run["nodes"][dataset.node].get("results", []),
+            "commit": run["commit"],
+            "environment": environment,
+            "error": error,
+        }
 
     def compile(self, worktree: str, environment: str, node_id: str) -> list[Record]:
         """The statements of a node subtree, compiled from the current files without running them."""

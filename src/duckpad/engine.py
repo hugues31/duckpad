@@ -19,6 +19,7 @@ from .execution.exports import Exports
 from .execution.fingerprints import Fingerprints
 from .execution.results import Results
 from .execution.runs import Runner
+from .execution.samples import Sample
 from .extensions import MAX_UPLOAD_BYTES, database_config, install, runtime
 from .projects import Projects
 from .store import Store
@@ -93,9 +94,10 @@ class Engine:
         sort: str | None = None,
         descending: bool = False,
         filters: Record | None = None,
+        sample: Sample | None = None,
     ) -> Record:
         return self.results.preview(
-            worktree, environment, node, port, limit, offset, sort, descending, filters
+            worktree, environment, node, port, limit, offset, sort, descending, filters, sample
         )
 
     def generation_valid(self, worktree: str, environment: str, dataset_id: str) -> bool:

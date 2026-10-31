@@ -567,6 +567,8 @@ class Runner:
         """Drop replaced outputs and their lineage tables once no lineage reader uses them."""
         context = execution.context
         for dataset in previous.values():
+            with context.lock:
+                cancel_lineage(context, {dataset.node}, dropping=True)
             wait_for_readers(context, {dataset.node})
             with context.lock:
                 traces = [

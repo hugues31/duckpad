@@ -31,6 +31,7 @@ from .auth import SESSION_LIFETIME, Auth
 from .bundle import bundle_to_files
 from .components import group, import_definition
 from .example import create_example
+from .execution.samples import Sample
 from .git.identity import commit_author
 from .jobs import Jobs
 from .oidc import CALLBACK_PATH, OIDC, TRANSACTION_LIFETIME, OIDCSettings
@@ -902,15 +903,22 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
         sort: str | None = None,
         descending: bool = False,
         filters: str = "{}",
+        search: str = "",
+        filter: str = "",
+        order: str = "[]",
+        method: str = "first",
+        rows: int | None = None,
+        seed: int = 0,
     ) -> Record:
         try:
-            filter_values = json.loads(filters)
+            filter_values, order_values = json.loads(filters), json.loads(order)
         except ValueError as error:
             raise Problem("Invalid preview filters") from error
         if not isinstance(filter_values, dict):
             raise Problem("Invalid preview filters")
+        sample = Sample(method=method, rows=rows, seed=seed, filter=filter, search=search, order=order_values)
         return engine.preview(
-            worktree, environment, node, port, limit, offset, sort, descending, filter_values
+            worktree, environment, node, port, limit, offset, sort, descending, filter_values, sample
         )
 
     @app.get("/api/worktrees/{worktree}/generations/{identity}", response_model=None)
