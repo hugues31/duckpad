@@ -26,6 +26,11 @@ from duckpad.util import clean
         "SELECT category FROM {{ source }} EXCEPT SELECT category FROM {{ source }} WHERE id<4 ORDER BY category;",
         "WITH q AS (SELECT * FROM {{ source }} WHERE value>10) SELECT grp, MAX(value) AS total FROM q GROUP BY grp ORDER BY grp;",
         "SELECT a.* FROM {{ source }} a SEMI JOIN {{ source }} b ON a.id=b.id ORDER BY a.id;",
+        # `~` and `!~` match anywhere in the value, unlike regexp_full_match.
+        "SELECT id FROM {{ source }} WHERE CAST(value AS VARCHAR) ~ '^[2-5]' ORDER BY id;",
+        "SELECT id, CAST(value AS VARCHAR) !~ '^[2-5]' AS outside FROM {{ source }} ORDER BY id;",
+        "SELECT id, regexp_replace(grp || value, '([A-Z])([0-9])', '\\2\\1') AS swapped, "
+        "regexp_extract(category || value, '[A-Z]([0-9]+)', 1) AS digits FROM {{ source }} ORDER BY id;",
     ],
 )
 def test_instrumentation_preserves_native_values_types_and_multiplicity(services, tmp_path, query):
