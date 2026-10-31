@@ -78,6 +78,7 @@ export interface Revision {
   parents: string[];
   /** Commit details, absent for the empty tree. */
   author?: string;
+  assistant?: string;
   date?: string;
   message?: string;
   /** When the working files were frozen. */
@@ -92,6 +93,7 @@ export interface Comparison extends ComparisonReport {
 export interface Commit {
   commit: string;
   author: string;
+  assistant?: string;
   date: string;
   parents: string[];
   /** The subject line. */

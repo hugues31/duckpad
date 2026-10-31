@@ -26,9 +26,15 @@ def diagnose(files):
         return None, [{"file": "flow.json", "message": str(error)}]
 
 
-def require_valid(files, message):
-    """Reject project files that cannot be adopted, with their validation errors."""
+def require_valid(files, message, baseline=None):
+    """Reject project files that cannot be adopted, with their validation errors.
+
+    With `baseline`, only the errors that its files do not already have are rejected.
+    """
     _, errors = diagnose(files)
+    if errors and baseline is not None:
+        known = diagnose(baseline)[1]
+        errors = [error for error in errors if error not in known]
     if errors:
         raise Problem(message, 422, errors)
 
@@ -65,11 +71,28 @@ class GitWorkspace:
         return commit
 
     def metadata(self, path, commit, name=None):
-        text = self.git(path, "show", "-s", "--format=%H%x1f%an%x1f%aI%x1f%P%x1f%s", commit, "--")
-        value = dict(
-            zip(("commit", "author", "date", "parents", "message"), text.split("\x1f", 4), strict=True)
+        text = self.git(
+            path,
+            "show",
+            "-s",
+            "--format=%H%x1f%an%x1f%aI%x1f%P%x1f%(trailers:key=Duckpad-Assistant,valueonly)%x1f%s",
+            commit,
+            "--",
         )
-        return {**value, "parents": value["parents"].split(), "ref": commit, "name": name or commit[:8]}
+        value = dict(
+            zip(
+                ("commit", "author", "date", "parents", "assistant", "message"),
+                text.split("\x1f", 5),
+                strict=True,
+            )
+        )
+        return {
+            **value,
+            "parents": value["parents"].split(),
+            "assistant": value["assistant"].strip(),
+            "ref": commit,
+            "name": name or commit[:8],
+        }
 
     def revision(self, worktree, ref):
         path = worktree["path"]

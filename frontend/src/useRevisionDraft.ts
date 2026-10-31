@@ -16,6 +16,7 @@ export type DraftScope = "page" | "worktree";
 interface Draft {
   scope: DraftScope;
   discard: () => void;
+  persist: () => Promise<void>;
 }
 
 /** Registers an unsaved draft and returns its unregistration. */
@@ -47,6 +48,10 @@ export function useDraftRegistry() {
       /** Discard unsaved changes, optionally only those of one scope. */
       discard: (scope?: DraftScope) =>
         matching(scope).forEach((draft) => draft.discard()),
+      /** Save each editor against its own base, stopping on a rejected save. */
+      persist: async () => {
+        for (const draft of matching()) await draft.persist();
+      },
     };
   }, [drafts, register]);
 }
@@ -153,15 +158,24 @@ export function useRevisionDraft<T, Revision>(
     // The owner reports save failures; nothing is left to display them here.
     persist().catch(() => undefined);
   };
+  const flush = async () => {
+    do {
+      await persist();
+    } while (unsaved());
+  };
   const register = useContext(DraftContext);
   // The registry and the unmount use the actions of the latest render.
-  const actions = useRef({ discard, close });
+  const actions = useRef({ discard, close, flush });
   useLayoutEffect(() => {
-    actions.current = { discard, close };
+    actions.current = { discard, close, flush };
   });
   useEffect(() => {
     if (!dirty || !register) return;
-    return register({ scope, discard: () => actions.current.discard() });
+    return register({
+      scope,
+      discard: () => actions.current.discard(),
+      persist: () => actions.current.flush(),
+    });
   }, [dirty, register, scope]);
   useEffect(() => () => actions.current.close(), []);
 

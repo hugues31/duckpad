@@ -1,6 +1,8 @@
 """Small read-only views over the same services and authorization as the HTTP API."""
 
 import json
+from collections.abc import Callable
+from copy import deepcopy
 from dataclasses import dataclass
 from typing import Literal
 
@@ -50,8 +52,10 @@ class Dependencies:
     configuration: Configuration
     revision: str
     context: dict
+    editing_snapshot: dict | None = None
+    writer: Callable | None = None
 
-    def check(self, *, data=False):
+    def check(self, *, data=False, write=False):
         user = self.auth.check(self.token)
         config = self.configuration.get()
         if not config["enabled"] or config["revision"] != self.revision:
@@ -62,20 +66,39 @@ class Dependencies:
         assert access is not None
         worktree = self.context.get("worktree")
         if worktree:
-            access.worktree(user, worktree)
+            access.worktree(user, worktree, "editor" if write else "reader")
             current = self.services.projects.get(worktree)
             if current["project"] != self.context["project"] or current["branch"] != self.context["branch"]:
                 raise Problem("The conversation branch changed. Start a new conversation.", 409)
+            if (
+                write
+                and self.services.projects.git(current["path"], "symbolic-ref", "-q", "HEAD", check=False)
+                != "refs/heads/" + self.context["branch"]
+            ):
+                raise Problem("The conversation branch changed. Start a new conversation.", 409)
         elif self.context.get("project"):
             access.require(user, self.context["project"])
+        if write and not worktree:
+            raise Problem("Open a project branch to edit its content", 403)
         return user, config
+
+    def can_write(self):
+        user, _ = self.check()
+        access = self.services.engine.access
+        assert access is not None
+        return bool(self.context.get("worktree")) and access.role(user, self.context["project"]) in (
+            "editor",
+            "admin",
+        )
 
     def snapshot(self):
         self.check()
         worktree = self.context.get("worktree")
         if not worktree:
             raise Problem("Open a project branch to read its content")
-        return self.services.projects.snapshot(worktree, committed=True)
+        if self.editing_snapshot is None:
+            self.editing_snapshot = self.services.projects.snapshot(worktree, committed=True)
+        return deepcopy(self.editing_snapshot)
 
     def results(self, *, data=False):
         self.check(data=data)

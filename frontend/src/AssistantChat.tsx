@@ -7,6 +7,7 @@ import {
   Send,
   Square,
   Trash2,
+  Undo2,
   X,
 } from "lucide-react";
 import { useNavigate } from "react-router";
@@ -16,6 +17,7 @@ import { useAssistantError } from "./assistantErrors";
 import { api, send, streamAssistant } from "./api";
 import type {
   AssistantContext,
+  AssistantAction,
   AssistantEvent,
   AssistantTool,
   AssistantTurn,
@@ -39,10 +41,29 @@ const toolLabels: Record<string, TranslationKey> = {
   read_history: "assistantReadHistory",
   preview_output: "assistantPreview",
   explain_value: "assistantLineage",
+  edit_flow: "assistantEditFlow",
+  write_sql: "assistantWriteSql",
+  write_documentation: "assistantWriteDocs",
+  edit_variable: "assistantEditVariable",
+  group_nodes: "assistantGroupNodes",
 };
 
-function ToolCard({ tool }: { tool: AssistantTool }) {
+interface ActionControls {
+  canUndo?: boolean;
+  onUndo?: (action?: string) => void;
+  onCompare?: (action: AssistantAction) => void;
+  onConflict?: (conflict: string) => void;
+}
+
+function ToolCard({
+  tool,
+  canUndo,
+  onUndo,
+  onCompare,
+  onConflict,
+}: { tool: AssistantTool } & ActionControls) {
   const t = useT();
+  const action = tool.action;
   const target =
     tool.args.node ||
     tool.args.path ||
@@ -58,28 +79,116 @@ function ToolCard({ tool }: { tool: AssistantTool }) {
           ? "assistantStopped"
           : "assistantFailed";
   return (
-    <details className="assistant-tool">
-      <summary>
-        <span>
-          {t(toolLabels[tool.name] || "assistantReadFlow")}
-          {target ? ` · ${String(target)}` : ""}
-        </span>
-        <small>{t(status)}</small>
-      </summary>
-      <pre>{tool.summary || t(status)}</pre>
-    </details>
+    <div className="assistant-tool">
+      <details open={action ? true : undefined}>
+        <summary>
+          <span>
+            {t(toolLabels[tool.name] || "assistantReadFlow")}
+            {target ? ` · ${String(target)}` : ""}
+          </span>
+          <small>
+            {t(
+              action?.status === "undone"
+                ? "assistantUndone"
+                : action?.status === "discarded"
+                  ? "assistantDiscarded"
+                  : status,
+            )}
+          </small>
+        </summary>
+        {action ? (
+          <>
+            <ul className="assistant-changes">
+              {action.changes.map((change) => (
+                <li key={change.id}>
+                  {t(change.status)} · {change.name}
+                </li>
+              ))}
+            </ul>
+            {action.change_count > action.changes.length && (
+              <p className="muted">{t("assistantMoreChanges")}</p>
+            )}
+            {action.affected_nodes !== undefined && (
+              <p>
+                {t("assistantAffectedNodes").replace(
+                  "{count}",
+                  String(action.affected_nodes),
+                )}
+              </p>
+            )}
+            {action.sql_diffs.map((diff) => (
+              <div key={diff.path}>
+                <code>{diff.path}</code>
+                <pre>{diff.diff}</pre>
+                {diff.truncated && <small>{t("assistantMoreChanges")}</small>}
+              </div>
+            ))}
+          </>
+        ) : (
+          <pre>{tool.summary || t(status)}</pre>
+        )}
+      </details>
+      {action && (
+        <div className="assistant-action-buttons">
+          {action.commit && (
+            <button
+              className="button secondary small"
+              onClick={() => onCompare?.(action)}
+              disabled={!onCompare}
+            >
+              {t("compareVersions")}
+            </button>
+          )}
+          {action.commit && action.status !== "undone" && (
+            <button
+              className="button secondary small"
+              disabled={!canUndo || !!action.conflict}
+              onClick={() => onUndo?.(action.id)}
+            >
+              <Undo2 size={14} />
+              {t("assistantUndo")}
+            </button>
+          )}
+          {action.conflict && (
+            <button
+              className="button secondary small"
+              disabled={!onConflict}
+              onClick={() => onConflict?.(action.conflict!)}
+            >
+              {t("assistantResolveConflict")}
+            </button>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 
-export function AssistantMessage({ turn }: { turn: AssistantTurn }) {
+export function AssistantMessage({
+  turn,
+  ...controls
+}: { turn: AssistantTurn } & ActionControls) {
   const t = useT();
   const explainError = useAssistantError();
+  const remaining = turn.tools.filter(
+    (tool) => tool.action?.commit && tool.action.status === "applied",
+  ).length;
   return (
     <article className="assistant-turn">
       <p className="assistant-question">{turn.user}</p>
       {turn.tools.map((tool) => (
-        <ToolCard key={tool.id} tool={tool} />
+        <ToolCard key={tool.id} tool={tool} {...controls} />
       ))}
+      {remaining > 1 && (
+        <button
+          className="button secondary small"
+          disabled={!controls.canUndo}
+          onClick={() => controls.onUndo?.()}
+        >
+          <Undo2 size={14} />
+          {t("assistantUndoTurn").replace("{count}", String(remaining))}
+        </button>
+      )}
       <div className="assistant-markdown">
         <Markdown
           remarkPlugins={[remarkGfm]}
@@ -112,7 +221,7 @@ export function AssistantMessage({ turn }: { turn: AssistantTurn }) {
 export default function AssistantChat() {
   const t = useT();
   const explainError = useAssistantError();
-  const { workspace, environment } = useShell();
+  const { workspace, environment, drafts, openModal } = useShell();
   const worktree = useWorktree();
   const route = usePageRoute();
   const navigate = useNavigate();
@@ -126,6 +235,7 @@ export default function AssistantChat() {
   const [title, setTitle] = useState("");
   const [model, setModel] = useState("");
   const [busy, setBusy] = useState(false);
+  const [undoing, setUndoing] = useState(false);
   const [error, setError] = useState("");
   const [pending, setPending] = useState<AssistantTurn | null>(null);
   const controller = useRef<AbortController | null>(null);
@@ -179,7 +289,27 @@ export default function AssistantChat() {
   const bound =
     !conversation ||
     (conversation.worktree === context.worktree &&
-      conversation.project === context.project);
+      conversation.project === context.project &&
+      conversation.branch === context.branch);
+  // Conflict resolutions happen in the existing workspace dialog.
+  useEffect(() => {
+    if (!conversation?.id || busy || undoing) return;
+    let cancelled = false;
+    void api<Conversation>(`/assistant/conversations/${conversation.id}`)
+      .then((value) => {
+        if (!cancelled) setConversation(value);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    conversation?.id,
+    busy,
+    undoing,
+    worktree.snapshot?.revision,
+    worktree.snapshot?.conflicts,
+  ]);
 
   async function list(offset = 0) {
     const result = await api<{
@@ -210,7 +340,7 @@ export default function AssistantChat() {
     }
   }
   async function submit() {
-    if (busy || !draft.trim() || !selected) return;
+    if (busy || undoing || !draft.trim() || !selected) return;
     setBusy(true);
     setError("");
     const abort = new AbortController();
@@ -227,6 +357,10 @@ export default function AssistantChat() {
       error: "",
     };
     try {
+      if (worktree.id) {
+        await drafts.persist();
+        await worktree.flush();
+      }
       if (!value || !bound) {
         value = await api<Conversation>("/assistant/conversations", {
           ...send(context),
@@ -249,6 +383,11 @@ export default function AssistantChat() {
             ],
           };
         else if (event.type === "done") current = event.turn;
+        if (
+          (event.type === "tool" && event.tool.action) ||
+          event.type === "done"
+        )
+          void worktree.refresh();
         setPending(current);
       };
       await streamAssistant(
@@ -277,6 +416,50 @@ export default function AssistantChat() {
       setBusy(false);
     }
   }
+  async function undo(turn: AssistantTurn, action = "") {
+    if (!conversation || !turn.id || busy || undoing || !bound) return;
+    setUndoing(true);
+    setError("");
+    try {
+      await drafts.persist();
+      await worktree.flush();
+      const value = await api<Conversation>(
+        `/assistant/conversations/${conversation.id}/undo`,
+        send({
+          turn: turn.id,
+          action,
+          context: { ...context, node: "", file: "" },
+        }),
+      );
+      setConversation(value);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      await worktree.refresh();
+      setUndoing(false);
+    }
+  }
+  const actionControls = (turn: AssistantTurn): ActionControls => ({
+    canUndo: !busy && !undoing && bound && worktree.canEdit,
+    onUndo: (action) => void undo(turn, action),
+    onCompare: bound
+      ? (action) =>
+          openModal({
+            kind: "git",
+            worktree: context.worktree,
+            commit: action.commit,
+          })
+      : undefined,
+    onConflict:
+      bound && !busy && !undoing
+        ? (conflict) =>
+            openModal({
+              kind: "conflict",
+              worktree: context.worktree,
+              conflict,
+            })
+        : undefined,
+  });
   async function stop() {
     if (!identity.current) return;
     try {
@@ -323,7 +506,7 @@ export default function AssistantChat() {
                 className="icon-button"
                 title={t("assistantNew")}
                 aria-label={t("assistantNew")}
-                disabled={busy}
+                disabled={busy || undoing}
                 onClick={() => {
                   setConversation(null);
                   setPending(null);
@@ -371,7 +554,7 @@ export default function AssistantChat() {
                 {conversations.map((item) => (
                   <button
                     key={item.id}
-                    disabled={busy}
+                    disabled={busy || undoing}
                     className={item.id === conversation?.id ? "active" : ""}
                     onClick={() => void resume(item)}
                   >
@@ -416,7 +599,10 @@ export default function AssistantChat() {
                     required
                     onChange={(e) => setTitle(e.target.value)}
                   />
-                  <button className="button secondary small" disabled={busy}>
+                  <button
+                    className="button secondary small"
+                    disabled={busy || undoing}
+                  >
                     {t("save")}
                   </button>
                   <button
@@ -424,7 +610,7 @@ export default function AssistantChat() {
                     type="button"
                     aria-label={t("assistantDelete")}
                     title={t("assistantDelete")}
-                    disabled={busy}
+                    disabled={busy || undoing}
                     onClick={() =>
                       void api(`/assistant/conversations/${conversation.id}`, {
                         method: "DELETE",
@@ -463,6 +649,9 @@ export default function AssistantChat() {
                   {t("assistantDifferentBranch")}
                 </p>
               )}
+              {context.worktree && worktree.snapshot && !worktree.canEdit && (
+                <p className="assistant-context">{t("assistantReadOnly")}</p>
+              )}
               <div
                 ref={log}
                 className="assistant-messages"
@@ -486,9 +675,18 @@ export default function AssistantChat() {
                   </div>
                 )}
                 {conversation?.turns.map((turn, index) => (
-                  <AssistantMessage key={index} turn={turn} />
+                  <AssistantMessage
+                    key={turn.id || index}
+                    turn={turn}
+                    {...actionControls(turn)}
+                  />
                 ))}
-                {pending && <AssistantMessage turn={pending} />}
+                {pending && (
+                  <AssistantMessage
+                    turn={pending}
+                    {...actionControls(pending)}
+                  />
+                )}
                 {busy && (
                   <p className="muted" role="status">
                     {t("assistantThinking")}
@@ -519,7 +717,7 @@ export default function AssistantChat() {
                   rows={3}
                   maxLength={16000}
                   value={draft}
-                  disabled={busy}
+                  disabled={busy || undoing}
                   placeholder={t("assistantMessageHint")}
                   onChange={(e) => setDraft(e.target.value)}
                   onKeyDown={(e) => {
@@ -536,7 +734,7 @@ export default function AssistantChat() {
                 <footer>
                   <select
                     aria-label={t("assistantModel")}
-                    disabled={busy}
+                    disabled={busy || undoing}
                     value={selectedKey}
                     onChange={(e) => setModel(e.target.value)}
                   >
@@ -564,6 +762,7 @@ export default function AssistantChat() {
                       disabled={
                         !draft.trim() ||
                         !selected ||
+                        undoing ||
                         (!!worktree.id && !worktree.snapshot)
                       }
                     >
