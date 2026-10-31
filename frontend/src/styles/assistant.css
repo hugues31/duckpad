@@ -230,3 +230,27 @@
     display: none;
   }
 }
+
+.assistant-quick-prompts,
+.assistant-run-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-block: 12px;
+}
+
+.assistant-run {
+  padding: 12px;
+  overflow-wrap: anywhere;
+}
+
+.assistant-run .variable-values {
+  width: 100%;
+}
+
+.assistant-prompt-setting {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 16px;
+}

@@ -5,6 +5,7 @@ from fastapi.responses import StreamingResponse
 from starlette.background import BackgroundTask
 
 from .actions import UndoRequest
+from .approvals import ApprovalRequest
 from .config import Settings
 from .service import Assistant, Rename, TurnRequest
 from .tools import PageContext
@@ -65,6 +66,20 @@ def router(assistant: Assistant):
     @routes.post("/conversations/{identity}/undo")
     def undo(request: Request, identity: str, data: UndoRequest):
         return assistant.actions.undo(request.state.user, identity, data)
+
+    @routes.post("/conversations/{identity}/approvals")
+    def approve(request: Request, identity: str, data: ApprovalRequest):
+        from ..app import session_token
+
+        stream, cancellation = assistant.approvals.decide(
+            request.state.user, session_token(request), identity, data
+        )
+        return StreamingResponse(
+            stream,
+            media_type="application/x-ndjson",
+            headers={"X-Accel-Buffering": "no", "Cache-Control": "no-store"},
+            background=BackgroundTask(assistant.release, identity, cancellation),
+        )
 
     @routes.post("/conversations/{identity}/messages")
     def message(request: Request, identity: str, data: TurnRequest):

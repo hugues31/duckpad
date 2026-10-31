@@ -42,6 +42,7 @@ class PageContext(BaseModel):
     node: str = Field(default="", max_length=512)
     file: str = Field(default="", max_length=512)
     environment: str = Field(default="", max_length=100)
+    run: str = Field(default="", max_length=100)
 
 
 @dataclass
@@ -54,6 +55,7 @@ class Dependencies:
     context: dict
     editing_snapshot: dict | None = None
     writer: Callable | None = None
+    launcher: Callable | None = None
 
     def check(self, *, data=False, write=False):
         user = self.auth.check(self.token)
@@ -132,7 +134,7 @@ def validate_context(services, user, context: PageContext):
     if context.project:
         access.require(user, context.project)
     if not context.worktree:
-        if context.node or context.file or context.branch or context.tab:
+        if context.node or context.file or context.branch or context.tab or context.run:
             raise Problem("Page context requires an open working branch", 422)
         return value
     project = access.worktree(user, context.worktree)
@@ -140,10 +142,16 @@ def validate_context(services, user, context: PageContext):
     if context.project != project or context.branch != worktree["branch"] or context.page != "pipelines":
         raise Problem("Page context does not match the working branch", 422)
     services.catalog.environment(context.environment)
+    if context.run:
+        run = services.store.get("run", context.run)
+        if not run or any(run[k] != value[k] for k in ("project", "worktree", "branch", "environment")):
+            raise Problem("Execution not found", 404)
     snapshot = services.projects.snapshot(context.worktree, committed=True)
     if context.node:
         entries = node_entries(snapshot["bundle"] or {})
         match = next((n for n in entries if "::".join([*n["path"], n["node"]]) == context.node), None)
+        if match is None and context.run:
+            match = services.store.get("run", context.run)["nodes"].get(context.node)
         if match is None:
             raise Problem("The selected node does not exist", 422)
         value["node_name"] = match["label"]
@@ -298,9 +306,9 @@ def read_runs(
     worktree, _ = ctx.deps.results()
     store = ctx.deps.services.store
     if run:
-        record = store.get("run", run)
-        if not record or record["worktree"] != worktree:
-            raise Problem("Execution not found", 404)
+        from .runs import run_record
+
+        record = run_record(ctx.deps, run)
         if node:
             result = record.get("nodes", {}).get(node)
             if result is None:
@@ -326,7 +334,17 @@ def read_runs(
         items = [
             {
                 k: r.get(k)
-                for k in ("id", "environment", "status", "started", "finished", "duration", "commit")
+                for k in (
+                    "id",
+                    "environment",
+                    "scope",
+                    "entry_point",
+                    "status",
+                    "started",
+                    "finished",
+                    "duration",
+                    "commit",
+                )
             }
             for r in store.runs(user, worktree)
         ]

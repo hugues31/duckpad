@@ -1,3 +1,4 @@
+import { PromptSettings } from "./AssistantPrompts";
 import { useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { useAssistantError } from "./assistantErrors";
@@ -122,6 +123,10 @@ export default function AssistantSettings() {
                 onChange={(e) => change({ max_rows: Number(e.target.value) })}
               />
             </label>
+            <PromptSettings
+              value={config.quick_prompts ?? null}
+              onChange={(quick_prompts) => change({ quick_prompts })}
+            />
             {config.providers.map((provider, index) => (
               <fieldset key={provider.id} className="assistant-provider">
                 <legend>

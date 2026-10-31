@@ -48,6 +48,7 @@ class Results:
                 result.setdefault(
                     node, {"outputs": {}, "error": error, "execution_status": context.node_status.get(node)}
                 )
+                result[node]["error_run"] = context.result_runs.get(node)
             generations = {
                 node: next(iter(context.outputs.get(node, {}).values())).run
                 if context.outputs.get(node)

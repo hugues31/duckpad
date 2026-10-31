@@ -1,3 +1,4 @@
+import AskAssistant from "./AskAssistant";
 import { useState } from "react";
 import {
   AlertCircle,
@@ -129,6 +130,9 @@ export default function HistoryPanel({
                 <small>
                   {new Date(run.started).toLocaleString()} · {run.environment} ·{" "}
                   {run.branch}
+                  {run.entry_point === "assistant"
+                    ? ` · ${t("assistant")}`
+                    : ""}
                 </small>
               </span>
               <span className={`badge ${run.status}`}>{t(run.status)}</span>
@@ -227,6 +231,18 @@ export default function HistoryPanel({
                 {t("tagRunCommit")}
               </button>
             )}
+            {["failed", "partial_failure", "interrupted"].includes(
+              selected.status,
+            ) && (
+              <AskAssistant
+                onOpen={() => setSelected(null)}
+                run={selected.id}
+                environment={selected.environment}
+              />
+            )}
+            {selected.entry_point === "assistant" && (
+              <p className="muted">{t("assistantRunEntryPoint")}</p>
+            )}
             {selected.error && <p className="notice error">{selected.error}</p>}
             {selected.requester && (
               <p>
@@ -284,7 +300,17 @@ export default function HistoryPanel({
                   <WarningBadge count={warningCount(state.results)} />
                   <span className="muted">{state.duration?.toFixed(3)} s</span>
                 </summary>
-                {state.error && <p className="notice error">{state.error}</p>}
+                {state.error && (
+                  <div className="notice error">
+                    <p>{state.error}</p>
+                    <AskAssistant
+                      onOpen={() => setSelected(null)}
+                      node={key}
+                      run={selected.id}
+                      environment={selected.environment}
+                    />
+                  </div>
+                )}
                 <ExecutionMessages results={state.results} />
                 {state.external_outcome && (
                   <p className="notice">

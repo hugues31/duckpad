@@ -1,3 +1,4 @@
+import AskAssistant from "./AskAssistant";
 import Select from "./Select";
 import { templateUsage } from "./nodeCode";
 import { lazy, Suspense, useRef, useState } from "react";
@@ -289,7 +290,14 @@ export default function Inspector({
       <div className="inspector-body">
         {error && <div className="notice error">{error}</div>}
         {statuses.nodes[fullNode]?.error && (
-          <p className="notice error">{statuses.nodes[fullNode].error}</p>
+          <div className="notice error">
+            <p>{statuses.nodes[fullNode].error}</p>
+            <AskAssistant
+              node={fullNode}
+              run={statuses.nodes[fullNode].error_run}
+              environment={environment}
+            />
+          </div>
         )}
         <ExecutionMessages
           results={(

@@ -327,6 +327,7 @@ class Runner:
                     if "error" in skipped:
                         with context.lock:
                             context.errors[key] = skipped["error"]
+                            context.result_runs[key] = run["id"]
                     self._persist(run, secrets)
                     continue
                 self._run_node(execution, key)

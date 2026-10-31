@@ -421,7 +421,7 @@ Deletion of a project or account cascades to its conversations. Administrators
 cannot read other users’ conversations. All tools recheck session and project
 permissions; data and compilation tools recheck project connection grants.
 The validated page context contains only page/tab/section, project/worktree/branch,
-selected node, open Code file, selected environment and their names. Saved
+selected node, open Code file, selected environment, optional debug run ID and their names. Saved
 content is fetched on demand, in bounded pages. The frontend saves pending local
 drafts before sending a message; failed saves prevent the turn. Unsaved drafts
 are never included directly in provider payloads.
@@ -438,6 +438,8 @@ messages (including tool exchanges), and whichever tool results are requested:
 | Materialized output schemas, counts, generation IDs and statuses | Yes | Yes |
 | Run IDs, environment, timestamps, statuses, durations, commits and per-node status | Yes | Yes |
 | Run error text and node message text | Withheld; only error presence | Yes, bounded |
+| Historical executed SQL and data-test results | SQL tool absent; result text withheld | Yes, bounded; connection secrets redacted |
+| Run proposals, approval/refusal and launched run metadata | For project editors/admins; always explicitly approved | Same |
 | Output preview values and filters | Tool absent | Bounded existing output rows |
 | Value lineage: selected value, SQL/expression, contributing values, source/schema metadata and limitations | Tool absent | Bounded contribution pages |
 | Search excerpts from saved project definitions | Yes | Yes |
@@ -459,7 +461,36 @@ receive `edit_flow`, `write_sql`, `write_documentation`, `edit_variable` and
 `group_nodes`. Readers receive no writing tools; forced writes and undo requests
 still recheck editing permission. Writes cannot target another worktree or
 branch, change instance configuration or launch execution. There is no arbitrary
-SQL execution, unrestricted file write, network or run-launch tool.
+SQL execution, unrestricted file write or network tool. Editors/admins additionally
+receive `launch_run` and `cancel_run`; launch is always deferred for approval.
+Read tools include `inspect_run`, `compare_run` and `wait_for_run` (at most 15
+seconds per call), plus `read_run_sql` when data reading is enabled. Run diagnostics
+include node errors, messages and data tests. Comparison selects the preceding
+successful run with the same branch, environment and scope. Historical reads
+recheck the run's connection grants. Value explanations combine bounded previews,
+lineage contributions and upstream node SQL.
+
+`launch_run` uses Pydantic AI `requires_approval` and `DeferredToolRequests`.
+The server persists tool calls and confirmation cards with the conversation, and
+resumes the original model history through `DeferredToolResults` after the author
+accepts or refuses. A reload preserves pending decisions. A batch waits for every
+decision; consumed requests cannot be replayed. If a server restart or disconnect
+interrupts the resumed response, the next message closes that turn as stopped
+without replaying its decisions. Permission is checked again at launch, using
+the same editor role and connection grants as the execution API.
+Approval is bound to the proposed definitions, environment and connection
+configuration; a changed plan requires a new confirmation. Cards show environment,
+scope, used variables, protected-environment confirmation and irreversible exports
+or external writes. The run card follows status and allows cancellation. Completed
+external writes cannot be undone. Execution history records `entry_point=assistant`
+and the requesting user.
+
+Instance administrators manage ordered label/prompt pairs in the assistant
+settings. New conversations show them as buttons that send the complete prompt.
+Before customization (or after restoring defaults), built-ins follow the UI
+language and include flow optimization, debugging and value explanation. An empty
+custom list hides all buttons. Quick prompts live only in instance settings;
+project-level quick prompts are not supported.
 
 All tools run sequentially. Reads start from a captured committed snapshot;
 successful writes advance it. Writes use `projects.write` with that base revision,
