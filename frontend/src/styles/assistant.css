@@ -1,0 +1,232 @@
+/* The assistant stays available across authenticated pages. */
+.assistant-launcher {
+  position: fixed;
+  right: 20px;
+  bottom: 18px;
+  z-index: 35;
+  border-radius: 24px;
+  box-shadow: var(--shadow);
+}
+.assistant-chat {
+  position: fixed;
+  right: 20px;
+  bottom: 72px;
+  width: min(440px, calc(100vw - 32px));
+  height: min(620px, calc(100dvh - 100px));
+  display: flex;
+  flex-direction: column;
+  z-index: 40;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 12px 48px #0003;
+  overflow: hidden;
+}
+.assistant-chat.maximized {
+  inset: 66px 28px 28px;
+  width: auto;
+  height: auto;
+  z-index: 55;
+}
+.assistant-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.assistant-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+.assistant-main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+.assistant-context {
+  color: var(--muted);
+  background: var(--surface-alt);
+  padding: 8px 16px;
+  margin: 0;
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.assistant-history {
+  width: 240px;
+  flex-shrink: 0;
+  overflow: auto;
+  padding: 16px 12px;
+  border-right: 1px solid var(--border);
+}
+.assistant-history h3 {
+  font-size: 13px;
+  margin: 0 0 12px;
+}
+.assistant-history button {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  text-align: left;
+  width: 100%;
+  padding: 10px;
+  margin-bottom: 6px;
+  border-radius: 6px;
+}
+.assistant-history button.active {
+  background: var(--accent-soft);
+}
+.assistant-history strong {
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+.assistant-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+}
+.assistant-title input {
+  min-width: 0;
+  flex: 1;
+}
+.assistant-messages {
+  overflow: auto;
+  flex: 1;
+  min-height: 0;
+  padding: 16px;
+  overscroll-behavior: contain;
+}
+.assistant-welcome {
+  max-width: 420px;
+  margin: 30px auto;
+  line-height: 1.6;
+}
+.assistant-welcome svg {
+  color: var(--accent);
+}
+.assistant-turn {
+  margin-bottom: 24px;
+  overflow-wrap: anywhere;
+}
+.assistant-question {
+  padding: 10px 12px;
+  margin: 0 0 12px;
+  background: var(--accent-soft);
+  border-radius: 8px;
+  white-space: pre-wrap;
+}
+.assistant-markdown {
+  line-height: 1.6;
+}
+.assistant-markdown pre,
+.assistant-tool pre {
+  white-space: pre-wrap;
+  overflow: auto;
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px;
+  font-size: 12px;
+}
+.assistant-markdown table {
+  display: block;
+  overflow: auto;
+  border-collapse: collapse;
+}
+.assistant-markdown td,
+.assistant-markdown th {
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+}
+.assistant-tool {
+  border: 1px solid var(--border);
+  padding: 8px;
+  border-radius: 6px;
+  margin: 6px 0;
+}
+.assistant-tool summary {
+  cursor: pointer;
+  font-size: 12px;
+}
+.assistant-tool small {
+  margin-left: 8px;
+  color: var(--muted);
+}
+.assistant-tool pre {
+  max-height: 180px;
+  font-size: 11px;
+  margin-bottom: 0;
+}
+.assistant-action-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+.assistant-changes {
+  padding-left: 20px;
+  font-size: 12px;
+}
+.assistant-composer {
+  border-top: 1px solid var(--border);
+  padding: 12px;
+}
+.assistant-prompt-label {
+  display: block;
+  font-size: 11px;
+  margin-bottom: 5px;
+}
+.assistant-composer textarea {
+  width: 100%;
+  resize: vertical;
+  min-height: 65px;
+  max-height: 160px;
+}
+.assistant-composer footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 8px;
+}
+.assistant-composer select {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+}
+.assistant-settings-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
+.assistant-provider {
+  display: grid;
+  gap: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+}
+.assistant-provider legend {
+  font-weight: 600;
+}
+@media (width <= 700px) {
+  .assistant-chat.maximized {
+    inset: 8px;
+  }
+  .assistant-history {
+    width: 145px;
+    padding: 12px 6px;
+  }
+  .assistant-launcher span {
+    display: none;
+  }
+}

@@ -1,0 +1,27 @@
+Third-party logos identify the projects used by Duckpad. They retain their
+original artwork and colors and are not covered by Duckpad's MIT license.
+
+DuckDB
+Copyright DuckDB Foundation. DuckDB is a registered trademark.
+Source: https://github.com/duckdb/duckdb-web/blob/main/images/designmanual/DuckDB_icon-lightmode.svg
+Brand assets: https://duckdb.org/design/
+Guidelines: https://duckdb.org/trademark_guidelines
+
+Python
+Copyright Python Software Foundation. The Python logo is a PSF trademark.
+Source: https://www.python.org/community/logos/
+Artwork: https://s3.dualstack.us-east-2.amazonaws.com/pythondotorg-assets/media/files/python-logo-only.svg
+Guidelines: https://www.python.org/psf/trademarks/
+
+Git
+Git Logo by Jason Long, licensed under Creative Commons Attribution 3.0 Unported.
+No changes made.
+Source: https://git-scm.com/community/logos
+Artwork: https://git-scm.com/images/logos/downloads/Git-Icon-1788C.svg
+License: https://creativecommons.org/licenses/by/3.0/
+
+Apache Parquet
+Copyright The Apache Software Foundation. Apache Parquet is an ASF trademark.
+Source: https://github.com/apache/parquet-format/blob/master/logo/parquet-logos_1.svg
+Guidelines: https://www.apache.org/foundation/marks/
+License and notice: apache-2.0.txt and apache-parquet-NOTICE.txt in this directory.
