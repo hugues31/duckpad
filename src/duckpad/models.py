@@ -119,6 +119,15 @@ class ProjectMember(SQLModel, table=True):
     role: str
 
 
+class JobIdempotency(SQLModel, table=True):
+    __tablename__ = "job_idempotency"
+    job: str = Field(primary_key=True, foreign_key="job.id", ondelete="CASCADE")
+    key: str = Field(primary_key=True)
+    request_hash: str
+    run: str = Field(foreign_key="run.id", ondelete="CASCADE")
+    expires: float = Field(index=True)
+
+
 class Connector(SQLModel, table=True):
     __tablename__ = "connector"
     id: str = Field(primary_key=True)
