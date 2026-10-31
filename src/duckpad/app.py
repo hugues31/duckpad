@@ -527,6 +527,14 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
         )
         return result
 
+    @app.get("/api/worktrees/{worktree}/extensions", response_model=None)
+    def project_extensions(worktree: str) -> Record:
+        return engine.project_extensions(worktree)
+
+    @app.post("/api/worktrees/{worktree}/extensions/check", response_model=None)
+    def check_project_extension(worktree: str, data: schemas.ProjectExtension) -> Record:
+        return engine.check_project_extension(worktree, data.name, data.source)
+
     @app.put("/api/worktrees/{worktree}", response_model=None)
     def save_project(worktree: str, data: schemas.Save) -> Record:
         proposal = data.files if data.files is not None else bundle_to_files(data.bundle)

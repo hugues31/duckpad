@@ -7,6 +7,7 @@ import zipfile
 import zlib
 from pathlib import PurePosixPath, PureWindowsPath
 
+from . import project_extensions
 from .bundle import files_to_bundle, is_declarative
 from .components import expand
 from .graph import connection_references
@@ -120,4 +121,9 @@ def import_warnings(bundle, granted):
     except (Problem, KeyError, TypeError, AttributeError, RecursionError):
         # Diagnostics of the imported project already explain malformed definitions.
         return {"connections": [], "files": []}
-    return {"connections": sorted(connections - set(granted)), "files": sorted(files)}
+    warnings = {"connections": sorted(connections - set(granted)), "files": sorted(files)}
+    if not project_extensions.problems(bundle):
+        requirements = project_extensions.enabled(bundle.get("extensions"))
+        if requirements:
+            warnings["extensions"] = [item["name"] for item in requirements]
+    return warnings

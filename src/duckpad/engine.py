@@ -8,6 +8,9 @@ from collections.abc import Generator
 from contextlib import AbstractContextManager, contextmanager, nullcontext
 from typing import BinaryIO
 
+import duckdb
+
+from . import project_extensions
 from .access import Access
 from .catalog import Catalog
 from .datasets import Context
@@ -16,7 +19,7 @@ from .execution.exports import Exports
 from .execution.fingerprints import Fingerprints
 from .execution.results import Results
 from .execution.runs import Runner
-from .extensions import MAX_UPLOAD_BYTES, install, runtime
+from .extensions import MAX_UPLOAD_BYTES, database_config, install, runtime
 from .projects import Projects
 from .store import Store
 from .types import Record, RunToken
@@ -164,6 +167,37 @@ class Engine:
             "max_upload_bytes": MAX_UPLOAD_BYTES,
             "imports": list(self.store.get("settings", "offline_extensions", {}).values()),
         }
+
+    def project_extensions(self, worktree: str) -> Record:
+        bundle = self.projects.snapshot(worktree, committed=True)["bundle"]
+        if bundle is None:
+            raise Problem("Correct the project files in Code before managing extensions", 422)
+        declared = project_extensions.declarations(bundle.get("extensions"))
+        config = {**database_config(self.store.paths.extensions), **self.extension_settings(), "threads": 1}
+        imports = self.store.get("settings", "offline_extensions", {})
+        with duckdb.connect(config=config) as db:
+            available = project_extensions.installed(db)
+        entries = []
+        for name, item in sorted(declared.items()):
+            result = project_extensions.resolve(
+                {"name": name, **item},
+                imports,
+                available,
+                config["allow_unsigned_extensions"],
+                self.store.paths.extensions,
+            )
+            entries.append({"name": name, **item, **{k: v for k, v in result.items() if k != "sql"}})
+        version, platform = runtime()
+        return {"version": version, "platform": platform, "requirements": entries}
+
+    def check_project_extension(self, worktree: str, name: str, source: str) -> Record:
+        self.projects.get(worktree)
+        project_extensions.declarations({name: {"source": source, "enabled": True}})
+        config = {**database_config(self.store.paths.extensions), **self.extension_settings()}
+        project_extensions.check(
+            config, [{"name": name, "source": source}], self.store.get("settings", "offline_extensions", {})
+        )
+        return {"status": "ready"}
 
     def import_extension(self, filename: str | None, source: str, stream: BinaryIO) -> Record:
         with self.exclusive():

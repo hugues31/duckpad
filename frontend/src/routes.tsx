@@ -15,6 +15,7 @@ import ProjectSettingsPage from "./pages/ProjectSettingsPage";
 import ProjectsPage from "./pages/ProjectsPage";
 import { NotFoundPage } from "./pages/PageStates";
 import UserSettingsPage from "./pages/UserSettingsPage";
+import ExtensionsPage from "./pages/ExtensionsPage";
 import VariablesPage from "./pages/VariablesPage";
 import WorktreePage, { CodePage } from "./pages/WorktreePage";
 
@@ -29,6 +30,7 @@ const tabPages: Record<WorkspaceTab, ComponentType> = {
   code: CodePage,
   documentation: DocumentationPage,
   variables: VariablesPage,
+  extensions: ExtensionsPage,
   history: HistoryPage,
 };
 
