@@ -171,6 +171,19 @@ export default function HistoryPanel({
               </span>
             </div>
             {selected.error && <p className="notice error">{selected.error}</p>}
+            {selected.requester && (
+              <p>
+                {t("runRequester")}:{" "}
+                <strong>{selected.requester.username}</strong>
+                {selected.requester.token_name && (
+                  <>
+                    {" "}
+                    · {t("apiTokenName")}:{" "}
+                    <strong>{selected.requester.token_name}</strong>
+                  </>
+                )}
+              </p>
+            )}
             {!!Object.keys(selected.variables || {}).length && (
               <section className="run-variables">
                 <h4>{t("variables")}</h4>
@@ -191,6 +204,7 @@ export default function HistoryPanel({
                     scope: selected.scope,
                     trigger: selected.trigger,
                     entry_point: selected.entry_point,
+                    requester: selected.requester,
                     started: selected.started,
                     finished: selected.finished,
                     connections: selected.connections,

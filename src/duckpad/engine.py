@@ -63,9 +63,15 @@ class Engine:
         return self.pool.get(worktree, environment, create)
 
     def launch(
-        self, worktree: str, environment: str, target: str | None = None, entry_point: str = "api"
+        self,
+        worktree: str,
+        environment: str,
+        target: str | None = None,
+        entry_point: str = "api",
+        *,
+        requester: Record | None = None,
     ) -> Record:
-        return self.runs.launch(worktree, environment, target, entry_point)
+        return self.runs.launch(worktree, environment, target, entry_point, requester=requester)
 
     def scope_variables(self, worktree: str, environment: str, target: str | None = None) -> Record:
         return self.runs.scope_variables(worktree, environment, target)

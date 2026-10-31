@@ -52,6 +52,9 @@ class Access:
         exists without its members and connection grants.
         """
 
+        if user.get("auth_method") == "service":
+            raise Problem("Service accounts cannot create projects", 403)
+
         def grant(worktree):
             current = self.store.get("user", user["id"])
             if not current or not current["active"]:
@@ -87,6 +90,8 @@ class Access:
                 raise Problem("User not found", 404)
             if user.get("oidc") and "password" in data:
                 raise Problem("SSO accounts authenticate with their identity provider")
+            if user.get("service") and ("password" in data or data.get("role", "member") != "member"):
+                raise Problem("Service accounts must be Members without a password")
             if data.get("active") is False:
                 user["session_version"] = user.get("session_version", 0) + 1
             user.update({k: v for k, v in data.items() if k != "password"})
@@ -102,6 +107,7 @@ class Access:
             if not user["active"]:
                 # The account's SSH key must never authenticate again, even after reactivation.
                 self.store.delete(KEY_KIND, identity)
+                self.store.delete_api_tokens(identity)
         return Auth.public(user)
 
     def member(self, project, identity, role):
@@ -111,6 +117,8 @@ class Access:
             user = self.store.get("user", identity)
             if role is not None and (not user or not user["active"]):
                 raise Problem("Choose an active user")
+            if role is not None and user.get("service") and role != "reader":
+                raise Problem("Service accounts can only be project Readers", 403)
             record = self.record(project)
             if role is None:
                 record["members"].pop(identity, None)

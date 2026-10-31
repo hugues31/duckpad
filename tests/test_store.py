@@ -19,7 +19,7 @@ from duckpad.catalog import Catalog
 from duckpad.migrations import configuration, migration_connection
 from duckpad.models import LoginSession, ProjectMember, User
 from duckpad.projects import Projects
-from duckpad.store import Store
+from duckpad.store import Store, metadata_engine
 from duckpad.util import Problem
 
 
@@ -40,10 +40,10 @@ def test_initial_migration_matches_models_and_survives_restart(store):
     with store.engine.connect() as connection:
         assert (
             connection.exec_driver_sql("SELECT version_num FROM alembic_version").scalar_one()
-            == "0002_assistant"
+            == "0003_api_tokens"
         )
         assert "records" not in inspect(connection).get_table_names()
-        assert len(SQLModel.metadata.tables) == 21
+        assert len(SQLModel.metadata.tables) == 22
         assert compare_metadata(MigrationContext.configure(connection), SQLModel.metadata) == []
         assert connection.exec_driver_sql("PRAGMA foreign_keys").scalar_one() == 1
         assert connection.exec_driver_sql("PRAGMA journal_mode").scalar_one() == "wal"
@@ -69,6 +69,62 @@ def test_unknown_document_schema_is_not_modified(tmp_path):
         assert connection.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall() == [
             ("records",)
         ]
+
+
+@pytest.mark.parametrize("previous", ["0001_relational", "0002_assistant"])
+def test_api_token_migration_preserves_accounts_sessions_and_memberships(tmp_path, previous):
+    engine = metadata_engine(tmp_path / "instance.sqlite")
+    credentials = Auth.credentials("migration-password")
+    with migration_connection(engine) as connection:
+        command.upgrade(configuration(connection), previous)
+        connection.execute(
+            text(
+                "INSERT INTO user (id, username, username_key, role, active, salt, hash, session_version) "
+                "VALUES ('owner', 'owner', 'owner', 'admin', 1, :salt, :hash, 0)"
+            ),
+            credentials,
+        )
+        connection.execute(
+            text(
+                "INSERT INTO user (id, username, username_key, role, active, oidc_issuer, oidc_subject, session_version) "
+                "VALUES ('sso', 'sso', 'sso', 'member', 1, 'https://id.example.invalid', 'subject', 0)"
+            )
+        )
+        connection.execute(
+            text(
+                "INSERT INTO session (id, user, expires, version, credential) VALUES ('session', 'owner', 9999999999, 0, :hash)"
+            ),
+            credentials,
+        )
+        connection.execute(
+            text("INSERT INTO project VALUES ('project', 'Existing project', 'main', '2026-01-01')")
+        )
+        connection.execute(text("INSERT INTO worktree VALUES ('main', 'project', 'main', 'unused')"))
+        connection.execute(text("INSERT INTO project_member VALUES ('project', 'owner', 'admin')"))
+        connection.execute(text("INSERT INTO project_member VALUES ('project', 'sso', 'reader')"))
+        if previous == "0002_assistant":
+            connection.execute(
+                text(
+                    "INSERT INTO assistant_conversation VALUES "
+                    "('conversation', 'owner', 'project', 'main', 'main', 'Kept', '2026-01-01', 0, '[]', '[]')"
+                )
+            )
+    engine.dispose()
+    store = Store(tmp_path)
+    try:
+        assert store.get("user", "owner")["hash"] == credentials["hash"]
+        assert store.get("user", "owner")["service"] is False
+        assert store.get("user", "sso")["oidc"]["subject"] == "subject"
+        assert store.get("session", "session")["credential"] == credentials["hash"]
+        assert store.get("access", "project")["members"] == {"owner": "admin", "sso": "reader"}
+        if previous == "0002_assistant":
+            assert store.get("assistant_conversation", "conversation")["title"] == "Kept"
+        auth = Auth(store)
+        user = auth.create_user("migrated-service", service=True)
+        token = auth.create_api_token(auth.public(store.get("user", "owner")), user["id"], "After migration")
+        assert auth.check_api_token(token["token"])[0] == user
+    finally:
+        store.close()
 
 
 def test_schema_constraints_apply_outside_services(store):

@@ -1,7 +1,8 @@
-"""Individual accounts and expiring sessions, outside project repositories."""
+"""Accounts, expiring sessions and hashed API tokens, outside project repositories."""
 
 import hashlib
 import hmac
+import math
 import re
 import secrets
 import time
@@ -52,20 +53,34 @@ class Auth:
     @staticmethod
     def public(user):
         result = {key: user[key] for key in ("id", "username", "role", "active")}
-        if user.get("oidc"):
+        if user.get("service"):
+            result.update(auth_method="service", description=user["description"])
+        elif user.get("oidc"):
             result["auth_method"] = "oidc"
         return result
 
-    def create_user(self, username, password, role="member"):
+    def create_user(self, username, password=None, role="member", *, service=False, description=""):
         if not isinstance(username, str) or not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9_.-]{0,63}", username):
             raise Problem("Use a username of 1-64 letters, numbers, dots, hyphens or underscores")
         if role not in ("admin", "member"):
             raise Problem("Unknown instance role")
-        credentials = self.credentials(password)
+        if service and (role != "member" or password is not None):
+            raise Problem("Service accounts must be Members without a password")
+        if not isinstance(description, str) or len(description) > 1000:
+            raise Problem("Use a description of at most 1000 characters")
+        credentials = {} if service else self.credentials(password)
         with self.store.transaction():
             if self.store.find_user(username):
                 raise Problem("Username already exists", 409)
-            user = {"id": uid("user_"), "username": username, "role": role, "active": True, **credentials}
+            user = {
+                "id": uid("user_"),
+                "username": username,
+                "role": role,
+                "active": True,
+                "service": service,
+                "description": description.strip(),
+                **credentials,
+            }
             self.store.put("user", user["id"], user)
         return self.public(user)
 
@@ -86,7 +101,7 @@ class Auth:
             recent.append(attempt)
         user = self.store.find_user(username)
         valid = self.password_matches(user, password)
-        if not user or user.get("oidc") or not user["active"] or not valid:
+        if not user or user.get("oidc") or user.get("service") or not user["active"] or not valid:
             raise Problem("Invalid username or password", 401)
         with self.store.transaction():
             current = self.store.get("user", user["id"])
@@ -96,14 +111,20 @@ class Auth:
             return self.start_session(user, credential=user["hash"])
 
     def password_matches(self, user, password):
-        """Check a local account's password; unknown and SSO accounts run the same derivation."""
-        record = user if user and not user.get("oidc") else {"salt": "00" * 32, "hash": "00" * 64}
+        """Check a local password; accounts without passwords run the same derivation."""
+        record = (
+            user
+            if user and not user.get("oidc") and not user.get("service")
+            else {"salt": "00" * 32, "hash": "00" * 64}
+        )
         valid = hmac.compare_digest(self.hash_password(password[:1024], record["salt"]), record["hash"])
         return valid and len(password) <= 1024
 
     def confirm_password(self, identity, password):
         """Require an account's current password before it changes its own credentials."""
         user = self.store.get("user", identity)
+        if user.get("service"):
+            raise Problem("Service accounts cannot use passwords")
         if user.get("oidc"):
             raise Problem("SSO accounts authenticate with their identity provider")
         if not self.password_matches(user, password):
@@ -115,6 +136,8 @@ class Auth:
         The binding records what the session depends on: the password hash for local
         accounts, or the SSO configuration revision for identity provider accounts.
         """
+        if user.get("service") or user.get("auth_method") == "service":
+            raise Problem("Service accounts cannot sign in interactively", 403)
         token = secrets.token_urlsafe(32)
         now = time.time()
         with self.store.transaction():
@@ -139,6 +162,7 @@ class Auth:
             or session["expires"] < time.time()
             or not user
             or not user["active"]
+            or user.get("service")
             or session["version"] != user.get("session_version", 0)
         ):
             raise Problem("Authentication required", 401)
@@ -152,6 +176,75 @@ class Auth:
 
     def logout(self, token):
         self.store.delete("session", session_key(token))
+
+    @staticmethod
+    def public_token(token):
+        return {key: token[key] for key in ("id", "name", "created", "expires", "last_used")}
+
+    def token_account(self, actor, identity, *, create=False):
+        user = self.store.get("user", identity)
+        if not user:
+            raise Problem("User not found", 404)
+        if user.get("service"):
+            allowed = actor["role"] == "admin"
+        else:
+            allowed = actor["id"] == identity or (not create and actor["role"] == "admin")
+        if not allowed:
+            raise Problem("You cannot manage this account's API tokens", 403)
+        return user
+
+    def list_api_tokens(self, actor, identity):
+        self.token_account(actor, identity)
+        return [self.public_token(token) for token in self.store.api_tokens(identity)]
+
+    def create_api_token(self, actor, identity, name, expires=None):
+        if not isinstance(name, str) or not name.strip() or len(name.strip()) > 128:
+            raise Problem("Use a token name of 1-128 characters")
+        now = time.time()
+        if expires is not None and (not math.isfinite(expires) or expires <= now):
+            raise Problem("Token expiration must be in the future")
+        with self.store.transaction():
+            user = self.token_account(actor, identity, create=True)
+            if not user["active"]:
+                raise Problem("Activate the account before creating API tokens", 409)
+            secret = "dpk_" + secrets.token_urlsafe(32)
+            token = {
+                "id": uid("token_"),
+                "user": identity,
+                "hash": session_key(secret),
+                "name": name.strip(),
+                "created": now,
+                "expires": expires,
+                "last_used": None,
+            }
+            self.store.put("api_token", token["id"], token)
+        return {**self.public_token(token), "token": secret}
+
+    def revoke_api_token(self, actor, identity, token_id):
+        with self.store.transaction():
+            self.token_account(actor, identity)
+            token = self.store.get("api_token", token_id)
+            if not token or token["user"] != identity:
+                raise Problem("API token not found", 404)
+            self.store.delete("api_token", token_id)
+
+    def check_api_token(self, secret):
+        with self.store.transaction():
+            token = self.store.find_api_token(session_key(secret)) if secret.startswith("dpk_") else None
+            user = self.store.get("user", token["user"]) if token else None
+            now = time.time()
+            if (
+                not token
+                or not user
+                or not user["active"]
+                or (token["expires"] is not None and token["expires"] <= now)
+                or (user.get("oidc") and not self.store.get("settings", "oidc", {}).get("enabled"))
+            ):
+                raise Problem("Authentication required", 401)
+            if token["last_used"] is None or token["last_used"] <= now - 60:
+                token["last_used"] = now
+                self.store.put("api_token", token["id"], token)
+            return self.public(user), token["name"]
 
     def commit_identity(self, user):
         record = self.store.get("user", user["id"])
