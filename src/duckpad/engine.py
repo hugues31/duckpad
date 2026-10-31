@@ -100,6 +100,11 @@ class Engine:
             worktree, environment, node, port, limit, offset, sort, descending, filters, sample
         )
 
+    def test_rows(
+        self, worktree: str, environment: str, node: str, test: str, limit: int = 100, offset: int = 0
+    ) -> Record:
+        return self.results.test_rows(worktree, environment, node, test, limit, offset)
+
     def generation_valid(self, worktree: str, environment: str, dataset_id: str) -> bool:
         return self.results.generation_valid(worktree, environment, dataset_id)
 

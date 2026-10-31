@@ -1,4 +1,4 @@
-"""Samples of the results panel.
+"""Samples and failing rows of the results panel.
 
 None of them changes a result: they read the retained datasets on bounded cursors.
 """
@@ -6,6 +6,7 @@ None of them changes a result: they read the retained datasets on bounded cursor
 import pytest
 from helpers import join_run
 
+from duckpad.bundle import bundle_to_files
 from duckpad.execution import samples
 from duckpad.execution.samples import Sample
 from duckpad.util import Problem
@@ -190,3 +191,26 @@ def test_slow_reads_stop_after_the_timeout(services, project, monkeypatch):
     monkeypatch.undo()
     # The next sample reads normally.
     assert engine.preview(project, "dev", "checked", sample=Sample(rows=1))["filtered_count"] == 1
+
+
+def test_failing_rows_are_recomputed_from_the_retained_result(services, project):
+    store, projects, _, engine = services
+    recorded = store.get("run", engine.preview(project, "dev", "checked")["run"])
+    rows = engine.test_rows(project, "dev", "checked", "large_amount", limit=3)
+    assert rows["filtered_count"] == 5
+    assert [row["values"][0] for row in rows["rows"]] == [26, 27, 28]
+    assert [c["name"] for c in rows["columns"]] == ["id", "channel", "amount", "note"]
+    assert rows["severity"] == "warning"
+    assert rows["output"] == "result"
+    assert engine.test_rows(project, "dev", "checked", "positive")["filtered_count"] == 0
+    assert engine.test_rows(project, "dev", "checked", "large_amount", offset=3)["rows"][0]["values"][0] == 29
+    with pytest.raises(Problem, match="did not run"):
+        engine.test_rows(project, "dev", "checked", "missing")
+    # Rows are never stored with the run.
+    assert store.get("run", rows["run"]) == recorded
+    snapshot = projects.snapshot(project)
+    snapshot["bundle"]["node_sql"]["nodes/checked.sql"] = CODE.replace("250", "260")
+    projects.write(project, snapshot["revision"], bundle_to_files(snapshot["bundle"]))
+    with pytest.raises(Problem, match="stale") as error:
+        engine.test_rows(project, "dev", "checked", "large_amount")
+    assert error.value.status == 409

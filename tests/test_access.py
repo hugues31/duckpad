@@ -59,6 +59,7 @@ ROUTE_ACCESS = {
         "GET /api/worktrees/{worktree}/exports/{node}/download",
         "GET /api/worktrees/{worktree}/preview/{node}",
         "GET /api/worktrees/{worktree}/test-history/{node}",
+        "GET /api/worktrees/{worktree}/test-rows/{node}/{test}",
         "GET /api/worktrees/{worktree}/generations/{identity}",
         "GET /api/worktrees/{worktree}/variables/scope",
         "GET /api/worktrees/{worktree}/extensions",

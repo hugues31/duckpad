@@ -5,6 +5,8 @@ from __future__ import annotations
 import threading
 
 import duckdb
+import sqlglot
+from sqlglot import exp
 
 from .. import variables
 from ..catalog import Catalog, redact
@@ -28,6 +30,23 @@ from .samples import (
 )
 
 MAX_PREVIEW_ROWS = 10_000
+
+
+def reads_only(sql: str, tables: set[str]) -> bool:
+    """Whether a query reads only the given relations, besides its own common table expressions."""
+    try:
+        tree = sqlglot.parse_one(sql, read="duckdb")
+    except sqlglot.errors.SqlglotError:
+        return False
+    if not isinstance(tree, exp.Query):
+        return False
+    local = {cte.alias_or_name for cte in tree.find_all(exp.CTE)}
+    for table in tree.find_all(exp.Table):
+        if not isinstance(table.this, exp.Identifier) or table.args.get("db") or table.args.get("catalog"):
+            return False
+        if table.name not in tables | local:
+            return False
+    return True
 
 
 class Results:
@@ -167,6 +186,70 @@ class Results:
             "commit": run["commit"],
             "environment": environment,
             "error": error,
+        }
+
+    def test_rows(
+        self,
+        worktree: str,
+        environment: str,
+        node: str,
+        test: str,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> Record:
+        """The failing rows of a data test, recomputed on demand from the retained result.
+
+        The query is the one the run recorded for the displayed result; it must read only
+        that result's outputs and inputs. Rows are paged and never stored.
+        """
+        context = self.pool.get(worktree, environment)
+        with context.lock:
+            outputs = dict(context.outputs.get(node, {}))
+        if not outputs:
+            raise Problem("No materialized result. Run this node to see its failing rows.", 404)
+        datasets = list(outputs.values())
+        if any(dataset.status != "valid" for dataset in datasets):
+            raise Problem("This result is stale. Run the node again to see its failing rows.", 409)
+        run = self.store.get("run", datasets[0].run)
+        statement = next(
+            (s for s in run["nodes"][node].get("statements", []) if s.get("test_name") == test), None
+        )
+        if statement is None:
+            raise Problem("This test did not run for the displayed result", 404)
+        readable = {dataset.id: dataset for dataset in datasets}
+        with context.lock:
+            for dataset in datasets:
+                for dependency in dataset.dependencies.values():
+                    source = context.datasets.get(dependency)
+                    if source is None or source.status != "valid":
+                        raise Problem("An input of this result was replaced. Run the node again.", 409)
+                    readable[source.id] = source
+        if not reads_only(statement["sql"], set(readable)):
+            raise Problem("This test reads other resources; its failing rows cannot be recomputed", 422)
+        bindings = statement.get("bindings") or {}
+        query = f'SELECT * FROM ({statement["sql"]}) AS "_duckpad_test"'
+        page = max(1, min(limit, MAX_PREVIEW_ROWS))
+        with reading(context, readable.values()) as cursor:
+            try:
+                described = cursor.execute("DESCRIBE " + statement["sql"], bindings).fetchall()
+                count_row = cursor.execute(f"SELECT count(*) FROM ({query})", bindings).fetchone()
+                assert count_row is not None
+                rows = cursor.execute(
+                    f"{query} LIMIT {page} OFFSET {max(0, int(offset))}", bindings
+                ).fetchall()
+            except duckdb.InterruptException:
+                raise
+            except duckdb.Error as error:
+                raise Problem(f"Cannot recompute the failing rows: {error}", 422) from error
+        return {
+            "test": test,
+            "run": run["id"],
+            "severity": statement.get("test_severity"),
+            "output": statement.get("message_output"),
+            "columns": [{"name": c[0], "type": c[1]} for c in described],
+            "rows": [{"id": offset + index, "values": clean(row)} for index, row in enumerate(rows)],
+            "filtered_count": count_row[0],
+            "offset": offset,
         }
 
     def compile(self, worktree: str, environment: str, node_id: str) -> list[Record]:

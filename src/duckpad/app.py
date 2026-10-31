@@ -921,6 +921,12 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
             worktree, environment, node, port, limit, offset, sort, descending, filter_values, sample
         )
 
+    @app.get("/api/worktrees/{worktree}/test-rows/{node}/{test}", response_model=None)
+    def test_rows(
+        worktree: str, node: str, test: str, environment: str, limit: int = 100, offset: int = 0
+    ) -> Record:
+        return engine.test_rows(worktree, environment, node, test, limit, offset)
+
     @app.get("/api/worktrees/{worktree}/generations/{identity}", response_model=None)
     def generation(worktree: str, identity: str, environment: str) -> Record:
         return {"valid": engine.generation_valid(worktree, environment, identity)}
