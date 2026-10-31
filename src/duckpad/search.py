@@ -83,7 +83,7 @@ def search_instance(projects, user, query, limit):
         return False
 
     worktrees = sorted(
-        (w for w in projects.store.all("worktree") if w["project"] in visible),
+        (w for w in projects.store.all("worktree") if w["project"] in visible and not w.get("read_only")),
         key=lambda w: (
             visible[w["project"]]["name"].casefold(),
             w["project"],

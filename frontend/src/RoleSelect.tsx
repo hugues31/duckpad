@@ -2,7 +2,7 @@ import Select from "./Select";
 import { useT } from "./i18n";
 
 const INSTANCE_ROLES = ["member", "admin"] as const;
-export const PROJECT_ROLES = ["reader", "editor", "admin"] as const;
+export const PROJECT_ROLES = ["reader", "operator", "editor", "admin"] as const;
 
 /** Choose an instance role, or a project role by default. */
 export default function RoleSelect({
@@ -10,12 +10,14 @@ export default function RoleSelect({
   onChange,
   instance = false,
   disabled = false,
+  service = false,
   label,
 }: {
   value: string;
   onChange: (role: string) => void;
   instance?: boolean;
   disabled?: boolean;
+  service?: boolean;
   label: string;
 }) {
   const t = useT();
@@ -26,7 +28,12 @@ export default function RoleSelect({
       disabled={disabled}
       onChange={(e) => onChange(e.target.value)}
     >
-      {(instance ? INSTANCE_ROLES : PROJECT_ROLES).map((role) => (
+      {(instance
+        ? INSTANCE_ROLES
+        : service
+          ? (["reader", "operator"] as const)
+          : PROJECT_ROLES
+      ).map((role) => (
         <option key={role} value={role}>
           {t(`role_${role}`)}
         </option>

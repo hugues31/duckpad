@@ -10,6 +10,7 @@ from test_assistant import configure, conversation, dependencies, project, turn
 from test_assistant import instance as instance
 
 from duckpad.assistant.editing import WRITE_TOOLS, NodeEdit, edit_flow
+from duckpad.assistant.runs import RUN_TOOLS
 from duckpad.bundle import bundle_to_files
 from duckpad.util import Problem
 
@@ -178,6 +179,28 @@ def test_reader_has_no_write_tools_and_forced_write_or_undo_is_denied(instance):
             f"/api/assistant/conversations/{identity}/undo", json={"turn": result["id"], "context": context}
         )
         assert response.status_code == 403
+
+
+def test_job_results_offer_no_write_or_run_tools_to_project_admins(instance):
+    app, admin = instance
+    worktree, context = seed(app, admin)
+    projects = app.state.services.projects
+    projects.versioning.create_tag(
+        worktree["id"], "v1", projects.snapshot(worktree["id"])["commit"], "Accepted"
+    )
+    response = admin.post(
+        f"/api/projects/{worktree['project']}/jobs",
+        json={"slug": "daily", "name": "Daily", "environment": "dev", "target": {"kind": "tag", "ref": "v1"}},
+    )
+    assert response.status_code == 201, response.text
+    job = response.json()["worktree"]
+    context = {**context, "worktree": job, "branch": projects.get(job)["branch"]}
+    app.state.assistant.configuration.model_override = TestModel(
+        call_tools=[], custom_output_text="Read only"
+    )
+    turn(admin, conversation(admin, context), context)
+    available = app.state.assistant.configuration.model_override.last_model_request_parameters.function_tools
+    assert {t.name for t in available}.isdisjoint(t.__name__ for t in [*WRITE_TOOLS, *RUN_TOOLS])
 
 
 def test_undo_preserves_later_node_edits_beyond_base_cache(instance):

@@ -13,7 +13,7 @@ from duckpad.app import create_app
 from duckpad.util import Problem
 
 PASSWORD = "individual-test-password"
-PUBLIC, SESSION, READER, EDITOR, PROJECT_ADMIN, INSTANCE_ADMIN = range(6)
+PUBLIC, SESSION, READER, OPERATOR, EDITOR, PROJECT_ADMIN, INSTANCE_ADMIN = range(7)
 # The minimum access level of every API route. Classify each new route here.
 ROUTE_ACCESS = {
     PUBLIC: [
@@ -41,6 +41,10 @@ ROUTE_ACCESS = {
         "DELETE /api/ssh-key",
     ],
     READER: [
+        "GET /api/projects/{project}/jobs",
+        "GET /api/jobs/{slug}",
+        "GET /api/jobs/{slug}/version",
+        "GET /api/jobs/{slug}/runs",
         "GET /api/projects/{project}/settings",
         "GET /api/worktrees/{worktree}",
         "GET /api/worktrees/{worktree}/archive.zip",
@@ -61,6 +65,7 @@ ROUTE_ACCESS = {
         "POST /api/worktrees/{worktree}/lineage",
         "GET /api/runs/{run}",
     ],
+    OPERATOR: ["POST /api/jobs/{slug}/runs"],
     EDITOR: [
         "PUT /api/worktrees/{worktree}",
         "POST /api/worktrees/{worktree}/extensions/check",
@@ -84,6 +89,10 @@ ROUTE_ACCESS = {
         "POST /api/runs/{run}/cancel",
     ],
     PROJECT_ADMIN: [
+        "POST /api/projects/{project}/jobs",
+        "PATCH /api/jobs/{slug}",
+        "DELETE /api/jobs/{slug}",
+        "POST /api/jobs/{slug}/version",
         "PUT /api/projects/{project}/members/{identity}",
         "DELETE /api/projects/{project}/members/{identity}",
         "DELETE /api/projects/{project}",
@@ -252,7 +261,7 @@ def test_private_discovery_and_all_direct_resource_routes(instance):
     )
 
 
-@pytest.mark.parametrize("role", ["reader", "editor", "admin"])
+@pytest.mark.parametrize("role", ["reader", "operator", "editor", "admin"])
 def test_project_role_matrix_and_cross_project_import(instance, role):
     app, client = instance
     owner, owner_headers = account(app, "owner")
@@ -282,7 +291,7 @@ def test_project_role_matrix_and_cross_project_import(instance, role):
         "git/push",
     ):
         response = request(client, headers, "POST", f"/worktrees/{worktree}/{suffix}", json={})
-        assert response.status_code in ((403,) if role == "reader" else (409, 422))
+        assert response.status_code in ((403,) if role in ("reader", "operator") else (409, 422))
     remote = request(client, headers, "GET", f"/worktrees/{worktree}/git/remote").json()
     app.state.services.projects.remotes.credentials.save_hosts("", ["https://example.invalid/"])
     response = request(
@@ -304,14 +313,14 @@ def test_project_role_matrix_and_cross_project_import(instance, role):
         "PUT",
         f"/worktrees/{worktree}",
         json={"revision": snapshot["revision"], "bundle": snapshot["bundle"]},
-    ).status_code == (403 if role == "reader" else 200)
+    ).status_code == (403 if role in ("reader", "operator") else 200)
     for suffix in ("branches", "group", "import", "merge", "runs", "uploads"):
-        if role == "reader":
+        if role in ("reader", "operator"):
             assert (
                 request(client, headers, "POST", f"/worktrees/{worktree}/{suffix}", json={}).status_code
                 == 403
             )
-    if role != "reader":
+    if role not in ("reader", "operator"):
         response = request(
             client,
             headers,
@@ -365,7 +374,7 @@ def test_every_api_route_requires_its_classified_access_level(instance):
     # Deleting a project must not remove the one that the other routes probe.
     disposable = own_project(app, client, owner_headers, "Disposable")
     actors = [{"cookie": ""}, account(app, "outsider")[1]]
-    for role in ("reader", "editor"):
+    for role in ("reader", "operator", "editor"):
         user, headers = account(app, role)
         for project in (worktree, disposable):
             app.state.access.member(project["project"], user["id"], role)
@@ -375,7 +384,18 @@ def test_every_api_route_requires_its_classified_access_level(instance):
     store, engine = app.state.services.store, app.state.services.engine
     run = wait_run(store, engine.launch(worktree["id"], "dev"))
     store.put("conflict", "probe", {"id": "probe", "worktree": worktree["id"]})
+    from duckpad.jobs import Jobs
+    from duckpad.schemas import NewJob
+
+    jobs = Jobs(app.state.services)
+    for slug in ("probe-job", "disposable-job"):
+        jobs.create(
+            worktree["project"],
+            NewJob(slug=slug, name=slug, environment="dev", target={"kind": "branch", "ref": "main"}),
+            {"id": "owner", "username": "owner"},
+        )
     values = {
+        "slug": "probe-job",
         "project": worktree["project"],
         "worktree": worktree["id"],
         "run": run["id"],
@@ -386,6 +406,8 @@ def test_every_api_route_requires_its_classified_access_level(instance):
     # Logging out revokes the probing session, so it is probed last.
     for (method, path), level in sorted(levels.items(), key=lambda item: (item[0][1] == "/api/logout", item)):
         ids = {**values, "project": disposable["project"]} if path == "/api/projects/{project}" else values
+        if method == "DELETE" and path == "/api/jobs/{slug}":
+            ids = {**ids, "slug": "disposable-job"}
         url = re.sub(r"\{(\w+)\}", lambda match, ids=ids: ids.get(match[1], "missing"), path)
         # An unknown environment keeps the permitted launch probe from starting a run.
         body = {"environment": "missing"} if path.endswith("/runs") else {}

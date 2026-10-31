@@ -57,7 +57,7 @@ test("create a personal token once, attribute a run and revoke it", async ({
   );
 });
 
-test("create a service account and restrict project access to Reader", async ({
+test("create a service account and restrict project access to Reader or Operator", async ({
   page,
 }) => {
   await signIn(page);
@@ -114,13 +114,19 @@ test("create a service account and restrict project access to Reader", async ({
   await page.goto(`/projects/${worktree.project}/settings`);
   await page.getByLabel(en.user, { exact: true }).selectOption(user.id);
   const role = page.getByLabel(en.projectRole, { exact: true });
-  await expect(role.locator("option")).toHaveCount(1);
+  await expect(role.locator("option")).toHaveCount(2);
+  await expect(role.locator("option")).toHaveText([
+    en.role_reader,
+    en.role_operator,
+  ]);
   await expect(role).toHaveValue("reader");
   await page
     .getByRole("button", { name: en.addParticipant, exact: true })
     .click();
   const member = page.getByRole("row").filter({ hasText: name });
-  await expect(member.getByRole("combobox")).toBeDisabled();
+  await expect(member.getByRole("combobox")).toBeEnabled();
+  await member.getByRole("combobox").selectOption("operator");
+  await expect(member.getByRole("combobox")).toHaveValue("operator");
   expect(
     (await page.request.get(`/api/worktrees/${worktree.id}`, { headers })).ok(),
   ).toBe(true);
