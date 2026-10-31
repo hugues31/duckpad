@@ -251,12 +251,12 @@ def router(jobs, access):
                 body=data.model_dump(),
             )
         except Problem as error:
+            # Jobs code their launch errors where they are raised; statuses pass through unchanged.
+            # Uncoded 422s come from the pinned version at execution time, such as a strict scope.
+            if error.status != 422 or (isinstance(error.detail, dict) and "code" in error.detail):
+                raise
             detail = error.detail if isinstance(error.detail, dict) else {"errors": error.detail}
-            code = "job_busy" if detail.get("run") else "target_unavailable"
-            if error.status == 422:
-                code = "invalid_project"
-            status = 409 if error.status == 404 else error.status
-            raise Problem(str(error), status, {"code": code, **detail}) from error
+            raise Problem(str(error), 422, {"code": "invalid_project", **detail}) from error
         return public_run(run)
 
     @api.get("/runs/{run_id}", response_model=Run, summary="Read a run, optionally waiting for completion")

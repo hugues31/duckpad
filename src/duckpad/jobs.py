@@ -27,7 +27,7 @@ class Jobs:
     def get(self, slug):
         job = self.store.get("job", slug)
         if not job:
-            raise Problem("Job not found", 404)
+            raise Problem("Job not found", 404, {"code": "job_not_found"})
         return job
 
     def path(self, project):
@@ -147,12 +147,16 @@ class Jobs:
     def runs(self, job, limit=50):
         return self.store.runs({"role": "admin"}, job["worktree"], limit=limit)
 
-    def idle(self, job):
+    def idle(self, job, *, launch=False):
         with self.engine.lock:
             active = self.engine.active.get(job["worktree"])
             if active:
-                logger.info("Job launch refused: job=%s run=%s code=job_busy", job["id"], active["id"])
-                raise Problem("This Job already has an active execution", 409, {"run": active["id"]})
+                if launch:
+                    # A refused launch leaves no run record; only this line traces it.
+                    logger.info("Job launch refused: job=%s run=%s code=job_busy", job["id"], active["id"])
+                raise Problem(
+                    "This Job already has an active execution", 409, {"code": "job_busy", "run": active["id"]}
+                )
 
     def update(self, slug, data):
         with self.projects.locked(self.get(slug)["worktree"]):
@@ -242,23 +246,28 @@ class Jobs:
     def _launch(self, slug, data, requester, external_trigger, idempotency):
         job = self.get(slug)
         # Refuse an admitted run even while its launch capture holds the repository lock.
-        self.idle(job)
+        self.idle(job, launch=True)
         with self.projects.locked(job["worktree"]) as worktree:
             job = self.get(slug)
-            self.idle(job)
+            self.idle(job, launch=True)
             if data.entry_point == "ui" and data.revision != job["revision"]:
                 raise Problem("This Job changed; review its environment and version before running", 409)
-            settings = self.catalog.environment(job["environment"])
+            try:
+                settings = self.catalog.environment(job["environment"])
+            except Problem as error:
+                raise Problem(
+                    "Job environment is unavailable", 409, {"code": "target_unavailable"}
+                ) from error
             if data.entry_point == "ui" and settings["confirm_before_run"] and not data.confirmed:
                 raise Problem(
                     "Confirm this environment before running", 409, {"confirmation_required": settings}
                 )
             target = job["target"]
-            if target["kind"] == "tag":
-                commit = target["commit"]
-            else:
-                _, commit = self.resolve(job["project"], "branch", target["branch"])
             try:
+                if target["kind"] == "tag":
+                    commit = target["commit"]
+                else:
+                    _, commit = self.resolve(job["project"], "branch", target["branch"])
                 self.projects.git(worktree["path"], "cat-file", "-e", commit + "^{commit}")
             except Problem as error:
                 raise Problem("Job target is unavailable", 409, {"code": "target_unavailable"}) from error

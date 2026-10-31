@@ -17,6 +17,7 @@ from sqlalchemy import text
 from duckpad.app import create_app
 from duckpad.jobs import Jobs
 from duckpad.store import Store
+from duckpad.util import Problem
 
 instance = test_jobs.instance
 
@@ -202,6 +203,10 @@ def test_busy_refusal_is_logged_not_recorded_and_key_can_retry(api, monkeypatch,
         error(refusal, 409, "job_busy")
         assert refusal.json()["detail"]["run"] == run["id"]
         assert "code=job_busy" in caplog.text
+        # Edits refused on a running Job are not launch refusals.
+        with pytest.raises(Problem, match="active execution"):
+            Jobs(app.state.services).delete("daily")
+        assert caplog.text.count("Job launch refused") == 1
         assert len(app.state.services.store.all("run")) == 1
         assert (
             app.state.services.store.job_launch("daily", hashlib.sha256(b"later").hexdigest(), time.time())
@@ -343,6 +348,23 @@ def test_missing_target_and_invalid_project_do_not_consume_keys(api):
     record["scope"] = None
     store.put("job", job["slug"], record)
     assert launch(call, key="fix")["id"]
+
+
+def test_launch_errors_keep_their_status(api, monkeypatch):
+    app, call, _, _, _, _ = api
+    services = app.state.services
+    join_run(services.store, launch(call)["id"])
+    services.catalog.delete_environment("dev")
+    error(call("POST", "/jobs/daily/runs", {}), 409, "target_unavailable")
+    launch_job = Jobs.launch
+
+    def deleted_after_authorization(self, slug, *args, **kwargs):
+        services.store.delete("job", slug)
+        return launch_job(self, slug, *args, **kwargs)
+
+    monkeypatch.setattr(Jobs, "launch", deleted_after_authorization)
+    error(call("POST", "/jobs/daily/runs", {}, key="gone"), 404, "job_not_found")
+    assert len(services.store.all("run")) == 1
 
 
 def test_text_log_messages_failure_and_terminal_control_escaping(api):
