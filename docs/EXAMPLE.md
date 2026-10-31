@@ -1,6 +1,10 @@
 # Northstar example tour
 
-Choose **Open example project** from the welcome screen. The example also remains available from the project menu. It creates its own local inputs and an instance connection named Northstar; no credentials or external database are needed.
+Choose **New project** on the Projects page or beside the active project selector. Enter your project name, then choose **Start from an example → Create**. This creates an independent copy of Northstar under your chosen name, even when other projects already exist. It creates its own local inputs and a connection named Northstar; no credentials or external database are needed. The **Open example project** shortcut is also available when the project list is empty.
+
+New to Duckpad? Follow the [quickstart](QUICKSTART.md) to install it and run your
+first pipeline. The website version of this guide includes a captioned recording
+of the steps below, regenerated from the application with Playwright.
 
 ## Explore the pipeline
 
@@ -12,13 +16,26 @@ Choose **Open example project** from the welcome screen. The example also remain
 6. Select Customer reach. Its four ordered outputs use `DISTINCT`, `UNION`, `INTERSECT` and `EXCEPT` to compare customer channels.
 7. The two export nodes write revenue CSV reports. Their explicit paths appear in compiled SQL and run history. Running again replaces the same local files according to native `COPY` behavior.
 
+![Metrics inside the nested Regional summary component](images/component.png)
+
 ## Explain a value
 
-Select Regional revenue and its `report` output. Click a revenue cell. Follow the rank step's contribution into the aggregate, then inspect the original amount cells. Use Next to move through pages of five; the displayed total represents the full search, regardless of the preview row limit.
+![Source amounts contributing to regional revenue](images/lineage.png)
 
-For a distinct customer count, the first level contains customer-value groups and the number of source rows in each. Expanding a group preserves repeated purchases as separate cells. For a maximum, tied maximum cells appear first; Show evaluation context reveals the examined group.
+Select Regional revenue and its `report` output. Click a revenue cell. The calculation modal connects source amounts directly to the aggregate, collapsing the rank projection and other steps that merely carry the value forward. Use Next to display another five inputs; the exact total covers all contributions, regardless of the preview row limit.
+
+For a distinct customer count, value-group cards show the count of original rows. Open a group to see its source cells. Repeated purchases remain separate cells. For a maximum, all tied extrema are shown; calculation details expose the full examined group as row-selection context.
 
 Documentation is available on the project tab and the selected node's Documentation tab, including dataset and column descriptions.
+
+## Inspect the SQL
+
+Open the **Code** tab and select `templates/sql.sql` in the project file tree.
+The editor gives you access to the SQL and structured files behind the canvas.
+Edits to a shared definition affect its instances in the current branch; use an
+isolated working branch when experimenting.
+
+![The project file tree and SQL editor](images/code.png)
 
 ## Compare configurations
 
