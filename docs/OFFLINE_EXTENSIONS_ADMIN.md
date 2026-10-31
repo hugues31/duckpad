@@ -23,7 +23,9 @@ For example, `v2.0.0/linux_amd64/httpfs.duckdb_extension.gz` selects the Linux
 x86-64 core binary, even when downloaded with a Windows browser. The interface
 constructs this URL from the backend runtime. A missing download means that
 name/version/platform combination is unavailable in the selected repository;
-check its catalog or obtain a compatible build from its publisher.
+check its catalog or obtain a compatible build from its publisher. When the
+browser can reach the repository, the interface reports a missing download
+before you click the link.
 
 The same import accepts matching files extracted from release archives. Select
 the inner `.duckdb_extension` or `.duckdb_extension.gz`; do not upload the entire
@@ -33,7 +35,10 @@ the inner `.duckdb_extension` or `.duckdb_extension.gz`; do not upload the entir
 
 The authenticated administrator endpoint `POST /api/extensions/import` accepts
 multipart fields `file` and `source` (`core`, `community`, or `unsigned`).
-`GET /api/extensions/runtime` lists imports alongside the server version/platform.
+`GET /api/extensions/runtime` lists imports alongside the server version/platform,
+and `core_extensions`: the core extensions known to the server's DuckDB build, with
+their description, aliases and whether they are built in. Reading this list
+needs no network access.
 
 Duckpad validates the file in a temporary cache with DuckDB's native `INSTALL`.
 Core and community imports always verify signatures, even when the separate
