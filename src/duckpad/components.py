@@ -2,7 +2,7 @@
 
 import copy
 
-from . import variables
+from . import variables, views
 from .node_code import code_path, node_sql
 from .templates import IDENTIFIER, directives, parse_template
 from .util import Problem, uid
@@ -350,7 +350,7 @@ def component_paths(bundle):
 
 
 def reconcile_documentation(previous, current):
-    """Copy imported documentation and prune explicitly deleted owning nodes."""
+    """Copy imported documentation and prune the documentation and views of deleted owning nodes."""
     documentation = current.setdefault("documentation", {})
     paths = component_paths(current)
     for identity, prefixes in paths.items():
@@ -371,6 +371,7 @@ def reconcile_documentation(previous, current):
     for before, after, prefixes in pairs:
         removed = {n["id"] for n in before.get("nodes", [])} - {n["id"] for n in after.get("nodes", [])}
         owners = [prefix + node for prefix in prefixes for node in removed]
+        views.prune(current.get("views"), owners)
         for section in DOCUMENTATION_SECTIONS:
             values = documentation.get(section, {})
             for key in list(values):

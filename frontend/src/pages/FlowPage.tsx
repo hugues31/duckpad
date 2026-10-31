@@ -20,7 +20,6 @@ import {
   type NodeConnection,
   type PathPart,
 } from "../graph";
-import { useT } from "../i18n";
 import Inspector from "../Inspector";
 import {
   NEW_NODE_SQL,
@@ -33,9 +32,11 @@ import {
 import LineagePanel from "../LineagePanel";
 import type { Cell } from "../lineageGraph";
 import NodePalette, { type NodeKind } from "../NodePalette";
-import Preview, { useNodePreview } from "../Preview";
+import { useNodePreview } from "../Preview";
+import ResultsPanel, { type ResultsTab } from "../ResultsPanel";
 import { useShell, useWorkspace } from "../shell";
 import type { Bundle, FlowNode, Graph } from "../types";
+import { templateLabel, useT } from "../i18n";
 import {
   isWideLayout,
   PanelResizeHandles,
@@ -47,6 +48,9 @@ import { InvalidProject } from "./PageStates";
 
 /** Height of each banner stacked under the toolbar, in pixels. */
 const NOTICE_HEIGHT = 36;
+/** A Filter node's code when the project has no `filter` template to copy. */
+const FILTER_SQL =
+  "-- @label Filter\n-- @input source\n-- @param condition: expression(source)\n-- @output result\nSELECT * FROM {{ source }} WHERE {{ condition }};\n";
 
 interface FlowLocation {
   worktree: string;
@@ -123,6 +127,7 @@ export default function FlowPage() {
   const location = useLocation();
   const sizes = usePanelSizes();
   const [selection, setSelection] = useState<string[]>([]);
+  const [resultsTab, setResultsTab] = useState<ResultsTab>("data");
   const [focusRequest, setFocusRequest] = useState<{
     id: string;
     key: string;
@@ -291,6 +296,39 @@ export default function FlowPage() {
     });
     if (selected && ids.includes(selected)) select(null);
   }
+  /** Insert a Filter node reading one output of the selected node, with a sample's condition. */
+  async function addFilterNode(port: string, condition: string) {
+    if (!node) return;
+    const created: FlowNode = {
+      id: identifier(),
+      params: { condition },
+      position: { x: node.position.x + 240, y: node.position.y + 140 },
+    };
+    const filter = snapshot.parsed_templates.filter;
+    const reusable =
+      bundle?.templates.filter !== undefined &&
+      filter?.inputs?.length === 1 &&
+      filter.parameters?.some((p) => p.name === "condition");
+    await save(snapshot, (value) => {
+      const g = graphAt(value, path);
+      if (reusable) {
+        created.template = "filter";
+        detachNode(value, created, parent);
+      } else {
+        created.preset = "filter";
+        (value.node_sql ||= {})[nodeCodePath(created.id, parent)] = FILTER_SQL;
+      }
+      g.nodes.push(created);
+      connectInput(g, {
+        source: node.id,
+        sourceHandle: port,
+        target: created.id,
+        targetHandle: reusable ? filter!.inputs![0] : "source",
+      });
+    });
+    notify(t("filterNodeAdded"));
+    select(created.id);
+  }
   function openComponent(id: string) {
     const instance = graph?.nodes.find((n) => n.id === id);
     if (!instance?.component) return;
@@ -313,11 +351,19 @@ export default function FlowPage() {
         signature.kind === "export" ? "write" : "read",
       ),
   );
+  const hasResults = ports.length > 0 || signature?.kind === "export";
   const shown = {
     palette: panels.open.palette,
     inspector: panels.open.inspector && !!node,
-    preview: panels.open.preview && !!node && ports.length > 0,
+    preview: panels.open.preview && !!node && hasResults,
   };
+  const editCode = () =>
+    node &&
+    openModal(
+      node.template
+        ? { kind: "template", worktree, template: node.template }
+        : { kind: "nodeCode", worktree, node: node.id, parent },
+    );
   return (
     <div
       className={`flow-layout ${shown.palette ? "palette-open" : ""} ${shown.inspector ? "inspector-open" : ""} ${shown.preview ? "preview-open" : ""} ${path.length ? "nested-flow" : ""}`}
@@ -419,21 +465,45 @@ export default function FlowPage() {
             }
             onOpen={openComponent}
             onSelection={updateSelection}
+            onWarnings={() => setResultsTab("log")}
           />
         </div>
-        {node && ports.length > 0 ? (
-          <Preview
+        {node && signature && hasResults ? (
+          <ResultsPanel
             readOnly={!canEdit}
-            key={[worktree, fullNode, environment, ...ports].join(":")}
+            key={[worktree, fullNode, ...ports].join(":")}
+            user={workspace.user.id}
             snapshot={snapshot}
             environment={environment}
-            preview={preview}
-            ports={ports}
-            active={!!statuses.active}
+            node={node}
+            fullNode={fullNode}
+            parent={parent}
+            prefix={prefix}
+            signature={signature}
+            label={
+              node.label ||
+              (signature.kind === "component"
+                ? signature.definition?.name
+                : node.template
+                  ? templateLabel(node.template, signature.definition?.label, t)
+                  : signature.definition?.label) ||
+              node.id
+            }
+            graphNodes={graph.nodes}
+            graphEdges={graph.edges}
+            statuses={statuses}
+            tab={resultsTab}
             hidden={!panels.open.preview}
+            onTab={setResultsTab}
             onClose={() => panels.set({ preview: false })}
             onRun={() => run(fullNode)}
             onExplain={(value) => view.change({ cell: value })}
+            onSave={(change) => save(snapshot, change)}
+            onSaveDocumentation={(change) =>
+              save(snapshot, (value) => change(value.documentation))
+            }
+            onAddFilter={addFilterNode}
+            onEditCode={editCode}
           />
         ) : null}
       </main>
@@ -509,17 +579,7 @@ export default function FlowPage() {
             onDelete={() => safe(() => removeNodes([node.id]))}
             onRun={() => run(fullNode)}
             onOpen={() => openComponent(node.id)}
-            onEditTemplate={() =>
-              openModal(
-                node.template
-                  ? {
-                      kind: "template",
-                      worktree,
-                      template: node.template,
-                    }
-                  : { kind: "nodeCode", worktree, node: node.id, parent },
-              )
-            }
+            onEditTemplate={editCode}
             onViewCode={() =>
               openModal({ kind: "nodeCode", worktree, node: node.id, parent })
             }

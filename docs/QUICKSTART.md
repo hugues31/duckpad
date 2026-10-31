@@ -78,11 +78,11 @@ and explicit limitations.
 
 ## 4. Make it yours
 
-Select **Paid orders** and change its **status** parameter. The old preview
-becomes **Stale**. Click **Run pipeline** again to compute the new result.
+Select **Paid orders** and change its **status** parameter. The old result
+becomes **Stale** in the results panel. Click **Run pipeline** again to compute the new result.
 You choose when a run happens; editing never starts one automatically.
 
-![Paid orders parameters beside its output preview](images/parameters.png)
+![Paid orders parameters beside its results](images/parameters.png)
 
 Try the **Code** tab to inspect the project files and SQL. Use **New working
 branch** before experimenting with a shared definition, then compare your changes

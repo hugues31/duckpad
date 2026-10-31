@@ -2,7 +2,7 @@
 
 import json
 
-from . import project_extensions, variables
+from . import project_extensions, variables, views
 from .util import dumps
 
 MISSING = object()
@@ -68,7 +68,7 @@ def merge_files(base, current, proposal, choices=None, evidence=None):
     for name in sorted(base.keys() | current.keys() | proposal.keys()):
         values = [v.get(name, MISSING) for v in (base, current, proposal)]
         if (
-            name in (variables.FILE, project_extensions.FILE)
+            name in (variables.FILE, project_extensions.FILE, views.FILE)
             and values[0] is MISSING
             and all(v is not MISSING for v in values[1:])
         ):
@@ -77,7 +77,14 @@ def merge_files(base, current, proposal, choices=None, evidence=None):
             values[0] = "{}"
         try:
             if name.endswith(".json") and all(v is not MISSING for v in values):
-                merged, errors = merge_values(*(json.loads(v) for v in values), name, choices, evidence)
+                parsed = [json.loads(v) for v in values]
+                named = [views.by_name(v) for v in parsed] if name == views.FILE else [None]
+                if all(v is not None for v in named):
+                    # Shared views merge view by view, keyed by their name.
+                    merged, errors = merge_values(*named, name, choices, evidence)
+                    merged = views.from_names(merged, [parsed[1], parsed[2], parsed[0]])
+                else:
+                    merged, errors = merge_values(*parsed, name, choices, evidence)
                 content = dumps(merged)
             else:
                 content, errors = merge_values(*values, name, choices, evidence)

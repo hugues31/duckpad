@@ -116,6 +116,89 @@ test("capture project creation, results, lineage and SQL", async ({ page }) => {
   await capture(page, "code");
 });
 
+test("capture the results panel: samples, columns, tests and log", async ({
+  page,
+}) => {
+  const worktree = await example(page);
+  // Paid orders reports two messages and three tests, one of them failing as a warning.
+  const url = `/api/worktrees/${worktree.id}`;
+  const snapshot = await (await page.request.get(url)).json();
+  snapshot.bundle.templates.validated_orders += [
+    "-- @message",
+    "SELECT 'info' AS level, COUNT(*) || ' paid orders kept, ' || (SELECT COUNT(*) FROM {{ source }} WHERE status <> 'paid') || ' refunds excluded' AS message FROM {{ orders }};",
+    "-- @message",
+    "SELECT 'warning' AS level, 'Largest order is ' || MAX(amount) || ' EUR, above the 450 EUR review threshold' AS message FROM {{ orders }} HAVING MAX(amount) > 450;",
+    "-- @test order_id_unique",
+    "SELECT order_id FROM {{ orders }} GROUP BY order_id HAVING COUNT(*) > 1;",
+    "-- @test amount_present",
+    "SELECT * FROM {{ orders }} WHERE amount IS NULL;",
+    "-- @test amount_in_range: warning",
+    "SELECT * FROM {{ orders }} WHERE amount > 450;",
+    "",
+  ].join("\n");
+  snapshot.bundle.documentation.datasets = {
+    "validated:orders": "Paid orders only; each row is one order.",
+  };
+  snapshot.bundle.documentation.columns = {
+    "validated:orders": {
+      order_id: "Unique order identifier.",
+      amount: "Gross order amount in EUR before refunds.",
+      region: "Customer region at the time of the run.",
+    },
+  };
+  const saved = await page.request.put(url, {
+    data: { revision: snapshot.revision, bundle: snapshot.bundle },
+  });
+  expect(saved.ok()).toBeTruthy();
+  await page.reload();
+  await run(page);
+  await node(page, "Paid orders").click();
+  const panel = page.getByRole("region", { name: "Results", exact: true });
+  await expect(panel.locator(".results-header .badge")).toHaveText("Valid");
+  await panel.getByRole("button", { name: /^Sample:/ }).click();
+  const popover = page.getByRole("dialog", { name: "Sample", exact: true });
+  await popover.getByLabel("Number of rows", { exact: true }).fill("100");
+  await popover
+    .getByRole("textbox", { name: "Filter", exact: true })
+    .fill("channel = 'Partner' AND amount > 300");
+  await popover.getByRole("button", { name: "Column", exact: true }).click();
+  await popover
+    .getByLabel("Sort column", { exact: true })
+    .selectOption("amount");
+  await popover
+    .getByLabel("Sort direction", { exact: true })
+    .selectOption("desc");
+  await expect(popover.getByRole("status")).toHaveText("16 matching rows");
+  await capture(page, "results-sample");
+  await popover.getByRole("button", { name: "Apply", exact: true }).click();
+  await expect(panel.locator(".preview-footer")).toContainText("1–16 / 16");
+  await capture(page, "results-data");
+  await panel.getByRole("tab", { name: /^Columns/ }).click();
+  await panel
+    .getByRole("button", { name: "Compute statistics", exact: true })
+    .click();
+  await expect(panel.locator(".statistics-note")).toBeVisible();
+  await capture(page, "results-columns", panel);
+  await panel.getByRole("tab", { name: /^Tests/ }).click();
+  await panel
+    .locator(".test-row")
+    .filter({ hasText: "amount_in_range" })
+    .locator(".test-status")
+    .click();
+  await expect(panel.locator(".test-details")).toContainText(
+    "SELECT * FROM {{ orders }} WHERE amount > 450;",
+  );
+  await capture(page, "results-tests", panel);
+  await panel
+    .getByRole("button", { name: "Show the 10 failing rows", exact: true })
+    .click();
+  await expect(panel.locator(".preview-footer")).toContainText("1–10 / 10");
+  await capture(page, "results-failing-rows", panel);
+  await panel.getByRole("tab", { name: /^Log/ }).click();
+  await expect(panel.locator(".log-timeline")).toContainText("Published");
+  await capture(page, "results-log", panel);
+});
+
 test("capture parameters, node documentation and nested components", async ({
   page,
 }) => {

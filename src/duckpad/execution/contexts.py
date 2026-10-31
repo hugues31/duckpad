@@ -53,9 +53,15 @@ def interrupt(cursor: SQLCursor) -> None:
     threading.Thread(target=stop, name="interrupt", daemon=True).start()
 
 
-def cancel_lineage(context: Context, affected: set[str] | None = None) -> None:
-    """Interrupt the lineage requests reading results of the affected nodes, or all of them."""
+def cancel_lineage(context: Context, affected: set[str] | None = None, *, dropping: bool = False) -> None:
+    """Interrupt the lineage requests reading results of the affected nodes, or all of them.
+
+    Display readers, such as samples and statistics, keep reading a result that turns stale;
+    they stop when all requests stop, or when `dropping` announces that the results go away.
+    """
     for request in list(context.lineage.values()):
+        if request.get("display") and affected is not None and not dropping:
+            continue
         if affected is None or request["nodes"] & affected:
             request["canceled"].set()
             interrupt(request["cursor"])
@@ -267,7 +273,7 @@ class ContextPool:
             for dataset in context.datasets.values():
                 if dataset.node in removed:
                     dataset.status = "stale"
-            cancel_lineage(context, removed)
+            cancel_lineage(context, removed, dropping=True)
         wait_for_readers(context, removed)
         with context.lock:
             assert context.db is not None

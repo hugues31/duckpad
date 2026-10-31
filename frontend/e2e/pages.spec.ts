@@ -251,32 +251,29 @@ test("the data preview and the Inspector share one load of the node", async ({
   expect(loads).toHaveLength(1);
 });
 
-test("the data preview filters its first column until another one is chosen", async ({
+test("the results search covers every column and headers sort the sample", async ({
   page,
 }) => {
   const { node } = await openRunExample(page);
   await node.click();
   const preview = page.locator(".preview-panel");
-  const first = await preview.locator(".data-table th button span").first();
+  const first = preview.locator(".data-table th button span").first();
   const column = (await first.textContent())!;
-  await expect(
-    preview.getByLabel("Filter column", { exact: true }),
-  ).toHaveValue(column);
-  const filtered = page.waitForRequest((request) => {
+  const searched = page.waitForRequest((request) => {
     const { pathname, searchParams } = new URL(request.url());
     return (
       pathname.includes("/preview/") &&
-      searchParams.get("filters") ===
-        JSON.stringify({ [column]: "no-such-value" })
+      searchParams.get("search") === "no-such-value"
     );
   });
   await preview
-    .getByLabel("Filter rows…", { exact: true })
+    .getByLabel("Search all columns…", { exact: true })
     .fill("no-such-value");
-  await filtered;
+  await searched;
   await expect(preview.locator(".empty-small")).toBeVisible();
   await preview.getByTitle("Clear", { exact: true }).click();
   await expect(preview.locator(".empty-small")).toHaveCount(0);
   await first.click();
   await expect(first).toHaveText(`${column} ↑`);
+  await expect(preview.locator(".sample-chip")).toHaveText(`${column} ↑`);
 });

@@ -14,6 +14,7 @@ from contextlib import contextmanager, suppress
 from pathlib import Path
 from typing import Literal, Unpack, cast, overload
 
+from . import views
 from .builtin_templates import BUILTINS
 from .bundle import ROOT_FILES, bundle_to_files, files_to_bundle, is_declarative
 from .comparison import commit_message
@@ -296,12 +297,13 @@ class Projects:
                     if name in existing:
                         (Path(path) / name).unlink(missing_ok=True)
                         existing.pop(name)
-            before = dumps(bundle["documentation"])
+            before = dumps([bundle["documentation"], bundle.get("views")])
             reconcile_documentation(previous, bundle)
-            if before != dumps(bundle["documentation"]):
+            if before != dumps([bundle["documentation"], bundle.get("views")]):
                 reconciled = bundle_to_files(bundle)
-                for name in ("documentation.json", "README.md"):
-                    atomic_write(Path(path) / name, reconciled[name])
+                for name in ("documentation.json", "README.md", views.FILE):
+                    if name in reconciled:
+                        atomic_write(Path(path) / name, reconciled[name])
                 existing = self.read_files({"path": str(path)})
         except (Problem, KeyError, TypeError, AttributeError):
             # An unavailable schema or malformed definition is never a deletion.

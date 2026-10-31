@@ -87,7 +87,7 @@ export default function ExportDownload({
           <>
             {result.filename}
             <br />
-            {environment} · {new Date(result.started!).toLocaleString()}
+            {new Date(result.started!).toLocaleString()}
             <br />
             {t("exportExecution")} {result.run}
           </>

@@ -203,6 +203,8 @@ interface CanvasProps {
   ) => void;
   onOpen: (id: string) => void;
   onSelection: (ids: string[]) => void;
+  /** Show the results log of a node whose warning badge was clicked. */
+  onWarnings?: (id: string) => void;
 }
 function CanvasInner(props: CanvasProps) {
   const t = useT();
@@ -571,6 +573,12 @@ function CanvasInner(props: CanvasProps) {
         onNodeClick={(event, node) => {
           setFocus(null);
           if (!event.shiftKey) props.onSelect(node.id);
+          // A warning badge opens the node's results on its log.
+          if (
+            !event.shiftKey &&
+            (event.target as Element).closest(".warning-badge")
+          )
+            props.onWarnings?.(node.id);
         }}
         onPaneClick={() => {
           setFocus(null);
