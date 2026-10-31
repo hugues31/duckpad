@@ -241,6 +241,10 @@ test("the assistant bubble moves aside and the chat keeps the reading position",
       .fill(question);
     await chat.getByRole("button", { name: "Send", exact: true }).click();
     await expect(answers).toHaveCount(index + 1);
+    // Send returns once the turn is saved and the chat is idle.
+    await expect(
+      chat.getByRole("button", { name: "Send", exact: true }),
+    ).toBeVisible();
   }
   const log = chat.getByRole("log", { name: "Conversation messages" });
   const remaining = () =>
@@ -262,9 +266,6 @@ test("the assistant bubble moves aside and the chat keeps the reading position",
   await chat.getByRole("button", { name: "Close", exact: true }).click();
   await launcher.click();
   await expect(answers.last()).toBeInViewport();
-  await page.request.put("/api/assistant/settings", {
-    data: { enabled: false, providers: [] },
-  });
 });
 
 test("assistant writes appear on the canvas and undo preserves a manual SQL edit", async ({
