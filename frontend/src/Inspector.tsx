@@ -1,12 +1,13 @@
 import AskAssistant from "./AskAssistant";
 import Select from "./Select";
-import { templateUsage } from "./nodeCode";
+import { nodeCodePath, nodeEntity, templateUsage } from "./nodeCode";
 import { lazy, Suspense, useRef, useState } from "react";
 import {
   ArrowRight,
   BookOpen,
   Boxes,
   Code2,
+  Info,
   Link,
   Play,
   Settings2,
@@ -17,6 +18,7 @@ import { api, withQuery } from "./api";
 import { nodeInterface, type NodeInterface } from "./graph";
 import { templateLabel, useT } from "./i18n";
 import NodeDocumentation from "./NodeDocumentation";
+import NodeInfo from "./NodeInfo";
 import ExportDownload from "./ExportDownload";
 import ExecutionMessages from "./ExecutionMessages";
 import NodeTests from "./NodeTests";
@@ -52,11 +54,13 @@ const TABS = [
   ["parameters", Settings2],
   ["sql", Code2],
   ["notes", BookOpen],
+  ["info", Info],
 ] as const;
 
 export default function Inspector({
   readOnly = false,
   node,
+  parent,
   signature,
   snapshot,
   graphNodes,
@@ -84,6 +88,8 @@ export default function Inspector({
 }: {
   readOnly?: boolean;
   node: FlowNode;
+  /** The component definition holding the node, if not the root flow. */
+  parent?: string;
   signature: NodeInterface;
   snapshot: Snapshot;
   graphNodes: FlowNode[];
@@ -263,9 +269,6 @@ export default function Inspector({
           <Play size={16} />
         </button>
       </div>
-      <button className="button secondary small" onClick={onHistory}>
-        {t("elementHistory")}
-      </button>
       {signature.kind !== "component" && signature.definition?.download && (
         <ExportDownload
           key={`${snapshot.worktree.id}:${environment}:${fullNode}:${snapshot.revision}`}
@@ -280,10 +283,11 @@ export default function Inspector({
             key={key}
             className={tab === key ? "active" : ""}
             aria-pressed={tab === key}
+            title={t(key)}
             onClick={() => setTab(key)}
           >
             <Icon size={14} />
-            {t(key)}
+            <span>{t(key)}</span>
           </button>
         ))}
       </div>
@@ -593,6 +597,24 @@ export default function Inspector({
               </>
             )}
           </>
+        ) : tab === "info" ? (
+          <NodeInfo
+            worktree={worktree}
+            entity={nodeEntity(node.id, parent)}
+            template={node.template}
+            revision={snapshot.revision}
+            node={node.id}
+            definitionFile={
+              node.component
+                ? `components/${node.component}.json`
+                : node.template
+                  ? `templates/${node.template}.sql`
+                  : nodeCodePath(node.id, parent)
+            }
+            environment={environment}
+            result={statuses.nodes[fullNode]}
+            onHistory={onHistory}
+          />
         ) : (
           <NodeDocumentation
             snapshot={snapshot}

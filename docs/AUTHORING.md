@@ -68,6 +68,16 @@ The **Code** tab exposes the same files, and **Compare versions** shows their ch
 
 ![A normal node owns its code and offers explicit template conversions](images/node-code.png)
 
+The inspector's **Info** tab tells who changed a node. **Last modified** shows
+when and by whom the latest commit changed it, with the commit message and
+whether that change touched processing, documentation or the canvas layout.
+**Created**, **Revisions** and **Contributors** summarize the rest of its Git
+history; a linked node also shows the last change to its template. A merge that
+only brings another branch's edit leaves the credit to the commit that made it.
+The tab also lists the node's latest results in the selected environment, its ID
+and the file holding its code, template or component definition. **View change
+history** opens the node's element history in the Git workspace.
+
 ## SQL template contract
 
 ![The Paid orders inspector exposes its input and status parameter](images/parameters.png)
