@@ -611,8 +611,6 @@ export default function Inspector({
                   ? `templates/${node.template}.sql`
                   : nodeCodePath(node.id, parent)
             }
-            environment={environment}
-            result={statuses.nodes[fullNode]}
             onHistory={onHistory}
           />
         ) : (

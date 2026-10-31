@@ -1,10 +1,8 @@
-import { Fragment } from "react";
 import { History } from "lucide-react";
 import { withQuery } from "./api";
 import type { ElementChange, ElementSummary } from "./gitTypes";
 import { useLanguage, useT, useTranslateValue } from "./i18n";
 import { relativeTime } from "./relativeTime";
-import type { NodeResult } from "./types";
 import { useApiResource } from "./useApiResource";
 
 /** A relative date, with the full date and time on hover. */
@@ -33,8 +31,9 @@ const summaryPath = (worktree: string, entity: string) =>
   withQuery(`/worktrees/${worktree}/git/history/summary`, { entity });
 
 /**
- * Who created and changed a node, from the project's Git history, with its
- * latest results and the identifiers that locate it in the project files.
+ * Who created and changed a node, from the project's Git history, and the
+ * identifiers that locate it in the project files. Run outcomes depend on the
+ * environment, so they stay with the results.
  */
 export default function NodeInfo({
   worktree,
@@ -43,8 +42,6 @@ export default function NodeInfo({
   revision,
   node,
   definitionFile,
-  environment,
-  result,
   onHistory,
 }: {
   worktree: string;
@@ -57,8 +54,6 @@ export default function NodeInfo({
   node: string;
   /** The file holding the node's code, template or component definition. */
   definitionFile: string;
-  environment: string;
-  result?: NodeResult;
   onHistory: () => void;
 }) {
   const t = useT();
@@ -72,7 +67,6 @@ export default function NodeInfo({
     { refresh: revision },
   );
   const data = summary.data;
-  const outputs = Object.values(result?.outputs || {});
   return (
     <div className="node-info">
       <section aria-labelledby="node-info-changes">
@@ -135,34 +129,6 @@ export default function NodeInfo({
           <History size={15} />
           {t("viewChangeHistory")}
         </button>
-      </section>
-      <section aria-labelledby="node-info-results">
-        <h4 id="node-info-results">
-          {t("latestResults")} · {environment}
-        </h4>
-        {outputs.length ? (
-          <dl className="info-list">
-            {outputs.map((output) => (
-              <Fragment key={output.port}>
-                <dt>{output.port}</dt>
-                <dd>
-                  <span>
-                    {output.count.toLocaleString()} {t("rows")} ·{" "}
-                    {output.columns.length} {t("columns")}
-                  </span>
-                  <small>
-                    {t("computed")} <When date={output.created} />
-                    {output.status === "stale" && (
-                      <span className="badge stale">{t("stale")}</span>
-                    )}
-                  </small>
-                </dd>
-              </Fragment>
-            ))}
-          </dl>
-        ) : (
-          <p className="muted small">{t("notComputedYet")}</p>
-        )}
       </section>
       <section aria-labelledby="node-info-details">
         <h4 id="node-info-details">{t("nodeDetails")}</h4>

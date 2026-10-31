@@ -109,9 +109,9 @@ whether that change touched processing, documentation or the canvas layout.
 **Created**, **Revisions** and **Contributors** summarize the rest of its Git
 history; a linked node also shows the last change to its template. A merge that
 only brings another branch's edit leaves the credit to the commit that made it.
-The tab also lists the node's latest results in the selected environment, its ID
-and the file holding its code, template or component definition. **View change
-history** opens the node's element history in the Git workspace.
+The tab also gives the node's ID and the file holding its code, template or
+component definition. **View change history** opens the node's element history
+in the Git workspace.
 
 ## SQL template contract
 

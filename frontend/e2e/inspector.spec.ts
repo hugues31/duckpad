@@ -200,7 +200,7 @@ test("Inspector does not queue later edits for a duplicate blur and click save",
   await expect(status).toHaveValue("refunded");
 });
 
-test("Info tab tells who changed the node, its results and opens its history", async ({
+test("Info tab tells who changed the node and opens its history", async ({
   page,
 }) => {
   const { endpoint, inspector, label } = await openInspector(page);
@@ -228,16 +228,10 @@ test("Info tab tells who changed the node, its results and opens its history", a
   await expect(details).toContainText(node.id);
   await expect(details).toContainText(`templates/${node.template}.sql`);
 
-  const results = inspector.getByRole("region", { name: /^Latest results/ });
-  await expect(results).toContainText("Not computed in this environment yet.");
-  await inspector
-    .getByRole("button", { name: "Run with ancestors", exact: true })
-    .click();
-  await expect(results).toContainText(/\d+ rows · \d+ columns/, {
-    timeout: 30000,
-  });
-  await expect(results).toContainText("Computed now");
-
+  const revisions = await changes
+    .locator("dt", { hasText: "Revisions" })
+    .locator("+ dd")
+    .innerText();
   await changes
     .getByRole("button", { name: "View change history", exact: true })
     .click();
@@ -246,4 +240,6 @@ test("Info tab tells who changed the node, its results and opens its history", a
     `node/${node.id}`,
   );
   await expect(dialog.locator(".git-commit").first()).toContainText("admin");
+  // Without merges, the history lists exactly the commits counted as revisions.
+  await expect(dialog.locator(".git-commit")).toHaveCount(Number(revisions));
 });

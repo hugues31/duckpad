@@ -218,9 +218,6 @@
   color: var(--muted);
   opacity: 0.75;
 }
-.info-list .badge {
-  margin-left: 6px;
-}
 @media (max-width: 1099px) {
   .inspector {
     top: calc(var(--stage-top) + 38px);
