@@ -1,0 +1,109 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="875" viewBox="0 0 1440 875" role="img" aria-labelledby="title desc">
+<title id="title">Partition origin and detailed lineage</title>
+<desc id="desc">Mockup · A collected row keeps its origin; detailed lineage needs that key's retained results.</desc>
+<style>text { font-family: Inter, ui-sans-serif, system-ui, -apple-system, sans-serif; }</style>
+<rect x="0" y="0" width="1440" height="875" rx="0" fill="#f5f7fb"/>
+<rect x="0" y="0" width="1440" height="54" rx="0" fill="#19283d"/>
+<text x="24" y="35" font-size="23" fill="white" font-weight="700">duckpad</text>
+<text x="151" y="33" font-size="14" fill="#d7e0ee" font-weight="400">/  Order processing</text>
+<rect x="1175" y="15" width="161" height="25" rx="5" fill="#eef1f5"/>
+<text x="1185" y="32" font-size="12" fill="#566577" font-weight="600">DESIGN PROPOSAL</text>
+<rect x="0" y="54" width="180" height="821" rx="0" fill="#ffffff"/>
+<text x="22" y="88" font-size="10" fill="#566577" font-weight="700">WORKSPACE</text>
+<rect x="12" y="105" width="156" height="35" rx="6" fill="#edf2ff"/>
+<text x="26" y="128" font-size="14" fill="#315cce" font-weight="600">Flow</text>
+<text x="26" y="172" font-size="14" fill="#566577" font-weight="400">Code</text>
+<text x="26" y="216" font-size="14" fill="#566577" font-weight="400">Documentation</text>
+<text x="26" y="260" font-size="14" fill="#566577" font-weight="400">Variables</text>
+<text x="26" y="304" font-size="14" fill="#566577" font-weight="400">History</text>
+<path d="M180 54 L180 875" fill="none" stroke="#dce3ec" stroke-width="1.5"/>
+<rect x="181" y="54" width="1259" height="65" rx="0" fill="white"/>
+<rect x="204" y="68" width="132" height="36" rx="6" fill="white" stroke="#dce3ec"/>
+<text x="217" y="91" font-size="13" fill="#202a38" font-weight="600">main  ▾</text>
+<rect x="348" y="68" width="132" height="36" rx="6" fill="white" stroke="#dce3ec"/>
+<text x="361" y="91" font-size="13" fill="#202a38" font-weight="600">prod  ▾</text>
+<rect x="492" y="68" width="240" height="36" rx="6" fill="white" stroke="#dce3ec"/>
+<text x="505" y="91" font-size="13" fill="#202a38" font-weight="600">Partition: All  ▾</text>
+<text x="753" y="91" font-size="12" fill="#566577" font-weight="400">batch · 30 keys</text>
+<rect x="1248" y="68" width="163" height="36" rx="6" fill="#315cce"/>
+<text x="1261" y="91" font-size="13" fill="white" font-weight="600">Run pipeline ▾</text>
+<path d="M181 119 L1440 119" fill="none" stroke="#dce3ec" stroke-width="1.5"/>
+<text x="205" y="852" font-size="12" fill="#566577" font-weight="400">Mockup · A collected row keeps its origin; detailed lineage needs that key's retained results.</text>
+<rect x="205" y="143" width="663" height="638" rx="8" fill="white" stroke="#dce3ec"/>
+<text x="228" y="180" font-size="22" fill="#202a38" font-weight="600">Results · Collected orders</text>
+<rect x="675" y="159" width="148" height="25" rx="5" fill="#eef1f5"/>
+<text x="685" y="176" font-size="12" fill="#566577" font-weight="600">All partitions</text>
+<text x="229" y="210" font-size="13" fill="#566577" font-weight="400">30/30 partitions · complete · run_example</text>
+<path d="M229 231 L845 231" fill="none" stroke="#dce3ec" stroke-width="1.5"/>
+<text x="229" y="260" font-size="14" fill="#315cce" font-weight="600">Data</text>
+<text x="297" y="260" font-size="14" fill="#566577" font-weight="400">Columns</text>
+<text x="388" y="260" font-size="14" fill="#566577" font-weight="400">Tests</text>
+<text x="455" y="260" font-size="14" fill="#566577" font-weight="400">Log</text>
+<rect x="221" y="283" width="631" height="36" rx="0" fill="#f5f7fa"/>
+<text x="238" y="307" font-size="12" fill="#566577" font-weight="600">order_id</text>
+<text x="390" y="307" font-size="12" fill="#566577" font-weight="600">customer</text>
+<text x="590" y="307" font-size="12" fill="#566577" font-weight="600">amount</text>
+<text x="730" y="307" font-size="12" fill="#566577" font-weight="600">status</text>
+<text x="238" y="346" font-size="13" fill="#202a38" font-weight="400">127001</text>
+<text x="390" y="346" font-size="13" fill="#202a38" font-weight="400">Northwind</text>
+<text x="590" y="346" font-size="13" fill="#202a38" font-weight="400">189.50</text>
+<text x="730" y="346" font-size="13" fill="#202a38" font-weight="400">paid</text>
+<path d="M229 360 L844 360" fill="none" stroke="#dce3ec" stroke-width="1.5"/>
+<text x="238" y="389" font-size="13" fill="#202a38" font-weight="400">127002</text>
+<text x="390" y="389" font-size="13" fill="#202a38" font-weight="400">Acme</text>
+<text x="590" y="389" font-size="13" fill="#202a38" font-weight="400">189.50</text>
+<text x="730" y="389" font-size="13" fill="#202a38" font-weight="400">paid</text>
+<path d="M229 403 L844 403" fill="none" stroke="#dce3ec" stroke-width="1.5"/>
+<text x="238" y="432" font-size="13" fill="#202a38" font-weight="400">127003</text>
+<text x="390" y="432" font-size="13" fill="#202a38" font-weight="400">Northwind</text>
+<rect x="577" y="407" width="106" height="36" rx="4" fill="#edf2ff" stroke="#315cce"/>
+<text x="590" y="432" font-size="13" fill="#315cce" font-weight="600">240.00</text>
+<text x="730" y="432" font-size="13" fill="#202a38" font-weight="400">paid</text>
+<path d="M229 446 L844 446" fill="none" stroke="#dce3ec" stroke-width="1.5"/>
+<text x="238" y="475" font-size="13" fill="#202a38" font-weight="400">127004</text>
+<text x="390" y="475" font-size="13" fill="#202a38" font-weight="400">Acme</text>
+<text x="590" y="475" font-size="13" fill="#202a38" font-weight="400">189.50</text>
+<text x="730" y="475" font-size="13" fill="#202a38" font-weight="400">paid</text>
+<path d="M229 489 L844 489" fill="none" stroke="#dce3ec" stroke-width="1.5"/>
+<text x="238" y="518" font-size="13" fill="#202a38" font-weight="400">127005</text>
+<text x="390" y="518" font-size="13" fill="#202a38" font-weight="400">Northwind</text>
+<text x="590" y="518" font-size="13" fill="#202a38" font-weight="400">189.50</text>
+<text x="730" y="518" font-size="13" fill="#202a38" font-weight="400">paid</text>
+<path d="M229 532 L844 532" fill="none" stroke="#dce3ec" stroke-width="1.5"/>
+<text x="238" y="561" font-size="13" fill="#202a38" font-weight="400">127006</text>
+<text x="390" y="561" font-size="13" fill="#202a38" font-weight="400">Acme</text>
+<text x="590" y="561" font-size="13" fill="#202a38" font-weight="400">189.50</text>
+<text x="730" y="561" font-size="13" fill="#202a38" font-weight="400">paid</text>
+<path d="M229 575 L844 575" fill="none" stroke="#dce3ec" stroke-width="1.5"/>
+<text x="238" y="604" font-size="13" fill="#202a38" font-weight="400">127007</text>
+<text x="390" y="604" font-size="13" fill="#202a38" font-weight="400">Northwind</text>
+<text x="590" y="604" font-size="13" fill="#202a38" font-weight="400">189.50</text>
+<text x="730" y="604" font-size="13" fill="#202a38" font-weight="400">paid</text>
+<path d="M229 618 L844 618" fill="none" stroke="#dce3ec" stroke-width="1.5"/>
+<rect x="229" y="684" width="614" height="70" rx="8" fill="#f7f9fc"/>
+<text x="245" y="709" font-size="13" fill="#202a38" font-weight="600">Business columns are unchanged.</text>
+<text x="245" y="733" font-size="12" fill="#566577" font-weight="400">Partition identity is retained privately for ordering and explanation.</text>
+<rect x="888" y="143" width="531" height="638" rx="8" fill="white" stroke="#dce3ec"/>
+<text x="911" y="180" font-size="22" fill="#202a38" font-weight="600">Explain amount = 240.00</text>
+<text x="911" y="210" font-size="13" fill="#566577" font-weight="400">order_id 127003 · Collected orders</text>
+<path d="M911 231 L1396 231" fill="none" stroke="#dce3ec" stroke-width="1.5"/>
+<text x="911" y="264" font-size="12" fill="#566577" font-weight="600">Origin partition</text>
+<rect x="911" y="279" width="112" height="25" rx="5" fill="#edf2ff"/>
+<text x="921" y="296" font-size="12" fill="#315cce" font-weight="600">batch-012</text>
+<text x="1041" y="297" font-size="13" fill="#202a38" font-weight="400">task_id = task-842</text>
+<text x="911" y="332" font-size="13" fill="#202a38" font-weight="600">Produced by Enriched orders · report</text>
+<text x="911" y="357" font-size="12" fill="#566577" font-weight="400">Run: run_example · row 24,116</text>
+<path d="M939 386 L939 427" fill="none" stroke="#315cce" stroke-width="1.5"/>
+<rect x="911" y="428" width="485" height="81" rx="8" fill="#edf2ff"/>
+<text x="929" y="453" font-size="15" fill="#315cce" font-weight="600">Origin available</text>
+<text x="929" y="478" font-size="13" fill="#566577" font-weight="400">Intermediate results of batch-012 are not retained.</text>
+<text x="929" y="498" font-size="11" fill="#566577" font-weight="400">No source query has been executed to open this panel.</text>
+<text x="911" y="547" font-size="16" fill="#202a38" font-weight="600">Explain with a new run of batch-012</text>
+<text x="911" y="576" font-size="12" fill="#566577" font-weight="400">Computes Enriched orders and its inputs for batch-012 only.</text>
+<text x="911" y="602" font-size="12" fill="#566577" font-weight="400">No export runs. Sources are read again,</text>
+<text x="911" y="624" font-size="12" fill="#566577" font-weight="400">so the explanation applies to the new result.</text>
+<rect x="911" y="652" width="370" height="36" rx="6" fill="#315cce"/>
+<text x="924" y="675" font-size="13" fill="white" font-weight="600">Run batch-012 to explain</text>
+<text x="911" y="723" font-size="12" fill="#566577" font-weight="400">For a global aggregate, contributions may span several</text>
+<text x="911" y="744" font-size="12" fill="#566577" font-weight="400">partitions. One replay cannot explain the entire aggregate.</text>
+</svg>

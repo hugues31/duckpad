@@ -2,7 +2,8 @@
 
 Oracle requires ORADUCK_ORACLE_USER, ORADUCK_ORACLE_PASSWORD and
 ORADUCK_ORACLE_DSN. The script creates uniquely named test tables and removes
-only those tables. S3 uses an ephemeral Moto endpoint on localhost.
+only those tables. S3 uses an ephemeral Moto endpoint on localhost, through the
+built-in connector and a custom storage type, both with a URI root.
 """
 
 import argparse
@@ -16,20 +17,23 @@ from pathlib import Path
 
 import duckdb
 
-from duckpad.catalog import Catalog
-from duckpad.engine import Engine
+from duckpad.builtin_templates import BUILTINS
+from duckpad.execution.runs import UNFINISHED_RUN_STATUSES
 from duckpad.lineage import Lineage
-from duckpad.projects import Projects
-from duckpad.store import Store
-from duckpad.templates import BUILTINS
+from duckpad.services import Services
 from duckpad.util import dumps, literal
+
+RUN_TIMEOUT = 600
 
 
 def wait(store, engine, worktree):
     run = engine.launch(worktree, "dev")
-    while store.get("run", run["id"])["status"] in ("preparing", "running", "canceling"):
-        time.sleep(0.02)
+    deadline = time.monotonic() + RUN_TIMEOUT
     result = store.get("run", run["id"])
+    while result["status"] in UNFINISHED_RUN_STATUSES:
+        assert time.monotonic() < deadline, "The run did not finish"
+        time.sleep(0.05)
+        result = store.get("run", run["id"])
     assert result["status"] == "success", {
         key: {"status": value["status"], "error": value.get("error")}
         for key, value in result["nodes"].items()
@@ -51,15 +55,6 @@ def node(identity, template, **params):
     return {"id": identity, "template": template, "params": params, "position": {"x": 0, "y": 0}}
 
 
-def services(home):
-    store = Store(home)
-    projects, catalog = Projects(store), Catalog(store)
-    engine = Engine(store, projects, catalog)
-    projects.on_change = engine.invalidate
-    catalog.on_change = engine.invalidate
-    return store, projects, catalog, engine
-
-
 def oracle(home):
     import oracledb
 
@@ -73,7 +68,8 @@ def oracle(home):
     suffix = uuid.uuid4().hex[:8].upper()
     source, destination, native = [f"DP_TEST_{role}_{suffix}" for role in ("SRC", "DST", "NATIVE")]
     created = []
-    store, projects, catalog, engine = services(home)
+    instance = Services.open(home)
+    store, projects, catalog, engine = instance.store, instance.projects, instance.catalog, instance.engine
     try:
         for name in (source, destination, native):
             cursor.execute(f"CREATE TABLE {name} (ID NUMBER(10), AMOUNT NUMBER(10,2))")
@@ -88,6 +84,7 @@ def oracle(home):
                 "connector": "oracle",
                 "environments": {"dev": values, "prod": values},
             },
+            create=True,
         )
         templates = dict(BUILTINS)
         templates["calculate"] = (
@@ -120,7 +117,7 @@ def oracle(home):
         )
         assert explanation["complete"] and explanation["total"] == 1, explanation
         # Compare with the same native COPY SQL in the same context and engine.
-        context, dataset = engine.find_dataset(worktree, "dev", "calculate")
+        context, _dataset = engine.find_dataset(worktree, "dev", "calculate")
         sql = first["nodes"]["write"]["statements"][0]["sql"].replace("$destination", literal(native))
         context.db.execute(sql)
         cursor.execute(f"SELECT ID, AMOUNT FROM {destination} ORDER BY ID")
@@ -164,8 +161,7 @@ def oracle(home):
             ],
         }
     finally:
-        engine.close()
-        store.close()
+        instance.close()
         for table in created:
             cursor.execute(f"DROP TABLE {table} PURGE")
         cursor.close()
@@ -187,11 +183,12 @@ def s3(home):
         aws_secret_access_key="duckpad-test-secret",
         region_name="us-east-1",
     )
-    store, projects, catalog, engine = services(home)
+    instance = Services.open(home)
+    store, projects, catalog, engine = instance.store, instance.projects, instance.catalog, instance.engine
     try:
         client.create_bucket(Bucket="duckpad-acceptance")
         client.put_object(
-            Bucket="duckpad-acceptance", Key="orders.csv", Body=b"id,amount\n1,10\n2,20\n3,30\n"
+            Bucket="duckpad-acceptance", Key="landing/orders.csv", Body=b"id,amount\n1,10\n2,20\n3,30\n"
         )
         parquet = home / "labels.parquet"
         db = duckdb.connect()
@@ -199,8 +196,12 @@ def s3(home):
             f"COPY (SELECT * FROM (VALUES (1,'North'),(2,'South'),(3,'West')) t(id,region)) TO {literal(str(parquet))} (FORMAT PARQUET)"
         )
         db.close()
-        client.put_object(Bucket="duckpad-acceptance", Key="labels.parquet", Body=parquet.read_bytes())
+        client.put_object(
+            Bucket="duckpad-acceptance", Key="landing/labels.parquet", Body=parquet.read_bytes()
+        )
         values = {
+            # Relative paths are appended to the root, which has no trailing slash on purpose.
+            "root": "s3://duckpad-acceptance/landing",
             "key_id": "duckpad-test-key",
             "secret": "duckpad-test-secret",
             "region": "us-east-1",
@@ -216,29 +217,51 @@ def s3(home):
                 "connector": "s3",
                 "environments": {"dev": values, "prod": values},
             },
+            create=True,
+        )
+        # An administrator-declared storage type, as pasted into New connector.
+        catalog.save(
+            "connector",
+            {
+                "id": "landing_bucket",
+                "name": "Landing bucket",
+                "family": "storage",
+                "parameters": [
+                    {"name": "root", "type": "text"},
+                    {"name": "key_id", "type": "text", "secret": True},
+                    {"name": "secret", "type": "text", "secret": True},
+                    {"name": "endpoint", "type": "text"},
+                ],
+                "extensions": [{"name": "httpfs"}],
+                "init_sql": "CREATE OR REPLACE TEMPORARY SECRET {{ secret_name }} (TYPE S3, KEY_ID {{ key_id }}, SECRET {{ secret }}, ENDPOINT {{ endpoint }}, USE_SSL false, URL_STYLE 'path');",
+                "capabilities": ["read"],
+            },
+            create=True,
+        )
+        landing = {
+            "root": "s3://duckpad-acceptance/landing/",
+            "key_id": values["key_id"],
+            "secret": values["secret"],
+            "endpoint": values["endpoint"],
+        }
+        catalog.save(
+            "connection",
+            {
+                "id": "landing",
+                "name": "Landing",
+                "connector": "landing_bucket",
+                "environments": {"dev": landing, "prod": landing},
+            },
+            create=True,
         )
         bundle = {
             "flow": {
                 "nodes": [
-                    node(
-                        "csv",
-                        "load_csv",
-                        connection="s3_acceptance",
-                        file="s3://duckpad-acceptance/orders.csv",
-                    ),
-                    node(
-                        "parquet",
-                        "load_parquet",
-                        connection="s3_acceptance",
-                        file="s3://duckpad-acceptance/labels.parquet",
-                    ),
+                    node("csv", "load_csv", connection="s3_acceptance", file="orders.csv"),
+                    node("parquet", "load_parquet", connection="s3_acceptance", file="labels.parquet"),
                     node("joined", "join", condition="l.id = r.id", columns="l.*, r.region"),
-                    node(
-                        "export",
-                        "export_csv",
-                        connection="s3_acceptance",
-                        destination="s3://duckpad-acceptance/export.csv",
-                    ),
+                    node("export", "export_csv", connection="s3_acceptance", destination="export.csv"),
+                    node("custom", "load_csv", connection="landing", file="orders.csv"),
                 ],
                 "edges": [
                     edge("csv", "joined", "left"),
@@ -252,13 +275,22 @@ def s3(home):
         }
         worktree = projects.create("S3 acceptance", bundle)["id"]
         first = wait(store, engine, worktree)
-        exported = client.get_object(Bucket="duckpad-acceptance", Key="export.csv")["Body"].read()
+        assert "'s3://duckpad-acceptance/landing/orders.csv'" in first["nodes"]["csv"]["statements"][0]["sql"]
+        exported = client.get_object(Bucket="duckpad-acceptance", Key="landing/export.csv")["Body"].read()
         assert b"South" in exported and b"20" in exported
+        assert [row["values"] for row in engine.preview(worktree, "dev", "custom")["rows"]] == [
+            [1, 10],
+            [2, 20],
+            [3, 30],
+        ]
         preview = engine.preview(worktree, "dev", "joined")
         explanation = Lineage(engine).explain(worktree, "dev", preview["id"], 0, "amount")
         assert explanation["complete"] and explanation["total"] == 1, explanation
         second = wait(store, engine, worktree)
-        assert client.get_object(Bucket="duckpad-acceptance", Key="export.csv")["Body"].read() == exported
+        assert (
+            client.get_object(Bucket="duckpad-acceptance", Key="landing/export.csv")["Body"].read()
+            == exported
+        )
         assert values["secret"] not in dumps(store.all("run"))
         return {
             "status": "passed",
@@ -272,6 +304,8 @@ def s3(home):
                 "Parquet read",
                 "join",
                 "CSV export",
+                "relative paths under a URI root",
+                "custom storage type",
                 "repeat native replacement",
                 "shared connection reuse",
                 "cell lineage",
@@ -279,8 +313,7 @@ def s3(home):
             ],
         }
     finally:
-        engine.close()
-        store.close()
+        instance.close()
         server.stop()
 
 
