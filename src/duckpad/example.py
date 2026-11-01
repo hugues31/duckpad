@@ -1,18 +1,22 @@
 """A reproducible, fully local example spanning the major pipeline features."""
 
 import csv
+import shutil
 
 import duckdb
 
-from .templates import BUILTINS
+from .builtin_templates import BUILTINS
+from .node_code import code_path
+from .types import Record
+from .util import literal, uid
 
 
-def create_example(projects, catalog):
-    root = projects.store.home / "examples" / "northstar"
+def write_samples(root):
+    """Synthetic orders and customers for each environment; prod amounts are larger."""
     for environment, multiplier in (("dev", 1), ("prod", 3)):
         folder = root / environment
         folder.mkdir(parents=True, exist_ok=True)
-        with (folder / "orders.csv").open("w", newline="") as stream:
+        with (folder / "orders.csv").open("w", newline="", encoding="utf-8") as stream:
             writer = csv.writer(stream)
             writer.writerow(["order_id", "customer_id", "order_date", "amount", "status", "channel"])
             for index in range(1, 121):
@@ -59,19 +63,25 @@ def create_example(projects, catalog):
                     )
                 ],
             )
-            from .util import literal
-
             db.execute(f"COPY customers TO {literal(str(folder / 'customers.parquet'))} (FORMAT PARQUET)")
         finally:
             db.close()
-    catalog.save(
+
+
+def create_example(projects, catalog, name=None, record=None):
+    """Create a project with its own sample data and connection; record joins its transaction."""
+    project_id = uid("project_")
+    connection_id = "sample_" + project_id
+    root = projects.store.paths.resources(project_id) / "sample"
+    connection = catalog.check(
         "connection",
         {
-            "id": "northstar",
+            "id": connection_id,
             "name": "Northstar sample data",
-            "connector": "local",
+            "connector": "folder",
             "environments": {env: {"root": str(root / env)} for env in ("dev", "prod")},
         },
+        create=True,
     )
     templates = BUILTINS.copy()
     templates["validated_orders"] = """-- @label Validated orders
@@ -183,14 +193,14 @@ EXCEPT SELECT customer_id FROM {{ source }} WHERE amount > 400;
         },
     }
     nodes = [
-        node("orders", "load_csv", "Orders", 30, 80, connection="northstar", file="orders.csv"),
+        node("orders", "load_csv", "Orders", 30, 80, connection=connection_id, file="orders.csv"),
         node(
             "customers",
             "load_parquet",
             "Customers",
             30,
             290,
-            connection="northstar",
+            connection=connection_id,
             file="customers.parquet",
         ),
         node(
@@ -224,7 +234,6 @@ EXCEPT SELECT customer_id FROM {{ source }} WHERE amount > 400;
             "Export revenue",
             1050,
             40,
-            connection="local",
             destination="regional-revenue.csv",
         ),
         node(
@@ -233,7 +242,6 @@ EXCEPT SELECT customer_id FROM {{ source }} WHERE amount > 400;
             "Export high-value",
             1050,
             290,
-            connection="local",
             destination="high-value-orders.csv",
         ),
     ]
@@ -266,17 +274,37 @@ EXCEPT SELECT customer_id FROM {{ source }} WHERE amount > 400;
             },
         },
     }
-    return projects.create(
-        "Northstar · Revenue operations",
-        {
-            "flow": {
-                "name": "Northstar",
-                "description": "From raw orders to explainable revenue",
-                "nodes": nodes,
-                "edges": edges,
-            },
-            "templates": templates,
-            "components": {"regional_summary": metrics, "regional_report": report},
-            "documentation": documentation,
+    bundle: Record = {
+        "flow": {
+            "name": name or "Northstar analytics",
+            "description": "From raw orders to explainable revenue",
+            "nodes": nodes,
+            "edges": edges,
         },
-    )
+        "templates": templates,
+        "components": {"regional_summary": metrics, "regional_report": report},
+        "documentation": documentation,
+    }
+
+    # Demonstrate both local SQL and linked definitions, including code inside a component.
+    graphs: list[tuple[Record, str | None, str]] = [
+        (bundle["flow"], None, "reach"),
+        (bundle["components"]["regional_report"], "regional_report", "rank"),
+    ]
+    for graph, parent, identity in graphs:
+        owned = next(node for node in graph["nodes"] if node["id"] == identity)
+        owned["origin"] = owned.pop("template")
+        bundle.setdefault("node_sql", {})[code_path(identity, parent)] = templates[owned["origin"]]
+
+    def register(worktree):
+        projects.store.put("connection", connection_id, connection)
+        if record is not None:
+            record(worktree)
+
+    try:
+        write_samples(root)
+        return projects.create(bundle["flow"]["name"], bundle, project_id=project_id, record=register)
+    except Exception:
+        # An example that could not be created leaves no sample data behind.
+        shutil.rmtree(root.parent, ignore_errors=True)
+        raise

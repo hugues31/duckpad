@@ -1,0 +1,528 @@
+/* Project variables: the Variables tab, parameter bindings and value lists. */
+.variable-error {
+  color: #ca6961;
+}
+.variable-warning {
+  color: #ad8137;
+}
+.variables-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+}
+.variables-layout.editing {
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 370px);
+}
+.variables-tools {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-bottom: 16px;
+}
+.variables-tools .search {
+  width: 280px;
+  max-width: 100%;
+  margin: 0;
+}
+.variables-table-scroll {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  margin-bottom: 14px;
+}
+.variables-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.variables-table th {
+  padding: 11px 14px;
+  text-align: left;
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  background: var(--surface-alt);
+  border-bottom: 1px solid var(--border);
+}
+.variables-table th .env-dot {
+  margin-right: 6px;
+  vertical-align: middle;
+}
+.variables-table td {
+  padding: 14px;
+  vertical-align: top;
+  border-bottom: 1px solid var(--border);
+}
+.variables-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+.variables-table tbody tr {
+  cursor: pointer;
+}
+.variables-table tbody tr:hover {
+  background: var(--surface-alt);
+}
+.variables-table tbody tr.selected {
+  background: var(--accent-soft);
+}
+.variables-table .active-environment {
+  border-left: 2px solid var(--accent);
+  border-right: 2px solid var(--accent);
+}
+.variables-table th.active-environment {
+  color: var(--accent);
+}
+.variables-table td > small {
+  display: block;
+  max-width: 320px;
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+.variable-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  text-align: left;
+}
+.variable-name code {
+  font-weight: 650;
+  font-size: 12px;
+}
+.variable-value {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  white-space: nowrap;
+}
+.variable-value small {
+  display: block;
+  margin-top: 4px;
+  /* The interface font from tokens.css: long diagnostics wrap, never widen the table. */
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  color: var(--muted);
+}
+.variable-values td > small,
+.variable-values td > strong {
+  display: block;
+}
+.variable-usage {
+  color: var(--accent);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.variables-empty {
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  margin-bottom: 14px;
+}
+.variable-editor {
+  position: sticky;
+  top: 0;
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: var(--glass-shadow);
+}
+.variable-editor > header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+.variable-editor > header strong {
+  flex: 1;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  overflow-wrap: anywhere;
+}
+.variable-editor > p.muted {
+  margin: 6px 0 16px;
+  line-height: 1.5;
+}
+.variable-editor fieldset {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+.variable-editor .field {
+  margin-bottom: 14px;
+}
+.variable-editor-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 130px;
+  gap: 10px;
+}
+.variable-editor h4 {
+  margin: 18px 0 10px;
+}
+.variable-environment {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.variable-environment input,
+.variable-environment select {
+  width: 100%;
+}
+.variable-environment.active .variable-environment-name {
+  font-weight: 650;
+}
+.variable-environment.unknown {
+  grid-template-columns: 64px minmax(0, 1fr) auto;
+  font-size: 11px;
+}
+.variable-environment-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  cursor: pointer;
+}
+.switch input {
+  appearance: none;
+  position: relative;
+  width: 26px;
+  height: 15px;
+  margin: 0;
+  padding: 0;
+  border-radius: 8px;
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.switch input::after {
+  content: "";
+  position: absolute;
+  top: 1px;
+  left: 1px;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: var(--surface);
+  box-shadow: 0 1px 2px #0003;
+  transition: transform 0.15s;
+}
+.switch input:checked {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.switch input:checked::after {
+  transform: translateX(11px);
+}
+.switch input:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+.variable-impact {
+  margin: 14px 0 0;
+  padding: 11px 13px;
+  border-radius: 7px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #ad7a2a;
+  background: #e9b85a18;
+  border: 1px solid #bd944933;
+}
+.variable-usage-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  margin-bottom: 8px;
+  padding: 10px 12px;
+  text-align: left;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+}
+.variable-usage-row:hover {
+  border-color: var(--accent);
+}
+.variable-usage-row strong {
+  display: block;
+  font-size: 12px;
+}
+.variable-usage-row small {
+  display: block;
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 10px;
+}
+.variable-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+/* The variable button and picker of a parameter in the inspector. */
+.field:has(> span > .variable-picker-anchor) {
+  position: relative;
+}
+.variable-picker-anchor {
+  display: inline-flex;
+}
+.variable-button svg {
+  flex-shrink: 0;
+}
+.variable-button {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border-radius: 5px;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  background: var(--accent-soft);
+}
+.variable-button[aria-expanded="true"],
+.variable-button:not(:disabled):hover {
+  color: var(--surface);
+  background: var(--accent);
+}
+.variable-picker {
+  position: absolute;
+  top: 26px;
+  left: 0;
+  right: 0;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px;
+  font-weight: 400;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+}
+.variable-picker > .eyebrow {
+  margin-bottom: 4px;
+}
+.variable-picker hr {
+  width: 100%;
+  margin: 6px 0;
+  border: 0;
+  border-top: 1px solid var(--border);
+}
+.variable-picker p {
+  margin: 4px 0 0;
+  line-height: 1.4;
+}
+.variable-option {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  width: 100%;
+  padding: 8px 10px;
+  text-align: left;
+  border-radius: 7px;
+}
+.variable-option:not(:disabled):hover,
+.variable-option:focus-visible {
+  background: var(--accent-soft);
+}
+.variable-option code {
+  color: var(--accent);
+  font-weight: 650;
+}
+.variable-option small {
+  color: var(--muted);
+  font-size: 10px;
+}
+.variable-option.create {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  color: var(--accent);
+}
+.variable-binding {
+  padding: 8px 10px;
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  background: var(--surface);
+  font-size: 12px;
+}
+.variable-binding.has-error {
+  border-color: #c66b65;
+}
+.variable-binding-value {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.variable-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 7px;
+  border-radius: 5px;
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+.variable-chip code {
+  font-weight: 650;
+}
+.variable-binding.has-error .variable-chip {
+  color: #ca6961;
+  background: #c66b6518;
+}
+.variable-binding-hint {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 9px 10px;
+  border-radius: 6px;
+  background: var(--surface-alt);
+  font-size: 11px;
+  line-height: 1.4;
+}
+.variable-binding-hint a {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--accent);
+  font-weight: 600;
+  text-decoration: none;
+}
+.variable-binding-hint a:hover {
+  text-decoration: underline;
+}
+
+/* Resolved values in SQL, run confirmations and run details. */
+.variable-values {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 8px 0;
+  font-size: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.variable-values th,
+.variable-values td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+.variable-values tr:last-child th,
+.variable-values tr:last-child td {
+  border-bottom: 0;
+}
+.variable-values th {
+  font-weight: 400;
+}
+.variable-values th small {
+  display: block;
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 10px;
+}
+.variable-values td:nth-child(2) {
+  text-align: right;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.variable-values td.muted {
+  width: 1%;
+  white-space: nowrap;
+  font-size: 11px;
+}
+.scope-variables {
+  margin-top: 16px;
+}
+.scope-variables h4,
+.run-variables h4 {
+  margin: 0 0 6px;
+}
+.run-variables {
+  margin: 14px 0;
+}
+.stale-reason {
+  font-size: 11px;
+  color: var(--muted);
+}
+.comparison-usages {
+  font-size: 12px;
+}
+.git-conflict legend code {
+  margin-left: 8px;
+  font-size: 10px;
+}
+
+/* Variables referenced inside expressions and the guided filter value. */
+.expression-input {
+  position: relative;
+}
+.expression-suggestions {
+  top: calc(100% + 4px);
+  max-height: 240px;
+  overflow-y: auto;
+}
+.expression-suggestions .variable-option {
+  cursor: pointer;
+}
+.expression-suggestions .variable-option.active {
+  background: var(--accent-soft);
+}
+.expression-values {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 11px;
+}
+.expression-values li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 3px 12px;
+  padding: 6px 9px;
+  border-radius: 6px;
+  background: var(--surface-alt);
+}
+.expression-values code {
+  color: var(--accent);
+  font-weight: 650;
+}
+.expression-values strong {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-weight: 600;
+}
+.expression-values span.active {
+  color: var(--accent);
+}
+.filter-value {
+  display: flex;
+  gap: 6px;
+}
+.filter-value > * {
+  flex: 1;
+  min-width: 0;
+}
