@@ -5,6 +5,7 @@ import {
   completeReference,
   fill,
   formatVariableValue,
+  computedDiagnostic,
   partialReference,
   referencedVariables,
   usableInExpressions,
@@ -26,12 +27,15 @@ export function ExpressionInput({
   variables,
   onChange,
   onBlur,
+  singleLine,
 }: {
   id: string;
   value: string;
   variables: ExpressionVariables;
   onChange: (value: string) => void;
   onBlur?: () => void;
+  /** A path: one line, where Enter only accepts a suggestion. */
+  singleLine?: boolean;
 }) {
   const t = useT();
   const list = useId();
@@ -78,7 +82,7 @@ export function ExpressionInput({
       <textarea
         ref={input}
         id={id}
-        rows={3}
+        rows={singleLine ? 1 : 3}
         className="code-input"
         value={value}
         aria-autocomplete="list"
@@ -92,6 +96,8 @@ export function ExpressionInput({
         }}
         onSelect={(e) => track(e.currentTarget)}
         onKeyDown={(e) => {
+          if (singleLine && e.key === "Enter" && !(open && options[active]))
+            e.preventDefault();
           if (!open) return;
           if (e.key === "Escape") {
             e.preventDefault();
@@ -145,8 +151,22 @@ export function ExpressionInput({
               <small>
                 {variable.type} ·{" "}
                 {variable.values[environment]?.error
-                  ? t("noVariableValue")
+                  ? computedDiagnostic(variable.values[environment]?.code, t) ||
+                    t("noVariableValue")
                   : `${environment} ${formatVariableValue(variable.values[environment]?.value)}`}
+                {variable.from && (
+                  <span>
+                    {" "}
+                    ·{" "}
+                    {[
+                      variable.from.node,
+                      variable.from.port,
+                      variable.from.column,
+                    ]
+                      .filter(Boolean)
+                      .join(".")}
+                  </span>
+                )}
               </small>
             </div>
           ))}
@@ -192,11 +212,26 @@ export function ExpressionValues({
                   {shown}{" "}
                   <strong>
                     {resolved.error
-                      ? t("noVariableValue")
+                      ? computedDiagnostic(resolved.code, t) ||
+                        t("noVariableValue")
                       : formatVariableValue(resolved.value)}
                   </strong>
                   {resolved.source === "default" && (
                     <small> ({t("defaultValueSource")})</small>
+                  )}
+                  {resolved.source === "node" && resolved.from && (
+                    <small>
+                      {" "}
+                      (
+                      {[
+                        resolved.from.node,
+                        resolved.from.port,
+                        resolved.from.column,
+                      ]
+                        .filter(Boolean)
+                        .join(".")}
+                      )
+                    </small>
                   )}
                 </span>
               ))

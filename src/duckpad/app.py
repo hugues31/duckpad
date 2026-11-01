@@ -631,7 +631,16 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
         result["parsed_templates"] = parse_templates((result["bundle"] or {}).get("templates", {}))
         result["parsed_nodes"] = parse_templates((result["bundle"] or {}).get("node_sql", {}))
         result["variables"] = (
-            variables.summary(result["bundle"], catalog.environment_names()) if result["bundle"] else None
+            variables.summary(
+                result["bundle"],
+                catalog.environment_names(),
+                {
+                    environment: engine.pool.computed(worktree, environment, result["bundle"])
+                    for environment in catalog.environment_names()
+                },
+            )
+            if result["bundle"]
+            else None
         )
         return result
 

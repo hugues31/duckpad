@@ -290,6 +290,13 @@ Active statuses are `preparing`, `running` and `canceling`. Terminal statuses ar
 `success`, `failed`, `partial_failure`, `canceled` and `interrupted`. An instance
 restart marks unfinished runs `interrupted`; Duckpad does not retry them.
 
+The run's `variables` map records the constants used by its nodes. Computed entries
+include their normalized `from` descriptor, type, state, value or diagnostic,
+resolution (`calculated` or `retained`), and producing run and commit. Each Job
+recalculates the producers in its scope; a scoped Job cannot borrow retained values
+from an editor or another Job. These values never change the versioned declarations.
+See [Project variables](VARIABLES.md).
+
 ```bash
 duckpad_api -X POST "$DUCKPAD_SERVER/api/v1/runs/$id/cancel"
 duckpad_api "$DUCKPAD_SERVER/api/v1/runs/$id?wait=30"

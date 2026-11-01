@@ -72,7 +72,14 @@ class Lineage:
                 cursor.close()
                 raise Problem("Lineage interrupted by recalculation", 409)
             context.lineage[request_id] = {"cursor": cursor, "canceled": canceled, "nodes": dependencies}
+        evidence = self.engine.store.get("run", dataset.run) or {}
+        state = evidence.get("nodes", {}).get(dataset.node, {})
+        names = set(state.get("variables", {}).values())
+        names.update(name for refs in state.get("references", {}).values() for name in refs)
+        resolved = {name: value for name, value in evidence.get("variables", {}).items() if name in names}
         response = {
+            "variables": resolved,
+            "environment": environment,
             "request": request_id,
             "dataset": dataset_id,
             "execution": dataset.run,

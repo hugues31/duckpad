@@ -81,6 +81,7 @@ def test_job_and_run_contract_trigger_requester_and_log(api):
     trigger = {"source": "airflow", "reference": "daily/scheduled-1"}
     run = launch(call, body={"trigger": trigger})
     assert set(run) == {
+        "variables",
         "id",
         "job",
         "status",

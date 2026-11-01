@@ -328,7 +328,7 @@ def test_identifier_list_undeclared_and_misplaced_references_are_errors_on_the_n
         "the same list type instead."
     )
     misplaced = (
-        "Parameter title (text) cannot reference variable report_start inside its text: only expression "
+        "Parameter title (text) cannot reference variable report_start inside its text: only expression and path "
         "parameters can. Bind the whole parameter to the variable instead."
     )
     assert projects.snapshot(worktree)["diagnostics"] == [

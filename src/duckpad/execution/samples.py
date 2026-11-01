@@ -85,7 +85,7 @@ def check_sample(method: str, rows: int | None, seed: int) -> None:
 
 
 def sample_condition(
-    text: str, columns: Iterable[str], bundle: Record | None, environment: str
+    text: str, columns: Iterable[str], bundle: Record | None, environment: str, computed: Record | None = None
 ) -> tuple[str, Record]:
     """A sample filter validated like a Filter condition, with its variables bound, never pasted.
 
@@ -123,7 +123,7 @@ def sample_condition(
         name = function.name if isinstance(function, exp.Anonymous) else function.sql_name()
         if name.casefold() in DENIED_FUNCTIONS:
             raise Problem(f"The sample filter cannot call {name}")
-    values = variable_values(VARIABLE_REFERENCE.findall(text), bundle, environment)
+    values = variable_values(VARIABLE_REFERENCE.findall(text), bundle, environment, computed)
     placeholders = variable_placeholders(values, {SEARCH: None})
     substituted = bind_variables("The sample filter", text, values, placeholders)
     try:
@@ -133,7 +133,9 @@ def sample_condition(
     return sql, {placeholders[name]: value["value"] for name, value in values.items()}
 
 
-def variable_values(names: Iterable[str], bundle: Record | None, environment: str) -> Record:
+def variable_values(
+    names: Iterable[str], bundle: Record | None, environment: str, computed: Record | None = None
+) -> Record:
     """Name -> type and value of the project variables a sample filter references."""
     names = list(dict.fromkeys(names))
     if not names:
@@ -148,7 +150,7 @@ def variable_values(names: Iterable[str], bundle: Record | None, environment: st
         variable = declared[name]
         if base_type(variable["type"]) not in variables.EXPRESSION_TYPES:
             raise Problem(f"Variable {name} has a {variable['type']} value, which a condition cannot use")
-        value = variables.resolve(variable, environment)
+        value = variables.resolve(variable, environment, (computed or {}).get(name))
         if "error" in value:
             raise Problem(f"Variable {name}: {value['error']}")
         values[name] = {"type": variable["type"], "value": value["value"]}

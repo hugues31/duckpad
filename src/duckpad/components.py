@@ -15,10 +15,10 @@ def in_subtree(key, root):
     return key == root or key.startswith(root + "::")
 
 
-def expand_for(bundle, environment, tolerant=True):
+def expand_for(bundle, environment, tolerant=True, computed=None):
     """Expand a bundle with variable references bound to their values in an environment."""
     nodes, edges, boundaries = expand(bundle, tolerant=tolerant)
-    variables.bind(bundle, nodes, environment)
+    variables.bind(bundle, nodes, environment, computed)
     return nodes, edges, boundaries
 
 
@@ -237,6 +237,24 @@ def group(bundle, selection, label, exposed=None, parent=None):
             ):
                 port = f"output_{len(definition['outputs']) + 1}"
                 definition["outputs"][port] = {"node": key[0], "port": key[1]}
+    if not parent:
+        from . import value_sources
+
+        nodes, _, boundaries = expand(bundle, tolerant=True)
+        for name, source in value_sources.sources(bundle, nodes, boundaries).items():
+            origin = source["from"]
+            if "error" in source or origin["node"] not in selected:
+                continue
+            target = {"node": origin["node"], "port": origin["port"]}
+            port = next((p for p, output in definition["outputs"].items() if output == target), None)
+            if port is None:
+                port = f"output_{len(definition['outputs']) + 1}"
+                definition["outputs"][port] = target
+            bundle["variables"][name]["from"] = {
+                "node": instance_id,
+                "port": port,
+                "column": origin["column"],
+            }
     for node in internal:
         if not node.get("template") and not node.get("component"):
             code = bundle.setdefault("node_sql", {})

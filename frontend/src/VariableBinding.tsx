@@ -10,6 +10,7 @@ import { useAsyncAction } from "./useAsyncAction";
 import { VariableValueInput } from "./VariableFields";
 import {
   compatible,
+  computedDiagnostic,
   declarations,
   fill,
   formatVariableValue,
@@ -29,13 +30,16 @@ export function useValueSummary() {
       return fill(t("sameValueEverywhere"), {
         value: formatVariableValue(variable.default),
       });
-    return values
+    const resolved = values
       .map(([environment, value]) =>
         value.error
-          ? `${environment} ${t("noVariableValue")}`
+          ? `${environment} ${computedDiagnostic(value.code, t) || t("noVariableValue")}`
           : `${environment} ${formatVariableValue(value.value)}${value.source === "default" ? ` (${t("defaultValueSource")})` : ""}`,
       )
       .join(" · ");
+    return variable.from
+      ? `${[variable.from.node, variable.from.port, variable.from.column].filter(Boolean).join(".")} · ${resolved}`
+      : resolved;
   };
 }
 
@@ -357,7 +361,9 @@ export function BoundVariable({
         <button
           type="button"
           className="icon"
-          disabled={disabled}
+          disabled={
+            disabled || (!!variable?.from && current?.value === undefined)
+          }
           aria-label={fill(t("unbindVariable"), { name })}
           title={fill(t("unbindVariable"), { name })}
           onClick={onUnbind}

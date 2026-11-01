@@ -126,7 +126,7 @@ export default function ParameterField({
           onChange={onChange}
           onBlur={onBlur}
         />
-      ) : (base === "expressions" || base === "expression") &&
+      ) : ["expressions", "expression", "file", "destination"].includes(base) &&
         expressionVariables &&
         (value == null || typeof value !== "object") ? (
         <ExpressionInput
@@ -135,6 +135,7 @@ export default function ParameterField({
           variables={expressionVariables}
           onChange={onChange}
           onBlur={onBlur}
+          singleLine={base === "file" || base === "destination"}
         />
       ) : base === "expressions" ||
         base === "expression" ||
@@ -186,7 +187,7 @@ export default function ParameterField({
           />
         </span>
       )}
-      {(base === "expressions" || base === "expression") &&
+      {["expressions", "expression", "file", "destination"].includes(base) &&
         expressionVariables && (
           <ExpressionValues value={text} variables={expressionVariables} />
         )}

@@ -100,6 +100,19 @@
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   white-space: nowrap;
 }
+.variable-value small {
+  display: block;
+  margin-top: 4px;
+  /* The interface font from tokens.css: long diagnostics wrap, never widen the table. */
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  color: var(--muted);
+}
+.variable-values td > small,
+.variable-values td > strong {
+  display: block;
+}
 .variable-usage {
   color: var(--accent);
   font-weight: 600;

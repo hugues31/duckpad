@@ -79,6 +79,7 @@ function StatusIcon({ status, ...props }: LucideProps & { status: string }) {
 
 /** What the canvas shows of a node. */
 type PipelineData = {
+  valueProducer?: boolean;
   label: string;
   kind: TemplateKind | "component";
   inputs: string[];
@@ -135,6 +136,11 @@ function PipelineNode({ id, data, selected }: NodeProps<PipelineNode>) {
         </div>
       )}
       <div className="node-status-slot">
+        {data.valueProducer && (
+          <span className="badge neutral" title={t("valueProducer")}>
+            ƒ
+          </span>
+        )}
         <WarningBadge count={data.warnings} />
         {data.status && (
           <span className={`node-status ${data.status}`} title={t(data.status)}>
@@ -192,6 +198,7 @@ interface CanvasProps {
   local?: Record<string, ParsedTemplate>;
   components: Record<string, ComponentDefinition>;
   excludedComponents: string[];
+  valueProducers?: string[];
   statuses: Statuses;
   prefix: string;
   viewKey: string;
@@ -334,6 +341,9 @@ function CanvasInner(props: CanvasProps) {
           position: node.position || { x: 0, y: 0 },
           selected: node.id === props.selected,
           data: {
+            valueProducer: props.valueProducers?.includes(
+              props.prefix + node.id,
+            ),
             label:
               node.label ||
               (signature.kind === "component"
@@ -369,6 +379,7 @@ function CanvasInner(props: CanvasProps) {
       }),
     [
       props.nodes,
+      props.valueProducers,
       props.parsed,
       props.local,
       props.components,

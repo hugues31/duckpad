@@ -44,6 +44,7 @@ import {
   type Explanation,
   type Query,
 } from "./lineageGraph";
+import { VariableValues } from "./VariableFields";
 import { trapFocus } from "./modals";
 
 type Props = {
@@ -615,6 +616,13 @@ function CalculationDetails({
         {entry.result.node} · {entry.result.port} · {t("lineageRow")}{" "}
         {entry.result.row + 1}
       </p>
+      {entry.result.variables &&
+        Object.keys(entry.result.variables).length > 0 && (
+          <VariableValues
+            variables={entry.result.variables}
+            environment={entry.result.environment || ""}
+          />
+        )}
       {entry.result.expression && (
         <pre className="expression">{entry.result.expression}</pre>
       )}

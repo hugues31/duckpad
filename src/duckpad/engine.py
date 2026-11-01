@@ -43,8 +43,8 @@ class Engine:
         self.lock = threading.RLock()
         # The token of each worktree's active run, admitted by the runner under the lock.
         self.active: dict[str, RunToken] = {}
-        self.fingerprints = Fingerprints(projects, catalog)
         self.pool = ContextPool(store, projects, catalog, access, self.isolated, self.lock)
+        self.fingerprints = Fingerprints(projects, catalog, self.pool)
         self.exports = Exports(store, projects, catalog, access, self.fingerprints, self.lock, self.active)
         self.results = Results(store, projects, catalog, self.pool, self.lock, self.active)
         self.runs = Runner(
@@ -176,7 +176,7 @@ class Engine:
             if not self.store.get("worktree", context.worktree):
                 self.discard_worktree(context.worktree)
                 continue
-            self.pool.mark_stale(context, self.fingerprints.current(context.worktree, context.environment))
+            self.fingerprints.invalidate(context)
 
     def extension_settings(self) -> dict[str, bool]:
         return self.pool.extension_settings()

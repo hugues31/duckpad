@@ -11,10 +11,10 @@ from typing import Any, cast
 
 import duckdb
 
-from .. import project_extensions, variables
+from .. import project_extensions, value_sources, variables
 from ..bundle import files_to_bundle, topological
 from ..catalog import Catalog, redact
-from ..components import expand_for, in_subtree
+from ..components import expand, expand_for, in_subtree
 from ..data_preparation import failure_hint
 from ..datasets import Context, Dataset
 from ..graph import connection_references, reachable
@@ -46,6 +46,11 @@ class Execution:
     captured: Connections
     secrets: list[str]
     fingerprints: dict[str, str]
+    bundle: Record = field(default_factory=dict)
+    sources: Record = field(default_factory=dict)
+    values: Record = field(default_factory=dict)
+    value_phase: set[str] = field(default_factory=set)
+    validation_errors: Record = field(default_factory=dict)
     cursor: SQLCursor | None = None
     prepared: dict[str, Exception | None] = field(default_factory=dict)
     published: dict[str, dict[str, Dataset]] = field(default_factory=dict)
@@ -165,20 +170,24 @@ class Runner:
             raise Problem(
                 "Project files are invalid; correct them before execution", 422, snapshot["diagnostics"]
             )
-        nodes, edges, _ = expand_for(bundle, environment)
-        scope = launch_scope(nodes, edges, target)
-        order = [n for n in topological(nodes, edges, tolerant=True) if n in scope]
-        self._check_conflicts(snapshot["conflicts"], scope, environment)
-        captured, secrets = self._capture_connections(
-            worktree, nodes, scope, environment, strict=bool(target)
-        )
-        fingerprints = self.fingerprints.of(bundle, environment, captured)
+        structural, edges, boundaries = expand(bundle, tolerant=True)
+        sources = value_sources.sources(bundle, structural, boundaries)
+        phase, validation_errors = value_sources.dependencies(structural, edges, sources)
         context = self.pool.get(
             worktree,
             environment,
             create=True,
             requirements=project_extensions.enabled(bundle.get("extensions")),
         )
+        values = self.pool.computed(worktree, environment, bundle)
+        nodes, edges, _ = expand_for(bundle, environment, computed=values)
+        scope = launch_scope(nodes, edges, target)
+        order = [n for n in topological(nodes, edges, tolerant=True) if n in scope]
+        self._check_conflicts(snapshot["conflicts"], scope, environment)
+        captured, secrets = self._capture_connections(
+            worktree, nodes, scope, environment, strict=bool(target)
+        )
+        fingerprints = self.fingerprints.of(bundle, environment, captured, values)
         affected = reachable(scope, edges, upstream=False)
         self.exports.mark_stale(worktree, environment, affected - scope)
         with context.lock:
@@ -186,6 +195,7 @@ class Runner:
             for dataset in context.datasets.values():
                 if dataset.node in affected:
                     dataset.status = "stale"
+                    dataset.value_stale = False
         run = {
             "id": token["id"],
             "worktree": worktree,
@@ -210,7 +220,7 @@ class Runner:
                 }
                 for n in order
             },
-            "variables": variables.used(bundle, nodes, scope, environment),
+            "variables": variables.used(bundle, nodes, scope, environment, values),
             "connections": {
                 ref: {"definition": c["definition"], "settings": c["settings"], "name": c["name"]}
                 for ref, c in captured.items()
@@ -222,7 +232,31 @@ class Runner:
             "variable_declarations": bundle.get("variables"),
             "extensions": bundle.get("extensions"),
         }
-        return Execution(token, context, run, nodes, edges, order, captured, secrets, fingerprints)
+        for name, source in sources.items():
+            if source.get("node") in scope:
+                run["variables"][name] = {
+                    "type": source["type"],
+                    "from": source["from"],
+                    "source": "node",
+                    "state": "pending",
+                    "resolution": "calculated",
+                }
+        return Execution(
+            token,
+            context,
+            run,
+            nodes,
+            edges,
+            order,
+            captured,
+            secrets,
+            fingerprints,
+            bundle=bundle,
+            sources=sources,
+            values=values,
+            value_phase=phase & scope,
+            validation_errors=validation_errors,
+        )
 
     def scope_variables(self, worktree: str, environment: str, target: str | None = None) -> Record:
         """Variables a launch would use, with their values and sources in this environment."""
@@ -230,8 +264,21 @@ class Runner:
         snapshot = self.projects.snapshot(worktree)
         if snapshot["bundle"] is None:
             return {}
-        nodes, edges, _ = expand_for(snapshot["bundle"], environment)
-        return variables.used(snapshot["bundle"], nodes, launch_scope(nodes, edges, target), environment)
+        bundle = snapshot["bundle"]
+        values = self.pool.computed(worktree, environment, bundle)
+        nodes, edges, boundaries = expand_for(bundle, environment, computed=values)
+        scope = launch_scope(nodes, edges, target)
+        result = variables.used(bundle, nodes, scope, environment, values)
+        for name, source in value_sources.sources(bundle, nodes, boundaries).items():
+            if source.get("node") in scope:
+                result[name] = {
+                    "type": source["type"],
+                    "from": source["from"],
+                    "source": "node",
+                    "state": "pending",
+                    "resolution": "calculated",
+                }
+        return result
 
     def _check_conflicts(self, conflicts: list[Record], scope: set[str], environment: str) -> None:
         """Reject a run when a pending edit conflict would change a node in its scope."""
@@ -259,7 +306,13 @@ class Runner:
                 secrets.extend(hidden)
             except Problem as error:
                 node["error"] = str(error)
-            if strict and node.get("error"):
+                if strict:
+                    raise Problem(str(error), 422) from error
+            deferred = any(
+                binding.get("source") == "node" and "error" in binding
+                for binding in [*node.get("variables", {}).values(), *variables.expression_bindings(node)]
+            )
+            if strict and node.get("error") and not deferred:
                 raise Problem(node["error"], 422)
         return captured, secrets
 
@@ -329,19 +382,21 @@ class Runner:
             run["status"] = "running"
             self._persist(run, secrets)
             self.pool.forget_removed(context, execution.nodes)
-            for key in execution.order:
-                state = run["nodes"][key]
-                skipped = self._skip_reason(execution, key)
-                if skipped:
-                    state.update(skipped)
-                    if "error" in skipped:
-                        with context.lock:
-                            context.errors[key] = skipped["error"]
-                            context.result_runs[key] = run["id"]
-                    self._persist(run, secrets)
-                    continue
-                self._run_node(execution, key)
-            run["status"] = run_outcome({n["status"] for n in run["nodes"].values()}, execution.canceled)
+            # Only runs that calculate values report phases, so ordinary runs show no progress label.
+            if execution.value_phase:
+                run["phase"] = "values"
+            for key, error in execution.validation_errors.items():
+                execution.nodes[key]["error"] = error["error"]
+            self._execute_nodes(execution, [k for k in execution.order if k in execution.value_phase])
+            self._freeze_values(execution)
+            if execution.value_phase:
+                run["phase"] = "consumers"
+            self._persist(run, secrets)
+            self._execute_nodes(execution, [k for k in execution.order if k not in execution.value_phase])
+            statuses = {n["status"] for n in run["nodes"].values()}
+            if any(v.get("resolution") == "calculated" and v.get("error") for v in run["variables"].values()):
+                statuses.add("failed")
+            run["status"] = run_outcome(statuses, execution.canceled)
         except Exception as error:
             run.update(
                 status="canceled" if execution.canceled else "failed",
@@ -364,6 +419,93 @@ class Runner:
                     self._persist(run, secrets)
                 finally:
                     self.active.pop(context.worktree, None)
+
+    def _execute_nodes(self, execution: Execution, order: list[str]) -> None:
+        for key in order:
+            state = execution.run["nodes"][key]
+            skipped = self._skip_reason(execution, key)
+            if skipped:
+                state.update(skipped)
+                if "error" in skipped:
+                    with execution.context.lock:
+                        execution.context.errors[key] = skipped["error"]
+                        execution.context.result_runs[key] = execution.run["id"]
+                self._persist(execution.run, execution.secrets)
+            else:
+                self._run_node(execution, key)
+
+    def _freeze_values(self, execution: Execution) -> None:
+        """Publish all successful extractions at the phase boundary, then bind consumers."""
+        if not execution.sources:
+            return
+        run, context = execution.run, execution.context
+        extracted = {}
+        for name, source in execution.sources.items():
+            key = source.get("node")
+            if key not in execution.value_phase:
+                continue
+            upstream = reachable({key}, execution.edges, upstream=True)
+            invalid = next(
+                (execution.validation_errors[n] for n in upstream if n in execution.validation_errors), None
+            )
+            if invalid:
+                entry = value_sources.unavailable(source, invalid["code"], invalid["error"])
+            elif run["nodes"][key]["status"] != "success" or execution.canceled:
+                entry = value_sources.unavailable(
+                    source, "value_source_failed", f"{name}: source {source['from']['node']} failed"
+                )
+            else:
+                dataset = execution.published[key].get(source["port"])
+                entry = (
+                    value_sources.extract(execution.cursor, dataset, source)
+                    if dataset
+                    else value_sources.unavailable(
+                        source, "value_source_failed", "Source output was not published"
+                    )
+                )
+            if "error" in entry:
+                origin = source["from"]
+                entry["error"] = (
+                    f"{name}: {origin['node']}.{origin['port']}.{origin['column']}: {entry['error']}"
+                )
+            entry.update(resolution="calculated", producer_run=run["id"], producer_commit=run["commit"])
+            extracted[name] = entry
+        with self.lock, context.lock:
+            if execution.canceled:
+                for entry in extracted.values():
+                    entry.pop("value", None)
+                    entry.update(
+                        state="unavailable", code="value_source_failed", error="Value phase canceled"
+                    )
+            execution.values.update(extracted)
+            run["variables"].update(extracted)
+            # Persist evidence before any value becomes available to subsequent requests.
+            self._persist(run, execution.secrets)
+            if not execution.canceled:
+                for name, entry in extracted.items():
+                    signature = value_sources.identity(execution.sources[name])
+                    context.value_attempts[signature] = copy.deepcopy(entry)
+                    if entry["state"] == "ready":
+                        context.retained_values[signature] = copy.deepcopy(entry)
+        rebound, _, _ = expand_for(execution.bundle, context.environment, computed=execution.values)
+        for key in execution.order:
+            if key not in execution.value_phase:
+                # Connection failures captured at admission remain failures after binding.
+                for reference in connection_references(rebound[key]):
+                    if reference not in execution.captured:
+                        rebound[key]["error"] = execution.nodes[key].get("error", "Connection unavailable")
+                execution.nodes[key] = rebound[key]
+        execution.fingerprints = self.fingerprints.of(
+            execution.bundle, context.environment, execution.captured, execution.values
+        )
+        for key in execution.order:
+            run["nodes"][key]["fingerprint"] = execution.fingerprints[key]
+        run["variables"].update(
+            variables.used(
+                execution.bundle, execution.nodes, execution.order, context.environment, execution.values
+            )
+        )
+        self.fingerprints.invalidate(context)
 
     @staticmethod
     def _skip_reason(execution: Execution, key: str) -> dict[str, str] | None:
@@ -478,6 +620,7 @@ class Runner:
             project_files,
             input_schemas={port: data.columns for port, data in input_datasets.items()},
             variables=variables.expression_values(node),
+            bound=node.get("variables"),
         )
         state["statements"] = variables.annotate(statements, node)
         self._persist(run, execution.secrets)
@@ -515,6 +658,17 @@ class Runner:
             count_row = cursor.execute(f"SELECT count(*) FROM {qi(table)}").fetchone()
             assert count_row is not None
             count = count_row[0]
+            source_columns = plan["columns"]
+            if source_columns is None and any(
+                s.get("node") == key and s.get("port") == statement["output"]
+                for s in execution.sources.values()
+            ):
+                source_columns = [
+                    {"name": c[0], "type": c[1]}
+                    for c in cursor.execute(
+                        "DESCRIBE " + statement["query"], statement["bindings"]
+                    ).fetchall()
+                ]
             staged[statement["output"]] = Dataset(
                 id=table,
                 node=key,
@@ -528,6 +682,8 @@ class Runner:
                 dependencies={data.table: data.id for data in data_inputs.values()},
                 fingerprint=execution.fingerprints[key],
                 storage=plan["storage"],
+                source_columns=source_columns or columns,
+                bound_values=copy.deepcopy(execution.values),
                 source=node["parsed"]["kind"] == "source",
                 column_map=column_map,
                 witnesses=plan["witnesses"],
@@ -605,7 +761,11 @@ class Runner:
             return
 
         def current(bundle: Record) -> bool:
-            fingerprint = self.fingerprints.of(bundle, context.environment).get(key)
+            fingerprint = self.fingerprints.of(
+                bundle,
+                context.environment,
+                computed=self.pool.computed(context.worktree, context.environment, bundle),
+            ).get(key)
             return fingerprint == execution.fingerprints[key]
 
         self.projects.prune_column_documentation(context.worktree, key, columns, current)

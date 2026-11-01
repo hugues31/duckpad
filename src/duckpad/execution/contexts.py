@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import re
 import threading
 import time
@@ -10,9 +11,10 @@ from contextlib import suppress
 
 import duckdb
 
-from .. import project_extensions
+from .. import project_extensions, value_sources
 from ..access import Access
 from ..catalog import Catalog, redact
+from ..components import expand
 from ..datasets import Context
 from ..extensions import database_config
 from ..materialize import drop_dataset
@@ -168,6 +170,34 @@ class ContextPool:
     def find(self, worktree: str, environment: str) -> Context | None:
         """The context of a worktree in an environment if one was started, without starting it."""
         return self.contexts.get((worktree, environment))
+
+    def computed(self, worktree: str, environment: str, bundle: Record) -> Record:
+        """Snapshot live scalar values without starting a database or reading run history."""
+        declarations = bundle.get("variables")
+        if not isinstance(declarations, dict) or not any(
+            isinstance(v, dict) and "from" in v for v in declarations.values()
+        ):
+            return {}
+        nodes, _, boundaries = expand(bundle, tolerant=True)
+        sources = value_sources.sources(bundle, nodes, boundaries)
+        context = self.find(worktree, environment)
+        cache = {}
+        if context and context.db is not None and not getattr(context.db, "closed", False):
+            with context.lock:
+                cache = copy.deepcopy(context.retained_values)
+        result = value_sources.retained(sources, cache)
+        if context:
+            with context.lock:
+                for name, source in sources.items():
+                    entry = result[name]
+                    attempt = context.value_attempts.get(value_sources.identity(source), {})
+                    if attempt.get("error"):
+                        entry["last_error"] = attempt["error"]
+                    if entry["state"] != "ready":
+                        continue
+                    dataset = context.outputs.get(source.get("node"), {}).get(source.get("port"))
+                    entry["source_stale"] = dataset is None or dataset.status != "valid"
+        return result
 
     def all(self, worktree: str | None = None) -> list[Context]:
         """Started contexts, of one worktree when given."""

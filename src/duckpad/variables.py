@@ -24,13 +24,14 @@ from .util import Problem, dumps
 FILE = "variables.json"
 KEY = "$var"
 NAME = re.compile(r"[a-z][a-z0-9_]*")
-FIELDS = {"type", "description", "default", "environments"}
+FIELDS = {"type", "description", "default", "environments", "from"}
 SCALAR_TYPES = ("text", "number", "boolean", "date", "identifier")
 LIST_TYPE = re.compile(r"list\s*<\s*(text|number)\s*>")
 CHOICE_TYPE = re.compile(r"choice\s*\((.*)\)")
 # `{{ var.name }}` inside expression parameters; templates and components never accept them.
 EXPRESSION_REFERENCE = VARIABLE_REFERENCE
 EXPRESSION_PARAMETERS = ("expression", "expressions")
+REFERENCE_PARAMETERS = (*EXPRESSION_PARAMETERS, "file", "destination")
 # Variable types an expression can reference: each becomes a DuckDB parameter of the same type.
 EXPRESSION_TYPES = ("text", "number", "boolean", "date", "choice")
 SECRET_HINTS = ("password", "passwd", "secret", "token", "apikey", "api_key", "credential", "private_key")
@@ -191,7 +192,7 @@ def declarations(bundle):
         if not isinstance(declaration, dict):
             return {}, f"Variable {name} must be an object with a type"
         unknown = sorted(declaration.keys() - FIELDS)
-        if unknown:
+        if unknown and "from" not in declaration:
             return {}, f"Variable {name} has unknown fields: {', '.join(unknown)}"
         type_name = normalized_type(declaration.get("type"))
         if type_name is None:
@@ -203,6 +204,19 @@ def declarations(bundle):
         environments = declaration.get("environments", {})
         if not isinstance(description, str):
             return {}, f"Variable {name}: the description must be text"
+        if "from" in declaration:
+            errors = {"fields": f"Unknown fields: {', '.join(unknown)}"} if unknown else {}
+            forbidden = declaration.keys() & {"default", "environments"}
+            if forbidden:
+                errors["source"] = "Computed variables forbid default and environments, even empty or null"
+            result[name] = {
+                "type": type_name,
+                "description": description,
+                "from": copy.deepcopy(declaration["from"]),
+                "environments": {},
+                "errors": errors,
+            }
+            continue
         if not isinstance(environments, dict):
             return {}, f"Variable {name}: environments must be an object of values"
         errors = {}
@@ -224,8 +238,18 @@ def declarations(bundle):
     return result, None
 
 
-def resolve(variable, environment):
+def resolve(variable, environment, computed=None):
     """`{"value", "source"}` of a variable in an environment, or `{"error"}` when it has no valid value."""
+    if "from" in variable:
+        if computed is not None:
+            return copy.deepcopy(computed)
+        return {
+            "state": "unavailable",
+            "source": "node",
+            "from": copy.deepcopy(variable["from"]),
+            "code": "value_not_calculated",
+            "error": "value not calculated; run the value source",
+        }
     if environment in variable["environments"]:
         source, key, value = (
             "environment",
@@ -419,10 +443,10 @@ def reference_error(bundle, variables, file_error, node, param, name):
 def expression_error(variables, file_error, parameter, name):
     """Why a `{{ var.name }}` reference inside a node parameter cannot take a value in any environment."""
     param, type_name = parameter["name"], parameter["type"]
-    if base_type(type_name) not in EXPRESSION_PARAMETERS:
+    if base_type(type_name) not in REFERENCE_PARAMETERS:
         return (
             f"Parameter {param} ({type_name}) cannot reference variable {name} inside its text: only "
-            "expression parameters can. Bind the whole parameter to the variable instead."
+            "expression and path parameters can. Bind the whole parameter to the variable instead."
         )
     if file_error:
         return f"Cannot use variable {name} in {param}: {file_error}"
@@ -463,6 +487,22 @@ def problems(bundle):
             for name, variable in sorted(variables.items())
             for message in variable["errors"].values()
         ]
+    if any("from" in v for v in variables.values()):
+        from . import value_sources
+        from .components import expand
+
+        nodes, edges, boundaries = expand(bundle, tolerant=True)
+        sources = value_sources.sources(bundle, nodes, boundaries)
+        result += [
+            {"file": FILE, "variable": name, "message": source["error"], "code": source["code"]}
+            for name, source in sources.items()
+            if "error" in source
+        ]
+        _, invalid = value_sources.dependencies(nodes, edges, sources)
+        result += [
+            {"file": "flow.json", "node": key, "message": error["error"], "code": error["code"]}
+            for key, error in invalid.items()
+        ]
     return result + definition_problems(bundle)
 
 
@@ -486,13 +526,13 @@ def node_problems(bundle, nodes):
         ]
         for param, names in sorted(texts.items()):
             # A file error is reported once, on the file; a misplaced reference does not depend on it.
-            if not file_error or base_type(parameters[param]["type"]) not in EXPRESSION_PARAMETERS:
+            if not file_error or base_type(parameters[param]["type"]) not in REFERENCE_PARAMETERS:
                 messages += [expression_error(variables, None, parameters[param], name) for name in names]
         result += [{"file": "flow.json", "node": key, "message": message} for message in messages if message]
     return result
 
 
-def bind(bundle, nodes, environment):
+def bind(bundle, nodes, environment, computed=None):
     """Replace the variable references of expanded nodes with their values in an environment.
 
     Each bound node records `variables`: parameter -> name, type, and value and source, or the
@@ -509,11 +549,10 @@ def bind(bundle, nodes, environment):
         variable = variables.get(name)
         binding = {"name": name, "type": variable["type"] if variable else None}
         if message is None:
-            value = resolve(variable, environment)
+            value = resolve(variable, environment, (computed or {}).get(name))
+            binding.update(value)
             if "error" in value:
                 message = f"Variable {name}: {value['error']}"
-            else:
-                binding.update(value)
         if message:
             binding["error"] = message
         return binding
@@ -567,7 +606,13 @@ def expression_values(node):
     }
 
 
-def used(bundle: Record, nodes: dict[str, Record], keys: Iterable[str], environment: str) -> Record:
+def used(
+    bundle: Record,
+    nodes: dict[str, Record],
+    keys: Iterable[str],
+    environment: str,
+    computed: Record | None = None,
+) -> Record:
     """Variables used by bound nodes: name -> type, and value and source or the reason it has none."""
     variables, file_error = declarations(bundle)
     names = sorted(
@@ -580,7 +625,10 @@ def used(bundle: Record, nodes: dict[str, Record], keys: Iterable[str], environm
     result = {}
     for name in names:
         if name in variables:
-            result[name] = {"type": variables[name]["type"], **resolve(variables[name], environment)}
+            result[name] = {
+                "type": variables[name]["type"],
+                **resolve(variables[name], environment, (computed or {}).get(name)),
+            }
         else:
             result[name] = {"type": None, "error": file_error or "undeclared variable"}
     return result
@@ -662,7 +710,7 @@ def warnings(bundle, environments):
     return result
 
 
-def summary(bundle, environments):
+def summary(bundle, environments, computed=None):
     """A bundle's variables for the interface: values per environment, usages and diagnostics."""
     variables, file_error = declarations(bundle)
     used_by = usages(bundle)
@@ -674,7 +722,12 @@ def summary(bundle, environments):
                 **{k: copy.deepcopy(v) for k, v in variable.items() if k != "errors"},
                 "errors": list(variable["errors"].values()),
                 "warnings": [w["message"] for w in advice if w["variable"] == name],
-                "values": {environment: resolve(variable, environment) for environment in environments},
+                "values": {
+                    environment: resolve(
+                        variable, environment, (computed or {}).get(environment, {}).get(name)
+                    )
+                    for environment in environments
+                },
                 "usages": used_by.get(name, []),
             }
             for name, variable in variables.items()
@@ -752,6 +805,10 @@ def fingerprinted(node, params):
     Renaming a variable keeps a fingerprint, while changing the value it binds in this
     environment changes it. Parameters without references are returned unchanged.
     """
+    params = dict(params)
+    for param, binding in node.get("variables", {}).items():
+        if binding.get("source") == "node":
+            params[param] = {key: binding[key] for key in ("type", "value", "error") if key in binding}
     bindings = {binding["name"]: binding for binding in expression_bindings(node)}
     if not bindings:
         return params

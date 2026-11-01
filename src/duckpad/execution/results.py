@@ -258,7 +258,13 @@ class Results:
         bundle = (
             self.projects.snapshot(worktree)["bundle"] if VARIABLE_REFERENCE.search(sample.filter) else None
         )
-        condition, bindings = sample_condition(sample.filter, columns, bundle, environment)
+        condition, bindings = sample_condition(
+            sample.filter,
+            columns,
+            bundle,
+            environment,
+            computed=self.pool.computed(worktree, environment, bundle) if bundle else None,
+        )
         common, row, ordering = sample_query(dataset, sample, condition)
         bindings = sample_bindings(sample, columns, bindings)
         projection = ", ".join(qi(c) for c in columns)
@@ -455,7 +461,12 @@ class Results:
         self.catalog.environment(environment)
         if not snapshot["bundle"]:
             raise Problem("Project files are invalid", 422, snapshot["diagnostics"])
-        nodes, edges, _ = expand_for(snapshot["bundle"], environment, tolerant=False)
+        nodes, edges, _ = expand_for(
+            snapshot["bundle"],
+            environment,
+            tolerant=False,
+            computed=self.pool.computed(worktree, environment, snapshot["bundle"]),
+        )
         selected = [key for key in nodes if in_subtree(key, node_id)]
         if not selected:
             raise Problem("Node not found", 404)
@@ -491,6 +502,7 @@ class Results:
                 self.store.paths.project_files(snapshot["worktree"]["project"], worktree, environment),
                 input_schemas=input_schemas,
                 variables=variables.expression_values(node),
+                bound=node.get("variables"),
             )
             for statement in statements:
                 statement["sql"] = redact(statement["sql"], secrets)
