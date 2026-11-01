@@ -309,7 +309,7 @@ class Runner:
                 if strict:
                     raise Problem(str(error), 422) from error
             deferred = any(
-                binding.get("source") == "node"
+                binding.get("source") == "node" and "error" in binding
                 for binding in [*node.get("variables", {}).values(), *variables.expression_bindings(node)]
             )
             if strict and node.get("error") and not deferred:
@@ -382,12 +382,15 @@ class Runner:
             run["status"] = "running"
             self._persist(run, secrets)
             self.pool.forget_removed(context, execution.nodes)
-            run["phase"] = "values" if execution.value_phase else "consumers"
+            # Only runs that calculate values report phases, so ordinary runs show no progress label.
+            if execution.value_phase:
+                run["phase"] = "values"
             for key, error in execution.validation_errors.items():
                 execution.nodes[key]["error"] = error["error"]
             self._execute_nodes(execution, [k for k in execution.order if k in execution.value_phase])
             self._freeze_values(execution)
-            run["phase"] = "consumers"
+            if execution.value_phase:
+                run["phase"] = "consumers"
             self._persist(run, secrets)
             self._execute_nodes(execution, [k for k in execution.order if k not in execution.value_phase])
             statuses = {n["status"] for n in run["nodes"].values()}
@@ -617,6 +620,7 @@ class Runner:
             project_files,
             input_schemas={port: data.columns for port, data in input_datasets.items()},
             variables=variables.expression_values(node),
+            bound=node.get("variables"),
         )
         state["statements"] = variables.annotate(statements, node)
         self._persist(run, execution.secrets)

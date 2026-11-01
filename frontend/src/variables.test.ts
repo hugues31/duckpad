@@ -38,6 +38,22 @@ describe("computed declarations", () => {
       ]),
     ).toEqual([]);
   });
+
+  it("reports a type change but not an inferred port spelled out", () => {
+    expect(
+      changedEnvironments(computed, { ...computed, type: "text" }, ["dev"]),
+    ).toEqual(["dev"]);
+    expect(
+      changedEnvironments(
+        computed,
+        {
+          ...computed,
+          from: { node: "control", port: "result", column: "amount" },
+        },
+        ["dev"],
+      ),
+    ).toEqual([]);
+  });
 });
 
 describe("expression references", () => {

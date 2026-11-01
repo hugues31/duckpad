@@ -135,6 +135,7 @@ export default function ParameterField({
           variables={expressionVariables}
           onChange={onChange}
           onBlur={onBlur}
+          singleLine={base === "file" || base === "destination"}
         />
       ) : base === "expressions" ||
         base === "expression" ||

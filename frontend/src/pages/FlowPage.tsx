@@ -3,6 +3,7 @@ import {
   useEffect,
   useEffectEvent,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   type CSSProperties,
@@ -138,6 +139,14 @@ export default function FlowPage() {
     key: string;
   } | null>(null);
   const bundle = snapshot.bundle;
+  const declared = snapshot.variables?.declarations;
+  const valueProducers = useMemo(
+    () =>
+      Object.values(declared || {}).flatMap((v) =>
+        v.from ? [v.from.node] : [],
+      ),
+    [declared],
+  );
   const graph = bundle ? graphAt(bundle, path) : undefined;
   const prefix = pathPrefix(path);
   const parent = path.at(-1)?.definition;
@@ -430,9 +439,7 @@ export default function FlowPage() {
         />
         <div className="canvas">
           <Canvas
-            valueProducers={Object.values(
-              snapshot.variables?.declarations || {},
-            ).flatMap((v) => (v.from ? [v.from.node] : []))}
+            valueProducers={valueProducers}
             readOnly={!canEdit}
             nodes={graph.nodes}
             edges={graph.edges}

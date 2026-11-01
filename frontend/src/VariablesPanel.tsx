@@ -478,7 +478,10 @@ function VariableEditor({
       if (!name) onCreated(draft.name);
       return result;
     },
-    { equal: sameValue },
+    {
+      // Compare what would be saved, so switching modes back and forth is no edit.
+      equal: (a, b) => a.name === b.name && sameValue(stored(a), stored(b)),
+    },
   );
   useEffect(() => onDirty(dirty), [dirty, onDirty]);
   const [options, setOptions] = useState(() =>
@@ -501,10 +504,11 @@ function VariableEditor({
         choices.some((option) => !option || /[()]/.test(option)) ||
         new Set(choices).size !== choices.length) &&
       t("choiceOptionsRequired"),
-    draft.default !== undefined &&
+    !draft.from &&
+      draft.default !== undefined &&
       !validValue(draft.type, draft.default) &&
       `${t("defaultValue")}: ${fill(t("invalidVariableValue"), { type: draft.type })}`,
-    ...Object.entries(values)
+    ...Object.entries(draft.from ? {} : values)
       .filter(([, item]) => !validValue(draft.type, item))
       .map(
         ([key]) =>
@@ -522,6 +526,23 @@ function VariableEditor({
     });
   const usages = summary?.usages || [];
   const nodes = snapshot.bundle?.flow.nodes || [];
+  const outputs = (node: (typeof nodes)[number]) =>
+    nodeInterface(
+      node,
+      snapshot.parsed_templates,
+      snapshot.bundle?.components,
+      localDefinitions(snapshot),
+    ).outputs;
+  // Exports have no output, so they cannot supply a value.
+  const sources = nodes.filter((node) => outputs(node).length);
+  const source =
+    draft.from && nodes.find((node) => node.id === draft.from!.node);
+  const ports = source ? outputs(source) : [];
+  // Keep the usual key order, so reverting an edit leaves the draft unchanged.
+  const setSource = (change: Partial<NonNullable<Draft["from"]>>) => {
+    const { node, port, column } = { ...draft.from!, ...change };
+    set({ from: { node, ...(port ? { port } : {}), column } });
+  };
   const usedNodes = [...new Set(usages.map((usage) => usage.node))];
   const changed = saved
     ? changedEnvironments(
@@ -637,15 +658,17 @@ function VariableEditor({
             aria-label={t("variableMode")}
             value={draft.from ? "computed" : "ordinary"}
             onChange={(e) => {
-              update((current) => {
-                const next = { ...current };
-                delete next.default;
-                delete next.environments;
-                if (e.target.value === "computed")
-                  next.from = { node: "", column: "" };
-                else delete next.from;
-                return next;
-              });
+              const computed = e.target.value === "computed";
+              // Values stay in the draft, so switching back restores them;
+              // stored() leaves them out of a computed declaration.
+              update(({ from: _from, ...current }) =>
+                computed
+                  ? {
+                      ...current,
+                      from: saved?.from ?? { node: "", column: "" },
+                    }
+                  : current,
+              );
             }}
           >
             <option value="ordinary">{t("ordinaryVariable")}</option>
@@ -660,13 +683,17 @@ function VariableEditor({
                 aria-label={t("valueSourceNode")}
                 value={draft.from.node}
                 onChange={(e) =>
-                  set({
-                    from: { node: e.target.value, column: draft.from!.column },
-                  })
+                  setSource({ node: e.target.value, port: undefined })
                 }
               >
                 <option value="">{t("chooseValueSource")}</option>
-                {nodes.map((node) => (
+                {draft.from.node &&
+                  !sources.some((node) => node.id === draft.from!.node) && (
+                    <option value={draft.from.node} disabled>
+                      {draft.from.node} · {t("absent")}
+                    </option>
+                  )}
+                {sources.map((node) => (
                   <option key={node.id} value={node.id}>
                     {node.label || node.id}
                   </option>
@@ -675,27 +702,35 @@ function VariableEditor({
             </label>
             <label className="field">
               <span>{t("valueSourcePort")}</span>
-              <input
+              <Select
+                aria-label={t("valueSourcePort")}
                 value={draft.from.port || ""}
-                placeholder={t("uniqueOutputHint")}
                 onChange={(e) =>
-                  set({
-                    from: {
-                      node: draft.from!.node,
-                      column: draft.from!.column,
-                      ...(e.target.value ? { port: e.target.value } : {}),
-                    },
-                  })
+                  setSource({ port: e.target.value || undefined })
                 }
-              />
+              >
+                <option value="">
+                  {ports.length === 1
+                    ? `${ports[0]} · ${t("uniqueOutputHint")}`
+                    : t("uniqueOutputHint")}
+                </option>
+                {draft.from.port && !ports.includes(draft.from.port) && (
+                  <option value={draft.from.port} disabled>
+                    {draft.from.port} · {t("absent")}
+                  </option>
+                )}
+                {ports.map((port) => (
+                  <option key={port} value={port}>
+                    {port}
+                  </option>
+                ))}
+              </Select>
             </label>
             <label className="field">
               <span>{t("valueSourceColumn")}</span>
               <input
                 value={draft.from.column}
-                onChange={(e) =>
-                  set({ from: { ...draft.from!, column: e.target.value } })
-                }
+                onChange={(e) => setSource({ column: e.target.value })}
               />
             </label>
             <p className="muted small">{t("computedVariableHint")}</p>
@@ -705,7 +740,9 @@ function VariableEditor({
                 className="button secondary small"
                 onClick={() => onRunSource(saved.from!.node)}
               >
-                {t("runNode")} · {saved.from.node}
+                {t("runNode")} ·{" "}
+                {nodes.find((node) => node.id === saved.from!.node)?.label ||
+                  saved.from.node}
               </button>
             )}
           </>

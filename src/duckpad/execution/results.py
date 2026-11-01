@@ -502,6 +502,7 @@ class Results:
                 self.store.paths.project_files(snapshot["worktree"]["project"], worktree, environment),
                 input_schemas=input_schemas,
                 variables=variables.expression_values(node),
+                bound=node.get("variables"),
             )
             for statement in statements:
                 statement["sql"] = redact(statement["sql"], secrets)

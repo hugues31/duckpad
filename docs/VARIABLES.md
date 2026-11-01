@@ -212,8 +212,8 @@ See [environments](ENVIRONMENTS.md) for instance settings and
 ## Calculate a value from a node
 
 Select **Computed from node** as the value source in the variable editor. Choose
-its type, the stable ID of a root node, an output port and a column. The port can
-be left empty when there is exactly one output. A component instance can supply
+its type, a root node, an output port and a column. The port can be left empty
+when there is exactly one output. A component instance can supply
 one of its exposed outputs. Grouping a source updates the declaration to refer
 to the new instance's exposed output.
 
@@ -264,12 +264,12 @@ the canvas marks value sources with **ƒ**. A shared upstream node runs once.
 Value sources and their upstream nodes may use ordinary variables only; computed
 value chains and dependency cycles are rejected.
 
-**Run node** in the variable editor refreshes its source using the usual launch
-permissions and protected-environment confirmation. A launch limited to a
-consumer does not add the value source to its scope: it uses the last successful
-value retained in that worktree and environment. Without one, run the source or
-the whole pipeline first. Compile, preview, sample filtering and launch inspection
-never execute a source themselves.
+**Run with ancestors** in the variable editor refreshes its source using the
+usual launch permissions and protected-environment confirmation. A launch limited
+to a consumer does not add the value source to its scope: it uses the last
+successful value retained in that worktree and environment. Without one, run the
+source or the whole pipeline first. Compile, preview, sample filtering and launch
+inspection never execute a source themselves.
 
 Changing the producer's SQL keeps its last successful scalar available and marks
 the source result stale. Changing the source descriptor or declared type requires

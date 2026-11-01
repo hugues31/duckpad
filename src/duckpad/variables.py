@@ -553,8 +553,6 @@ def bind(bundle, nodes, environment, computed=None):
             binding.update(value)
             if "error" in value:
                 message = f"Variable {name}: {value['error']}"
-            else:
-                binding.update(value)
         if message:
             binding["error"] = message
         return binding

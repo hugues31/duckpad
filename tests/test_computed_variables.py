@@ -178,6 +178,21 @@ def test_identical_refresh_preserves_out_of_scope_result_and_changed_value_inval
     assert engine.preview(worktree, "dev", "independent")["status"] == "valid"
 
 
+def test_targeted_launch_still_rejects_other_binding_errors_of_a_computed_consumer(services):
+    store, projects, _, engine = services
+    project = bundle()
+    project["templates"]["consumer"] = (
+        "-- @kind source\n-- @param amount: number\n-- @param label: text\n-- @output result\n"
+        "SELECT {{ amount }} AS amount, {{ label }} AS label;"
+    )
+    project["flow"]["nodes"][1]["params"]["label"] = {"$var": "label"}
+    project["variables"]["label"] = {"type": "text", "environments": {"prod": "adjusted"}}
+    worktree = projects.create("Computed", project)["id"]
+    assert wait_run(store, engine.launch(worktree, "dev"))["variables"]["amount"]["value"] == 4
+    with pytest.raises(Problem, match="Variable label: no value in dev"):
+        engine.launch(worktree, "dev", "consumer")
+
+
 def test_value_cycle_is_localized(services):
     store, projects, _, engine = services
     project = bundle()
@@ -488,6 +503,47 @@ def test_path_symlinks_globs_and_uri_authority_are_checked(tmp_path):
     )
     with pytest.raises(Problem, match="authority"):
         authorize_path("s3://bucket/{{ var.name }}", "s3://other/file.csv", root, "file", {}, None)
+    # DuckDB reads settings such as s3_endpoint from the URL query.
+    for template, path in (
+        ("{{ var.name }}", "s3://bucket/prefix/x.csv?s3_endpoint=evil.example"),
+        ("data/{{ var.name }}", "s3://bucket/prefix/data/x#/../../other.csv"),
+    ):
+        with pytest.raises(Problem, match="query or fragment"):
+            authorize_path(template, path, "s3://bucket/prefix", "file", {}, None)
+    assert (
+        authorize_path("s3://bucket/{{ var.name }}?v=1", "s3://bucket/a.csv?v=1", root, "file", {}, None)
+        == "s3://bucket/a.csv?v=1"
+    )
+
+
+def test_whole_path_bindings_are_not_rendered_again_and_computed_ones_are_authorized(tmp_path):
+    template = parse_template(
+        "-- @kind source\n-- @param file: file\n-- @output result\nSELECT * FROM read_csv({{ file }});"
+    )
+
+    def compiled(value, bound=None, values=None):
+        statements = compile_template(
+            template,
+            {"file": value},
+            {},
+            {"result": "out"},
+            {},
+            {"file": tmp_path},
+            variables=values,
+            bound=bound,
+        )
+        return statements[0]["sql"]
+
+    computed = {"name": "path", "type": "text", "source": "node", "value": "/etc/hostname"}
+    with pytest.raises(Problem, match="outside the allowed resource root"):
+        compiled(computed["value"], {"file": computed})
+    computed["value"] = "day/../report.csv"
+    assert f"'{tmp_path.resolve() / 'report.csv'}'" in compiled(computed["value"], {"file": computed})
+    ordinary = {"name": "pattern", "type": "text", "source": "default", "value": "{{ var.day }}.csv"}
+    day = {"day": {"type": "text", "value": "secret"}}
+    assert "secret" not in compiled(ordinary["value"], {"file": ordinary}, day)
+    with pytest.raises(Problem, match="NUL"):
+        compiled("{{ var.day }}.csv", None, {"day": {"type": "text", "value": "a\x00b"}})
 
 
 def test_control_csv_binds_parquet_scan_predicate_and_path_without_a_join(services):

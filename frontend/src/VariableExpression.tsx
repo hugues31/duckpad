@@ -27,12 +27,15 @@ export function ExpressionInput({
   variables,
   onChange,
   onBlur,
+  singleLine,
 }: {
   id: string;
   value: string;
   variables: ExpressionVariables;
   onChange: (value: string) => void;
   onBlur?: () => void;
+  /** A path: one line, where Enter only accepts a suggestion. */
+  singleLine?: boolean;
 }) {
   const t = useT();
   const list = useId();
@@ -79,7 +82,7 @@ export function ExpressionInput({
       <textarea
         ref={input}
         id={id}
-        rows={3}
+        rows={singleLine ? 1 : 3}
         className="code-input"
         value={value}
         aria-autocomplete="list"
@@ -93,6 +96,8 @@ export function ExpressionInput({
         }}
         onSelect={(e) => track(e.currentTarget)}
         onKeyDown={(e) => {
+          if (singleLine && e.key === "Enter" && !(open && options[active]))
+            e.preventDefault();
           if (!open) return;
           if (e.key === "Escape") {
             e.preventDefault();

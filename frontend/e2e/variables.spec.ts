@@ -45,6 +45,18 @@ test("calculate a control value, retain it for a targeted launch and show its pr
     0,
   );
   await expect(editor.getByLabel("Source node")).toHaveValue("control");
+  // Ports come from the node, and switching modes back and forth loses nothing.
+  await expect(editor.getByLabel("Output port")).toContainText("result");
+  const mode = editor.getByLabel("Value source", { exact: true });
+  await mode.selectOption("ordinary");
+  await expect(
+    editor.getByLabel("Default value", { exact: true }),
+  ).toBeVisible();
+  await mode.selectOption("computed");
+  await expect(editor.getByLabel("Source node")).toHaveValue("control");
+  await expect(
+    editor.getByRole("button", { name: "Save changes", exact: true }),
+  ).toBeDisabled();
   const pending = await (
     await page.request.get(`${url}/variables/scope?environment=dev`)
   ).json();
@@ -56,6 +68,10 @@ test("calculate a control value, retain it for a targeted launch and show its pr
     .filter({ hasText: "order_status" });
   await expect(row).toContainText("paid");
   await expect(row).toContainText("Retained value");
+  // The page polls run states: capture it once it shows the finished run.
+  await expect(
+    page.getByRole("button", { name: "Run pipeline", exact: true }),
+  ).toBeVisible();
   await page.screenshot({
     path: resolve("../docs/images/computed-variables.png"),
     animations: "disabled",

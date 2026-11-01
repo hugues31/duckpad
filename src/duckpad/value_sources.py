@@ -109,12 +109,14 @@ def dependencies(nodes, edges, sources):
                 adjacency[sources[name]["node"]].append((key, [f"var.{name}"]))
 
     def path(start, target, visited):
+        # One shared visited set keeps the search linear on graphs with many diamonds.
         if start == target:
             return [start]
         if start in visited:
             return None
+        visited.add(start)
         for child, labels in adjacency[start]:
-            tail = path(child, target, visited | {start})
+            tail = path(child, target, visited)
             if tail:
                 return [start, *labels, *tail]
         return None

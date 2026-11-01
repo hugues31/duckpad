@@ -103,7 +103,10 @@
 .variable-value small {
   display: block;
   margin-top: 4px;
-  font-family: var(--font-sans, sans-serif);
+  /* The interface font from tokens.css: long diagnostics wrap, never widen the table. */
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  white-space: normal;
+  overflow-wrap: anywhere;
   color: var(--muted);
 }
 .variable-values td > small,

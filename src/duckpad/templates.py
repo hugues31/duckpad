@@ -367,6 +367,8 @@ def render_path(name, text, values):
             ):
                 raise Problem(f"{name}: expected a finite number")
             return json.dumps(value)
+        if "\x00" in str(value):
+            raise Problem(f"{name}: a path cannot contain a NUL character")
         return str(value)
 
     return VARIABLE_REFERENCE.sub(replace, text)
@@ -385,6 +387,10 @@ def authorize_path(template, path, root, kind, connections, reference):
         before, after = urlsplit(baseline), urlsplit(path)
         if not before.scheme or (before.scheme, before.netloc) != (after.scheme, after.netloc):
             raise Problem("Path references cannot change the URI scheme or authority")
+        # A query can carry settings such as s3_endpoint; only the written one is allowed.
+        written = urlsplit(template)
+        if (after.query, after.fragment) != (written.query, written.fragment):
+            raise Problem("Path references cannot change a URI query or fragment")
         if any(part == ".." for part in unquote(after.path).split("/")):
             raise Problem("Path references cannot traverse a resource root")
         if URI.match(str(root)) and not after.path.startswith(before.path.rstrip("/") + "/"):
@@ -396,7 +402,9 @@ def authorize_path(template, path, root, kind, connections, reference):
     candidate = Path(path)
     if not candidate.is_absolute():
         candidate = base / candidate
-    if not candidate.resolve().is_relative_to(base):
+    # Return the checked path: DuckDB and export capture must not reinterpret `..` or symlinks.
+    candidate = candidate.resolve()
+    if not candidate.is_relative_to(base):
         raise Problem("Path is outside the allowed resource root")
     for matched in base.glob(str(candidate.relative_to(base))):
         if not matched.resolve().is_relative_to(base):
@@ -424,8 +432,13 @@ def render_parameter(
     input_schemas=None,
     variables=None,
     placeholders=None,
+    bound=None,
 ):
-    """Return the SQL text of a structural parameter, or None for a bound scalar value."""
+    """Return the SQL text of a structural parameter, or None for a bound scalar value.
+
+    `bound` maps parameters bound whole to a variable to their binding: such values are
+    never rendered again, and a computed one is checked like `{{ var.name }}`.
+    """
     name, type_name = parameter["name"], parameter["type"]
     kind, argument = base_type(type_name), type_argument(type_name)
     value = parameters[name]
@@ -460,13 +473,20 @@ def render_parameter(
             if is_project_files(reference)
             else connection_for(connections, reference)["values"].get("root", "")
         )
-        path = str(value)
-        if "{{" in path or "}}" in path:
-            path = render_path(name, path, variables or {})
+        path, binding = str(value), (bound or {}).get(name)
+        if binding is not None and binding.get("source") == "node":
+            # A value read from data must not choose a resource outside the captured root.
+            template, values = "{{ var." + binding["name"] + " }}", {binding["name"]: binding}
+        elif binding is None and ("{{" in path or "}}" in path):
+            template, values = path, variables or {}
+        else:
+            template = None
+        if template is not None:
+            path = render_path(name, template, values)
             resource_root = root or project_files[kind]
             if URI.match(str(resource_root)) and not URI.match(path) and not Path(path).is_absolute():
                 path = str(resource_root).rstrip("/") + "/" + path
-            return literal(authorize_path(str(value), path, resource_root, kind, connections, reference))
+            return literal(authorize_path(template, path, resource_root, kind, connections, reference))
         if not URI.match(path) and not Path(path).is_absolute():
             path = str(Path(root or project_files[kind]) / path)
         return literal(path)
@@ -618,7 +638,15 @@ def is_local_table(table, local_names):
 
 
 def compile_template(
-    template, params, inputs, physical_outputs, connections, project_files, input_schemas=None, variables=None
+    template,
+    params,
+    inputs,
+    physical_outputs,
+    connections,
+    project_files,
+    input_schemas=None,
+    variables=None,
+    bound=None,
 ):
     """Compile a template's blocks into statements with their bound parameters.
 
@@ -626,6 +654,7 @@ def compile_template(
     paths when no connection root applies: the project's resources and the environment's exports.
     `variables` maps the variables referenced inside expression parameters to their type and
     value; each statement lists the named parameters binding them in `variable_bindings`.
+    `bound` maps parameters bound whole to a variable to their binding.
     """
     values, bindings = dict(inputs), {}
     parameters = {p["name"]: params.get(p["name"], p.get("default")) for p in template["parameters"]}
@@ -646,6 +675,7 @@ def compile_template(
             input_schemas,
             variables,
             placeholders,
+            bound,
         )
         if rendered is None:
             bindings[name] = parameters[name]

@@ -208,6 +208,14 @@ export function descendants(bundle: Bundle, nodes: string[]) {
   return found;
 }
 
+/** Whether two value sources read the same cell; an omitted port matches any. */
+const sameSource = (a: Declaration["from"], b: Declaration["from"]) =>
+  !a || !b
+    ? a === b
+    : a.node === b.node &&
+      a.column === b.column &&
+      (!a.port || !b.port || a.port === b.port);
+
 /** The environments in which a declaration change gives a different value. */
 export const changedEnvironments = (
   before: Declaration | undefined,
@@ -216,7 +224,9 @@ export const changedEnvironments = (
 ) =>
   environments.filter(
     (environment) =>
-      !sameValue(before?.from, after.from) ||
+      !sameSource(before?.from, after.from) ||
+      // A computed value is retained for its declared type only.
+      (!!after.from && before?.type !== after.type) ||
       !sameValue(
         resolveValue(before, environment).value,
         resolveValue(after, environment).value,
