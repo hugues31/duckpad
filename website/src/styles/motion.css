@@ -40,15 +40,15 @@
     mix-blend-mode: normal;
   }
   [data-reveal] {
+    --hover-transition:
+      background 200ms ease, border-color 200ms ease, box-shadow 250ms ease,
+      transform 250ms ease;
     transition:
       opacity 800ms var(--reveal-delay, 0ms) ease,
       translate 900ms var(--reveal-delay, 0ms) cubic-bezier(0.22, 1, 0.36, 1),
       scale 900ms var(--reveal-delay, 0ms) cubic-bezier(0.22, 1, 0.36, 1),
       filter 800ms var(--reveal-delay, 0ms) ease,
-      background 200ms ease,
-      border-color 200ms ease,
-      box-shadow 250ms ease,
-      transform 250ms ease;
+      var(--hover-transition);
   }
   [data-reveal-pending] {
     opacity: 0;
@@ -67,6 +67,12 @@
     translate: none;
     scale: none;
     filter: none;
+  }
+  /* Appear at once; cards already visible on load still ease on hover. */
+  [data-reveal-immediate] {
+    transition: var(--hover-transition);
+  }
+  [data-reveal]:focus-within {
     transition: none;
   }
 }

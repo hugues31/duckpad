@@ -95,7 +95,8 @@ COPY (SELECT * FROM {{ source }})
 TO {{ destination }} (FORMAT CSV, HEADER TRUE);
 ```
 
-Connect `source` to the table you want to export. Exports have no `@output`.
+Connect `source` to the table you want to export. Exports write with an
+explicit `COPY ... TO` or `INSERT` statement and have no `@output`.
 When the local connection has no root, the relative destination resolves inside
 the branch and environment's export directory. Run the node and open **Log →
 Download exported data** to retrieve its CSV. See [project exports](AUTHORING.md)
@@ -105,7 +106,6 @@ An export can also declare tests and messages. They run **before the external
 write**, even when declared below `COPY`. A failing error check prevents it.
 
 ## Parameter values
-
 
 Numeric and list fields preserve the text you type until you leave the field or
 save. Clearing a numeric field removes its override, so the template, component,
@@ -127,11 +127,6 @@ items: `New York, Paris` becomes `["New York", "Paris"]`.
 | `expressions` | Comma-separated or array expression list, for projections and aggregates |
 | `list<text>`, `list<number>`, `list<boolean>`, `list<column>` | A typed list emitted as literals or identifiers |
 | `schema` | JSON mapping of column names to DuckDB types, used for CSV overrides |
-
-Transformations may read only declared inputs, earlier outputs, local CTEs and subqueries. External table functions and undeclared tables are rejected. A source uses `-- @kind source` and explicitly declared resource parameters. Each file reader such as `read_csv` takes one declared file parameter, or a list of them, as its only positional argument; its other arguments must be named options such as `delim = ';'`. Exports use `-- @kind export`, declared tabular inputs and explicit `COPY ... TO` or `INSERT` statements. They have no tabular output. Connector setup is separate from those data operations.
-
-Compilation is available without executing the flow. The inspector's **SQL** tab shows the query compiled from the current configuration; the **Executed SQL** of the results panel's **Log** shows the actual statement sequence of the displayed result. Actual materialization statements include private storage/view setup and bound values; generated credentials are masked.
-
 
 ## Check data and report messages
 

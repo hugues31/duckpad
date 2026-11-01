@@ -62,9 +62,6 @@ See [installation](docs/INSTALLATION.md) for platform requirements and setup opt
 [Architecture](docs/ARCHITECTURE.md) · [Validation](docs/VALIDATION.md) ·
 [Releases](docs/RELEASING.md) · [Security](SECURITY.md)
 
-The [website and documentation guide](docs/WEBSITE.md) explains local preview,
-Playwright demo recording and GitHub Pages publishing. Developer checks live in
-[CONTRIBUTING.md](CONTRIBUTING.md). Private issue workflows and preview tooling
-are maintained in operator-owned configuration outside Git.
+Want to contribute? Start with [CONTRIBUTING.md](CONTRIBUTING.md).
 
 **MIT licensed.** Built for the open-source community.
