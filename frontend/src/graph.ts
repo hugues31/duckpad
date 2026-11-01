@@ -55,6 +55,34 @@ export const graphAt = (bundle: Bundle, path: PathPart[]): Graph =>
 export const pathPrefix = (path: PathPart[]) =>
   path.map((part) => part.instance + "::").join("");
 
+/**
+ * The expanded node and port that materialize an output. A component instance
+ * stores no rows: its exposed output is the output of a node inside it, found
+ * through nested instances as the engine expands them.
+ */
+export function outputSource(bundle: Bundle, node: string, port: string) {
+  const ids = node.split("::");
+  let graph: Graph = bundle.flow;
+  for (const id of ids.slice(0, -1)) {
+    const parent = graph.nodes.find((n) => n.id === id);
+    const definition = parent?.component && bundle.components[parent.component];
+    if (!definition) return { node, port };
+    graph = definition;
+  }
+  let current = graph.nodes.find((n) => n.id === ids[ids.length - 1]);
+  const source = { node, port };
+  while (current?.component) {
+    const definition: ComponentDefinition | undefined =
+      bundle.components[current.component];
+    const exposed = definition?.outputs?.[source.port];
+    if (!exposed) break;
+    source.node += "::" + exposed.node;
+    source.port = exposed.port;
+    current = definition.nodes.find((n) => n.id === exposed.node);
+  }
+  return source;
+}
+
 /** A template or component that a node instantiates. */
 export type NodeKind = "template" | "component";
 

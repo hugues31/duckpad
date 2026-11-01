@@ -84,6 +84,8 @@ export interface Bundle {
   variables?: Record<string, Json> | string | null;
   /** Requirements from extensions.json, preserved as raw text when malformed. */
   extensions?: Record<string, ProjectExtension> | string | null;
+  /** Shared result views of views.json by `node:port`, its raw text when malformed. */
+  views?: Record<string, Json> | string | null;
 }
 /** A root flow node parameter bound to a project variable. */
 export interface VariableUsage {
@@ -249,8 +251,10 @@ export interface Statement {
 export interface PreviewPage extends Dataset {
   results?: ExecutionResult[];
   rows: { id: number; values: Json[] }[];
-  /** Rows matching the filters, across all pages. */
+  /** Rows to page through: the sample's rows, or every matching row. */
   filtered_count: number;
+  /** Rows matching the sample filter and search, before the sample size. */
+  matched_count?: number;
   offset: number;
   /** The statements of the run that produced the dataset. */
   executed_sql: Statement[];
@@ -299,11 +303,19 @@ export interface NodeRun {
   status: NodeRunStatus;
   label: string;
   kind: TemplateKind;
-  outputs?: Record<string, Dataset>;
+  /** Each output with the seconds its statement took, recorded since per-output timings. */
+  outputs?: Record<string, Dataset & { duration?: number | null }>;
   error?: string;
   duration?: number;
   external_outcome?: "completed" | "failed" | "partial or unknown" | "unknown";
-  statements?: Statement[];
+  started?: string;
+  finished?: string;
+  statements?: (Statement & {
+    test_name?: string;
+    test_severity?: "warning" | "error";
+    message_block?: number;
+    message_output?: string | null;
+  })[];
   /** Parameter -> the variable bound to it. */
   variables?: Record<string, string>;
   /** Parameter -> the variables its expression references. */
@@ -361,4 +373,47 @@ export interface NodeResult {
 export interface Statuses {
   nodes: Record<string, NodeResult>;
   active: Run | null;
+}
+/** Statistics of one column over a whole retained result. */
+export interface ColumnStatistics {
+  type: string;
+  nulls: number | null;
+  distinct: number;
+  count: number;
+  unique: boolean;
+  min?: string;
+  max?: string;
+  /** Row counts of equal-width bins between min and max. */
+  histogram?: number[];
+  top?: { value: string; rows: number }[];
+}
+/** Columns of a result, statistics when computed, and changes since the previous run. */
+export interface ResultStatistics {
+  dataset: string;
+  status: Dataset["status"];
+  count: number;
+  columns: Column[];
+  statistics: {
+    computed: string;
+    duration: number;
+    count: number;
+    columns: Record<string, ColumnStatistics>;
+  } | null;
+  schema: {
+    previous_run: string;
+    added: string[];
+    removed: string[];
+    retyped: { name: string; before: string; after: string }[];
+  } | null;
+}
+/** A page of the failing rows of a data test, recomputed from the retained result. */
+export interface TestRows {
+  test: string;
+  run: string;
+  severity: "warning" | "error";
+  output: string | null;
+  columns: Column[];
+  rows: { id: number; values: Json[] }[];
+  filtered_count: number;
+  offset: number;
 }

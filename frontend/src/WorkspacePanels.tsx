@@ -59,7 +59,7 @@ export function usePanelSizes() {
   // Keep room for the graph, its breadcrumb and navigation controls.
   const previewMax = Math.max(180, height - headerHeight - 300);
   const preview = clamp(
-    preferences.preview ?? (mobile ? 220 : clamp(height * 0.28, 200, 280)),
+    preferences.preview ?? (mobile ? 220 : clamp(height * 0.4, 240, 420)),
     180,
     previewMax,
   );

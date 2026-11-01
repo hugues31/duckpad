@@ -226,9 +226,7 @@ async function openRunExample(page: Page) {
   return { worktree: example.id as string, node };
 }
 
-test("the data preview and the Inspector share one load of the node", async ({
-  page,
-}) => {
+test("the results panel loads the node's rows once", async ({ page }) => {
   const { worktree, node } = await openRunExample(page);
   const nodeId = await node.getAttribute("data-id");
   const loads: string[] = [];
@@ -241,42 +239,38 @@ test("the data preview and the Inspector share one load of the node", async ({
   });
   await node.click();
   await expect(page.locator(".preview-header .badge")).toHaveText("Valid");
-  const inspector = page.locator(".inspector");
-  await inspector.getByRole("button", { name: "SQL", exact: true }).click();
-  await inspector
-    .getByRole("button", { name: "Displayed result", exact: true })
-    .click();
-  await expect(inspector).toContainText(/Commit [0-9a-f]{8}/);
+  // The executed SQL comes with the run in the Log, not with the rows.
+  const results = page.getByRole("region", { name: "Results", exact: true });
+  await results.getByRole("tab", { name: /^Log/ }).click();
+  await results.getByText("Executed SQL", { exact: true }).click();
+  await expect(results.locator(".executed-sql .monaco-editor")).toBeVisible();
   await page.waitForTimeout(1000);
   expect(loads).toHaveLength(1);
 });
 
-test("the data preview filters its first column until another one is chosen", async ({
+test("the results search covers every column and headers sort the sample", async ({
   page,
 }) => {
   const { node } = await openRunExample(page);
   await node.click();
   const preview = page.locator(".preview-panel");
-  const first = await preview.locator(".data-table th button span").first();
+  const first = preview.locator(".data-table th button span").first();
   const column = (await first.textContent())!;
-  await expect(
-    preview.getByLabel("Filter column", { exact: true }),
-  ).toHaveValue(column);
-  const filtered = page.waitForRequest((request) => {
+  const searched = page.waitForRequest((request) => {
     const { pathname, searchParams } = new URL(request.url());
     return (
       pathname.includes("/preview/") &&
-      searchParams.get("filters") ===
-        JSON.stringify({ [column]: "no-such-value" })
+      searchParams.get("search") === "no-such-value"
     );
   });
   await preview
-    .getByLabel("Filter rows…", { exact: true })
+    .getByLabel("Search all columns…", { exact: true })
     .fill("no-such-value");
-  await filtered;
+  await searched;
   await expect(preview.locator(".empty-small")).toBeVisible();
   await preview.getByTitle("Clear", { exact: true }).click();
   await expect(preview.locator(".empty-small")).toHaveCount(0);
   await first.click();
   await expect(first).toHaveText(`${column} ↑`);
+  await expect(preview.locator(".sample-chip")).toHaveText(`${column} ↑`);
 });

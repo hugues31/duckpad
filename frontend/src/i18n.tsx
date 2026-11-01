@@ -33,6 +33,16 @@ export function useT() {
 }
 export type Translate = ReturnType<typeof useT>;
 
+/** A `{count}` message in the singular for one item, in the plural otherwise. */
+export function countLabel(
+  t: Translate,
+  value: number,
+  one: TranslationKey,
+  many: TranslationKey,
+) {
+  return t(value === 1 ? one : many).replace("{count}", value.toLocaleString());
+}
+
 /**
  * Translate a value known only at runtime, such as a status reported by the
  * server; values without a translation are shown as is.

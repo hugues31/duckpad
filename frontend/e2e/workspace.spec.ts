@@ -489,7 +489,7 @@ test("glass panels overlay the full canvas and fitting keeps nodes reachable", a
   }
 
   await page
-    .getByRole("button", { name: "Toggle data preview", exact: true })
+    .getByRole("button", { name: "Toggle results", exact: true })
     .click();
   await expect(page.locator(".preview-panel")).toBeHidden();
   await page
@@ -514,7 +514,7 @@ test("glass panels overlay the full canvas and fitting keeps nodes reachable", a
     .fill("Filter");
   await expect(page.locator(".palette-item")).toHaveCount(1);
   await page
-    .getByRole("button", { name: "Toggle data preview", exact: true })
+    .getByRole("button", { name: "Toggle results", exact: true })
     .click();
   await expect(page.locator(".preview-panel")).toBeVisible();
   await page
@@ -568,9 +568,7 @@ test("floating panels remain usable on tablet and phone with higher contrast", a
     page.locator(".inspector").getByLabel("Display name", { exact: true }),
   ).toBeVisible();
   await page.locator(".inspector").getByTitle("Close", { exact: true }).click();
-  await page
-    .getByRole("button", { name: "Hide data preview", exact: true })
-    .click();
+  await page.getByRole("button", { name: "Hide results", exact: true }).click();
   await page.getByRole("button", { name: "Fit view", exact: true }).click();
   await page.screenshot({ path: "test-results/glass-workspace-mobile.png" });
   expect(await page.locator(".canvas").boundingBox()).toEqual(
@@ -620,14 +618,14 @@ test("panning, zooming and moving nodes survive release and backend polling", as
   await expect(viewport).not.toHaveAttribute("style", dragged!);
   const zoomed = await viewport.getAttribute("style");
   await page
-    .getByRole("button", { name: "Toggle data preview", exact: true })
+    .getByRole("button", { name: "Toggle results", exact: true })
     .click();
   await page.waitForResponse(
     (response) => response.url().includes("/status?") && response.ok(),
   );
   await expect(viewport).toHaveAttribute("style", zoomed!);
   await page
-    .getByRole("button", { name: "Toggle data preview", exact: true })
+    .getByRole("button", { name: "Toggle results", exact: true })
     .click();
   await expect(viewport).toHaveAttribute("style", zoomed!);
 

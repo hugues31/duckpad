@@ -71,6 +71,39 @@
   color: var(--accent);
   background: var(--accent-soft);
 }
+/* One line on what the node produced; each part opens the results panel. */
+.result-summary {
+  margin: -4px 17px 15px;
+  padding: 8px 10px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 9px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 11px;
+}
+.result-summary .badge {
+  gap: 4px;
+}
+.result-summary .warning-badge {
+  padding: 2px 6px;
+}
+.summary-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 0;
+  font-size: 11px;
+}
+.summary-link:hover {
+  text-decoration: underline;
+}
+.result-summary .results-link {
+  margin-left: auto;
+  color: var(--accent);
+  font-weight: 600;
+}
 /*
  * Grid tracks share missing width from the longest labels first: in a narrow
  * panel they shorten, never below three characters, and short ones stay whole.
@@ -184,13 +217,8 @@
 .documentation-editor {
   width: 100%;
   min-height: 250px;
-  margin-top: 15px;
   font-size: 12px;
   line-height: 1.8;
-}
-.inspector-body > select {
-  width: 100%;
-  margin-bottom: 10px;
 }
 .node-info > section:first-child > h4 {
   margin-top: 0;

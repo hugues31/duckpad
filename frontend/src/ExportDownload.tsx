@@ -1,5 +1,4 @@
 import { Download } from "lucide-react";
-import { useRef } from "react";
 import { api, apiUrl, withQuery } from "./api";
 import { useT } from "./i18n";
 import { useApiResource } from "./useApiResource";
@@ -28,6 +27,30 @@ const REASONS = {
   unsupported: "exportUnsupported",
 } as const;
 
+/**
+ * Start a download in a hidden frame kept outside React: the results Log
+ * remounts this component when a run lands or the user switches tabs, and
+ * removing the frame would cancel a download in progress.
+ */
+function startDownload(url: string, onError: (body: string) => void) {
+  let frame = document.querySelector<HTMLIFrameElement>(
+    "iframe.export-download-frame",
+  );
+  if (!frame) {
+    frame = document.createElement("iframe");
+    frame.className = "export-download-frame";
+    frame.hidden = true;
+    document.body.append(frame);
+  }
+  const current = frame;
+  // A file removed after the preflight returns JSON in this hidden frame.
+  current.onload = () => {
+    const body = current.contentDocument?.body.textContent;
+    if (body) onError(body);
+  };
+  current.src = url;
+}
+
 export default function ExportDownload({
   worktree,
   environment,
@@ -38,7 +61,6 @@ export default function ExportDownload({
   node: string;
 }) {
   const t = useT();
-  const frame = useRef<HTMLIFrameElement>(null);
   const endpoint = `/worktrees/${encodeURIComponent(worktree)}/exports/${encodeURIComponent(node)}`;
   const {
     data: result,
@@ -67,13 +89,23 @@ export default function ExportDownload({
             if (current.run !== result?.run)
               throw new Error(t("exportChanged"));
             // Let the browser stream the attachment to disk, without buffering it in a Blob.
-            if (frame.current)
-              frame.current.src = apiUrl(
+            startDownload(
+              apiUrl(
                 withQuery(endpoint + "/download", {
                   environment,
                   run: current.run,
                 }),
-              );
+              ),
+              (body) => {
+                try {
+                  download.setError(
+                    JSON.parse(body).error || t("exportMissing"),
+                  );
+                } catch {
+                  download.setError(t("exportMissing"));
+                }
+              },
+            );
           })
         }
       >
@@ -87,7 +119,7 @@ export default function ExportDownload({
           <>
             {result.filename}
             <br />
-            {environment} · {new Date(result.started!).toLocaleString()}
+            {new Date(result.started!).toLocaleString()}
             <br />
             {t("exportExecution")} {result.run}
           </>
@@ -100,22 +132,6 @@ export default function ExportDownload({
           {error}
         </p>
       )}
-      <iframe
-        ref={frame}
-        hidden
-        title={t("downloadExportedData")}
-        onLoad={() => {
-          // A file removed after the preflight returns JSON in this hidden frame.
-          const body = frame.current?.contentDocument?.body.textContent;
-          if (body) {
-            try {
-              download.setError(JSON.parse(body).error || t("exportMissing"));
-            } catch {
-              download.setError(t("exportMissing"));
-            }
-          }
-        }}
-      />
     </section>
   );
 }
