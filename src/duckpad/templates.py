@@ -499,7 +499,9 @@ def render_parameter(
             return literal(under_root(root, path) if relative else path)
         if relative and URI.match(root):
             path = under_root(root, path)
-        return literal(authorize_path(template, path, root or str(project_files[kind]), kind, connections, reference))
+        return literal(
+            authorize_path(template, path, root or str(project_files[kind]), kind, connections, reference)
+        )
     if kind in ("column", "identifier"):
         return ".".join(qi(part) for part in str(value).split("."))
     if kind == "schema":
