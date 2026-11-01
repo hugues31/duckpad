@@ -50,9 +50,9 @@ def resource_config(resources: Record) -> Record:
 def automatic_resources() -> Record:
     """DuckDB's own sizing on this server, which sessions use without explicit resources."""
     with duckdb.connect() as db:
-        threads, memory_limit = db.execute(
-            "SELECT current_setting('threads'), current_setting('memory_limit')"
-        ).fetchone()
+        row = db.execute("SELECT current_setting('threads'), current_setting('memory_limit')").fetchone()
+    assert row is not None
+    threads, memory_limit = row
     return {"threads": threads, "memory_limit": memory_limit}
 
 

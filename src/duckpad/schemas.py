@@ -16,7 +16,9 @@ from pydantic import (
 
 # DuckDB memory sizes: decimal or binary units, or a share of the server's memory.
 MEMORY_LIMIT = re.compile(r"(\d+(?:\.\d+)?)\s*([KMGT]i?B|%)", re.IGNORECASE)
-MEMORY_UNITS = {unit.lower(): unit for unit in ("KB", "MB", "GB", "TB", "KiB", "MiB", "GiB", "TiB", "%")}
+MEMORY_UNITS: dict[str, str] = {
+    unit.lower(): unit for unit in ("KB", "MB", "GB", "TB", "KiB", "MiB", "GiB", "TiB", "%")
+}
 
 
 class Login(BaseModel):
