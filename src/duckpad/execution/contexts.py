@@ -230,7 +230,10 @@ class ContextPool:
             # Check native loading in a child first, even in trusted-local mode.
             if requirements:
                 project_extensions.check(config, requirements, imports)
-            db = duckdb.connect(":memory:", config={**config, **resource_config(resources)})
+            db = duckdb.connect(
+                ":memory:",
+                config={**config, **project_extensions.EXPLICIT_LOADING, **resource_config(resources)},
+            )
             try:
                 project_extensions.load(db, requirements, imports, config["allow_unsigned_extensions"])
                 return db

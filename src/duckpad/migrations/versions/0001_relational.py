@@ -298,18 +298,6 @@ def upgrade():
                 },
             },
             {
-                "id": "xlsx",
-                "name": "Excel (XLSX)",
-                "definition": {
-                    "description": "Read worksheets and export XLSX workbooks on this computer.",
-                    "parameters": [{"name": "root", "type": "text", "default": ""}],
-                    "extensions": [{"name": "excel"}],
-                    "init_sql": "",
-                    "capabilities": ["read", "write"],
-                    "compatibility": "Requires the matching DuckDB excel extension. Validated with DuckDB 2.0.0 on Linux x86_64, including isolated execution. Legacy .xls files are not supported.",
-                },
-            },
-            {
                 "id": "s3",
                 "name": "Amazon S3",
                 "definition": {

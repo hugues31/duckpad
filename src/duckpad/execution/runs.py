@@ -548,7 +548,7 @@ class Runner:
         except Exception as error:
             self._drop_staged(context, created_tables)
             types = {base_type(p["type"]) for p in node["parsed"]["parameters"]}
-            message = redact(str(error), secrets) + failure_hint(types)
+            message = project_extensions.explain_missing(redact(str(error), secrets)) + failure_hint(types)
             state.update(status="canceled" if execution.canceled else "failed", error=message)
             with context.lock:
                 context.errors[key] = message

@@ -1,6 +1,6 @@
 # Connections, file storage and extensions (design proposal)
 
-**Status: accepted on 1 November 2026 (see [Decisions](#decisions)). Step 1, project files without a connection, is implemented; each remaining delivery step has its own ticket.**
+**Status: accepted on 1 November 2026 (see [Decisions](#decisions)). Steps 1 and 2, project files without a connection and the removal of the Excel connector, are implemented; each remaining delivery step has its own ticket.**
 
 ## Summary
 
@@ -135,10 +135,6 @@ An instance or project created before a step may need to be recreated.
 3. **Server folder, families and customizable built-ins.** Replace Local files with Server folder, describe S3 without naming formats, make `family` mandatory and group the page by it, custom types included. Offer every storage connection as a location, with URI roots. Ship built-ins with the release, store administrator edits as overrides, and add Reset to built-in and Duplicate.
 4. **The database family, validated with Postgres.** Ship Postgres as a plain JSON definition with Additional options, add generic Load table and Export table templates and Test connection, and provide a `postgres` build that runs on the server's processor. Acceptance includes an administrator-declared connector, such as the attached DuckDB file example, working through the same templates without code changes. Snowflake or BigQuery follow the same path.
 
-## Open questions
-
-- On runtimes that do not link `excel` statically, should built-in templates declare the extensions they need, or should the **Extensions** tab remain the only mechanism?
-
 ## Decisions
 
 Decided on 1 November 2026:
@@ -148,6 +144,7 @@ Decided on 1 November 2026:
 3. **Connector types are edited as JSON**, with published examples; no form-based editor.
 4. **No earlier version to support.** Breaking changes are allowed; see [Compatibility](#compatibility).
 5. **Project files resolve relative source paths under the project's resources**, where uploads land, and relative destinations under the environment's exports directory.
+6. **The Extensions tab is the only way a project loads a format's extension.** Built-in templates do not declare extensions, and execution sessions never load or download an extension on demand, in embedded or isolated mode. On a runtime that does not link `excel` statically, a project enables it in its **Extensions** tab, guided by the node error that names it. A template declaration would only save that checkbox: an administrator still installs the binary on such runtimes, and the project's requirements would no longer all be listed in `extensions.json`. Duckpad's container image links `excel`, so its deployments need neither; a `pip install` uses DuckDB's PyPI wheel, which does not, so its administrator imports `excel` once.
 
 ## Sources
 
