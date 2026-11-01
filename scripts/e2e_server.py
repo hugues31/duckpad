@@ -7,6 +7,7 @@ import sys
 import tempfile
 from pathlib import Path
 
+import duckdb
 import uvicorn
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ed25519
@@ -27,6 +28,12 @@ port = int(os.environ.get("DUCKPAD_E2E_PORT", "8766"))
 
 with tempfile.TemporaryDirectory(prefix="duckpad-e2e-") as directory:
     app = create_app(Path(directory))
+    # Duckpad's runtime links excel. With other DuckDB builds, such as the PyPI wheel, browser
+    # XLSX tests enable it in their project, from a binary installed as an administrator would.
+    with duckdb.connect(config={"extension_directory": str(app.state.services.store.paths.extensions)}) as db:
+        query = "SELECT install_mode = 'STATICALLY_LINKED' FROM duckdb_extensions() WHERE extension_name = 'excel'"
+        if not db.execute(query).fetchone()[0]:
+            db.execute("INSTALL excel")
     app.state.assistant.configuration.model_override = test_model()
     provider = Provider(f"http://127.0.0.1:{port}/test-oidc")
     app.router.routes.insert(0, Mount("/test-oidc", app=provider.application()))

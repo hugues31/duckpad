@@ -81,8 +81,9 @@ relative paths against its root instead. File readers use
 one declared file parameter (or a list) as their only positional argument, with
 named options such as `header = true` or `delim = ';'` afterward.
 
-For Parquet use `read_parquet({{ path }})`. XLSX, S3 and Oracle have additional
-connection or extension requirements; follow [Connections](CONNECTORS.md).
+For Parquet use `read_parquet({{ path }})`. A format provided by an extension,
+such as XLSX, may need that extension enabled in the project's **Extensions** tab;
+S3 and Oracle need a connection. Follow [Connections](CONNECTORS.md#file-formats-and-extensions).
 Ordinary transformations cannot bypass this contract with undeclared file reads.
 
 ## Write an export

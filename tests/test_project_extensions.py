@@ -94,6 +94,60 @@ def test_missing_requirement_blocks_execution_without_installing(tmp_path, isola
         instance.close()
 
 
+@pytest.mark.parametrize("isolated", [False, True])
+def test_a_format_without_its_extension_names_the_extension_to_enable(tmp_path, isolated):
+    # Avro is a core extension that no supported DuckDB build links statically.
+    instance = Services.open(tmp_path / "instance", enforce_access=isolated)
+    try:
+        definitions = bundle()
+        definitions["templates"].update(
+            load_avro=(
+                "-- @kind source\n-- @output result\n"
+                '-- @param connection: connection = ""\n'
+                '-- @param file: file(connection) = "events.avro"\n'
+                "SELECT * FROM read_avro({{ file }});"
+            ),
+            export_avro=(
+                "-- @kind export\n-- @input source\n"
+                '-- @param connection: connection = ""\n'
+                '-- @param destination: destination(connection) = "events.avro"\n'
+                "COPY (SELECT * FROM {{ source }}) TO {{ destination }} (FORMAT AVRO);"
+            ),
+        )
+        definitions["flow"]["nodes"] += [
+            {"id": "events", "template": "load_avro", "params": {}},
+            {"id": "export", "template": "export_avro", "params": {}},
+        ]
+        definitions["flow"]["edges"] = [
+            {
+                "id": "e",
+                "source": "source",
+                "sourceHandle": "result",
+                "target": "export",
+                "targetHandle": "source",
+            }
+        ]
+        worktree = instance.projects.create("Avro", definitions)
+        if isolated:
+            instance.engine.access.grant_connections(worktree["project"], [])
+        run = wait_run(instance.store, instance.engine.launch(worktree["id"], "dev"))
+        assert run["nodes"]["source"]["status"] == "success", run
+        for node, capability in (
+            ("events", 'Table Function with name "read_avro"'),
+            ("export", 'Copy Function with name "AVRO"'),
+        ):
+            error = run["nodes"][node]["error"]
+            assert error == (
+                f"Catalog Error: {capability} is not in the catalog, but it exists in the avro extension.\n"
+                "Enable the avro extension in the project's Extensions tab; "
+                "an instance administrator may need to import it first."
+            ), error
+        # Neither execution mode downloads or loads the extension on demand.
+        assert not list(instance.store.paths.extensions.rglob("avro*"))
+    finally:
+        instance.close()
+
+
 def test_requirements_roundtrip_merge_and_invalid_files_remain_reviewable():
     requirements = {"duckfn_statrs": {"source": "community", "enabled": True}}
     original = bundle(requirements)

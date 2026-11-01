@@ -130,7 +130,8 @@ export const sections = [
       {
         slug: "connectors",
         title: "Connections",
-        description: "Read and export local files, Excel, S3 and Oracle data.",
+        description:
+          "Read and export project files, server folders, S3 and Oracle data.",
       },
       {
         slug: "environments",

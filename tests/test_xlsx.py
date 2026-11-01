@@ -13,7 +13,6 @@ from duckpad.app import create_app
 from duckpad.auth import Auth
 from duckpad.builtin_templates import BUILTINS
 from duckpad.bundle import bundle_to_files
-from duckpad.catalog import Catalog
 from duckpad.services import Services
 from duckpad.store import Store
 from duckpad.templates import compile_template, parse_template
@@ -29,12 +28,13 @@ def xlsx_services(tmp_path, excel_cache, request):
 
 
 def connect(catalog, roots):
+    """A server folder holding workbooks, with a root per environment."""
     catalog.save(
         "connection",
         {
-            "id": "xlsx",
+            "id": "workbooks",
             "name": "Workbooks",
-            "connector": "xlsx",
+            "connector": "local",
             "environments": {env: {"root": str(root)} for env, root in roots.items()},
         },
         create=True,
@@ -77,19 +77,11 @@ def replace_source(instance, worktree, **params):
     instance.projects.write(worktree, snapshot["revision"], bundle_to_files(bundle))
 
 
-def test_fresh_catalog_includes_xlsx_and_preserves_customizations_on_restart(tmp_path):
+def test_fresh_catalog_offers_no_excel_connector(tmp_path):
+    # XLSX is a format: workbooks use project files or a file storage connection.
     store = Store(tmp_path)
     try:
-        catalog = Catalog(store)
-        seeded = store.get("connector", "xlsx")
-        assert seeded["name"] == "Excel (XLSX)" and seeded["extensions"] == [{"name": "excel"}]
-        definition = {**seeded, "name": "Custom spreadsheets"}
-        catalog.save("connector", definition)
-        Catalog(store)
-        assert store.get("connector", "xlsx") == definition
-        store.delete("connector", "xlsx")
-        Catalog(store)
-        assert store.get("connector", "xlsx") is None
+        assert {connector["id"] for connector in store.all("connector")} == {"local", "s3", "oracle"}
     finally:
         store.close()
 
@@ -101,7 +93,7 @@ def test_xlsx_import_transform_lineage_export_replacement_and_environments(xlsx_
     prod.mkdir()
     workbook(dev / "workbook.xlsx")
     connect(instance.catalog, {"dev": dev, "prod": prod})
-    bundle = source_bundle({"connection": "xlsx", "sheet": "Orders"})
+    bundle = source_bundle({"connection": "workbooks", "sheet": "Orders"})
     bundle["templates"]["totals"] = (
         "-- @input source\n-- @output result\n"
         "SELECT region, SUM(amount) AS amount FROM {{ source }} GROUP BY region ORDER BY region;"
@@ -111,14 +103,14 @@ def test_xlsx_import_transform_lineage_export_replacement_and_environments(xlsx_
         {
             "id": "export",
             "template": "export_xlsx",
-            "params": {"connection": "xlsx", "sheet": "Regional totals"},
+            "params": {"connection": "workbooks", "sheet": "Regional totals"},
         },
     ]
     bundle["flow"]["edges"] = [
         {"id": str(i), "source": source, "sourceHandle": "result", "target": target, "targetHandle": "source"}
         for i, (source, target) in enumerate((("source", "totals"), ("totals", "export")))
     ]
-    worktree = project(instance, bundle, ["xlsx"])
+    worktree = project(instance, bundle, ["workbooks"])
     for _ in range(2):
         run = wait_run(instance.store, instance.engine.launch(worktree, "dev"), timeout=30)
         assert run["status"] == "success", run
@@ -220,22 +212,22 @@ def test_xlsx_api_upload_needs_no_connection_and_blocks_outside_files(tmp_path, 
         failed = wait_run(instance.store, instance.engine.launch(identity, "dev"), timeout=30)
         assert failed["status"] == "failed", failed
         assert "Permission Error: Cannot access file" in failed["nodes"]["source"]["error"]
-        readonly = copy.deepcopy(instance.store.get("connector", "xlsx"))
-        readonly.update(id="readonly_xlsx", capabilities=["read"])
+        readonly = copy.deepcopy(instance.store.get("connector", "local"))
+        readonly.update(id="readonly_folder", capabilities=["read"])
         instance.catalog.save("connector", readonly)
         connection = {
-            "id": "xlsx",
+            "id": "workbooks",
             "name": "Workbooks",
-            "connector": "readonly_xlsx",
+            "connector": "readonly_folder",
             "environments": {"dev": {}},
         }
         instance.catalog.save("connection", connection, create=True)
         with pytest.raises(Problem, match="does not support write"):
             compile_template(
                 parse_template(BUILTINS["export_xlsx"]),
-                {"connection": "xlsx"},
+                {"connection": "workbooks"},
                 {"source": '"data"'},
                 {},
-                instance.catalog.capture(["xlsx"], "dev")[0],
+                instance.catalog.capture(["workbooks"], "dev")[0],
                 instance.store.paths.project_files(worktree["project"], identity, "dev"),
             )

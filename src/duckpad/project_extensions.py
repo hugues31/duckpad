@@ -17,6 +17,12 @@ from .util import Problem, dumps, qi
 
 FILE = "extensions.json"
 NAME = re.compile(r"[a-z][a-z0-9_]{0,63}")
+# Execution sessions load only built-in, project and connector extensions: DuckDB never
+# loads or downloads one on demand, so a project behaves the same in every execution mode.
+EXPLICIT_LOADING = {"autoload_known_extensions": False, "autoinstall_known_extensions": False}
+# DuckDB's error for a function, copy format or type that a known, unloaded extension provides,
+# followed by INSTALL/LOAD advice that does not apply to Duckpad sessions.
+MISSING = re.compile(r"(is not in the catalog, but it exists in the (\w+) extension\.).*", re.DOTALL)
 
 
 def read(text):
@@ -68,6 +74,18 @@ def problems(bundle):
         return []
     except Problem as error:
         return [{"file": FILE, "message": str(error)}]
+
+
+def explain_missing(message):
+    """Name the project extension to enable when a node uses a capability of an unloaded extension."""
+    return MISSING.sub(
+        lambda match: (
+            f"{match[1]}\nEnable the {match[2]} extension in the project's Extensions tab; "
+            "an instance administrator may need to import it first."
+        ),
+        message,
+        count=1,
+    )
 
 
 def installed(db):
@@ -166,14 +184,7 @@ def check(config, requirements, imports):
 if __name__ == "__main__":
     payload = json.load(sys.stdin)
     try:
-        with duckdb.connect(
-            config={
-                **payload["config"],
-                "threads": 1,
-                "autoload_known_extensions": False,
-                "autoinstall_known_extensions": False,
-            }
-        ) as database:
+        with duckdb.connect(config={**payload["config"], "threads": 1, **EXPLICIT_LOADING}) as database:
             load(
                 database,
                 payload["requirements"],

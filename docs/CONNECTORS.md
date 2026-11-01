@@ -28,11 +28,10 @@ results; switching environment never starts a run.
 | Preset | Required operations | Recorded validation |
 | --- | --- | --- |
 | Local files | CSV and Parquet read; CSV export | DuckDB 2.0.0, Python 3.13.12, Linux x86_64; unit/native-equivalence tests, browser example and million-row benchmark |
-| Excel (XLSX) | Read a selected worksheet; export a single-sheet workbook | DuckDB 2.0.0 with matching `excel`, Linux x86_64; embedded and isolated execution, uploads, types, lineage, repeated export and environment separation |
 | S3 | CSV and Parquet read; CSV export | DuckDB 2.0.0 with matching `httpfs`, Linux x86_64; Moto S3 emulator on localhost; repeated native destination replacement |
 | Oracle | Read attached tables; export to an existing table with OraDuck | DuckDB 2.0.0, signed community OraDuck 0.4.0, Oracle 19.3, Oracle Instant Client 19.32, Linux x86_64 |
 
-The table records connector validation of the embedded engine. The isolated HTTP worker additionally requires Linux Landlock; local CSV/Parquet execution, exports and lineage are covered by the account/permission tests. Remote S3/Oracle deployments need validation with their extension and network policy in this execution mode.
+The table records connector validation of the embedded engine. File formats are not connectors; XLSX has its own [validation record](#xlsx-workbooks). The isolated HTTP worker additionally requires Linux Landlock; local CSV/Parquet execution, exports and lineage are covered by the account/permission tests. Remote S3/Oracle deployments need validation with their extension and network policy in this execution mode.
 
 These are the tested combinations, not claims that every newer DuckDB or operating-system build has been validated. A matching extension build is required for the installed DuckDB version. Other platforms and live AWS deployments need validation in their own environment. Raw results are in `docs/validation/`.
 
@@ -52,10 +51,41 @@ CSV exposes header, delimiter and a JSON type-override map; `{}` retains native 
 
 Single-file CSV `COPY` follows DuckDB's native replacement behavior on a second run. Duckpad does not add an overwrite option, rename files, or ask for an existence-based confirmation.
 
-## Excel (XLSX)
+## File formats and extensions
 
-**Load XLSX** and **Export XLSX** read and write local `.xlsx` workbooks with
-DuckDB's `excel` extension. Like CSV and Parquet nodes, they use project files by
+A file format is a node and extension concern, not a connection: every file node
+works with project files and with the file connections granted to the project. CSV, Parquet
+and JSON are built into every DuckDB build Duckpad supports. XLSX needs DuckDB's
+`excel` extension, which Duckpad's runtime links; other formats, such as Avro or
+spatial files, need their extension enabled in the project's **Extensions** tab.
+
+The **Extensions** tab is the only way a project loads a format's extension.
+Built-in templates do not declare the extensions they need, and execution never
+downloads or loads an extension on demand, in embedded or isolated mode. The
+project's `extensions.json` therefore lists every extension it needs beyond the
+runtime's built-in ones, and a project behaves the same on every instance and in
+every execution mode.
+
+A node that uses a format, function or type of an extension that is neither built
+into the runtime nor enabled in the project fails with an error naming the
+extension to enable:
+
+```text
+Catalog Error: Table Function with name "read_xlsx" is not in the catalog, but it exists in the excel extension.
+Enable the excel extension in the project's Extensions tab; an instance administrator may need to import it first.
+```
+
+Add the extension with origin **DuckDB core** in the **Extensions** tab and tick
+**Activate for this project**. If it shows **Import required**, an instance
+administrator imports its binary first; see the
+[extension activation guide](OFFLINE_EXTENSIONS.md#activate-a-project-capability).
+Extensions needed to reach a system, such as `httpfs` for S3 or `oraduck` for
+Oracle, stay declared by its connector and load with the connection.
+
+## XLSX workbooks
+
+**Load XLSX** and **Export XLSX** read and write `.xlsx` workbooks with DuckDB's
+`excel` extension. Like CSV and Parquet nodes, they use project files by
 default: no connection or administrator is needed.
 
 1. In a project, add **Load XLSX**, upload a workbook or enter its path, then
@@ -66,19 +96,17 @@ default: no connection or administrator is needed.
    run the pipeline. `header` controls whether column names are written.
 
 To read or write workbooks in a server folder, select a granted Local files
-connection as the Location. The `xlsx` preset declares the same `root` parameter
-and also loads `excel`; it is added to existing catalogs once, preserving any
-custom definition already named `xlsx`.
+connection as the Location, as for CSV and Parquet.
 
 New projects include both templates. Existing projects retain their versioned
 templates; create equivalent source/export templates through **New SQL template**
 or copy `load_xlsx` and `export_xlsx` from a new project's Code workspace.
-No Python spreadsheet dependency is needed. Duckpad's container image builds
-DuckDB with `excel`. Other DuckDB builds, such as the PyPI wheel, need it enabled
-in the project's **Extensions** tab once an instance administrator has installed
-a compatible binary; for disconnected deployments, follow the
-[offline extension guide](OFFLINE_EXTENSIONS.md). CSV/Parquet-only projects do
-not load it.
+No Python spreadsheet dependency is needed. Duckpad's runtime, including its
+container image, builds DuckDB with `excel`. Other DuckDB builds, such as the
+PyPI wheel, need it enabled in the project's **Extensions** tab (see
+[File formats and extensions](#file-formats-and-extensions)); for disconnected
+deployments, follow the [offline extension guide](OFFLINE_EXTENSIONS.md).
+CSV/Parquet-only projects do not load it.
 
 Imports use native DuckDB inference: numbers generally become `DOUBLE`, while
 formatted dates, times and booleans retain their inferred types. Inconsistent cells
@@ -91,8 +119,12 @@ Exports replace the entire destination workbook on every run, including any
 existing sheets. They create one sheet of values; formatting, formulas and other
 workbook features are not preserved. Excel's numeric representation can lose
 precision for large integers and decimals; cast these to text before exporting
-when exact digits matter. Legacy `.xls`, encrypted workbooks, formula recalculation
-and remote XLSX storage are outside this connector's validated scope.
+when exact digits matter.
+
+Validated with DuckDB 2.0.0 and its matching `excel` on Linux x86_64, in embedded
+and isolated execution: project files and server folders, uploads, types, lineage,
+repeated export and environment separation. Legacy `.xls`, encrypted workbooks,
+formula recalculation and remote XLSX storage are outside the validated scope.
 
 Uploads, local roots, environment-specific destinations and project permissions
 follow the same rules as CSV and Parquet project files. Source lineage identifies the imported

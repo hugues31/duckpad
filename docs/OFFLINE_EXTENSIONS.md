@@ -126,7 +126,9 @@ Removing the entry also disables it. Existing results become stale when enabled
 requirements change, and the next execution recreates the database so disabled
 functions are no longer retained in that session. Other projects are unaffected.
 Built-in DuckDB functions and extensions required by a project's connectors remain
-available independently of this list.
+available independently of this list. Execution never loads or downloads any other
+extension on demand, in embedded or isolated mode: a format, function or type from
+an extension that is not enabled fails with an error naming the extension to enable.
 
 ## Before importing
 

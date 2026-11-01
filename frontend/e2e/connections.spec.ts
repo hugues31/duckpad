@@ -79,6 +79,17 @@ test("switching connectors removes obsolete values across all environments", asy
 }) => {
   await signIn(page);
   const identity = "switch_connector_ui";
+  // A second connector declaring root keeps the values entered for Local files.
+  const local = (
+    await (await page.request.get("/api/catalog")).json()
+  ).connectors.find((c: { id: string }) => c.id === "local");
+  expect(
+    (
+      await page.request.put("/api/catalog/connector", {
+        data: { ...local, id: "archive_ui", name: "Archive UI" },
+      })
+    ).ok(),
+  ).toBeTruthy();
   const created = await page.request.put(
     "/api/catalog/connection?create=true",
     {
@@ -128,7 +139,7 @@ test("switching connectors removes obsolete values across all environments", asy
       await dialog.getByRole("button", { name: env, exact: true }).click();
       await dialog.getByLabel("root", { exact: true }).fill(`data/${env}`);
     }
-    await connector.selectOption("xlsx");
+    await connector.selectOption("archive_ui");
     await expect(dialog.getByLabel("root", { exact: true })).toHaveValue(
       "data/prod",
     );
@@ -146,12 +157,13 @@ test("switching connectors removes obsolete values across all environments", asy
     expect(
       catalog.connections.find((c: { id: string }) => c.id === identity),
     ).toMatchObject({
-      connector: "xlsx",
+      connector: "archive_ui",
       environments: expected,
     });
     await expect(dialog).toHaveCount(0);
   } finally {
     await page.request.delete(`/api/catalog/connection/${identity}`);
+    await page.request.delete("/api/catalog/connector/archive_ui");
   }
 });
 
