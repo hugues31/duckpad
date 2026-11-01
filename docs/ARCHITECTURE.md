@@ -44,7 +44,7 @@ Settings follow the same instance, project and user boundaries as authorization:
 
 | Scope | Entry point | Settings and permissions |
 | --- | --- | --- |
-| Instance | **Instance settings** in the main navigation | User accounts and instance roles (member/admin), OIDC single sign-on, AI assistant providers/models and data policy, trusted Git hosts and origin prefixes, environment names, connections and connector definitions, and DuckDB extension imports and unsigned policy. Only instance administrators can configure these. |
+| Instance | **Instance settings** in the main navigation | User accounts and instance roles (member/admin), OIDC single sign-on, AI assistant providers/models and data policy, trusted Git hosts and origin prefixes, environment names, connections and connector definitions, DuckDB extension imports and unsigned policy, and SQL session threads and memory limits. Only instance administrators can configure these. |
 | Project | **Project settings** in the open project's toolbar | Participants and project roles (reader/operator/editor/admin), authorized connections, and project deletion. Project administrators manage participants; only instance administrators grant access to instance connections. Readers, operators and editors can inspect their project's access without changing it. |
 | Project definition | **Variables** and **Extensions** in the working branch | Versioned values and extension requirements; editors change them and readers inspect them. Extension installation and trust remain instance settings. |
 | User | **Account menu → User settings** | Language, theme, the signed-in account's password and its SSH key for Git. SSO accounts manage their password with the identity provider. |
@@ -245,8 +245,9 @@ disabled, and its configuration is locked before user SQL executes.
 
 This default mode requires Landlock ABI 2+ on Linux x86-64 or arm64, including
 inside containers. A missing or blocked sandbox causes an explicit execution
-error; there is no automatic unrestricted fallback. Workers use two DuckDB
-threads and a 512 MB memory limit.
+error; there is no automatic unrestricted fallback. Workers use the instance's
+[SQL resources](INSTALLATION.md#sql-resources), which default to DuckDB's automatic
+thread count and memory limit.
 Project and connection extensions remain trusted administrator-installed code. Project
 requirements load before configuration is locked, using local binaries from the declared
 origin. They never install on demand. A changed requirement recreates the session at

@@ -146,9 +146,9 @@ def serve(descriptor):
                 "allow_unredacted_secrets": False,
                 "autoload_known_extensions": False,
                 "autoinstall_known_extensions": False,
-                "threads": 2,
-                "memory_limit": "512MB",
                 "temp_directory": policy["temporary"],
+                # Explicit instance resources; DuckDB sizes the others from the server's CPUs and memory.
+                **policy["resources"],
             },
         )
         project_extensions.load(

@@ -92,7 +92,7 @@ test("settings use desktop columns and remain usable on narrow screens in both l
     page
       .getByRole("navigation", { name: fr.instanceSettings, exact: true })
       .getByRole("link"),
-  ).toHaveCount(7);
+  ).toHaveCount(8);
   await noPageOverflow(page);
   await page.getByRole("link", { name: fr.ssoSettings, exact: true }).click();
   await expect(page.getByLabel(fr.ssoEnabled, { exact: true })).toBeVisible();

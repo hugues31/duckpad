@@ -1,8 +1,22 @@
 """Request bodies of the HTTP API."""
 
+import re
 from typing import Any, Literal
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, StrictBool, field_validator, model_validator
+from pydantic import (
+    AwareDatetime,
+    BaseModel,
+    ConfigDict,
+    Field,
+    StrictBool,
+    StrictInt,
+    field_validator,
+    model_validator,
+)
+
+# DuckDB memory sizes: decimal or binary units, or a share of the server's memory.
+MEMORY_LIMIT = re.compile(r"(\d+(?:\.\d+)?)\s*([KMGT]i?B|%)", re.IGNORECASE)
+MEMORY_UNITS = {unit.lower(): unit for unit in ("KB", "MB", "GB", "TB", "KiB", "MiB", "GiB", "TiB", "%")}
 
 
 class Login(BaseModel):
@@ -97,6 +111,28 @@ class ConnectionGrants(BaseModel):
 
 class ExtensionSettings(BaseModel):
     allow_unsigned_extensions: StrictBool
+
+
+class SQLResources(BaseModel):
+    """DuckDB threads and memory limit of each SQL session; None keeps DuckDB's automatic sizing."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    threads: StrictInt | None = Field(default=None, ge=1, le=1024)
+    memory_limit: str | None = Field(default=None, max_length=32)
+
+    @field_validator("memory_limit")
+    @classmethod
+    def normalize_memory_limit(cls, value: str | None) -> str | None:
+        if value is None or not value.strip():
+            return None
+        match = MEMORY_LIMIT.fullmatch(value.strip())
+        if not match:
+            raise ValueError("Enter a memory limit such as 16GB, 512MiB or 50%")
+        amount, unit = match.groups()
+        if float(amount) <= 0 or (unit == "%" and float(amount) > 100):
+            raise ValueError("A memory limit must be positive, and at most 100%")
+        return amount + MEMORY_UNITS[unit.lower()]
 
 
 class ProjectExtension(BaseModel):
