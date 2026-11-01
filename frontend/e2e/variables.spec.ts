@@ -679,6 +679,13 @@ test("a variable named constructor can be created, bound and audited", async ({
   await expect(
     inspector.getByRole("group", { name: "status is bound to constructor" }),
   ).toBeVisible();
+  // The run reads the saved bundle: start it once the binding is saved.
+  await saved(page);
+  expect(
+    (await snapshot(page, url)).bundle!.flow.nodes.find(
+      (n) => n.id === "validated",
+    )!.params.status,
+  ).toEqual({ $var: "constructor" });
   await run(page, url, "dev");
   await inspector.getByRole("button", { name: "SQL", exact: true }).click();
   await expect(inspector.locator(".variable-values")).toContainText(
