@@ -83,8 +83,29 @@ named options such as `header = true` or `delim = ';'` afterward.
 
 For Parquet use `read_parquet({{ path }})`. A format provided by an extension,
 such as XLSX, may need that extension enabled in the project's **Extensions** tab;
-S3 and Oracle need a connection. Follow [Connections](CONNECTORS.md#file-formats-and-extensions).
+S3 and databases need a connection. Follow [Connections](CONNECTORS.md#file-formats-and-extensions).
 Ordinary transformations cannot bypass this contract with undeclared file reads.
+
+## Read a database table
+
+Use a **Load table** palette node. Its definition reads a table through the
+attachment of a granted database connection:
+
+```sql
+-- @label Load table
+-- @kind source
+-- @param connection: connection = ""
+-- @param schema: schema_name(connection) = "public"
+-- @param table: table_name(schema) = ""
+-- @output result
+SELECT * FROM {{ connection }}.{{ schema }}.{{ table }};
+```
+
+The `schema_name` and `table_name` types let the inspector suggest the schemas
+and tables of the selected environment. Sources read tables only through a
+declared connection. **Export table** writes with an explicit
+`INSERT INTO {{ connection }}.{{ schema }}.{{ table }} BY NAME`; see
+[Database tables](CONNECTORS.md#database-tables).
 
 ## Write an export
 
@@ -126,6 +147,7 @@ items: `New York, Paris` becomes `["New York", "Paris"]`.
 | `connection` | Logical instance connection ID; resolves to a collision-free runtime alias. Empty (`""`) selects project files for the parameters that reference it; the inspector labels it **Location** |
 | `secret(connection)` | Runtime secret name, for extension options; never a password |
 | `identifier`, `column(source)` | Quoted identifiers; input column suggestions use resolved schemas |
+| `schema_name(connection)`, `table_name(schema)` | One quoted schema or table name of a database connection; the inspector suggests those of the selected environment. `table_name` names the `schema_name` parameter whose schema lists its tables |
 | `expression(source)` | Parsed scalar SQL expression; queries and side effects are rejected |
 | `expressions` | Comma-separated or array expression list, for projections and aggregates |
 | `list<text>`, `list<number>`, `list<boolean>`, `list<column>` | A typed list emitted as literals or identifiers |

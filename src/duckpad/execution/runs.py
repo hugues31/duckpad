@@ -11,7 +11,7 @@ from typing import Any, cast
 
 import duckdb
 
-from .. import project_extensions, value_sources, variables
+from .. import connection_probe, project_extensions, value_sources, variables
 from ..bundle import files_to_bundle, topological
 from ..catalog import Catalog, redact
 from ..components import expand, expand_for, in_subtree
@@ -587,7 +587,15 @@ class Runner:
             if reference not in execution.prepared:
                 try:
                     if not self.isolated:
-                        self.catalog.prepare(execution.cursor, {reference: execution.captured[reference]})
+                        captured = {reference: execution.captured[reference]}
+                        # An extension that stops its process must not stop the server.
+                        connection_probe.check_extensions(
+                            self.pool.probe_config(),
+                            captured,
+                            self.store.get("settings", "offline_extensions", {}),
+                            execution.secrets,
+                        )
+                        self.catalog.prepare(execution.cursor, captured)
                     execution.prepared[reference] = None
                 except Exception as error:
                     execution.prepared[reference] = error

@@ -10,7 +10,7 @@ from typing import BinaryIO
 
 import duckdb
 
-from . import project_extensions
+from . import connection_probe, project_extensions
 from .access import Access
 from .catalog import Catalog
 from .datasets import Context
@@ -217,6 +217,33 @@ class Engine:
             "requirements": entries,
             "core_extensions": core_catalog(),
         }
+
+    def test_connection(self, data: Record, environment: str) -> Record:
+        """Run a connection's setup for one environment, as edited and saved or not, in a child process."""
+        captured, secrets = self.catalog.capture_draft(data, environment)
+        imports = self.store.get("settings", "offline_extensions", {})
+        return connection_probe.run(self.pool.probe_config(), captured, imports, secrets)
+
+    def connection_objects(self, worktree: str, reference: str, environment: str) -> Record:
+        """The schemas and tables of a database connection granted to the worktree's project."""
+        captured, secrets = self.pool.capture(worktree, [reference], environment)
+        connection = captured[reference]
+        if connection["definition"].get("family") != "database":
+            raise Problem(f"Connection {reference} is not a database", 422)
+        # A session that already attached the connection lists it: a second attachment of a
+        # database file would wait for its lock.
+        context = self.pool.find(worktree, environment)
+        if context is not None and context.db is not None and not getattr(context.db, "closed", False):
+            cursor = context.db.cursor()
+            try:
+                if connection_probe.attached(cursor, connection["alias"]):
+                    return connection_probe.objects(cursor, connection["alias"])
+            except (duckdb.Error, Problem):
+                pass
+            finally:
+                cursor.close()
+        imports = self.store.get("settings", "offline_extensions", {})
+        return connection_probe.run(self.pool.probe_config(), captured, imports, secrets)
 
     def check_project_extension(self, worktree: str, name: str, source: str) -> Record:
         self.projects.get(worktree)

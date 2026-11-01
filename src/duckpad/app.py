@@ -400,6 +400,10 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
             catalog.delete(kind, identity, before_change=engine.reset_catalog)
         return catalog.public()
 
+    @app.post("/api/catalog/connection/test", response_model=None)
+    def test_connection(data: schemas.ConnectionTest) -> Record:
+        return engine.test_connection(data.connection, data.environment)
+
     @app.post("/api/catalog/connector/{identity}/reset", response_model=None)
     def reset_connector(identity: str) -> Record:
         with engine.exclusive():
@@ -652,6 +656,10 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
             else None
         )
         return result
+
+    @app.get("/api/worktrees/{worktree}/connections/{connection}/objects", response_model=None)
+    def connection_objects(worktree: str, connection: str, environment: str) -> Record:
+        return engine.connection_objects(worktree, connection, environment)
 
     @app.get("/api/worktrees/{worktree}/extensions", response_model=None)
     def project_extensions(worktree: str) -> Record:

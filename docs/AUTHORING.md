@@ -106,6 +106,14 @@ Write queries that return failing rows with [`-- @test`](TESTS.md).
 See the [parameter type reference](SQL.md#parameter-values) and
 [project variables](VARIABLES.md) for shared values.
 
+### Database tables
+
+**Load table** and **Export table** read and write the tables of any database
+connection granted to the project, with schema and table suggestions in the
+inspector. Custom templates get the same fields with the `schema_name(connection)`
+and `table_name(schema)` parameter types; see
+[database tables](CONNECTORS.md#database-tables).
+
 ## Node results
 
 Explore data, samples, saved views, column statistics, test outcomes and execution

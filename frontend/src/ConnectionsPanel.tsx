@@ -6,6 +6,7 @@ import {
   Database,
   FolderOpen,
   KeyRound,
+  PlugZap,
   Plus,
   RotateCcw,
   Settings2,
@@ -15,6 +16,7 @@ import { useT } from "./i18n";
 import { ConfirmModal, Modal } from "./modals";
 import type {
   Connection,
+  ConnectionTest,
   Connector,
   ConnectorEditor,
   ConnectorFamily,
@@ -63,10 +65,33 @@ export default function ConnectionsPanel({
     ? chosenEnvironment
     : catalog.environments[0];
   const { pending: saving, error, setError, run } = useAsyncAction();
+  const testing = useAsyncAction();
+  // The last test's outcome, for the environment and values it ran with.
+  const [tested, setTested] = useState<{
+    environment: string;
+    result: ConnectionTest;
+  } | null>(null);
   const connectorOf = (id?: string) =>
     catalog.connectors.find((c) => c.id === id);
   const definition = connectorOf(selected?.connector);
+  const label = (id: string) =>
+    catalog.environment_details.find((e) => e.id === id)?.label ?? id;
+  const resetTest = () => {
+    setTested(null);
+    testing.setError("");
+  };
+  const testConnection = () => {
+    resetTest();
+    void testing.run(async () => {
+      const result = await api<ConnectionTest>(
+        "/catalog/connection/test",
+        send({ connection: selectedRef.current, environment: env }),
+      );
+      setTested({ environment: env, result });
+    });
+  };
   const changeValue = (name: string, value: Json | undefined) => {
+    resetTest();
     const old = selectedRef.current!;
     const values = { ...old.environments?.[env] };
     if (value === undefined) delete values[name];
@@ -91,6 +116,7 @@ export default function ConnectionsPanel({
           onClick={() => {
             setCreating(true);
             setError("");
+            resetTest();
             setSelected({
               id: "",
               name: "",
@@ -126,6 +152,7 @@ export default function ConnectionsPanel({
                       setCreating(false);
                       setSelected(structuredClone(connection));
                       setError("");
+                      resetTest();
                     }}
                   >
                     <span className="connection-logo">
@@ -384,6 +411,7 @@ export default function ConnectionsPanel({
                   disabled={saving}
                   value={selected.connector}
                   onChange={(e) => {
+                    resetTest();
                     const connector = e.target.value;
                     const parameters = new Set(
                       catalog.connectors
@@ -428,61 +456,120 @@ export default function ConnectionsPanel({
                     key={e.id}
                     className={e.id === env ? "active" : ""}
                     aria-pressed={e.id === env}
-                    onClick={() => setEnv(e.id)}
+                    onClick={() => {
+                      setEnv(e.id);
+                      resetTest();
+                    }}
                   >
                     <span className="env-dot" style={{ background: e.color }} />
                     {e.label}
                   </button>
                 ))}
               </div>
-              {definition?.parameters?.map((p) => (
-                <label
-                  className="field"
-                  key={`${selected.connector}:${env}:${p.name}`}
-                >
-                  <span>
-                    {p.secret && <KeyRound size={12} />} {p.name}
-                  </span>
-                  {p.type === "boolean" ? (
-                    <Select
-                      disabled={saving}
-                      value={String(
-                        selected.environments?.[env]?.[p.name] ??
-                          p.default ??
-                          false,
-                      )}
-                      onChange={(e) =>
-                        changeValue(p.name, e.target.value === "true")
-                      }
-                    >
-                      <option value="true">true</option>
-                      <option value="false">false</option>
-                    </Select>
-                  ) : p.type === "number" ? (
-                    <ParameterInput
-                      kind="number"
-                      disabled={saving}
-                      secret={p.secret}
-                      value={
-                        selected.environments?.[env]?.[p.name] ?? p.default
-                      }
-                      onChange={(value) => changeValue(p.name, value)}
-                    />
-                  ) : (
-                    <input
-                      disabled={saving}
-                      type={p.secret ? "password" : "text"}
-                      value={String(
-                        selected.environments?.[env]?.[p.name] ??
-                          p.default ??
-                          "",
-                      )}
-                      onChange={(e) => changeValue(p.name, e.target.value)}
-                    />
-                  )}
-                </label>
-              ))}
+              {definition?.parameters?.map((p) => {
+                const name = p.label || p.name;
+                // The description stays out of the accessible name.
+                const hint = p.description
+                  ? `connection-parameter-${p.name}-hint`
+                  : undefined;
+                return (
+                  <label
+                    className="field"
+                    key={`${selected.connector}:${env}:${p.name}`}
+                  >
+                    <span>
+                      {p.secret && <KeyRound size={12} />} {name}
+                    </span>
+                    {p.type === "boolean" ? (
+                      <Select
+                        aria-label={name}
+                        aria-describedby={hint}
+                        disabled={saving}
+                        value={String(
+                          selected.environments?.[env]?.[p.name] ??
+                            p.default ??
+                            false,
+                        )}
+                        onChange={(e) =>
+                          changeValue(p.name, e.target.value === "true")
+                        }
+                      >
+                        <option value="true">true</option>
+                        <option value="false">false</option>
+                      </Select>
+                    ) : p.type === "number" ? (
+                      <ParameterInput
+                        kind="number"
+                        label={name}
+                        disabled={saving}
+                        secret={p.secret}
+                        value={
+                          selected.environments?.[env]?.[p.name] ?? p.default
+                        }
+                        onChange={(value) => changeValue(p.name, value)}
+                      />
+                    ) : (
+                      <input
+                        aria-label={name}
+                        aria-describedby={hint}
+                        disabled={saving}
+                        type={p.secret ? "password" : "text"}
+                        value={String(
+                          selected.environments?.[env]?.[p.name] ??
+                            p.default ??
+                            "",
+                        )}
+                        onChange={(e) => changeValue(p.name, e.target.value)}
+                      />
+                    )}
+                    {hint && (
+                      <small className="muted" id={hint}>
+                        {p.description}
+                      </small>
+                    )}
+                  </label>
+                );
+              })}
               <p className="muted small">{t("secretHint")}</p>
+              <div className="connection-test">
+                <button
+                  type="button"
+                  className="button secondary small"
+                  disabled={saving || testing.pending}
+                  onClick={testConnection}
+                >
+                  <PlugZap size={14} />
+                  {t(testing.pending ? "testingConnection" : "testConnection")}
+                </button>
+                <small className="muted">{t("connectionTestHint")}</small>
+              </div>
+              {tested?.environment === env && (
+                <div className="notice success" role="status">
+                  {tested.result.schemas
+                    ? t("connectionTestPassed")
+                        .replace("{environment}", label(env))
+                        .replace(
+                          "{schemas}",
+                          String(tested.result.schemas.length),
+                        )
+                        .replace(
+                          "{tables}",
+                          String(tested.result.tables?.length ?? 0),
+                        )
+                    : t("connectionTestReady").replace(
+                        "{environment}",
+                        label(env),
+                      )}
+                </div>
+              )}
+              {testing.error && (
+                <div
+                  className="notice error connection-test-error"
+                  role="alert"
+                >
+                  {testing.error}
+                </div>
+              )}
               {error && (
                 <div className="notice error" role="alert">
                   {error}

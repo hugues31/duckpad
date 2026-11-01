@@ -223,6 +223,11 @@ class ContextPool:
     def extension_settings(self) -> dict[str, bool]:
         return {"allow_unsigned_extensions": self.store.get("settings", "allow_unsigned_extensions", False)}
 
+    def probe_config(self) -> Record:
+        """DuckDB settings of connection setup in a child process, outside an execution session."""
+        self.store.paths.extensions.mkdir(exist_ok=True)
+        return {**database_config(self.store.paths.extensions), **self.extension_settings()}
+
     def sql_resources(self) -> Record:
         """DuckDB threads and memory limit of new SQL sessions; None leaves DuckDB's automatic sizing."""
         return {**SQL_RESOURCES, **self.store.get("settings", "sql_resources", {})}

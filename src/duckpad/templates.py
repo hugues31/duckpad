@@ -36,6 +36,8 @@ PARAMETER_TYPES = {
     "secret",
     "column",
     "identifier",
+    "schema_name",
+    "table_name",
     "expression",
     "expressions",
     "schema",
@@ -43,7 +45,9 @@ PARAMETER_TYPES = {
     *PREPARATION_TYPES,
 }
 # Types whose argument names the connection parameter that resolves them.
-CONNECTION_BOUND = {"file", "destination", "secret"}
+CONNECTION_BOUND = {"file", "destination", "secret", "schema_name"}
+# A database object name, listed from the connection (schemas) or the schema parameter (tables).
+OBJECT_NAMES = {"schema_name": "schema", "table_name": "table"}
 RESOURCE_TYPES = ("file", "destination")
 # Directives that document a template without changing what it computes.
 DESCRIPTIVE = ("label", "description")
@@ -176,6 +180,12 @@ def validate_interface(template):
         kind, argument = base_type(parameter["type"]), type_argument(parameter["type"])
         if kind in PREPARATION_TYPES and argument not in template["inputs"]:
             raise Problem(f"Parameter {parameter['name']} must reference a declared input port")
+        if kind == "table_name" and (
+            argument is None or base_type(parameters.get(argument, {}).get("type", "")) != "schema_name"
+        ):
+            raise Problem(f"Parameter {parameter['name']} must reference a declared schema_name parameter")
+        if kind == "schema_name" and argument is None:
+            raise Problem(f"Parameter {parameter['name']} must reference a declared connection parameter")
         if kind not in CONNECTION_BOUND or (argument is None and kind != "secret"):
             continue
         if argument is None or parameters.get(argument, {}).get("type") != "connection":
@@ -504,6 +514,11 @@ def render_parameter(
         )
     if kind in ("column", "identifier"):
         return ".".join(qi(part) for part in str(value).split("."))
+    if kind in OBJECT_NAMES:
+        if not isinstance(value, str) or not value.strip():
+            raise Problem(f"Choose a {OBJECT_NAMES[kind]} for {name}")
+        # One name, which may contain dots: databases list it as is.
+        return qi(value)
     if kind == "schema":
         return render_schema(name, value)
     if kind == "keyword":

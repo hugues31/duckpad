@@ -59,7 +59,7 @@ const builtinLabels = {
   load_csv: "Load CSV",
   load_parquet: "Load Parquet",
   load_xlsx: "Load XLSX",
-  load_oracle: "Load Oracle",
+  load_table: "Load table",
   join: "Join",
   filter: "Filter",
   aggregate: "Aggregate",
@@ -67,6 +67,7 @@ const builtinLabels = {
   clean_values: "Clean values",
   export_csv: "Export CSV",
   export_xlsx: "Export XLSX",
+  export_table: "Export table",
   export_oracle: "Export Oracle",
   sql: "SQL transform",
 } satisfies Partial<Record<TranslationKey, string>>;

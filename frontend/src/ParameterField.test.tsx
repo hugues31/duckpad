@@ -71,3 +71,47 @@ it("asks for a database connection that SQL uses directly", () => {
     Array.from(connection.querySelectorAll("option"), (o) => o.textContent),
   ).toEqual(["Choose a source…", "Warehouse"]);
 });
+
+it("suggests table names listed from the database connection", () => {
+  const onChange = vi.fn();
+  const { rerender } = render(
+    <ParameterField
+      parameter={{ name: "table", type: "table_name(schema)", default: "" }}
+      value=""
+      onChange={onChange}
+      connections={connections}
+      objects={{ names: [], pending: true, error: "" }}
+    />,
+  );
+  expect(screen.getByText("Listing schemas and tables…")).toBeTruthy();
+  rerender(
+    <ParameterField
+      parameter={{ name: "table", type: "table_name(schema)", default: "" }}
+      value=""
+      onChange={onChange}
+      connections={connections}
+      objects={{ names: ["order_totals", "orders"], pending: false, error: "" }}
+    />,
+  );
+  const input = screen.getByRole("combobox", { name: "table" });
+  const list = document.getElementById(input.getAttribute("list")!);
+  expect(Array.from(list!.querySelectorAll("option"), (o) => o.value)).toEqual([
+    "order_totals",
+    "orders",
+  ]);
+  // A name typed by hand stays possible, for objects created after the listing.
+  fireEvent.change(input, { target: { value: "new_table" } });
+  expect(onChange).toHaveBeenLastCalledWith("new_table");
+  rerender(
+    <ParameterField
+      parameter={{ name: "table", type: "table_name(schema)", default: "" }}
+      value=""
+      onChange={onChange}
+      connections={connections}
+      objects={{ names: [], pending: false, error: "password failed" }}
+    />,
+  );
+  expect(
+    screen.getByText("Cannot list schemas and tables: password failed"),
+  ).toBeTruthy();
+});

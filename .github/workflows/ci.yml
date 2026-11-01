@@ -70,6 +70,71 @@ jobs:
           path: s3-validation.json
           if-no-files-found: ignore
 
+  database-acceptance:
+    name: Database acceptance on PostgreSQL, MySQL and SQLite
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: duckpad
+          POSTGRES_PASSWORD: duckpad-ci-password
+          POSTGRES_DB: sales_dev
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U duckpad" --health-interval 5s --health-timeout 5s --health-retries 20
+      # A MySQL schema is a database: dev and prod are two servers with the same database.
+      mysql-dev:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: duckpad-ci-password
+          MYSQL_DATABASE: duckpad
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd "mysqladmin ping -h 127.0.0.1 -pduckpad-ci-password" --health-interval 5s --health-timeout 5s --health-retries 30
+      mysql-prod:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: duckpad-ci-password
+          MYSQL_DATABASE: duckpad
+        ports: ['3307:3306']
+        options: >-
+          --health-cmd "mysqladmin ping -h 127.0.0.1 -pduckpad-ci-password" --health-interval 5s --health-timeout 5s --health-retries 30
+    env:
+      DUCKPAD_POSTGRES_HOST: 127.0.0.1
+      DUCKPAD_POSTGRES_PORT: '5432'
+      DUCKPAD_POSTGRES_USER: duckpad
+      DUCKPAD_POSTGRES_PASSWORD: duckpad-ci-password
+      DUCKPAD_POSTGRES_DEV_DATABASE: sales_dev
+      DUCKPAD_POSTGRES_PROD_DATABASE: sales_prod
+      DUCKPAD_MYSQL_HOST: 127.0.0.1
+      DUCKPAD_MYSQL_DEV_PORT: '3306'
+      DUCKPAD_MYSQL_PROD_PORT: '3307'
+      DUCKPAD_MYSQL_USER: root
+      DUCKPAD_MYSQL_PASSWORD: duckpad-ci-password
+      DUCKPAD_MYSQL_DATABASE: duckpad
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - uses: astral-sh/setup-uv@v7
+      - run: uv sync --locked --python 3.12
+      - run: PGPASSWORD=duckpad-ci-password psql -h 127.0.0.1 -U duckpad -d sales_dev -c 'CREATE DATABASE sales_prod'
+      # Downloads the postgres, mysql and sqlite extensions matching DuckDB's PyPI wheel.
+      - run: uv run python scripts/integration.py postgres --output database-validation/postgres.json
+      - run: uv run python scripts/integration.py mysql --output database-validation/mysql.json
+      - run: uv run python scripts/integration.py sqlite --output database-validation/sqlite.json
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: database-validation
+          path: database-validation/
+          if-no-files-found: ignore
+
   windows-projects:
     name: Windows projects and trusted local execution
     runs-on: windows-latest

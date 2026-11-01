@@ -15,6 +15,15 @@
 .connector-family {
   margin-bottom: 30px;
 }
+.connection-test {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 4px;
+}
+.connection-test-error {
+  white-space: pre-wrap;
+}
 .connector-actions {
   flex-wrap: wrap;
   justify-content: flex-end;

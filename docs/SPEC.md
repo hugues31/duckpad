@@ -50,9 +50,10 @@ Built-in and user-created connectors use the same definition format. The require
 | - | - |
 | Server folder | Read CSV and Parquet; export CSV. |
 | S3 | Read CSV and Parquet; export CSV through DuckDB-compatible S3 access. |
+| PostgreSQL | Read tables and insert into existing tables through the `postgres` extension, with Additional options passed to libpq. |
 | Oracle | Read Oracle resources and export tabular results to Oracle using `oraduck`. |
 
-PostgreSQL is not a required built-in MVP preset; users can add it through the same SQL connector mechanism. Every supplied preset must document its tested DuckDB versions, platforms, extension dependencies, and external prerequisites. A preset is considered supported only after validation against the required DuckDB version and its advertised capabilities.
+Other databases, such as MySQL or SQLite, use the same definition format without code changes; the connector guide publishes examples. Every supplied preset must document its tested DuckDB versions, platforms, extension dependencies, and external prerequisites. A preset is considered supported only after validation against the required DuckDB version and its advertised capabilities.
 
 **Oracle via oraduck**: both reading and writing are required. Initialization uses a temporary `oraduck` secret with `USER`, `PASSWORD`, and `DSN`. Source nodes read through `ATTACH` and `SELECT`; the attached catalog is read-only. Export nodes use `COPY` with `FORMAT oraduck` and the same secret to load an existing Oracle table. The preset must document Oracle Instant Client prerequisites and validate its extension build against the exact DuckDB version used. See the [OraDuck documentation](https://raw.githubusercontent.com/hugues31/oraduck/main/README.md).
 
@@ -100,11 +101,12 @@ After a failed recomputation, the results panel keeps the node's last successful
 | - | - | - |
 | Load CSV | Connection, file, delimiter, header, detected or overridden types | 0 → 1 |
 | Load Parquet | Connection, file | 0 → 1 |
-| Load Oracle | Oracle connection, schema, source resource | 0 → 1 |
+| Load table | Database connection, schema, table | 0 → 1 |
 | Join | Two sources, keys, join type, selected columns | 2 → 1 |
 | Filter | Column, operator, value; SQL expression in advanced mode | 1 → 1 |
 | Aggregate | Grouping columns, functions, columns, and aliases | 1 → 1 |
 | Export CSV | Connection, destination, delimiter, header | 1 → 0 |
+| Export table | Database connection, schema, existing table; columns matched by name | 1 → 0 |
 | Export Oracle | Oracle connection, existing destination table, column mapping | 1 → 0 |
 | SQL transform | Independent SQL with named ports and typed parameters; optionally linked to a project template | 1 → 1 |
 
