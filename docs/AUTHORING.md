@@ -2,7 +2,7 @@
 
 The **Code** tab, between **Flow** and **Documentation**, displays the worktree's declarative files in a folder tree beside the Monaco editor. Select a file to edit its SQL, JSON, Markdown or TOML, then choose **Save changes**. Drafts are retained when switching files or workspace tabs. Editing files in an external editor is also supported. Every completed save is versioned, including invalid content. Corrections create later commits. Inspect errors and fix the current files; Duckpad never runs an earlier valid graph silently.
 
-Choose **Download project ZIP** in the Code tab to export the selected branch's saved `README.md`, `pyproject.toml`, `flow.json`, `documentation.json`, `variables.json`, `extensions.json`, node SQL, SQL templates and component definitions, preserving their relative paths. Save or discard pending edits before downloading. The archive excludes Git history, datasets, execution results, virtual environments and instance connection settings. Project readers can browse and download these files; editing requires an editor or administrator role.
+Choose **Download project ZIP** in the Code tab to export the selected branch's saved `README.md`, `pyproject.toml`, `flow.json`, `documentation.json`, `variables.json`, `extensions.json`, `views.json`, node SQL, SQL templates and component definitions, preserving their relative paths. Save or discard pending edits before downloading. The archive excludes Git history, datasets, execution results, virtual environments and instance connection settings. Project readers can browse and download these files; editing requires an editor or administrator role.
 
 Use the project's **Extensions** tab to activate installed DuckDB capabilities
 directly in SQL models. Requirements and origins are versioned in `extensions.json`;
@@ -11,7 +11,7 @@ no connection parameter is needed. Binaries remain on the instance. See the
 
 To recreate a project from such an archive, choose **New project**, then **Import a project ZIP**, and select the file. Leave the name empty to keep the name stored in `flow.json`. Archives whose files sit in a single top-level folder, such as a repository download from a Git host, are accepted. Only the declarative files above are read; Git metadata, data and other entries are ignored. The imported project starts its own Git history, makes you its administrator and can use only the **Local files** connection until an instance administrator grants others. Because the archive contains no connection settings or data, Duckpad then lists the connections the pipeline references that are unavailable to the new project, and the nodes that read uploaded files or other absolute paths, including Windows and network paths. Grant or create those connections, and upload the files again. Archives over 16 MiB (64 MiB once extracted), without `flow.json`, or with invalid JSON or non-UTF-8 files are rejected without creating a project.
 
-After running **Export CSV**, **Export XLSX**, or another export template whose single `COPY ... TO` statement writes CSV or XLSX to a `destination` parameter, select the export node and choose **Download exported data** in its inspector. The file contains the entire executed export, including its delimiter, headers and worksheet name. The inspector identifies the execution and environment. Changing inputs or settings, rerunning upstream nodes, or a failed execution requires another successful export before downloading. Missing files also require a rerun. Downloads are private to project members, survive a backend restart, and use a saved copy of the exported bytes so later writes to the destination cannot replace that execution's result. Oracle and remote-storage destinations do not offer this action.
+After running **Export CSV**, **Export XLSX**, or another export template whose single `COPY ... TO` statement writes CSV or XLSX to a `destination` parameter, select the export node: its [results panel](#node-results) opens on **Log**, where **Download exported data** fetches the file. The file contains the entire executed export, including its delimiter, headers and worksheet name. The Log identifies the run that wrote it. Changing inputs or settings, rerunning upstream nodes, or a failed execution requires another successful export before downloading. Missing files also require a rerun. Downloads are private to project members, survive a backend restart, and use a saved copy of the exported bytes so later writes to the destination cannot replace that execution's result. Oracle and remote-storage destinations do not offer this action.
 
 ![Project files and the SQL template editor in the Code workspace](images/code.png)
 
@@ -164,9 +164,10 @@ successful outputs as stale, and blocks descendants. All message blocks are
 checked before publication or export; warnings alone leave the run in `success`.
 Changing a message block invalidates results just like changing other SQL.
 
-The inspector shows messages belonging to its displayed result; a stale retained
-preview keeps its original messages alongside the latest failure. The canvas
-shows a warning badge and count. History retains messages and warning totals for
+The **Log** tab of the [results panel](#node-results) lists the messages of the
+run behind the displayed result; a stale retained result keeps its original
+messages alongside the latest failure. The canvas shows a warning badge and
+count; selecting the badge opens the Log. History retains messages and warning totals for
 each run, including failures and exports, after a restart. A node outside the
 scope of a later launch keeps its previous result's messages.
 
@@ -213,9 +214,11 @@ test adds one warning, regardless of its row count, and leaves the run successfu
 All checks still run after a test reports failure. Editing tests invalidates
 results, just like changing other SQL.
 
-When a node's code declares tests, the inspector shows the latest test attempt
-and up to nine previous attempts for that node and environment, including failed
-attempts with no published output.
+When a node's code declares tests, the **Tests** tab of the
+[results panel](#node-results) shows each test with its latest outcome and a
+strip of its last ten attempts for that node and environment, including failed
+attempts with no published output. **Show the failing rows** recomputes a
+failing test's rows on demand.
 An out-of-scope launch does not replace this history. History also includes each
 test's status, name, associated output (when the query references exactly one),
 and observed count in run details. The canvas warning badge includes failed
@@ -249,7 +252,163 @@ items: `New York, Paris` becomes `["New York", "Paris"]`.
 
 Transformations may read only declared inputs, earlier outputs, local CTEs and subqueries. External table functions and undeclared tables are rejected. A source uses `-- @kind source` and explicitly declared resource parameters. Each file reader such as `read_csv` takes one declared file parameter, or a list of them, as its only positional argument; its other arguments must be named options such as `delim = ';'`. Exports use `-- @kind export`, declared tabular inputs and explicit `COPY ... TO` or `INSERT` statements. They have no tabular output. Connector setup is separate from those data operations.
 
-Compilation is available without executing the flow. The SQL inspector distinguishes the current compiled query from the actual statement sequence of the displayed result. Actual materialization statements include private storage/view setup and bound values; generated credentials are masked.
+Compilation is available without executing the flow. The inspector's **SQL** tab shows the query compiled from the current configuration; the **Executed SQL** of the results panel's **Log** shows the actual statement sequence of the displayed result. Actual materialization statements include private storage/view setup and bound values; generated credentials are masked.
+
+## Node results
+
+Selecting a node opens two panels. The **inspector** on the right describes the
+node: its parameters, compiled SQL, documentation and change history, the same
+in every environment. The **results panel** under the canvas shows what the node
+produced in the environment selected in the top bar: whatever changes when you
+switch environment or run again is there.
+
+![The results panel of Paid orders on a sample of partner orders above 300, sorted by amount](images/results-data.png)
+
+The header names the node and the dataset shown, its **Valid** or **Stale**
+badge, the time, duration and commit of the run that produced the rows, and the
+row and column counts. With several outputs, or inputs, the selector lists the
+node's outputs and, under **Inputs, to compare**, the datasets connected to its
+inputs: showing an input keeps the current sample when its columns allow it, to
+check an operation before and after. An export node has no rows: its panel opens
+on **Log**, with **Tests**. A component instance shows its exposed outputs.
+
+Under the node kind, the inspector keeps a one-line **result summary**: the
+**Valid** or **Stale** badge, the number of outputs, warning badges for
+messages and failing tests, **Last run failed** after a failure, the time of the
+run and a **Results** link. Each part opens the results panel on the matching
+tab: the badge and the outputs open **Data**, messages, the failure and the run
+time open **Log**, failing tests open **Tests**. Like both panels, the summary
+follows the environment selected in the top bar without repeating it.
+
+### Data and samples
+
+The **Data** tab pages through the retained result, 100 rows at a time. Select a
+value to [explain it](LINEAGE.md); filtered, sorted and random rows keep their
+identity, so lineage works on any cell of a valid result. **Search all columns**
+finds text in every column. Clicking a column header sorts by that column.
+
+**Sample** chooses which rows are displayed:
+
+- **Rows:** all rows, the first rows, or a random sample with a seed, up to
+  10,000 rows after the filter and sort. A seed always shows the same rows of the
+  same result.
+- **Filter:** a SQL condition on the dataset's columns, written without `WHERE`,
+  such as `channel = 'Partner' AND amount > 300`. It is validated like a Filter
+  node's condition: one expression, no query or statement, only this dataset's
+  columns. `{{ var.name }}` references take the selected environment's value as a
+  bound parameter. The number of matching rows updates as you type.
+- **Sort:** one or more columns, ascending or descending.
+
+![The Sample popover with a filter, its matching rows and a sort](images/results-sample.png)
+
+Chips under the tabs show the active filter and sort; the cross removes one.
+**A sample only changes the display:** runs always compute on all the data, and
+descendants never read a sample. The sample is remembered in your browser for
+each node output; it survives reruns and environment switches. A filter that no
+longer applies, after a column was renamed for instance, is reported with
+**Reset** instead of being dropped. Reading a sample stops after 30 seconds.
+
+From the Sample popover:
+
+- **Add as a Filter node** inserts a Filter node reading this output, with the
+  same condition, when a check should become part of the pipeline.
+- **Create a test from this filter** appends `-- @test <name>: <severity>` with
+  `SELECT * FROM {{ output }} WHERE <filter>;` to the node code: rows matching
+  the filter then fail the test. For a node linked to a template, the test goes
+  into the template and checks every linked node, unless you detach this node
+  first. Node code cannot reference project variables, so a filter using them
+  must be rewritten with values.
+- **Copy SQL** copies the query of the sample, written with `{{ port }}` rather
+  than internal table names.
+
+**Save as view…** names the current sample and saves it in `views.json`, so the
+whole team finds "Large orders" or "Partner orders above 300" next to **All
+rows** above the table. A view is a normal save: one commit, merged view by view
+between branches, listed in comparisons and included in project ZIP archives.
+Views never change results, so saving one makes nothing stale. Deleting a node
+deletes its views in the same save. Readers and operators use views and their own
+samples but cannot save views.
+
+```json
+{
+  "validated:orders": [
+    {
+      "name": "Partner orders above 300",
+      "rows": 100,
+      "method": "first",
+      "filter": "channel = 'Partner' AND amount > 300",
+      "order": [["amount", "desc"]]
+    }
+  ]
+}
+```
+
+Views are keyed by `node:port`, like dataset documentation. A view has a `name`,
+unique for its output, and optionally `rows` (1 to 10,000), `method` (`first` or
+`random`), `seed`, `filter` and `order` (`[column, "asc" | "desc"]` pairs).
+
+### Columns and statistics
+
+![The Columns tab with descriptions and computed statistics](images/results-columns.png)
+
+The **Columns** tab lists each column's position, name, type and description,
+with the dataset description above, at once and without reading any rows.
+Descriptions are edited in place with the pencil and saved in
+`documentation.json`. Selecting a column name shows it in the Data tab. A chip
+compares the columns with the previous successful run of the node in the same
+environment: added, removed and retyped columns, or "Same columns as the previous
+run".
+
+**Compute statistics** scans the whole retained result once, never the displayed
+sample: null percentage, approximate distinct values, range and distribution of
+numbers and dates, and top values of text. The tab never starts this computation
+by itself, since it competes with runs for the CPU on large results. Statistics
+are kept for that result: reopening the tab, coming back to the node or another
+user shows them at once with the time they were computed, and the run that
+replaces the result discards them. The computation can be canceled and stops
+after 30 seconds.
+
+### Tests
+
+![The Tests tab with a failing warning test, its query and history](images/results-tests.png)
+
+The **Tests** tab summarizes the passed, warning and error tests of the latest
+check, then lists each test with its severity, output, failing rows and its last
+ten runs in this environment. Select a status to see the test's query and since
+when it fails. **Show the failing rows** opens the Data tab on the rows the test
+returns, recomputed from the retained result with the definitions recorded by
+the run: they are paged like a sample and never stored. It needs a valid result.
+**Edit tests in the node code** opens the code editor.
+
+![Failing rows of a test, recomputed from the retained result](images/results-failing-rows.png)
+
+### Log
+
+![The Log tab: run summary, timeline and executed SQL](images/results-log.png)
+
+The **Log** tab tells the story of the latest run of the node: its status, start
+and end, duration, commit and whether it matches the current configuration, who
+launched it, its scope and warnings. The timeline lists the inputs, each output
+with its row count and computing time, each `-- @message` result, the tests and
+the publication, or the error that prevented it, with **Ask the assistant**. A
+filter shows all entries, messages, warnings or errors. **Executed SQL** shows
+the statements, bound values and variables of that run, with secrets masked.
+**Open the run in History** opens its full record.
+
+### API
+
+- `GET /api/worktrees/{worktree}/preview/{node}` accepts `search` (all columns),
+  `filter` (a SQL condition), `order` (a JSON list of `[column, direction]`),
+  `method` (`first` or `random`), `rows` and `seed` besides `port`, `limit` and
+  `offset`. `matched_count` counts the rows matching the filter and search;
+  `filtered_count` the rows to page through.
+- `GET /api/worktrees/{worktree}/statistics/{node}?environment&port` returns the
+  columns, the statistics when they were computed for the current result, and
+  the schema changes since the previous run. `POST` computes them; `DELETE`
+  cancels a computation in progress. Readers may use all three.
+- `GET /api/worktrees/{worktree}/test-rows/{node}/{test}?environment&limit&offset`
+  returns a page of a test's failing rows for a valid result.
+- Run records keep each output's `duration` in seconds.
 
 ## Graph and components
 
@@ -311,7 +470,7 @@ variable and its value in the selected environment; the cross restores a fixed
 value initialized with that value. Parameters of an opened component definition
 have no variable button: expose them, then bind the instance.
 
-When a variable change makes a result stale, the data preview names the
+When a variable change makes a result stale, the results panel names the
 variable, the environment, and its previous and current values. The **SQL** tab
 lists each bound variable with its value. An environment that requires
 confirmation lists the variables of the requested scope, with their values and
@@ -425,7 +584,8 @@ The API exposes what the interface needs:
   the variables a launch would use. The environment confirmation error of a UI
   launch includes the same list.
 - Run records, `compile/{node}` and the executed SQL of previews include the
-  variables used.
+  variables used. A sample filter may reference `{{ var.name }}`; the selected
+  environment's value is bound, never pasted.
 
 ### Variables in expressions
 
@@ -467,7 +627,7 @@ the new instance keeps the references.
 
 ![Business documentation for Paid orders alongside its result table](images/node-documentation.png)
 
-Business documentation is separate from SQL and covers the project, node instances, outputs and columns. Grouping preserves the documented instance paths; imports carry component documentation. Successfully confirmed schema removals prune missing column documentation in a versioned save. Renames start undocumented. Invalid SQL, failed runs and backend restarts do not imply deletion.
+Business documentation is separate from SQL and covers the project, node instances, outputs and columns. Describe a node in the inspector's **Documentation** tab, and its outputs and columns in the **Columns** tab of the [results panel](#node-results), where the columns are visible. Grouping preserves the documented instance paths; imports carry component documentation. Successfully confirmed schema removals prune missing column documentation in a versioned save. Renames start undocumented. Invalid SQL, failed runs and backend restarts do not imply deletion.
 
 Create a working branch to compare a change. Branches have isolated worktrees and memory contexts, and use the same instance connections. **Compare & merge** performs three-way merging and validates the graph/interfaces before acceptance. Git history can open a chosen revision in a new working branch. Recompute manually there to explore its code against current resources and connection settings.
 

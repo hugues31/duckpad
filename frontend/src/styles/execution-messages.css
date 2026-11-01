@@ -1,4 +1,4 @@
-/* Execution results shared by the inspector, run history and canvas badges. */
+/* Execution results shared by run history, the results panel, the inspector summary and canvas badges. */
 .warning-badge {
   display: inline-flex;
   align-items: center;

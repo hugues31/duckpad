@@ -398,7 +398,10 @@ class Runner:
             previous = self._publish(execution, key, staged)
             created_tables.clear()
             self._retire(execution, key, previous)
-            state.update(status="success", outputs={p: d.public() for p, d in staged.items()})
+            state.update(
+                status="success",
+                outputs={p: {**d.public(), "duration": d.duration} for p, d in staged.items()},
+            )
             try:
                 self._prune_documentation(execution, key, staged)
             except Exception as error:
@@ -498,6 +501,7 @@ class Runner:
                 self._export(execution, key, statement)
                 continue
             table = statement["table"]
+            output_start = time.monotonic()
             data_inputs = {data.table: data for data in [*input_datasets.values(), *staged.values()]}
             plan = plan_materialization(
                 cursor, statement, data_inputs, instrument=node["parsed"]["kind"] != "source"
@@ -528,6 +532,7 @@ class Runner:
                 column_map=column_map,
                 witnesses=plan["witnesses"],
                 groups=plan["groups"],
+                duration=time.monotonic() - output_start,
             )
         if check_failure is not None:
             raise Problem(check_failure or "An execution check reported an error")
@@ -572,6 +577,8 @@ class Runner:
         """Drop replaced outputs and their lineage tables once no lineage reader uses them."""
         context = execution.context
         for dataset in previous.values():
+            with context.lock:
+                cancel_lineage(context, {dataset.node}, dropping=True)
             wait_for_readers(context, {dataset.node})
             with context.lock:
                 traces = [

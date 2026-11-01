@@ -1,6 +1,6 @@
 # Lineage coverage
 
-Lineage explains the materialized execution, not today's external resource. A result identifies its execution, dataset generation, column and stable storage row. Sorting or filtering the preview does not change those identities or restrict the provenance search.
+Lineage explains the materialized execution, not today's external resource. A result identifies its execution, dataset generation, column and stable storage row. Sorting, filtering or sampling the displayed rows does not change those identities or restrict the provenance search.
 
 Clicking a cell opens a large modal with a dependency graph: source cells on the left, calculations on the right. The selected value appears compactly in the header. All inputs on the current page are traced automatically; shared source cells appear once, connected to each calculation that uses them.
 

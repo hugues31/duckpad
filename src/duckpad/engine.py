@@ -19,6 +19,7 @@ from .execution.exports import Exports
 from .execution.fingerprints import Fingerprints
 from .execution.results import Results
 from .execution.runs import Runner
+from .execution.samples import Sample
 from .extensions import MAX_UPLOAD_BYTES, core_catalog, database_config, install, runtime
 from .projects import Projects
 from .store import Store
@@ -93,10 +94,25 @@ class Engine:
         sort: str | None = None,
         descending: bool = False,
         filters: Record | None = None,
+        sample: Sample | None = None,
     ) -> Record:
         return self.results.preview(
-            worktree, environment, node, port, limit, offset, sort, descending, filters
+            worktree, environment, node, port, limit, offset, sort, descending, filters, sample
         )
+
+    def statistics(self, worktree: str, environment: str, node: str, port: str = "result") -> Record:
+        return self.results.statistics(worktree, environment, node, port)
+
+    def compute_statistics(self, worktree: str, environment: str, node: str, port: str = "result") -> Record:
+        return self.results.compute_statistics(worktree, environment, node, port)
+
+    def cancel_statistics(self, worktree: str, environment: str, node: str, port: str = "result") -> Record:
+        return self.results.cancel_statistics(worktree, environment, node, port)
+
+    def test_rows(
+        self, worktree: str, environment: str, node: str, test: str, limit: int = 100, offset: int = 0
+    ) -> Record:
+        return self.results.test_rows(worktree, environment, node, test, limit, offset)
 
     def generation_valid(self, worktree: str, environment: str, dataset_id: str) -> bool:
         return self.results.generation_valid(worktree, environment, dataset_id)

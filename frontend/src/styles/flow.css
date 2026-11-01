@@ -8,7 +8,7 @@
   --canvas-left: 0px;
   --canvas-right: 0px;
   --canvas-bottom: 0px;
-  --preview-height: clamp(200px, 28vh, 280px);
+  --preview-height: clamp(240px, 40vh, 420px);
   position: absolute;
   inset: 0;
   min-height: 0;

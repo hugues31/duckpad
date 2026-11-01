@@ -5,7 +5,7 @@ import re
 import tomllib
 from pathlib import Path
 
-from . import __version__, project_extensions, variables
+from . import __version__, project_extensions, variables, views
 from .components import expand
 from .node_code import node_sql
 from .templates import parse_template
@@ -18,6 +18,7 @@ ROOT_FILES = (
     "pyproject.toml",
     variables.FILE,
     project_extensions.FILE,
+    views.FILE,
 )
 DECLARATIVE_PATH = re.compile(
     r"(?:templates|nodes)/[A-Za-z0-9_-]+\.sql|components/[A-Za-z0-9_-]+(?:\.json|/[A-Za-z0-9_-]+\.sql)"
@@ -55,6 +56,7 @@ def files_to_bundle(files):
             "pyproject": files.get("pyproject.toml"),
             "variables": variables.read(files.get(variables.FILE)),
             "extensions": project_extensions.read(files.get(project_extensions.FILE)),
+            "views": views.read(files.get(views.FILE)),
         }
     except (ValueError, KeyError) as error:
         raise Problem(f"Cannot read declarative project files: {error}") from error
@@ -113,6 +115,7 @@ def bundle_to_files(bundle):
             if bundle.get("variables") is not None
             else {}
         ),
+        **({views.FILE: views.write(bundle["views"])} if bundle.get("views") is not None else {}),
     }
 
 
@@ -180,6 +183,7 @@ def validate(bundle):
             errors.append({"file": name, "message": str(error)})
     errors.extend(project_extensions.problems(bundle))
     errors.extend(variables.problems(bundle))
+    errors.extend(views.problems(bundle))
     try:
         nodes, edges, _ = expand(bundle)
         errors.extend(variables.node_problems(bundle, nodes))
