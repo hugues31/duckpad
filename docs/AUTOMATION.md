@@ -81,6 +81,7 @@ environment, a line each time the run status or node counts change, then the run
 - **SIGTERM and SIGINT** (a Control-M kill, an Airflow timeout, Ctrl+C) make the
   command request cancellation, wait up to two minutes for the run to stop, print
   its log and exit with 3. An expired `--timeout` does the same and exits with 6. A
+  run that finished before the cancellation reached it keeps its own exit code. A
   second signal stops the wait.
 - **Redirects are refused**, so the token is never sent to another address: use the
   final HTTPS address. `HTTPS_PROXY`, `NO_PROXY` and `SSL_CERT_FILE` are honored.

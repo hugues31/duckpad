@@ -220,7 +220,8 @@ def stop(api, run, code, reason):
     if run["status"] in ACTIVE_STATUSES:
         raise Exit(code, f"Run {run['id']} is still {run['status']} after {STOP_SECONDS} s")
     finish(api, run)
-    return code
+    # A run that finished before the cancellation reached it keeps its own outcome.
+    return code if run["status"] in ("canceled", "interrupted") else OUTCOMES[run["status"]]
 
 
 def launch(args, server, token):
@@ -298,6 +299,10 @@ def main(argv=None):
         token = os.environ.get("DUCKPAD_TOKEN", "").strip()
     if not token:
         print("duckpad run: error: set DUCKPAD_TOKEN or pass --token-file", file=sys.stderr)
+        return REFUSED
+    if not re.fullmatch(r"[!-~]+", token):
+        # http.client would reject the header with an error that quotes the token into scheduler logs.
+        print("duckpad run: error: the token must be a single line without spaces", file=sys.stderr)
         return REFUSED
     if location.scheme == "http" and location.hostname not in ("127.0.0.1", "::1", "localhost"):
         print(f"Warning: the API token is sent unencrypted to {location.hostname}", file=sys.stderr)

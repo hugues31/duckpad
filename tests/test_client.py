@@ -194,6 +194,7 @@ def test_busy_job_exits_4_and_names_the_active_run(server, monkeypatch):
     [
         ((), None, "set DUCKPAD_TOKEN or pass --token-file"),
         ((), "dpk_unknown", "HTTP 401, unauthenticated"),
+        ((), "dpk_secret\nsecond line", "the token must be a single line without spaces"),
         ((), "reader", "HTTP 403, forbidden"),
         (("--job", "missing"), "operator", "HTTP 404, job_not_found"),
         (("--source", "x" * 129), "operator", "HTTP 422, invalid_request"),
@@ -209,7 +210,7 @@ def test_refused_requests_exit_5(server, args, token, message):
     result = duckpad_run(url, *options, token=tokens.get(token, token))
     assert result.returncode == client.REFUSED, result.stdout + result.stderr
     assert message in result.stderr
-    assert "Traceback" not in result.stderr
+    assert "Traceback" not in result.stderr and "dpk_secret" not in result.stderr
     assert app.state.services.store.all("run") == []
 
 
@@ -228,6 +229,18 @@ def test_timeout_cancels_waits_for_the_stop_and_exits_6(server, monkeypatch):
     assert "Timeout of 0:00:01 reached: canceling run" in stderr
     assert "Outcome: canceled" in stdout
     assert only_run(app)["status"] == "canceled"
+
+
+def test_a_run_that_finished_before_the_cancellation_keeps_its_outcome(capsys):
+    class Finished:
+        deadline = 0.0
+
+        def call(self, method, path, **options):
+            return "Outcome: success\n" if path.endswith("/log") else {"id": "run_1", "status": "success"}
+
+    running = {"id": "run_1", "status": "running"}
+    assert client.stop(Finished(), running, client.TIMEOUT, "Timeout reached") == client.SUCCESS
+    assert "Outcome: success" in capsys.readouterr().out
 
 
 def only_run_status(app):
