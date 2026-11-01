@@ -178,6 +178,14 @@ def group(bundle, selection, label, exposed=None, parent=None):
                     definition.setdefault("documentation", {}).setdefault(section, {})[local] = copy.deepcopy(
                         value
                     )
+    # Shared views follow their nodes into the instance, or the next save would prune them.
+    saved = bundle.get("views")
+    if isinstance(saved, dict):
+        for prefix in prefixes:
+            for key in list(saved):
+                local = key[len(prefix) :] if key.startswith(prefix) else ""
+                if any(local.startswith(node + ":") for node in selected):
+                    saved[prefix + instance_id + "::" + local] = saved.pop(key)
     outer = []
     outgoing_ports, incoming_ports = {}, {}
     for edge in graph["edges"]:

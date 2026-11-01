@@ -12,6 +12,7 @@ from helpers import example_bundle, join_run
 from duckpad.app import create_app
 from duckpad.bundle import bundle_to_files, files_to_bundle, validate
 from duckpad.comparison import commit_message, compare_files
+from duckpad.components import group
 from duckpad.merge import merge_files
 
 PARTNERS = {
@@ -140,6 +141,17 @@ def test_deleting_a_node_deletes_its_views_in_the_same_save(services, tmp_path):
     assert saved["bundle"]["views"] == {"filter:result": [LARGE]}
     committed = projects.revision_files(worktree["path"], "HEAD")
     assert json.loads(committed["views.json"]) == {"filter:result": [LARGE]}
+
+
+def test_grouping_nodes_keeps_their_views(services, tmp_path):
+    _, projects, _, _ = services
+    worktree = projects.create(
+        "Views", project(tmp_path, {"filter:result": [LARGE], "total:result": [PARTNERS]})
+    )
+    snapshot = projects.snapshot(worktree["id"])
+    grouped, instance = group(snapshot["bundle"], ["filter"], "Qualifying orders")
+    saved = projects.write(worktree["id"], snapshot["revision"], bundle_to_files(grouped))
+    assert saved["bundle"]["views"] == {instance + "::filter:result": [LARGE], "total:result": [PARTNERS]}
 
 
 def test_views_travel_in_project_archives(tmp_path):
