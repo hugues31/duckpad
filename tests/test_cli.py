@@ -6,6 +6,7 @@ import sys
 from contextlib import closing
 
 import pytest
+import uvicorn
 from fastapi.testclient import TestClient
 
 from duckpad import cli
@@ -51,6 +52,6 @@ def test_network_binds_warn_when_no_proxy_is_trusted(tmp_path, monkeypatch, caps
         with TestClient(app):
             pass
 
-    monkeypatch.setattr(cli.uvicorn, "run", serve)
+    monkeypatch.setattr(uvicorn, "run", serve)
     cli.main()
     assert ("FORWARDED_ALLOW_IPS is not set" in capsys.readouterr().out) is warned

@@ -1,6 +1,6 @@
 # Job automation (design proposal)
 
-**Status: delivery steps 1.1 (API tokens, service accounts and run requesters), 1.2 (immutable annotated tags and comparison by tag), 1.3 (Operator access, Jobs, pinned versions, audited promotion and read-only results) and 1.4 (Automation API v1, idempotency, waiting, text logs and OpenAPI) implemented. The remaining steps are proposed; the decisions below were agreed in review.**
+**Status: delivery step 1 implemented: 1.1 (API tokens, service accounts and run requesters), 1.2 (immutable annotated tags and comparison by tag), 1.3 (Operator access, Jobs, pinned versions, audited promotion and read-only results), 1.4 (Automation API v1, idempotency, waiting, text logs and OpenAPI) and 1.5 (the `duckpad run` command, its exit codes, signals and timeouts). The remaining steps are proposed; the decisions below were agreed in review.**
 
 ## Summary
 
@@ -183,6 +183,7 @@ duckpad run --job sales-daily-prod --timeout 2h
 
 - `duckpad run` launches the Job, prints node progress to standard output, waits for the outcome and exits with a code orchestrators can act on. `--detach` returns as soon as the run is accepted and prints its identifier.
 - Credentials come from `DUCKPAD_TOKEN` or `--token-file`, never from a command-line argument visible in process lists.
+- The server comes from `DUCKPAD_SERVER` or `--server`; without either, the command targets the local instance (`http://127.0.0.1:8765`).
 - `--source` and `--reference` fill the run's trigger (`cli` and no reference by default).
 - `--idempotency-key` sets the key; by default the command generates one per invocation and reuses it when it retries a launch after a network error.
 - On SIGTERM or SIGINT (a Control-M kill, an Airflow timeout), the command requests cancellation, waits for the run to stop and exits with code 3. When `--timeout` expires, it does the same and exits with code 6.

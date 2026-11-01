@@ -1,23 +1,22 @@
-"""The single-process entry point owns live DuckDB execution contexts."""
+"""The single-process server owns live DuckDB execution contexts; `duckpad run` is an API client."""
 
 import argparse
 import os
 import shutil
+import sys
 import threading
 import webbrowser
 from pathlib import Path
 
-import uvicorn
-from filelock import FileLock, Timeout
-
-from .app import create_app
-from .logging import server_log_config
-from .util import Problem
+from . import client
 
 LOOPBACK_HOSTS = ("127.0.0.1", "::1", "localhost")
 
 
 def main():
+    if sys.argv[1:2] == ["run"]:
+        # Dispatch before the server's imports: schedulers start this command for every task.
+        sys.exit(client.main(sys.argv[2:]))
     parser = argparse.ArgumentParser(prog="duckpad", description="Local SQL pipelines with cell lineage")
     commands = parser.add_subparsers(dest="command", required=True)
     start = commands.add_parser("start", help="Start the local workspace")
@@ -40,7 +39,22 @@ def main():
         default="info",
         help="Server log level (default: info); debug includes successful UI polling requests",
     )
+    # Listed for `duckpad --help`; the client parses its own options.
+    commands.add_parser(
+        "run", help="Launch a Job, wait for its outcome and exit with its code", add_help=False
+    )
     args = parser.parse_args()
+    start_server(parser, args)
+
+
+def start_server(parser, args):
+    import uvicorn
+    from filelock import FileLock, Timeout
+
+    from .app import create_app
+    from .logging import server_log_config
+    from .util import Problem
+
     if args.trusted_local and args.host not in LOOPBACK_HOSTS:
         parser.error("--trusted-local requires --host 127.0.0.1, ::1, or localhost")
     if not shutil.which("git"):
