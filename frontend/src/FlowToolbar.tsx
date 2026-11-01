@@ -105,6 +105,13 @@ export function FlowToolbar({ tab }: { tab: WorkspaceTab }) {
             {t("merge")}
           </button>
         )}
+        {active?.phase && (
+          <span role="status" className="muted small">
+            {active.phase === "values"
+              ? t("calculatingValues")
+              : t("runningConsumers")}
+          </span>
+        )}
         {active ? (
           <button
             className="button stop"

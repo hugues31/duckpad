@@ -1,6 +1,6 @@
 # Project variables (design proposal)
 
-**Status: delivery steps 1 (model and engine), 2 (interface) and 3 (expressions) implemented; step 4 (computed variables and path references) accepted on 1 November 2026 (see [Decisions](#decisions)), not implemented yet.** `variables.json`, the `date` parameter type, whole-parameter binding, fingerprints, run records, the API, ZIP archives, merge, comparison and grouping work as described below, and so do the **Variables** tab, the inspector's variable button and chip, stale reasons, run confirmations and run details, and `{{ var.name }}` references in expressions with their suggestions, value hints, guided Filter values and lineage labels; see [Project variables](../VARIABLES.md). The screenshots in this proposal are mockups drawn before the implementation; the user guide shows the actual interface. The [Computed variables](#computed-variables) section describes accepted behavior that a separate issue will implement.
+**Status: delivery steps 1 (model and engine), 2 (interface), 3 (expressions) and 4 (computed variables and path references) implemented.** `variables.json`, typed binding, fingerprints, run records, the API, ZIP archives, merge, comparison and grouping work as described below, alongside the **Variables** editor, inspector, confirmations, history and lineage. Computed values use a separate value phase and ephemeral retained results; expression and path references share reference analysis and use their own safe renderers. See [Project variables](../VARIABLES.md) for the current interface and screenshots. The screenshots in this proposal are mockups drawn before implementation.
 
 ## Summary
 
@@ -179,7 +179,7 @@ Variables are not a secret store. Ordinary values are stored in Git and ZIP expo
 
 ## Computed variables
 
-**Accepted, not implemented yet.** A control file or table can supply the reporting date, processing mode or options for each execution. Committing a different `variables.json` for every run is unnecessary, and joining the control table to every query does not supply a scalar for file paths or activation conditions. Resolve its output once, then pass typed constants to consumers so the query engine can push eligible predicates into source scans.
+**Implemented.** A control file or table can supply the reporting date, processing mode or options for each execution. Committing a different `variables.json` for every run is unnecessary, and joining the control table to every query does not supply a scalar for file paths or activation conditions. Resolve its output once, then pass typed constants to consumers so the query engine can push eligible predicates into source scans.
 
 This extends the existing variable model, not a project-variable mutation API. A run never edits `variables.json`. Reproduction requires the recorded commit, catalog configuration and source inputs, including the control input; the commit alone cannot reproduce changing external data. The run also records the exact values used, even when it reused an earlier value-node result.
 

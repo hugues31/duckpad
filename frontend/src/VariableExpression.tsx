@@ -5,6 +5,7 @@ import {
   completeReference,
   fill,
   formatVariableValue,
+  computedDiagnostic,
   partialReference,
   referencedVariables,
   usableInExpressions,
@@ -145,8 +146,22 @@ export function ExpressionInput({
               <small>
                 {variable.type} ·{" "}
                 {variable.values[environment]?.error
-                  ? t("noVariableValue")
+                  ? computedDiagnostic(variable.values[environment]?.code, t) ||
+                    t("noVariableValue")
                   : `${environment} ${formatVariableValue(variable.values[environment]?.value)}`}
+                {variable.from && (
+                  <span>
+                    {" "}
+                    ·{" "}
+                    {[
+                      variable.from.node,
+                      variable.from.port,
+                      variable.from.column,
+                    ]
+                      .filter(Boolean)
+                      .join(".")}
+                  </span>
+                )}
               </small>
             </div>
           ))}
@@ -192,11 +207,26 @@ export function ExpressionValues({
                   {shown}{" "}
                   <strong>
                     {resolved.error
-                      ? t("noVariableValue")
+                      ? computedDiagnostic(resolved.code, t) ||
+                        t("noVariableValue")
                       : formatVariableValue(resolved.value)}
                   </strong>
                   {resolved.source === "default" && (
                     <small> ({t("defaultValueSource")})</small>
+                  )}
+                  {resolved.source === "node" && resolved.from && (
+                    <small>
+                      {" "}
+                      (
+                      {[
+                        resolved.from.node,
+                        resolved.from.port,
+                        resolved.from.column,
+                      ]
+                        .filter(Boolean)
+                        .join(".")}
+                      )
+                    </small>
                   )}
                 </span>
               ))

@@ -1,4 +1,5 @@
 import type { Node, Edge } from "@xyflow/react";
+import type { VariableValue } from "./types";
 import type { Translate } from "./i18n";
 
 export type Cell = {
@@ -15,6 +16,8 @@ export type Query = Cell & {
   context?: boolean;
 };
 export type Explanation = Input & {
+  variables?: Record<string, VariableValue>;
+  environment?: string;
   kind?: string;
   expression?: string;
   calculation?: {

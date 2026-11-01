@@ -214,6 +214,8 @@ export default function FlowPage() {
         return;
       }
       select(found.id, found.path, location.key);
+      if (location.state?.valueSource)
+        view.change({ cell: location.state.valueSource as Cell });
       if (found.id) setFocusRequest({ id: found.id, key: location.key });
     },
   );
@@ -428,6 +430,9 @@ export default function FlowPage() {
         />
         <div className="canvas">
           <Canvas
+            valueProducers={Object.values(
+              snapshot.variables?.declarations || {},
+            ).flatMap((v) => (v.from ? [v.from.node] : []))}
             readOnly={!canEdit}
             nodes={graph.nodes}
             edges={graph.edges}

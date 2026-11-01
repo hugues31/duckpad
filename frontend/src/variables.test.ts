@@ -1,10 +1,44 @@
 import { describe, expect, it } from "vitest";
 import {
+  changedEnvironments,
   completeReference,
   partialReference,
   referencedVariables,
+  resolveValue,
   usableInExpressions,
 } from "./variables";
+
+describe("computed declarations", () => {
+  const computed = {
+    type: "number",
+    from: { node: "control", column: "amount" },
+  };
+
+  it("does not restore an ordinary fallback from a computed declaration", () => {
+    expect(
+      resolveValue(
+        { ...computed, default: 1, environments: { prod: 2 } },
+        "prod",
+      ),
+    ).toEqual({});
+  });
+
+  it("reports source changes in every environment and ignores descriptions", () => {
+    expect(
+      changedEnvironments(
+        computed,
+        { ...computed, from: { node: "control", column: "limit" } },
+        ["dev", "prod"],
+      ),
+    ).toEqual(["dev", "prod"]);
+    expect(
+      changedEnvironments(computed, { ...computed, description: "A limit" }, [
+        "dev",
+        "prod",
+      ]),
+    ).toEqual([]);
+  });
+});
 
 describe("expression references", () => {
   it("lists referenced variables once, in order", () => {

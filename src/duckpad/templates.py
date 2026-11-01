@@ -1,9 +1,11 @@
 """Typed SQL templates. Compilation never executes SQL."""
 
 import json
+import math
 import re
 from datetime import date
 from pathlib import Path
+from urllib.parse import unquote, urlsplit
 
 import sqlglot
 from sqlglot import exp
@@ -340,6 +342,68 @@ def check_variables(name, text):
         )
 
 
+def render_path(name, text, values):
+    """Render only scalar variable references, once, with no general interpolation."""
+    if not isinstance(text, str):
+        raise Problem(f"{name} requires a path")
+    remainder = VARIABLE_REFERENCE.sub("", text)
+    if "{{" in remainder or "}}" in remainder:
+        raise Problem(f"{name}: invalid path reference; use {{{{ var.name }}}}")
+
+    def replace(match):
+        variable = values.get(match[1])
+        if not variable or "value" not in variable:
+            raise Problem(f"{name}: variable {match[1]} has no resolved value")
+        kind, value = base_type(variable["type"]), variable["value"]
+        if kind not in ("text", "choice", "date", "number", "boolean"):
+            raise Problem(f"{name}: {kind} cannot be used in a path")
+        if kind == "boolean":
+            return "true" if value else "false"
+        if kind == "number":
+            if (
+                isinstance(value, bool)
+                or not isinstance(value, (float, int))
+                or (isinstance(value, float) and not math.isfinite(value))
+            ):
+                raise Problem(f"{name}: expected a finite number")
+            return json.dumps(value)
+        return str(value)
+
+    return VARIABLE_REFERENCE.sub(replace, text)
+
+
+def authorize_path(template, path, root, kind, connections, reference):
+    """Check the resolved resource against its captured root, including glob matches."""
+    if reference:
+        connection = connection_for(connections, reference)
+        capability = "write" if kind == "destination" else "read"
+        if capability not in connection["definition"].get("capabilities", []):
+            raise Problem(f"Connection {reference} does not support {capability}")
+    if URI.match(path):
+        # An interpolated authority cannot select a different credential scope.
+        baseline = str(root) if URI.match(str(root)) else template
+        before, after = urlsplit(baseline), urlsplit(path)
+        if not before.scheme or (before.scheme, before.netloc) != (after.scheme, after.netloc):
+            raise Problem("Path references cannot change the URI scheme or authority")
+        if any(part == ".." for part in unquote(after.path).split("/")):
+            raise Problem("Path references cannot traverse a resource root")
+        if URI.match(str(root)) and not after.path.startswith(before.path.rstrip("/") + "/"):
+            raise Problem("Path is outside the connection root")
+        return path
+    if URI.match(str(root)):
+        raise Problem("Path references cannot change the URI scheme or authority")
+    base = Path(root).resolve()
+    candidate = Path(path)
+    if not candidate.is_absolute():
+        candidate = base / candidate
+    if not candidate.resolve().is_relative_to(base):
+        raise Problem("Path is outside the allowed resource root")
+    for matched in base.glob(str(candidate.relative_to(base))):
+        if not matched.resolve().is_relative_to(base):
+            raise Problem("Path glob follows a symlink outside the resource root")
+    return str(candidate)
+
+
 def connection_for(connections, reference):
     if reference not in connections:
         raise Problem(f"Missing connection: {reference}")
@@ -397,6 +461,12 @@ def render_parameter(
             else connection_for(connections, reference)["values"].get("root", "")
         )
         path = str(value)
+        if "{{" in path or "}}" in path:
+            path = render_path(name, path, variables or {})
+            resource_root = root or project_files[kind]
+            if URI.match(str(resource_root)) and not URI.match(path) and not Path(path).is_absolute():
+                path = str(resource_root).rstrip("/") + "/" + path
+            return literal(authorize_path(str(value), path, resource_root, kind, connections, reference))
         if not URI.match(path) and not Path(path).is_absolute():
             path = str(Path(root or project_files[kind]) / path)
         return literal(path)
@@ -637,6 +707,18 @@ def compile_template(
         if output:
             values[output] = qi(physical)
             allowed.add(qi(physical))
+    paths = {
+        p["name"]: {
+            "template": parameters[p["name"]],
+            "variables": VARIABLE_REFERENCE.findall(str(parameters[p["name"]])),
+            "resource": sqlglot.parse_one(values[p["name"]], read="duckdb").this,
+        }
+        for p in template["parameters"]
+        if base_type(p["type"]) in RESOURCE_TYPES
+    }
+    if paths:
+        for statement in statements:
+            statement["paths"] = paths
     return statements
 
 

@@ -13,12 +13,13 @@ export default function VariablesPage() {
   const navigate = useNavigate();
   const { openWorktree } = useShell();
   const workspace = useWorkspace();
-  const { id, environment, snapshot, canEdit, save, refresh } =
+  const { id, environment, snapshot, canEdit, save, refresh, run } =
     useLoadedWorktree();
   if (!snapshot.bundle) return <InvalidProject />;
   return (
     <VariablesPanel
       readOnly={!canEdit}
+      onRunSource={canEdit ? (node) => void run(node) : undefined}
       snapshot={snapshot}
       environment={environment}
       environments={workspace.catalog.environment_details}

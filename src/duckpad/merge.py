@@ -25,7 +25,23 @@ def merge_values(base, current, proposed, path="", choices=None, evidence=None):
         return current, []
     if current == base:
         return proposed, []
-    if all(isinstance(v, dict) for v in (base, current, proposed)):
+    variable_path = path.startswith(variables.FILE + "/")
+    atomic_source = variable_path and path.count("/") == 2 and path.endswith("/from")
+    mode_change = (
+        variable_path
+        and path.count("/") == 1
+        and all(isinstance(v, dict) for v in (base, current, proposed))
+        and ("from" in current) != ("from" in proposed)
+        and any(
+            ("from" in switched) != ("from" in base)
+            and any(
+                other.get(key, MISSING) != base.get(key, MISSING)
+                for key in ("from", "default", "environments")
+            )
+            for switched, other in ((current, proposed), (proposed, current))
+        )
+    )
+    if not atomic_source and not mode_change and all(isinstance(v, dict) for v in (base, current, proposed)):
         result, conflicts = {}, []
         for key in sorted(base.keys() | current.keys() | proposed.keys()):
             value, errors = merge_values(

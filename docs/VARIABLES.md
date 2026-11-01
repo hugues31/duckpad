@@ -10,6 +10,10 @@ next to `flow.json`, and change through the usual save and commit cycle. The
 [design proposal](../docs/design/PROJECT_VARIABLES.md) explains the choices
 behind them.
 
+Variables can also take their value from a node output, and scalar variables can
+appear in file and export paths. The declaration is versioned; calculated values
+are recorded with executions and never written back to `variables.json`.
+
 ![The Variables tab lists each value per environment; the editor names the nodes that a change makes stale](images/variables.png)
 
 ## Create and edit values
@@ -204,3 +208,116 @@ the new instance keeps the references.
 
 See [environments](ENVIRONMENTS.md) for instance settings and
 [SQL syntax](SQL.md) for typed node parameters.
+
+## Calculate a value from a node
+
+Select **Computed from node** as the value source in the variable editor. Choose
+its type, the stable ID of a root node, an output port and a column. The port can
+be left empty when there is exactly one output. A component instance can supply
+one of its exposed outputs. Grouping a source updates the declaration to refer
+to the new instance's exposed output.
+
+![A computed variable with its source and retained value in the Variables tab](images/computed-variables.png)
+
+For example, upload `run_control.csv`:
+
+```csv
+report_date;mode;with_adjustments
+2026-06-30;standard;true
+```
+
+Read it with a CSV source called `run_control`, then declare:
+
+```json
+{
+  "report_date": {
+    "type": "date",
+    "from": {"node": "run_control", "column": "report_date"}
+  },
+  "mode": {
+    "type": "choice(standard|adjusted)",
+    "from": {"node": "run_control", "column": "mode"}
+  },
+  "with_adjustments": {
+    "type": "boolean",
+    "from": {"node": "run_control", "column": "with_adjustments"}
+  }
+}
+```
+
+The entire output must contain **exactly one row**. Duckpad waits for all outputs,
+data tests and messages to succeed before extracting values. Zero rows, multiple
+rows, NULL and incompatible cells are errors. A bad column blocks its consumers;
+other valid columns and independent branches remain usable. Computed declarations
+cannot contain `default` or `environments`, including empty or null fields.
+
+Conversions use the DuckDB column type. Text and booleans are not coerced from
+numbers. Dates accept DATE or valid ISO `YYYY-MM-DD` text, but not timestamps.
+Numbers must be finite; decimals must survive JSON serialization without losing
+precision. Lists must already be list cells with compatible, non-null elements.
+Use an explicit cast in the producer when its SQL type differs from the declared
+variable type.
+
+A pipeline run first calculates included value sources and their upstream nodes,
+then freezes the values and runs consumers. The toolbar shows these phases and
+the canvas marks value sources with **ƒ**. A shared upstream node runs once.
+Value sources and their upstream nodes may use ordinary variables only; computed
+value chains and dependency cycles are rejected.
+
+**Run node** in the variable editor refreshes its source using the usual launch
+permissions and protected-environment confirmation. A launch limited to a
+consumer does not add the value source to its scope: it uses the last successful
+value retained in that worktree and environment. Without one, run the source or
+the whole pipeline first. Compile, preview, sample filtering and launch inspection
+never execute a source themselves.
+
+Changing the producer's SQL keeps its last successful scalar available and marks
+the source result stale. Changing the source descriptor or declared type requires
+a new calculation. A failed refresh never falls back to an older value within
+that run; the older value remains available for a later consumer-only run.
+Refreshing an identical typed value preserves out-of-scope consumer results;
+changing it invalidates those consumers and their data descendants. Real data
+connections retain their usual invalidation rules.
+
+Retained values disappear when results are evicted or the backend restarts. New
+worktrees, historical revisions and Jobs do not share them. A Job calculates all
+value sources included in its scope; a fresh consumer-only Job must include its
+source to obtain a value. A successful value phase survives a later consumer
+failure, while a canceled value phase publishes no partial values.
+
+**History → Variables**, executed SQL and lineage show the immutable values used
+by that result, their source output and column, and the producing run and commit.
+A retained value names the earlier run that supplied it. **Open source cell** opens
+the recorded cell while that result is available. This explanation remains in run
+history after results disappear; it does not recreate the live source cell.
+Protected confirmation shows **Calculated at launch** for included sources and
+**Retained value** with provenance for excluded sources.
+
+## Use variables in paths
+
+Both ordinary and computed scalar variables can appear in `file`, `destination`
+and their connection-bound variants:
+
+```json
+{
+  "file": "orders/{{ var.report_date }}/{{ var.mode }}/*.parquet",
+  "destination": "exports/{{ var.report_date }}_summary.csv"
+}
+```
+
+Typing `{{ var.` offers compatible variables. Text, choices, ISO dates, finite
+numbers and booleans are accepted; booleans become `true` or `false`. Lists and
+identifiers are not path fragments. References are expanded once, without
+functions, recursive expansion or general text interpolation. Whole-parameter
+`{"$var": "name"}` bindings retain their existing type compatibility rules.
+
+The resolved path is checked against the captured connection or project-files
+root. Traversal, absolute paths or symlinks cannot escape that root. URI fragments
+cannot change the scheme or authority. Permitted globs remain subject to these
+checks and connection read/write permissions. Apostrophes are escaped as SQL
+literals. Executed statements retain the original template, referenced variables
+and resolved resource for inspection.
+
+Rename, Used by, grouping and version comparison include path references. Git
+comparison, merge and ZIP export contain declarations only. A computed `from`
+descriptor merges as one unit, so competing source edits require a choice.

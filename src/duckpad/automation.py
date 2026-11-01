@@ -12,6 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from . import schemas
 from .execution.runs import UNFINISHED_RUN_STATUSES
+from .types import Record
 from .util import Problem
 
 
@@ -61,6 +62,7 @@ class Run(BaseModel):
     started: str
     finished: str | None
     nodes: NodeCounts
+    variables: dict[str, Record] = Field(default_factory=dict)
     trigger: Trigger | None
     requester: Requester | None
     links: RunLinks
@@ -124,6 +126,7 @@ def public_run(run):
         "tag": run.get("tag"),
         "commit": run["commit"],
         "environment": run["environment"],
+        "variables": run.get("variables", {}),
         "started": run["started"],
         "finished": run.get("finished"),
         "nodes": {

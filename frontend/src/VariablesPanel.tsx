@@ -19,6 +19,7 @@ import { useRevisionDraft } from "./useRevisionDraft";
 import { VariableValueInput } from "./VariableFields";
 import {
   baseType,
+  computedDiagnostic,
   changedEnvironments,
   declarations,
   descendants,
@@ -52,8 +53,11 @@ const NEW_VARIABLE: Draft = {
 const stored = ({ name: _name, ...draft }: Draft): Declaration => ({
   type: draft.type,
   ...(draft.description ? { description: draft.description } : {}),
-  ...(draft.default !== undefined ? { default: draft.default } : {}),
-  ...(Object.keys(draft.environments || {}).length
+  ...(draft.from ? { from: draft.from } : {}),
+  ...(!draft.from && draft.default !== undefined
+    ? { default: draft.default }
+    : {}),
+  ...(!draft.from && Object.keys(draft.environments || {}).length
     ? { environments: draft.environments }
     : {}),
 });
@@ -67,6 +71,7 @@ export default function VariablesPanel({
   onRename,
   onOpenNode,
   onViewFiles,
+  onRunSource,
 }: {
   readOnly: boolean;
   snapshot: Snapshot;
@@ -81,6 +86,7 @@ export default function VariablesPanel({
   onRename: (base: Snapshot, name: string, target: string) => Promise<void>;
   onOpenNode: (node: string) => void;
   onViewFiles: () => void;
+  onRunSource?: (node: string) => void;
 }) {
   const t = useT();
   const [params, setParams] = useSearchParams();
@@ -273,6 +279,7 @@ export default function VariablesPanel({
               open(target);
             }}
             onOpenNode={onOpenNode}
+            onRunSource={onRunSource}
             onDirty={setDirty}
             onCreated={(name) => open(name, null, true)}
             onClose={() => open(null)}
@@ -350,7 +357,20 @@ function VariableRow({
         </span>
       </td>
       <td className="variable-value">
-        {"default" in variable ? formatVariableValue(variable.default) : "—"}
+        {variable.from ? (
+          <>
+            <span>{t("computedFromNode")}</span>
+            <small>
+              {[variable.from.node, variable.from.port, variable.from.column]
+                .filter(Boolean)
+                .join(".")}
+            </small>
+          </>
+        ) : "default" in variable ? (
+          formatVariableValue(variable.default)
+        ) : (
+          "—"
+        )}
       </td>
       {environments.map((item) => {
         const value = variable.values[item.id];
@@ -361,12 +381,22 @@ function VariableRow({
           >
             {!value || value.error ? (
               <span className="variable-error" title={value?.error}>
-                {t("noVariableValue")}
+                {computedDiagnostic(value?.code, t) || t("noVariableValue")}
+                {value?.last_error && <small>{value.last_error}</small>}
               </span>
             ) : value.source === "default" ? (
               <span className="muted">{t("defaultValueSource")}</span>
             ) : (
-              formatVariableValue(value.value)
+              <span title={value.producer_run}>
+                {formatVariableValue(value.value)}
+                {value.resolution === "retained" && (
+                  <small>{t("retainedValue")}</small>
+                )}
+                {value.source_stale && <small>{t("valueSourceStale")}</small>}
+                {value.last_error && (
+                  <small className="variable-error">{value.last_error}</small>
+                )}
+              </span>
             )}
           </td>
         );
@@ -390,6 +420,7 @@ function VariableEditor({
   onSave,
   onRename,
   onOpenNode,
+  onRunSource,
   onDirty,
   onCreated,
   onClose,
@@ -407,6 +438,7 @@ function VariableEditor({
   ) => Promise<Snapshot>;
   onRename: (target: string) => Promise<void>;
   onOpenNode: (node: string) => void;
+  onRunSource?: (node: string) => void;
   onDirty: (dirty: boolean) => void;
   onCreated: (name: string) => void;
   onClose: () => void;
@@ -456,6 +488,9 @@ function VariableEditor({
   const kind = baseType(draft.type);
   const choices = typeOptions(draft.type);
   const problems = [
+    draft.from &&
+      (!draft.from.node || !draft.from.column) &&
+      t("valueSourceRequired"),
     !name &&
       draft.name &&
       !VARIABLE_NAME.test(draft.name) &&
@@ -596,86 +631,176 @@ function VariableEditor({
             onChange={(e) => set({ description: e.target.value })}
           />
         </label>
-        <div className="field">
-          <span>
-            <label htmlFor={`${id}-default`}>{t("defaultValue")}</label>
-          </span>
-          <VariableValueInput
-            id={`${id}-default`}
-            type={draft.type}
-            value={draft.default}
-            placeholder={t("noDefault")}
-            onChange={(item) =>
+        <label className="field">
+          <span>{t("variableMode")}</span>
+          <Select
+            aria-label={t("variableMode")}
+            value={draft.from ? "computed" : "ordinary"}
+            onChange={(e) => {
               update((current) => {
                 const next = { ...current };
-                if (item === undefined) delete next.default;
-                else next.default = item;
+                delete next.default;
+                delete next.environments;
+                if (e.target.value === "computed")
+                  next.from = { node: "", column: "" };
+                else delete next.from;
                 return next;
-              })
-            }
-          />
-        </div>
-        <h4 className="eyebrow">{t("valuePerEnvironment")}</h4>
-        {environments.map((item) => {
-          const inherited = !(item.id in values);
-          return (
-            <div
-              className={`variable-environment ${item.id === environment ? "active" : ""}`}
-              key={item.id}
-            >
-              <span className="variable-environment-name" title={item.label}>
-                <span className="env-dot" style={{ background: item.color }} />
-                {item.id}
+              });
+            }}
+          >
+            <option value="ordinary">{t("ordinaryVariable")}</option>
+            <option value="computed">{t("computedFromNode")}</option>
+          </Select>
+        </label>
+        {draft.from ? (
+          <>
+            <label className="field">
+              <span>{t("valueSourceNode")}</span>
+              <Select
+                aria-label={t("valueSourceNode")}
+                value={draft.from.node}
+                onChange={(e) =>
+                  set({
+                    from: { node: e.target.value, column: draft.from!.column },
+                  })
+                }
+              >
+                <option value="">{t("chooseValueSource")}</option>
+                {nodes.map((node) => (
+                  <option key={node.id} value={node.id}>
+                    {node.label || node.id}
+                  </option>
+                ))}
+              </Select>
+            </label>
+            <label className="field">
+              <span>{t("valueSourcePort")}</span>
+              <input
+                value={draft.from.port || ""}
+                placeholder={t("uniqueOutputHint")}
+                onChange={(e) =>
+                  set({
+                    from: {
+                      node: draft.from!.node,
+                      column: draft.from!.column,
+                      ...(e.target.value ? { port: e.target.value } : {}),
+                    },
+                  })
+                }
+              />
+            </label>
+            <label className="field">
+              <span>{t("valueSourceColumn")}</span>
+              <input
+                value={draft.from.column}
+                onChange={(e) =>
+                  set({ from: { ...draft.from!, column: e.target.value } })
+                }
+              />
+            </label>
+            <p className="muted small">{t("computedVariableHint")}</p>
+            {onRunSource && saved?.from && !dirty && (
+              <button
+                type="button"
+                className="button secondary small"
+                onClick={() => onRunSource(saved.from!.node)}
+              >
+                {t("runNode")} · {saved.from.node}
+              </button>
+            )}
+          </>
+        ) : (
+          <>
+            <div className="field">
+              <span>
+                <label htmlFor={`${id}-default`}>{t("defaultValue")}</label>
               </span>
               <VariableValueInput
+                id={`${id}-default`}
                 type={draft.type}
-                value={inherited ? undefined : values[item.id]}
-                label={fill(t("environmentValue"), { environment: item.id })}
-                disabled={inherited}
-                placeholder={
-                  draft.default === undefined
-                    ? t("noVariableValue")
-                    : `${formatVariableValue(draft.default)} · ${t("defaultValueSource")}`
+                value={draft.default}
+                placeholder={t("noDefault")}
+                onChange={(item) =>
+                  update((current) => {
+                    const next = { ...current };
+                    if (item === undefined) delete next.default;
+                    else next.default = item;
+                    return next;
+                  })
                 }
-                onChange={(next) => setEnvironment(item.id, next)}
               />
-              <label className="switch">
-                <input
-                  type="checkbox"
-                  role="switch"
-                  aria-label={fill(t("useDefaultIn"), {
-                    environment: item.id,
-                  })}
-                  checked={inherited}
-                  onChange={(e) =>
-                    setEnvironment(
-                      item.id,
-                      e.target.checked
-                        ? undefined
-                        : (draft.default ?? initialValue(draft.type)),
-                    )
-                  }
-                />
-                <span aria-hidden="true">{t("defaultValueSource")}</span>
-              </label>
             </div>
-          );
-        })}
-        {unknown.map((key) => (
-          <div className="variable-environment unknown" key={key}>
-            <span className="variable-environment-name">{key}</span>
-            <span className="variable-warning">
-              {formatVariableValue(values[key])} · {t("unknownEnvironment")}
-            </span>
-            <button
-              type="button"
-              className="text-button danger"
-              onClick={() => setEnvironment(key, undefined)}
-            >
-              {t("remove")}
-            </button>
-          </div>
-        ))}
+            <h4 className="eyebrow">{t("valuePerEnvironment")}</h4>
+            {environments.map((item) => {
+              const inherited = !(item.id in values);
+              return (
+                <div
+                  className={`variable-environment ${item.id === environment ? "active" : ""}`}
+                  key={item.id}
+                >
+                  <span
+                    className="variable-environment-name"
+                    title={item.label}
+                  >
+                    <span
+                      className="env-dot"
+                      style={{ background: item.color }}
+                    />
+                    {item.id}
+                  </span>
+                  <VariableValueInput
+                    type={draft.type}
+                    value={inherited ? undefined : values[item.id]}
+                    label={fill(t("environmentValue"), {
+                      environment: item.id,
+                    })}
+                    disabled={inherited}
+                    placeholder={
+                      draft.default === undefined
+                        ? t("noVariableValue")
+                        : `${formatVariableValue(draft.default)} · ${t("defaultValueSource")}`
+                    }
+                    onChange={(next) => setEnvironment(item.id, next)}
+                  />
+                  <label className="switch">
+                    <input
+                      type="checkbox"
+                      role="switch"
+                      aria-label={fill(t("useDefaultIn"), {
+                        environment: item.id,
+                      })}
+                      checked={inherited}
+                      onChange={(e) =>
+                        setEnvironment(
+                          item.id,
+                          e.target.checked
+                            ? undefined
+                            : (draft.default ?? initialValue(draft.type)),
+                        )
+                      }
+                    />
+                    <span aria-hidden="true">{t("defaultValueSource")}</span>
+                  </label>
+                </div>
+              );
+            })}
+            {unknown.map((key) => (
+              <div className="variable-environment unknown" key={key}>
+                <span className="variable-environment-name">{key}</span>
+                <span className="variable-warning">
+                  {formatVariableValue(values[key])} · {t("unknownEnvironment")}
+                </span>
+                <button
+                  type="button"
+                  className="text-button danger"
+                  onClick={() => setEnvironment(key, undefined)}
+                >
+                  {t("remove")}
+                </button>
+              </div>
+            ))}
+          </>
+        )}
       </fieldset>
       {name && dirty && (
         <p className="variable-impact" role="status">

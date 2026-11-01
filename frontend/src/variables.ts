@@ -44,6 +44,7 @@ const BINDABLE: Record<string, string[]> = {
 
 /** A declaration as stored in variables.json. */
 export type Declaration = {
+  from?: { node: string; port?: string; column: string };
   type: string;
   description?: string;
   default?: Json;
@@ -153,7 +154,7 @@ export function resolveValue(
   declaration: Declaration | undefined,
   environment: string,
 ): VariableValue {
-  if (!declaration) return {};
+  if (!declaration || declaration.from) return {};
   if (declaration.environments && environment in declaration.environments)
     return {
       value: declaration.environments[environment],
@@ -215,6 +216,7 @@ export const changedEnvironments = (
 ) =>
   environments.filter(
     (environment) =>
+      !sameValue(before?.from, after.from) ||
       !sameValue(
         resolveValue(before, environment).value,
         resolveValue(after, environment).value,
@@ -284,4 +286,31 @@ export function completeReference(text: string, caret: number, name: string) {
     text: text.slice(0, partial.start) + inserted + after.slice(rest.length),
     caret: partial.start + inserted.length,
   };
+}
+
+/** Localized meaning of a stable computed-value diagnostic code. */
+export function computedDiagnostic(
+  code: string | undefined,
+  t: Translate,
+): string {
+  switch (code) {
+    case "value_not_calculated":
+      return t("valueNotCalculated");
+    case "invalid_value_source":
+      return t("invalidValueSource");
+    case "value_cardinality":
+      return t("valueCardinality");
+    case "value_null":
+      return t("valueNull");
+    case "value_type":
+      return t("valueTypeMismatch");
+    case "value_dependency_cycle":
+      return t("valueDependencyCycle");
+    case "value_chain":
+      return t("valueChain");
+    case "value_source_failed":
+      return t("valueSourceFailed");
+    default:
+      return "";
+  }
 }

@@ -1,3 +1,4 @@
+import { Link, useParams } from "react-router";
 import { withQuery } from "./api";
 import { useT } from "./i18n";
 import ParameterInput from "./ParameterInput";
@@ -13,6 +14,7 @@ import type {
 import { useApiResource } from "./useApiResource";
 import {
   baseType,
+  computedDiagnostic,
   descendants,
   fill,
   formatVariableValue,
@@ -137,6 +139,7 @@ export function VariableValues({
   parameters?: Record<string, string[]>;
 }) {
   const source = useSourceLabel();
+  const t = useT();
   return (
     <table className="variable-values">
       <tbody>
@@ -150,20 +153,92 @@ export function VariableValues({
             </th>
             {item.error ? (
               <td className="variable-error" colSpan={2}>
+                {item.code && (
+                  <strong>{computedDiagnostic(item.code, t)}</strong>
+                )}
                 {item.error}
               </td>
             ) : (
               <>
                 <td>
-                  <strong>{formatVariableValue(item.value)}</strong>
+                  <strong>
+                    {item.state === "pending"
+                      ? t("calculatedAtLaunch")
+                      : formatVariableValue(item.value)}
+                  </strong>
                 </td>
-                <td className="muted">{source(item.source, environment)}</td>
+                <td className="muted">
+                  {item.source === "node" ? (
+                    <>
+                      <span>
+                        {item.resolution === "retained"
+                          ? t("retainedValue")
+                          : t("computedFromNode")}
+                      </span>
+                      <small>
+                        {item.from &&
+                          [item.from.node, item.from.port, item.from.column]
+                            .filter(Boolean)
+                            .join(".")}
+                      </small>
+                      {item.producer_run && (
+                        <small>
+                          {item.producer_run} ·{" "}
+                          {item.producer_commit?.slice(0, 8)}
+                        </small>
+                      )}
+                      <ValueSourceLink value={item} environment={environment} />
+                    </>
+                  ) : (
+                    source(item.source, environment)
+                  )}
+                </td>
               </>
             )}
           </tr>
         ))}
       </tbody>
     </table>
+  );
+}
+
+/** Open only the recorded generation, never today's replacement source result. */
+function ValueSourceLink({
+  value,
+  environment,
+}: {
+  value: VariableValue;
+  environment: string;
+}) {
+  const t = useT();
+  const { worktreeId } = useParams();
+  const { data } = useApiResource<{ valid: boolean }>(
+    worktreeId && value.source_dataset
+      ? withQuery(
+          `/worktrees/${worktreeId}/generations/${value.source_dataset}`,
+          { environment },
+        )
+      : null,
+  );
+  if (!data?.valid || !value.from) return null;
+  return (
+    <small>
+      <Link
+        to={withQuery(`/worktrees/${worktreeId}/flow`, {
+          environment,
+          node: value.from.node,
+        })}
+        state={{
+          valueSource: {
+            dataset: value.source_dataset,
+            row: 0,
+            column: value.from.column,
+          },
+        }}
+      >
+        {t("openValueSource")}
+      </Link>
+    </small>
   );
 }
 

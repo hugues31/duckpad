@@ -22,6 +22,9 @@ class Dataset:
     dependencies: dict[str, str]
     fingerprint: str
     storage: str
+    bound_values: Record = field(default_factory=dict)
+    value_stale: bool = False
+    source_columns: list[dict[str, str]] = field(default_factory=list)
     source: bool = False
     status: str = "valid"
     created: str = field(default_factory=now)
@@ -69,6 +72,8 @@ class Context:
     errors: dict[str, str] = field(default_factory=dict)
     node_status: dict[str, str] = field(default_factory=dict)
     result_runs: dict[str, str] = field(default_factory=dict)
+    retained_values: Record = field(default_factory=dict)
+    value_attempts: Record = field(default_factory=dict)
     lineage: dict[str, LineageRequest] = field(default_factory=dict)
     lock: threading.RLock = field(default_factory=threading.RLock)
     trace_lock: threading.RLock = field(default_factory=threading.RLock)
