@@ -318,6 +318,7 @@ def test_connector_parameter_labels_are_documentation(services):
     assert catalog.capture(["w"], "dev")[0]["w"]["fingerprint"] == before
 
 
+@pytest.mark.skipif(not EXAMPLES.is_dir(), reason="Source archives ship no documentation")
 @pytest.mark.parametrize("name", ["mysql", "sqlite"])
 def test_published_examples_are_valid_definitions_shown_in_the_guide(services, name):
     _, _, catalog, _ = services
