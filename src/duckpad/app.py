@@ -136,9 +136,16 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
         if route == "v1":
             # The versioned router checks resource visibility and project roles itself.
             return
-        if route in ("users", "environments", "catalog", "resources", "sso", "extensions", "git-hosts") or (
-            route == "assistant" and len(parts) >= 3 and parts[2] in ("settings", "test", "models")
-        ):
+        if route in (
+            "users",
+            "environments",
+            "catalog",
+            "resources",
+            "sql-resources",
+            "sso",
+            "extensions",
+            "git-hosts",
+        ) or (route == "assistant" and len(parts) >= 3 and parts[2] in ("settings", "test", "models")):
             access.instance_admin(user)
         elif route == "projects" and len(parts) >= 3 and parts[2:] != ["import"]:
             access.require(user, parts[2], "reader" if request.method == "GET" else "admin")
@@ -357,6 +364,14 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
     @app.put("/api/extensions/settings", response_model=None)
     def save_extension_settings(data: schemas.ExtensionSettings) -> Record:
         return engine.configure_extensions(data.allow_unsigned_extensions)
+
+    @app.get("/api/sql-resources", response_model=None)
+    def sql_resources() -> Record:
+        return engine.sql_resources()
+
+    @app.put("/api/sql-resources", response_model=None)
+    def save_sql_resources(data: schemas.SQLResources) -> Record:
+        return engine.configure_sql_resources(data.model_dump())
 
     @app.get("/api/extensions/runtime", response_model=None)
     def extension_runtime() -> Record:

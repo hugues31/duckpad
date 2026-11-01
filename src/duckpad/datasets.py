@@ -62,6 +62,8 @@ class Context:
     environment: str
     db: SQLDatabase | None
     extensions: list[Record] = field(default_factory=list)
+    # The SQL resources its database started with.
+    resources: Record = field(default_factory=dict)
     outputs: dict[str, dict[str, Dataset]] = field(default_factory=dict)
     datasets: dict[str, Dataset] = field(default_factory=dict)
     errors: dict[str, str] = field(default_factory=dict)

@@ -85,6 +85,84 @@ test("unsigned extension settings persist, report rejected changes and are trans
   }
 });
 
+test("SQL resource settings show automatic sizing, persist explicit limits and are translated", async ({
+  page,
+}) => {
+  await signIn(page);
+  const original = await (await page.request.get("/api/sql-resources")).json();
+  const { automatic } = original;
+  try {
+    await page.request.put("/api/sql-resources", {
+      data: { threads: null, memory_limit: null },
+    });
+    await openInstanceSettings(page, "SQL resources");
+    await expect(page).toHaveURL(/\/instance-settings\/sql-resources$/);
+    const threads = page.getByLabel("Threads per session", { exact: true });
+    const memory = page.getByLabel("Memory limit per session", {
+      exact: true,
+    });
+    const save = page.getByRole("button", {
+      name: "Save SQL resources",
+      exact: true,
+    });
+    await expect(threads).toHaveValue("");
+    await expect(threads).toHaveAttribute(
+      "placeholder",
+      `Automatic (${automatic.threads})`,
+    );
+    await expect(memory).toHaveAttribute(
+      "placeholder",
+      `Automatic (${automatic.memory_limit})`,
+    );
+    await expect(page.locator("#sql-memory-hint")).toContainText(
+      `Automatic: ${automatic.memory_limit}`,
+    );
+
+    await threads.fill("4");
+    await memory.fill("16");
+    await save.click();
+    await expect(page.getByRole("alert")).toContainText(
+      "Enter a memory limit such as 16GB, 512MiB or 50%",
+    );
+    await memory.fill(" 16 gib ");
+    await save.click();
+    await expect(page.getByRole("status")).toContainText(
+      "SQL resources saved.",
+    );
+    await expect(memory).toHaveValue("16GiB");
+    await page.reload();
+    await expect(threads).toHaveValue("4");
+    await expect(memory).toHaveValue("16GiB");
+
+    await threads.fill("");
+    await memory.fill("");
+    await save.click();
+    await expect(page.getByRole("status")).toContainText(
+      "SQL resources saved.",
+    );
+    expect(
+      await (await page.request.get("/api/sql-resources")).json(),
+    ).toMatchObject({ threads: null, memory_limit: null });
+
+    await openUserSettings(page);
+    await page.getByLabel("Language", { exact: true }).selectOption("fr");
+    await page.goto("/instance-settings/sql-resources");
+    await expect(
+      page.getByLabel(fr.sqlThreads, { exact: true }),
+    ).toHaveAttribute(
+      "placeholder",
+      fr.automaticValue.replace("{value}", String(automatic.threads)),
+    );
+    await expect(
+      page.getByRole("button", { name: fr.saveSqlResources, exact: true }),
+    ).toBeVisible();
+  } finally {
+    await page.request.put("/api/sql-resources", {
+      data: { threads: original.threads, memory_limit: original.memory_limit },
+    });
+  }
+});
+
 test("instance configuration is available without a project and separate from personal settings", async ({
   page,
 }) => {
