@@ -1,3 +1,5 @@
+import { Link } from "react-router";
+import { worktreeUrl } from "./navigation";
 import AskAssistant from "./AskAssistant";
 import { useState } from "react";
 import {
@@ -58,7 +60,9 @@ export default function HistoryPanel({
   const [tagCommit, setTagCommit] = useState<string | null>(null);
   const tags = useApiResource<GitTag[]>(`/worktrees/${worktree}/git/tags`);
   const more = useAsyncAction();
-  const runHistory = useApiResource<Run[]>(withQuery("/runs", { worktree }));
+  const runHistory = useApiResource<Run[]>(
+    withQuery("/runs", { worktree, include_jobs: true }),
+  );
   const gitHistory = useApiResource<HistoryPage>(
     withQuery(`/worktrees/${worktree}/git/history`, { limit: 100 }),
   );
@@ -129,7 +133,9 @@ export default function HistoryPanel({
                 </strong>
                 <small>
                   {new Date(run.started).toLocaleString()} · {run.environment} ·{" "}
-                  {run.branch}
+                  {run.job
+                    ? `${t("job")} · ${run.job.name} · ${run.tag || run.commit.slice(0, 8)}`
+                    : run.branch}
                   {run.entry_point === "assistant"
                     ? ` · ${t("assistant")}`
                     : ""}
@@ -243,85 +249,7 @@ export default function HistoryPanel({
             {selected.entry_point === "assistant" && (
               <p className="muted">{t("assistantRunEntryPoint")}</p>
             )}
-            {selected.error && <p className="notice error">{selected.error}</p>}
-            {selected.requester && (
-              <p>
-                {t("runRequester")}:{" "}
-                <strong>{selected.requester.username}</strong>
-                {selected.requester.token_name && (
-                  <>
-                    {" "}
-                    · {t("apiTokenName")}:{" "}
-                    <strong>{selected.requester.token_name}</strong>
-                  </>
-                )}
-              </p>
-            )}
-            {!!Object.keys(selected.variables || {}).length && (
-              <section className="run-variables">
-                <h4>{t("variables")}</h4>
-                <VariableValues
-                  variables={selected.variables || {}}
-                  environment={selected.environment}
-                  parameters={boundParameters(selected)}
-                />
-              </section>
-            )}
-            <details className="run-step">
-              <summary>{t("executionConfiguration")}</summary>
-              <pre className="expression">
-                {JSON.stringify(
-                  {
-                    commit: selected.commit,
-                    environment: selected.environment,
-                    scope: selected.scope,
-                    trigger: selected.trigger,
-                    entry_point: selected.entry_point,
-                    requester: selected.requester,
-                    started: selected.started,
-                    finished: selected.finished,
-                    connections: selected.connections,
-                    definitions: selected.definitions,
-                    node_sql: selected.node_sql,
-                    components: selected.components,
-                  },
-                  null,
-                  2,
-                )}
-              </pre>
-            </details>
-            {Object.entries(selected.nodes).map(([key, state]) => (
-              <details className="run-step" key={key}>
-                <summary>
-                  <span className={`badge ${state.status}`}>
-                    {t(state.status)}
-                  </span>
-                  <strong>{state.label}</strong>
-                  <WarningBadge count={warningCount(state.results)} />
-                  <span className="muted">{state.duration?.toFixed(3)} s</span>
-                </summary>
-                {state.error && (
-                  <div className="notice error">
-                    <p>{state.error}</p>
-                    <AskAssistant
-                      onOpen={() => setSelected(null)}
-                      node={key}
-                      run={selected.id}
-                      environment={selected.environment}
-                    />
-                  </div>
-                )}
-                <ExecutionMessages results={state.results} />
-                {state.external_outcome && (
-                  <p className="notice">
-                    {t("externalOutcome")}: {t(state.external_outcome)}
-                  </p>
-                )}
-                <pre className="expression">
-                  {JSON.stringify(state, null, 2)}
-                </pre>
-              </details>
-            ))}
+            <RunDetails run={selected} onClose={() => setSelected(null)} />
           </div>
         </Modal>
       )}
@@ -334,5 +262,110 @@ export default function HistoryPanel({
         />
       )}
     </section>
+  );
+}
+
+/** The captured requester, configuration and node logs of a run. */
+export function RunDetails({
+  run,
+  onClose,
+}: {
+  run: Run;
+  onClose: () => void;
+}) {
+  const t = useT();
+  return (
+    <>
+      {run.job && (
+        <Link
+          className="button secondary"
+          to={worktreeUrl(run.worktree, "flow", run.environment)}
+          onClick={onClose}
+        >
+          {t("openResults")}
+        </Link>
+      )}
+      {run.job && (
+        <p>
+          {t("job")}: <strong>{run.job.name}</strong> ·{" "}
+          {run.tag || run.job.branch} · <code>{run.commit.slice(0, 8)}</code>
+        </p>
+      )}
+      {run.error && <p className="notice error">{run.error}</p>}
+      {run.requester && (
+        <p>
+          {t("runRequester")}: <strong>{run.requester.username}</strong>
+          {run.requester.token_name && (
+            <>
+              {" "}
+              · {t("apiTokenName")}: <strong>{run.requester.token_name}</strong>
+            </>
+          )}
+        </p>
+      )}
+      {!!Object.keys(run.variables || {}).length && (
+        <section className="run-variables">
+          <h4>{t("variables")}</h4>
+          <VariableValues
+            variables={run.variables || {}}
+            environment={run.environment}
+            parameters={boundParameters(run)}
+          />
+        </section>
+      )}
+      <details className="run-step">
+        <summary>{t("executionConfiguration")}</summary>
+        <pre className="expression">
+          {JSON.stringify(
+            {
+              commit: run.commit,
+              environment: run.environment,
+              scope: run.scope,
+              trigger: run.trigger,
+              job: run.job,
+              tag: run.tag,
+              entry_point: run.entry_point,
+              requester: run.requester,
+              started: run.started,
+              finished: run.finished,
+              connections: run.connections,
+              definitions: run.definitions,
+              node_sql: run.node_sql,
+              components: run.components,
+            },
+            null,
+            2,
+          )}
+        </pre>
+      </details>
+      {Object.entries(run.nodes).map(([key, state]) => (
+        <details className="run-step" key={key}>
+          <summary>
+            <span className={`badge ${state.status}`}>{t(state.status)}</span>
+            <strong>{state.label}</strong>
+            <WarningBadge count={warningCount(state.results)} />
+            <span className="muted">{state.duration?.toFixed(3)} s</span>
+          </summary>
+          {state.error && (
+            <div className="notice error">
+              <p>{state.error}</p>
+              <AskAssistant
+                onOpen={onClose}
+                node={key}
+                run={run.id}
+                environment={run.environment}
+              />
+            </div>
+          )}
+          <ExecutionMessages results={state.results} />
+          {state.external_outcome && (
+            <p className="notice">
+              {t("externalOutcome")}: {t(state.external_outcome)}
+            </p>
+          )}
+          <pre className="expression">{JSON.stringify(state, null, 2)}</pre>
+        </details>
+      ))}
+    </>
   );
 }

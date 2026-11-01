@@ -8,7 +8,7 @@ import threading
 from contextlib import contextmanager
 from pathlib import Path
 
-from sqlalchemy import URL, delete, event, func, literal_column
+from sqlalchemy import URL, and_, delete, event, func, literal_column, or_
 from sqlmodel import Session, create_engine, select
 
 from . import models as m
@@ -23,6 +23,7 @@ MODELS = {
     "api_token": m.APIToken,
     "project": m.Project,
     "worktree": m.Worktree,
+    "job": m.Job,
     "connector": m.Connector,
     "connection": m.Connection,
     "environment": m.Environment,
@@ -124,6 +125,8 @@ class Store:
         data = row.model_dump()
         if kind in SNAPSHOTS:
             data = {**data.pop(SNAPSHOTS[kind]), **data}
+        if kind == "worktree" and not data["read_only"]:
+            data.pop("read_only")
         if kind == "connector" and data["name"] is None:
             data.pop("name")
         if kind == "user":
@@ -168,6 +171,18 @@ class Store:
                 select(m.APIToken).where(m.APIToken.user == user).order_by(m.APIToken.created)
             )
             return [row.model_dump() for row in rows]
+
+    def job_launch(self, job, key, instant):
+        with self.session() as session:
+            row = session.get(m.JobIdempotency, (job, key))
+            return row.model_dump() if row is not None and row.expires > instant else None
+
+    def remember_job_launch(self, data, run, instant):
+        """Called in the transaction that first persists a run, before execution starts."""
+        with self.session() as session:
+            session.exec(delete(m.JobIdempotency).where(m.JobIdempotency.expires <= instant))
+            session.add(m.JobIdempotency(**data, run=run, expires=instant + 7 * 24 * 60 * 60))
+            session.flush()
 
     def find_api_token(self, token_hash):
         with self.session() as session:
@@ -355,7 +370,7 @@ class Store:
         with self.session() as session:
             session.exec(delete(m.OIDCTransaction))
 
-    def runs(self, user, worktree=None):
+    def runs(self, user, worktree=None, include_jobs=False, limit=None):
         with self.session() as session:
             statement = select(m.Run)
             if user["role"] != "admin":
@@ -363,8 +378,21 @@ class Store:
                     m.ProjectMember.user == user["id"]
                 )
             if worktree:
-                statement = statement.where(m.Run.worktree == worktree)
-            rows = session.exec(statement.order_by(m.Run.started.desc(), m.Run.id.desc()))
+                condition = m.Run.worktree == worktree
+                if include_jobs:
+                    tree = session.get(m.Worktree, worktree)
+                    if tree:
+                        condition = or_(
+                            condition,
+                            and_(
+                                m.Run.project == tree.project, m.Run.snapshot["trigger"].as_string() == "job"
+                            ),
+                        )
+                statement = statement.where(condition)
+            statement = statement.order_by(m.Run.started.desc(), m.Run.id.desc())
+            if limit is not None:
+                statement = statement.limit(limit)
+            rows = session.exec(statement)
             return [self._record("run", row, session) for row in rows]
 
     def test_history(self, worktree, environment, node, limit=10):

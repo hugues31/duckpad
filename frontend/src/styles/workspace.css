@@ -64,7 +64,8 @@
   transition: width 0.3s;
 }
 .full-panel {
-  padding: 37px 44px;
+  --full-panel-padding: 37px;
+  padding: var(--full-panel-padding) 44px;
   overflow: auto;
   flex: 1;
   min-height: 0;
@@ -96,6 +97,7 @@
 }
 @media (max-width: 600px) {
   .full-panel {
+    --full-panel-padding: 20px;
     padding: 20px;
   }
   .page-heading {

@@ -22,7 +22,7 @@ from starlette.datastructures import UploadFile as FormFile
 from starlette.exceptions import HTTPException
 from starlette.middleware.base import RequestResponseEndpoint
 
-from . import __version__, schemas, variables
+from . import __version__, automation, schemas, variables
 from .archive import archive_bundle, import_warnings, read_archive, write_archive
 from .artifacts import CHUNK_SIZE
 from .assistant.api import router as assistant_router
@@ -32,6 +32,7 @@ from .bundle import bundle_to_files
 from .components import group, import_definition
 from .example import create_example
 from .git.identity import commit_author
+from .jobs import Jobs
 from .oidc import CALLBACK_PATH, OIDC, TRANSACTION_LIFETIME, OIDCSettings
 from .resources import resource_usage
 from .search import search_instance
@@ -96,6 +97,7 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
     assert access is not None
     credentials = projects.remotes.credentials
     assistant = Assistant(services, auth)
+    jobs = Jobs(services)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
@@ -118,10 +120,21 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
     app.state.access = access
     app.state.assistant = assistant
     app.include_router(assistant_router(assistant))
+    app.include_router(automation.router(jobs, access))
+
+    def request_problem(
+        request: Request, error: Problem, headers: Mapping[str, str] | None = None
+    ) -> JSONResponse:
+        if request.url.path.startswith("/api/v1/"):
+            error = automation.problem(error)
+        return problem_response(error, headers)
 
     def authorize(request: Request, user: Record) -> None:
         parts = request.url.path.strip("/").split("/")
         route = parts[1] if len(parts) > 1 else ""
+        if route == "v1":
+            # The versioned router checks resource visibility and project roles itself.
+            return
         if route in ("users", "environments", "catalog", "resources", "sso", "extensions", "git-hosts") or (
             route == "assistant" and len(parts) >= 3 and parts[2] in ("settings", "test", "models")
         ):
@@ -135,11 +148,22 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
             access.worktree(user, parts[2], "reader" if read else "editor")
             if parts[3:] == ["git", "remote"] and request.method == "PUT":
                 access.worktree(user, parts[2], "admin")
+        elif route == "jobs" and len(parts) >= 3:
+            job = jobs.get(parts[2])
+            role = (
+                "reader"
+                if request.method == "GET"
+                else ("operator" if request.method == "POST" and parts[3:] == ["runs"] else "admin")
+            )
+            access.require(user, job["project"], role)
         elif route in ("runs", "conflicts") and len(parts) >= 3:
             record = store.get("run" if route == "runs" else "conflict", parts[2])
             if not record:
                 raise Problem("Resource not found", 404)
-            access.worktree(user, record["worktree"], "reader" if request.method == "GET" else "editor")
+            if route == "runs" and record.get("trigger") == "job":
+                access.require(user, record["project"], "reader" if request.method == "GET" else "operator")
+            else:
+                access.worktree(user, record["worktree"], "reader" if request.method == "GET" else "editor")
         elif route not in (
             "assistant",
             "session",
@@ -159,20 +183,20 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
     @app.exception_handler(Problem)
     async def problem_handler(request: Request, error: Exception) -> JSONResponse:
         assert isinstance(error, Problem)
-        return problem_response(error)
+        return request_problem(request, error)
 
     @app.exception_handler(RequestValidationError)
     async def invalid_request(request: Request, error: Exception) -> JSONResponse:
         assert isinstance(error, RequestValidationError)
         errors = [{"location": ".".join(map(str, e["loc"])), "message": e["msg"]} for e in error.errors()]
         summary = "; ".join(f"{e['location']}: {e['message']}" for e in errors)
-        return problem_response(Problem(f"Invalid request: {summary}", 422, errors))
+        return request_problem(request, Problem(f"Invalid request: {summary}", 422, errors))
 
     @app.exception_handler(HTTPException)
     async def http_problem(request: Request, error: Exception) -> JSONResponse:
         # Framework errors, such as unsupported methods or malformed forms, use the same format.
         assert isinstance(error, HTTPException)
-        return problem_response(Problem(str(error.detail), error.status_code), error.headers)
+        return request_problem(request, Problem(str(error.detail), error.status_code), error.headers)
 
     @app.middleware("http")
     async def authentication(request: Request, call_next: RequestResponseEndpoint) -> Response:
@@ -201,7 +225,7 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
             with commit_author(auth.commit_identity(user) if user else None):
                 response = await call_next(request)
         except Problem as error:
-            response = problem_response(error)
+            response = request_problem(request, error)
         except Exception:
             # The traceback stays in the server log; clients never see internal details.
             logger.exception("Unexpected error in %s %s", request.method, request.url.path)
@@ -626,6 +650,10 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
     ) -> Record:
         return projects.versioning.history(worktree, ref, offset, limit, entity)
 
+    @app.get("/api/worktrees/{worktree}/git/history/summary", response_model=None)
+    def git_history_summary(worktree: str, entity: str, ref: str = "HEAD") -> Record:
+        return projects.versioning.element_summary(worktree, entity, ref)
+
     @app.get("/api/worktrees/{worktree}/git/tags", response_model=None)
     def git_tags(worktree: str) -> list[Record]:
         return projects.versioning.tags(worktree)
@@ -757,6 +785,52 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
     def status(worktree: str, environment: str) -> Record:
         return engine.statuses(worktree, environment)
 
+    # Jobs are instance metadata; their detached worktrees only expose read routes.
+    @app.get("/api/projects/{project}/jobs", response_model=None)
+    def list_jobs(project: str) -> list[Record]:
+        return [jobs.public(job) for job in store.all("job") if job["project"] == project]
+
+    @app.post("/api/projects/{project}/jobs", response_model=None, status_code=201)
+    def create_job(project: str, data: schemas.NewJob, request: Request) -> Record:
+        return jobs.create(project, data, request.state.user)
+
+    @app.get("/api/jobs/{slug}", response_model=None)
+    def get_job(slug: str) -> Record:
+        return jobs.public(jobs.get(slug))
+
+    @app.patch("/api/jobs/{slug}", response_model=None)
+    def update_job(slug: str, data: schemas.JobChanges) -> Record:
+        return jobs.update(slug, data)
+
+    @app.delete("/api/jobs/{slug}", response_model=None)
+    def delete_job(slug: str) -> Record:
+        jobs.delete(slug)
+        return {"ok": True}
+
+    @app.get("/api/jobs/{slug}/version", response_model=None)
+    def compare_job_version(slug: str, ref: str, kind: str = "tag") -> Record:
+        return jobs.compare(slug, kind, ref)
+
+    @app.post("/api/jobs/{slug}/version", response_model=None)
+    def promote_job(slug: str, data: schemas.JobPromotion, request: Request) -> Record:
+        return jobs.promote(slug, data, request.state.user)
+
+    @app.get("/api/jobs/{slug}/runs", response_model=None)
+    def job_runs(slug: str) -> list[Record]:
+        return jobs.runs(jobs.get(slug))
+
+    @app.post("/api/jobs/{slug}/runs", response_model=None, status_code=202)
+    def launch_job(slug: str, data: schemas.JobLaunch, request: Request) -> Record:
+        return jobs.launch(
+            slug,
+            data,
+            {
+                "id": request.state.user["id"],
+                "username": request.state.user["username"],
+                "token_name": request.state.token_name,
+            },
+        )
+
     @app.post("/api/worktrees/{worktree}/runs", response_model=None)
     def launch(worktree: str, data: schemas.Launch, request: Request) -> Record:
         entry_point = "ui" if data.entry_point == "ui" else "api"
@@ -780,10 +854,10 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
         return engine.launch(worktree, data.environment, data.node, entry_point, requester=requester)
 
     @app.get("/api/runs", response_model=None)
-    def runs(request: Request, worktree: str | None = None) -> list[Record]:
+    def runs(request: Request, worktree: str | None = None, include_jobs: bool = False) -> list[Record]:
         if worktree:
             access.worktree(request.state.user, worktree)
-        return store.runs(request.state.user, worktree)
+        return store.runs(request.state.user, worktree, include_jobs)
 
     @app.get("/api/worktrees/{worktree}/test-history/{node}", response_model=None)
     def test_history(worktree: str, node: str, environment: str, limit: int = 10) -> list[Record]:

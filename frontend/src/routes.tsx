@@ -6,6 +6,7 @@ import {
   type PageHandle,
   type WorkspaceTab,
 } from "./navigation";
+import JobsPage from "./pages/JobsPage";
 import DocumentationPage from "./pages/DocumentationPage";
 import FlowPage from "./pages/FlowPage";
 import HistoryPage from "./pages/HistoryPage";
@@ -56,6 +57,7 @@ export const pageRoutes: RouteObject[] = [
     { area: "projectSettings" },
     ProjectSettingsPage,
   ),
+  page("projects/:projectId/jobs", { area: "jobs" }, JobsPage),
   // The tabs of a working branch share its toolbar and code editor.
   {
     Component: WorktreePage,

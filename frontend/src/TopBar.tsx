@@ -41,7 +41,8 @@ export default function TopBar({
     useShell();
   const { id: worktree, snapshot, canEdit, gitVersion } = useWorktree();
   const instanceAdmin = workspace?.user.role === "admin";
-  const projectArea = area === "pipelines" || area === "projectSettings";
+  const projectArea =
+    area === "pipelines" || area === "projectSettings" || area === "jobs";
   const project =
     projectId ||
     workspace?.worktrees.find((w) => w.id === worktree)?.project ||
@@ -138,8 +139,14 @@ export default function TopBar({
                 value={worktree}
                 onChange={(e) => openWorktree(e.target.value, tab)}
               >
+                {snapshot.worktree.read_only && (
+                  <option value={worktree}>{t("jobResults")}</option>
+                )}
                 {workspace?.worktrees
-                  .filter((w) => w.project === snapshot.worktree.project)
+                  .filter(
+                    (w) =>
+                      w.project === snapshot.worktree.project && !w.read_only,
+                  )
                   .map((w) => (
                     <option key={w.id} value={w.id}>
                       {w.branch}
@@ -155,12 +162,16 @@ export default function TopBar({
                 <Plus size={13} />
               </button>
             </div>
-            <GitSyncButton
-              worktree={worktree}
-              commit={snapshot.commit}
-              version={gitVersion}
-              onClick={() => openModal({ kind: "git", worktree, mode: "sync" })}
-            />
+            {!snapshot.worktree.read_only && (
+              <GitSyncButton
+                worktree={worktree}
+                commit={snapshot.commit}
+                version={gitVersion}
+                onClick={() =>
+                  openModal({ kind: "git", worktree, mode: "sync" })
+                }
+              />
+            )}
             <span className="header-divider" />
             <label className="environment-picker">
               <span

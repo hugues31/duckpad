@@ -78,7 +78,9 @@ function DocumentationEditor({
   const t = useT();
   const [message, setMessage] = useState("");
   const editable =
-    snapshot.role !== "reader" && (kind !== "columns" || !!column);
+    !snapshot.worktree.read_only &&
+    (snapshot.role === "admin" || snapshot.role === "editor") &&
+    (kind !== "columns" || !!column);
   const documentation = snapshot.bundle?.documentation;
   const current: string =
     (kind === "columns"

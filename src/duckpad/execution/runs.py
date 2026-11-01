@@ -117,14 +117,22 @@ class Runner:
         entry_point: str = "api",
         *,
         requester: Record | None = None,
+        job: Record | None = None,
+        external_trigger: Record | None = None,
+        idempotency: Record | None = None,
     ) -> Record:
-        self.projects.get(worktree)
+        record = self.projects.get(worktree)
+        if record.get("read_only") and job is None:
+            raise Problem("Launch this worktree from its Job", 403)
         token: RunToken = {"id": uid("run_"), "cancel": threading.Event(), "cursor": None}
         self._admit(worktree, environment, token)
         try:
             execution = self._prepare(token, worktree, environment, target, entry_point)
             execution.run["requester"] = copy.deepcopy(requester)
-            self._persist(execution.run, execution.secrets)
+            if job is not None:
+                execution.run.update(trigger="job", job=copy.deepcopy(job), tag=job.get("tag"))
+                execution.run["external_trigger"] = copy.deepcopy(external_trigger)
+            self._persist(execution.run, execution.secrets, idempotency=idempotency)
             thread = threading.Thread(target=self._execute, args=(execution,), name=token["id"], daemon=True)
             with self.lock:
                 self.threads = [t for t in self.threads if t.is_alive()] + [thread]
@@ -275,7 +283,7 @@ class Runner:
                 self.store.put("run", run_id, run)
         return cast(Record, run)
 
-    def _persist(self, run: Record, secrets: list[str]) -> None:
+    def _persist(self, run: Record, secrets: list[str], *, idempotency: Record | None = None) -> None:
         run["warning_count"] = sum(
             result_counts(state.get("results", []))["warning"] for state in run["nodes"].values()
         )
@@ -300,6 +308,8 @@ class Runner:
             ):
                 run["status"] = "canceling"
             self.store.put("run", run["id"], sanitize(run))
+            if idempotency is not None:
+                self.store.remember_job_launch(idempotency, run["id"], time.time())
             replaced = self.exports.record(run)
         self.exports.discard(replaced)
         context = self.pool.find(run["worktree"], run["environment"])

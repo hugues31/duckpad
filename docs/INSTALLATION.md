@@ -132,9 +132,9 @@ Instance administrators can list and revoke any account's tokens through its **A
 **Service accounts.** Instance administrators use **Add service account** in **Users and permissions**
 to supply a name and description. These accounts have no password or SSO identity and cannot
 sign in interactively. They are always instance Members, cannot create projects, and may only
-be granted Reader access to existing projects. Administrators create and revoke their tokens
-from the account's **API tokens** view. Service accounts cannot run pipelines until the Operator
-role is available. Every HTTP-launched run records its requesting account and, when applicable,
+be granted Reader or Operator access to existing projects. Administrators create and revoke their tokens
+from the account's **API tokens** view. Service Operators can run and cancel Jobs.
+Every HTTP-launched run records its requesting account and, when applicable,
 the token name; **History** displays this attribution even after the token is revoked.
 
 ![Instance administrators manage users, instance roles and active accounts](images/users.png)
@@ -142,10 +142,21 @@ the token name; **History** displays this attribution even after the token is re
 - **Instance Admin** manages accounts, configuration, connections and every project.
 - **Instance Member** sees only their projects and can create private projects.
   The creator becomes the project's admin.
-- **Project Reader** can inspect the flow, SQL, history and existing results.
-- **Project Editor** can also edit content, create tags, run/cancel pipelines and
-  export through authorized connections.
-- **Project Admin** can also manage participants and delete the project.
+
+Project roles form a hierarchy: Reader < Operator < Editor < Project Admin.
+
+| Action | Reader | Operator | Editor | Project Admin |
+| --- | :-: | :-: | :-: | :-: |
+| View flow, SQL, documentation, history, run logs, results and lineage, including Job results | ✓ | ✓ | ✓ | ✓ |
+| Run, cancel or rerun a Job | – | ✓ | ✓ | ✓ |
+| Run or cancel ad hoc on a branch, for the project or a node | – | – | ✓ | ✓ |
+| Edit, create branches, merge, publish and create tags | – | – | ✓ | ✓ |
+| Create, edit or delete Jobs, change their version, manage members and the origin, delete the project | – | – | – | ✓ |
+
+Instance administrators have every project right. Job result worktrees remain
+read-only for everyone, including instance administrators. Jobs execute a pinned
+tag or an acceptance branch in their own worktree; Operators cannot run arbitrary
+branch versions directly. See [Jobs in the user guide](AUTHORING.md#jobs).
 
 Open a project and select **Project settings** to add participants, change roles or
 remove access. Every instance and project must retain an active admin. Instance

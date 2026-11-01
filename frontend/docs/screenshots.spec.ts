@@ -6,6 +6,7 @@ import {
   openUserSettings,
   PASSWORD,
   signIn,
+  stubDuckDBWebsites,
 } from "../e2e/helpers";
 
 // All scenes use the real application and disposable, synthetic fixtures.
@@ -402,6 +403,7 @@ test("capture account roles, project access and personal preferences", async ({
 test("capture offline extension download and import settings", async ({
   page,
 }) => {
+  await stubDuckDBWebsites(page);
   const runtime = await (
     await page.request.get("/api/extensions/runtime")
   ).json();
@@ -417,6 +419,9 @@ test("capture offline extension download and import settings", async ({
     `https://extensions.duckdb.org/${runtime.version}/${runtime.platform}/httpfs.duckdb_extension.gz`,
   );
   await expect(
+    page.getByText("Download available for the server"),
+  ).toBeVisible();
+  await expect(
     page.getByLabel("Allow unsigned extensions", { exact: true }),
   ).not.toBeChecked();
   await expect(
@@ -428,6 +433,7 @@ test("capture offline extension download and import settings", async ({
 test("capture project extension activation and missing imports", async ({
   page,
 }) => {
+  await stubDuckDBWebsites(page);
   const response = await page.request.post("/api/projects", {
     data: { name: "Project capabilities" },
   });
@@ -457,6 +463,7 @@ test("capture project extension activation and missing imports", async ({
       .getByRole("article", { name: "duckfn_statrs", exact: true })
       .getByRole("status"),
   ).toHaveText("Import required");
+  await expect(page.getByText(/choose an extension to fill in/)).toBeVisible();
   await capture(
     page,
     "project-extensions",
@@ -552,7 +559,8 @@ test("capture SSO configuration and the enabled sign-in choice", async ({
 });
 
 test("assistant settings and contextual chat", async ({ page }) => {
-  await page.setViewportSize({ width: 1440, height: 1250 });
+  // Tall enough for the whole settings card, sticky save bar included.
+  await page.setViewportSize({ width: 1440, height: 1900 });
   const response = await page.request.put("/api/assistant/settings", {
     data: {
       enabled: true,
@@ -572,9 +580,11 @@ test("assistant settings and contextual chat", async ({ page }) => {
   });
   expect(response.ok()).toBeTruthy();
   await page.goto("/instance-settings/assistant");
-  await expect(page.getByLabel("Allowed models", { exact: true })).toHaveValue(
-    "deepseek-chat",
-  );
+  await expect(
+    page
+      .getByRole("group", { name: "DeepSeek", exact: true })
+      .getByRole("listitem"),
+  ).toHaveText(["deepseek-chat"]);
   await capture(
     page,
     "assistant-settings",

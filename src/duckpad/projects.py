@@ -226,6 +226,32 @@ class Projects:
             shutil.rmtree(worktree["path"], ignore_errors=True)
             shutil.rmtree(self.store.paths.exports(worktree["id"]), ignore_errors=True)
 
+    def job_worktree(self, project: str, commit: str) -> Record:
+        """Create an internal detached checkout; the caller holds the repository lock."""
+        main = self.get(self.store.get("project", project)["main"])
+        key = uid("worktree_")
+        path = self.store.paths.worktree(key)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        self.git(main["path"], "worktree", "add", "--detach", str(path), commit)
+        worktree = {
+            "id": key,
+            "project": project,
+            "branch": "job:" + key,
+            "path": str(path),
+            "read_only": True,
+        }
+        try:
+            self.store.put("worktree", key, worktree)
+        except Exception:
+            self.git(main["path"], "worktree", "remove", "--force", str(path))
+            raise
+        return worktree
+
+    @staticmethod
+    def writable(worktree: Record) -> None:
+        if worktree.get("read_only"):
+            raise Problem("Job results are read-only", 403)
+
     def get(self, worktree_id: str) -> Record:
         result = self.store.get("worktree", worktree_id)
         if not result:
@@ -407,6 +433,7 @@ class Projects:
         if not all(is_declarative(name) for name in proposal):
             raise Problem("Only declarative project files can be edited here")
         with self.locked(worktree_id) as worktree:
+            self.writable(worktree)
             current = self.read_files(worktree)
             base = self.base(worktree, revision, current)
             if base is None:
@@ -461,7 +488,9 @@ class Projects:
         those outputs still match the files; the documentation of an outdated result is kept.
         Component outputs that expose a port of the node are pruned with it.
         """
-        with self.locked(worktree_id):
+        with self.locked(worktree_id) as worktree:
+            if worktree.get("read_only"):
+                return
             snapshot = self.snapshot(worktree_id)
             bundle = snapshot["bundle"]
             if not bundle or not current(bundle):
@@ -544,6 +573,8 @@ class Projects:
 
     def flush(self, worktree_id: str) -> Record:
         with self.locked(worktree_id) as worktree:
+            if worktree.get("read_only"):
+                return self.snapshot(worktree_id, committed=True)
             previous = self.read_files(worktree)
             # A stable read precedes capture; file writers may still begin a new
             # save after capture, which is handled by the next watcher batch.
@@ -573,6 +604,8 @@ class Projects:
                 if path.name not in recorded:
                     shutil.rmtree(path, ignore_errors=True)
         for worktree in worktrees:
+            if worktree.get("read_only"):
+                continue
             path = worktree["path"]
             try:
                 if not Path(path).is_dir():
@@ -605,6 +638,8 @@ class Projects:
 
     def _observe(self, worktree: Record) -> None:
         """Commit a worktree's external edits once they have been quiet for QUIET_PERIOD."""
+        if worktree.get("read_only"):
+            return
         key = worktree["id"]
         current = self.read_files(worktree)
         if current != self.observed.get(key):

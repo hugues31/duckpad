@@ -40,10 +40,10 @@ def test_initial_migration_matches_models_and_survives_restart(store):
     with store.engine.connect() as connection:
         assert (
             connection.exec_driver_sql("SELECT version_num FROM alembic_version").scalar_one()
-            == "0003_api_tokens"
+            == "0005_job_idempotency"
         )
         assert "records" not in inspect(connection).get_table_names()
-        assert len(SQLModel.metadata.tables) == 22
+        assert len(SQLModel.metadata.tables) == 24
         assert compare_metadata(MigrationContext.configure(connection), SQLModel.metadata) == []
         assert connection.exec_driver_sql("PRAGMA foreign_keys").scalar_one() == 1
         assert connection.exec_driver_sql("PRAGMA journal_mode").scalar_one() == "wal"
@@ -123,6 +123,45 @@ def test_api_token_migration_preserves_accounts_sessions_and_memberships(tmp_pat
         user = auth.create_user("migrated-service", service=True)
         token = auth.create_api_token(auth.public(store.get("user", "owner")), user["id"], "After migration")
         assert auth.check_api_token(token["token"])[0] == user
+    finally:
+        store.close()
+
+
+def test_job_migration_keeps_worktree_runs_and_accepts_operators(tmp_path):
+    engine = metadata_engine(tmp_path / "instance.sqlite")
+    with migration_connection(engine) as connection:
+        command.upgrade(configuration(connection), "0003_api_tokens")
+        connection.execute(
+            text(
+                "INSERT INTO user (id, username, username_key, role, active, session_version, service, description) "
+                "VALUES ('robot', 'robot', 'robot', 'member', 1, 0, 1, '')"
+            )
+        )
+        connection.execute(
+            text("INSERT INTO project VALUES ('project', 'Existing project', 'main', '2026-01-01')")
+        )
+        connection.execute(text("INSERT INTO worktree VALUES ('main', 'project', 'main', 'unused')"))
+        connection.execute(text("INSERT INTO project_member VALUES ('project', 'robot', 'reader')"))
+        connection.execute(
+            text(
+                "INSERT INTO run VALUES ('run', 'project', 'main', 'dev', 'success', '2026-01-01', NULL, NULL, '{}')"
+            )
+        )
+    engine.dispose()
+    store = Store(tmp_path)
+    try:
+        # Rebuilding the worktree table must not cascade into its run history.
+        assert store.get("run", "run")["status"] == "success"
+        assert store.get("worktree", "main") == {
+            "id": "main",
+            "project": "project",
+            "branch": "main",
+            "path": "unused",
+        }
+        access = store.get("access", "project")
+        access["members"]["robot"] = "operator"
+        store.put("access", "project", access)
+        assert store.get("access", "project")["members"] == {"robot": "operator"}
     finally:
         store.close()
 

@@ -108,7 +108,9 @@ export function WorktreeProvider({
       return refreshWorkspace();
     },
   });
-  const canEdit = snapshot?.role === "admin" || snapshot?.role === "editor";
+  const canEdit =
+    !snapshot?.worktree.read_only &&
+    (snapshot?.role === "admin" || snapshot?.role === "editor");
   const refresh = useCallback(
     (worktree?: string) => reload(worktree).catch(() => undefined),
     [reload],

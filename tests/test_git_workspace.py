@@ -18,6 +18,7 @@ from duckpad.comparison import commit_message, compare_files
 from duckpad.components import group
 from duckpad.git import command
 from duckpad.git.command import GitError
+from duckpad.git.identity import commit_author
 from duckpad.git.remote import validate_url
 from duckpad.services import Services
 from duckpad.util import Problem
@@ -305,6 +306,67 @@ def test_history_pagination_real_merge_parents_and_element_filter(project):
     assert not {c["commit"] for c in first["items"]} & {c["commit"] for c in second["items"]}
     node_history = projects.versioning.history(main["id"], ref=merged["commit"], entity="node/filter")
     assert any(c["commit"] == review["target_head"] for c in node_history["items"])
+
+
+def test_element_summary_credits_the_commits_that_changed_the_element(project):
+    projects, main = project
+    people = {
+        name: {"name": name, "email": f"{name.lower()}@example.invalid"} for name in ("Ada", "Bob", "Cy")
+    }
+    summary = projects.versioning.element_summary
+    initial = summary(main["id"], "node/filter")
+    assert initial["exists"] and initial["changes"] == 1 and initial["complete"]
+    assert initial["created"]["status"] == "added" and initial["created"] == initial["last"]
+    with commit_author(people["Ada"]):
+        edit(projects, main, lambda b: b["flow"]["nodes"][1]["params"].update(minimum=5))
+    with commit_author(people["Bob"]):
+        edit(projects, main, lambda b: b["flow"]["nodes"][2]["position"].update(x=500))
+        feature = projects.branch(main["id"], "feature")
+        edit(projects, feature, lambda b: b["flow"]["nodes"][1]["position"].update(y=80))
+        edited = projects.git(feature["path"], "rev-parse", "HEAD")
+    with commit_author(people["Cy"]):
+        edit(projects, main, lambda b: b["documentation"].update(project="Main notes"))
+        merged = apply(projects, projects.versioning.prepare(main["id"], "refs/heads/feature"))
+    assert projects.git(main["path"], "rev-parse", "HEAD") == merged["commit"]
+    result = summary(main["id"], "node/filter")
+    # The merge only brings Bob's edit, so Bob keeps the credit.
+    assert result["last"]["commit"] == edited
+    assert result["last"]["author"] == "Bob" and result["last"]["status"] == "modified"
+    assert result["last"]["categories"] == ["layout"]
+    assert result["created"] == initial["created"]
+    assert result["authors"] == ["Bob", "Ada", initial["created"]["author"]]
+    # The count matches the element history, which also lists the merge.
+    history = projects.versioning.history(main["id"], entity="node/filter")["items"]
+    assert result["changes"] == len(history) == 4 and history[0]["commit"] == merged["commit"]
+    assert summary(main["id"], "node/total")["last"]["author"] == "Bob"
+    before = summary(main["id"], "node/filter", ref=f"{edited}~1")
+    assert before["last"]["author"] == "Ada" and before["last"]["categories"] == ["processing"]
+    with commit_author(people["Cy"]):
+
+        def add_node(b):
+            b["flow"]["nodes"].append({"id": "custom", "params": {}, "position": {"x": 0, "y": 200}})
+            b["node_sql"] = {"nodes/custom.sql": "-- @output result\nSELECT 1 AS value;"}
+
+        edit(projects, main, add_node)
+    with commit_author(people["Ada"]):
+        edit(
+            projects,
+            main,
+            lambda b: b["node_sql"].update({"nodes/custom.sql": "-- @output result\nSELECT 2;"}),
+        )
+        edit(projects, main, lambda b: b["templates"].update(filter=b["templates"]["filter"] + "\n"))
+    custom = summary(main["id"], "node/custom")
+    assert custom["created"]["author"] == "Cy" and custom["last"]["author"] == "Ada"
+    assert custom["last"]["categories"] == ["processing"] and custom["changes"] == 2
+    # Editing a linked node's template changes the template, not the node.
+    assert summary(main["id"], "node/filter")["last"]["commit"] == edited
+    template = summary(main["id"], "template/filter")
+    assert template["last"]["author"] == "Ada" and template["changes"] == 2
+    removed = summary(main["id"], "node/missing")
+    assert not removed["exists"] and removed["last"] is None and removed["changes"] == 0
+    for entity in ("flow", "edge/a", "node/", "component/../node/a", "template/../flow"):
+        with pytest.raises(Problem, match="Choose a node or template"):
+            summary(main["id"], entity)
 
 
 def test_non_main_destination_and_protected_cleanup(project):

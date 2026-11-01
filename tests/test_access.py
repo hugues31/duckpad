@@ -13,7 +13,7 @@ from duckpad.app import create_app
 from duckpad.util import Problem
 
 PASSWORD = "individual-test-password"
-PUBLIC, SESSION, READER, EDITOR, PROJECT_ADMIN, INSTANCE_ADMIN = range(6)
+PUBLIC, SESSION, READER, OPERATOR, EDITOR, PROJECT_ADMIN, INSTANCE_ADMIN = range(7)
 # The minimum access level of every API route. Classify each new route here.
 ROUTE_ACCESS = {
     PUBLIC: [
@@ -23,6 +23,8 @@ ROUTE_ACCESS = {
         "GET /api/oidc/callback",
     ],
     SESSION: [
+        "GET /api/v1/jobs",
+        "GET /api/v1/openapi.json",
         "POST /api/logout",
         "GET /api/session",
         "GET /api/search",
@@ -41,10 +43,18 @@ ROUTE_ACCESS = {
         "DELETE /api/ssh-key",
     ],
     READER: [
+        "GET /api/v1/jobs/{slug}",
+        "GET /api/v1/runs/{run_id}",
+        "GET /api/v1/runs/{run_id}/log",
+        "GET /api/projects/{project}/jobs",
+        "GET /api/jobs/{slug}",
+        "GET /api/jobs/{slug}/version",
+        "GET /api/jobs/{slug}/runs",
         "GET /api/projects/{project}/settings",
         "GET /api/worktrees/{worktree}",
         "GET /api/worktrees/{worktree}/archive.zip",
         "GET /api/worktrees/{worktree}/git/history",
+        "GET /api/worktrees/{worktree}/git/history/summary",
         "GET /api/worktrees/{worktree}/git/tags",
         "GET /api/worktrees/{worktree}/git/compare",
         "GET /api/worktrees/{worktree}/git/branches",
@@ -60,6 +70,11 @@ ROUTE_ACCESS = {
         "GET /api/worktrees/{worktree}/extensions",
         "POST /api/worktrees/{worktree}/lineage",
         "GET /api/runs/{run}",
+    ],
+    OPERATOR: [
+        "POST /api/jobs/{slug}/runs",
+        "POST /api/v1/jobs/{slug}/runs",
+        "POST /api/v1/runs/{run_id}/cancel",
     ],
     EDITOR: [
         "PUT /api/worktrees/{worktree}",
@@ -84,6 +99,10 @@ ROUTE_ACCESS = {
         "POST /api/runs/{run}/cancel",
     ],
     PROJECT_ADMIN: [
+        "POST /api/projects/{project}/jobs",
+        "PATCH /api/jobs/{slug}",
+        "DELETE /api/jobs/{slug}",
+        "POST /api/jobs/{slug}/version",
         "PUT /api/projects/{project}/members/{identity}",
         "DELETE /api/projects/{project}/members/{identity}",
         "DELETE /api/projects/{project}",
@@ -119,6 +138,8 @@ AUTHORIZATION_ERRORS = {
     "Project not found",
     "Worktree not found",
     "Resource not found",
+    "Job not found",
+    "Run not found",
     "Your project role does not allow this action",
     "Instance administrator access required",
 }
@@ -223,6 +244,7 @@ def test_private_discovery_and_all_direct_resource_routes(instance):
         ("GET", f"/worktrees/{branch['id']}"),
         ("GET", f"/worktrees/{worktree['id']}/status"),
         ("GET", f"/worktrees/{worktree['id']}/git/history"),
+        ("GET", f"/worktrees/{worktree['id']}/git/history/summary?entity=node/source"),
         ("GET", f"/worktrees/{worktree['id']}/archive.zip"),
         ("GET", f"/worktrees/{worktree['id']}/git/compare?a=HEAD&b=HEAD"),
         ("GET", f"/worktrees/{worktree['id']}/compile/source"),
@@ -252,7 +274,7 @@ def test_private_discovery_and_all_direct_resource_routes(instance):
     )
 
 
-@pytest.mark.parametrize("role", ["reader", "editor", "admin"])
+@pytest.mark.parametrize("role", ["reader", "operator", "editor", "admin"])
 def test_project_role_matrix_and_cross_project_import(instance, role):
     app, client = instance
     owner, owner_headers = account(app, "owner")
@@ -265,6 +287,7 @@ def test_project_role_matrix_and_cross_project_import(instance, role):
     assert snapshot["role"] == role
     for suffix in (
         "git/history",
+        "git/history/summary?entity=node/source",
         "git/compare",
         "git/branches",
         "git/remote",
@@ -282,7 +305,7 @@ def test_project_role_matrix_and_cross_project_import(instance, role):
         "git/push",
     ):
         response = request(client, headers, "POST", f"/worktrees/{worktree}/{suffix}", json={})
-        assert response.status_code in ((403,) if role == "reader" else (409, 422))
+        assert response.status_code in ((403,) if role in ("reader", "operator") else (409, 422))
     remote = request(client, headers, "GET", f"/worktrees/{worktree}/git/remote").json()
     app.state.services.projects.remotes.credentials.save_hosts("", ["https://example.invalid/"])
     response = request(
@@ -304,14 +327,14 @@ def test_project_role_matrix_and_cross_project_import(instance, role):
         "PUT",
         f"/worktrees/{worktree}",
         json={"revision": snapshot["revision"], "bundle": snapshot["bundle"]},
-    ).status_code == (403 if role == "reader" else 200)
+    ).status_code == (403 if role in ("reader", "operator") else 200)
     for suffix in ("branches", "group", "import", "merge", "runs", "uploads"):
-        if role == "reader":
+        if role in ("reader", "operator"):
             assert (
                 request(client, headers, "POST", f"/worktrees/{worktree}/{suffix}", json={}).status_code
                 == 403
             )
-    if role != "reader":
+    if role not in ("reader", "operator"):
         response = request(
             client,
             headers,
@@ -352,9 +375,16 @@ def test_project_role_matrix_and_cross_project_import(instance, role):
 
 def test_every_api_route_requires_its_classified_access_level(instance):
     app, client = instance
+    # Newer FastAPI versions retain included routers instead of flattening their routes.
+    automation_routes = [
+        child
+        for route in app.routes
+        if (included := getattr(route, "original_router", None)) is not None and included.prefix == "/api/v1"
+        for child in included.routes
+    ]
     routes = {
         (method, route.path)
-        for route in app.routes
+        for route in [*app.routes, *automation_routes]
         if isinstance(route, APIRoute) and route.path.startswith("/api/")
         for method in route.methods
     }
@@ -365,7 +395,7 @@ def test_every_api_route_requires_its_classified_access_level(instance):
     # Deleting a project must not remove the one that the other routes probe.
     disposable = own_project(app, client, owner_headers, "Disposable")
     actors = [{"cookie": ""}, account(app, "outsider")[1]]
-    for role in ("reader", "editor"):
+    for role in ("reader", "operator", "editor"):
         user, headers = account(app, role)
         for project in (worktree, disposable):
             app.state.access.member(project["project"], user["id"], role)
@@ -375,7 +405,22 @@ def test_every_api_route_requires_its_classified_access_level(instance):
     store, engine = app.state.services.store, app.state.services.engine
     run = wait_run(store, engine.launch(worktree["id"], "dev"))
     store.put("conflict", "probe", {"id": "probe", "worktree": worktree["id"]})
+    from duckpad.jobs import Jobs
+    from duckpad.schemas import NewJob
+
+    jobs = Jobs(app.state.services)
+    for slug in ("probe-job", "disposable-job"):
+        jobs.create(
+            worktree["project"],
+            NewJob(slug=slug, name=slug, environment="dev", target={"kind": "branch", "ref": "main"}),
+            {"id": "owner", "username": "owner"},
+        )
+    from duckpad.schemas import JobLaunch
+
+    job_run = wait_run(store, jobs.launch("probe-job", JobLaunch(), None))
     values = {
+        "run_id": job_run["id"],
+        "slug": "probe-job",
         "project": worktree["project"],
         "worktree": worktree["id"],
         "run": run["id"],
@@ -386,6 +431,8 @@ def test_every_api_route_requires_its_classified_access_level(instance):
     # Logging out revokes the probing session, so it is probed last.
     for (method, path), level in sorted(levels.items(), key=lambda item: (item[0][1] == "/api/logout", item)):
         ids = {**values, "project": disposable["project"]} if path == "/api/projects/{project}" else values
+        if method == "DELETE" and path == "/api/jobs/{slug}":
+            ids = {**ids, "slug": "disposable-job"}
         url = re.sub(r"\{(\w+)\}", lambda match, ids=ids: ids.get(match[1], "missing"), path)
         # An unknown environment keeps the permitted launch probe from starting a run.
         body = {"environment": "missing"} if path.endswith("/runs") else {}

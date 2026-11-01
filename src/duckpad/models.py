@@ -82,14 +82,50 @@ class Worktree(SQLModel, table=True):
     project: str = Field(foreign_key="project.id", ondelete="CASCADE", index=True)
     branch: str
     path: str = Field(unique=True)
+    read_only: bool = False
+
+
+class Job(SQLModel, table=True):
+    __tablename__ = "job"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["worktree", "project"],
+            ["worktree.id", "worktree.project"],
+            ondelete="CASCADE",
+            name="job_worktree_project",
+        ),
+    )
+    # The immutable instance-wide slug is the primary key.
+    id: str = Field(primary_key=True)
+    project: str = Field(index=True)
+    worktree: str = Field(unique=True)
+    name: str
+    description: str
+    environment: str
+    scope: str | None = None
+    target: dict = Field(sa_type=JSON)
+    runtime_variables: list = Field(default_factory=list, sa_type=JSON)
+    versions: list = Field(default_factory=list, sa_type=JSON)
+    revision: str
 
 
 class ProjectMember(SQLModel, table=True):
     __tablename__ = "project_member"
-    __table_args__ = (CheckConstraint("role IN ('reader', 'editor', 'admin')", name="project_member_role"),)
+    __table_args__ = (
+        CheckConstraint("role IN ('reader', 'operator', 'editor', 'admin')", name="project_member_role"),
+    )
     project: str = Field(primary_key=True, foreign_key="project.id", ondelete="CASCADE")
     user: str = Field(primary_key=True, foreign_key="user.id", ondelete="CASCADE", index=True)
     role: str
+
+
+class JobIdempotency(SQLModel, table=True):
+    __tablename__ = "job_idempotency"
+    job: str = Field(primary_key=True, foreign_key="job.id", ondelete="CASCADE")
+    key: str = Field(primary_key=True)
+    request_hash: str
+    run: str = Field(foreign_key="run.id", ondelete="CASCADE")
+    expires: float = Field(index=True)
 
 
 class Connector(SQLModel, table=True):

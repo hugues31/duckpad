@@ -86,7 +86,7 @@ Before each manual execution that reads Oracle, Duckpad recreates the relevant a
 
 # User interface
 
-A palette exposes available templates. Each instance provides a form generated from its typed parameters; Monaco allows editing the template SQL. Clicking an operation opens the inspector on the right with its parameters, a preview of its results, and its compiled SQL in read-only mode, accompanied by bound parameter values with secrets masked. A single output is displayed directly; multiple outputs provide a selector. The preview is configurable: the first 100 rows by default, an adjustable row count, filters, and sorting, with columns, their types, and result status. Selecting a cell in a valid result gives access to its lineage; a missing or stale result requires manual recomputation. The inspector distinguishes SQL compiled from the current configuration from the SQL actually executed to produce the displayed result. Compilation does not trigger flow execution.
+A palette exposes available templates. Each instance provides a form generated from its typed parameters; Monaco allows editing the template SQL. Clicking an operation opens the inspector on the right with its parameters, a preview of its results, and its compiled SQL in read-only mode, accompanied by bound parameter values with secrets masked. A single output is displayed directly; multiple outputs provide a selector. The preview is configurable: the first 100 rows by default, an adjustable row count, filters, and sorting, with columns, their types, and result status. Selecting a cell in a valid result gives access to its lineage; a missing or stale result requires manual recomputation. The inspector distinguishes SQL compiled from the current configuration from the SQL actually executed to produce the displayed result. Compilation does not trigger flow execution. An **Info** tab shows who created the node and who changed it last, from Git history, with its identifiers, and opens its element history.
 
 After a failed recomputation, the inspector keeps the node's last successful result available as a read-only preview, explicitly marked as stale, alongside the latest execution error. The executed SQL shown for that preview belongs to the retained successful result. Cell-level lineage is disabled for that result until a successful recomputation produces a valid replacement. If the node has never produced a successful result, the inspector shows the error and no result.
 
@@ -411,7 +411,9 @@ reading and the maximum rows per tool call (50 by default, 1–500). Supported
 providers are OpenAI, Anthropic, Google, Mistral, DeepSeek, Ollama and custom
 OpenAI-compatible servers. Keys are write-only, optional for Ollama/custom,
 retained only for an unchanged provider type and base URL, and excluded from
-project files, archives, model instructions, responses and error logs.
+project files, archives, model instructions, responses and error logs. Model
+discovery and the connection test accept unsaved provider settings and reuse a
+saved key only under that same rule.
 
 A floating chat on every authenticated page streams safe Markdown and collapsible
 tool cards. The expanded view lists author-private conversations in recent-first

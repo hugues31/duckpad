@@ -13,6 +13,13 @@ branch and title. Foreign keys cascade on author or project deletion; the
 `setting` table retains write-only provider configuration. Neither is part of
 project export.
 
+Revision `0005_job_idempotency` adds `job_idempotency`, keyed by Job and the hash
+of an idempotency key. It stores a canonical request hash, the accepted run and
+its seven-day expiry. Admission serializes retries per Job, and the initial run
+and key are persisted in the same transaction before starting the execution
+thread. Expired entries are ignored on lookup and removed when another accepted
+key is written. Deleting a Job removes its keys while retaining its run history.
+
 ## Data model
 
 ```mermaid

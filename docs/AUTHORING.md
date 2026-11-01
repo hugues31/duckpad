@@ -56,6 +56,41 @@ as a project automatically; import the ZIP from the interface instead.
 Connections, credentials and input data must also be configured separately on
 another instance.
 
+## Jobs
+
+Open **Jobs** from the project toolbar to run reviewed versions separately from
+working branches. Readers can inspect Jobs, their logs, results and version history.
+Operators and higher roles can **Run Job**, cancel an active run, or run it again.
+A protected environment asks for confirmation before launch. Each Job accepts one
+run at a time: a busy launch is refused with the active run ID, without queuing or
+retrying it. Different Jobs can run in parallel.
+
+Project admins choose **New Job**, then enter a permanent instance-wide slug
+(lowercase letters, digits and hyphens), name, description, environment and scope.
+Leave scope empty for the whole project, or supply a node ID such as `report` or
+`component::node` to run its launch scope, including upstream dependencies.
+Choose a tag to pin its current commit, or a branch for acceptance runs that should
+resolve the branch head at each launch. Uncommitted edits are never a Job target.
+Run-time variable overrides are not available yet; each run uses the versioned
+`variables.json` values for the selected environment.
+
+A tag Job keeps its pinned commit even if something outside Duckpad moves the tag.
+The Jobs page warns about the mismatch; it never silently follows the moved tag.
+**Change version** first opens **Compare versions**, including variable value
+changes, and only then enables **Use this version**. The audit records who changed
+it, when, and the old and new tags and commits. To roll back, expand **Version
+history** and choose **Review this version** beside an earlier tag, then compare
+and confirm. If the Job or reference changes during review, compare again.
+
+**Open results** opens the Job's internal checkout with flow, code, previews and
+lineage in read-only mode, including for administrators. It stays on the last run's
+commit until another launch; changing the target does not relabel existing results.
+Internal checkouts never appear in the branch selector. Result availability follows
+the usual execution-context lifetime. **Recent runs** and **History** retain the
+Job name, requested tag, executed commit, requester, token name and node logs.
+Deleting a Job keeps its run history and results available in **History**. The
+**Open results** link in a historical Job run still opens its retained checkout.
+
 ## Editing node code
 
 The palette and **Add a connected node** create normal nodes by copying the selected entry's SQL. **Duplicate node** also creates independent code. Choose **New SQL node** for a minimal `source` input and `result` output without naming a template. **Edit code** in the inspector changes only that node. Its `-- @param` declarations generate the parameter form; guided forms remain available while their supporting parameters are present.
@@ -67,6 +102,16 @@ For a normal node, **Convert to template** asks for a name and links the node to
 The **Code** tab exposes the same files, and **Compare versions** shows their changes. SQL files are versioned, merged and checked for conflicts, and included in project ZIPs. Deleting a node deletes its file. Northstar's Customer reach node owns its code, while Paid orders uses a linked template; Rank regions owns code inside the Regional report component.
 
 ![A normal node owns its code and offers explicit template conversions](images/node-code.png)
+
+The inspector's **Info** tab tells who changed a node. **Last modified** shows
+when and by whom the latest commit changed it, with the commit message and
+whether that change touched processing, documentation or the canvas layout.
+**Created**, **Revisions** and **Contributors** summarize the rest of its Git
+history; a linked node also shows the last change to its template. A merge that
+only brings another branch's edit leaves the credit to the commit that made it.
+The tab also gives the node's ID and the file holding its code, template or
+component definition. **View change history** opens the node's element history
+in the Git workspace.
 
 ## SQL template contract
 

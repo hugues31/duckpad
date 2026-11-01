@@ -71,15 +71,32 @@
   color: var(--accent);
   background: var(--accent-soft);
 }
+/*
+ * Grid tracks share missing width from the longest labels first: in a narrow
+ * panel they shorten, never below three characters, and short ones stay whole.
+ */
 .inspector-tabs {
-  padding: 0 12px;
-  gap: 10px;
+  display: grid;
+  grid-auto-flow: column;
+  justify-content: start;
+  padding: 0 6px;
+  gap: 6px;
   border-bottom: 1px solid var(--border);
 }
 .inspector-tabs button {
+  min-width: 0;
   font-size: 11px;
-  gap: 5px;
+  gap: 4px;
   padding: 12px 0;
+}
+.inspector-tabs svg {
+  flex-shrink: 0;
+}
+.inspector-tabs span {
+  min-width: 3ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .inspector-body {
   padding: 21px 18px;
@@ -174,6 +191,32 @@
 .inspector-body > select {
   width: 100%;
   margin-bottom: 10px;
+}
+.node-info > section:first-child > h4 {
+  margin-top: 0;
+}
+.info-list {
+  display: grid;
+  grid-template-columns: minmax(80px, max-content) minmax(0, 1fr);
+  gap: 10px 14px;
+  margin: 0;
+  font-size: 12px;
+}
+.info-list dt {
+  color: var(--muted);
+  opacity: 0.75;
+}
+.info-list dd {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.info-list small {
+  font-size: 11px;
+  color: var(--muted);
+  opacity: 0.75;
 }
 @media (max-width: 1099px) {
   .inspector {

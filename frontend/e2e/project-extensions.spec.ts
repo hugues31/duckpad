@@ -1,5 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
-import { signIn } from "./helpers";
+import { signIn, stubDuckDBWebsites } from "./helpers";
+
+test.beforeEach(({ page }) => stubDuckDBWebsites(page));
 
 async function project(page: Page) {
   await signIn(page);
@@ -105,6 +107,87 @@ test("project extensions distinguish missing imports, check loading and persist 
   await activation.click();
   await expect(json.getByRole("status")).toHaveText("Ready to activate");
   await expect(activation).not.toBeChecked();
+});
+
+test("editors pick listed extensions and enter exact names when the browser is offline", async ({
+  page,
+}) => {
+  await project(page);
+  const name = page.getByLabel("Extension name", { exact: true });
+  const source = page.getByLabel("Extension source", { exact: true });
+  const catalog = page.getByRole("list", {
+    name: "Available extensions",
+    exact: true,
+  });
+  const pick = (extension: string) =>
+    catalog.getByRole("button", { name: new RegExp(`^${extension} `) });
+  await expect(
+    page.getByRole("link", { name: "Community extension list", exact: true }),
+  ).toHaveAttribute(
+    "href",
+    "https://duckdb.org/community_extensions/list_of_extensions",
+  );
+  // Core extensions come from the server's DuckDB, community ones from the browser.
+  await expect(pick("httpfs")).toContainText("DuckDB core");
+  await expect(pick("h3")).toContainText("DuckDB community");
+  await name.fill("hex");
+  await expect(catalog.getByRole("button")).toHaveCount(1);
+  await pick("h3").click();
+  await expect(name).toHaveValue("h3");
+  await expect(source).toHaveValue("community");
+  await expect(pick("h3")).toHaveAttribute("aria-current", "true");
+  const runtime = await (
+    await page.request.get("/api/extensions/runtime")
+  ).json();
+  const availability = page.locator(".extension-availability");
+  await expect(availability).toHaveText(
+    `Download available for the server: ${runtime.version} / ${runtime.platform}`,
+  );
+  await page
+    .getByRole("button", { name: "Add extension", exact: true })
+    .click();
+  await expect(
+    page.getByRole("article", { name: "h3", exact: true }).getByRole("status"),
+  ).toHaveText("Import required");
+  await name.fill("gsheets");
+  await pick("gsheets").click();
+  await expect(availability).toContainText(
+    "No download published for the server",
+  );
+  // Aliases find core extensions, and built-in ones need no download.
+  await name.fill("postgres");
+  await expect(catalog.getByRole("button").first()).toHaveAccessibleName(
+    /^postgres_scanner /,
+  );
+  await name.fill("json");
+  await source.selectOption("core");
+  await expect(pick("json")).toContainText("built in");
+  await expect(availability).toHaveText(
+    "Built into the server's DuckDB: no download or import needed.",
+  );
+
+  await page.unrouteAll();
+  await stubDuckDBWebsites(page, { offline: true });
+  await page.reload();
+  await expect(page.getByText(/cannot load the community list/)).toBeVisible();
+  await expect(pick("httpfs")).toBeVisible();
+  await expect(pick("duckfn_statrs")).toHaveCount(0);
+  // Without a connection the download check stays silent.
+  const probe = page.waitForEvent("requestfailed", (request) =>
+    request.url().includes("community-extensions.duckdb.org"),
+  );
+  await name.fill("duckfn_statrs");
+  await source.selectOption("community");
+  await probe;
+  await expect(availability).toBeEmpty();
+  await page
+    .getByRole("button", { name: "Add extension", exact: true })
+    .click();
+  await expect(
+    page
+      .getByRole("article", { name: "duckfn_statrs", exact: true })
+      .getByRole("status"),
+  ).toHaveText("Import required");
 });
 
 test("a downloaded community binary is imported and activated without a connection", async ({
