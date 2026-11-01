@@ -17,8 +17,9 @@ test("upload a worksheet and export it as project files through the canvas", asy
   ).json();
   const endpoint = `/api/worktrees/${worktree.id}`;
   try {
-    // Duckpad's runtime links excel. Other DuckDB builds, such as the PyPI wheel
-    // used in CI, need it enabled in the project; the test server installs it.
+    // Duckpad's container image links excel. Other DuckDB builds, such as the
+    // PyPI wheel used in CI, need it enabled in the project; the test server
+    // installs it.
     const available = await (
       await page.request.get(`${endpoint}/extensions`)
     ).json();

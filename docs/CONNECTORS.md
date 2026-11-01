@@ -56,8 +56,10 @@ Single-file CSV `COPY` follows DuckDB's native replacement behavior on a second 
 A file format is a node and extension concern, not a connection: every file node
 works with project files and with the file connections granted to the project. CSV, Parquet
 and JSON are built into every DuckDB build Duckpad supports. XLSX needs DuckDB's
-`excel` extension, which Duckpad's runtime links; other formats, such as Avro or
-spatial files, need their extension enabled in the project's **Extensions** tab.
+`excel` extension, which Duckpad's container image links but the PyPI wheel
+installed by `pip install duckpad` does not. Formats whose extension the runtime
+does not link, such as XLSX on a `pip` installation, Avro or spatial files, need
+their extension enabled in the project's **Extensions** tab.
 
 The **Extensions** tab is the only way a project loads a format's extension.
 Built-in templates do not declare the extensions they need, and execution never
@@ -101,9 +103,10 @@ connection as the Location, as for CSV and Parquet.
 New projects include both templates. Existing projects retain their versioned
 templates; create equivalent source/export templates through **New SQL template**
 or copy `load_xlsx` and `export_xlsx` from a new project's Code workspace.
-No Python spreadsheet dependency is needed. Duckpad's runtime, including its
-container image, builds DuckDB with `excel`. Other DuckDB builds, such as the
-PyPI wheel, need it enabled in the project's **Extensions** tab (see
+No Python spreadsheet dependency is needed. Duckpad's container image builds
+DuckDB with `excel`. Other DuckDB builds, such as the PyPI wheel installed by
+`pip install duckpad`, need it enabled in the project's **Extensions** tab once an
+instance administrator has imported its binary (see
 [File formats and extensions](#file-formats-and-extensions)); for disconnected
 deployments, follow the [offline extension guide](OFFLINE_EXTENSIONS.md).
 CSV/Parquet-only projects do not load it.
