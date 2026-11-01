@@ -179,18 +179,9 @@ Variables are not a secret store. Ordinary values are stored in Git and ZIP expo
 
 ## Computed variables
 
-**Proposed, not implemented.** A control file or table can supply the reporting
-date, processing mode or options for each execution. Committing a different
-`variables.json` for every run is unnecessary, and joining the control table to
-every query does not supply a scalar for file paths or activation conditions.
-Resolve its output once, then pass typed constants to consumers so the query
-engine can push eligible predicates into source scans.
+**Proposed, not implemented.** A control file or table can supply the reporting date, processing mode or options for each execution. Committing a different `variables.json` for every run is unnecessary, and joining the control table to every query does not supply a scalar for file paths or activation conditions. Resolve its output once, then pass typed constants to consumers so the query engine can push eligible predicates into source scans.
 
-This extends the existing variable model, not a project-variable mutation API.
-A run never edits `variables.json`. Reproduction requires the recorded commit,
-catalog configuration and source inputs, including the control input; the commit
-alone cannot reproduce changing external data. The run also records the exact
-values used, even when it reused an earlier value-node result.
+This extends the existing variable model, not a project-variable mutation API. A run never edits `variables.json`. Reproduction requires the recorded commit, catalog configuration and source inputs, including the control input; the commit alone cannot reproduce changing external data. The run also records the exact values used, even when it reused an earlier value-node result.
 
 ### Declaration and source
 
@@ -212,40 +203,15 @@ values used, even when it reused an earlier value-node result.
 }
 ```
 
-An ordinary declaration keeps its current fields. A computed declaration has
-`type`, optional `description`, and `from`; `default` and `environments` are
-forbidden, including empty objects or nulls. There is **no fallback default** in
-v1: a missing control value must not silently select a business behavior.
-Environment-specific inputs come from the producer's normal connection and
-ordinary parameter bindings.
+An ordinary declaration keeps its current fields. A computed declaration has `type`, optional `description`, and `from`; `default` and `environments` are forbidden, including empty objects or nulls. There is **no fallback default** in v1: a missing control value must not silently select a business behavior. Environment-specific inputs come from the producer's normal connection and ordinary parameter bindings.
 
-The shared **value source** is `{node, port?, column}`. `node` is the stable ID of
-a root flow node, including a component instance with an exposed output; it is
-not its label or an internal component path. `port` names that output and may be
-omitted only when the node exposes exactly one output. Resolution records the
-actual port even when omitted. `column` names one unambiguous output column,
-not an expression or a column index. Unknown fields, missing nodes, missing or
-ambiguous ports and missing or ambiguous columns are diagnostics on the variable.
-Output schema checks that require execution happen after the producer runs.
-An export without an output cannot supply a value.
+The shared **value source** is `{node, port?, column}`. `node` is the stable ID of a root flow node, including a component instance with an exposed output; it is not its label or an internal component path. `port` names that output and may be omitted only when the node exposes exactly one output. Resolution records the actual port even when omitted. `column` names one unambiguous output column, not an expression or a column index. Unknown fields, missing nodes, missing or ambiguous ports and missing or ambiguous columns are diagnostics on the variable. Output schema checks that require execution happen after the producer runs. An export without an output cannot supply a value.
 
-A **value node** is any node referenced by `from`. All references to the same
-output read the same published result, and each producer executes at most once
-per run. A component's exposed output resolves to its expanded producing node;
-the component's unrelated outputs are not extra value dependencies. Renaming a
-label changes nothing. Changing an ID must update the references or diagnose
-them; grouping a producer must expose its output and update `from` atomically.
-Grouping consumers exposes bound parameters, expressions and path parameters as
-today, preserving project references on the root instance only.
+A **value node** is any node referenced by `from`. All references to the same output read the same published result, and each producer executes at most once per run. A component's exposed output resolves to its expanded producing node; the component's unrelated outputs are not extra value dependencies. Renaming a label changes nothing. Changing an ID must update the references or diagnose them; grouping a producer must expose its output and update `from` atomically. Grouping consumers exposes bound parameters, expressions and path parameters as today, preserving project references on the root instance only.
 
 ### Cardinality and conversion
 
-The entire referenced output must contain **exactly one row**. Extraction can
-stop after observing a second row; it must not use a paginated preview, sample,
-first-row shortcut or implicit aggregate. Multiple columns may feed different
-variables. Validate each selected cell independently after the node's outputs,
-tests and messages have successfully published. A failing error-level data test
-therefore prevents value publication; a warning follows existing node semantics.
+The entire referenced output must contain **exactly one row**. Extraction can stop after observing a second row; it must not use a paginated preview, sample, first-row shortcut or implicit aggregate. Multiple columns may feed different variables. Validate each selected cell independently after the node's outputs, tests and messages have successfully published. A failing error-level data test therefore prevents value publication; a warning follows existing node semantics.
 
 Use explicit, lossless conversions to the existing canonical variable types:
 
@@ -259,61 +225,19 @@ Use explicit, lossless conversions to the existing canonical variable types:
 | `date` | A DuckDB `DATE`, or a valid ISO `YYYY-MM-DD` string, normalized to that string; reject timestamps and locale-dependent strings |
 | `list<text>`, `list<number>` | A list cell whose non-null elements satisfy the corresponding scalar rules; no splitting strings or collecting rows |
 
-Zero rows, two or more rows, `NULL`, incompatible types and unsupported loss of
-precision are errors, never missing values with an implicit fallback. Diagnostics
-name the variable, source and expected type/cardinality, for example
-`report_date: run_control.result must return exactly one row; found at least 2`
-or `report_date: run_control.result.report_date is NULL; expected date`.
-Only consumers of the failed variable and their dependent nodes are blocked;
-a different valid column from the same successful output remains usable. A SQL
-failure of the producer blocks all variables supplied by that failed node.
+Zero rows, two or more rows, `NULL`, incompatible types and unsupported loss of precision are errors, never missing values with an implicit fallback. Diagnostics name the variable, source and expected type/cardinality, for example `report_date: run_control.result must return exactly one row; found at least 2` or `report_date: run_control.result.report_date is NULL; expected date`. Only consumers of the failed variable and their dependent nodes are blocked; a different valid column from the same successful output remains usable. A SQL failure of the producer blocks all variables supplied by that failed node.
 
 ### Dependency validation and execution in two phases
 
-Add value-dependency edges from producers to consumers alongside ordinary data
-edges for ordering and cycle detection. These edges are not joins or dataset
-inputs. They cover whole bindings, expressions, paths and exposed component
-parameters, and later activation conditions. Detect cycles on the expanded
-graph, including a producer reading its own variable, an ancestor reading that
-variable, and mutual dependencies between value nodes. Show the dependency chain
-in the diagnostic, for example
-`run_control -> var.report_date -> filtered_orders -> run_control`.
-Block the cycle and its dependents, not independent branches. An acyclic value
-node may use ordinary variables or values from an earlier value node; those
-dependencies use the same ordering and out-of-scope retention rules.
+Add value-dependency edges from producers to consumers alongside ordinary data edges for ordering and cycle detection. These edges are not joins or dataset inputs. They cover whole bindings, expressions, paths and exposed component parameters, and later activation conditions. Detect cycles on the expanded graph, including a producer reading its own variable, an ancestor reading that variable, and mutual dependencies between value nodes. Show the dependency chain in the diagnostic, for example `run_control -> var.report_date -> filtered_orders -> run_control`. Block the cycle and its dependents, not independent branches. An acyclic value node may use ordinary variables or values from an earlier value node; those dependencies use the same ordering and out-of-scope retention rules.
 
-Preserve the existing meaning of a launch: the whole project, or a selected node
-or component and its data ancestors. A value reference alone **does not add its
-producer to a targeted launch**. Otherwise a consumer-only run would secretly
-refresh the control file instead of using the retained value.
+Preserve the existing meaning of a launch: the whole project, or a selected node or component and its data ancestors. A value reference alone **does not add its producer to a targeted launch**. Otherwise a consumer-only run would secretly refresh the control file instead of using the retained value.
 
-1. **Capture and plan.** Reserve the worktree using existing admission rules.
-   Capture the commit, declarations, environment, connection configuration and
-   ordinary values. Build a structural candidate scope using data edges, before
-   value-dependent filtering. Identify its value nodes and their data ancestors;
-   validate the combined dependency graph. Capture retained values needed from
-   producers outside this scope. Capture connection settings for both phases
-   now, so later editing cannot change an accepted run.
-2. **Compute values.** Run included value nodes and their upstream dependencies
-   in dependency order. Bind preceding computed values before each dependent
-   producer runs. Publish and extract their values, recording success or a
-   per-variable error. Nodes shared by this phase and the rest execute once.
-   Producers in scope are recomputed even when their previous result is valid:
-   an external control file may have changed without a Git change. A failed
-   refresh never falls back to a previous value within this run.
-3. **Bind and execute the remainder.** Freeze the resolved value map, including
-   retained out-of-scope values and errors. Resolve parameters and paths, then
-   compute the final effective scope and fingerprints, and execute remaining
-   nodes under existing run rules. A future activation-condition feature must
-   evaluate conditions here, not use retained values to skip an included
-   producer. It cannot expand beyond the captured candidate scope without a
-   separate design. Failures block affected consumers; independent nodes run.
+1. **Capture and plan.** Reserve the worktree using existing admission rules. Capture the commit, declarations, environment, connection configuration and ordinary values. Build a structural candidate scope using data edges, before value-dependent filtering. Identify its value nodes and their data ancestors; validate the combined dependency graph. Capture retained values needed from producers outside this scope. Capture connection settings for both phases now, so later editing cannot change an accepted run.
+2. **Compute values.** Run included value nodes and their upstream dependencies in dependency order. Bind preceding computed values before each dependent producer runs. Publish and extract their values, recording success or a per-variable error. Nodes shared by this phase and the rest execute once. Producers in scope are recomputed even when their previous result is valid: an external control file may have changed without a Git change. A failed refresh never falls back to a previous value within this run.
+3. **Bind and execute the remainder.** Freeze the resolved value map, including retained out-of-scope values and errors. Resolve parameters and paths, then compute the final effective scope and fingerprints, and execute remaining nodes under existing run rules. A future activation-condition feature must evaluate conditions here, not use retained values to skip an included producer. It cannot expand beyond the captured candidate scope without a separate design. Failures block affected consumers; independent nodes run.
 
-These are two execution phases within one run ID and one admission lock, not
-child runs. Existing cancellation and terminal statuses apply. Persist the
-value phase before starting consumers; a canceled or interrupted phase cannot
-publish a half-extracted value as ready. A successfully published value survives
-a later consumer failure, just as the producer's successful result does.
+These are two execution phases within one run ID and one admission lock, not child runs. Existing cancellation and terminal statuses apply. Persist the value phase before starting consumers; a canceled or interrupted phase cannot publish a half-extracted value as ready. A successfully published value survives a later consumer failure, just as the producer's successful result does.
 
 ```mermaid
 flowchart LR
@@ -326,13 +250,7 @@ flowchart LR
 
 ### Retained values, previews and validity
 
-The current value is the **last successfully extracted value of the producer in
-this worktree and environment**. Store it with the execution context, keyed by
-the resolved source and declared type, with its producing run and commit. It
-has the same lifetime as node results: new worktrees, Job worktrees and historical
-revision worktrees have no shared value cache; eviction or a backend restart
-requires another calculation. Durable run history remains readable and is not
-silently rehydrated as a live value cache.
+The current value is the **last successfully extracted value of the producer in this worktree and environment**. Store it with the execution context, keyed by the resolved source and declared type, with its producing run and commit. It has the same lifetime as node results: new worktrees, Job worktrees and historical revision worktrees have no shared value cache; eviction or a backend restart requires another calculation. Durable run history remains readable and is not silently rehydrated as a live value cache.
 
 | Situation | Resolution |
 | --- | --- |
@@ -343,66 +261,27 @@ silently rehydrated as a live value cache.
 | Resolved `from` or declared type changed | Invalidate that declaration's retained association; require a successful calculation for the new declaration; spelling out an already inferred port is not a source change |
 | Producer/extraction fails on refresh | Keep the previous successful value visible, with the latest error; it is usable only in a later launch that excludes the producer |
 
-Preview, compile, sample-filter and scope-inspection requests never run a value
-node. They use the retained map or return a diagnostic for affected nodes. On a
-new branch, the diagnostic tells the user to run the producer or the whole flow.
-Compilation cannot invent a placeholder date or imply that an unresolved
-consumer is executable. An existing stale preview remains inspectable under the
-usual result rules; its SQL and lineage refer to its recorded values.
+Preview, compile, sample-filter and scope-inspection requests never run a value node. They use the retained map or return a diagnostic for affected nodes. On a new branch, the diagnostic tells the user to run the producer or the whole flow. Compilation cannot invent a placeholder date or imply that an unresolved consumer is executable. An existing stale preview remains inspectable under the usual result rules; its SQL and lineage refer to its recorded values.
 
-Consumer fingerprints include the **declared type and canonical value**, including
-values used in paths. They do not include the producing run ID, timestamp,
-variable name or source node fingerprint merely because it supplies a scalar.
-Changing a value invalidates its consumers and their data descendants in this
-environment only, including results outside the current launch. Recomputing the
-same value leaves those results valid. A real data edge still carries its normal
-fingerprint dependency. Renames and description edits preserve validity.
-Changing a source declaration makes its value unavailable until resolved; if it
-then produces the same typed value, existing consumer fingerprints still match.
-Explicit launches retain their existing recomputation semantics; this proposal
-does not introduce a general cache-skipping scheduler.
+Consumer fingerprints include the **declared type and canonical value**, including values used in paths. They do not include the producing run ID, timestamp, variable name or source node fingerprint merely because it supplies a scalar. Changing a value invalidates its consumers and their data descendants in this environment only, including results outside the current launch. Recomputing the same value leaves those results valid. A real data edge still carries its normal fingerprint dependency. Renames and description edits preserve validity. Changing a source declaration makes its value unavailable until resolved; if it then produces the same typed value, existing consumer fingerprints still match. Explicit launches retain their existing recomputation semantics; this proposal does not introduce a general cache-skipping scheduler.
 
 ### References in file and destination parameters
 
-Step 4 introduces `{{ var.name }}` in `file`, `destination`, `file(connection)`
-and `destination(connection)` parameters, for **both ordinary and computed
-variables**. Whole-parameter `{"$var": "name"}` keeps its existing compatibility
-rules. A date may be formatted inside a path without becoming a text variable:
+Step 4 introduces `{{ var.name }}` in `file`, `destination`, `file(connection)` and `destination(connection)` parameters, for **both ordinary and computed variables**. Whole-parameter `{"$var": "name"}` keeps its existing compatibility rules. A date may be formatted inside a path without becoming a text variable:
 
 ```json
 {"id": "summary_export", "template": "csv_export", "params": {"destination": "exports/{{ var.report_date }}_summary.csv"}}
 ```
 
-Use a shared reference parser with separate rendering contexts: SQL expressions
-produce typed bindings; paths produce a single string passed to the existing
-resource compiler. Path fragments accept text, choices, dates, finite numbers
-and booleans. Dates use ISO format, booleans `true`/`false`, and numbers a stable
-locale-independent representation; identifier and list fragments are rejected.
-Unknown variables, malformed tokens and unresolved values diagnose the parameter.
-There are no functions, arbitrary expressions, recursive expansion, shell
-expansion or interpolation in general `text` fields. Quotes in a value are data.
+Use a shared reference parser with separate rendering contexts: SQL expressions produce typed bindings; paths produce a single string passed to the existing resource compiler. Path fragments accept text, choices, dates, finite numbers and booleans. Dates use ISO format, booleans `true`/`false`, and numbers a stable locale-independent representation; identifier and list fragments are rejected. Unknown variables, malformed tokens and unresolved values diagnose the parameter. There are no functions, arbitrary expressions, recursive expansion, shell expansion or interpolation in general `text` fields. Quotes in a value are data.
 
-Resolve fragments first, then apply the connection root or default directory,
-normalize the final resource, and enforce the existing allowed directories and
-connection read/write permissions on that final path. Neither an absolute path,
-`..`, a symlink escape nor a changed URI scheme or authority may enlarge the
-resource access granted by the captured configuration. Apply checks before
-reading or writing, including export artifact capture. Keep existing permitted
-glob behavior subject to the same access restrictions. Do not authorize the
-unresolved template or create new allowed roots from a variable value.
+Resolve fragments first, then apply the connection root or default directory, normalize the final resource, and enforce the existing allowed directories and connection read/write permissions on that final path. Neither an absolute path, `..`, a symlink escape nor a changed URI scheme or authority may enlarge the resource access granted by the captured configuration. Apply checks before reading or writing, including export artifact capture. Keep existing permitted glob behavior subject to the same access restrictions. Do not authorize the unresolved template or create new allowed roots from a variable value.
 
-Finally render the validated path with the existing escaped SQL literal function
-where DuckDB resource syntax requires a literal; ordinary scalar parameters stay
-bound. Never splice an unescaped value into SQL. Keep the original path template,
-variable values and resolved resource in the run evidence so SQL, history and
-lineage can explain the actual input or destination. Rename, **Used by**,
-comparison, grouping and editor suggestions include path references.
+Finally render the validated path with the existing escaped SQL literal function where DuckDB resource syntax requires a literal; ordinary scalar parameters stay bound. Never splice an unescaped value into SQL. Keep the original path template, variable values and resolved resource in the run evidence so SQL, history and lineage can explain the actual input or destination. Rename, **Used by**, comparison, grouping and editor suggestions include path references.
 
 ### Run evidence, API and lineage
 
-Extend existing read contracts, rather than adding a setter for current values.
-`bundle.variables` stays the versioned declaration. The runtime summary and run
-records carry the separately resolved values. Proposed additions are:
+Extend existing read contracts, rather than adding a setter for current values. `bundle.variables` stays the versioned declaration. The runtime summary and run records carry the separately resolved values. Proposed additions are:
 
 | Surface | Addition |
 | --- | --- |
@@ -413,8 +292,7 @@ records carry the separately resolved values. Proposed additions are:
 | Compile and executed SQL | Include resolved values and source labels next to bindings; unresolved compile requests diagnose only affected nodes |
 | Rename, save, compare and merge | Include declarations and all reference locations; never include retained runtime values in Git operations |
 
-A resolved entry in the existing run `variables` map uses this shape (IDs and
-commits here are illustrative):
+A resolved entry in the existing run `variables` map uses this shape (IDs and commits here are illustrative):
 
 ```json
 {
@@ -431,125 +309,43 @@ commits here are illustrative):
 }
 ```
 
-`resolution` is `calculated` or `retained`; in the latter case provenance points
-to the earlier run. Pending entries have no value yet, and unavailable entries
-contain a structured `error` with a stable code and source context, never
-`value: null` as a usable constant. Codes distinguish `value_not_calculated`,
-`invalid_value_source`, `value_cardinality`, `value_null`, `value_type`,
-`value_dependency_cycle` and `value_source_failed`. Each node keeps its usage
-mapping. Retain evidence for every variable extracted in the value phase, even
-if no consumer ultimately executes, and for retained values actually used.
+`resolution` is `calculated` or `retained`; in the latter case provenance points to the earlier run. Pending entries have no value yet, and unavailable entries contain a structured `error` with a stable code and source context, never `value: null` as a usable constant. Codes distinguish `value_not_calculated`, `invalid_value_source`, `value_cardinality`, `value_null`, `value_type`, `value_dependency_cycle` and `value_source_failed`. Each node keeps its usage mapping. Retain evidence for every variable extracted in the value phase, even if no consumer ultimately executes, and for retained values actually used.
 
-The SQL tab, **History → Variables** and lineage show, for example,
-`report_date = 2026-06-30 (run_control)`, with the output/column and producing run
-available as details. A retained value explicitly says which earlier run supplied
-it. Explanations use the consumer result's immutable evidence, not today's value.
-Where the source dataset still exists, provenance can open its single source
-cell; after eviction, the recorded value and source remain visible without
-claiming live cell-level lineage. A filter still uses a scalar DuckDB parameter,
-not a join to the control relation. Check source predicate pushdown with
-`EXPLAIN` on Parquet in the implementation tests.
+The SQL tab, **History → Variables** and lineage show, for example, `report_date = 2026-06-30 (run_control)`, with the output/column and producing run available as details. A retained value explicitly says which earlier run supplied it. Explanations use the consumer result's immutable evidence, not today's value. Where the source dataset still exists, provenance can open its single source cell; after eviction, the recorded value and source remain visible without claiming live cell-level lineage. A filter still uses a scalar DuckDB parameter, not a join to the control relation. Check source predicate pushdown with `EXPLAIN` on Parquet in the implementation tests.
 
 ### Interface, Jobs and version comparison
 
-- **Variables.** Choose an ordinary value or **Computed from node** in the
-  declaration editor. Computed mode selects a node, output and column instead
-  of default/environment value fields. The table shows **Computed by
-  run_control.report_date**, the current value in each environment, its retained
-  state or error, and **Used by**. The output name disambiguates multiple ports.
-  Offer **Run run_control** only to users already allowed to run that worktree;
-  Job results retain the existing read-only and Job launch rules.
-- **Inspector.** The variable button includes compatible computed variables
-  even before calculation, labeled **Not calculated**. Expression and path
-  suggestions show their source and current state. Restoring a fixed value from
-  a chip requires an available value; it cannot fabricate one when unresolved.
-- **Canvas.** A value-node badge identifies producers and lists the variables
-  they supply. Progress distinguishes calculating values from running consumers.
-  Diagnostics identify the consumer parameter and the failed value source.
-- **Protected environments.** Before execution, confirmation lists included
-  computed sources as **Calculated at launch**, even if a retained value exists.
-  An excluded producer shows the exact retained value and its producing run.
-  Confirmation authorizes the captured scope and sources, not an unknown future
-  scalar. Execution still enforces resource access after resolution.
-- **Jobs.** Every launch recalculates all value nodes in the Job's scope before
-  its consumers; valid retained results cannot skip that phase. A scoped Job
-  follows the same out-of-scope rule and cannot borrow values from an editor's
-  worktree or another Job. A fresh scoped Job without the required retained
-  values reports the missing producer; configure a scope that includes it.
-  Cancellation, admission, idempotency and CLI exit codes remain unchanged.
-- **Compare and merge.** Compare `type`, `description` and `from` as versioned
-  definition fields and list potentially affected consumers. Merge `from` as
-  one source descriptor: competing source changes conflict rather than combining
-  one branch's node with another's column. Switching between ordinary and
-  computed modes conflicts with edits to the old value/source fields; the
-  result must validate as one mode. Runtime values never appear as Git changes,
-  merge conflicts or ZIP content. Compare runs to compare calculated values.
+- **Variables.** Choose an ordinary value or **Computed from node** in the declaration editor. Computed mode selects a node, output and column instead of default/environment value fields. The table shows **Computed by run_control.report_date**, the current value in each environment, its retained state or error, and **Used by**. The output name disambiguates multiple ports. Offer **Run run_control** only to users already allowed to run that worktree; Job results retain the existing read-only and Job launch rules.
+- **Inspector.** The variable button includes compatible computed variables even before calculation, labeled **Not calculated**. Expression and path suggestions show their source and current state. Restoring a fixed value from a chip requires an available value; it cannot fabricate one when unresolved.
+- **Canvas.** A value-node badge identifies producers and lists the variables they supply. Progress distinguishes calculating values from running consumers. Diagnostics identify the consumer parameter and the failed value source.
+- **Protected environments.** Before execution, confirmation lists included computed sources as **Calculated at launch**, even if a retained value exists. An excluded producer shows the exact retained value and its producing run. Confirmation authorizes the captured scope and sources, not an unknown future scalar. Execution still enforces resource access after resolution.
+- **Jobs.** Every launch recalculates all value nodes in the Job's scope before its consumers; valid retained results cannot skip that phase. A scoped Job follows the same out-of-scope rule and cannot borrow values from an editor's worktree or another Job. A fresh scoped Job without the required retained values reports the missing producer; configure a scope that includes it. Cancellation, admission, idempotency and CLI exit codes remain unchanged.
+- **Compare and merge.** Compare `type`, `description` and `from` as versioned definition fields and list potentially affected consumers. Merge `from` as one source descriptor: competing source changes conflict rather than combining one branch's node with another's column. Switching between ordinary and computed modes conflicts with edits to the old value/source fields; the result must validate as one mode. Runtime values never appear as Git changes, merge conflicts or ZIP content. Compare runs to compare calculated values.
 
-All new interface labels and diagnostics require English, French and Portuguese
-translations in the implementation, plus an updated variable guide and screenshots.
-Activation conditions and values supplied by an orchestrator remain separate
-features; the former will consume this resolved map. Templates, node SQL and
-component definitions continue to use exposed parameters, not project references.
-Python nodes are outside this proposal.
+All new interface labels and diagnostics require English, French and Portuguese translations in the implementation, plus an updated variable guide and screenshots. Activation conditions and values supplied by an orchestrator remain separate features; the former will consume this resolved map. Templates, node SQL and component definitions continue to use exposed parameters, not project references. Python nodes are outside this proposal.
 
 ### Shared foundation for partitions
 
 The partition design (GENERAL-460) should reuse four contracts from this work:
 
-1. **Source resolution.** `{node, port?, column}` identifies a published output
-   column. Separate locating the output from cardinality policy: a computed
-   variable requires one row; a partition dimension reads N ordered rows and
-   attributes from those same rows. Partition uniqueness, null-key rules and
-   empty-set behavior belong to the partition design, not this extractor.
-2. **Execution phases.** Compute included value sources and their dependencies
-   before planning value-dependent work. Share admission, cancellation, source
-   failures and cycle detection. Partition enumeration adds its own selection
-   and iteration rules after this phase; it must not be implemented as repeated
-   scalar-variable mutations.
-3. **Reference contexts.** Share parsing, type-aware rendering and final path
-   authorization. Reserve a separate namespace for `{{ partition }}` and
-   `{{ partition.attribute }}`; they are not accepted by this implementation
-   until partition scope validation exists.
-4. **Evidence and fingerprints.** Reuse the typed value, normalized `from`,
-   producing run/commit and resolution provenance envelope. A partition adds
-   its key and attributes to the execution context and node fingerprint;
-   provenance stays separate from computational identity. Both SQL annotations
-   and lineage read the values attached to the executed result.
+1. **Source resolution.** `{node, port?, column}` identifies a published output column. Separate locating the output from cardinality policy: a computed variable requires one row; a partition dimension reads N ordered rows and attributes from those same rows. Partition uniqueness, null-key rules and empty-set behavior belong to the partition design, not this extractor.
+2. **Execution phases.** Compute included value sources and their dependencies before planning value-dependent work. Share admission, cancellation, source failures and cycle detection. Partition enumeration adds its own selection and iteration rules after this phase; it must not be implemented as repeated scalar-variable mutations.
+3. **Reference contexts.** Share parsing, type-aware rendering and final path authorization. Reserve a separate namespace for `{{ partition }}` and `{{ partition.attribute }}`; they are not accepted by this implementation until partition scope validation exists.
+4. **Evidence and fingerprints.** Reuse the typed value, normalized `from`, producing run/commit and resolution provenance envelope. A partition adds its key and attributes to the execution context and node fingerprint; provenance stays separate from computational identity. Both SQL annotations and lineage read the values attached to the executed result.
 
-Implement and validate this foundation before partition execution. This step
-does not decide partition storage, retention limits, parallelism or collection.
+Implement and validate this foundation before partition execution. This step does not decide partition storage, retention limits, parallelism or collection.
 
 ### Delivery and acceptance
 
-This issue delivers the proposal only. After review and acceptance, a dedicated
-implementation issue covers model/validation, value-phase execution and retained
-state, path references, API/evidence, interface/translations and the user guide.
-Acceptance for that implementation includes:
+This issue delivers the proposal only. After review and acceptance, a dedicated implementation issue covers model/validation, value-phase execution and retained state, path references, API/evidence, interface/translations and the user guide. Acceptance for that implementation includes:
 
-- A one-row `run_control.csv` with `report_date;mode;with_adjustments` supplies
-  bound variables; `EXPLAIN` shows the eligible date predicate in the Parquet
-  scan, and returned rows match a literal-parameter reference query.
-- Zero/multiple rows, nulls, missing source/port/column, incompatible values,
-  unsafe conversions, failing producer tests and direct/indirect cycles give
-  explicit diagnostics while an independent branch still completes.
-- A fresh worktree's compile/preview does not execute anything; a consumer-only
-  launch needs a retained value. Exercise component outputs, acyclic value
-  chains, shared producers, environment/worktree isolation, restart/eviction,
-  failed refresh and cancellation without silently reusing a failed refresh.
-- A changed control value invalidates exactly its consumers and their data
-  descendants in that environment. An unchanged value keeps out-of-scope
-  consumer results valid. Consumer runs freeze values throughout execution.
-- Ordinary and computed path references resolve for reads and exports. Test
-  quotes, multiple fragments, dates, booleans, unknown tokens, traversal,
-  absolute paths, symlinks, permitted globs and connection-scoped URIs against
-  final resource authorization, with no unescaped SQL insertion.
-- Jobs recalculate included producers; protected confirmation, variables,
-  inspector, badges, history, executed SQL and lineage agree on pending,
-  calculated and retained values. No run changes `variables.json`; version
-  comparison, ZIPs and merge contain declarations only.
-- Relevant pytest, Vitest, `ty check`, Ruff, ESLint and Playwright checks pass;
-  English, French and Portuguese strings and the user guide are updated. A
-  preview of the implementation commit is verified for human review.
+- A one-row `run_control.csv` with `report_date;mode;with_adjustments` supplies bound variables; `EXPLAIN` shows the eligible date predicate in the Parquet scan, and returned rows match a literal-parameter reference query.
+- Zero/multiple rows, nulls, missing source/port/column, incompatible values, unsafe conversions, failing producer tests and direct/indirect cycles give explicit diagnostics while an independent branch still completes.
+- A fresh worktree's compile/preview does not execute anything; a consumer-only launch needs a retained value. Exercise component outputs, acyclic value chains, shared producers, environment/worktree isolation, restart/eviction, failed refresh and cancellation without silently reusing a failed refresh.
+- A changed control value invalidates exactly its consumers and their data descendants in that environment. An unchanged value keeps out-of-scope consumer results valid. Consumer runs freeze values throughout execution.
+- Ordinary and computed path references resolve for reads and exports. Test quotes, multiple fragments, dates, booleans, unknown tokens, traversal, absolute paths, symlinks, permitted globs and connection-scoped URIs against final resource authorization, with no unescaped SQL insertion.
+- Jobs recalculate included producers; protected confirmation, variables, inspector, badges, history, executed SQL and lineage agree on pending, calculated and retained values. No run changes `variables.json`; version comparison, ZIPs and merge contain declarations only.
+- Relevant pytest, Vitest, `ty check`, Ruff, ESLint and Playwright checks pass; English, French and Portuguese strings and the user guide are updated. A preview of the implementation commit is verified for human review.
 
 ## Alternatives considered
 
