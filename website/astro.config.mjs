@@ -29,9 +29,10 @@ export default defineConfig({
   trailingSlash: "always",
   output: "static",
   markdown: {
+    // SQL directives are comments: keep them readable at body-text contrast.
+    shikiConfig: { theme: "github-dark-high-contrast" },
     processor: unified({
       remarkPlugins: [repositoryLinks],
-      shikiConfig: { theme: "github-dark" },
     }),
   },
   integrations: [

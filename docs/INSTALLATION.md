@@ -182,7 +182,7 @@ Project roles form a hierarchy: Reader < Operator < Editor < Project Admin.
 Instance administrators have every project right. Job result worktrees remain
 read-only for everyone, including instance administrators. Jobs execute a pinned
 tag or an acceptance branch in their own worktree; Operators cannot run arbitrary
-branch versions directly. See [Jobs in the user guide](AUTHORING.md#jobs).
+branch versions directly. See the [Jobs guide](JOBS.md).
 
 Open a project and select **Project settings** to add participants, change roles or
 remove access. Every instance and project must retain an active admin. Instance
