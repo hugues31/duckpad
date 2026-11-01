@@ -958,7 +958,6 @@ pre {
     border: 1px solid var(--line);
     background: var(--surface);
     box-shadow: 0 16px 35px #0002;
-    z-index: 20;
     border-radius: 7px;
   }
   .mobile-nav a {

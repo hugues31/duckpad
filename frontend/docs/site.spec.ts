@@ -425,32 +425,26 @@ for (const reducedMotion of ["no-preference", "reduce"] as const) {
       reducedMotion,
     });
     const page = await context.newPage();
+    const toggle = page.getByLabel("Navigation menu");
+    const menu = page.getByRole("navigation", {
+      name: "Mobile navigation",
+      exact: true,
+    });
     await page.goto("docs/quickstart/");
-    await page.getByLabel("Navigation menu").tap();
-    await page
-      .getByRole("navigation", { name: "Mobile navigation", exact: true })
-      .getByRole("link", { name: "Releases", exact: true })
-      .tap();
+    await toggle.tap();
+    await menu.getByRole("link", { name: "Releases", exact: true }).tap();
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(
       "What’s new in Duckpad.",
     );
-    await page.getByLabel("Navigation menu").tap();
+    await toggle.tap();
     await page.keyboard.press("Escape");
-    await expect(page.getByLabel("Navigation menu")).toBeFocused();
-    await expect(
-      page.getByRole("navigation", { name: "Mobile navigation", exact: true }),
-    ).not.toBeVisible();
-    await page.getByLabel("Navigation menu").tap();
-    await page
-      .getByRole("navigation", { name: "Mobile navigation", exact: true })
-      .getByRole("link", { name: "Why Duckpad", exact: true })
-      .tap();
+    await expect(toggle).toBeFocused();
+    await expect(menu).not.toBeVisible();
+    await toggle.tap();
+    await menu.getByRole("link", { name: "Why Duckpad", exact: true }).tap();
     await expect(page).toHaveURL(/\/#features$/);
-    await page.getByLabel("Navigation menu").tap();
-    await page
-      .getByRole("navigation", { name: "Mobile navigation", exact: true })
-      .getByRole("link", { name: "Documentation", exact: true })
-      .tap();
+    await toggle.tap();
+    await menu.getByRole("link", { name: "Documentation", exact: true }).tap();
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(
       "Duckpad in 15 minutes",
     );
