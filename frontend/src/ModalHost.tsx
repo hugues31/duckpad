@@ -15,6 +15,7 @@ import { useShell } from "./shell";
 import type {
   Bundle,
   Conflict,
+  ConnectorEditor,
   Environment,
   Snapshot,
   Worktree,
@@ -38,7 +39,7 @@ SELECT * FROM {{ source }};
 export type ModalState =
   | { kind: "about" }
   | { kind: "newProject" }
-  | { kind: "connector"; title: string; value: string; create?: boolean }
+  | ({ kind: "connector" } & ConnectorEditor)
   | WorktreeModal;
 
 /** Dialogs about one working branch; they never act on another one. */
@@ -139,22 +140,18 @@ function AboutDialog({ onClose }: { onClose: () => void }) {
 function ConnectorDialog({
   title,
   value,
-  create,
+  identity,
   onClose,
-}: {
-  title: string;
-  value: string;
-  /** New definitions and duplicates never replace an existing connector. */
-  create?: boolean;
-  onClose: () => void;
-}) {
+}: ConnectorEditor & { onClose: () => void }) {
   const t = useT();
-  const { refreshWorkspace } = useShell();
+  const { refreshWorkspace, notify } = useShell();
   const save = async (text: string) => {
+    const definition = JSON.parse(text);
+    const create = definition?.id !== identity;
     try {
       await api(
         withQuery("/catalog/connector", { create }),
-        send(JSON.parse(text), "PUT"),
+        send(definition, "PUT"),
       );
     } catch (error) {
       if (errorDetail(error).code === "connector_exists")
@@ -162,6 +159,14 @@ function ConnectorDialog({
       throw error;
     }
     await refreshWorkspace();
+    // A new definition is listed at the end of its family, often out of view.
+    if (create)
+      notify(
+        t("connectorCreated").replace(
+          "{name}",
+          definition.name ?? definition.id,
+        ),
+      );
   };
   return (
     <EditorModal

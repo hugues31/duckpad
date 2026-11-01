@@ -16,6 +16,7 @@ import { ConfirmModal, Modal } from "./modals";
 import type {
   Connection,
   Connector,
+  ConnectorEditor,
   ConnectorFamily,
   Json,
   Workspace,
@@ -44,7 +45,7 @@ export default function ConnectionsPanel({
 }: {
   workspace: Workspace;
   refresh: () => Promise<void>;
-  onEditor: (data: { title: string; value: string; create?: boolean }) => void;
+  onEditor: (editor: ConnectorEditor) => void;
 }) {
   const t = useT();
   const [creating, setCreating] = useState(false);
@@ -189,7 +190,6 @@ export default function ConnectionsPanel({
                 null,
                 2,
               ),
-              create: true,
             })
           }
         >
@@ -206,73 +206,73 @@ export default function ConnectionsPanel({
           <h3 id={`connectors-${family}`}>{t(label)}</h3>
           {catalog.connectors
             .filter((connector) => familyOf(connector) === family)
-            .map((connector) => (
-              <div className="connector-row" key={connector.id}>
-                <div>
-                  <div className="row gap">
-                    <strong>{connector.name}</strong>
-                    {connector.origin === "built-in" && (
-                      <span className="badge neutral">{t("builtIn")}</span>
-                    )}
-                    {connector.origin === "customized" && (
-                      <span className="badge stale">{t("customized")}</span>
-                    )}
+            .map((connector) => {
+              const name = connector.name ?? connector.id;
+              return (
+                <div className="connector-row" key={connector.id}>
+                  <div>
+                    <div className="row gap">
+                      <strong>{connector.name}</strong>
+                      {connector.origin === "built-in" && (
+                        <span className="badge neutral">{t("builtIn")}</span>
+                      )}
+                      {connector.origin === "customized" && (
+                        <span className="badge stale">{t("customized")}</span>
+                      )}
+                    </div>
+                    <p>{connector.description}</p>
+                    <small>{connector.compatibility}</small>
                   </div>
-                  <p>{connector.description}</p>
-                  <small>{connector.compatibility}</small>
-                </div>
-                <div className="row gap connector-actions">
-                  {(connector.capabilities ?? []).map((c) => (
-                    <span key={c} className="badge neutral">
-                      {t(c)}
-                    </span>
-                  ))}
-                  <button
-                    className="button secondary small"
-                    aria-label={`${t("edit")} ${connector.name ?? connector.id}`}
-                    onClick={() =>
-                      onEditor({
-                        title: connector.name ?? connector.id,
-                        value: definitionText(connector),
-                      })
-                    }
-                  >
-                    {t("edit")}
-                  </button>
-                  <button
-                    className="button secondary small"
-                    aria-label={`${t("duplicate")} ${connector.name ?? connector.id}`}
-                    onClick={() =>
-                      onEditor({
-                        title: t("duplicateConnector"),
-                        value: definitionText({
-                          ...connector,
-                          id: `${connector.id}_copy`,
-                          name: t("copyName").replace(
-                            "{name}",
-                            connector.name ?? connector.id,
-                          ),
-                        }),
-                        create: true,
-                      })
-                    }
-                  >
-                    <Copy size={14} />
-                    {t("duplicate")}
-                  </button>
-                  {connector.origin === "customized" && (
+                  <div className="row gap connector-actions">
+                    {(connector.capabilities ?? []).map((c) => (
+                      <span key={c} className="badge neutral">
+                        {t(c)}
+                      </span>
+                    ))}
                     <button
                       className="button secondary small"
-                      aria-label={`${t("resetToBuiltIn")} ${connector.name ?? connector.id}`}
-                      onClick={() => setResetting(connector)}
+                      aria-label={`${t("edit")} ${name}`}
+                      onClick={() =>
+                        onEditor({
+                          title: name,
+                          value: definitionText(connector),
+                          identity: connector.id,
+                        })
+                      }
                     >
-                      <RotateCcw size={14} />
-                      {t("resetToBuiltIn")}
+                      {t("edit")}
                     </button>
-                  )}
+                    <button
+                      className="button secondary small"
+                      aria-label={`${t("duplicate")} ${name}`}
+                      onClick={() =>
+                        onEditor({
+                          title: t("duplicateConnector"),
+                          value: definitionText({
+                            ...connector,
+                            id: `${connector.id}_copy`,
+                            name: t("copyName").replace("{name}", name),
+                          }),
+                        })
+                      }
+                    >
+                      <Copy size={14} />
+                      {t("duplicate")}
+                    </button>
+                    {connector.origin === "customized" && (
+                      <button
+                        className="button secondary small"
+                        aria-label={`${t("resetToBuiltIn")} ${name}`}
+                        onClick={() => setResetting(connector)}
+                      >
+                        <RotateCcw size={14} />
+                        {t("resetToBuiltIn")}
+                      </button>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
         </section>
       ))}
       {resetting && (

@@ -266,6 +266,7 @@
   "duplicateConnector": "Duplicar definição de conector",
   "copyName": "{name} (cópia)",
   "connectorAlreadyExists": "Já existe um conector com este identificador. Escolha outro identificador.",
+  "connectorCreated": "Definição de conector {name} criada",
   "resetToBuiltIn": "Restaurar versão integrada",
   "resetToBuiltInHint": "Suas alterações nesta definição são descartadas e ela volta a seguir a versão integrada do Duckpad, incluindo atualizações futuras. As conexões mantêm seus valores.",
   "secretHint": "Armazenado fora do Git. Mantenha o valor mascarado para conservar o segredo existente.",

@@ -256,9 +256,30 @@ test("connector definitions are grouped by family, customized built-ins reset an
     const editor = page.getByRole("dialog");
     await editor.getByRole("button", { name: "Save changes" }).click();
     await expect(editor).toHaveCount(0);
+    // The copy is listed at the end of its family, so saving confirms it.
+    await expect(page.locator(".toast")).toContainText(
+      "Connector definition Server folder (copy) created",
+    );
     await expect(
       storage.filter({ hasText: "Server folder (copy)" }),
     ).not.toContainText("Built-in");
+    // Editing a definition under an identifier already taken never replaces it.
+    await storage
+      .getByRole("button", { name: "Edit Landing UI", exact: true })
+      .click();
+    await editor.locator(".monaco-editor").getByText("landing_ui").dblclick();
+    await page.keyboard.insertText("folder_copy");
+    await editor.getByRole("button", { name: "Save changes" }).click();
+    await expect(editor.locator(".notice.error")).toHaveText(
+      "A connector with this identifier already exists. Choose another identifier.",
+    );
+    await editor
+      .locator("footer")
+      .getByRole("button", { name: "Close", exact: true })
+      .click();
+    await expect(
+      storage.filter({ hasText: "Server folder (copy)" }),
+    ).toHaveCount(1);
     // A second duplicate keeps the identifier of the first and is refused.
     await storage
       .getByRole("button", { name: "Duplicate Server folder", exact: true })

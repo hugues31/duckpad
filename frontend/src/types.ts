@@ -189,6 +189,16 @@ export interface ConnectorParameter {
   secret?: boolean;
 }
 /** A connector definition, as written by an administrator. */
+/** A connector definition opened in the JSON editor. */
+export interface ConnectorEditor {
+  title: string;
+  value: string;
+  /**
+   * The identifier being edited. New definitions and duplicates have none: like
+   * an edit that changes the identifier, saving them never replaces a connector.
+   */
+  identity?: string;
+}
 export interface Connector {
   id: string;
   name?: string;

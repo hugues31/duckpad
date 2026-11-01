@@ -266,6 +266,7 @@
   "duplicateConnector": "Duplicate connector definition",
   "copyName": "{name} (copy)",
   "connectorAlreadyExists": "A connector with this identifier already exists. Choose another identifier.",
+  "connectorCreated": "Connector definition {name} created",
   "resetToBuiltIn": "Reset to built-in",
   "resetToBuiltInHint": "Your changes to this definition are discarded and it follows Duckpad's built-in version again, including future updates. Connections keep their values.",
   "secretHint": "Stored outside Git. Leave the masked value to keep the existing secret.",
