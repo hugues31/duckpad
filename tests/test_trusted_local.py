@@ -8,6 +8,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 import duckdb
 import pytest
+import uvicorn
 from fastapi.testclient import TestClient
 from helpers import join_run, wait_until
 
@@ -297,7 +298,7 @@ def test_cli_explicit_mode_and_loopback_hosts(tmp_path, monkeypatch, capsys, hos
         with TestClient(app) as client:
             assert client.get("/api/workspace").status_code == 401
 
-    monkeypatch.setattr(cli.uvicorn, "run", serve)
+    monkeypatch.setattr(uvicorn, "run", serve)
     cli.main()
     assert ("SQL runs without OS isolation" in capsys.readouterr().out) is trusted
 
