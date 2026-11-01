@@ -17,6 +17,8 @@ from .templates import base_type
 from .util import Problem, digest, qi
 
 INTEGER = re.compile(r"U?(?:TINYINT|SMALLINT|INTEGER|BIGINT|HUGEINT)")
+# DuckDB folds ASCII letters in identifiers, including quoted identifiers.
+IDENTIFIER_CASE = str.maketrans("ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz")
 
 
 def locate(bundle, nodes, boundaries, source):
@@ -171,7 +173,11 @@ def convert(type_name, duck_type, value):
 def extract(cursor, dataset, source):
     """Extract one cell from a complete published output, independently of other columns."""
     column = source["from"]["column"]
-    matches = [c for c in (dataset.source_columns or dataset.columns) if c["name"] == column]
+    matches = [
+        c
+        for c in (dataset.source_columns or dataset.columns)
+        if c["name"].translate(IDENTIFIER_CASE) == column.translate(IDENTIFIER_CASE)
+    ]
     if len(matches) != 1:
         return unavailable(source, "invalid_value_source", f"Column {column} is missing or ambiguous")
     if dataset.count != 1:

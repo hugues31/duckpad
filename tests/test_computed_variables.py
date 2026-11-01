@@ -333,10 +333,11 @@ def test_failing_source_test_blocks_all_values_after_outputs_are_computed(servic
     assert engine.pool.computed(worktree, "dev", project)["amount"]["state"] == "unavailable"
 
 
-def test_duplicate_output_column_is_not_silently_the_first_cell(services):
+@pytest.mark.parametrize("alias", ["amount", "AMOUNT"])
+def test_duplicate_output_column_is_not_silently_the_first_cell(services, alias):
     store, projects, _, engine = services
     worktree = projects.create(
-        "Ambiguous column", bundle("SELECT 4 AS amount, 5 AS amount, '2026-06-30' AS day")
+        "Ambiguous column", bundle(f"SELECT 4 AS amount, 5 AS {alias}, '2026-06-30' AS day")
     )["id"]
     run = wait_run(store, engine.launch(worktree, "dev"))
     assert run["variables"]["amount"]["code"] == "invalid_value_source"
