@@ -3,6 +3,7 @@ import Layout from "../layouts/Layout.astro";
 import ProductVideo from "../components/ProductVideo.astro";
 import FlowIllustration from "../components/FlowIllustration.astro";
 import TechnologyLogos from "../components/TechnologyLogos.astro";
+import FeatureGrid from "../components/FeatureGrid.astro";
 import "../styles/home.css";
 import { url } from "../lib/docs";
 ---
@@ -24,8 +25,9 @@ import { url } from "../lib/docs";
           <span>Trust the result.</span>
         </h1>
         <p class="hero-description">
-          Turn scattered data into a story you can follow. Build SQL pipelines
-          visually. Explore the results. Trace a number all the way home.
+          Build SQL pipelines visually. Explore and test the results. Trace a
+          number back to its source, then run a reviewed version with
+          confidence.
         </p>
         <div class="install-terminal">
           <div class="terminal-bar">
@@ -59,7 +61,7 @@ duckpad start</code></pre>
       id="demo"
       class="product-section wrap"
       aria-labelledby="demo-heading"
-      data-reveal
+      data-reveal="media"
     >
       <div class="section-kicker">
         <span id="demo-heading">MEET YOUR NEW DATA WORKSPACE</span>
@@ -81,6 +83,7 @@ duckpad start</code></pre>
         </span>
       </div>
     </section>
+    <FeatureGrid />
     <section id="workflow" class="workflow wrap">
       <div class="section-heading" data-reveal>
         <p class="eyebrow">FROM INPUT TO INSIGHT</p>
@@ -168,7 +171,7 @@ duckpad start</code></pre>
           Explore lineage and its limits ↗
         </a>
       </div>
-      <figure class="lineage-image" data-reveal>
+      <figure class="lineage-image" data-reveal="media">
         <img
           src={url("demos/lineage.png")}
           alt="Duckpad lineage panel showing the original amount cells contributing to regional revenue"
@@ -197,7 +200,7 @@ duckpad start</code></pre>
           environment.
         </p>
         <div class="tag-row">
-          <span>CSV & Parquet</span>
+          <span>CSV, Parquet & Excel</span>
           <span>DuckDB 2.0</span>
           <span>Reusable SQL</span>
           <span>Git projects</span>
@@ -216,14 +219,14 @@ duckpad start</code></pre>
           make sense.
         </h2>
         <p>
-          Start with Northstar, a complete example you can explore.
+          Build your first SQL pipeline in 15 minutes.
           <br />
-          No external database account required.
+          Start from scratch. No external database account required.
         </p>
       </div>
       <div class="start-actions">
         <a class="button light" href={url("docs/quickstart/")}>
-          Open the quickstart ↗
+          Duckpad in 15 minutes ↗
         </a>
         <a href="https://github.com/hugues31/duckpad">
           Explore the source on GitHub ↗
@@ -232,43 +235,3 @@ duckpad start</code></pre>
     </section>
   </main>
 </Layout>
-
-<script>
-  const motion = matchMedia("(prefers-reduced-motion: reduce)");
-  const sections = document.querySelectorAll<HTMLElement>("[data-reveal]");
-  let observer: IntersectionObserver | undefined;
-
-  const reveal = (section: HTMLElement) => {
-    delete section.dataset.revealPending;
-    observer?.unobserve(section);
-  };
-
-  const setupReveals = () => {
-    observer?.disconnect();
-    sections.forEach(reveal);
-    if (motion.matches || !("IntersectionObserver" in window)) return;
-
-    observer = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          if (entry.isIntersecting) reveal(entry.target as HTMLElement);
-        }
-      },
-      { threshold: 0.08 },
-    );
-    sections.forEach((section) => {
-      // Keep the initial viewport and restored scroll positions immediately readable.
-      if (section.getBoundingClientRect().top >= innerHeight) {
-        section.dataset.revealPending = "";
-        observer!.observe(section);
-      }
-    });
-  };
-
-  sections.forEach((section) => {
-    // Keyboard navigation must never land on an invisible link.
-    section.addEventListener("focusin", () => reveal(section));
-  });
-  motion.addEventListener("change", setupReveals);
-  setupReveals();
-</script>

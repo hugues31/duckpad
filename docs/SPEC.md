@@ -251,7 +251,7 @@ quality overview are outside this contract.
 
 - A project variable is a named, typed and documented value declared in the versioned `variables.json`, with a default and optional values per environment. A root flow parameter, including an exposed parameter of a component instance, can be bound to it with `{"$var": "name"}`, and a root flow `expression` or `expressions` parameter can reference text, number, boolean, date and choice variables as `{{ var.name }}`. The compiler turns each reference into a named DuckDB parameter bound with its type, never into SQL text. Templates and component definitions cannot reference variables.
 
-- A launch resolves each variable used by its scope from the captured commit and the selected environment, binds the value like any parameter, and records its type, value and source in the run. Computation fingerprints include the resolved values, so changing a value invalidates only the results that use it in that environment. Lineage explanations label each bound value with its variable. See [Authoring projects](AUTHORING.md#project-variables) and the [design proposal](design/PROJECT_VARIABLES.md).
+- A launch resolves each variable used by its scope from the captured commit and the selected environment, binds the value like any parameter, and records its type, value and source in the run. Computation fingerprints include the resolved values, so changing a value invalidates only the results that use it in that environment. Lineage explanations label each bound value with its variable. See [Project variables](VARIABLES.md) and the [design proposal](design/PROJECT_VARIABLES.md).
 
 # Documentation and data lineage
 

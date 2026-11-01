@@ -1,6 +1,6 @@
 # Node results panel (design proposal)
 
-**Status: accepted on 31 October 2026 (see [Decisions](#decisions)) and implemented, all four delivery steps.** The inspector keeps the node's definition with its one-line result summary, and the results panel shows the **Data**, **Columns**, **Tests** and **Log** tabs with custom samples, views shared in `views.json`, failing rows on demand, column statistics on request and per-output durations; see [Node results](../AUTHORING.md#node-results). The screenshots in this proposal are mockups drawn before the implementation over the Northstar example, where the Paid orders node declares two `-- @message` blocks and three `-- @test` blocks; the user guide shows the actual interface.
+**Status: accepted on 31 October 2026 (see [Decisions](#decisions)) and implemented, all four delivery steps.** The inspector keeps the node's definition with its one-line result summary, and the results panel shows the **Data**, **Columns**, **Tests** and **Log** tabs with custom samples, views shared in `views.json`, failing rows on demand, column statistics on request and per-output durations; see [Results, samples & logs](../RESULTS.md). The screenshots in this proposal are mockups drawn before the implementation over the Northstar example, where the Paid orders node declares two `-- @message` blocks and three `-- @test` blocks; the user guide shows the actual interface.
 
 ## Summary
 
@@ -231,4 +231,4 @@ Decided on 31 October 2026:
 - Dataiku DSS: [sampling in Explore](https://doc.dataiku.com/dss/13/explore/sampling.html), [column analysis](https://knowledge.dataiku.com/9.0/courses/basics/explore-data/concept-analyze.html)
 - Power Query: [data profiling tools](https://learn.microsoft.com/en-us/power-query/data-profiling-tools)
 - dbt: [data tests](https://docs.getdbt.com/docs/build/data-tests), [`store_failures`](https://docs.getdbt.com/reference/resource-configs/store_failures)
-- Duckpad: [execution messages and data tests](../AUTHORING.md#execution-messages), [specification](../SPEC.md)
+- Duckpad: [execution messages](../MESSAGES.md) and [data tests](../TESTS.md), [specification](../SPEC.md)
