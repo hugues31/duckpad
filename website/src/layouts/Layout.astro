@@ -1,6 +1,7 @@
 ---
 import "@fontsource-variable/manrope";
 import "../styles/global.css";
+import "../styles/motion.css";
 import Mark from "../components/Mark.astro";
 import ThemeToggle from "../components/ThemeToggle.astro";
 import GitHubStars from "../components/GitHubStars.astro";
@@ -113,6 +114,8 @@ const canonical = Astro.site
       <small>Built with DuckDB. Made for the open-source community.</small>
     </footer>
     <script>
+      import "../lib/motion";
+
       document
         .querySelectorAll<HTMLDetailsElement>(".mobile-nav")
         .forEach((menu) => {

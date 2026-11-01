@@ -1,6 +1,75 @@
 import AxeBuilder from "@axe-core/playwright";
 import { test, expect } from "@playwright/test";
 
+test("scroll reveals stagger cards and respect live motion preferences", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await page.goto("./");
+  const cards = page.locator(".feature-card");
+  await expect(cards.first()).toHaveAttribute("data-reveal-pending", "");
+  await cards
+    .first()
+    .evaluate((element) =>
+      element.scrollIntoView({ block: "center", behavior: "instant" }),
+    );
+  await expect(cards.first()).not.toHaveAttribute("data-reveal-pending");
+  const delays = await cards.evaluateAll((elements) =>
+    elements
+      .slice(0, 3)
+      .map(
+        (element) => getComputedStyle(element).transitionDelay.split(",")[0],
+      ),
+  );
+  expect(delays).toEqual(["0s", "0.09s", "0.18s"]);
+  await expect
+    .poll(() =>
+      cards.first().evaluate((element) => element.getAnimations().length),
+    )
+    .toBeGreaterThan(0);
+  await expect(page.locator("[data-reveal-pending]").first()).toHaveCount(1);
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await expect(page.locator("[data-reveal-pending]")).toHaveCount(0);
+  await expect(cards.first()).toHaveCSS("opacity", "1");
+  expect(
+    await cards.first().evaluate((element) => element.getAnimations().length),
+  ).toBe(0);
+});
+
+test("guide reveals keep keyboard focus and anchor targets immediately readable", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await page.goto("./");
+  const card = page.locator(".feature-card").last();
+  await expect(card).toHaveAttribute("data-reveal-pending", "");
+  await card.focus();
+  await expect(card).toHaveCSS("opacity", "1");
+  expect(await card.evaluate((element) => element.getAnimations().length)).toBe(
+    0,
+  );
+
+  await page.goto("docs/quickstart/");
+  const image = page.locator('.prose [data-reveal="media"]').first();
+  await expect(image).toHaveAttribute("data-reveal-pending", "");
+  await image.evaluate((element) =>
+    element.scrollIntoView({ block: "center", behavior: "instant" }),
+  );
+  await expect(image).not.toHaveAttribute("data-reveal-pending");
+  await expect
+    .poll(() => image.evaluate((element) => element.getAnimations().length))
+    .toBeGreaterThan(0);
+  const heading = page.locator(".prose > h2").last();
+  const id = await heading.getAttribute("id");
+  await page.evaluate((id) => {
+    location.hash = id!;
+  }, id);
+  await expect(heading).toHaveCSS("opacity", "1");
+  expect(
+    await heading.evaluate((element) => element.getAnimations().length),
+  ).toBe(0);
+});
+
 test("homepage, captions and recorded media are available", async ({
   page,
 }, testInfo) => {

@@ -61,7 +61,7 @@ duckpad start</code></pre>
       id="demo"
       class="product-section wrap"
       aria-labelledby="demo-heading"
-      data-reveal
+      data-reveal="media"
     >
       <div class="section-kicker">
         <span id="demo-heading">MEET YOUR NEW DATA WORKSPACE</span>
@@ -171,7 +171,7 @@ duckpad start</code></pre>
           Explore lineage and its limits ↗
         </a>
       </div>
-      <figure class="lineage-image" data-reveal>
+      <figure class="lineage-image" data-reveal="media">
         <img
           src={url("demos/lineage.png")}
           alt="Duckpad lineage panel showing the original amount cells contributing to regional revenue"
@@ -235,43 +235,3 @@ duckpad start</code></pre>
     </section>
   </main>
 </Layout>
-
-<script>
-  const motion = matchMedia("(prefers-reduced-motion: reduce)");
-  const sections = document.querySelectorAll<HTMLElement>("[data-reveal]");
-  let observer: IntersectionObserver | undefined;
-
-  const reveal = (section: HTMLElement) => {
-    delete section.dataset.revealPending;
-    observer?.unobserve(section);
-  };
-
-  const setupReveals = () => {
-    observer?.disconnect();
-    sections.forEach(reveal);
-    if (motion.matches || !("IntersectionObserver" in window)) return;
-
-    observer = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          if (entry.isIntersecting) reveal(entry.target as HTMLElement);
-        }
-      },
-      { threshold: 0.08 },
-    );
-    sections.forEach((section) => {
-      // Keep the initial viewport and restored scroll positions immediately readable.
-      if (section.getBoundingClientRect().top >= innerHeight) {
-        section.dataset.revealPending = "";
-        observer!.observe(section);
-      }
-    });
-  };
-
-  sections.forEach((section) => {
-    // Keyboard navigation must never land on an invisible link.
-    section.addEventListener("focusin", () => reveal(section));
-  });
-  motion.addEventListener("change", setupReveals);
-  setupReveals();
-</script>
