@@ -53,7 +53,7 @@ test("homepage, captions and recorded media are available", async ({
     .getByRole("link", { name: "Build your first pipeline", exact: true })
     .click();
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(
-    "Your first pipeline",
+    "Duckpad in 15 minutes",
   );
   await page.screenshot({
     path: testInfo.outputPath("website-docs.png"),
@@ -406,7 +406,7 @@ test("content and documentation navigation remain usable without JavaScript", as
   ).not.toBeVisible();
   await page.getByRole("link", { name: "Build your first pipeline" }).click();
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(
-    "Your first pipeline",
+    "Duckpad in 15 minutes",
   );
   await page.getByText("Browse documentation", { exact: true }).click();
   await page

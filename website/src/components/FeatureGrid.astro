@@ -1,0 +1,116 @@
+---
+import { url } from "../lib/docs";
+
+const features = [
+  {
+    label: "SQL nodes",
+    slug: "sql",
+    text: "Write DuckDB SQL with typed parameters, named inputs and multiple outputs.",
+    mark: "SQL",
+  },
+  {
+    label: "Guided data preparation",
+    slug: "data_preparation",
+    text: "Select and rename columns, convert types, clean text and fill missing values.",
+    mark: "01",
+  },
+  {
+    label: "Results worth exploring",
+    slug: "results",
+    text: "Filter and sample data, save views and compute column statistics on demand.",
+    mark: "↗",
+  },
+  {
+    label: "Cell-level lineage",
+    slug: "lineage",
+    text: "Follow a value through joins and aggregates to the source cells behind it.",
+    mark: "←",
+  },
+  {
+    label: "Data tests",
+    slug: "tests",
+    text: "Check for failing rows and stop invalid data before publishing or exporting it.",
+    mark: "✓",
+  },
+  {
+    label: "Messages and run logs",
+    slug: "messages",
+    text: "Report business warnings in SQL and inspect the statements of each run.",
+    mark: ">_",
+  },
+  {
+    label: "Reusable components",
+    slug: "components",
+    text: "Group steps, expose parameters and reuse nested flows across projects.",
+    mark: "{}",
+  },
+  {
+    label: "Variables and environments",
+    slug: "variables",
+    text: "Define a value once, bind it to your nodes and adapt it for each environment.",
+    mark: "$",
+  },
+  {
+    label: "Visual version control",
+    slug: "git",
+    text: "Branch, compare your flow and SQL, review merges and tag a version to run.",
+    mark: "⑂",
+  },
+  {
+    label: "Jobs and automation",
+    slug: "jobs",
+    text: "Run reviewed versions, then connect your scheduler with the CLI or API.",
+    mark: "▶",
+  },
+  {
+    label: "An assistant in context",
+    slug: "assistant",
+    text: "Explain your flow, inspect edits with Undo and confirm runs from the conversation.",
+    mark: "✦",
+  },
+  {
+    label: "Your files and databases",
+    slug: "connectors",
+    text: "Work with CSV, Parquet and Excel, or configure S3 and Oracle connections.",
+    mark: "↔",
+  },
+];
+---
+
+<section id="features" class="features wrap" aria-labelledby="features-heading">
+  <div class="features-heading" data-reveal>
+    <div>
+      <p class="eyebrow">ONE WORKSPACE, FROM SOURCE TO RESULT</p>
+      <h2 id="features-heading">Build. Inspect. Run again.</h2>
+    </div>
+    <p>
+      Start with a few nodes. Keep the tools you need as your project grows.
+    </p>
+  </div>
+  <div class="feature-grid">
+    {features.map((feature) => (
+      <a class="feature-card" href={url(`docs/${feature.slug}/`)} data-reveal>
+        <span class="feature-mark" aria-hidden="true">
+          {feature.mark}
+        </span>
+        <h3>{feature.label}</h3>
+        <p>{feature.text}</p>
+        <span class="feature-arrow" aria-hidden="true">
+          ↗
+        </span>
+      </a>
+    ))}
+  </div>
+  <p class="features-more">
+    Made for your team:
+    <a href={url("docs/installation/#accounts-and-project-access")}>
+      Project permissions
+    </a>
+    <span aria-hidden="true">·</span>
+    <a href={url("docs/sso/")}>Single sign-on</a>
+    <span aria-hidden="true">·</span>
+    <a href={url("docs/offline_extensions/")}>Offline extensions</a>
+    <span aria-hidden="true">·</span>
+    <a href={url("docs/documentation/")}>Project documentation</a>
+  </p>
+</section>

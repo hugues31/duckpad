@@ -126,8 +126,9 @@ real server runtime and download link without downloading or importing a binary.
 
 | Images in `docs/images/` | Guides |
 | --- | --- |
-| `new-project.png`, `workspace.png`, `parameters.png` | Quickstart and authoring |
-| `lineage.png` | Quickstart, example tour and lineage |
+| `quickstart-results.png`, `quickstart-lineage.png` | The 15-minute quickstart; captured by executing its SQL snippets |
+| `new-project.png`, `workspace.png`, `parameters.png` | Northstar and authoring |
+| `lineage.png` | Example tour and lineage |
 | `code.png`, `component.png`, `node-documentation.png` | Authoring and example tour |
 | `variables.png`, `variable-binding.png`, `variable-expression.png`, `run-variables.png` | Authoring |
 | `connection.png`, `environments.png` | Connections |

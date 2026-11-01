@@ -1,5 +1,6 @@
 import { test, expect, type Locator, type Page } from "@playwright/test";
 import { mkdir } from "node:fs/promises";
+import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import {
   openInstanceSettings,
@@ -114,6 +115,103 @@ test("capture project creation, results, lineage and SQL", async ({ page }) => {
     "SELECT",
   );
   await capture(page, "code");
+});
+
+test("capture the quickstart using the SQL printed in the guide", async ({
+  page,
+}) => {
+  const sql = [
+    ...readFileSync(resolve("../docs/QUICKSTART.md"), "utf8").matchAll(
+      /```sql\n([\s\S]*?)```/g,
+    ),
+  ].map((match) => match[1]);
+  expect(sql).toHaveLength(3);
+  await page.getByRole("button", { name: "New project", exact: true }).click();
+  const creation = page.getByRole("dialog");
+  await creation.getByLabel("Name", { exact: true }).fill("Revenue lab");
+  await creation
+    .getByRole("radio", { name: "Empty project", exact: true })
+    .check();
+  await creation.getByRole("button", { name: "Create", exact: true }).click();
+  await expect(creation).toHaveCount(0);
+  const inspector = page.locator(".inspector");
+  const results = page.getByRole("region", { name: "Results", exact: true });
+  const edit = async (code: string) => {
+    await inspector
+      .getByRole("button", { name: "Edit code", exact: true })
+      .click();
+    const editor = page.getByRole("dialog");
+    await expect(editor.locator(".monaco-editor")).toBeVisible();
+    await editor.locator(".monaco-editor textarea").focus();
+    await page.keyboard.press("ControlOrMeta+A");
+    await page.keyboard.insertText(code);
+    await editor
+      .getByRole("button", { name: "Save changes", exact: true })
+      .click();
+    await expect(editor).toHaveCount(0);
+  };
+  const add = async (label: string, code: string, count: number) => {
+    await page
+      .getByRole("button", { name: "New SQL node", exact: true })
+      .click();
+    await expect(page.locator(".react-flow__node")).toHaveCount(count);
+    await expect(inspector.getByLabel("Display name")).toHaveValue("");
+    await inspector.getByLabel("Display name").fill(label);
+    await inspector
+      .getByRole("button", { name: "Save changes", exact: true })
+      .click();
+    await expect(inspector.locator(".inspector-title")).toContainText(label);
+    await edit(code);
+  };
+  await add("Sample orders", sql[0], 1);
+  await run(page);
+  await expect(results.locator("tbody tr")).toHaveCount(4);
+  await add("Revenue report", sql[1], 2);
+  await inspector
+    .getByRole("combobox", { name: "source", exact: true })
+    .selectOption({ label: "Sample orders · orders" });
+  await run(page);
+  await results
+    .getByRole("combobox", { name: "Output", exact: true })
+    .selectOption("report");
+  await expect(results.locator("tbody tr")).toHaveCount(2);
+  const revenue = results.getByRole("button", {
+    name: "Explain this value: revenue, rows 1, 150.00",
+    exact: true,
+  });
+  await expect(revenue).toBeVisible();
+  await expect(results.locator("tbody tr").last()).toContainText("80.00");
+  await page.getByRole("button", { name: "Fit view", exact: true }).click();
+  await capture(page, "quickstart-results");
+  await revenue.click();
+  const lineage = page.getByRole("dialog", {
+    name: "How this value was calculated",
+  });
+  await expect(lineage.locator(".lineage-card.is-source")).toHaveCount(2);
+  await expect(lineage).toContainText("120 + 30 = 150.00");
+  await capture(page, "quickstart-lineage", lineage);
+  await page.keyboard.press("Escape");
+  await edit(sql[1] + "\n" + sql[2]);
+  await run(page);
+  await results.getByRole("tab", { name: /^Tests/ }).click();
+  await expect(results).toContainText("amount_nonnegative");
+  await expect(results).toContainText("OK");
+  await results.getByRole("tab", { name: "Log", exact: true }).click();
+  await expect(results).toContainText("3 paid orders checked");
+  await inspector
+    .getByRole("textbox", { name: "status", exact: true })
+    .fill("pending");
+  await inspector
+    .getByRole("button", { name: "Save changes", exact: true })
+    .click();
+  await expect(
+    inspector.getByRole("button", { name: "Stale", exact: true }),
+  ).toBeVisible();
+  await run(page);
+  await results.getByRole("tab", { name: "Data", exact: true }).click();
+  await expect(results.locator("tbody tr")).toHaveCount(1);
+  await expect(results.locator("tbody tr")).toContainText("North America");
+  await expect(results.locator("tbody tr")).toContainText("50.00");
 });
 
 test("capture the results panel: samples, columns, tests and log", async ({

@@ -1,109 +1,183 @@
-# Your first pipeline
+# Duckpad in 15 minutes
 
-Go from a fresh install to a result you can explain. The included **Northstar**
-project provides synthetic CSV and Parquet data, reusable transformations and
-exports. You do not need an external database account.
+Build a pipeline from an empty project, write two SQL nodes, check their data and
+explain a revenue total. You will use four sample orders; no files to download or
+database account to configure. Allow extra time for the initial installation.
 
-## 1. Start Duckpad
+Prefer to explore an existing pipeline? Open the [Northstar tour](EXAMPLE.md).
 
-You need **Python 3.11+** and **Git**. The package includes the interface;
-you do not need Node.js or a source checkout.
-The default isolated SQL mode requires **Linux with Landlock ABI 2 or later**
-(Linux 5.19+ with Landlock enabled). A Linux container or VM must also expose
-this capability.
+## 1. Install and sign in · 2 minutes
+
+With **Python 3.11+** and **Git** installed, run:
 
 ```sh
 pip install duckpad
 duckpad start
 ```
 
-On a trusted, single-user Windows workstation, use `duckpad start --trusted-local`
-instead. This explicit mode runs SQL without OS isolation, with your user
-permissions. Use only trusted projects and keep the instance private to your
-computer. See [trusted local mode](INSTALLATION.md#trusted-local-mode).
+The default execution mode needs Linux with Landlock ABI 2+ (Linux 5.19+ with
+Landlock enabled). On your own trusted Windows workstation, use
+`duckpad start --trusted-local`; this mode runs with your user permissions and
+must stay private to your computer. See [installation](INSTALLATION.md) for
+platform requirements, virtual environments and instance options.
 
 Open the local address printed in the terminal, normally `http://127.0.0.1:8765`.
-Sign in as **admin** using the password printed once on first launch. Save it
-somewhere private; the same password remains valid after a restart.
+Sign in as **admin** with the password printed once on first launch. Save that
+password privately; it remains valid after a restart.
 
-See [installation and accounts](INSTALLATION.md) for instance options,
-virtual environments and development from source.
+## 2. Create an empty project · 1 minute
 
-## 2. Open the example
+On **Projects**, choose **New project**, name it **Revenue lab**, select
+**Empty project**, then **Create**. Keep **dev** selected in the top bar.
 
-Choose **New project** on the Projects page, enter a name, then choose
-**Start from an example → Create**.
+You are in **Flow**, the visual canvas. A few concepts will help:
 
-![Create a named project from the built-in example](images/new-project.png)
+| Concept | What it means here |
+| --- | --- |
+| Project | Your graph, SQL and documentation, saved together in Git |
+| Node | One step that reads, transforms or exports data |
+| Port and edge | A named table input/output and the connection between two nodes |
+| Parameter | A typed setting that changes a node without rewriting its SQL |
+| Environment | The connection settings and variable values used for a run |
+| Run | An explicit execution of the saved pipeline; editing does not run it |
 
-Keep the **dev** environment selected and click **Run pipeline**. Wait for the
-run to finish. This reads 120 orders and 12 customers, joins them and writes two
-local CSV reports.
+## 3. Create your first SQL node · 3 minutes
 
-![The Northstar pipeline and its revenue preview](images/workspace.png)
+Choose **New SQL node** in the palette. Select it, set its **Display name** to
+**Sample orders**, then choose **Edit code** in the inspector. Replace the
+entire default code, including its `-- @input source` line, with:
 
-Select **Regional revenue** on the canvas and choose **report** in the output
-selector. The table shows the calculated revenue for each region.
+```sql
+-- @label Sample orders
+-- @kind source
+-- @output orders
+SELECT * FROM (VALUES
+    (1, 'Europe',        'paid',    120.00),
+    (2, 'Europe',        'paid',     30.00),
+    (3, 'North America', 'paid',     80.00),
+    (4, 'North America', 'pending', 50.00)
+) AS sample(order_id, region, status, amount);
+```
 
-Use **Find a node…** to search the current graph by label, ID or
-template. Choose a result with the mouse or the arrow keys and Enter to select
-and center it. Inside a component, this searches that component's nodes.
+Choose **Save changes**, then **Run pipeline**. Select the node: its **Data** tab
+under the canvas shows all four orders.
 
-**Search instance** in the top bar finds projects, open branches and placed nodes
-across projects you can read, including nodes inside nested components. Results
-show their project, branch and component path; selecting one opens that location.
-Search uses saved project metadata, never SQL, parameter values, connection
-secrets or result rows. It does not change the project or run a pipeline.
+`-- @kind source` identifies a source node. `-- @output orders` names the table
+it publishes. The rest is DuckDB SQL, ending in a semicolon. This source uses
+inline data; later you can replace it with a **Load CSV** or **Load Parquet** node
+from the palette and upload your own file.
 
-Press **Ctrl+F** (**⌘F** on macOS) to focus canvas search, or **Ctrl+K** (**⌘K**)
-to open instance search. These shortcuts leave text editors, other form fields
-and open dialogs in control of their keys.
+## 4. Connect a transformation · 3 minutes
 
-## 3. Explain a number
+Choose **New SQL node** again and set its **Display name** to **Revenue report**.
+Choose **Edit code**, replace the code with the following, then **Save changes**:
 
-Click a **revenue** cell in the result table. A large modal connects the original
-**amount** cells to the sum that produced the selected revenue. Unchanged values
-pass straight through, leaving only source cells and meaningful calculations.
+```sql
+-- @label Revenue report
+-- @input source
+-- @param status: text = "paid"
+-- @output paid_orders
+SELECT * FROM {{ source }} WHERE status = {{ status }};
+-- @output report
+SELECT region, COUNT(*) AS orders, SUM(amount) AS revenue
+FROM {{ paid_orders }}
+GROUP BY region
+ORDER BY region;
+```
 
-The calculation shows `SUM(amount)`, its result and the full number of
-contributing values. Use **Next** to display the next five inputs. Open a card's
-details to inspect the SQL or the context that selected its rows. Pan and zoom
-the graph as needed; press Escape to return to the result table.
+Connect **Sample orders → orders** to **Revenue report → source** by dragging
+between the ports. Alternatively, select **Revenue report** and choose
+**Sample orders · orders** in its **source** input selector. An unconnected input
+is invalid until you make this connection.
 
-![The original amounts behind a regional revenue total](images/lineage.png)
+The double braces refer to declared names. `{{ source }}` is the connected
+table; `{{ status }}` is the parameter value. Write the placeholder without SQL
+quotes: Duckpad binds the value for you. `{{ paid_orders }}` reads the earlier
+output of this same node. Outputs must be declared before another output reads
+them; the full rules are in [SQL syntax](SQL.md).
 
-An explanation describes the data captured by that run. It does not silently
-read a changed source file. See [lineage coverage](LINEAGE.md) for supported SQL
-and explicit limitations.
+Run the pipeline. Select **Revenue report** and choose **report** in the results
+output selector. You should see:
 
-## 4. Make it yours
+| region | orders | revenue |
+| --- | ---: | ---: |
+| Europe | 2 | 150.00 |
+| North America | 1 | 80.00 |
 
-Select **Paid orders** and change its **status** parameter. The old result
-becomes **Stale** in the results panel. Click **Run pipeline** again to compute the new result.
-You choose when a run happens; editing never starts one automatically.
+![The two-node Revenue lab pipeline with its regional totals](images/quickstart-results.png)
 
-![Paid orders parameters beside its results](images/parameters.png)
+Switch to **paid_orders** to see the three rows behind those totals. A node can
+publish several outputs; downstream nodes choose which port to read.
 
-Try the **Code** tab to inspect the project files and SQL. Use **New working
-branch** before experimenting with a shared definition, then compare your changes
-before merging them. The [version control guide](GIT.md) explains the full review
-workflow.
+## 5. Inspect and explain the result · 2 minutes
+
+Switch back to **report** and click the **150.00** revenue cell. The lineage
+view shows how `SUM(amount)` used **120** and **30**. Press Escape to return
+to the table. An explanation uses the data captured by that run; it does not
+silently reread a changed source.
+
+![The 120 and 30 source amounts contributing to the 150 revenue total](images/quickstart-lineage.png)
+
+In **Columns**, inspect types and choose **Compute statistics** to profile the
+whole result. In **Data**, try a filter or sample; these controls change what
+you inspect, not the pipeline output. The [results guide](RESULTS.md) covers
+saved views, statistics and the execution log.
+
+## 6. Add a test and a message · 2 minutes
+
+Open **Revenue report → Edit code** and append these blocks after the queries:
+
+```sql
+-- @test amount_nonnegative
+SELECT * FROM {{ paid_orders }} WHERE amount < 0;
+-- @message
+SELECT 'info' AS level, COUNT(*) || ' paid orders checked' AS message
+FROM {{ paid_orders }};
+```
+
+Save and run again. **Tests** shows `amount_nonnegative` as **OK**, with zero
+failing rows. **Log** shows **3 paid orders checked** alongside the execution.
+
+A test returns the rows that violate a rule; zero rows passes. An error test
+blocks publication when it finds failures. A message returns `level` and
+`message` columns for business information, warnings or errors. See
+[data tests](TESTS.md) and [execution messages](MESSAGES.md) for their contracts.
+
+## 7. Change, rerun and keep your work · 2 minutes
+
+In the **Revenue report** inspector, change **status** from `paid` to `pending`
+and save the parameter change. The previous result becomes **Stale**. Run again:
+**report** now contains one North America row with **orders = 1** and
+**revenue = 50.00**. Set the parameter back to `paid`, save and rerun.
+
+Completed saves create Git commits automatically. **Code** shows the SQL files,
+and **History** records the executions. Before a larger experiment, create a
+**New working branch**, then [compare and merge](GIT.md) the changes. Use
+**Documentation** to explain the project to the next person.
+
+You now have a source, a parameterized transformation, two outputs, a data test
+and a message, with results you can explain.
 
 ## Where next?
 
-- Follow the [Northstar tour](EXAMPLE.md) for nested components and environment comparisons.
-- Learn the [pipeline and SQL template contract](AUTHORING.md).
-- Configure your own [connections](CONNECTORS.md).
-- Invite your team with [accounts and project roles](INSTALLATION.md#accounts-and-project-access).
+- [Prepare columns and values](DATA_PREPARATION.md) with guided forms.
+- [Read your own files and databases](CONNECTORS.md), then write an export with
+  the [SQL guide](SQL.md#write-an-export).
+- [Reuse a group of nodes](COMPONENTS.md) and configure it with
+  [project variables](VARIABLES.md).
+- [Create a Job](JOBS.md) and [launch it from a scheduler](AUTOMATION.md).
+- [Explore Northstar](EXAMPLE.md) for joins, nested components and environments.
+- [Ask the assistant](ASSISTANT.md) to explain code or make changes you can inspect and undo.
 
 ## If something gets in the way
 
-- **An unsupported sandbox error:** check that the Linux kernel exposes Landlock
-  ABI 2+. For your own trusted Windows workstation, restart with `--trusted-local`;
-  shared instances must keep the isolation boundary.
-- **An instance is already running:** stop the original process or use a different
-  `--home` directory and `--port` for a second instance.
-- **A blank or stale preview after restart:** run the pipeline again. Execution
-  history persists; materialized results and lineage live in memory.
-- **A build error on an older CPU:** the deployment guide describes the optional
-  portable DuckDB runtime. Keep DuckDB 2.0; do not downgrade to bypass setup.
+- **Unsupported sandbox:** check the host requirements in
+  [installation](INSTALLATION.md#start). Shared instances require isolation.
+- **Missing source input:** connect the transformation's input; remove the
+  default input declaration from the inline source node.
+- **Unknown reference:** check the spelling inside `{{ }}` and declare an output
+  before reading it from another output.
+- **Stale or empty results:** save the changes and run again. Results live in
+  memory and need a new run after a backend restart; history persists.
+- **Instance already running:** stop the existing process or use a separate
+  `--home` directory and `--port`.
