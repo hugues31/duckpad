@@ -11,7 +11,7 @@ Drag an input or output connection onto empty canvas space to open **Add a conne
 
 ## Group and open components
 
-Select nodes using Shift, then choose **Group into component**. Node-owned code moves to `components/<component-id>/<node-id>.sql`. Incoming and outgoing edges are preserved as named boundary ports; terminal outputs remain inspectable. Double-click the resulting node to open the sub-flow. Breadcrumbs identify the instance path. Definition edits affect every usage in this project branch, while parameters belong to the selected instance.
+Select nodes using Shift, then choose **Create component**. Node-owned code moves to `components/<component-id>/<node-id>.sql`. Incoming and outgoing edges are preserved as named boundary ports; terminal outputs remain inspectable. Double-click the resulting node to open the sub-flow. Breadcrumbs identify the instance path. Definition edits affect every usage in this project branch, while parameters belong to the selected instance.
 
 ![The nested Regional summary component, its breadcrumb path and metrics output](images/component.png)
 

@@ -102,7 +102,7 @@ described in [Variables in expressions](#variables-in-expressions):
 References are allowed only in the root flow. A template, a template parameter
 default or a component definition that references a variable is an error on
 that definition, and blocks the nodes built from it: expose the parameter
-instead, then bind it or write the expression on the instance. **Group into
+instead, then bind it or write the expression on the instance. **Create
 component** does this for you. Each bound parameter of the grouped nodes, and
 each expression that references variables, becomes an exposed parameter of the
 new instance, which keeps the same binding or expression, in one save.
@@ -199,7 +199,7 @@ records it, fingerprints include its type and value in each environment, and a
 rename keeps results valid. The **SQL** tab lists the named parameter next to the
 variable and its value. Lineage explanations show the value that was used,
 labeled with its variable, for example `amount >= 900 (high_value_threshold)`.
-**Group into component** exposes each expression that references variables, so
+**Create component** exposes each expression that references variables, so
 the new instance keeps the references.
 
 See [environments](ENVIRONMENTS.md) for instance settings and
