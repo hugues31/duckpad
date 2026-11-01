@@ -11,12 +11,14 @@ import json
 import os
 import platform
 import tempfile
+import time
 import uuid
 from pathlib import Path
 
 import duckdb
 
 from duckpad.builtin_templates import BUILTINS
+from duckpad.execution.runs import UNFINISHED_RUN_STATUSES
 from duckpad.lineage import Lineage
 from duckpad.services import Services
 from duckpad.util import dumps, literal
@@ -26,7 +28,12 @@ RUN_TIMEOUT = 600
 
 def wait(store, engine, worktree):
     run = engine.launch(worktree, "dev")
-    result = engine.wait(run["id"], RUN_TIMEOUT)
+    deadline = time.monotonic() + RUN_TIMEOUT
+    result = store.get("run", run["id"])
+    while result["status"] in UNFINISHED_RUN_STATUSES:
+        assert time.monotonic() < deadline, "The run did not finish"
+        time.sleep(0.05)
+        result = store.get("run", run["id"])
     assert result["status"] == "success", {
         key: {"status": value["status"], "error": value.get("error")}
         for key, value in result["nodes"].items()
