@@ -384,7 +384,9 @@ test("capture connection setup and environment policies", async ({ page }) => {
   await dialog
     .getByRole("combobox", { name: "Connector", exact: true })
     .selectOption("local");
-  await dialog.getByLabel("root", { exact: true }).fill("/srv/finance-dev");
+  const root = dialog.getByLabel("root", { exact: true });
+  await root.fill("/srv/finance-dev");
+  await root.blur();
   await capture(page, "connection", dialog);
   await page.keyboard.press("Escape");
   await openInstanceSettings(page, "Environments");
