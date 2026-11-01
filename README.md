@@ -1,78 +1,70 @@
 # Duckpad
 
-Build local DuckDB pipelines on a visual canvas, inspect their results, and explain individual values back to their source cells. Duckpad combines a React/TypeScript interface with a Python/FastAPI execution service.
+[![Tests](https://github.com/hugues31/duckpad/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/hugues31/duckpad/actions/workflows/ci.yml)
+[![PyPI version](https://img.shields.io/pypi/v/duckpad.svg)](https://pypi.org/project/duckpad/)
+[![Python versions](https://img.shields.io/pypi/pyversions/duckpad.svg)](https://pypi.org/project/duckpad/)
+[![License: MIT](https://img.shields.io/github/license/hugues31/duckpad.svg)](LICENSE)
 
-## Start
+### See the flow. Trust the result.
 
-Requires **Python 3.11+ and Git** on `PATH`. Release wheels include the frontend, Monaco and its workers; Node.js is not needed to run the installed application.
+An open-source SQL workspace powered by **DuckDB 2.0**. Turn scattered data into
+visual pipelines, explore the results and trace a number all the way back to its
+source.
+
+[![Visit the website](https://img.shields.io/badge/Visit_the_website-1858de?style=for-the-badge)](https://hugues31.github.io/duckpad/)
+
+[![Watch Duckpad in one minute: build visual pipelines and version your work](docs/images/duckpad-overview.jpg)](https://hugues31.github.io/duckpad/#demo)
+
+- **Compose visually.** Connect sources, joins and reusable components. Use guided
+  forms to prepare columns and values, or write your own SQL nodes.
+- **Explore and check your data.** Sample and filter results, save views, compute
+  column statistics, and keep data tests and execution messages next to your SQL.
+- **Explain a number.** Follow a result cell back to its contributing source
+  values, with [explicit lineage coverage](docs/LINEAGE.md).
+- **Iterate with confidence.** Save to Git, branch independently, compare changes
+  visually and review a merge before applying it.
+- **Run repeatable work.** Share typed variables across nodes and environments,
+  then launch Jobs against reviewed versions from the interface, CLI or a scheduler.
+- **Ask for help in context.** Use the AI assistant to explain a flow, inspect
+  its edits and confirm executions with your existing project permissions.
+- **Keep control.** Run on your infrastructure, configure connections per
+  environment, manage team access and import extensions for offline use.
+
+## Try it
+
+With Python 3.11+ and Git installed:
 
 ```sh
-pip install ./dist/duckpad-0.1.0-py3-none-any.whl
+pip install duckpad
 duckpad start
 ```
 
-The distribution is named `duckpad`. Once published to a package index, the same package can be installed with `pip install duckpad`; this repository does not publish releases automatically.
+Open the printed local address and sign in with the initial admin
+password from the terminal. Follow **[Duckpad in 15 minutes](docs/QUICKSTART.md)**
+to build your first pipeline from scratch, write SQL and explain a result.
 
-Open the localhost address printed in the terminal. Sign in as `admin` using the password printed **once** on the first launch. The same password remains valid after a restart. The default instance directory is `$XDG_DATA_HOME/duckpad`, or `~/.local/share/duckpad`. Authentication, connection settings and execution history are kept there, outside project repositories.
+Prefer a ready-made project? Choose **New project → Start from an example**,
+enter a name, then **Create → Run pipeline** to explore Northstar.
+See [installation](docs/INSTALLATION.md) for platform requirements and setup options.
 
-```sh
-duckpad start --home /path/to/my-instance --port 8765 --no-browser
-```
+## Go further
 
-Only one backend may own an instance directory at a time. Use separate `--home` directories for independent instances. The default address is `127.0.0.1`.
+| Build | Understand | Share and run |
+| --- | --- | --- |
+| [SQL syntax](docs/SQL.md) | [Results and samples](docs/RESULTS.md) | [Version control](docs/GIT.md) |
+| [Data preparation](docs/DATA_PREPARATION.md) | [Data tests](docs/TESTS.md) | [Jobs](docs/JOBS.md) |
+| [Reusable components](docs/COMPONENTS.md) | [Messages and logs](docs/MESSAGES.md) | [CLI and automation](docs/AUTOMATION.md) |
+| [Variables](docs/VARIABLES.md) | [Lineage](docs/LINEAGE.md) | [Connections](docs/CONNECTORS.md) |
+| [Project files](docs/AUTHORING.md) | [AI assistant](docs/ASSISTANT.md) | [Environments](docs/ENVIRONMENTS.md) |
 
-## Try the complete example
+[Installation & accounts](docs/INSTALLATION.md) · [Single sign-on](docs/SSO.md) ·
+[Offline extensions](docs/OFFLINE_EXTENSIONS.md) · [Project documentation](docs/DOCUMENTATION.md) ·
+[Architecture](docs/ARCHITECTURE.md) · [Validation](docs/VALIDATION.md) ·
+[Releases](docs/RELEASING.md) · [Security](SECURITY.md)
 
-Choose **Open example project** and **Run pipeline**. The Northstar example creates CSV and Parquet inputs, joins customers to orders, computes ordered outputs, uses nested reusable components twice with separate parameters, computes aggregates, distinct counts, set operations and window ranks, and exports two CSV reports. Its `dev` and `prod` data are deliberately different.
+The [website and documentation guide](docs/WEBSITE.md) explains local preview,
+Playwright demo recording and GitHub Pages publishing. Developer checks live in
+[CONTRIBUTING.md](CONTRIBUTING.md). Private issue workflows and preview tooling
+are maintained in operator-owned configuration outside Git.
 
-Select **Regional revenue**, choose the `report` output, then click a revenue cell. Follow a contribution into the nested aggregate and page through its source amounts. No external accounts are required for this example. See the [example tour](docs/EXAMPLE.md).
-
-![Northstar pipeline and preview](docs/images/workspace.png)
-
-## Included workflows
-
-- Drag templates onto the canvas, connect ports, configure typed parameters, and edit shared SQL definitions in Monaco.
-- Use guided filter, join-key and aggregate forms, or edit their generated SQL expressions.
-- Preview, filter and sort results; explain valid cells with five contributions per page and complete counts.
-- Group nodes into nested components, expose parameters, and import independent copies between projects.
-- Save automatically to Git, inspect diffs, open isolated branches or historical revisions, and explicitly merge changes.
-- Detect concurrent UI/file edits and resolve recoverable conflicts without losing either proposal.
-- Recompute manually, stop active SQL, retain stale previews after failure, and inspect durable execution history.
-- Configure reusable connections and environments outside project Git, with local, S3 and Oracle presets.
-- Switch English/French and light/dark themes without changing the project.
-
-Results live in memory per worktree and environment. After a backend restart, history remains available but previews and lineage require another manual run. Editing or changing an external source does not launch a run automatically.
-
-## Develop and verify
-
-```sh
-bash scripts/setup.sh
-uv run duckpad start --home .duckpad-dev --no-browser
-```
-
-For frontend development, `npm run dev --prefix frontend` proxies `/api` to the backend on port 8765.
-
-```sh
-uv run ruff check src tests scripts
-uv run ruff format --check src tests scripts
-uv run pytest -q
-npm run check --prefix frontend
-npm exec --prefix frontend -- playwright install chromium
-npm run build --prefix frontend
-npm run test:e2e --prefix frontend
-uv build
-```
-
-The Playwright suite starts a disposable instance on port 8766. `DUCKPAD_CHROMIUM_EXECUTABLE` can point to an already installed Chromium executable. Building a release without compiled assets fails with an actionable message; editable installation permits building them afterward.
-
-## Documentation
-
-- [Multica issue workflow and preview deployment](docs/MULTICA.md)
-- [Architecture and execution invariants](docs/ARCHITECTURE.md)
-- [Project files, templates and components](docs/AUTHORING.md)
-- [Lineage coverage and limitations](docs/LINEAGE.md)
-- [Connector setup and validated compatibility](docs/CONNECTORS.md)
-- [Execution-service prototype and scheduling decision](docs/EXECUTION_SERVICE.md)
-- [Validation results and performance reference](docs/VALIDATION.md)
-
-The required dependency is `duckdb>=2.0`; the recorded validation uses **DuckDB 2.0.0 on Linux x86_64**. Oracle needs a matching OraDuck extension and Oracle Instant Client. S3 validation uses a local S3 emulator; live AWS IAM, TLS and deployment-specific behavior need their own integration checks. Details and reproducible commands are in the connector guide.
+**MIT licensed.** Built for the open-source community.
