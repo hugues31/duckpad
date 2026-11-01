@@ -1,6 +1,6 @@
 # Connections, file storage and extensions (design proposal)
 
-**Status: delivery plan approved; the [custom connector types](#custom-connector-types) amendment awaits review. Nothing is implemented.**
+**Status: accepted on 1 November 2026 (see [Decisions](#decisions)). Nothing is implemented yet; each delivery step has its own ticket.**
 
 ## Summary
 
@@ -12,6 +12,7 @@ This proposal answers from the user's point of view, with Postgres, Snowflake an
 2. **Keep server folders as connections, but stop requiring one for project files.** A folder with different paths in dev and prod, granted to some projects by an administrator, is a real connection even without a password. The default Local workspace connection is not: it grants access the project already has.
 3. **Define a connection as "where data lives and how to reach it in each environment".** Credentials follow from that definition but do not make it. Connections then fall into two families, databases and file storage, and every file format node works with every file storage connection.
 4. **Keep connector types open to administrators.** Duckpad will not ship a connector for every database. Administrators already declare and edit connector types as JSON; the plan makes custom types work like built-in ones and keeps customized built-ins across upgrades.
+5. **Break compatibility where it simplifies the model.** Duckpad has no earlier version to support, so the steps remove obsolete connectors, connections and template defaults instead of keeping them working. See [Compatibility](#compatibility).
 
 ## What users experience today
 
@@ -45,7 +46,7 @@ Extensions needed to *reach* a system (`postgres`, `httpfs`, `oraduck`) stay dec
 
 Every file node (Load or Export CSV, Parquet, XLSX and later JSON) labels its connection field **Location**. It defaults to **Project files** and lists the file storage connections granted to the project. Relative paths resolve against the chosen location. Absolute paths remain restricted to project files and granted roots, as today.
 
-The template language needs no new syntax: an empty `connection` parameter means project files. Templates already versioned in projects keep their `local` default, which keeps working.
+The template language needs no new syntax: an empty `connection` parameter means project files. Built-in templates drop their `local` and `xlsx` defaults, and the default Local workspace connection is removed with its grants.
 
 When a format needs an extension that is neither built into the runtime nor enabled in the project, the node error names the extension to enable in the **Extensions** tab.
 
@@ -55,7 +56,7 @@ A database connection attaches the remote database with a temporary secret (`ATT
 
 ### Connections page
 
-The page groups connections into **Databases and warehouses** and **File storage**. A fresh instance lists no connection, instead of a Local workspace entry nobody configures. The connector catalog drops Excel (XLSX), renames Local files to **Server folder** ("A folder on the Duckpad server, with a path for each environment") and describes S3 without naming formats.
+The page groups connections into **Databases and warehouses** and **File storage**. A fresh instance lists no connection, instead of a Local workspace entry nobody configures. The connector catalog drops Excel (XLSX), replaces Local files with **Server folder** (identifier `folder`, "A folder on the Duckpad server, with a path for each environment") and describes S3 without naming formats.
 
 ## Custom connector types
 
@@ -71,16 +72,16 @@ Duckpad cannot ship and validate a connector for every database or storage servi
 
 - **Custom types have no family.** The grouped Connections page cannot place them, file nodes cannot offer a custom storage as a location, and a custom database is read through the template labeled Load Oracle.
 - **Storage roots must be local paths.** Relative paths are joined to the root as filesystem paths, so the root `s3://bucket/landing` and the file `a.csv` become `s3:/bucket/landing/a.csv`.
-- **A customized built-in cannot be reset.** Nothing distinguishes an edited built-in from the shipped definition. Step 3 cannot safely rename Local files or describe S3 differently in existing catalogs, and an administrator has no way back to the shipped version. Copies exist only as a side effect of changing the identifier.
+- **A customized built-in cannot be reset.** Built-ins are copied into the catalog once, when the database is created. Nothing distinguishes an edited built-in from the shipped definition, a later release cannot fix a built-in without overwriting edits, and an administrator has no way back to the shipped version. Copies exist only as a side effect of changing the identifier.
 - **Every missing setting needs a definition change.** Built-in connectors expose a fixed list of parameters.
 - **Nothing tests a definition before a project uses it.** Extensions are native code. On a processor without AVX2, the published `postgres` extension for DuckDB 2.0.0 installs, then stops the Python process with an illegal instruction when it loads. In embedded execution, that crash would stop the Duckpad server.
 
 ### Proposal
 
-- **Families.** A definition declares `family: database` or `family: storage`. Built-in definitions declare it. A definition without it counts as a database when its setup attaches one, and as storage otherwise. Custom types are grouped, listed and offered exactly like built-in ones.
+- **Families.** Every definition declares `family: database` or `family: storage`; validation rejects a definition without it. Custom types are grouped, listed and offered exactly like built-in ones.
 - **Storage roots.** A storage connector declares a `root` parameter, either a folder or a URI prefix such as `gs://bucket/landing/`. File nodes offer every granted storage connection as a location. Relative paths are appended to the root without altering a URI.
 - **Generic table nodes.** Load table reads `{{ connection }}.{{ schema }}.{{ table }}` and Export table inserts into it, for every database connection. A connector whose write path is not `INSERT`, such as OraDuck, keeps its own export template.
-- **Built-in and customized definitions.** Built-in definitions show a **Built-in** badge, and Duckpad records the fingerprint of each version it ships. An upgrade replaces a built-in only when the administrator has not changed it. Otherwise, Duckpad keeps the edit, marks the definition **Customized** and offers **Reset to built-in**. **Duplicate** creates an editable copy under a new identifier.
+- **Built-in and customized definitions.** Built-in definitions come with each release instead of being copied into the catalog, and show a **Built-in** badge. Editing one stores the administrator's version as an override: the definition is marked **Customized**, keeps the edit across upgrades, and **Reset to built-in** deletes the override. An unedited built-in always matches the running release. **Duplicate** creates an editable copy under a new identifier.
 - **Additional options.** Built-in database connectors expose an optional **Additional options** parameter, passed to the driver as is: libpq keywords such as `sslmode=require application_name=duckpad` for Postgres. Most missing settings then need no definition change.
 - **Test connection.** The connection form runs the setup of one environment in a separate process and reports the error. An incompatible extension, a wrong password or an unreachable host shows up before any project run.
 - **Shared definitions.** Definitions remain JSON. The connector guide publishes examples beyond the built-ins, such as MySQL and SQLite. A community contribution is a definition plus a validation record, the same evidence the built-ins have.
@@ -105,15 +106,17 @@ Two boundaries stay in place:
 - **KNIME**: standard file systems (local, relative to the workflow, mountpoints) need no connector node. Connected file systems such as S3 or SMB come from a connector node plugged into the same CSV or Excel reader. Format and location are independent.
 - **dbt**: `profiles.yml` holds one connection per warehouse, with one target per environment, the same shape as a Duckpad connection with environment values.
 
-## Migration
+## Compatibility
 
-Projects store connection references in Git, so existing references keep working:
+Duckpad has no earlier version to support: no installation, project or catalog has to keep working across these steps. Breaking changes are allowed, and the steps need no migration path:
 
-- Fresh catalogs stop seeding Excel (XLSX). Existing `xlsx` connector definitions, connections and grants stay valid, and nodes that reference them keep running.
-- Local files keeps the identifier `local`; only its display name and description change, so existing connections and node parameters are unaffected.
-- Existing built-in definitions identical to a shipped version become plain built-ins and receive the new names and descriptions. Edited ones keep their content and are marked Customized. Custom connector types without `family` keep working, placed by the inference rule.
-- New projects stop receiving the Local workspace grant once file nodes no longer need it. Existing grants remain.
-- New built-in templates default to project files. Existing projects keep their versioned templates until someone updates them, as for any template change.
+- The `xlsx` connector is deleted, with its connections and grants. Load XLSX and Export XLSX use project files or a storage location, like every other format.
+- The `local` connector and the default Local workspace connection are deleted. Server folder takes the identifier `folder`.
+- Built-in templates drop their `local` and `xlsx` defaults. Templates already copied into projects are not rewritten.
+- `family` is mandatory, with no inference for definitions written before it existed.
+- Built-in definitions are read from the release; catalog rows seeded by earlier versions are not converted into overrides.
+
+An instance or project created before a step may need to be recreated.
 
 ## Alternatives considered
 
@@ -127,9 +130,9 @@ Projects store connection references in Git, so existing references keep working
 
 ## Delivery plan
 
-1. **Project files without a connection.** An empty connection on a file node means project files. Built-in CSV, Parquet and XLSX templates default to it, the inspector labels the field **Location**, and new projects no longer receive the Local workspace grant.
-2. **Retire the Excel connector.** Stop seeding it in fresh catalogs, report an actionable error when `excel` is neither built in nor enabled, and update the connector guide and its screenshots.
-3. **Server folder, families and customizable built-ins.** Rename and describe Local files, describe S3 without naming formats, add `family` to definitions and group the page by it, custom types included. Offer every storage connection as a location, with URI roots. Mark built-ins, keep customized ones across upgrades, and add Reset to built-in and Duplicate.
+1. **Project files without a connection.** An empty connection on a file node means project files. Built-in CSV, Parquet and XLSX templates default to it, the inspector labels the field **Location**, and the Local workspace connection and its grants are removed.
+2. **Remove the Excel connector.** Delete the `xlsx` connector, report an actionable error when `excel` is neither built in nor enabled, and update the connector guide and its screenshots.
+3. **Server folder, families and customizable built-ins.** Replace Local files with Server folder, describe S3 without naming formats, make `family` mandatory and group the page by it, custom types included. Offer every storage connection as a location, with URI roots. Ship built-ins with the release, store administrator edits as overrides, and add Reset to built-in and Duplicate.
 4. **The database family, validated with Postgres.** Ship Postgres as a plain JSON definition with Additional options, add generic Load table and Export table templates and Test connection, and provide a `postgres` build that runs on the server's processor. Acceptance includes an administrator-declared connector, such as the attached DuckDB file example, working through the same templates without code changes. Snowflake or BigQuery follow the same path.
 
 ## Open questions
@@ -137,7 +140,14 @@ Projects store connection references in Git, so existing references keep working
 - A relative source path currently resolves under the environment's exports directory, while uploads land in the project's resources. Should Project files resolve relative source paths under resources instead?
 - On runtimes that do not link `excel` statically, should built-in templates declare the extensions they need, or should the **Extensions** tab remain the only mechanism?
 
-- Is a JSON editor with published examples enough for administrators, or should connector types also get a form-based editor? This proposal keeps JSON: one definition is one file, easy to share and review.
+## Decisions
+
+Decided on 1 November 2026:
+
+1. **The four-step delivery plan**, with one ticket per step.
+2. **Custom connector types stay open to instance administrators**, including edits to built-ins that expose a missing parameter.
+3. **Connector types are edited as JSON**, with published examples; no form-based editor.
+4. **No earlier version to support.** Breaking changes are allowed; see [Compatibility](#compatibility).
 
 ## Sources
 
