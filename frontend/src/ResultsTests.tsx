@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import { withQuery } from "./api";
 import type { NodeInterface } from "./graph";
-import { useT } from "./i18n";
+import { countLabel, useT } from "./i18n";
 import { worktreeUrl } from "./navigation";
 import { nodeCode } from "./nodeCode";
 import { clock } from "./ResultsPanel";
@@ -52,6 +52,7 @@ export default function ResultsTests({
   result,
   refresh,
   canShowRows,
+  readOnly,
   onShowRows,
   onEditCode,
 }: {
@@ -64,7 +65,9 @@ export default function ResultsTests({
   result?: NodeResult;
   refresh: string;
   canShowRows: boolean;
-  onShowRows: (test: string, count: number) => void;
+  /** Readers open the node code read-only. */
+  readOnly: boolean;
+  onShowRows: (test: string, count: number, output?: string | null) => void;
   onEditCode: () => void;
 }) {
   const t = useT();
@@ -116,7 +119,7 @@ export default function ResultsTests({
           {!node.component && (
             <button className="button secondary small" onClick={onEditCode}>
               <Code2 size={13} aria-hidden="true" />
-              {t("editNodeCode")}
+              {t(readOnly ? "viewNodeCode" : "editNodeCode")}
             </button>
           )}
         </div>
@@ -128,15 +131,15 @@ export default function ResultsTests({
         <span className="tests-summary">
           <span className="ok">
             <CircleCheck size={13} aria-hidden="true" />
-            {t("testsPassed").replace("{count}", String(counts.ok))}
+            {countLabel(t, counts.ok, "testsPassedOne", "testsPassed")}
           </span>
           <span className="warning">
             <AlertTriangle size={13} aria-hidden="true" />
-            {t("testsWarnings").replace("{count}", String(counts.warning))}
+            {countLabel(t, counts.warning, "testsWarningsOne", "testsWarnings")}
           </span>
           <span className="error">
             <CircleX size={13} aria-hidden="true" />
-            {t("testsErrors").replace("{count}", String(counts.error))}
+            {countLabel(t, counts.error, "testsErrorsOne", "testsErrors")}
           </span>
           {latest && (
             <span className="muted">
@@ -148,7 +151,7 @@ export default function ResultsTests({
         {!node.component && (
           <button className="text-button" onClick={onEditCode}>
             <Code2 size={12} aria-hidden="true" />
-            {t("editTestsInCode")}
+            {t(readOnly ? "viewNodeCode" : "editTestsInCode")}
           </button>
         )}
       </div>
@@ -258,7 +261,9 @@ export default function ResultsTests({
                               ? undefined
                               : t("failingRowsUnavailable")
                           }
-                          onClick={() => onShowRows(name, observed)}
+                          onClick={() =>
+                            onShowRows(name, observed, item?.output)
+                          }
                         >
                           <Eye size={12} aria-hidden="true" />
                           {t("showFailingRows").replace(
@@ -276,12 +281,15 @@ export default function ResultsTests({
                         <div className="row gap">
                           <span className="muted small">
                             {since
-                              ? t("failingSince")
-                                  .replace(
-                                    "{time}",
-                                    new Date(since.started).toLocaleString(),
-                                  )
-                                  .replace("{count}", String(failingRuns))
+                              ? countLabel(
+                                  t,
+                                  failingRuns,
+                                  "failingSinceOne",
+                                  "failingSince",
+                                ).replace(
+                                  "{time}",
+                                  new Date(since.started).toLocaleString(),
+                                )
                               : status === "ok"
                                 ? t("testPassing")
                                 : ""}{" "}

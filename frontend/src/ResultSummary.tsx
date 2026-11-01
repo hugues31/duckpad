@@ -1,7 +1,7 @@
 import { AlertTriangle, ChevronRight, Clock, Loader2 } from "lucide-react";
 import { warningCount } from "./ExecutionMessages";
 import { outputSource } from "./graph";
-import { useT, type TranslationKey } from "./i18n";
+import { countLabel, useT, type TranslationKey } from "./i18n";
 import { clock, computing, TAB_LABELS, type ResultsTab } from "./ResultsPanel";
 import type { Dataset, Snapshot, Statuses } from "./types";
 
@@ -56,7 +56,7 @@ export default function ResultSummary({
   const tabTitle = (tab: ResultsTab) =>
     `${t("results")} · ${t(TAB_LABELS[tab])}`;
   const count = (value: number, one: TranslationKey, many: TranslationKey) =>
-    t(value === 1 ? one : many).replace("{count}", String(value));
+    countLabel(t, value, one, many);
   return (
     <div
       className="result-summary"

@@ -375,10 +375,17 @@ export default function ResultsPanel({
           result={result}
           refresh={JSON.stringify([statuses.active?.id, result])}
           canShowRows={!!dataset && dataset.status === "valid" && !exportNode}
-          onShowRows={(test, count) => {
+          readOnly={readOnly}
+          onShowRows={(test, count, output) => {
             setTarget({
               node: fullNode,
-              port: target.input ? ports[0] : target.port,
+              // Failing rows come from the output the test checks.
+              port:
+                output && ports.includes(output)
+                  ? output
+                  : target.input
+                    ? ports[0]
+                    : target.port,
             });
             setFailing({ test, count });
             onTab("data");
@@ -394,6 +401,7 @@ export default function ResultsPanel({
           download={
             signature.kind !== "component" && !!signature.definition?.download
           }
+          readOnly={readOnly}
           result={result}
           inputs={inputs.map((input) => ({ ...input, ...stored(input) }))}
           statuses={statuses}

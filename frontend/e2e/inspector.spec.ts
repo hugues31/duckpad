@@ -294,7 +294,7 @@ test("the result summary opens the matching tab of the results panel", async ({
   await summary.getByRole("button", { name: "2 outputs", exact: true }).click();
   await expect(tab("Data")).toHaveAttribute("aria-selected", "true");
   await results
-    .getByRole("button", { name: "Hide data preview", exact: true })
+    .getByRole("button", { name: "Hide results", exact: true })
     .click();
   await expect(results).toBeHidden();
   await summary.getByRole("button", { name: "Results", exact: true }).click();

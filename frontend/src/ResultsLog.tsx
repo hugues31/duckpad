@@ -14,7 +14,7 @@ import {
 import AskAssistant from "./AskAssistant";
 import ExportDownload from "./ExportDownload";
 import { WarningBadge } from "./ExecutionMessages";
-import { useT } from "./i18n";
+import { countLabel, useT } from "./i18n";
 import { worktreeUrl } from "./navigation";
 import { clock, seconds } from "./ResultsPanel";
 import type {
@@ -59,6 +59,7 @@ export default function ResultsLog({
   fullNode,
   exportNode,
   download,
+  readOnly,
   result,
   inputs,
   statuses,
@@ -69,6 +70,7 @@ export default function ResultsLog({
   fullNode: string;
   exportNode: boolean;
   download: boolean;
+  readOnly: boolean;
   result?: NodeResult;
   inputs: { node: string; port: string; input: string; label: string }[];
   statuses: Statuses;
@@ -77,6 +79,8 @@ export default function ResultsLog({
   const t = useT();
   const worktree = snapshot.worktree.id;
   const [filter, setFilter] = useState<LogFilter>("all");
+  // Monaco loads only once the executed SQL is opened.
+  const [sqlOpen, setSqlOpen] = useState(false);
   // The latest attempt: a failed run after the retained result, or the run that produced it.
   const runId = (result?.error && result.error_run) || result?.result_run;
   const loaded = useApiResource<Run>(
@@ -102,7 +106,13 @@ export default function ResultsLog({
             />
           ) : (
             <p className="muted small">
-              {t(exportNode ? "exportNotRunHint" : "noResultHint")}
+              {t(
+                readOnly
+                  ? "readerNoResult"
+                  : exportNode
+                    ? "exportNotRunHint"
+                    : "noResultHint",
+              )}
             </p>
           )}
         </div>
@@ -144,7 +154,7 @@ export default function ResultsLog({
           {t("logComputedOutput")} <code>{port}</code>
         </>
       ),
-      detail: `${output.count.toLocaleString()} ${t(output.count === 1 ? "row" : "rows")} · ${output.columns.length} ${t("columns")}`,
+      detail: `${output.count.toLocaleString()} ${t(output.count === 1 ? "row" : "rows")} · ${countLabel(t, output.columns.length, "logColumnsOne", "logColumns")}`,
       aside:
         typeof output.duration === "number"
           ? seconds(output.duration)
@@ -187,7 +197,12 @@ export default function ResultsLog({
           {failed.map((item) => (
             <span key={item.origin.name}>
               , <strong>{item.origin.name}</strong>{" "}
-              {t("logTestFailed").replace("{count}", String(item.observed))}
+              {countLabel(
+                t,
+                Number(item.observed ?? 0),
+                "logTestFailedOne",
+                "logTestFailed",
+              )}
             </span>
           ))}
         </>
@@ -243,11 +258,13 @@ export default function ResultsLog({
   );
   const statements = state.statements || [];
   const requester = run.requester?.username || run.job?.name;
-  const current = result?.outputs
-    ? Object.values(result.outputs).every(
-        (dataset) => dataset.status === "valid",
-      )
-    : false;
+  // Only retained outputs tell whether the configuration changed since their run:
+  // exports keep none, and a failed attempt is not the run that produced them.
+  const outputs = Object.values(result?.outputs || {});
+  const current =
+    run.id === result?.result_run && outputs.length
+      ? outputs.every((dataset) => dataset.status === "valid")
+      : null;
   return (
     <div className="results-log">
       <div className="results-toolbar">
@@ -298,9 +315,11 @@ export default function ResultsLog({
           <span>
             <GitCommitHorizontal size={12} aria-hidden="true" />
             <code>{run.commit.slice(0, 7)}</code>{" "}
-            <span className="muted">
-              {t(current ? "currentConfiguration" : "earlierConfiguration")}
-            </span>
+            {current !== null && (
+              <span className="muted">
+                {t(current ? "currentConfiguration" : "earlierConfiguration")}
+              </span>
+            )}
           </span>
           {requester && (
             <span>
@@ -361,21 +380,26 @@ export default function ResultsLog({
           </section>
         )}
         {statements.length > 0 && (
-          <details className="executed-sql">
+          <details
+            className="executed-sql"
+            onToggle={(event) => setSqlOpen(event.newState === "open")}
+          >
             <summary>{t("executedSqlTitle")}</summary>
-            <Suspense fallback={<p>{t("loading")}</p>}>
-              <CodeEditor
-                value={statements
-                  .map((s) =>
-                    s.materialization_sql
-                      ? s.materialization_sql.join(";\n") + ";"
-                      : s.sql + ";",
-                  )
-                  .join("\n\n")}
-                readOnly
-                height="260px"
-              />
-            </Suspense>
+            {sqlOpen && (
+              <Suspense fallback={<p>{t("loading")}</p>}>
+                <CodeEditor
+                  value={statements
+                    .map((s) =>
+                      s.materialization_sql
+                        ? s.materialization_sql.join(";\n") + ";"
+                        : s.sql + ";",
+                    )
+                    .join("\n\n")}
+                  readOnly
+                  height="260px"
+                />
+              </Suspense>
+            )}
             <StatementVariables
               statements={statements}
               environment={run.environment}

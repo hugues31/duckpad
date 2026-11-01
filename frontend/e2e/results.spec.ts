@@ -291,6 +291,10 @@ test("the log tells the run behind the result, and exports open on it", async ({
   await expect(panel.locator(".log-export")).toContainText(
     "The destination was written completely.",
   );
+  // An export keeps no result that could tell its configuration changed.
+  await expect(panel.locator(".run-summary")).not.toContainText(
+    "configuration",
+  );
   await expect(
     panel.getByRole("button", { name: "Download exported data", exact: true }),
   ).toBeEnabled();

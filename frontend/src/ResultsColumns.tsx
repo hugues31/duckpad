@@ -255,9 +255,8 @@ function StatisticCells({ value }: { value?: ColumnStatistics }) {
         {value.min !== undefined ? `${value.min} … ${value.max}` : ""}
       </td>
       <td>
-        {value.unique ? (
-          <span className="muted">{t("uniqueValues")}</span>
-        ) : value.histogram ? (
+        {/* Numbers and dates keep their distribution; unique text has no top values. */}
+        {value.histogram ? (
           <span className="histogram" aria-label={t("distribution")}>
             {value.histogram.map((count, index) => (
               <span
@@ -267,6 +266,8 @@ function StatisticCells({ value }: { value?: ColumnStatistics }) {
               />
             ))}
           </span>
+        ) : value.unique ? (
+          <span className="muted">{t("uniqueValues")}</span>
         ) : (
           <span className="top-values">
             {(value.top || []).map((item) => (
