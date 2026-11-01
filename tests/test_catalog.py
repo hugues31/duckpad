@@ -212,7 +212,11 @@ def test_duplicates_are_custom_types_under_a_new_identifier(services):
         ({"family": "files"}, "Connector family must be database or storage"),
         (
             {"parameters": [{"name": "path", "type": "text"}]},
-            "Storage connectors must declare a root parameter",
+            "Storage connectors must declare a text root parameter",
+        ),
+        (
+            {"parameters": [{"name": "root", "type": "number"}]},
+            "Storage connectors must declare a text root parameter",
         ),
     ],
 )

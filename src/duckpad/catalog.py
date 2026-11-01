@@ -205,8 +205,11 @@ class Catalog:
         names = [parameter.get("name", "") for parameter in parameters]
         if len(names) != len(set(names)):
             raise Problem("Connector parameter names must be unique")
-        if definition["family"] == "storage" and "root" not in names:
-            raise Problem("Storage connectors must declare a root parameter: a folder or a URI prefix")
+        if definition["family"] == "storage" and not any(
+            parameter.get("name") == "root" and parameter.get("type", "text") in ("text", "file")
+            for parameter in parameters
+        ):
+            raise Problem("Storage connectors must declare a text root parameter: a folder or a URI prefix")
         for parameter in parameters:
             name, kind = parameter.get("name", ""), parameter.get("type", "text")
             if name in RESERVED_PARAMETERS or not IDENTIFIER.fullmatch(name):
