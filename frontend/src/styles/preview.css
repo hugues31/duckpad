@@ -1,0 +1,222 @@
+/* Data preview panel and table. */
+.preview-panel {
+  position: absolute;
+  z-index: 20;
+  left: var(--canvas-left);
+  right: var(--canvas-right);
+  bottom: 0;
+  height: var(--preview-height);
+  min-height: 180px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-top: 1px solid var(--border);
+}
+.preview-header {
+  min-height: 46px;
+  padding: 8px 14px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--border);
+}
+.preview-header > .row {
+  min-width: 0;
+}
+.preview-header strong {
+  font-size: 11px;
+  font-weight: 600;
+}
+.preview-header select {
+  font-size: 11px;
+  padding: 4px 7px;
+}
+.preview-tools {
+  height: 40px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px;
+  border-bottom: 1px solid var(--border);
+}
+.preview-tools .search {
+  margin: 0;
+  width: 170px;
+  height: 27px;
+}
+.preview-tools input {
+  font-size: 11px;
+  padding: 5px 0;
+}
+.preview-tools select {
+  font-size: 11px;
+  padding: 5px 6px;
+}
+.data-scroll {
+  flex: 1;
+  overflow: auto;
+  min-height: 0;
+  background: color-mix(in srgb, var(--surface) 25%, transparent);
+}
+.data-table {
+  border-collapse: separate;
+  border-spacing: 0;
+  width: 100%;
+  font-size: 10px;
+  text-align: left;
+}
+.data-table th {
+  position: sticky;
+  top: 0;
+  background: var(--surface-alt);
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  z-index: 1;
+  padding: 0;
+}
+.data-table th button {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 10px 13px;
+  min-width: 100px;
+  font-size: 12px;
+  font-weight: 550;
+}
+.data-table th small {
+  font-size: 10px;
+  letter-spacing: 0.03em;
+  color: var(--muted);
+  font-weight: 400;
+}
+.data-table td {
+  border-bottom: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+  padding: 0;
+}
+.data-table td.row-number,
+.data-table th.row-number {
+  padding: 9px;
+  color: var(--muted);
+  font-size: 9px;
+  text-align: center;
+  background: var(--surface-alt);
+  min-width: 30px;
+}
+.cell {
+  display: block;
+  padding: 8px 13px;
+  font-size: 12px;
+  white-space: nowrap;
+  width: 100%;
+  text-align: left;
+  min-height: 29px;
+}
+.cell:disabled {
+  opacity: 1;
+  cursor: default;
+  color: var(--muted);
+}
+.cell:not(:disabled):hover {
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1px var(--accent);
+  color: var(--accent);
+}
+.cell.null {
+  color: var(--muted);
+  font-style: italic;
+}
+.preview-footer {
+  height: 32px;
+  padding: 0 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: var(--muted);
+  font-size: 10px;
+  gap: 10px;
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.preview-footer > span {
+  max-width: 65%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.preview-footer .row {
+  gap: 5px;
+  white-space: nowrap;
+}
+.preview-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  flex: 1;
+  padding: 20px;
+  color: var(--muted);
+}
+.preview-empty strong {
+  font-size: 12px;
+  color: var(--text);
+  font-weight: 550;
+}
+.preview-empty p {
+  font-size: 10px;
+  margin: 5px 0 0;
+}
+.preview-empty .button {
+  margin-left: 15px;
+}
+.inline-error {
+  font-size: 10px;
+  max-height: 55px;
+  overflow: auto;
+  color: light-dark(#a33e36, #f4ada4);
+  background: #bc655e10;
+  padding: 7px 14px;
+}
+@media (max-width: 1200px) {
+  .preview-tools .search {
+    width: 130px;
+  }
+  .preview-tools select {
+    max-width: 110px;
+  }
+  .preview-empty {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .preview-empty .button {
+    margin-left: 0;
+  }
+}
+@media (max-width: 1099px) {
+  .preview-panel {
+    left: 0;
+    right: 0;
+  }
+}
+@media (max-width: 600px) {
+  .preview-header {
+    gap: 6px;
+  }
+  .preview-header .small {
+    font-size: 10px;
+  }
+  .preview-tools .search {
+    width: 120px;
+  }
+  .preview-tools {
+    gap: 5px;
+  }
+  .preview-tools select {
+    max-width: 80px;
+  }
+}

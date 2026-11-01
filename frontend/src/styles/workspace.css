@@ -1,0 +1,106 @@
+/* Workspace banners, run progress, and the layout of full-page tabs. */
+.banner {
+  position: relative;
+  z-index: 35;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 36px;
+  margin-top: 0;
+  padding: 9px 20px;
+  border-radius: 0;
+  font-size: 11px;
+  flex-shrink: 0;
+}
+.banner span {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.banner.error {
+  background: var(--surface);
+  color: light-dark(#9c3d36, #f6b1a8);
+  border: 1px solid #c5787166;
+}
+.banner.warning {
+  background: var(--surface);
+  color: light-dark(#79551d, #efcc8d);
+  border: 1px solid #ad813766;
+}
+.banner button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  color: inherit;
+  white-space: nowrap;
+}
+.run-progress {
+  position: relative;
+  z-index: 35;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 36px;
+  margin-top: 0;
+  padding: 7px 20px;
+  border-radius: 0;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 10px;
+  flex-shrink: 0;
+}
+.progress-track {
+  width: 100px;
+  height: 3px;
+  background: var(--accent-soft);
+  border-radius: 2px;
+  margin-left: auto;
+}
+.progress-track > div {
+  height: 3px;
+  background: var(--accent);
+  transition: width 0.3s;
+}
+.full-panel {
+  --full-panel-padding: 37px;
+  padding: var(--full-panel-padding) 44px;
+  overflow: auto;
+  flex: 1;
+  min-height: 0;
+  background: var(--bg);
+}
+.workspace-shell > .full-panel {
+  margin-top: 0;
+  border-radius: 0;
+  background: var(--glass);
+}
+.page-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 30px;
+  gap: 20px;
+}
+.page-heading h1 {
+  margin: 9px 0 10px;
+}
+.page-heading p {
+  font-size: 12px;
+  color: var(--muted);
+  margin: 0;
+}
+.page-heading .segmented {
+  align-self: flex-start;
+  margin-top: 10px;
+}
+@media (max-width: 600px) {
+  .full-panel {
+    --full-panel-padding: 20px;
+    padding: 20px;
+  }
+  .page-heading {
+    flex-wrap: wrap;
+  }
+}
