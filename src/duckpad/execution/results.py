@@ -91,7 +91,11 @@ def reads_only(sql: str, tables: set[str]) -> bool:
 def column_statistics(cursor: SQLCursor, dataset: Dataset) -> dict[str, Record]:
     """Nulls, distinct values, range, distribution or top values of each column of a whole result."""
     view = qi(dataset.table)
-    summary = cursor.execute(f"SUMMARIZE SELECT * FROM {view}").fetchall()
+    summary = [
+        # The null percentage is a DECIMAL, which the isolated SQL worker returns as text.
+        (*row[:-1], float(row[-1]) if row[-1] is not None else None)
+        for row in cursor.execute(f"SUMMARIZE SELECT * FROM {view}").fetchall()
+    ]
     # Only an exact count can tell a key from a column with a few duplicates.
     candidates = [
         (index, name)
@@ -111,7 +115,7 @@ def column_statistics(cursor: SQLCursor, dataset: Dataset) -> dict[str, Record]:
         distinct = exact.get(index, distinct)
         entry: Record = {
             "type": type_name,
-            "nulls": float(nulls) if nulls is not None else None,
+            "nulls": nulls,
             "distinct": distinct,
             "count": count,
         }
