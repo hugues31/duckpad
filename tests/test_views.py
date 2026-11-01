@@ -9,6 +9,7 @@ import pytest
 from fastapi.testclient import TestClient
 from helpers import example_bundle, join_run
 
+from duckpad import variables
 from duckpad.app import create_app
 from duckpad.bundle import bundle_to_files, files_to_bundle, validate
 from duckpad.comparison import commit_message, compare_files
@@ -152,6 +153,15 @@ def test_grouping_nodes_keeps_their_views(services, tmp_path):
     grouped, instance = group(snapshot["bundle"], ["filter"], "Qualifying orders")
     saved = projects.write(worktree["id"], snapshot["revision"], bundle_to_files(grouped))
     assert saved["bundle"]["views"] == {instance + "::filter:result": [LARGE], "total:result": [PARTNERS]}
+
+
+def test_renaming_a_variable_renames_it_in_view_filters(tmp_path):
+    bundle = project(
+        tmp_path, {"filter:result": [{"name": "Above", "filter": "amount > {{ var.threshold }}"}]}
+    )
+    bundle["variables"] = {"threshold": {"type": "number", "default": 100}}
+    renamed = variables.rename(bundle, "threshold", "minimum")
+    assert renamed["views"]["filter:result"][0]["filter"] == "amount > {{ var.minimum }}"
 
 
 def test_views_travel_in_project_archives(tmp_path):
