@@ -344,6 +344,23 @@ def test_duplicate_output_column_is_not_silently_the_first_cell(services, alias)
     assert run["variables"]["report_date"]["state"] == "ready"
 
 
+def test_case_insensitive_source_records_the_actual_column_for_live_provenance(services):
+    from duckpad.lineage import Lineage
+
+    store, projects, _, engine = services
+    project = bundle()
+    project["variables"]["amount"]["from"]["column"] = "AMOUNT"
+    worktree = projects.create("Source column case", project)["id"]
+    run = wait_run(store, engine.launch(worktree, "dev"))
+    value = run["variables"]["amount"]
+    assert value["from"]["column"] == "amount"
+    assert (
+        Lineage(engine).explain(worktree, "dev", value["source_dataset"], 0, value["from"]["column"])["value"]
+        == 4
+    )
+    assert projects.snapshot(worktree)["bundle"]["variables"]["amount"]["from"]["column"] == "AMOUNT"
+
+
 def test_value_chains_are_forbidden_without_disabling_independent_nodes(services):
     store, projects, _, engine = services
     project = bundle()

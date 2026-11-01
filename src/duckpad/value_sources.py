@@ -192,7 +192,7 @@ def extract(cursor, dataset, source):
         return unavailable(source, "value_null" if cell is None else "value_type", str(error))
     return {
         "type": source["type"],
-        "from": copy.deepcopy(source["from"]),
+        "from": {**source["from"], "column": matches[0]["name"]},
         "source": "node",
         "state": "ready",
         "value": value,
