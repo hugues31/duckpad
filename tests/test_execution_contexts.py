@@ -159,6 +159,7 @@ def test_remote_access_follows_the_secret_type_rather_than_the_connector_id(isol
         "connector",
         {
             "id": "minio",
+            "family": "database",
             "name": "MinIO",
             "parameters": [
                 {"name": "key_id", "type": "text", "secret": True},
@@ -210,6 +211,7 @@ def test_extension_installation_failure_is_reported_without_secrets(isolated, tm
         "connector",
         {
             "id": "custom",
+            "family": "database",
             "name": "Custom",
             "parameters": [{"name": "token", "type": "text", "secret": True}],
             "extensions": [{"name": "absent_extension", "repository": str(tmp_path / "repository")}],

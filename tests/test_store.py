@@ -34,7 +34,7 @@ def add_connection(store, identity="files"):
     """Fresh instances have no connection; create a local folder connection in every environment."""
     connection = {
         "name": "Files",
-        "connector": "local",
+        "connector": "folder",
         "secret_fields": [],
         "environments": {env: {"root": ""} for env in ("dev", "prod")},
     }
@@ -54,7 +54,7 @@ def test_initial_migration_matches_models_and_survives_restart(store):
     with store.engine.connect() as connection:
         assert (
             connection.exec_driver_sql("SELECT version_num FROM alembic_version").scalar_one()
-            == "0005_job_idempotency"
+            == "0006_builtin_connectors"
         )
         assert "records" not in inspect(connection).get_table_names()
         assert len(SQLModel.metadata.tables) == 24
@@ -176,6 +176,36 @@ def test_job_migration_keeps_worktree_runs_and_accepts_operators(tmp_path):
         access["members"]["robot"] = "operator"
         store.put("access", "project", access)
         assert store.get("access", "project")["members"] == {"robot": "operator"}
+    finally:
+        store.close()
+
+
+def test_connector_migration_keeps_connections_of_stored_connectors(tmp_path):
+    engine = metadata_engine(tmp_path / "instance.sqlite")
+    with migration_connection(engine) as connection:
+        command.upgrade(configuration(connection), "0005_job_idempotency")
+        connection.execute(text("INSERT INTO connector VALUES ('custom', 'Custom', '{\"id\": \"custom\"}')"))
+        connection.execute(text("INSERT INTO connection VALUES ('kept', 'Kept', 'custom', '[]')"))
+        connection.execute(
+            text("INSERT INTO connection_environment VALUES ('kept', 'dev', '{\"root\": \"/srv\"}')")
+        )
+    engine.dispose()
+    store = Store(tmp_path)
+    try:
+        # Rebuilding the connection table must not cascade into its environment values.
+        assert store.get("connection", "kept")["environments"] == {"dev": {"root": "/srv"}}
+        # Connections may now use built-in connectors, which are not stored.
+        Catalog(store).save(
+            "connection",
+            {
+                "id": "share",
+                "name": "Share",
+                "connector": "folder",
+                "environments": {"dev": {"root": "/srv"}},
+            },
+            create=True,
+        )
+        assert store.get("connection", "share")["connector"] == "folder"
     finally:
         store.close()
 

@@ -400,6 +400,12 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
             catalog.delete(kind, identity, before_change=engine.reset_catalog)
         return catalog.public()
 
+    @app.post("/api/catalog/connector/{identity}/reset", response_model=None)
+    def reset_connector(identity: str) -> Record:
+        with engine.exclusive():
+            catalog.reset(identity, before_change=engine.reset_catalog)
+        return catalog.public()
+
     @app.post("/api/environments", response_model=None)
     def create_environment(data: schemas.NewEnvironment) -> Record:
         with engine.exclusive():
@@ -619,15 +625,18 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
         project = result["worktree"]["project"]
         result["role"] = access.role(request.state.user, project)
         granted_connections = access.record(project)["connections"]
-        result["connections"] = [
-            {
-                "id": c["id"],
-                "name": c["name"],
-                "capabilities": store.get("connector", c["connector"], {}).get("capabilities", []),
-            }
-            for c in store.all("connection")
-            if c["id"] in granted_connections
-        ]
+        result["connections"] = []
+        for c in store.all("connection"):
+            if c["id"] in granted_connections:
+                definition = catalog.connector(c["connector"]) or {}
+                result["connections"].append(
+                    {
+                        "id": c["id"],
+                        "name": c["name"],
+                        "family": definition.get("family"),
+                        "capabilities": definition.get("capabilities", []),
+                    }
+                )
         result["parsed_templates"] = parse_templates((result["bundle"] or {}).get("templates", {}))
         result["parsed_nodes"] = parse_templates((result["bundle"] or {}).get("node_sql", {}))
         result["variables"] = (

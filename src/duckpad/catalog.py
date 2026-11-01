@@ -7,6 +7,7 @@ import re
 
 import duckdb
 
+from .builtin_connectors import BUILTIN_CONNECTORS
 from .templates import IDENTIFIER, REFERENCE
 from .types import Connections, Record
 from .util import Problem, digest, literal, qi
@@ -15,6 +16,8 @@ MASK = "••••"
 KINDS = ("connector", "connection")
 RESERVED_PARAMETERS = {"alias", "secret_name"}
 PARAMETER_TYPES = ("text", "number", "boolean", "file")
+# Databases are attached and read as tables; file storage is a location for file nodes, below its root.
+FAMILIES = ("database", "storage")
 # Catalog identifiers.
 NAME = re.compile(r"[A-Za-z][\w-]*")
 
@@ -37,17 +40,40 @@ class Catalog:
         self._validated = set()
         self.on_change = lambda: None
 
+    def connector(self, identity):
+        """The definition in effect: an administrator's version, else the built-in one, else None."""
+        stored = self.store.get("connector", identity)
+        if stored is None and identity in BUILTIN_CONNECTORS:
+            return copy.deepcopy(BUILTIN_CONNECTORS[identity])
+        return stored
+
+    def connectors(self):
+        """Built-in definitions, customized ones replaced by their override, then custom types.
+
+        `origin` tells them apart: built-in, customized or custom.
+        """
+        stored = {connector["id"]: connector for connector in self.store.all("connector")}
+        listed = []
+        for identity, builtin in BUILTIN_CONNECTORS.items():
+            override = stored.pop(identity, None)
+            listed.append(
+                {**override, "origin": "customized"}
+                if override is not None
+                else {**copy.deepcopy(builtin), "origin": "built-in"}
+            )
+        return listed + [{**connector, "origin": "custom"} for connector in stored.values()]
+
     def public(self):
         connections = copy.deepcopy(self.store.all("connection"))
         for connection in connections:
-            definition = self.store.get("connector", connection["connector"], {})
+            definition = self.connector(connection["connector"]) or {}
             hidden = set(connection.pop("secret_fields")) | secret_names(definition)
             for values in connection["environments"].values():
                 for name in hidden:
                     if values.get(name):
                         values[name] = MASK
         return {
-            "connectors": self.store.all("connector"),
+            "connectors": self.connectors(),
             "connections": connections,
             "environments": self.environment_names(),
             "environment_details": self.environments(),
@@ -94,7 +120,22 @@ class Catalog:
         self.check(kind, data, create=create)
         if before_change is not None:
             before_change()
-        self.store.put(kind, data["id"], data)
+        if kind == "connector" and data == BUILTIN_CONNECTORS.get(data["id"]):
+            # Saving a built-in unchanged keeps it following the release.
+            self.store.delete("connector", data["id"])
+        else:
+            self.store.put(kind, data["id"], data)
+        self.on_change()
+
+    def reset(self, identity, *, before_change=None):
+        """Delete the override of a customized built-in, which then matches the running release."""
+        if identity not in BUILTIN_CONNECTORS:
+            raise Problem("Only built-in connectors can be reset", 404)
+        if self.store.get("connector", identity) is None:
+            return
+        if before_change is not None:
+            before_change()
+        self.store.delete("connector", identity)
         self.on_change()
 
     def check(self, kind, data: Record, *, create=False):
@@ -114,7 +155,7 @@ class Catalog:
             if not create and previous is None:
                 raise Problem("Connection does not exist", 404, {"code": "connection_missing"})
             previous = previous or {"environments": {}, "secret_fields": []}
-            definition = self.store.get("connector", data.get("connector"))
+            definition = self.connector(str(data.get("connector", "")))
             if not definition:
                 raise Problem("Connector definition does not exist")
             if not isinstance(data.get("environments"), dict):
@@ -133,12 +174,20 @@ class Catalog:
                     if values.get(key) == MASK:
                         values[key] = previous["environments"].get(env, {}).get(key, "")
         else:
+            # Listings add the origin; it is not part of the definition.
+            data.pop("origin", None)
+            if create and self.connector(data["id"]) is not None:
+                raise Problem(
+                    "A connector with this identifier already exists", 409, {"code": "connector_exists"}
+                )
             self.validate_definition(data)
         return data
 
     def delete(self, kind, identity, *, before_change=None):
         if kind not in KINDS:
             raise Problem("Unknown catalog entity", 404)
+        if kind == "connector" and identity in BUILTIN_CONNECTORS:
+            raise Problem("Built-in connectors cannot be deleted; reset a customized one instead", 409)
         if kind == "connector" and any(c["connector"] == identity for c in self.store.all("connection")):
             raise Problem("Remove this connector's connections before deleting it", 409)
         if before_change is not None:
@@ -150,10 +199,14 @@ class Catalog:
         fingerprint = digest(definition)
         if fingerprint in self._validated:
             return
+        if definition.get("family") not in FAMILIES:
+            raise Problem("Connector family must be database or storage")
         parameters = definition.get("parameters", [])
         names = [parameter.get("name", "") for parameter in parameters]
         if len(names) != len(set(names)):
             raise Problem("Connector parameter names must be unique")
+        if definition["family"] == "storage" and "root" not in names:
+            raise Problem("Storage connectors must declare a root parameter: a folder or a URI prefix")
         for parameter in parameters:
             name, kind = parameter.get("name", ""), parameter.get("type", "text")
             if name in RESERVED_PARAMETERS or not IDENTIFIER.fullmatch(name):
@@ -204,7 +257,7 @@ class Catalog:
             connection = self.store.get("connection", reference)
             if not connection:
                 raise Problem(f"Missing connection: {reference}")
-            definition = self.store.get("connector", connection["connector"])
+            definition = self.connector(connection["connector"])
             if not definition:
                 raise Problem(f"Missing connector definition: {connection['connector']}")
             self.validate_definition(definition)

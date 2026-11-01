@@ -57,7 +57,7 @@ def files_connection(catalog, identity="files"):
     environments = {environment: {"root": ""} for environment in catalog.environment_names()}
     catalog.save(
         "connection",
-        {"id": identity, "name": "Files", "connector": "local", "environments": environments},
+        {"id": identity, "name": "Files", "connector": "folder", "environments": environments},
         create=True,
     )
     return identity

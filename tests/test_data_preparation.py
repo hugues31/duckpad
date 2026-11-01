@@ -148,7 +148,7 @@ def preparation_services(tmp_path, request):
         {
             "id": "input_files",
             "name": "Input files",
-            "connector": "local",
+            "connector": "folder",
             "environments": {"dev": {"root": str(tmp_path / "data")}},
         },
         create=True,

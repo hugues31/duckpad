@@ -100,6 +100,7 @@ def verify(binary):
                     "connector",
                     {
                         "id": "statistics",
+                        "family": "database",
                         "name": "Statistics",
                         "parameters": [],
                         "extensions": [{"name": "duckfn_statrs", "repository": "community"}],

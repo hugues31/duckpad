@@ -1,6 +1,5 @@
 """XLSX acceptance coverage against real workbooks and the isolated SQL worker."""
 
-import copy
 import shutil
 
 import duckdb
@@ -13,6 +12,7 @@ from duckpad.app import create_app
 from duckpad.auth import Auth
 from duckpad.builtin_templates import BUILTINS
 from duckpad.bundle import bundle_to_files
+from duckpad.catalog import Catalog
 from duckpad.services import Services
 from duckpad.store import Store
 from duckpad.templates import compile_template, parse_template
@@ -34,7 +34,7 @@ def connect(catalog, roots):
         {
             "id": "workbooks",
             "name": "Workbooks",
-            "connector": "local",
+            "connector": "folder",
             "environments": {env: {"root": str(root)} for env, root in roots.items()},
         },
         create=True,
@@ -81,7 +81,8 @@ def test_fresh_catalog_offers_no_excel_connector(tmp_path):
     # XLSX is a format: workbooks use project files or a file storage connection.
     store = Store(tmp_path)
     try:
-        assert {connector["id"] for connector in store.all("connector")} == {"local", "s3", "oracle"}
+        assert store.all("connector") == []
+        assert {connector["id"] for connector in Catalog(store).connectors()} == {"folder", "s3", "oracle"}
     finally:
         store.close()
 
@@ -212,7 +213,7 @@ def test_xlsx_api_upload_needs_no_connection_and_blocks_outside_files(tmp_path, 
         failed = wait_run(instance.store, instance.engine.launch(identity, "dev"), timeout=30)
         assert failed["status"] == "failed", failed
         assert "Permission Error: Cannot access file" in failed["nodes"]["source"]["error"]
-        readonly = copy.deepcopy(instance.store.get("connector", "local"))
+        readonly = instance.catalog.connector("folder")
         readonly.update(id="readonly_folder", capabilities=["read"])
         instance.catalog.save("connector", readonly)
         connection = {

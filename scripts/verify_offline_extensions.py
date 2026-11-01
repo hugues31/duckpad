@@ -61,6 +61,7 @@ def verify_duckpad(home, cache, isolated, allow_unsigned=False, import_file=None
             "connector",
             {
                 "id": "h3",
+                "family": "database",
                 "name": "Offline H3",
                 "parameters": [],
                 "extensions": [{"name": "h3", "repository": "community"}],

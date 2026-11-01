@@ -127,6 +127,7 @@ ROUTE_ACCESS = {
         "GET /api/catalog",
         "PUT /api/catalog/{kind}",
         "DELETE /api/catalog/{kind}/{identity}",
+        "POST /api/catalog/connector/{identity}/reset",
         "POST /api/environments",
         "PUT /api/environments/{identity}",
         "DELETE /api/environments/{identity}",
@@ -270,7 +271,7 @@ def test_members_read_their_uploads_and_export_without_a_connection(instance, tm
     connection = {
         "id": "share",
         "name": "Share",
-        "connector": "local",
+        "connector": "folder",
         "environments": {"dev": {"root": str(share)}},
     }
     assert client.put("/api/catalog/connection?create=true", json=connection).status_code == 200
@@ -657,7 +658,12 @@ def test_sql_worker_blocks_metadata_other_projects_and_symlinks(instance, tmp_pa
     # An editor cannot grant a connection by editing the project bundle.
     services.catalog.save(
         "connection",
-        {"id": "elsewhere", "name": "Elsewhere", "connector": "local", "environments": {"dev": {"root": ""}}},
+        {
+            "id": "elsewhere",
+            "name": "Elsewhere",
+            "connector": "folder",
+            "environments": {"dev": {"root": ""}},
+        },
         create=True,
     )
     snapshot = projects.snapshot(worktree["id"])
@@ -729,6 +735,7 @@ def test_read_only_connection_root_cannot_be_written_through_another_connection(
         "connector",
         {
             "id": "read_only",
+            "family": "storage",
             "parameters": [{"name": "root", "type": "text"}],
             "capabilities": ["read"],
             "init_sql": "",

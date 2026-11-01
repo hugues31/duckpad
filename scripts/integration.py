@@ -2,7 +2,8 @@
 
 Oracle requires ORADUCK_ORACLE_USER, ORADUCK_ORACLE_PASSWORD and
 ORADUCK_ORACLE_DSN. The script creates uniquely named test tables and removes
-only those tables. S3 uses an ephemeral Moto endpoint on localhost.
+only those tables. S3 uses an ephemeral Moto endpoint on localhost, through the
+built-in connector and a custom storage type, both with a URI root.
 """
 
 import argparse
@@ -180,7 +181,7 @@ def s3(home):
     try:
         client.create_bucket(Bucket="duckpad-acceptance")
         client.put_object(
-            Bucket="duckpad-acceptance", Key="orders.csv", Body=b"id,amount\n1,10\n2,20\n3,30\n"
+            Bucket="duckpad-acceptance", Key="landing/orders.csv", Body=b"id,amount\n1,10\n2,20\n3,30\n"
         )
         parquet = home / "labels.parquet"
         db = duckdb.connect()
@@ -188,8 +189,12 @@ def s3(home):
             f"COPY (SELECT * FROM (VALUES (1,'North'),(2,'South'),(3,'West')) t(id,region)) TO {literal(str(parquet))} (FORMAT PARQUET)"
         )
         db.close()
-        client.put_object(Bucket="duckpad-acceptance", Key="labels.parquet", Body=parquet.read_bytes())
+        client.put_object(
+            Bucket="duckpad-acceptance", Key="landing/labels.parquet", Body=parquet.read_bytes()
+        )
         values = {
+            # Relative paths are appended to the root, which has no trailing slash on purpose.
+            "root": "s3://duckpad-acceptance/landing",
             "key_id": "duckpad-test-key",
             "secret": "duckpad-test-secret",
             "region": "us-east-1",
@@ -207,28 +212,49 @@ def s3(home):
             },
             create=True,
         )
+        # An administrator-declared storage type, as pasted into New connector.
+        catalog.save(
+            "connector",
+            {
+                "id": "landing_bucket",
+                "name": "Landing bucket",
+                "family": "storage",
+                "parameters": [
+                    {"name": "root", "type": "text"},
+                    {"name": "key_id", "type": "text", "secret": True},
+                    {"name": "secret", "type": "text", "secret": True},
+                    {"name": "endpoint", "type": "text"},
+                ],
+                "extensions": [{"name": "httpfs"}],
+                "init_sql": "CREATE OR REPLACE TEMPORARY SECRET {{ secret_name }} (TYPE S3, KEY_ID {{ key_id }}, SECRET {{ secret }}, ENDPOINT {{ endpoint }}, USE_SSL false, URL_STYLE 'path');",
+                "capabilities": ["read"],
+            },
+            create=True,
+        )
+        landing = {
+            "root": "s3://duckpad-acceptance/landing/",
+            "key_id": values["key_id"],
+            "secret": values["secret"],
+            "endpoint": values["endpoint"],
+        }
+        catalog.save(
+            "connection",
+            {
+                "id": "landing",
+                "name": "Landing",
+                "connector": "landing_bucket",
+                "environments": {"dev": landing, "prod": landing},
+            },
+            create=True,
+        )
         bundle = {
             "flow": {
                 "nodes": [
-                    node(
-                        "csv",
-                        "load_csv",
-                        connection="s3_acceptance",
-                        file="s3://duckpad-acceptance/orders.csv",
-                    ),
-                    node(
-                        "parquet",
-                        "load_parquet",
-                        connection="s3_acceptance",
-                        file="s3://duckpad-acceptance/labels.parquet",
-                    ),
+                    node("csv", "load_csv", connection="s3_acceptance", file="orders.csv"),
+                    node("parquet", "load_parquet", connection="s3_acceptance", file="labels.parquet"),
                     node("joined", "join", condition="l.id = r.id", columns="l.*, r.region"),
-                    node(
-                        "export",
-                        "export_csv",
-                        connection="s3_acceptance",
-                        destination="s3://duckpad-acceptance/export.csv",
-                    ),
+                    node("export", "export_csv", connection="s3_acceptance", destination="export.csv"),
+                    node("custom", "load_csv", connection="landing", file="orders.csv"),
                 ],
                 "edges": [
                     edge("csv", "joined", "left"),
@@ -242,13 +268,22 @@ def s3(home):
         }
         worktree = projects.create("S3 acceptance", bundle)["id"]
         first = wait(store, engine, worktree)
-        exported = client.get_object(Bucket="duckpad-acceptance", Key="export.csv")["Body"].read()
+        assert "'s3://duckpad-acceptance/landing/orders.csv'" in first["nodes"]["csv"]["statements"][0]["sql"]
+        exported = client.get_object(Bucket="duckpad-acceptance", Key="landing/export.csv")["Body"].read()
         assert b"South" in exported and b"20" in exported
+        assert [row["values"] for row in engine.preview(worktree, "dev", "custom")["rows"]] == [
+            [1, 10],
+            [2, 20],
+            [3, 30],
+        ]
         preview = engine.preview(worktree, "dev", "joined")
         explanation = Lineage(engine).explain(worktree, "dev", preview["id"], 0, "amount")
         assert explanation["complete"] and explanation["total"] == 1, explanation
         second = wait(store, engine, worktree)
-        assert client.get_object(Bucket="duckpad-acceptance", Key="export.csv")["Body"].read() == exported
+        assert (
+            client.get_object(Bucket="duckpad-acceptance", Key="landing/export.csv")["Body"].read()
+            == exported
+        )
         assert values["secret"] not in dumps(store.all("run"))
         return {
             "status": "passed",
@@ -262,6 +297,8 @@ def s3(home):
                 "Parquet read",
                 "join",
                 "CSV export",
+                "relative paths under a URI root",
+                "custom storage type",
                 "repeat native replacement",
                 "shared connection reuse",
                 "cell lineage",

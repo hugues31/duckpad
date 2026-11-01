@@ -514,7 +514,7 @@ def test_a_launch_uses_the_values_of_its_captured_commit(services):
     )
     catalog.save(
         "connection",
-        {"id": "files", "name": "Files", "connector": "local", "environments": {"prod": {"root": ""}}},
+        {"id": "files", "name": "Files", "connector": "folder", "environments": {"prod": {"root": ""}}},
         create=True,
     )
     worktree = projects.create("Variables", bundle)["id"]
