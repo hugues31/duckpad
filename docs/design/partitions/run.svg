@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1440" height="940" viewBox="0 0 1440 940" role="img" aria-labelledby="title desc">
 <title id="title">Run selection and partition history</title>
-<desc id="desc">Mockup · Normal launches calculate the manifest; frozen retries reuse the original run inputs.</desc>
+<desc id="desc">Mockup · A retry is an ordinary launch limited to the failed partitions.</desc>
 <style>text { font-family: Inter, ui-sans-serif, system-ui, -apple-system, sans-serif; }</style>
 <rect x="0" y="0" width="1440" height="940" rx="0" fill="#f5f7fb"/>
 <rect x="0" y="0" width="1440" height="54" rx="0" fill="#19283d"/>
@@ -26,9 +26,9 @@
 <text x="505" y="91" font-size="13" fill="#202a38" font-weight="600">Partition: All  ▾</text>
 <text x="753" y="91" font-size="12" fill="#566577" font-weight="400">batch · 30 keys</text>
 <rect x="1248" y="68" width="163" height="36" rx="6" fill="#315cce"/>
-<text x="1261" y="91" font-size="13" fill="white" font-weight="600">Run with options</text>
+<text x="1261" y="91" font-size="13" fill="white" font-weight="600">Run pipeline ▾</text>
 <path d="M181 119 L1440 119" fill="none" stroke="#dce3ec" stroke-width="1.5"/>
-<text x="205" y="917" font-size="12" fill="#566577" font-weight="400">Mockup · Normal launches calculate the manifest; frozen retries reuse the original run inputs.</text>
+<text x="205" y="917" font-size="12" fill="#566577" font-weight="400">Mockup · A retry is an ordinary launch limited to the failed partitions.</text>
 <rect x="205" y="140" width="576" height="714" rx="8" fill="white" stroke="#dce3ec"/>
 <text x="229" y="178" font-size="23" fill="#202a38" font-weight="600">Run pipeline</text>
 <rect x="650" y="156" width="91" height="25" rx="5" fill="#fff5df"/>
@@ -44,7 +44,7 @@
 <rect x="228" y="361" width="526" height="55" rx="7" fill="white" stroke="#dce3ec"/>
 <text x="243" y="384" font-size="15" fill="#566577" font-weight="400">○</text>
 <text x="271" y="384" font-size="14" fill="#202a38" font-weight="600">Failed</text>
-<text x="271" y="404" font-size="12" fill="#566577" font-weight="400">Latest failed keys from a previous run</text>
+<text x="271" y="404" font-size="12" fill="#566577" font-weight="400">Keys whose latest attempt failed</text>
 <rect x="228" y="425" width="526" height="55" rx="7" fill="white" stroke="#dce3ec"/>
 <text x="243" y="448" font-size="15" fill="#566577" font-weight="400">○</text>
 <text x="271" y="448" font-size="14" fill="#202a38" font-weight="600">Missing</text>
@@ -116,11 +116,11 @@
 <path d="M825 567 L1396 567" fill="none" stroke="#dce3ec" stroke-width="1.5"/>
 <text x="824" y="594" font-size="15" fill="#b13a42" font-weight="600">batch-012 · Export failed</text>
 <text x="824" y="622" font-size="13" fill="#566577" font-weight="400">The destination could not be written.</text>
-<text x="824" y="648" font-size="13" fill="#566577" font-weight="400">29 successful partition exports will be reused.</text>
+<text x="824" y="648" font-size="13" fill="#566577" font-weight="400">The 29 successful partitions and their exports are kept.</text>
 <rect x="824" y="674" width="572" height="73" rx="8" fill="#edf2ff"/>
-<text x="840" y="697" font-size="13" fill="#315cce" font-weight="600">Retry the original run</text>
-<text x="840" y="719" font-size="12" fill="#566577" font-weight="400">Same commit, keys, attributes and variables.</text>
-<text x="840" y="738" font-size="12" fill="#566577" font-weight="400">No refresh of the partition list.</text>
+<text x="840" y="697" font-size="13" fill="#315cce" font-weight="600">Retry only the failed partitions</text>
+<text x="840" y="719" font-size="12" fill="#566577" font-weight="400">Recalculates the partition list, then runs batch-012.</text>
+<text x="840" y="738" font-size="12" fill="#566577" font-weight="400">A key that left the list is not retried.</text>
 <rect x="824" y="791" width="152" height="36" rx="6" fill="white" stroke="#dce3ec"/>
 <text x="837" y="814" font-size="13" fill="#202a38" font-weight="600">Open partition log</text>
 <rect x="1144" y="791" width="252" height="36" rx="6" fill="#315cce"/>
