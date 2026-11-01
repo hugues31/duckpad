@@ -11,7 +11,7 @@ import duckdb
 import sqlglot
 from sqlglot import exp
 
-from .. import variables
+from .. import partitions, variables
 from ..catalog import Catalog, redact
 from ..components import expand, expand_for, in_subtree
 from ..datasets import Context, Dataset
@@ -455,7 +455,9 @@ class Results:
             "offset": offset,
         }
 
-    def compile(self, worktree: str, environment: str, node_id: str) -> list[Record]:
+    def compile(
+        self, worktree: str, environment: str, node_id: str, *, partition: Record | None = None
+    ) -> list[Record]:
         """The statements of a node subtree, compiled from the current files without running them."""
         snapshot = self.projects.snapshot(worktree)
         self.catalog.environment(environment)
@@ -466,6 +468,7 @@ class Results:
             environment,
             tolerant=False,
             computed=self.pool.computed(worktree, environment, snapshot["bundle"]),
+            partition=partition,
         )
         selected = [key for key in nodes if in_subtree(key, node_id)]
         if not selected:
@@ -504,6 +507,7 @@ class Results:
                 variables=variables.expression_values(node),
                 bound=node.get("variables"),
             )
+            partitions.filter_statements(statements, node, partition)
             for statement in statements:
                 statement["sql"] = redact(statement["sql"], secrets)
             output.extend(variables.annotate(statements, node))

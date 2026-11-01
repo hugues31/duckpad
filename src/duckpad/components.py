@@ -2,7 +2,7 @@
 
 import copy
 
-from . import variables, views
+from . import partitions, variables, views
 from .node_code import code_path, node_sql
 from .templates import IDENTIFIER, directives, parse_template
 from .util import Problem, uid
@@ -15,10 +15,12 @@ def in_subtree(key, root):
     return key == root or key.startswith(root + "::")
 
 
-def expand_for(bundle, environment, tolerant=True, computed=None):
+def expand_for(bundle, environment, tolerant=True, computed=None, partition=None):
     """Expand a bundle with variable references bound to their values in an environment."""
     nodes, edges, boundaries = expand(bundle, tolerant=tolerant)
+    partitions.plan(bundle, nodes, edges, boundaries)
     variables.bind(bundle, nodes, environment, computed)
+    partitions.bind(nodes, partition)
     return nodes, edges, boundaries
 
 
@@ -155,6 +157,11 @@ def group(bundle, selection, label, exposed=None, parent=None):
     internal = [n for n in graph["nodes"] if n["id"] in selected]
     if not internal:
         raise Problem("Select at least one node")
+    collector = next((n["partitions"] for n in internal if "partitions" in n), None)
+    if collector is not None and (len(internal) > 1 or parent):
+        raise Problem(
+            "Grouping would hide an all-partitions boundary; keep its collector outside the component"
+        )
     component_id, instance_id = uid("component_"), uid("node_")
     definition = {
         "id": component_id,
@@ -255,7 +262,32 @@ def group(bundle, selection, label, exposed=None, parent=None):
                 "port": port,
                 "column": origin["column"],
             }
+    instance_outputs = {}
+    if not parent:
+        for node in internal:
+            for output, metadata in node.pop("outputs", {}).items():
+                target = {"node": node["id"], "port": output}
+                port = next((p for p, o in definition["outputs"].items() if o == target), None)
+                if port is None:
+                    port = f"output_{len(definition['outputs']) + 1}"
+                    definition["outputs"][port] = target
+                instance_outputs[port] = metadata
+        dimension = partitions.definition(bundle["flow"])
+        if dimension and dimension["values"].get("node") in selected:
+            nodes, _, boundaries = expand(bundle, tolerant=True)
+            source = value_sources.locate(bundle, nodes, boundaries, dimension["values"])
+            target = {"node": source["from"]["node"], "port": source["from"]["port"]}
+            port = next((p for p, o in definition["outputs"].items() if o == target), None)
+            if port is None:
+                port = f"output_{len(definition['outputs']) + 1}"
+                definition["outputs"][port] = target
+            bundle["flow"]["partitions"][dimension["name"]]["values"] = {
+                "node": instance_id,
+                "port": port,
+                "column": source["from"]["column"],
+            }
     for node in internal:
+        node.pop("partitions", None)
         if not node.get("template") and not node.get("component"):
             code = bundle.setdefault("node_sql", {})
             code[code_path(node["id"], component_id)] = code.pop(code_path(node["id"], parent))
@@ -266,6 +298,8 @@ def group(bundle, selection, label, exposed=None, parent=None):
             "component": component_id,
             "label": label,
             "params": instance_params,
+            **({"outputs": instance_outputs} if instance_outputs else {}),
+            **({"partitions": collector} if collector is not None else {}),
             "position": internal[0].get("position", {"x": 100, "y": 100}),
         }
     ]
@@ -285,6 +319,7 @@ def expose_variables(bundle, internal, exposed, parent=None):
     for node in internal:
         params = node.get("params")
         using = variables.references(params).keys() | variables.referenced(params).keys()
+        using |= {p for p, v in (params or {}).items() if partitions.references(v)}
         for param in [param for param in (params or {}) if param in using]:
             target = {"node": node["id"], "param": param}
             key = next(

@@ -29,10 +29,11 @@ class Fingerprints:
         environment: str,
         captured: Connections | None = None,
         computed: Record | None = None,
+        partition: Record | None = None,
     ) -> dict[str, str]:
         """Fingerprint every node of a bundle from its SQL, parameters, connections and inputs."""
         # Resolved values make renames, descriptions and promoted literals transparent.
-        nodes, edges, _ = expand_for(bundle, environment, computed=computed)
+        nodes, edges, _ = expand_for(bundle, environment, computed=computed, partition=partition)
         fingerprints: dict[str, str] = {}
         for key in topological(nodes, edges, tolerant=True):
             node = nodes[key]
@@ -60,6 +61,24 @@ class Fingerprints:
                     "params": params,
                     "connections": connections,
                     "extensions": project_extensions.enabled(bundle.get("extensions")),
+                    **(
+                        {
+                            "partition": {
+                                "key": {k: partition["key"][k] for k in ("type", "value")}
+                                if partition and node.get("partitioned")
+                                else None,
+                                "filters": {
+                                    p: declaration.get("column")
+                                    if isinstance(declaration, dict)
+                                    else declaration
+                                    for p, declaration in node.get("partition_filters", {}).items()
+                                },
+                                "collect": node.get("partition_collect_inputs", []),
+                            }
+                        }
+                        if node.get("partitioned") or node.get("partition_collect_inputs")
+                        else {}
+                    ),
                     "inputs": [
                         (
                             e["targetHandle"],

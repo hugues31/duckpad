@@ -27,6 +27,9 @@ def merge_values(base, current, proposed, path="", choices=None, evidence=None):
         return proposed, []
     variable_path = path.startswith(variables.FILE + "/")
     atomic_source = variable_path and path.count("/") == 2 and path.endswith("/from")
+    atomic_source |= (
+        path.startswith("flow.json/partitions/") and path.count("/") == 3 and path.endswith("/values")
+    )
     mode_change = (
         variable_path
         and path.count("/") == 1
@@ -38,6 +41,17 @@ def merge_values(base, current, proposed, path="", choices=None, evidence=None):
                 other.get(key, MISSING) != base.get(key, MISSING)
                 for key in ("from", "default", "environments")
             )
+            for switched, other in ((current, proposed), (proposed, current))
+        )
+    )
+    mode_change |= (
+        path.startswith("flow.json/nodes/")
+        and path.count("/") == 2
+        and all(isinstance(v, dict) for v in (base, current, proposed))
+        and current.get("partitions") != proposed.get("partitions")
+        and any(
+            switched.get("partitions") != base.get("partitions")
+            and other.get("outputs") != base.get("outputs")
             for switched, other in ((current, proposed), (proposed, current))
         )
     )

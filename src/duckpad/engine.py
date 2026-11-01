@@ -117,8 +117,10 @@ class Engine:
     def generation_valid(self, worktree: str, environment: str, dataset_id: str) -> bool:
         return self.results.generation_valid(worktree, environment, dataset_id)
 
-    def compile(self, worktree: str, environment: str, node: str) -> list[Record]:
-        return self.results.compile(worktree, environment, node)
+    def compile(
+        self, worktree: str, environment: str, node: str, *, partition: Record | None = None
+    ) -> list[Record]:
+        return self.results.compile(worktree, environment, node, partition=partition)
 
     def export_result(self, worktree: str, environment: str, node: str) -> Record:
         return self.exports.result(worktree, environment, node)
