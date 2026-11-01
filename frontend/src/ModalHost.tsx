@@ -3,7 +3,7 @@ import { nodeCode, nodeCodePath, nodeGraph } from "./nodeCode";
 import { useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { Boxes } from "lucide-react";
-import { api, errorDetail, importProjectArchive, send } from "./api";
+import { api, errorDetail, importProjectArchive, send, withQuery } from "./api";
 import DuckMark from "./DuckMark";
 import GitWorkspace from "./GitWorkspace";
 import NewProjectModal from "./NewProjectModal";
@@ -38,7 +38,7 @@ SELECT * FROM {{ source }};
 export type ModalState =
   | { kind: "about" }
   | { kind: "newProject" }
-  | { kind: "connector"; title: string; value: string }
+  | { kind: "connector"; title: string; value: string; create?: boolean }
   | WorktreeModal;
 
 /** Dialogs about one working branch; they never act on another one. */
@@ -139,15 +139,28 @@ function AboutDialog({ onClose }: { onClose: () => void }) {
 function ConnectorDialog({
   title,
   value,
+  create,
   onClose,
 }: {
   title: string;
   value: string;
+  /** New definitions and duplicates never replace an existing connector. */
+  create?: boolean;
   onClose: () => void;
 }) {
+  const t = useT();
   const { refreshWorkspace } = useShell();
   const save = async (text: string) => {
-    await api("/catalog/connector", send(JSON.parse(text), "PUT"));
+    try {
+      await api(
+        withQuery("/catalog/connector", { create }),
+        send(JSON.parse(text), "PUT"),
+      );
+    } catch (error) {
+      if (errorDetail(error).code === "connector_exists")
+        throw new Error(t("connectorAlreadyExists"), { cause: error });
+      throw error;
+    }
     await refreshWorkspace();
   };
   return (

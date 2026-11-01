@@ -41,7 +41,11 @@ export default function InstanceSettings({
   section: string;
   workspace: Workspace;
   refresh: () => Promise<void>;
-  onConnectorEditor: (data: { title: string; value: string }) => void;
+  onConnectorEditor: (data: {
+    title: string;
+    value: string;
+    create?: boolean;
+  }) => void;
 }) {
   const t = useT();
   return (

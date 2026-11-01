@@ -52,9 +52,12 @@ def enable_excel(bundle):
     return bundle
 
 
-def files_connection(catalog, identity="files"):
-    """A folder connection without a root, for tests that need a connection to prepare or revoke."""
-    environments = {environment: {"root": ""} for environment in catalog.environment_names()}
+def files_connection(catalog, identity="files", root=""):
+    """A Server folder connection for tests that need a connection to prepare or revoke.
+
+    Without a root, file nodes using it accept only absolute paths.
+    """
+    environments = {environment: {"root": root} for environment in catalog.environment_names()}
     catalog.save(
         "connection",
         {"id": identity, "name": "Files", "connector": "folder", "environments": environments},

@@ -2,7 +2,14 @@
 
 A connector is a declarative setup definition. A connection is a named reusable instance with independent environment values. Both live in the instance catalog, outside Git. Projects store only references. Instance admins configure them from **Instance settings → Connections**; connector definitions have a JSON editor, and their typed parameters generate connection forms.
 
-Fresh instances have no connection. File nodes read uploads and write exports as [project files](#project-files-and-local-folders) without one; connections reach server folders, object storage and databases.
+A connection says where data lives and how to reach it in each environment. Connections fall into two families, which group the Connections page:
+
+- **Databases and warehouses** are attached and read as tables, such as Oracle.
+- **File storage** is a location for file nodes: a Server folder, an S3 bucket prefix, or a storage type an administrator declares.
+
+Fresh instances have no connection. File nodes read uploads and write exports as [project files](#project-files-and-storage-locations) without one; connections reach server folders, object storage and databases.
+
+![Connections and connector definitions grouped by family, with a customized built-in](images/connections.png)
 
 The instance-admin-only `PUT /api/catalog/connector` and `PUT /api/catalog/connection` endpoints accept those same JSON objects, so an administrator can submit declarative files without changing application code. Secret fields are masked in public catalog responses and execution records. Definition snapshots and non-secret settings used by each run remain in its history. Instance admins grant each project access to connections in **Project settings**. Members see only the names and capabilities of granted connections, not the global catalog.
 
@@ -27,15 +34,15 @@ results; switching environment never starts a run.
 
 | Preset | Required operations | Recorded validation |
 | --- | --- | --- |
-| Local files | CSV and Parquet read; CSV export | DuckDB 2.0.0, Python 3.13.12, Linux x86_64; unit/native-equivalence tests, browser example and million-row benchmark |
-| S3 | CSV and Parquet read; CSV export | DuckDB 2.0.0 with matching `httpfs`, Linux x86_64; Moto S3 emulator on localhost; repeated native destination replacement |
+| Server folder | CSV and Parquet read; CSV export | DuckDB 2.0.0, Python 3.13.12, Linux x86_64; unit/native-equivalence tests, browser example and million-row benchmark |
+| S3 | CSV and Parquet read; CSV export; relative paths under a bucket prefix | DuckDB 2.0.0 with matching `httpfs`, Linux x86_64; Moto S3 emulator on localhost; repeated native destination replacement |
 | Oracle | Read attached tables; export to an existing table with OraDuck | DuckDB 2.0.0, signed community OraDuck 0.4.0, Oracle 19.3, Oracle Instant Client 19.32, Linux x86_64 |
 
 The table records connector validation of the embedded engine. File formats are not connectors; XLSX has its own [validation record](#xlsx-workbooks). The isolated HTTP worker additionally requires Linux Landlock; local CSV/Parquet execution, exports and lineage are covered by the account/permission tests. Remote S3/Oracle deployments need validation with their extension and network policy in this execution mode.
 
 These are the tested combinations, not claims that every newer DuckDB or operating-system build has been validated. A matching extension build is required for the installed DuckDB version. Other platforms and live AWS deployments need validation in their own environment. Raw results are in `docs/validation/`.
 
-## Project files and local folders
+## Project files and storage locations
 
 Every file node (Load CSV, Load Parquet, Load XLSX, Export CSV and Export XLSX) has a **Location** field. It defaults to **Project files**: the project's uploads and its exports, available in every environment without a connection or a grant. Upload a file next to the node's `file` field, or enter a path:
 
@@ -45,7 +52,15 @@ Every file node (Load CSV, Load Parquet, Load XLSX, Export CSV and Export XLSX) 
 
 ![Load XLSX reads a workbook from project files, without a connection](images/project-files.png)
 
-To use a folder on the server, an instance admin creates a **Local files** connection with a `root` directory for each environment, then grants it to the project. Members select it as the node's Location; relative paths then resolve against its root. Roots must exclude instance metadata and other projects. A connection that is not granted to the project is refused.
+The Location field also lists every file storage connection granted to the project, custom storage types included. Database connections are not locations. Each storage connection has a `root` per environment, either a folder on the server or a URI prefix:
+
+- A relative path is appended to the root. A URI root is kept as written: with the root `s3://bucket/landing` or `s3://bucket/landing/`, the path `inbox/a.csv` reads `s3://bucket/landing/inbox/a.csv`.
+- An absolute path or a full URI is used as is; a local path must still fall within the project files or a granted folder root.
+- A connection without a root in the selected environment accepts only absolute paths. Relative paths never fall back to project files once a location is chosen.
+
+To read a shared folder, an instance admin creates a **Server folder** connection, for example *Finance share* with `/srv/finance-dev` in dev and `/srv/finance` in prod, and grants it to the project. A member selects *Finance share* as the Location of Load CSV or Load XLSX and enters `inbox/budget.xlsx`. A dev run reads `/srv/finance-dev/inbox/budget.xlsx`, a prod run `/srv/finance/inbox/budget.xlsx`, without any project change. Folder roots must exclude instance metadata and other projects, and must exist on the server. A connection that is not granted to the project is refused.
+
+![Load XLSX reads inbox/budget.xlsx from the Finance share Server folder](images/server-folder-location.png)
 
 CSV exposes header, delimiter and a JSON type-override map; `{}` retains native inference. Parquet uses native types.
 
@@ -97,7 +112,7 @@ default: no connection or administrator is needed.
 2. Connect a result to **Export XLSX**, choose a destination and sheet name, and
    run the pipeline. `header` controls whether column names are written.
 
-To read or write workbooks in a server folder, select a granted Local files
+To read or write workbooks in a server folder, select a granted Server folder
 connection as the Location, as for CSV and Parquet.
 
 New projects include both templates. Existing projects retain their versioned
@@ -138,9 +153,9 @@ for native format behavior and limits.
 
 ## S3
 
-Configure access key ID, secret access key, region and endpoint per environment. The preset loads `httpfs` and creates a temporary S3 secret. Use `s3://bucket/key.csv` or a Parquet object URI in the ordinary file nodes. `use_ssl` defaults to true and `url_style` to `vhost`; a local S3-compatible endpoint can use false and `path` respectively.
+Configure a root, access key ID, secret access key, region and endpoint per environment. The preset loads `httpfs` and creates a temporary S3 secret. Set `root` to a bucket prefix such as `s3://landing/raw/` and select the connection as a file node's Location: relative paths are appended to it. Full `s3://bucket/key.csv` URIs also work, with or without a root. `use_ssl` defaults to true and `url_style` to `vhost`; a local S3-compatible endpoint can use false and `path` respectively.
 
-The local integration test validates both read formats, a join, CSV export, connection reuse, lineage and replacement of the same destination. It does not validate real AWS credentials, IAM policies, TLS configuration or every provider's object-storage behavior.
+The local integration test reads CSV and Parquet by relative path under a root without a trailing slash, joins them, exports CSV under the same root, and reads through an administrator-declared storage type with its own URI root. It also checks connection reuse, lineage and replacement of the same destination. CI runs it on every pull request. It does not validate real AWS credentials, IAM policies, TLS configuration or every provider's object-storage behavior.
 
 ```sh
 uv sync --group integration
@@ -169,16 +184,30 @@ uv run python scripts/integration.py oracle --output docs/validation/oracle.json
 
 The script creates uniquely named disposable test tables and drops only those tables in its cleanup. Credentials are never included in its report. See the [OraDuck documentation](https://raw.githubusercontent.com/hugues31/oraduck/main/README.md) for deployment prerequisites.
 
+## Built-in and custom connector types
+
+Server folder, Amazon S3 and Oracle · OraDuck are built in: their definitions come with each Duckpad release and show a **Built-in** badge. An unedited built-in always matches the running release.
+
+- **Edit** opens a built-in's JSON definition. Saving a change stores your version as an override: the definition shows **Customized**, keeps your edit across upgrades, and no longer follows the release. Saving it unchanged keeps it built-in.
+- **Reset to built-in** deletes the override. The definition matches the running release again; connections keep their values.
+- **Duplicate** opens a copy under a new identifier, `<id>_copy` by default. Saving creates a custom type, which never follows a built-in.
+- **New connector definition** creates a custom type. Custom types are grouped, listed and offered as locations exactly like built-in ones.
+
+New definitions and duplicates use `PUT /api/catalog/connector?create=true`, which refuses an existing identifier with 409. Without `create`, the same endpoint creates or replaces a definition. `POST /api/catalog/connector/<id>/reset` resets a built-in, and `DELETE /api/catalog/connector/<id>` deletes a custom type once no connection uses it; built-ins cannot be deleted.
+
 ## Add another connector
 
 For air-gapped instances, [download and import extensions](OFFLINE_EXTENSIONS.md)
 before using connectors that need extensions. This applies to core and community
 extensions; the cache belongs to the backend instance, outside project Git.
 
+Every definition declares its `family`, `database` or `storage`; definitions without one are rejected. A database connector attaches its system as `{{ alias }}`:
+
 ```json
 {
   "id": "warehouse",
   "name": "Attached DuckDB warehouse",
+  "family": "database",
   "description": "An existing DuckDB file",
   "parameters": [{"name": "database", "type": "file"}],
   "extensions": [],
@@ -189,5 +218,27 @@ extensions; the cache belongs to the backend instance, outside project Git.
 ```
 
 Create a named connection pointing to different database files in `dev` and `prod`. A source template can read `{{ connection }}.{{ resource }}`; an export template can explicitly `INSERT INTO` a declared attached destination from its input. This exact extension-free scenario is covered by `tests/test_catalog.py`, including reuse and historical project code using current catalog settings.
+
+A storage connector declares a `root` parameter, a folder or a URI prefix, and any setup its location needs. This one reaches Google Cloud Storage through `httpfs` with HMAC keys:
+
+```json
+{
+  "id": "gcs",
+  "name": "Google Cloud Storage",
+  "family": "storage",
+  "description": "A bucket prefix and HMAC keys for each environment",
+  "parameters": [
+    {"name": "root", "type": "text"},
+    {"name": "key_id", "type": "text", "secret": true},
+    {"name": "secret", "type": "text", "secret": true}
+  ],
+  "extensions": [{"name": "httpfs"}],
+  "capabilities": ["read", "write"],
+  "init_sql": "CREATE OR REPLACE TEMPORARY SECRET {{ secret_name }} (TYPE GCS, KEY_ID {{ key_id }}, SECRET {{ secret }});",
+  "compatibility": "Validate with the installed DuckDB version and httpfs"
+}
+```
+
+A connection with the root `gs://landing/raw/` in dev appears under **File storage** and as a Location of every file node in the projects it is granted to. In isolated execution, the worker may read the URI prefixes of the secret types it creates (`s3://`, `gcs://`, `gs://`, `r2://`) and below the URI roots of granted storage connections. A storage type whose root is `https://data.example.com/landing/` therefore needs no secret, only the `httpfs` extension, and cannot read `https://data.example.com/landing-archive/`.
 
 Connection parameter types are text, file, number, boolean and choice. Secret parameters add `"secret": true`. Setup placeholders use type-aware SQL escaping; `alias` and `secret_name` are reserved runtime identifiers. Setup permits declared extension loading, `CREATE OR REPLACE TEMPORARY SECRET {{ secret_name }}` and `ATTACH ... AS {{ alias }}`. Data queries and writes belong in source/export nodes and are rejected in initialization. Extensions are installed and loaded from the declared repository when needed.

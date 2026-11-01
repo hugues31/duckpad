@@ -409,9 +409,11 @@ def test_streams_in_bounded_chunks_and_closes_the_file(instance, monkeypatch):
     assert streams and all(stream.closed for stream in streams)
 
 
-def test_completed_contexts_do_not_replace_each_other_and_grants_are_rechecked(instance):
+def test_completed_contexts_do_not_replace_each_other_and_grants_are_rechecked(instance, tmp_path):
     services, client = instance
-    worktree, endpoint = create(instance, connection=files_connection(services.catalog))
+    share = tmp_path / "share"
+    share.mkdir()
+    worktree, endpoint = create(instance, connection=files_connection(services.catalog, root=str(share)))
     grants = f"/api/projects/{worktree['project']}/connections"
     assert client.put(grants, json={"connections": ["files"]}).status_code == 200
     dev = execute(services, worktree)
