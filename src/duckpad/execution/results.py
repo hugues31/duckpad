@@ -41,6 +41,8 @@ NUMERIC_TYPES = re.compile(
 )
 TEMPORAL_TYPES = re.compile(r"(DATE|TIMESTAMP.*)")
 NESTED_TYPE = re.compile(r"(STRUCT|MAP|UNION)\(.*|.*\[\d*\]")
+# SUMMARIZE estimates distinct values; counts at least this close to the row count are checked exactly.
+UNIQUE_ESTIMATE = 0.95
 
 
 @dataclass
@@ -90,9 +92,23 @@ def column_statistics(cursor: SQLCursor, dataset: Dataset) -> dict[str, Record]:
     """Nulls, distinct values, range, distribution or top values of each column of a whole result."""
     view = qi(dataset.table)
     summary = cursor.execute(f"SUMMARIZE SELECT * FROM {view}").fetchall()
+    # Only an exact count can tell a key from a column with a few duplicates.
+    candidates = [
+        (index, name)
+        for index, (name, _, _, _, distinct, *_, count, nulls) in enumerate(summary)
+        if count and not nulls and distinct >= UNIQUE_ESTIMATE * count
+    ]
+    exact = {}
+    if candidates:
+        counts = cursor.execute(
+            "SELECT " + ", ".join(f"count(DISTINCT {qi(name)})" for _, name in candidates) + f" FROM {view}"
+        ).fetchone()
+        assert counts is not None
+        exact = {index: value for (index, _), value in zip(candidates, counts, strict=True)}
     result: dict[str, Record] = {}
     histograms, bindings, tops = [], {}, []
     for index, (name, type_name, low, high, distinct, *_, count, nulls) in enumerate(summary):
+        distinct = exact.get(index, distinct)
         entry: Record = {
             "type": type_name,
             "nulls": float(nulls) if nulls is not None else None,
@@ -102,7 +118,8 @@ def column_statistics(cursor: SQLCursor, dataset: Dataset) -> dict[str, Record]:
         numeric, temporal = NUMERIC_TYPES.fullmatch(type_name), TEMPORAL_TYPES.fullmatch(type_name)
         if (numeric or temporal) and low is not None:
             entry.update(min=low, max=high)
-            if low != high:
+            # NaN and infinite numbers or dates cannot bound histogram bins.
+            if low != high and not {low.lstrip("-"), high.lstrip("-")} & {"nan", "inf", "infinity"}:
                 cast = "DOUBLE" if numeric else "TIMESTAMP"
                 bindings[f"low_{index}"], bindings[f"high_{index}"] = low, high
                 histograms.append(
@@ -314,6 +331,9 @@ class Results:
     def _compute_statistics(self, context: Context, dataset: Dataset, computation: Computation) -> None:
         started, computed = time.monotonic(), now()
         try:
+            # A request that finished just before this one registered has already computed them.
+            if dataset.statistics is not None:
+                return
             with reading(context, [dataset]) as cursor:
                 with self.lock:
                     computation.cursor = cursor

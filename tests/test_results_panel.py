@@ -233,6 +233,26 @@ def test_column_statistics_are_computed_once_per_result(services, project, tmp_p
     assert replaced["schema"]["retyped"] == [{"name": "amount", "before": "BIGINT", "after": "DOUBLE"}]
 
 
+def test_statistics_check_unique_values_exactly_and_skip_unbounded_histograms(services, project):
+    store, projects, _, engine = services
+    snapshot = projects.snapshot(project)
+    snapshot["bundle"]["node_sql"]["nodes/checked.sql"] = (
+        "-- @input source\n-- @output result\n"
+        "SELECT n AS id, CASE WHEN n = 0 THEN 1 ELSE n END AS almost,"
+        " CASE WHEN n = 1 THEN 'nan'::DOUBLE ELSE n END AS ratio,"
+        " CASE WHEN n = 2 THEN DATE 'infinity' ELSE DATE '2026-01-01' + n::INTEGER END AS until"
+        " FROM (SELECT unnest(range(5000)) AS n FROM {{ source }} WHERE id = 1);"
+    )
+    projects.write(project, snapshot["revision"], bundle_to_files(snapshot["bundle"]))
+    run = join_run(store, engine.launch(project, "dev")["id"])
+    assert run["status"] == "success", run
+    columns = engine.compute_statistics(project, "dev", "checked")["statistics"]["columns"]
+    assert columns["id"]["unique"] and columns["id"]["distinct"] == 5000
+    assert not columns["almost"]["unique"] and columns["almost"]["distinct"] == 4999
+    assert columns["ratio"]["max"] == "nan" and "histogram" not in columns["ratio"]
+    assert columns["until"]["max"] == "infinity" and "histogram" not in columns["until"]
+
+
 def test_statistics_computation_can_be_canceled(services, project, monkeypatch):
     engine = services[3]
     started = threading.Event()
