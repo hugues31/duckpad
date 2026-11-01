@@ -8,13 +8,17 @@ from .types import Record
 
 
 def connection_references(node: Record) -> list[str]:
-    """Return the connection IDs selected by a node's connection parameters."""
+    """Return the connection IDs selected by a node's connection parameters.
+
+    An empty connection parameter selects project files, which need no connection.
+    """
     params = node.get("params", {})
-    return [
+    selected = [
         params.get(parameter["name"], parameter.get("default"))
         for parameter in node["parsed"]["parameters"]
         if parameter["type"] == "connection"
     ]
+    return [reference for reference in selected if reference not in (None, "")]
 
 
 def reachable(seeds: Iterable[str], edges: list[Record], upstream: bool) -> set[str]:

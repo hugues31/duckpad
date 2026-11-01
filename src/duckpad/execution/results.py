@@ -488,7 +488,7 @@ class Results:
                 inputs,
                 {p: "output_" + p for p in node["parsed"]["outputs"]},
                 captured,
-                self.store.paths.exports(worktree, environment),
+                self.store.paths.project_files(snapshot["worktree"]["project"], worktree, environment),
                 input_schemas=input_schemas,
                 variables=variables.expression_values(node),
             )

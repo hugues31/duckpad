@@ -47,7 +47,7 @@ test("configure Excel, upload a worksheet and export it through the canvas", asy
     await page.getByRole("button", { name: "Load XLSX", exact: true }).click();
     const inspector = page.locator(".inspector");
     await inspector
-      .getByRole("combobox", { name: /connection/ })
+      .getByRole("combobox", { name: "Location", exact: true })
       .selectOption("xlsx_browser");
     const upload = inspector.getByLabel("Upload file", { exact: true });
     await expect(upload).toHaveAttribute("accept", /\.xlsx/);
@@ -82,7 +82,7 @@ test("configure Excel, upload a worksheet and export it through the canvas", asy
       )
       .toBe(1);
     await inspector
-      .getByRole("combobox", { name: /connection/ })
+      .getByRole("combobox", { name: "Location", exact: true })
       .selectOption("xlsx_browser");
     await inspector
       .getByRole("textbox", { name: /sheet/ })
@@ -140,13 +140,24 @@ test("configure Excel, upload a worksheet and export it through the canvas", asy
     expect(bytes.equals(await exportedFile.body())).toBeTruthy();
 
     // Re-read the exported workbook through the same isolated API worker.
+    // Relative sources resolve under the project's uploads, so name the export by its path.
+    const exportNode = snapshot.bundle.flow.nodes.find(
+      (node: any) => (node.template || node.origin) === "export_xlsx",
+    )!.id;
+    const executed = await (
+      await page.request.get(`/api/runs/${run.id}`)
+    ).json();
+    const exportPath = executed.nodes[exportNode].statements.find(
+      (statement: any) => statement.export_file,
+    ).export_file.path;
+    expect(exportPath).toMatch(/export\.xlsx$/);
     snapshot = await (await page.request.get(endpoint)).json();
     snapshot.bundle.flow.nodes.push({
       id: "roundtrip",
       template: "load_xlsx",
       params: {
         connection: "xlsx_browser",
-        file: "export.xlsx",
+        file: exportPath,
         sheet: "Exported orders",
       },
       position: { x: 500, y: 300 },

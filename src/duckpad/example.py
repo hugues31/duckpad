@@ -234,7 +234,6 @@ EXCEPT SELECT customer_id FROM {{ source }} WHERE amount > 400;
             "Export revenue",
             1050,
             40,
-            connection="local",
             destination="regional-revenue.csv",
         ),
         node(
@@ -243,7 +242,6 @@ EXCEPT SELECT customer_id FROM {{ source }} WHERE amount > 400;
             "Export high-value",
             1050,
             290,
-            connection="local",
             destination="high-value-orders.csv",
         ),
     ]

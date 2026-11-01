@@ -451,18 +451,47 @@ test("capture project variables, a parameter binding and a run confirmation", as
   await capture(page, "variable-expression");
 });
 
+test("capture a file node reading project files", async ({ page }) => {
+  const created = await page.request.post("/api/projects", {
+    data: { name: "Budget" },
+  });
+  expect(created.ok()).toBeTruthy();
+  const worktree = await created.json();
+  await page.goto(`/worktrees/${worktree.id}/flow`);
+  await page.getByRole("button", { name: "Load XLSX", exact: true }).click();
+  const inspector = page.locator(".inspector");
+  await expect(
+    inspector.getByRole("combobox", { name: "Location", exact: true }),
+  ).toHaveValue("");
+  await inspector.getByRole("textbox", { name: /file/ }).fill("budget.xlsx");
+  await inspector.getByRole("textbox", { name: /sheet/ }).fill("Orders");
+  await inspector
+    .getByRole("button", { name: "Save changes", exact: true })
+    .click();
+  await expect
+    .poll(
+      async () =>
+        (await (await page.request.get(`/api/worktrees/${worktree.id}`)).json())
+          .bundle.flow.nodes[0]?.params.sheet,
+    )
+    .toBe("Orders");
+  await capture(page, "project-files", inspector);
+});
+
 test("capture connection setup and environment policies", async ({ page }) => {
   await openInstanceSettings(page, "Connections");
   await page
     .getByRole("button", { name: "New connection", exact: true })
     .click();
   const dialog = page.getByRole("dialog");
-  await dialog.getByLabel("ID", { exact: true }).fill("xlsx");
-  await dialog.getByLabel("Name", { exact: true }).fill("Excel reports");
+  await dialog.getByLabel("ID", { exact: true }).fill("finance_share");
+  await dialog.getByLabel("Name", { exact: true }).fill("Finance share");
   await dialog
     .getByRole("combobox", { name: "Connector", exact: true })
-    .selectOption("xlsx");
-  await expect(dialog.getByLabel("root", { exact: true })).toHaveValue("");
+    .selectOption("local");
+  const root = dialog.getByLabel("root", { exact: true });
+  await root.fill("/srv/finance-dev");
+  await root.blur();
   await capture(page, "connection", dialog);
   await page.keyboard.press("Escape");
   await openInstanceSettings(page, "Environments");

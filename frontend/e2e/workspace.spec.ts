@@ -384,14 +384,18 @@ test("connection capabilities constrain source and export forms without a projec
     .filter({ has: page.getByText("Orders", { exact: true }) })
     .click();
   await expect(
-    page.locator(".inspector").getByRole("combobox", { name: /connection/ }),
+    page
+      .locator(".inspector")
+      .getByRole("combobox", { name: "Location", exact: true }),
   ).toContainText("Read only files");
   await page
     .locator(".react-flow__node")
     .filter({ has: page.getByText("Export revenue", { exact: true }) })
     .click();
   await expect(
-    page.locator(".inspector").getByRole("combobox", { name: /connection/ }),
+    page
+      .locator(".inspector")
+      .getByRole("combobox", { name: "Location", exact: true }),
   ).not.toContainText("Read only files");
   const after = await (
     await page.request.get("/api/worktrees/" + worktree)

@@ -88,7 +88,7 @@ def verify_duckpad(home, cache, isolated, allow_unsigned=False, import_file=None
         )
         if isolated:
             Auth(instance.store)
-            instance.engine.access.own(worktree, {"id": "admin"}, ["local", "h3"])
+            instance.engine.access.own(worktree, {"id": "admin"}, ["h3"])
         worktree_id = worktree["id"]
     finally:
         instance.close()

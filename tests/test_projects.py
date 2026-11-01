@@ -5,7 +5,7 @@ import time
 from pathlib import Path
 
 import pytest
-from helpers import example_bundle, wait_run, wait_until
+from helpers import example_bundle, files_connection, wait_run, wait_until
 
 from duckpad.auth import Auth
 from duckpad.bundle import bundle_to_files, files_to_bundle
@@ -235,7 +235,9 @@ def test_component_group_and_import_copy_are_independent(services, tmp_path):
 
 def test_edit_during_execution_preserves_launch_sql_and_publishes_stale(services, tmp_path):
     store, projects, catalog, engine = services
-    worktree = projects.create("Concurrent", example_bundle(tmp_path / "input.csv"))["id"]
+    bundle = example_bundle(tmp_path / "input.csv")
+    bundle["flow"]["nodes"][0]["params"]["connection"] = files_connection(catalog)
+    worktree = projects.create("Concurrent", bundle)["id"]
     entered, release = threading.Event(), threading.Event()
     prepare = catalog.prepare
 

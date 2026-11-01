@@ -30,6 +30,18 @@ def store(tmp_path):
     instance.close()
 
 
+def add_connection(store, identity="files"):
+    """Fresh instances have no connection; create a local folder connection in every environment."""
+    connection = {
+        "name": "Files",
+        "connector": "local",
+        "secret_fields": [],
+        "environments": {env: {"root": ""} for env in ("dev", "prod")},
+    }
+    store.put("connection", identity, connection)
+    return identity
+
+
 def test_initial_migration_matches_models_and_survives_restart(store):
     Auth(store)
     catalog = Catalog(store)
@@ -37,6 +49,8 @@ def test_initial_migration_matches_models_and_survives_restart(store):
         {"id": "qa", "label": "QA", "color": "#123456", "confirm_before_run": False}, create=True
     )
     store.put("settings", "arbitrary_config", {"enabled": True, "values": [1, 2]})
+    # Project files need no connection, so a fresh instance has none.
+    assert store.all("connection") == []
     with store.engine.connect() as connection:
         assert (
             connection.exec_driver_sql("SELECT version_num FROM alembic_version").scalar_one()
@@ -257,6 +271,7 @@ def test_project_creation_rolls_back_both_rows_on_failure(store, monkeypatch):
 
 def test_environment_creation_rolls_back_all_connections(store, monkeypatch):
     catalog = Catalog(store)
+    add_connection(store)
     original = store.put
 
     def fail_connection(kind, key, value):
@@ -270,7 +285,7 @@ def test_environment_creation_rolls_back_all_connections(store, monkeypatch):
             {"id": "qa", "label": "QA", "color": "#123456", "confirm_before_run": False}, create=True
         )
     assert catalog.environment_names() == ["dev", "prod"]
-    assert "qa" not in store.get("connection", "local")["environments"]
+    assert "qa" not in store.get("connection", "files")["environments"]
 
 
 def test_nested_rollback_and_thread_local_sessions(store):
@@ -309,7 +324,7 @@ def test_project_delete_cascades_without_deleting_shared_catalog_or_accounts(sto
     worktree = projects.create("Cascade")
     other = projects.create("Keep")
     project = worktree["project"]
-    store.put("access", project, {"members": {user["id"]: "admin"}, "connections": ["local"]})
+    store.put("access", project, {"members": {user["id"]: "admin"}, "connections": [add_connection(store)]})
     store.put("revision", worktree["id"] + ":revision", {"flow.json": "{}"})
     store.put("conflict", "conflict", {"worktree": worktree["id"], "base": {}})
     store.put("git_remote", project, {"version": "v1", "url": None, "mappings": {}})
@@ -334,7 +349,7 @@ def test_project_delete_cascades_without_deleting_shared_catalog_or_accounts(sto
         assert store.all(kind) == []
     assert store.get("project", other["project"])
     assert store.get("user", user["id"])
-    assert store.get("connection", "local")
+    assert store.get("connection", "files")
     with store.engine.connect() as connection:
         assert connection.exec_driver_sql("SELECT count(*) FROM project_member").scalar_one() == 0
         assert connection.exec_driver_sql("SELECT count(*) FROM project_connection").scalar_one() == 0
@@ -381,7 +396,7 @@ def test_unknown_fields_are_rejected_without_changing_records(store, kind):
         "user": "admin",
         "project": worktree["project"],
         "worktree": worktree["id"],
-        "connection": "local",
+        "connection": add_connection(store),
         "environment": "dev",
         "access": worktree["project"],
     }
@@ -400,10 +415,10 @@ def test_converted_fields_and_arbitrary_json_snapshots_round_trip(store):
     identity = {"issuer": "https://identity.example", "subject": "one"}
     store.put("user", "sso", {"username": "SSO", "role": "member", "active": True, "oidc": identity})
     assert store.get("user", "sso")["oidc"] == identity
-    connection = store.get("connection", "local")
+    connection = store.get("connection", add_connection(store))
     connection["environments"]["dev"] = {"arbitrary_parameter": "value"}
-    store.put("connection", "local", connection)
-    assert store.get("connection", "local") == connection
+    store.put("connection", "files", connection)
+    assert store.get("connection", "files") == connection
     transaction = {
         "browser": "browser",
         "nonce": "nonce",

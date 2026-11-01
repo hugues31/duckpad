@@ -217,6 +217,12 @@ export default function Inspector({
       else params[name] = value;
       return { ...current, params };
     });
+  // Connection parameters naming where file and destination parameters live.
+  const locations = new Set(
+    parameters
+      .filter((p) => /^(file|destination)\(/.test(p.type))
+      .map((p) => p.type.match(/\((\w+)\)/)?.[1]),
+  );
   const nodeProblems = snapshot.diagnostics.filter(
     (item) => item.file === "flow.json" && item.node === node.id,
   );
@@ -441,6 +447,9 @@ export default function Inspector({
                       : undefined
                   }
                   connections={connections}
+                  location={
+                    type === "connection" && locations.has(parameter.name)
+                  }
                   columns={port ? inputColumns[port] : undefined}
                   schemas={
                     (port && schemas[port]) || Object.values(schemas).flat()

@@ -243,6 +243,8 @@
   "sharedComponentHint": "Vous modifiez une définition de composant partagée dans cette branche.",
   "inputs": "Entrées",
   "notConnected": "Choisir une source…",
+  "location": "Emplacement",
+  "projectFiles": "Fichiers du projet",
   "upload": "Importer un fichier",
   "nodeLabel": "Nom affiché",
   "deleteNode": "Retirer le nœud",

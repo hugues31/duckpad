@@ -207,14 +207,14 @@ def test_export_warning_and_variables_match_the_requested_scope(instance):
     bundle["variables"] = {"threshold": {"type": "number", "default": 5}}
     bundle["node_sql"] = {
         "nodes/source.sql": "-- @param amount: number = 1\n-- @output result\nSELECT {{ amount }} AS value;",
-        "nodes/export.sql": '-- @kind export\n-- @input rows\n-- @param connection: connection = "local"\n-- @param target: destination(connection) = "approval.csv"\nCOPY {{ rows }} TO {{ target }} (FORMAT CSV);',
+        "nodes/export.sql": '-- @kind export\n-- @input rows\n-- @param connection: connection = ""\n-- @param target: destination(connection) = "approval.csv"\nCOPY {{ rows }} TO {{ target }} (FORMAT CSV);',
     }
     projects.write(context["worktree"], snapshot["revision"], bundle_to_files(bundle))
     identity, requested = request_run(app, client, context)
     plan = requested["tools"][0]["approval"]
     assert plan["node_count"] == 2
     assert plan["variables"]["threshold"]["value"] == 5
-    assert plan["exports"] == [{"node": "export", "label": "export", "connections": ["local"]}]
+    assert plan["exports"] == [{"node": "export", "label": "export", "connections": []}]
     final(decide(client, identity, requested, False))
     identity, requested = request_run(app, client, context, {"node": "source", "environment": "dev"})
     plan = requested["tools"][0]["approval"]

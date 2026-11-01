@@ -27,7 +27,7 @@ def test_extension_policy_recreates_databases_and_persists_across_restarts(tmp_p
         worktree = instance.projects.create("Extension policy", bundle())
         if isolated:
             Auth(instance.store)
-            instance.engine.access.own(worktree, {"id": "admin"}, ["local"])
+            instance.engine.access.own(worktree, {"id": "admin"}, [])
         identity = worktree["id"]
         commit = instance.projects.snapshot(identity)["commit"]
         for enabled in (False, True, False):
@@ -71,7 +71,7 @@ def test_extension_settings_api_requires_a_boolean_and_preserves_active_runs(tmp
         worktree = services.projects.create(
             "Active pipeline", bundle("SELECT sum(i::HUGEINT) FROM range(1000000000000) r(i)")
         )
-        app.state.access.own(worktree, {"id": "admin"}, ["local"])
+        app.state.access.own(worktree, {"id": "admin"}, [])
         run = services.engine.launch(worktree["id"], "dev")
         try:
             response = client.put("/api/extensions/settings", json=defaults)

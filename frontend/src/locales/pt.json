@@ -243,6 +243,8 @@
   "sharedComponentHint": "Você está editando uma definição de componente compartilhada neste branch.",
   "inputs": "Entradas",
   "notConnected": "Escolha uma fonte…",
+  "location": "Local",
+  "projectFiles": "Arquivos do projeto",
   "upload": "Enviar arquivo",
   "nodeLabel": "Nome de exibição",
   "deleteNode": "Remover nó",

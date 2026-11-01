@@ -1,6 +1,6 @@
 # Connections, file storage and extensions (design proposal)
 
-**Status: accepted on 1 November 2026 (see [Decisions](#decisions)). Nothing is implemented yet; each delivery step has its own ticket.**
+**Status: accepted on 1 November 2026 (see [Decisions](#decisions)). Step 1, project files without a connection, is implemented; each remaining delivery step has its own ticket.**
 
 ## Summary
 
@@ -44,7 +44,7 @@ Extensions needed to *reach* a system (`postgres`, `httpfs`, `oraduck`) stay dec
 
 ### File nodes
 
-Every file node (Load or Export CSV, Parquet, XLSX and later JSON) labels its connection field **Location**. It defaults to **Project files** and lists the file storage connections granted to the project. Relative paths resolve against the chosen location. Absolute paths remain restricted to project files and granted roots, as today.
+Every file node (Load or Export CSV, Parquet, XLSX and later JSON) labels its connection field **Location**. It defaults to **Project files** and lists the file storage connections granted to the project. Relative paths resolve against the chosen location. With **Project files**, a relative source path resolves under the project's resources, where uploads land, and a relative destination under the exports directory of the worktree in the selected environment. Absolute paths remain restricted to project files and granted roots, as today.
 
 The template language needs no new syntax: an empty `connection` parameter means project files. Built-in templates drop their `local` and `xlsx` defaults, and the default Local workspace connection is removed with its grants.
 
@@ -137,7 +137,6 @@ An instance or project created before a step may need to be recreated.
 
 ## Open questions
 
-- A relative source path currently resolves under the environment's exports directory, while uploads land in the project's resources. Should Project files resolve relative source paths under resources instead?
 - On runtimes that do not link `excel` statically, should built-in templates declare the extensions they need, or should the **Extensions** tab remain the only mechanism?
 
 ## Decisions
@@ -148,6 +147,7 @@ Decided on 1 November 2026:
 2. **Custom connector types stay open to instance administrators**, including edits to built-ins that expose a missing parameter.
 3. **Connector types are edited as JSON**, with published examples; no form-based editor.
 4. **No earlier version to support.** Breaking changes are allowed; see [Compatibility](#compatibility).
+5. **Project files resolve relative source paths under the project's resources**, where uploads land, and relative destinations under the environment's exports directory.
 
 ## Sources
 

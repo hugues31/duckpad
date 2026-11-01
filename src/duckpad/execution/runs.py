@@ -467,15 +467,15 @@ class Runner:
             if e["target"] == key
         }
         physical = {port: uid("data_") for port in node["parsed"]["outputs"]}
-        directory = self.store.paths.exports(context.worktree, context.environment)
-        directory.mkdir(parents=True, exist_ok=True)
+        project_files = self.store.paths.project_files(run["project"], context.worktree, context.environment)
+        project_files["destination"].mkdir(parents=True, exist_ok=True)
         statements = compile_template(
             node["parsed"],
             node.get("params", {}),
             {port: qi(data.table) for port, data in input_datasets.items()},
             physical,
             execution.captured,
-            directory,
+            project_files,
             input_schemas={port: data.columns for port, data in input_datasets.items()},
             variables=variables.expression_values(node),
         )

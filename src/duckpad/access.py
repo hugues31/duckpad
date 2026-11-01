@@ -61,9 +61,8 @@ class Access:
             current = self.store.get("user", user["id"])
             if not current or not current["active"]:
                 raise Problem("Authentication required", 401)
-            defaults = ["local", "sample_" + worktree["project"]] if sample else ["local"]
-            # Administrators may delete the default connection: new projects then start without it.
-            self.own(worktree, user, [c for c in defaults if self.store.get("connection", c)])
+            # Project files need no connection; only a sample project uses its own sample data.
+            self.own(worktree, user, ["sample_" + worktree["project"]] if sample else [])
 
         return factory(grant)
 
