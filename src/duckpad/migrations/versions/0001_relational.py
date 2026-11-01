@@ -346,28 +346,6 @@ def upgrade():
             },
         ],
     )
-    op.bulk_insert(
-        sa.table(
-            "connection",
-            sa.column("id"),
-            sa.column("name"),
-            sa.column("connector"),
-            sa.column("secret_fields", sa.JSON()),
-        ),
-        [{"id": "local", "name": "Local workspace", "connector": "local", "secret_fields": []}],
-    )
-    op.bulk_insert(
-        sa.table(
-            "connection_environment",
-            sa.column("connection"),
-            sa.column("environment"),
-            sa.column("parameters", sa.JSON()),
-        ),
-        [
-            {"connection": "local", "environment": name, "parameters": {"root": ""}}
-            for name in ("dev", "prod")
-        ],
-    )
 
 
 def downgrade():

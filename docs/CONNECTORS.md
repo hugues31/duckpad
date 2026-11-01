@@ -2,6 +2,8 @@
 
 A connector is a declarative setup definition. A connection is a named reusable instance with independent environment values. Both live in the instance catalog, outside Git. Projects store only references. Instance admins configure them from **Instance settings → Connections**; connector definitions have a JSON editor, and their typed parameters generate connection forms.
 
+Fresh instances have no connection. File nodes read uploads and write exports as [project files](#project-files-and-local-folders) without one; connections reach server folders, object storage and databases.
+
 The instance-admin-only `PUT /api/catalog/connector` and `PUT /api/catalog/connection` endpoints accept those same JSON objects, so an administrator can submit declarative files without changing application code. Secret fields are masked in public catalog responses and execution records. Definition snapshots and non-secret settings used by each run remain in its history. Instance admins grant each project access to connections in **Project settings**. Members see only the names and capabilities of granted connections, not the global catalog.
 
 Connection identifiers are fixed after creation; edit the display name to rename
@@ -13,7 +15,7 @@ To create a connection, use `PUT /api/catalog/connection?create=true` (409 if th
 identifier exists). For updates, use `?create=false` or omit `create` (404 if the
 connection does not exist). Masked secrets in an update retain their stored values.
 
-![Create an Excel connection with separate development and production settings](images/connection.png)
+![Create a server folder connection with separate development and production settings](images/connection.png)
 
 ## Environments
 
@@ -58,39 +60,49 @@ The table records connector validation of the embedded engine. The isolated HTTP
 
 These are the tested combinations, not claims that every newer DuckDB or operating-system build has been validated. A matching extension build is required for the installed DuckDB version. Other platforms and live AWS deployments need validation in their own environment. Raw results are in `docs/validation/`.
 
-## Local files
+## Project files and local folders
 
-The `local` connection is available in `dev` and `prod` and supports an optional root directory. CSV exposes header, delimiter and a JSON type-override map; `{}` retains native inference. Parquet uses native types. Absolute paths must fall within the project's resources/exports or an explicitly granted local connection root. Roots must exclude instance metadata and other projects. Uploads are scoped to the active project. Relative default exports resolve under `exports/<worktree>/<environment>/` when no connection root is set.
+Every file node (Load CSV, Load Parquet, Load XLSX, Export CSV and Export XLSX) has a **Location** field. It defaults to **Project files**: the project's uploads and its exports, available in every environment without a connection or a grant. Upload a file next to the node's `file` field, or enter a path:
+
+- A relative source path resolves under the project's resources, where uploads land.
+- A relative destination resolves under `exports/<worktree>/<environment>/`, so each branch and environment writes its own files.
+- An absolute path must fall within the project's resources or exports, or within the root of a connection granted to the project. Uploads are scoped to the active project.
+
+![Load XLSX reads a workbook from project files, without a connection](images/project-files.png)
+
+To use a folder on the server, an instance admin creates a **Local files** connection with a `root` directory for each environment, then grants it to the project. Members select it as the node's Location; relative paths then resolve against its root. Roots must exclude instance metadata and other projects. A connection that is not granted to the project is refused.
+
+CSV exposes header, delimiter and a JSON type-override map; `{}` retains native inference. Parquet uses native types.
 
 Single-file CSV `COPY` follows DuckDB's native replacement behavior on a second run. Duckpad does not add an overwrite option, rename files, or ask for an existence-based confirmation.
 
 ## Excel (XLSX)
 
-The `xlsx` preset loads DuckDB's `excel` extension and supports local `.xlsx`
-workbooks. It is added to existing catalogs once, preserving any custom definition
-already named `xlsx`. Connections and project grants are never added automatically.
+**Load XLSX** and **Export XLSX** read and write local `.xlsx` workbooks with
+DuckDB's `excel` extension. Like CSV and Parquet nodes, they use project files by
+default: no connection or administrator is needed.
 
-1. In **Instance settings → Connections**, create a connection with identifier
-   `xlsx` and connector **Excel (XLSX)**. Configure an optional `root` directory for
-   each environment; leave it blank for project uploads and default exports.
-2. Grant the connection to your project in **Project settings**. A connection with
-   another identifier also works; select it in each XLSX node.
-3. In a new project, add **Load XLSX**, upload a workbook or enter its path, then
+1. In a project, add **Load XLSX**, upload a workbook or enter its path, then
    choose a worksheet with `sheet`. Leave `sheet` blank for the first worksheet.
    `header=true` treats the first row as column names; turn it off for headerless
    sheets. `all_varchar=true` reads mixed columns as text instead of inferring types.
-4. Connect a result to **Export XLSX**, choose a destination and sheet name, and
+2. Connect a result to **Export XLSX**, choose a destination and sheet name, and
    run the pipeline. `header` controls whether column names are written.
+
+To read or write workbooks in a server folder, select a granted Local files
+connection as the Location. The `xlsx` preset declares the same `root` parameter
+and also loads `excel`; it is added to existing catalogs once, preserving any
+custom definition already named `xlsx`.
 
 New projects include both templates. Existing projects retain their versioned
 templates; create equivalent source/export templates through **New SQL template**
 or copy `load_xlsx` and `export_xlsx` from a new project's Code workspace.
-No Python spreadsheet dependency is needed. When it is not built into the runtime
-or already cached, the signed extension is installed in the instance's extension
-cache on first use, requiring network access and a build compatible with the
-installed DuckDB version and processor. For disconnected deployments, follow the
-[offline extension guide](OFFLINE_EXTENSIONS.md) to download and import its binary.
-CSV/Parquet-only projects do not load it.
+No Python spreadsheet dependency is needed. Duckpad's container image builds
+DuckDB with `excel`. Other DuckDB builds, such as the PyPI wheel, need it enabled
+in the project's **Extensions** tab once an instance administrator has installed
+a compatible binary; for disconnected deployments, follow the
+[offline extension guide](OFFLINE_EXTENSIONS.md). CSV/Parquet-only projects do
+not load it.
 
 Imports use native DuckDB inference: numbers generally become `DOUBLE`, while
 formatted dates, times and booleans retain their inferred types. Inconsistent cells
@@ -107,7 +119,7 @@ when exact digits matter. Legacy `.xls`, encrypted workbooks, formula recalculat
 and remote XLSX storage are outside this connector's validated scope.
 
 Uploads, local roots, environment-specific destinations and project permissions
-follow the same rules as local CSV/Parquet. Source lineage identifies the imported
+follow the same rules as CSV and Parquet project files. Source lineage identifies the imported
 dataset row and column, not an Excel cell address. Missing files, missing sheets
 and malformed workbooks report execution errors and retain the last result as
 stale. See the [DuckDB Excel extension documentation](https://duckdb.org/docs/stable/core_extensions/excel.html)

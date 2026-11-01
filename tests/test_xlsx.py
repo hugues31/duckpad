@@ -2,12 +2,11 @@
 
 import copy
 import shutil
-from pathlib import Path
 
 import duckdb
 import pytest
 from fastapi.testclient import TestClient
-from helpers import wait_run
+from helpers import statically_linked, wait_run
 from xlsx_fixture import workbook
 
 from duckpad.app import create_app
@@ -19,15 +18,6 @@ from duckpad.services import Services
 from duckpad.store import Store
 from duckpad.templates import compile_template, parse_template
 from duckpad.util import Problem
-
-
-@pytest.fixture(scope="module")
-def excel_cache(tmp_path_factory):
-    cache = tmp_path_factory.mktemp("excel-extensions")
-    with duckdb.connect(config={"extension_directory": str(cache)}) as db:
-        db.execute("INSTALL excel")
-        db.execute("LOAD excel")
-    return cache
 
 
 @pytest.fixture(params=[False, True], ids=["embedded", "isolated"])
@@ -63,12 +53,19 @@ def source_bundle(params=None):
     }
 
 
-def project(instance, bundle):
+def project(instance, bundle, connections=()):
     worktree = instance.projects.create("Spreadsheets", bundle)
     if instance.engine.access:
         Auth(instance.store)
-        instance.engine.access.own(worktree, {"id": "admin"}, ["local", "xlsx"])
+        instance.engine.access.own(worktree, {"id": "admin"}, list(connections))
     return worktree["id"]
+
+
+def project_files(instance, worktree):
+    """The project's resources, where uploads land and relative project file sources resolve."""
+    folder = instance.store.paths.resources(instance.projects.get(worktree)["project"])
+    folder.mkdir(parents=True, exist_ok=True)
+    return folder
 
 
 def replace_source(instance, worktree, **params):
@@ -102,20 +99,24 @@ def test_xlsx_import_transform_lineage_export_replacement_and_environments(xlsx_
     prod.mkdir()
     workbook(dev / "workbook.xlsx")
     connect(instance.catalog, {"dev": dev, "prod": prod})
-    bundle = source_bundle({"sheet": "Orders"})
+    bundle = source_bundle({"connection": "xlsx", "sheet": "Orders"})
     bundle["templates"]["totals"] = (
         "-- @input source\n-- @output result\n"
         "SELECT region, SUM(amount) AS amount FROM {{ source }} GROUP BY region ORDER BY region;"
     )
     bundle["flow"]["nodes"] += [
         {"id": "totals", "template": "totals", "params": {}},
-        {"id": "export", "template": "export_xlsx", "params": {"sheet": "Regional totals"}},
+        {
+            "id": "export",
+            "template": "export_xlsx",
+            "params": {"connection": "xlsx", "sheet": "Regional totals"},
+        },
     ]
     bundle["flow"]["edges"] = [
         {"id": str(i), "source": source, "sourceHandle": "result", "target": target, "targetHandle": "source"}
         for i, (source, target) in enumerate((("source", "totals"), ("totals", "export")))
     ]
-    worktree = project(instance, bundle)
+    worktree = project(instance, bundle, ["xlsx"])
     for _ in range(2):
         run = wait_run(instance.store, instance.engine.launch(worktree, "dev"), timeout=30)
         assert run["status"] == "success", run
@@ -142,13 +143,10 @@ def test_xlsx_import_transform_lineage_export_replacement_and_environments(xlsx_
     assert instance.engine.preview(worktree, "dev", "totals")["rows"][0]["values"] == ["North", 20]
 
 
-def test_xlsx_first_sheet_headerless_and_mixed_columns(xlsx_services, tmp_path):
+def test_xlsx_first_sheet_headerless_and_mixed_columns(xlsx_services):
     instance = xlsx_services
-    root = tmp_path / "books"
-    root.mkdir()
-    workbook(root / "workbook.xlsx")
-    connect(instance.catalog, {"dev": root})
     worktree = project(instance, source_bundle())
+    workbook(project_files(instance, worktree) / "workbook.xlsx")
     for params, expected in [
         ({}, [[999]]),
         ({"sheet": "Raw", "header": False}, [[1, 10], [2, 20]]),
@@ -161,14 +159,12 @@ def test_xlsx_first_sheet_headerless_and_mixed_columns(xlsx_services, tmp_path):
         assert [row["values"] for row in preview["rows"]] == expected
 
 
-def test_xlsx_failures_preserve_previous_result(xlsx_services, tmp_path):
+def test_xlsx_failures_preserve_previous_result(xlsx_services):
     instance = xlsx_services
-    root = tmp_path / "books"
-    root.mkdir()
+    worktree = project(instance, source_bundle())
+    root = project_files(instance, worktree)
     workbook(root / "workbook.xlsx")
     (root / "broken.xlsx").write_text("Not a workbook")
-    connect(instance.catalog, {"dev": root})
-    worktree = project(instance, source_bundle())
     first = wait_run(instance.store, instance.engine.launch(worktree, "dev"), timeout=30)
     assert first["status"] == "success", first
     for params in [
@@ -186,14 +182,12 @@ def test_xlsx_failures_preserve_previous_result(xlsx_services, tmp_path):
         assert preview["rows"][0]["values"] == [999]
 
 
-def test_xlsx_api_upload_requires_grant_and_blocks_outside_files(tmp_path, excel_cache):
+def test_xlsx_api_upload_needs_no_connection_and_blocks_outside_files(tmp_path, excel_cache):
     app = create_app(tmp_path / "instance", watch=False)
     instance = app.state.services
     shutil.copytree(excel_cache, instance.store.home / "extensions")
     with TestClient(app) as client:
         client.post("/api/login", json={"password": app.state.auth.initial_password})
-        connection = {"id": "xlsx", "name": "Workbooks", "connector": "xlsx", "environments": {"dev": {}}}
-        assert client.put("/api/catalog/connection?create=true", json=connection).status_code == 200
         worktree = client.post("/api/projects", json={"name": "XLSX uploads"}).json()
         identity = worktree["id"]
         source = workbook(tmp_path / "outside.xlsx")
@@ -210,19 +204,15 @@ def test_xlsx_api_upload_requires_grant_and_blocks_outside_files(tmp_path, excel
         assert uploaded.status_code == 200
         snapshot = client.get(f"/api/worktrees/{identity}").json()
         bundle = source_bundle({"file": uploaded.json()["path"], "sheet": "Orders"})
+        if not statically_linked("excel"):
+            bundle["extensions"] = {"excel": {"source": "core", "enabled": True}}
         assert (
             client.put(
                 f"/api/worktrees/{identity}", json={"revision": snapshot["revision"], "bundle": bundle}
             ).status_code
             == 200
         )
-        assert client.get(f"/api/worktrees/{identity}/compile/source?environment=dev").status_code == 403
-        assert (
-            client.put(
-                f"/api/projects/{worktree['project']}/connections", json={"connections": ["xlsx"]}
-            ).status_code
-            == 200
-        )
+        assert client.get(f"/api/worktrees/{identity}/compile/source?environment=dev").status_code == 200
         run = client.post(f"/api/worktrees/{identity}/runs", json={"environment": "dev"})
         assert run.status_code == 200, run.text
         assert wait_run(instance.store, run.json(), timeout=30)["status"] == "success"
@@ -233,13 +223,19 @@ def test_xlsx_api_upload_requires_grant_and_blocks_outside_files(tmp_path, excel
         readonly = copy.deepcopy(instance.store.get("connector", "xlsx"))
         readonly.update(id="readonly_xlsx", capabilities=["read"])
         instance.catalog.save("connector", readonly)
-        instance.catalog.save("connection", {**connection, "connector": "readonly_xlsx"})
+        connection = {
+            "id": "xlsx",
+            "name": "Workbooks",
+            "connector": "readonly_xlsx",
+            "environments": {"dev": {}},
+        }
+        instance.catalog.save("connection", connection, create=True)
         with pytest.raises(Problem, match="does not support write"):
             compile_template(
                 parse_template(BUILTINS["export_xlsx"]),
-                {},
+                {"connection": "xlsx"},
                 {"source": '"data"'},
                 {},
                 instance.catalog.capture(["xlsx"], "dev")[0],
-                Path(),
+                instance.store.paths.project_files(worktree["project"], identity, "dev"),
             )

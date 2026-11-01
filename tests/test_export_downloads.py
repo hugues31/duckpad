@@ -13,21 +13,13 @@ from xml.etree import ElementTree
 import duckdb
 import pytest
 from fastapi.testclient import TestClient
-from helpers import join_run
+from helpers import files_connection, join_run, statically_linked
 
 from duckpad.app import create_app
 from duckpad.artifacts import CHUNK_SIZE, open_regular
 from duckpad.builtin_templates import BUILTINS
 from duckpad.bundle import bundle_to_files
 from duckpad.util import digest
-
-
-@pytest.fixture(scope="module")
-def export_excel_cache(tmp_path_factory):
-    cache = tmp_path_factory.mktemp("export-excel")
-    with duckdb.connect(config={"extension_directory": str(cache)}) as db:
-        db.execute("INSTALL excel")
-    return cache
 
 
 @pytest.fixture
@@ -64,6 +56,8 @@ def create(instance, format_name="csv", **params):
         "components": {},
         "documentation": {},
     }
+    if format_name == "xlsx" and not statically_linked("excel"):
+        bundle["extensions"] = {"excel": {"source": "core", "enabled": True}}
     snapshot = services.projects.snapshot(worktree["id"])
     services.projects.write(worktree["id"], snapshot["revision"], bundle_to_files(bundle))
     return worktree, f"/api/worktrees/{worktree['id']}/exports/export"
@@ -88,22 +82,14 @@ def download(client, endpoint, run, environment="dev", **kwargs):
 
 @pytest.mark.parametrize("format_name", ["csv", "xlsx"])
 @pytest.mark.parametrize("header", [True, False])
-def test_contents_options_and_response_metadata(instance, export_excel_cache, format_name, header):
+def test_contents_options_and_response_metadata(instance, excel_cache, format_name, header):
     services, client = instance
     filename = "Quarterly résumé." + format_name
     if format_name == "xlsx":
-        shutil.copytree(export_excel_cache, services.store.home / "extensions")
-        client.put(
-            "/api/catalog/connection?create=true",
-            json={"id": "xlsx", "name": "Sheets", "connector": "xlsx", "environments": {"dev": {}}},
-        )
+        shutil.copytree(excel_cache, services.store.home / "extensions")
     worktree, endpoint = create(
         instance, format_name, destination=filename, header=header, delimiter=";", sheet="Full export"
     )
-    if format_name == "xlsx":
-        client.put(
-            f"/api/projects/{worktree['project']}/connections", json={"connections": ["local", "xlsx"]}
-        )
     assert client.get(endpoint, params={"environment": "dev"}).json()["status"] == "not_run"
     run = execute(services, worktree)
     info = client.get(endpoint, params={"environment": "dev"}).json()
@@ -139,7 +125,7 @@ def test_contents_options_and_response_metadata(instance, export_excel_cache, fo
             assert book.find("s:sheets/s:sheet", namespace).attrib["name"] == "Full export"
             sheet = ElementTree.fromstring(archive.read("xl/worksheets/sheet1.xml"))
             assert len(sheet.findall("s:sheetData/s:row", namespace)) == 1003 + header
-        with duckdb.connect(config={"extension_directory": str(export_excel_cache)}) as db:
+        with duckdb.connect(config={"extension_directory": str(excel_cache)}) as db:
             db.execute("LOAD excel")
             rows = db.execute(
                 "SELECT * FROM read_xlsx(?, sheet='Full export', header=?)", [str(original), header]
@@ -363,7 +349,7 @@ def test_imported_and_custom_file_exports_offer_downloads(instance):
 
     def custom(bundle, body):
         bundle["templates"]["custom"] = (
-            '-- @kind export\n-- @input rows\n-- @param connection: connection = "local"\n'
+            '-- @kind export\n-- @input rows\n-- @param connection: connection = ""\n'
             '-- @param target: destination(connection) = "custom.csv"\n' + body
         )
         bundle["flow"]["nodes"][1].update(template="custom", params={})
@@ -425,7 +411,9 @@ def test_streams_in_bounded_chunks_and_closes_the_file(instance, monkeypatch):
 
 def test_completed_contexts_do_not_replace_each_other_and_grants_are_rechecked(instance):
     services, client = instance
-    worktree, endpoint = create(instance)
+    worktree, endpoint = create(instance, connection=files_connection(services.catalog))
+    grants = f"/api/projects/{worktree['project']}/connections"
+    assert client.put(grants, json={"connections": ["files"]}).status_code == 200
     dev = execute(services, worktree)
     prod = execute(services, worktree, "prod")
     branch = services.projects.branch(worktree["id"], "other-export")
@@ -435,10 +423,7 @@ def test_completed_contexts_do_not_replace_each_other_and_grants_are_rechecked(i
     assert download(client, endpoint, prod).status_code == 409
     assert download(client, endpoint, dev, "prod").status_code == 409
     assert download(client, endpoint, branch_run).status_code == 409
-    assert (
-        client.put(f"/api/projects/{worktree['project']}/connections", json={"connections": []}).status_code
-        == 200
-    )
+    assert client.put(grants, json={"connections": []}).status_code == 200
     assert client.get(endpoint, params={"environment": "dev"}).json()["status"] == "stale"
     assert download(client, endpoint, dev).status_code == 409
 

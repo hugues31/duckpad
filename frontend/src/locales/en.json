@@ -243,6 +243,8 @@
   "sharedComponentHint": "You are editing a shared component definition in this branch.",
   "inputs": "Inputs",
   "notConnected": "Choose a source…",
+  "location": "Location",
+  "projectFiles": "Project files",
   "upload": "Upload file",
   "nodeLabel": "Display name",
   "deleteNode": "Remove node",

@@ -346,12 +346,17 @@ def connection_for(connections, reference):
     return connections[reference]
 
 
+def is_project_files(reference):
+    """An empty connection selects project files: the project's uploads and exports, never a connection."""
+    return reference in (None, "")
+
+
 def render_parameter(
     template,
     parameter,
     parameters,
     connections,
-    directory,
+    project_files,
     input_schemas=None,
     variables=None,
     placeholders=None,
@@ -370,18 +375,30 @@ def render_parameter(
     if kind in PREPARATION_TYPES:
         return render_preparation(kind, value, (input_schemas or {}).get(argument))
     if kind == "connection":
+        if is_project_files(value):
+            # Only file and destination parameters can resolve project files.
+            if any(name in REFERENCE.findall(block["sql"]) for block in template["blocks"]):
+                raise Problem(f"Choose a connection for {name}")
+            return ""
         connection = connection_for(connections, value)
         capability = "write" if template["kind"] == "export" else "read"
         if capability not in connection["definition"].get("capabilities", []):
             raise Problem(f"Connection {value} does not support {capability}")
         return qi(connection["alias"])
     if kind == "secret":
+        if is_project_files(parameters[argument]):
+            raise Problem(f"Choose a connection for {argument}")
         return literal(connection_for(connections, parameters[argument])["secret_name"])
-    if kind in ("file", "destination"):
-        root = connection_for(connections, parameters[argument])["values"].get("root", "") if argument else ""
+    if kind in RESOURCE_TYPES:
+        reference = parameters[argument] if argument else None
+        root = (
+            ""
+            if is_project_files(reference)
+            else connection_for(connections, reference)["values"].get("root", "")
+        )
         path = str(value)
         if not URI.match(path) and not Path(path).is_absolute():
-            path = str(Path(root or directory) / path)
+            path = str(Path(root or project_files[kind]) / path)
         return literal(path)
     if kind in ("column", "identifier"):
         return ".".join(qi(part) for part in str(value).split("."))
@@ -531,10 +548,12 @@ def is_local_table(table, local_names):
 
 
 def compile_template(
-    template, params, inputs, physical_outputs, connections, directory, input_schemas=None, variables=None
+    template, params, inputs, physical_outputs, connections, project_files, input_schemas=None, variables=None
 ):
     """Compile a template's blocks into statements with their bound parameters.
 
+    `project_files` maps `file` and `destination` to the directories that resolve their relative
+    paths when no connection root applies: the project's resources and the environment's exports.
     `variables` maps the variables referenced inside expression parameters to their type and
     value; each statement lists the named parameters binding them in `variable_bindings`.
     """
@@ -545,10 +564,18 @@ def compile_template(
     bindings.update({placeholders[name]: variable["value"] for name, variable in variables.items()})
     for parameter in template["parameters"]:
         name = parameter["name"]
-        if parameters[name] is None:
+        # A connection without a value selects project files.
+        if parameters[name] is None and parameter["type"] != "connection":
             raise Problem(f"Parameter {name} is required")
         rendered = render_parameter(
-            template, parameter, parameters, connections, directory, input_schemas, variables, placeholders
+            template,
+            parameter,
+            parameters,
+            connections,
+            project_files,
+            input_schemas,
+            variables,
+            placeholders,
         )
         if rendered is None:
             bindings[name] = parameters[name]

@@ -510,7 +510,12 @@ def test_a_launch_uses_the_values_of_its_captured_commit(services):
     store, projects, catalog, engine = services
     bundle = project_bundle()
     bundle["templates"]["orders"] = (
-        '-- @kind source\n-- @param connection: connection = "local"\n-- @output result\n' + ORDERS
+        '-- @kind source\n-- @param connection: connection = "files"\n-- @output result\n' + ORDERS
+    )
+    catalog.save(
+        "connection",
+        {"id": "files", "name": "Files", "connector": "local", "environments": {"prod": {"root": ""}}},
+        create=True,
     )
     worktree = projects.create("Variables", bundle)["id"]
     entered, release = threading.Event(), threading.Event()

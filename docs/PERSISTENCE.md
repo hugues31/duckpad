@@ -3,7 +3,7 @@
 Duckpad stores instance metadata in SQLite through SQLModel. Alembic applies the
 packaged revisions in `src/duckpad/migrations/versions/` before the application
 starts serving requests. The initial revision creates 20 business tables and
-seeds the default environments, connectors and local connection. It does not
+seeds the default environments and connectors, but no connection. It does not
 import the former `records` document table. Use a fresh data directory for this
 breaking change; an existing document database is rejected without deleting it.
 

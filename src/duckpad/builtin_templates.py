@@ -4,7 +4,7 @@ BUILTINS = {
     "load_csv": """-- @label Load CSV
 -- @description Read a CSV resource using native DuckDB options.
 -- @kind source
--- @param connection: connection = "local"
+-- @param connection: connection = ""
 -- @param file: file(connection) = "orders.csv"
 -- @param delimiter: text = ","
 -- @param header: boolean = true
@@ -14,7 +14,7 @@ SELECT * FROM read_csv({{ file }}, delim={{ delimiter }}, header={{ header }}, t
 """,
     "load_parquet": """-- @label Load Parquet
 -- @kind source
--- @param connection: connection = "local"
+-- @param connection: connection = ""
 -- @param file: file(connection) = "customers.parquet"
 -- @output result
 SELECT * FROM read_parquet({{ file }});
@@ -22,7 +22,7 @@ SELECT * FROM read_parquet({{ file }});
     "load_xlsx": """-- @label Load XLSX
 -- @description Read an XLSX worksheet. Leave sheet blank to use the first sheet; all_varchar preserves mixed columns as text.
 -- @kind source
--- @param connection: connection = "xlsx"
+-- @param connection: connection = ""
 -- @param file: file(connection) = "workbook.xlsx"
 -- @param sheet: text = ""
 -- @param header: boolean = true
@@ -77,7 +77,7 @@ SELECT {{ groups }}, {{ measures }} FROM {{ source }} GROUP BY {{ groups }};
     "export_csv": """-- @label Export CSV
 -- @kind export
 -- @input source
--- @param connection: connection = "local"
+-- @param connection: connection = ""
 -- @param destination: destination(connection) = "export.csv"
 -- @param delimiter: text = ","
 -- @param header: boolean = true
@@ -87,7 +87,7 @@ COPY {{ source }} TO {{ destination }} (FORMAT CSV, HEADER {{ header }}, DELIMIT
 -- @description Write a single-sheet XLSX workbook, replacing the destination on each run.
 -- @kind export
 -- @input source
--- @param connection: connection = "xlsx"
+-- @param connection: connection = ""
 -- @param destination: destination(connection) = "export.xlsx"
 -- @param sheet: text = "Sheet1"
 -- @param header: boolean = true

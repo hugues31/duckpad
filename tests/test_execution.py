@@ -3,7 +3,7 @@ import threading
 from pathlib import Path
 
 import pytest
-from helpers import example_bundle, pipeline, wait_run, wait_until
+from helpers import example_bundle, files_connection, pipeline, wait_run, wait_until
 
 from duckpad.bundle import bundle_to_files
 from duckpad.util import Problem
@@ -146,6 +146,7 @@ def test_atomic_admission_and_cancellation(services, tmp_path):
     bundle["templates"]["total"] = (
         "-- @input source\n-- @output result\nSELECT sum(a.amount * b.amount * c.amount) AS total FROM {{ source }} a CROSS JOIN {{ source }} b CROSS JOIN {{ source }} c;"
     )
+    bundle["flow"]["nodes"][0]["params"]["connection"] = files_connection(engine.catalog)
     wt = projects.create("Test", bundle)["id"]
     # Hold preparation deterministically to verify rejection cannot invalidate or queue.
     original = engine.catalog.prepare

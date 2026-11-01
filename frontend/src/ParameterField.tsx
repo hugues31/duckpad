@@ -18,6 +18,7 @@ export default function ParameterField({
   onChange,
   onBlur,
   connections,
+  location,
   schemas,
   columns,
   worktree,
@@ -31,6 +32,8 @@ export default function ParameterField({
   onChange: (value: Json | undefined) => void;
   onBlur?: () => void;
   connections: Snapshot["connections"];
+  /** A connection that file or destination parameters resolve against; empty selects project files. */
+  location?: boolean;
   schemas?: string[];
   columns?: Column[];
   worktree?: string;
@@ -61,7 +64,11 @@ export default function ParameterField({
   return (
     <div className="field">
       <span>
-        <label htmlFor={id}>{name.replaceAll("_", " ")}</label>
+        <label htmlFor={id}>
+          {location && name === "connection"
+            ? t("location")
+            : name.replaceAll("_", " ")}
+        </label>
         {variable?.control}
         <small>{base}</small>
       </span>
@@ -84,7 +91,11 @@ export default function ParameterField({
           onChange={(e) => onChange(e.target.value)}
           onBlur={onBlur}
         >
-          {!text && <option value="">{t("notConnected")}</option>}
+          {location ? (
+            <option value="">{t("projectFiles")}</option>
+          ) : (
+            !text && <option value="">{t("notConnected")}</option>
+          )}
           {text && !connections.some((c) => c.id === text) && (
             <option value={text} disabled>
               {text} · {t("unavailableConnection")}

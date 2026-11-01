@@ -47,7 +47,7 @@ test("configure Excel, upload a worksheet and export it through the canvas", asy
     await page.getByRole("button", { name: "Load XLSX", exact: true }).click();
     const inspector = page.locator(".inspector");
     await inspector
-      .getByRole("combobox", { name: /connection/ })
+      .getByRole("combobox", { name: "Location", exact: true })
       .selectOption("xlsx_browser");
     const upload = inspector.getByLabel("Upload file", { exact: true });
     await expect(upload).toHaveAttribute("accept", /\.xlsx/);
@@ -82,7 +82,7 @@ test("configure Excel, upload a worksheet and export it through the canvas", asy
       )
       .toBe(1);
     await inspector
-      .getByRole("combobox", { name: /connection/ })
+      .getByRole("combobox", { name: "Location", exact: true })
       .selectOption("xlsx_browser");
     await inspector
       .getByRole("textbox", { name: /sheet/ })

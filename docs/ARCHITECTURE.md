@@ -268,9 +268,11 @@ bind and prints a startup notice. It is not suitable for shared deployments or
 access through a proxy or tunnel. The option is not persisted or inferred from
 the operating system.
 
-The default local connection covers only each project's resources and exports.
-Additional local roots must exist and exclude the instance directory, its ancestors
-and other projects. Existing results are not recomputed during read requests. Sample
-projects receive their own input directories and connection grants. Users may
+Project files, each project's resources and its worktrees' exports, need no
+connection: the isolated worker always grants them, and an empty connection
+parameter selects them. Local roots of granted connections must exist and exclude
+the instance directory, its ancestors and other projects. Existing results are not
+recomputed during read requests. Sample projects receive their own input
+directories and connection grants. Users may
 upload source files from the node inspector. Read-only roots stay read-only at the
 OS layer even if SQL uses a different declared connection.

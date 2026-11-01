@@ -26,7 +26,7 @@ def isolated(tmp_path):
     instance.close()
 
 
-def project(services, name, connections=("local",), nodes=(), templates=None, edges=()):
+def project(services, name, connections=(), nodes=(), templates=None, edges=()):
     worktree = services.projects.create(name)
     services.engine.access.grant_connections(worktree["project"], list(connections))
     snapshot = services.projects.snapshot(worktree["id"])
@@ -37,7 +37,7 @@ def project(services, name, connections=("local",), nodes=(), templates=None, ed
     return worktree
 
 
-def csv_project(services, name, connections=("local",), extra_nodes=(), extra_templates=None):
+def csv_project(services, name, connections=(), extra_nodes=(), extra_templates=None):
     worktree = project(services, name, connections)
     folder = services.store.home / "resources" / worktree["project"]
     folder.mkdir(parents=True, exist_ok=True)
@@ -108,7 +108,7 @@ def test_isolated_csv_pipeline_ignores_an_authorized_unconfigured_connection(iso
     worktree = csv_project(
         isolated,
         "CSV only",
-        ["local", "warehouse"],
+        ["warehouse"],
         [oracle],
         {
             "oracle": '-- @kind source\n-- @param db: connection = "warehouse"\n-- @output result\nSELECT 1 AS value;'
@@ -195,11 +195,11 @@ def test_remote_access_follows_the_secret_type_rather_than_the_connector_id(isol
             pass
 
     monkeypatch.setattr(sandbox, "Database", Recorded)
-    remote = project(isolated, "Remote", ["local", "lake"])
+    remote = project(isolated, "Remote", ["lake"])
     local = project(isolated, "Local")
     engine.context(remote["id"], "dev", create=True)
     engine.context(local["id"], "dev", create=True)
-    assert set(policies[0]["captured"]) == {"local", "lake"}
+    assert set(policies[0]["captured"]) == {"lake"}
     assert policies[0]["remote_paths"] == ["s3://", "s3a://", "s3n://"]
     assert policies[1]["remote_paths"] == []
 
@@ -227,7 +227,7 @@ def test_extension_installation_failure_is_reported_without_secrets(isolated, tm
         },
         create=True,
     )
-    worktree = project(isolated, "Extensions", ["local", "custom"])
+    worktree = project(isolated, "Extensions", ["custom"])
     with pytest.raises(Problem, match="Cannot install the extensions of connection Custom data") as error:
         engine.context(worktree["id"], "dev", create=True)
     assert error.value.status == 503

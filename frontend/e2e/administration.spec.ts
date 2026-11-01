@@ -150,7 +150,7 @@ test("project settings keep unsaved connection grants until they are saved or di
   await role.selectOption("editor");
   await expect(role).toHaveValue("editor");
   await expect(grant).toBeChecked();
-  expect(await grantedConnections(page, project)).toEqual(["local"]);
+  expect(await grantedConnections(page, project)).toEqual([]);
 
   // A rejected save keeps the selection to retry.
   await page.route(`**/api/projects/${project}/connections`, (route) =>
@@ -180,9 +180,7 @@ test("project settings keep unsaved connection grants until they are saved or di
   await expect(save).toBeDisabled();
   await expect(unsaved).toHaveCount(0);
   await expect(page.getByRole("alert")).toHaveCount(0);
-  expect(await grantedConnections(page, project)).toEqual(
-    [connection, "local"].sort(),
-  );
+  expect(await grantedConnections(page, project)).toEqual([connection]);
   // Selecting the saved grants again leaves nothing to save.
   await grant.uncheck();
   await expect(save).toBeEnabled();

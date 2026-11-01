@@ -146,11 +146,12 @@ def preparation_services(tmp_path, request):
     instance.catalog.save(
         "connection",
         {
-            "id": "local",
+            "id": "input_files",
             "name": "Input files",
             "connector": "local",
             "environments": {"dev": {"root": str(tmp_path / "data")}},
         },
+        create=True,
     )
     yield instance
     instance.close()
@@ -173,10 +174,18 @@ def test_save_reload_replacement_schema_change_failure_and_downstream_export(pre
     bundle = {
         "flow": {
             "nodes": [
-                {"id": "source", "template": "load_csv", "params": {"file": "input.csv"}},
+                {
+                    "id": "source",
+                    "template": "load_csv",
+                    "params": {"connection": "input_files", "file": "input.csv"},
+                },
                 {"id": "clean", "template": "clean_values", "params": {"columns": clean}},
                 {"id": "select", "template": "select_columns", "params": {"columns": selection}},
-                {"id": "export", "template": "export_csv", "params": {"destination": "output.csv"}},
+                {
+                    "id": "export",
+                    "template": "export_csv",
+                    "params": {"connection": "input_files", "destination": "output.csv"},
+                },
             ],
             "edges": [
                 {"id": str(i), "source": a, "sourceHandle": "result", "target": b, "targetHandle": "source"}
@@ -197,7 +206,7 @@ def test_save_reload_replacement_schema_change_failure_and_downstream_export(pre
     worktree = instance.projects.create("Data preparation", bundle)
     if instance.engine.access:
         Auth(instance.store)
-        instance.engine.access.own(worktree, {"id": "admin"}, ["local"])
+        instance.engine.access.own(worktree, {"id": "admin"}, ["input_files"])
     wt = worktree["id"]
     snapshot = instance.projects.snapshot(wt)
     instance.projects.write(wt, snapshot["revision"], bundle_to_files(snapshot["bundle"]))

@@ -275,9 +275,12 @@ def test_preview_limit_lineage_and_connection_revocation(instance):
     bundle = snapshot["bundle"]
     bundle["flow"]["nodes"] = [{"id": "source", "params": {}}]
     bundle["node_sql"] = {
-        "nodes/source.sql": '-- @kind source\n-- @param connection: connection = "local"\n-- @output result\nSELECT range AS value FROM range(100);'
+        "nodes/source.sql": '-- @kind source\n-- @param connection: connection = "files"\n-- @output result\nSELECT range AS value FROM range(100);'
     }
     projects.write(worktree["id"], snapshot["revision"], bundle_to_files(bundle))
+    files = {"id": "files", "name": "Files", "connector": "local", "environments": {"dev": {"root": ""}}}
+    assert client.put("/api/catalog/connection?create=true", json=files).status_code == 200
+    app.state.access.grant_connections(worktree["project"], ["files"])
     run = app.state.services.engine.launch(worktree["id"], "dev")
     assert join_run(app.state.services.store, run["id"])["status"] == "success"
     ctx = dependencies(app, client, context)

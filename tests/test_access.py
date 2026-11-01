@@ -1,13 +1,15 @@
 """Authorization, revocation and SQL isolation acceptance tests."""
 
 import re
+import shutil
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pytest
 from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
-from helpers import wait_run
+from helpers import statically_linked, wait_run
+from xlsx_fixture import workbook
 
 from duckpad.app import create_app
 from duckpad.util import Problem
@@ -187,7 +189,7 @@ def test_accounts_memberships_and_grants_survive_restart(tmp_path):
         settings_path = "/projects/" + worktree["project"] + "/settings"
         settings = request(client, headers, "GET", settings_path).json()
         assert settings["members"][0]["id"] == owner["id"]
-        assert settings["connections"] == ["local"]
+        assert settings["connections"] == []
     app = create_app(home, watch=False)
     with TestClient(app) as client:
         assert app.state.auth.initial_password is None
@@ -195,10 +197,10 @@ def test_accounts_memberships_and_grants_survive_restart(tmp_path):
         assert request(client, headers, "GET", settings_path).json() == settings
 
 
-def test_projects_are_created_without_the_default_local_connection(instance):
+def test_fresh_instances_list_no_connection_and_new_projects_have_no_grant(instance):
     app, client = instance
     owner, headers = account(app, "owner")
-    assert client.delete("/api/catalog/connection/local").status_code == 200
+    assert client.get("/api/catalog").json()["connections"] == []
     project = own_project(app, client, headers)["project"]
     settings = request(client, headers, "GET", f"/projects/{project}/settings").json()
     assert settings["connections"] == [] and settings["members"][0]["id"] == owner["id"]
@@ -207,6 +209,90 @@ def test_projects_are_created_without_the_default_local_connection(instance):
     project = example.json()["project"]
     settings = request(client, headers, "GET", f"/projects/{project}/settings").json()
     assert settings["connections"] == ["sample_" + project]
+
+
+def test_members_read_their_uploads_and_export_without_a_connection(instance, tmp_path, excel_cache):
+    app, client = instance
+    shutil.copytree(excel_cache, app.state.services.store.home / "extensions", dirs_exist_ok=True)
+    _, headers = account(app, "member")
+    worktree = own_project(app, client, headers, "Budget")
+    identity = worktree["id"]
+    upload = workbook(tmp_path / "budget.xlsx")
+
+    def uploaded(name, content):
+        response = request(
+            client, headers, "POST", f"/worktrees/{identity}/uploads", files={"file": (name, content)}
+        )
+        assert response.status_code == 200, response.text
+        return response.json()["path"]
+
+    snapshot = request(client, headers, "GET", f"/worktrees/{identity}").json()
+    assert snapshot["connections"] == []
+    bundle = snapshot["bundle"]
+    bundle["flow"]["nodes"] = [
+        {
+            "id": "budget",
+            "template": "load_xlsx",
+            "params": {"file": uploaded("budget.xlsx", upload.read_bytes()), "sheet": "Orders"},
+        },
+        {"id": "orders", "template": "load_csv", "params": {"file": uploaded("orders.csv", b"id\n1\n")}},
+        {"id": "export", "template": "export_csv", "params": {"destination": "budget.csv"}},
+    ]
+    bundle["flow"]["edges"] = [
+        {
+            "id": "e",
+            "source": "budget",
+            "sourceHandle": "result",
+            "target": "export",
+            "targetHandle": "source",
+        }
+    ]
+    if not statically_linked("excel"):
+        bundle["extensions"] = {"excel": {"source": "core", "enabled": True}}
+    saved = request(
+        client,
+        headers,
+        "PUT",
+        f"/worktrees/{identity}",
+        json={"revision": snapshot["revision"], "bundle": bundle},
+    )
+    assert saved.status_code == 200, saved.text
+    run = request(client, headers, "POST", f"/worktrees/{identity}/runs", json={"environment": "dev"})
+    assert run.status_code == 200, run.text
+    assert wait_run(app.state.services.store, run.json(), timeout=30)["status"] == "success"
+    exported = app.state.services.store.paths.exports(identity, "dev") / "budget.csv"
+    assert exported.read_text().splitlines()[1].startswith("1.0,North,12.5")
+
+    # A connection the project was not granted stays refused.
+    share = tmp_path / "share"
+    share.mkdir()
+    connection = {
+        "id": "share",
+        "name": "Share",
+        "connector": "local",
+        "environments": {"dev": {"root": str(share)}},
+    }
+    assert client.put("/api/catalog/connection?create=true", json=connection).status_code == 200
+    snapshot = request(client, headers, "GET", f"/worktrees/{identity}").json()
+    assert snapshot["connections"] == []
+    bundle = snapshot["bundle"]
+    bundle["flow"]["nodes"][1]["params"]["connection"] = "share"
+    saved = request(
+        client,
+        headers,
+        "PUT",
+        f"/worktrees/{identity}",
+        json={"revision": snapshot["revision"], "bundle": bundle},
+    )
+    assert saved.status_code == 200, saved.text
+    assert (
+        request(client, headers, "GET", f"/worktrees/{identity}/compile/orders?environment=dev").status_code
+        == 403
+    )
+    launch = request(
+        client, headers, "POST", f"/worktrees/{identity}/runs", json={"environment": "dev", "node": "orders"}
+    )
+    assert launch.status_code == 422 and "not authorized" in launch.json()["error"]
 
 
 @pytest.mark.parametrize("kind", ["project", "example"])
@@ -224,7 +310,7 @@ def test_a_project_without_its_access_records_leaves_nothing_behind(instance, mo
     assert response.status_code == 409 and response.json()["error"] == "Simulated access failure"
     home = services.store.home
     assert services.store.all("project") == [] and services.store.all("worktree") == []
-    assert [c["id"] for c in services.store.all("connection")] == ["local"]
+    assert services.store.all("connection") == []
     assert not list(home.glob("projects/*")) and not list(home.glob("resources/*"))
 
 
@@ -566,8 +652,14 @@ def test_sql_worker_blocks_metadata_other_projects_and_symlinks(instance, tmp_pa
         cursor.execute("COPY (SELECT 1) TO '" + str(store.home / "overwrite.csv") + "'")
     cursor.close()
     # An editor cannot grant a connection by editing the project bundle.
-    app.state.access.grant_connections(worktree["project"], [])
-    engine.reset_project(worktree["project"])
+    services.catalog.save(
+        "connection",
+        {"id": "elsewhere", "name": "Elsewhere", "connector": "local", "environments": {"dev": {"root": ""}}},
+        create=True,
+    )
+    snapshot = projects.snapshot(worktree["id"])
+    snapshot["bundle"]["flow"]["nodes"][0]["params"]["connection"] = "elsewhere"
+    projects.write(worktree["id"], snapshot["revision"], bundle_to_files(snapshot["bundle"]))
     with pytest.raises(Problem, match="not authorized"):
         engine.compile(worktree["id"], "dev", "source")
 
@@ -649,7 +741,7 @@ def test_read_only_connection_root_cannot_be_written_through_another_connection(
         },
         create=True,
     )
-    app.state.access.grant_connections(worktree["project"], ["local", "source_files"])
+    app.state.access.grant_connections(worktree["project"], ["source_files"])
     cursor = engine.context(worktree["id"], "dev", create=True).db.cursor()
     assert cursor.execute("SELECT * FROM read_csv('" + str(root / "input.csv") + "')").fetchall() == [(42,)]
     with pytest.raises(Exception, match=r"Permission|denied"):

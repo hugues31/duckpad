@@ -15,6 +15,14 @@ from duckpad.app import SESSION_COOKIE, create_app, upload_name
 from duckpad.builtin_templates import BUILTINS
 from duckpad.util import Problem
 
+# Fresh instances have no connection; administrator edits act on this one.
+FILES = {
+    "id": "files",
+    "name": "Files",
+    "connector": "local",
+    "environments": {"dev": {"root": ""}, "prod": {"root": ""}},
+}
+
 
 @pytest.fixture
 def app(tmp_path):
@@ -336,6 +344,7 @@ def test_connection_creation_rejects_duplicates_without_overwriting_secrets(app,
 
 @pytest.mark.parametrize("query", ["", "?create=false"])
 def test_connection_update_rejects_unknown_identifiers(app, client, query):
+    assert client.put("/api/catalog/connection?create=true", json=FILES).status_code == 200
     original = client.get("/api/catalog").json()
     connection = {**original["connections"][0], "id": "missing"}
     response = client.put("/api/catalog/connection" + query, json=connection)
@@ -375,6 +384,7 @@ def test_connection_switch_filters_parameters_in_every_environment(app, client, 
 
 @pytest.fixture
 def executed_projects(app, client):
+    assert client.put("/api/catalog/connection?create=true", json=FILES).status_code == 200
     worktrees = []
     for name in ("Edited project", "Other project"):
         worktree = client.post("/api/projects", json={"name": name}).json()
@@ -439,7 +449,7 @@ def assert_rejected_admin_edit(app, client, worktrees, method, path, body, statu
 
 
 @pytest.mark.parametrize(
-    ("identity", "create", "status"), [("local", "true", 409), ("missing", "false", 404)]
+    ("identity", "create", "status"), [("files", "true", 409), ("missing", "false", 404)]
 )
 def test_rejected_connection_save_intent_preserves_results(
     app, client, executed_projects, identity, create, status
@@ -463,8 +473,8 @@ def test_rejected_connection_save_intent_preserves_results(
         ("connector", {"id": "local", "init_sql": "ATTACH"}, 400),
         ("connector", {"id": "local", "init_sql": "SELECT 1"}, 400),
         ("connector", {"id": "local", "parameters": [{"name": "alias"}]}, 400),
-        ("connection", {"id": "local", "connector": "missing", "environments": {}}, 400),
-        ("connection", {"id": "local", "connector": "local"}, 400),
+        ("connection", {"id": "files", "connector": "missing", "environments": {}}, 400),
+        ("connection", {"id": "files", "connector": "local"}, 400),
         ("connector", [], 422),
     ],
 )
@@ -487,8 +497,8 @@ def test_invalid_environment_creation_preserves_results(app, client, executed_pr
     ("body", "status"),
     [
         ({}, 422),
-        ({"connections": "local"}, 422),
-        ({"connections": ["local", "missing"]}, 400),
+        ({"connections": "files"}, 422),
+        ({"connections": ["files", "missing"]}, 400),
         ({"connections": [1]}, 422),
     ],
 )
@@ -501,8 +511,8 @@ def test_invalid_connection_grants_preserve_results(app, client, executed_projec
     ("method", "path", "body"),
     [
         ("PUT", "/api/catalog/connector", {"id": "local", "name": "Updated", "init_sql": ""}),
-        ("DELETE", "/api/catalog/connection/local", None),
-        ("PUT", "/api/projects/{project}/connections", {"connections": []}),
+        ("DELETE", "/api/catalog/connection/files", None),
+        ("PUT", "/api/projects/{project}/connections", {"connections": ["files"]}),
     ],
 )
 @pytest.mark.parametrize("active", [False, True])
@@ -551,15 +561,16 @@ def test_environment_metadata_preserves_connections_and_survives_catalog_reload(
 
 
 def test_environment_creation_deletion_and_recreation_do_not_copy_secrets(app, client):
+    assert client.put("/api/catalog/connection?create=true", json=FILES).status_code == 200
     settings = {"id": "qa", "label": "Quality assurance", "color": "#345678", "confirm_before_run": True}
     response = client.post("/api/environments", json=settings)
     assert response.status_code == 200, response.text
     assert response.json()["connections"][0]["environments"]["qa"] == {}
     assert client.post("/api/environments", json=settings).status_code == 409
     store = app.state.services.store
-    connection = store.get("connection", "local")
+    connection = store.get("connection", "files")
     connection["environments"]["qa"] = {"root": "private-connection-value"}
-    store.put("connection", "local", connection)
+    store.put("connection", "files", connection)
     worktree = app.state.services.projects.create("Historical environment")
     store.put(
         "run",
@@ -575,11 +586,11 @@ def test_environment_creation_deletion_and_recreation_do_not_copy_secrets(app, c
     response = client.delete("/api/environments/qa")
     assert response.status_code == 200
     assert "qa" not in response.json()["environments"]
-    assert "qa" not in store.get("connection", "local")["environments"]
+    assert "qa" not in store.get("connection", "files")["environments"]
     assert store.get("run", "historic")["environment"] == "qa"
     assert client.delete("/api/environments/qa").status_code == 404
     assert client.post("/api/environments", json=settings).status_code == 200
-    assert store.get("connection", "local")["environments"]["qa"] == {}
+    assert store.get("connection", "files")["environments"]["qa"] == {}
     assert client.delete("/api/environments/qa").status_code == 200
     assert client.delete("/api/environments/prod").status_code == 200
     assert client.delete("/api/environments/dev").status_code == 409
@@ -775,7 +786,7 @@ def test_downloaded_zip_imports_as_an_independent_project(app, client, worktree)
     )
     assert project["name"] == "API"
     settings = client.get(f"/api/projects/{imported['project']}/settings").json()
-    assert settings["connections"] == ["local"]
+    assert settings["connections"] == []
     assert [member["role"] for member in settings["members"]] == ["admin"]
     projects = app.state.services.projects
     assert projects.git(imported["path"], "log", "--format=%s") == "feat(project): import API"
@@ -824,11 +835,11 @@ def test_import_reports_what_the_archive_cannot_carry(app, client, worktree, tmp
 
     flow = json.loads(files["flow.json"])
     flow["nodes"] = [
-        source("upload", "Uploaded orders", connection="local", file=uploaded),
+        source("upload", "Uploaded orders", file=uploaded),
         source("remote", "Remote orders", connection="warehouse", file="s3://bucket/orders.csv"),
         {"id": "packaged", "component": "sources", "label": "Packaged sources", "params": {}},
     ]
-    component = {"nodes": [source("inner", "Inner", connection="local", file=uploaded)], "edges": []}
+    component = {"nodes": [source("inner", "Inner", connection="", file=uploaded)], "edges": []}
     data = project_zip(
         {**files, "flow.json": json.dumps(flow), "components/sources.json": json.dumps(component)}
     )

@@ -3,6 +3,8 @@
 import threading
 import time
 
+import duckdb
+
 from duckpad.execution.runs import UNFINISHED_RUN_STATUSES
 from duckpad.lineage import Lineage
 
@@ -35,6 +37,24 @@ def join_run(store, run_id, timeout=30):
     return store.get("run", run_id)
 
 
+def statically_linked(extension):
+    """Whether the installed DuckDB build includes an extension without loading it from a cache."""
+    with duckdb.connect() as db:
+        query = "SELECT install_mode = 'STATICALLY_LINKED' FROM duckdb_extensions() WHERE extension_name = ?"
+        return db.execute(query, [extension]).fetchone()[0]
+
+
+def files_connection(catalog, identity="files"):
+    """A folder connection without a root, for tests that need a connection to prepare or revoke."""
+    environments = {environment: {"root": ""} for environment in catalog.environment_names()}
+    catalog.save(
+        "connection",
+        {"id": identity, "name": "Files", "connector": "local", "environments": environments},
+        create=True,
+    )
+    return identity
+
+
 def example_bundle(path):
     path.write_text("id,region,amount\n1,North,10\n2,North,20\n3,South,30\n")
     return {
@@ -63,7 +83,7 @@ def example_bundle(path):
             ],
         },
         "templates": {
-            "source": '-- @kind source\n-- @param connection: connection = "local"\n-- @param file: file(connection)\n-- @output result\nSELECT * FROM read_csv({{ file }});',
+            "source": '-- @kind source\n-- @param connection: connection = ""\n-- @param file: file(connection)\n-- @output result\nSELECT * FROM read_csv({{ file }});',
             "filter": "-- @input source\n-- @param threshold: number = 0\n-- @output result\nSELECT * FROM {{ source }} WHERE amount > {{ threshold }};",
             "total": "-- @input source\n-- @output result\nSELECT region, SUM(amount) AS total, COUNT(*) AS count FROM {{ source }} GROUP BY region ORDER BY region;",
         },
