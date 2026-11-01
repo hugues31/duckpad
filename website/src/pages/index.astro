@@ -1,0 +1,237 @@
+---
+import Layout from "../layouts/Layout.astro";
+import ProductVideo from "../components/ProductVideo.astro";
+import FlowIllustration from "../components/FlowIllustration.astro";
+import TechnologyLogos from "../components/TechnologyLogos.astro";
+import FeatureGrid from "../components/FeatureGrid.astro";
+import "../styles/home.css";
+import { url } from "../lib/docs";
+---
+
+<Layout
+  title="Duckpad — See the flow. Trust the result."
+  description="An open-source SQL workspace powered by DuckDB. Build visual pipelines, inspect results and trace individual values back to their source."
+>
+  <main id="main">
+    <section class="hero wrap">
+      <div class="hero-copy">
+        <p class="eyebrow">
+          <span class="live-dot" aria-hidden="true"></span> OPEN SOURCE. OPEN
+          POSSIBILITIES.
+        </p>
+        <h1>
+          See the flow.
+          <br />
+          <span>Trust the result.</span>
+        </h1>
+        <p class="hero-description">
+          Build SQL pipelines visually. Explore and test the results. Trace a
+          number back to its source, then run a reviewed version with
+          confidence.
+        </p>
+        <div class="install-terminal">
+          <div class="terminal-bar">
+            <span class="terminal-lights" aria-hidden="true">
+              <i></i>
+              <i></i>
+              <i></i>
+            </span>
+            <span>Terminal</span>
+          </div>
+          <pre aria-label="Install and start Duckpad"><code>pip install duckpad
+duckpad start</code></pre>
+        </div>
+        <div class="hero-actions">
+          <a class="button" href={url("docs/quickstart/")}>
+            Build your first pipeline <span aria-hidden="true">↗</span>
+          </a>
+          <a class="text-link" href="#demo">
+            Watch it work <span aria-hidden="true">↓</span>
+          </a>
+        </div>
+        <p class="hero-note">
+          Powered by DuckDB 2.0 <span>·</span> Local execution <span>·</span>{" "}
+          MIT licensed
+        </p>
+      </div>
+      <FlowIllustration />
+    </section>
+    <TechnologyLogos />
+    <section
+      id="demo"
+      class="product-section wrap"
+      aria-labelledby="demo-heading"
+      data-reveal="media"
+    >
+      <div class="section-kicker">
+        <span id="demo-heading">MEET YOUR NEW DATA WORKSPACE</span>
+        <span>REAL APP. REAL WORKFLOW. ↙</span>
+      </div>
+      <ProductVideo />
+      <div class="principles">
+        <span>
+          <b>SQL</b> you can see
+        </span>
+        <span>
+          <b>Git</b> you can review
+        </span>
+        <span>
+          <b>Lineage</b> you can follow
+        </span>
+        <span>
+          <b>Data</b> you control
+        </span>
+      </div>
+    </section>
+    <FeatureGrid />
+    <section id="workflow" class="workflow wrap">
+      <div class="section-heading" data-reveal>
+        <p class="eyebrow">FROM INPUT TO INSIGHT</p>
+        <h2>
+          Less guesswork.
+          <br />
+          More <em>“got it.”</em>
+        </h2>
+        <p>Keep the big picture and the small details in the same place.</p>
+      </div>
+      <div class="workflow-grid">
+        <a class="workflow-item" href={url("docs/authoring/")} data-reveal>
+          <span class="step-number">01 / COMPOSE</span>
+          <h3>
+            Think in steps.
+            <br />
+            Work in SQL.
+          </h3>
+          <p>
+            Connect sources, joins and transformations on a visual canvas. Use
+            guided forms or get straight to the SQL.
+          </p>
+          <code>SELECT * FROM your_next_idea</code>
+          <span class="card-link">Explore pipelines ↗</span>
+        </a>
+        <a class="workflow-item" href={url("docs/lineage/")} data-reveal>
+          <span class="step-number">02 / UNDERSTAND</span>
+          <h3>
+            Every number
+            <br />
+            has a backstory.
+          </h3>
+          <p>
+            Click a valid result cell and follow its contributions through
+            joins, aggregates and nested components.
+          </p>
+          <div class="mini-lineage" aria-hidden="true">
+            <span>42</span>
+            <i>←</i>
+            <span>18</span>
+            <b>+</b>
+            <span>24</span>
+          </div>
+          <span class="card-link">Follow the lineage ↗</span>
+        </a>
+        <a class="workflow-item" href={url("docs/git/")} data-reveal>
+          <span class="step-number">03 / ITERATE</span>
+          <h3>
+            Make a change.
+            <br />
+            Keep the context.
+          </h3>
+          <p>
+            Save to Git, experiment on an isolated branch and compare changes
+            visually before a reviewed merge.
+          </p>
+          <div class="branch-illustration" aria-hidden="true">
+            <span>● main</span>
+            <span>╰── ● your-next-idea</span>
+          </div>
+          <span class="card-link">Work with versions ↗</span>
+        </a>
+      </div>
+    </section>
+    <section class="detail-section wrap">
+      <div class="detail-copy" data-reveal>
+        <p class="eyebrow">A CLEAR PATH BACK</p>
+        <h2>
+          “Where did this
+          <br />
+          come from?”
+          <br />
+          <span>Now you know.</span>
+        </h2>
+        <p>
+          Duckpad explains the data from the actual run. Explore the source
+          cells behind a total, inspect the calculation, and keep following the
+          thread.
+        </p>
+        <p class="muted">
+          Coverage is explicit. When a SQL construct cannot be fully explained,
+          Duckpad tells you.
+        </p>
+        <a class="text-link" href={url("docs/lineage/")}>
+          Explore lineage and its limits ↗
+        </a>
+      </div>
+      <figure class="lineage-image" data-reveal="media">
+        <img
+          src={url("demos/lineage.png")}
+          alt="Duckpad lineage panel showing the original amount cells contributing to regional revenue"
+          width="1440"
+          height="900"
+          loading="lazy"
+        />
+        <figcaption>
+          Follow contributions into the original source cells.
+        </figcaption>
+      </figure>
+    </section>
+    <section class="open-section wrap">
+      <div data-reveal>
+        <p class="eyebrow">YOUR WORK, IN YOUR HANDS</p>
+        <h2>
+          Small setup.
+          <br />
+          Room for big ideas.
+        </h2>
+      </div>
+      <div class="open-details" data-reveal>
+        <p>
+          Run Duckpad on infrastructure you control. Start with local files,
+          reuse your logic as components, and configure connections for each
+          environment.
+        </p>
+        <div class="tag-row">
+          <span>CSV, Parquet & Excel</span>
+          <span>DuckDB 2.0</span>
+          <span>Reusable SQL</span>
+          <span>Git projects</span>
+        </div>
+        <a class="text-link" href={url("docs/connectors/")}>
+          See connection options ↗
+        </a>
+      </div>
+    </section>
+    <section class="start-section wrap" data-reveal>
+      <div>
+        <p class="eyebrow">YOUR NEXT GOOD IDEA STARTS HERE</p>
+        <h2>
+          Let your data
+          <br />
+          make sense.
+        </h2>
+        <p>
+          Build your first SQL pipeline in 15 minutes.
+          <br />
+          Start from scratch. No external database account required.
+        </p>
+      </div>
+      <div class="start-actions">
+        <a class="button light" href={url("docs/quickstart/")}>
+          Duckpad in 15 minutes ↗
+        </a>
+        <a href="https://github.com/hugues31/duckpad">
+          Explore the source on GitHub ↗
+        </a>
+      </div>
+    </section>
+  </main>
+</Layout>
