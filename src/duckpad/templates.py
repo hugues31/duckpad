@@ -1,9 +1,11 @@
 """Typed SQL templates. Compilation never executes SQL."""
 
 import json
+import math
 import re
 from datetime import date
 from pathlib import Path
+from urllib.parse import unquote, urlsplit
 
 import sqlglot
 from sqlglot import exp
@@ -340,6 +342,76 @@ def check_variables(name, text):
         )
 
 
+def render_path(name, text, values):
+    """Render only scalar variable references, once, with no general interpolation."""
+    if not isinstance(text, str):
+        raise Problem(f"{name} requires a path")
+    remainder = VARIABLE_REFERENCE.sub("", text)
+    if "{{" in remainder or "}}" in remainder:
+        raise Problem(f"{name}: invalid path reference; use {{{{ var.name }}}}")
+
+    def replace(match):
+        variable = values.get(match[1])
+        if not variable or "value" not in variable:
+            raise Problem(f"{name}: variable {match[1]} has no resolved value")
+        kind, value = base_type(variable["type"]), variable["value"]
+        if kind not in ("text", "choice", "date", "number", "boolean"):
+            raise Problem(f"{name}: {kind} cannot be used in a path")
+        if kind == "boolean":
+            return "true" if value else "false"
+        if kind == "number":
+            if (
+                isinstance(value, bool)
+                or not isinstance(value, (float, int))
+                or (isinstance(value, float) and not math.isfinite(value))
+            ):
+                raise Problem(f"{name}: expected a finite number")
+            return json.dumps(value)
+        if "\x00" in str(value):
+            raise Problem(f"{name}: a path cannot contain a NUL character")
+        return str(value)
+
+    return VARIABLE_REFERENCE.sub(replace, text)
+
+
+def authorize_path(template, path, root, kind, connections, reference):
+    """Check the resolved resource against its captured root, including glob matches."""
+    if reference:
+        connection = connection_for(connections, reference)
+        capability = "write" if kind == "destination" else "read"
+        if capability not in connection["definition"].get("capabilities", []):
+            raise Problem(f"Connection {reference} does not support {capability}")
+    if URI.match(path):
+        # An interpolated authority cannot select a different credential scope.
+        baseline = str(root) if URI.match(str(root)) else template
+        before, after = urlsplit(baseline), urlsplit(path)
+        if not before.scheme or (before.scheme, before.netloc) != (after.scheme, after.netloc):
+            raise Problem("Path references cannot change the URI scheme or authority")
+        # A query can carry settings such as s3_endpoint; only the written one is allowed.
+        written = urlsplit(template)
+        if (after.query, after.fragment) != (written.query, written.fragment):
+            raise Problem("Path references cannot change a URI query or fragment")
+        if any(part == ".." for part in unquote(after.path).split("/")):
+            raise Problem("Path references cannot traverse a resource root")
+        if URI.match(str(root)) and not after.path.startswith(before.path.rstrip("/") + "/"):
+            raise Problem("Path is outside the connection root")
+        return path
+    if URI.match(str(root)):
+        raise Problem("Path references cannot change the URI scheme or authority")
+    base = Path(root).resolve()
+    candidate = Path(path)
+    if not candidate.is_absolute():
+        candidate = base / candidate
+    # Return the checked path: DuckDB and export capture must not reinterpret `..` or symlinks.
+    candidate = candidate.resolve()
+    if not candidate.is_relative_to(base):
+        raise Problem("Path is outside the allowed resource root")
+    for matched in base.glob(str(candidate.relative_to(base))):
+        if not matched.resolve().is_relative_to(base):
+            raise Problem("Path glob follows a symlink outside the resource root")
+    return str(candidate)
+
+
 def connection_for(connections, reference):
     if reference not in connections:
         raise Problem(f"Missing connection: {reference}")
@@ -367,8 +439,13 @@ def render_parameter(
     input_schemas=None,
     variables=None,
     placeholders=None,
+    bound=None,
 ):
-    """Return the SQL text of a structural parameter, or None for a bound scalar value."""
+    """Return the SQL text of a structural parameter, or None for a bound scalar value.
+
+    `bound` maps parameters bound whole to a variable to their binding: such values are
+    never rendered again, and a computed one is checked like `{{ var.name }}`.
+    """
     name, type_name = parameter["name"], parameter["type"]
     kind, argument = base_type(type_name), type_argument(type_name)
     value = parameters[name]
@@ -398,17 +475,31 @@ def render_parameter(
         return literal(connection_for(connections, parameters[argument])["secret_name"])
     if kind in RESOURCE_TYPES:
         reference = parameters[argument] if argument else None
-        path = str(value)
-        relative = not URI.match(path) and not Path(path).is_absolute()
         if is_project_files(reference):
-            return literal(str(Path(project_files[kind]) / path) if relative else path)
-        connection = connection_for(connections, reference)
-        if connection["definition"].get("family") != "storage":
-            raise Problem(f"Connection {reference} is not a file storage location")
-        root = connection["values"].get("root") or ""
+            root = str(project_files[kind])
+        else:
+            connection = connection_for(connections, reference)
+            if connection["definition"].get("family") != "storage":
+                raise Problem(f"Connection {reference} is not a file storage location")
+            root = connection["values"].get("root") or ""
+        path, binding = str(value), (bound or {}).get(name)
+        if binding is not None and binding.get("source") == "node":
+            # A value read from data must not choose a resource outside the captured root.
+            template, values = "{{ var." + binding["name"] + " }}", {binding["name"]: binding}
+        elif binding is None and ("{{" in path or "}}" in path):
+            template, values = path, variables or {}
+        else:
+            template = None
+        if template is not None:
+            path = render_path(name, template, values)
+        relative = not URI.match(path) and not Path(path).is_absolute()
         if relative and not root:
             raise Problem(f"Connection {reference} has no root in this environment; use an absolute path")
-        return literal(under_root(root, path) if relative else path)
+        if template is None:
+            return literal(under_root(root, path) if relative else path)
+        if relative and URI.match(root):
+            path = under_root(root, path)
+        return literal(authorize_path(template, path, root or str(project_files[kind]), kind, connections, reference))
     if kind in ("column", "identifier"):
         return ".".join(qi(part) for part in str(value).split("."))
     if kind == "schema":
@@ -557,7 +648,15 @@ def is_local_table(table, local_names):
 
 
 def compile_template(
-    template, params, inputs, physical_outputs, connections, project_files, input_schemas=None, variables=None
+    template,
+    params,
+    inputs,
+    physical_outputs,
+    connections,
+    project_files,
+    input_schemas=None,
+    variables=None,
+    bound=None,
 ):
     """Compile a template's blocks into statements with their bound parameters.
 
@@ -565,6 +664,7 @@ def compile_template(
     paths when no connection root applies: the project's resources and the environment's exports.
     `variables` maps the variables referenced inside expression parameters to their type and
     value; each statement lists the named parameters binding them in `variable_bindings`.
+    `bound` maps parameters bound whole to a variable to their binding.
     """
     values, bindings = dict(inputs), {}
     parameters = {p["name"]: params.get(p["name"], p.get("default")) for p in template["parameters"]}
@@ -585,6 +685,7 @@ def compile_template(
             input_schemas,
             variables,
             placeholders,
+            bound,
         )
         if rendered is None:
             bindings[name] = parameters[name]
@@ -646,6 +747,18 @@ def compile_template(
         if output:
             values[output] = qi(physical)
             allowed.add(qi(physical))
+    paths = {
+        p["name"]: {
+            "template": parameters[p["name"]],
+            "variables": VARIABLE_REFERENCE.findall(str(parameters[p["name"]])),
+            "resource": sqlglot.parse_one(values[p["name"]], read="duckdb").this,
+        }
+        for p in template["parameters"]
+        if base_type(p["type"]) in RESOURCE_TYPES
+    }
+    if paths:
+        for statement in statements:
+            statement["paths"] = paths
     return statements
 
 

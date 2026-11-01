@@ -109,7 +109,11 @@ class Exports:
             snapshot = self.projects.snapshot(worktree)
             if not snapshot["bundle"]:
                 return {"status": "stale"}
-            nodes, edges, _ = expand_for(snapshot["bundle"], environment)
+            nodes, edges, _ = expand_for(
+                snapshot["bundle"],
+                environment,
+                computed=self.fingerprints.pool.computed(worktree, environment, snapshot["bundle"]),
+            )
             definition = nodes.get(node)
             if not definition:
                 raise Problem("Node not found", 404)
@@ -139,7 +143,11 @@ class Exports:
                     self.access.connections(snapshot["worktree"]["project"], references)
                 except Problem:
                     return {**public, "status": "stale"}
-            current = self.fingerprints.of(snapshot["bundle"], environment)
+            current = self.fingerprints.of(
+                snapshot["bundle"],
+                environment,
+                computed=self.fingerprints.pool.computed(worktree, environment, snapshot["bundle"]),
+            )
             if current.get(node) != result["fingerprint"]:
                 return {**public, "status": "stale"}
             if result["run_status"] in ("canceled", "interrupted"):

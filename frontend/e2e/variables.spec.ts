@@ -1,12 +1,149 @@
 import { expect, test, type Page } from "@playwright/test";
 import { signIn } from "./helpers";
 import type { Snapshot } from "../src/types";
+import { resolve } from "node:path";
 
 const ORDER_STATUS = {
   type: "choice(paid|refunded|pending)",
   description: "Order status counted as revenue.",
   default: "paid",
 };
+
+test("calculate a control value, retain it for a targeted launch and show its provenance", async ({
+  page,
+}) => {
+  test.setTimeout(60000);
+  const { id, url } = await example(page, (bundle) => {
+    bundle.templates.control =
+      "-- @kind source\n-- @output result\nSELECT 'paid' AS status;";
+    bundle.flow.nodes.push({
+      id: "control",
+      template: "control",
+      label: "Run control",
+      params: {},
+      position: { x: 50, y: 450 },
+    });
+    bundle.variables = {
+      order_status: {
+        type: "choice(paid|refunded)",
+        description: "Processing mode supplied by the control output.",
+        from: { node: "control", column: "status" },
+      },
+    };
+    bundle.flow.nodes.find((node) => node.id === "validated")!.params.status = {
+      $var: "order_status",
+    };
+  });
+  const declarations = (await snapshot(page, url)).bundle!.variables;
+  await page.goto(`/worktrees/${id}/variables?environment=dev`);
+  await page.getByRole("button", { name: "order_status", exact: true }).click();
+  const editor = page.getByRole("complementary", { name: "order_status" });
+  await expect(editor.getByLabel("Value source", { exact: true })).toHaveValue(
+    "computed",
+  );
+  await expect(editor.getByLabel("Default value", { exact: true })).toHaveCount(
+    0,
+  );
+  await expect(editor.getByLabel("Source node")).toHaveValue("control");
+  // Ports come from the node, and switching modes back and forth loses nothing.
+  await expect(editor.getByLabel("Output port")).toContainText("result");
+  const mode = editor.getByLabel("Value source", { exact: true });
+  await mode.selectOption("ordinary");
+  await expect(
+    editor.getByLabel("Default value", { exact: true }),
+  ).toBeVisible();
+  await mode.selectOption("computed");
+  await expect(editor.getByLabel("Source node")).toHaveValue("control");
+  await expect(
+    editor.getByRole("button", { name: "Save changes", exact: true }),
+  ).toBeDisabled();
+  const pending = await (
+    await page.request.get(`${url}/variables/scope?environment=dev`)
+  ).json();
+  expect(pending.order_status.state).toBe("pending");
+  await run(page, url, "dev");
+  const row = page
+    .locator(".variables-table")
+    .getByRole("row")
+    .filter({ hasText: "order_status" });
+  await expect(row).toContainText("paid");
+  await expect(row).toContainText("Retained value");
+  // The page polls run states: capture it once it shows the finished run.
+  await expect(
+    page.getByRole("button", { name: "Run pipeline", exact: true }),
+  ).toBeVisible();
+  await page.screenshot({
+    path: resolve("../docs/images/computed-variables.png"),
+    animations: "disabled",
+    style: ".resource-monitor { visibility: hidden !important; }",
+  });
+  const retained = await (
+    await page.request.get(
+      `${url}/variables/scope?environment=dev&node=validated`,
+    )
+  ).json();
+  expect(retained.order_status.resolution).toBe("retained");
+  const launch = await page.request.post(`${url}/runs`, {
+    data: { environment: "dev", node: "validated" },
+  });
+  expect(launch.ok()).toBeTruthy();
+  const started = await launch.json();
+  await expect
+    .poll(
+      async () =>
+        (await (await page.request.get(`/api/runs/${started.id}`)).json())
+          .status,
+    )
+    .toBe("success");
+  const finished = await (
+    await page.request.get(`/api/runs/${started.id}`)
+  ).json();
+  expect(finished.nodes.control).toBeUndefined();
+  expect(finished.variables.order_status.producer_run).toBe(
+    retained.order_status.producer_run,
+  );
+  expect((await snapshot(page, url)).bundle!.variables).toEqual(declarations);
+  await page.goto(`/worktrees/${id}/history?environment=dev`);
+  await page.locator(".history-row").first().click();
+  await expect(page.locator(".variable-values")).toContainText(
+    "Retained value",
+  );
+  await expect(page.locator(".variable-values")).toContainText(
+    "control.result.status",
+  );
+  await page.getByRole("link", { name: "Open source cell" }).click();
+  await expect(
+    page.getByRole("dialog", {
+      name: "How this value was calculated",
+      exact: true,
+    }),
+  ).toContainText("paid");
+
+  // A protected launch confirms producers, even when that environment retains a value.
+  await run(page, url, "prod");
+  await page.goto(`/worktrees/${id}/flow?environment=prod&node=validated`);
+  await page.getByRole("button", { name: "Run pipeline", exact: true }).click();
+  const confirmation = page.getByRole("dialog", { name: "Confirm execution" });
+  await expect(confirmation.locator(".variable-values")).toContainText(
+    "Calculated at launch",
+  );
+  await confirmation
+    .getByRole("button", { name: "Cancel", exact: true })
+    .click();
+  await page
+    .locator(".inspector")
+    .getByRole("button", { name: "Run with ancestors", exact: true })
+    .click();
+  await expect(confirmation.locator(".variable-values")).toContainText(
+    "Retained value",
+  );
+  await expect(confirmation.locator(".variable-values")).toContainText(
+    "control.result.status",
+  );
+  await confirmation
+    .getByRole("button", { name: "Cancel", exact: true })
+    .click();
+});
 
 /** The Northstar example, optionally changed through the API before it opens. */
 async function example(

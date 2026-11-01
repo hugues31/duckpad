@@ -98,10 +98,20 @@ export interface VariableUsage {
 /** A variable's value in one environment, or why it has none. */
 export interface VariableValue {
   value?: Json;
-  source?: "default" | "environment";
+  source?: "default" | "environment" | "node";
+  from?: { node: string; port?: string; column: string };
+  state?: "pending" | "ready" | "unavailable";
+  resolution?: "calculated" | "retained";
+  producer_run?: string;
+  producer_commit?: string;
+  source_dataset?: string;
+  code?: string;
+  source_stale?: boolean;
+  last_error?: string;
   error?: string;
 }
 export interface VariableSummary {
+  from?: { node: string; port?: string; column: string };
   type: string;
   description: string;
   default?: Json;
@@ -335,6 +345,7 @@ export interface NodeRun {
   references?: Record<string, string[]>;
 }
 export interface Run {
+  phase?: "values" | "consumers";
   job?: {
     slug: string;
     name: string;

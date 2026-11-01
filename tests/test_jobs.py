@@ -85,6 +85,35 @@ def advance(instance, tag="v2"):
     return snapshot["commit"]
 
 
+def test_jobs_calculate_their_own_values_and_scoped_jobs_never_borrow_them(instance):
+    from test_computed_variables import bundle
+
+    from duckpad.bundle import bundle_to_files
+
+    app, tree, call, _, _ = instance
+    services = app.state.services
+    snapshot = services.projects.snapshot(tree["id"])
+    snapshot = services.projects.write(tree["id"], snapshot["revision"], bundle_to_files(bundle()))
+    services.projects.versioning.create_tag(tree["id"], "computed", snapshot["commit"], "Computed variables")
+    editor = join_run(services.store, services.engine.launch(tree["id"], "dev")["id"])
+    assert editor["variables"]["amount"]["value"] == 4
+    create(instance, "full-values", ref="computed")
+    response = call("POST", "/jobs/full-values/runs", {}, "operator")
+    assert response.status_code == 202, response.text
+    run = join_run(services.store, response.json()["id"])
+    assert run["status"] == "success", run
+    assert run["variables"]["amount"]["producer_run"] == run["id"]
+    response = call("GET", f"/v1/runs/{run['id']}", actor="operator")
+    assert response.status_code == 200, response.text
+    assert response.json()["variables"]["amount"]["value"] == 4
+    assert response.json()["variables"]["amount"]["from"]["port"] == "result"
+    create(instance, "scoped-values", ref="computed", scope="consumer")
+    response = call("POST", "/jobs/scoped-values/runs", {}, "operator")
+    assert response.status_code == 202, response.text
+    scoped = join_run(services.store, response.json()["id"])
+    assert scoped["variables"]["amount"]["code"] == "value_not_calculated"
+
+
 def test_pinned_job_read_only_results_requester_and_deleted_history(instance):
     app, tree, call, commit, _ = instance
     services = app.state.services
