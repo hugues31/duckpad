@@ -67,15 +67,17 @@ Use a **Load CSV** palette node, or put this complete definition in a new node:
 ```sql
 -- @label Read orders
 -- @kind source
--- @param connection: connection = "local"
+-- @param connection: connection = ""
 -- @param path: file(connection)
 -- @output orders
 SELECT * FROM read_csv({{ path }}, header = true);
 ```
 
 Set `path` through the node's file parameter: upload a CSV or select an allowed
-file path. The connection must be granted to the project. Relative paths resolve
-against its configured root; uploads belong to the project. File readers use
+file path. The empty `connection` selects project files: a relative path
+resolves under the project's resources, where uploads land, with no connection
+or grant. Choosing a granted connection as the node's **Location** resolves
+relative paths against its root instead. File readers use
 one declared file parameter (or a list) as their only positional argument, with
 named options such as `header = true` or `delim = ';'` afterward.
 
@@ -89,7 +91,7 @@ Ordinary transformations cannot bypass this contract with undeclared file reads.
 -- @label Export report
 -- @kind export
 -- @input source
--- @param connection: connection = "local"
+-- @param connection: connection = ""
 -- @param destination: destination(connection) = "report.csv"
 COPY (SELECT * FROM {{ source }})
 TO {{ destination }} (FORMAT CSV, HEADER TRUE);
@@ -97,8 +99,8 @@ TO {{ destination }} (FORMAT CSV, HEADER TRUE);
 
 Connect `source` to the table you want to export. Exports write with an
 explicit `COPY ... TO` or `INSERT` statement and have no `@output`.
-When the local connection has no root, the relative destination resolves inside
-the branch and environment's export directory. Run the node and open **Log →
+With project files, the relative destination resolves inside the branch and
+environment's export directory. Run the node and open **Log →
 Download exported data** to retrieve its CSV. See [project exports](AUTHORING.md)
 for download lifetime, XLSX and destination limits.
 
@@ -119,8 +121,8 @@ items: `New York, Paris` becomes `["New York", "Paris"]`.
 | `date` | A `YYYY-MM-DD` value bound as a DuckDB `DATE` |
 | `choice(a\|b)` | Enumerated scalar binding |
 | `keyword(inner\|left\|right\|full)` | Validated SQL keyword, for structural choices |
-| `file(connection)`, `destination(connection)` | Explicit path or URI; relative local paths resolve against the connection root or worktree/environment export directory |
-| `connection` | Logical instance connection ID; resolves to a collision-free runtime alias |
+| `file(connection)`, `destination(connection)` | Explicit path or URI; relative local paths resolve against the connection root. With project files, relative files resolve under the project's resources (uploads) and destinations under the worktree/environment export directory |
+| `connection` | Logical instance connection ID; resolves to a collision-free runtime alias. Empty (`""`) selects project files for the parameters that reference it; the inspector labels it **Location** |
 | `secret(connection)` | Runtime secret name, for extension options; never a password |
 | `identifier`, `column(source)` | Quoted identifiers; input column suggestions use resolved schemas |
 | `expression(source)` | Parsed scalar SQL expression; queries and side effects are rejected |
