@@ -4,7 +4,7 @@ import shutil
 
 import duckdb
 import pytest
-from helpers import statically_linked, wait_run
+from helpers import enable_excel, wait_run
 from xlsx_fixture import workbook
 
 from duckpad.auth import Auth
@@ -12,10 +12,6 @@ from duckpad.builtin_templates import BUILTINS
 from duckpad.bundle import bundle_to_files
 from duckpad.services import Services
 from duckpad.util import Problem
-
-# Duckpad's runtime links excel statically. Other DuckDB builds read workbooks once the project
-# enables excel, from a binary an instance administrator installed.
-STATIC_EXCEL = statically_linked("excel")
 
 
 @pytest.fixture(params=[False, True], ids=["embedded", "isolated"])
@@ -56,9 +52,7 @@ def budget_bundle():
         "components": {},
         "documentation": {},
     }
-    if not STATIC_EXCEL:
-        bundle["extensions"] = {"excel": {"source": "core", "enabled": True}}
-    return bundle
+    return enable_excel(bundle)
 
 
 def create(instance, bundle):

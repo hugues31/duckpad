@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
-from helpers import statically_linked, wait_run
+from helpers import enable_excel, wait_run
 from xlsx_fixture import workbook
 
 from duckpad.app import create_app
@@ -249,8 +249,7 @@ def test_members_read_their_uploads_and_export_without_a_connection(instance, tm
             "targetHandle": "source",
         }
     ]
-    if not statically_linked("excel"):
-        bundle["extensions"] = {"excel": {"source": "core", "enabled": True}}
+    enable_excel(bundle)
     saved = request(
         client,
         headers,

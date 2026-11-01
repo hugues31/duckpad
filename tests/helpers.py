@@ -37,11 +37,17 @@ def join_run(store, run_id, timeout=30):
     return store.get("run", run_id)
 
 
-def statically_linked(extension):
-    """Whether the installed DuckDB build includes an extension without loading it from a cache."""
+def enable_excel(bundle):
+    """Enable excel in the project unless the installed DuckDB build links it statically.
+
+    Duckpad's runtime links excel. Other builds, such as the PyPI wheel, read workbooks once the
+    project enables it, from a binary an instance administrator installed.
+    """
     with duckdb.connect() as db:
-        query = "SELECT install_mode = 'STATICALLY_LINKED' FROM duckdb_extensions() WHERE extension_name = ?"
-        return db.execute(query, [extension]).fetchone()[0]
+        query = "SELECT install_mode = 'STATICALLY_LINKED' FROM duckdb_extensions() WHERE extension_name = 'excel'"
+        if not db.execute(query).fetchone()[0]:
+            bundle["extensions"] = {"excel": {"source": "core", "enabled": True}}
+    return bundle
 
 
 def files_connection(catalog, identity="files"):

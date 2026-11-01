@@ -6,7 +6,7 @@ import shutil
 import duckdb
 import pytest
 from fastapi.testclient import TestClient
-from helpers import statically_linked, wait_run
+from helpers import enable_excel, wait_run
 from xlsx_fixture import workbook
 
 from duckpad.app import create_app
@@ -42,15 +42,17 @@ def connect(catalog, roots):
 
 
 def source_bundle(params=None):
-    return {
-        "flow": {
-            "nodes": [{"id": "source", "template": "load_xlsx", "params": params or {}}],
-            "edges": [],
-        },
-        "templates": BUILTINS.copy(),
-        "components": {},
-        "documentation": {},
-    }
+    return enable_excel(
+        {
+            "flow": {
+                "nodes": [{"id": "source", "template": "load_xlsx", "params": params or {}}],
+                "edges": [],
+            },
+            "templates": BUILTINS.copy(),
+            "components": {},
+            "documentation": {},
+        }
+    )
 
 
 def project(instance, bundle, connections=()):
@@ -204,8 +206,6 @@ def test_xlsx_api_upload_needs_no_connection_and_blocks_outside_files(tmp_path, 
         assert uploaded.status_code == 200
         snapshot = client.get(f"/api/worktrees/{identity}").json()
         bundle = source_bundle({"file": uploaded.json()["path"], "sheet": "Orders"})
-        if not statically_linked("excel"):
-            bundle["extensions"] = {"excel": {"source": "core", "enabled": True}}
         assert (
             client.put(
                 f"/api/worktrees/{identity}", json={"revision": snapshot["revision"], "bundle": bundle}

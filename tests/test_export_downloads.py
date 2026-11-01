@@ -13,7 +13,7 @@ from xml.etree import ElementTree
 import duckdb
 import pytest
 from fastapi.testclient import TestClient
-from helpers import files_connection, join_run, statically_linked
+from helpers import enable_excel, files_connection, join_run
 
 from duckpad.app import create_app
 from duckpad.artifacts import CHUNK_SIZE, open_regular
@@ -56,8 +56,8 @@ def create(instance, format_name="csv", **params):
         "components": {},
         "documentation": {},
     }
-    if format_name == "xlsx" and not statically_linked("excel"):
-        bundle["extensions"] = {"excel": {"source": "core", "enabled": True}}
+    if format_name == "xlsx":
+        enable_excel(bundle)
     snapshot = services.projects.snapshot(worktree["id"])
     services.projects.write(worktree["id"], snapshot["revision"], bundle_to_files(bundle))
     return worktree, f"/api/worktrees/{worktree['id']}/exports/export"
