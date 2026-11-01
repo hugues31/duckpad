@@ -28,7 +28,7 @@ def test_sql_resources_restart_sessions_at_their_next_run_and_persist(tmp_path, 
         worktree = instance.projects.create("SQL resources", bundle())
         if isolated:
             Auth(instance.store)
-            instance.engine.access.own(worktree, {"id": "admin"}, ["local"])
+            instance.engine.access.own(worktree, {"id": "admin"}, [])
         identity = worktree["id"]
 
         def preview():
@@ -105,7 +105,7 @@ def test_sql_resources_api_validates_values_and_keeps_active_runs(tmp_path):
         worktree = services.projects.create(
             "Active pipeline", bundle("SELECT sum(i::HUGEINT) FROM range(1000000000000) r(i)")
         )
-        app.state.access.own(worktree, {"id": "admin"}, ["local"])
+        app.state.access.own(worktree, {"id": "admin"}, [])
         run = services.engine.launch(worktree["id"], "dev")
         try:
             session = services.engine.context(worktree["id"], "dev").db
