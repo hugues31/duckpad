@@ -1,6 +1,6 @@
 # Connections, file storage and extensions (design proposal)
 
-**Status: accepted on 1 November 2026 (see [Decisions](#decisions)). Steps 1 to 3 are implemented: project files without a connection, the removal of the Excel connector, and Server folder with connector families and customizable built-ins. Step 4, the database family, has its own ticket.**
+**Status: implemented. Accepted on 1 November 2026 (see [Decisions](#decisions)); the four steps of the [delivery plan](#delivery-plan) are delivered. The [connections guide](../CONNECTORS.md) documents the result, including [database tables](../CONNECTORS.md#database-tables), [PostgreSQL](../CONNECTORS.md#postgresql), [Test connection](../CONNECTORS.md#test-a-connection) and the [MySQL and SQLite examples](../CONNECTORS.md#published-examples-mysql-and-sqlite).**
 
 ## Summary
 

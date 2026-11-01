@@ -11,7 +11,7 @@ from contextlib import suppress
 
 import duckdb
 
-from .. import project_extensions, value_sources
+from .. import connection_probe, project_extensions, value_sources
 from ..access import Access
 from ..catalog import Catalog, redact
 from ..components import expand
@@ -223,6 +223,11 @@ class ContextPool:
     def extension_settings(self) -> dict[str, bool]:
         return {"allow_unsigned_extensions": self.store.get("settings", "allow_unsigned_extensions", False)}
 
+    def probe_config(self) -> Record:
+        """DuckDB settings of connection setup in a child process, outside an execution session."""
+        self.store.paths.extensions.mkdir(exist_ok=True)
+        return {**database_config(self.store.paths.extensions), **self.extension_settings()}
+
     def sql_resources(self) -> Record:
         """DuckDB threads and memory limit of new SQL sessions; None leaves DuckDB's automatic sizing."""
         return {**SQL_RESOURCES, **self.store.get("settings", "sql_resources", {})}
@@ -302,21 +307,17 @@ class ContextPool:
 
     def _install_extensions(self, captured: Connections, config: Record, secrets: list[str]) -> None:
         """Provision trusted administrator-declared extensions before the worker gets read-only
-        access to their cache. Connection setup, such as ATTACH, runs only in the worker."""
-        declared = [c for c in captured.values() if c["definition"].get("extensions")]
-        if not declared:
-            return
-        with duckdb.connect(config=config) as setup:
-            for connection in declared:
-                definition = {**connection["definition"], "init_sql": ""}
-                try:
-                    self.catalog.prepare(setup, {"extensions": {**connection, "definition": definition}})
-                except duckdb.Error as error:
-                    raise Problem(
-                        f"Cannot install the extensions of connection {connection['name']}: "
-                        + redact(str(error), secrets),
-                        503,
-                    ) from None
+        access to their cache. A child process installs and loads them, so that a binary that
+        stops its process never stops the server. Connection setup, such as ATTACH, runs only
+        in the worker."""
+        imports = self.store.get("settings", "offline_extensions", {})
+        for connection in captured.values():
+            try:
+                connection_probe.check_extensions(config, connection, imports, secrets)
+            except Problem as error:
+                raise Problem(
+                    f"Cannot install the extensions of connection {connection['name']}: {error}", 503
+                ) from None
 
     def mark_stale(self, context: Context, fingerprints: dict[str, str]) -> None:
         """Mark results whose fingerprint changed stale, and interrupt lineage requests reading them."""

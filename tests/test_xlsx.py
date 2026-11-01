@@ -82,7 +82,12 @@ def test_fresh_catalog_offers_no_excel_connector(tmp_path):
     store = Store(tmp_path)
     try:
         assert store.all("connector") == []
-        assert {connector["id"] for connector in Catalog(store).connectors()} == {"folder", "s3", "oracle"}
+        assert {connector["id"] for connector in Catalog(store).connectors()} == {
+            "folder",
+            "s3",
+            "postgres",
+            "oracle",
+        }
     finally:
         store.close()
 

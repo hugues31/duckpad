@@ -519,6 +519,22 @@ test("capture connection setup and environment policies", async ({ page }) => {
         prod: { root: "s3://landing/raw/", key_id: "prod", secret: "prod" },
       },
     },
+    {
+      id: "sales_database",
+      name: "Sales database",
+      connector: "postgres",
+      environments: Object.fromEntries(
+        ["dev", "prod"].map((environment) => [
+          environment,
+          {
+            host: `${environment}.db.example.com`,
+            database: "sales",
+            user: "duckpad",
+            password: environment,
+          },
+        ]),
+      ),
+    },
   ];
   // An administrator exposed a session token on S3: the built-in becomes Customized.
   const customized = {
@@ -545,7 +561,10 @@ test("capture connection setup and environment policies", async ({ page }) => {
     await expect(
       page.locator(".connector-row").filter({ hasText: "Amazon S3" }),
     ).toContainText("Customized");
+    // Every connector definition, down to the customized built-in.
+    await page.setViewportSize({ width: 1440, height: 1240 });
     await capture(page, "connections", page.locator(".settings-layout"));
+    await page.setViewportSize({ width: 1440, height: 1000 });
     await page.request.put(`/api/projects/${worktree.project}/connections`, {
       data: { connections: ["finance_share"] },
     });
@@ -584,6 +603,96 @@ test("capture connection setup and environment policies", async ({ page }) => {
     page.getByRole("article", { name: "prod", exact: true }),
   ).toContainText("Confirm every run");
   await capture(page, "environments", page.locator(".settings-layout"));
+});
+
+// A disposable PostgreSQL server with a sales_dev and a sales_prod database holding
+// public.orders, as scripts/integration.py prepares; the scene is skipped without one.
+const postgres = {
+  host: process.env.DUCKPAD_DOCS_POSTGRES_HOST,
+  port: Number(process.env.DUCKPAD_DOCS_POSTGRES_PORT || 5432),
+  user: process.env.DUCKPAD_DOCS_POSTGRES_USER,
+  password: process.env.DUCKPAD_DOCS_POSTGRES_PASSWORD,
+};
+
+test("capture a PostgreSQL connection test and Load table", async ({
+  page,
+}) => {
+  test.skip(!postgres.host, "Set DUCKPAD_DOCS_POSTGRES_* to a test server.");
+  const values = (database: string, options: string) => ({
+    ...postgres,
+    database,
+    options,
+  });
+  const connection = {
+    id: "sales",
+    name: "Sales database",
+    connector: "postgres",
+    environments: {
+      dev: values("sales_dev", "application_name=duckpad"),
+      prod: values("sales_prod", "sslmode=require application_name=duckpad"),
+    },
+  };
+  const created = await page.request.post("/api/projects", {
+    data: { name: "Sales" },
+  });
+  const worktree = await created.json();
+  try {
+    expect(
+      (
+        await page.request.put("/api/catalog/connection?create=true", {
+          data: connection,
+        })
+      ).ok(),
+    ).toBeTruthy();
+    await openInstanceSettings(page, "Connections");
+    await page
+      .locator(".connection-card")
+      .filter({ hasText: "Sales database" })
+      .click();
+    const dialog = page.getByRole("dialog");
+    await dialog.getByRole("button", { name: "prod", exact: true }).click();
+    await dialog
+      .getByRole("button", { name: "Test connection", exact: true })
+      .click();
+    await expect(dialog.getByRole("status")).toContainText("Connected in prod");
+    await capture(page, "connection-test", dialog);
+    await page.keyboard.press("Escape");
+
+    await page.request.put(`/api/projects/${worktree.project}/connections`, {
+      data: { connections: ["sales"] },
+    });
+    await page.goto(`/worktrees/${worktree.id}/flow`);
+    await page.getByRole("button", { name: "Load table", exact: true }).click();
+    const inspector = page.locator(".inspector");
+    await inspector
+      .getByRole("combobox", { name: "connection", exact: true })
+      .selectOption("sales");
+    const table = inspector.getByRole("combobox", {
+      name: "table",
+      exact: true,
+    });
+    await expect(
+      page.locator(`datalist[id="${await table.getAttribute("list")}"] option`),
+    ).not.toHaveCount(0);
+    await table.fill("orders");
+    await inspector
+      .getByRole("button", { name: "Save changes", exact: true })
+      .click();
+    await expect
+      .poll(
+        async () =>
+          (
+            await (
+              await page.request.get(`/api/worktrees/${worktree.id}`)
+            ).json()
+          ).bundle.flow.nodes[0]?.params.table,
+      )
+      .toBe("orders");
+    await capture(page, "load-table", inspector);
+  } finally {
+    await page.request.delete(`/api/projects/${worktree.project}`);
+    await page.request.delete("/api/catalog/connection/sales");
+  }
 });
 
 test("capture branch creation and a real parameter comparison", async ({

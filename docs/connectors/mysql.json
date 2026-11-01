@@ -1,0 +1,24 @@
+{
+  "id": "mysql",
+  "name": "MySQL",
+  "family": "database",
+  "description": "A MySQL database, with its server and credentials for each environment.",
+  "parameters": [
+    {"name": "host", "type": "text"},
+    {"name": "port", "type": "number", "default": 3306},
+    {"name": "database", "type": "text"},
+    {"name": "user", "type": "text"},
+    {"name": "password", "type": "text", "secret": true},
+    {
+      "name": "options",
+      "type": "text",
+      "default": "",
+      "label": "Additional options",
+      "description": "Connection settings passed to the driver as is, such as ssl_mode=required."
+    }
+  ],
+  "extensions": [{"name": "mysql"}],
+  "capabilities": ["read", "write"],
+  "init_sql": "CREATE OR REPLACE TEMPORARY SECRET {{ secret_name }} (TYPE mysql, HOST {{ host }}, PORT {{ port }}, DATABASE {{ database }}, USER {{ user }}, PASSWORD {{ password }}); ATTACH {{ options }} AS {{ alias }} (TYPE mysql, SECRET {{ secret_name }});",
+  "compatibility": "Validated on DuckDB 2.0.0 with its matching mysql extension, MySQL 8.4, Linux x86_64. Other versions require validation."
+}

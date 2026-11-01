@@ -4,7 +4,7 @@ A connector is a declarative setup definition. A connection is a named reusable 
 
 A connection says where data lives and how to reach it in each environment. Connections fall into two families, which group the Connections page:
 
-- **Databases and warehouses** are attached and read as tables, such as Oracle.
+- **Databases and warehouses** are attached and read as tables with [Load table and Export table](#database-tables), such as PostgreSQL, Oracle or a database type an administrator declares.
 - **File storage** is a location for file nodes: a Server folder, an S3 bucket prefix, or a storage type an administrator declares.
 
 Fresh instances have no connection. File nodes read uploads and write exports as [project files](#project-files-and-storage-locations) without one; connections reach server folders, object storage and databases.
@@ -24,6 +24,20 @@ connection does not exist). Masked secrets in an update retain their stored valu
 
 ![Create a server folder connection with separate development and production settings](images/connection.png)
 
+## Test a connection
+
+**Test connection**, in the connection form, runs the setup of the selected environment with the values in the form, saved or not, in a separate process. It reports what would otherwise fail the first run that uses the connection, without stopping the Duckpad server:
+
+- a wrong password, an unknown database or an unreachable host, with the driver's message;
+- an extension that cannot load, or that stops its process, such as a binary built for a newer processor;
+- a Server folder root that does not exist on the server.
+
+A database connection then lists the schemas and tables it attached; a storage connection reports that its setup succeeded. Masked secrets of a saved connection keep their stored values, and errors never show secret values. A test stops after 30 seconds; add `connect_timeout=5` to a PostgreSQL connection's Additional options to fail sooner on an unreachable host.
+
+![Test a PostgreSQL connection in production before saving it](images/connection-test.png)
+
+Runs get the same protection. Duckpad loads each connector extension once in a separate process before relying on it: in embedded execution before loading it in the server, in isolated execution before starting the worker. An extension that crashes then fails the node, or the start of the isolated session, instead of stopping Duckpad.
+
 ## Environments
 
 Configure labels, colors, connection values and run confirmation in the
@@ -36,9 +50,11 @@ results; switching environment never starts a run.
 | --- | --- | --- |
 | Server folder | CSV and Parquet read; CSV export | DuckDB 2.0.0, Python 3.13.12, Linux x86_64; unit/native-equivalence tests, browser example and million-row benchmark |
 | S3 | CSV and Parquet read; CSV export; relative paths under a bucket prefix | DuckDB 2.0.0 with matching `httpfs`, Linux x86_64; Moto S3 emulator on localhost; repeated native destination replacement |
+| PostgreSQL | Load table and Export table; Additional options; Test connection | DuckDB 2.0.0 with its `postgres` extension linked statically, PostgreSQL 16, Linux x86_64 without AVX2, in embedded and isolated execution; CI with the PyPI wheel and downloaded extension |
 | Oracle | Read attached tables; export to an existing table with OraDuck | DuckDB 2.0.0, signed community OraDuck 0.4.0, Oracle 19.3, Oracle Instant Client 19.32, Linux x86_64 |
+| MySQL and SQLite examples | Load table and Export table through [published definitions](#published-examples-mysql-and-sqlite) | DuckDB 2.0.0 with matching `mysql` and `sqlite` extensions, MySQL 8.4, Linux x86_64 (CI) |
 
-The table records connector validation of the embedded engine. File formats are not connectors; XLSX has its own [validation record](#xlsx-workbooks). The isolated HTTP worker additionally requires Linux Landlock; local CSV/Parquet execution, exports and lineage are covered by the account/permission tests. Remote S3/Oracle deployments need validation with their extension and network policy in this execution mode.
+The table records connector validation of the embedded engine, and of the isolated worker where stated. File formats are not connectors; XLSX has its own [validation record](#xlsx-workbooks). The isolated HTTP worker additionally requires Linux Landlock; local CSV/Parquet execution, exports and lineage are covered by the account/permission tests. Remote S3/Oracle deployments need validation with their extension and network policy in this execution mode.
 
 These are the tested combinations, not claims that every newer DuckDB or operating-system build has been validated. A matching extension build is required for the installed DuckDB version. Other platforms and live AWS deployments need validation in their own environment. Raw results are in `docs/validation/`.
 
@@ -162,6 +178,42 @@ uv sync --group integration
 uv run python scripts/integration.py s3 --output docs/validation/s3.json
 ```
 
+## Database tables
+
+**Load table** reads a table or view of a database connection granted to the project, built-in or custom, and **Export table** inserts rows into an existing table. Both address the connection's attachment as `{{ connection }}.{{ schema }}.{{ table }}`:
+
+```sql
+SELECT * FROM {{ connection }}.{{ schema }}.{{ table }};
+INSERT INTO {{ connection }}.{{ schema }}.{{ table }} BY NAME SELECT * FROM {{ source }};
+```
+
+Select a connection, then a schema and a table. The inspector suggests those of the selected environment, read from the connection's attachment; typing a name also works, for example for a table created after the list loaded. The schema defaults to `public`, PostgreSQL's default. DuckDB and SQLite files use `main`, and MySQL the database name.
+
+![Load table reads public.orders from a PostgreSQL connection](images/load-table.png)
+
+Export table matches columns by name: every input column must exist in the destination, and destination columns absent from the input take their default value, such as `NULL`. Each run appends its rows. Duckpad never truncates, creates or replaces the table; prepare or clear it in the database itself. Oracle keeps **Export Oracle**, whose OraDuck `COPY` is not an `INSERT`; Load table reads Oracle like any other database.
+
+Template authors declare the same fields with the `schema_name(connection)` and `table_name(schema)` parameter types, described in the [SQL templates guide](SQL.md#parameter-values).
+
+## PostgreSQL
+
+Configure a host, port, database, user and password per environment. The built-in definition loads DuckDB's `postgres` extension, creates a temporary secret and attaches the database. Point dev and prod at different databases or servers with the same schemas and tables, and a project reads and writes each environment without any change.
+
+**Additional options** take libpq connection keywords separated by spaces, passed to the driver as written, for each environment. A production server that requires certificate validation gets `sslmode=verify-full sslrootcert=/etc/ssl/certs/company-ca.pem` in its prod values; other common keywords are `connect_timeout=5` and `application_name=duckpad`. The options take precedence over the fields above. Keep the password in its own field, which Duckpad masks: options are displayed and recorded in run history. A setting that libpq does not accept as a keyword needs an edit of the built-in definition, which then shows **Customized**.
+
+Duckpad's container image links `postgres` statically, built for x86-64 processors without AVX2 or BMI2, so nothing is downloaded. Other DuckDB builds, such as the PyPI wheel of `pip install duckpad`, install the extension from DuckDB's core repository on first use; air-gapped instances [import it](OFFLINE_EXTENSIONS.md) like any other extension.
+
+The acceptance test creates a uniquely named schema in a dev and a prod database, then runs Load table, an aggregate and Export table in both environments, in embedded and isolated execution. It checks repeated appends without truncation, cell lineage, Test connection, the inspector's listing, Additional options (`application_name` and TLS on the server side), and the errors for a wrong password, an unreachable host and a refused certificate. It drops only its own schema. CI runs it on every pull request against a PostgreSQL service.
+
+```sh
+# Credentials of a disposable test server, never a production one.
+export DUCKPAD_POSTGRES_HOST=127.0.0.1 DUCKPAD_POSTGRES_PORT=5432
+export DUCKPAD_POSTGRES_USER=... DUCKPAD_POSTGRES_PASSWORD=...
+export DUCKPAD_POSTGRES_DEV_DATABASE=sales_dev DUCKPAD_POSTGRES_PROD_DATABASE=sales_prod
+export DUCKPAD_POSTGRES_SSL=1  # when the server accepts TLS
+uv run python scripts/integration.py postgres --output docs/validation/postgres.json
+```
+
 ## Oracle / OraDuck
 
 Install Oracle Instant Client 19 or newer, Basic or Basic Light, compatible with the extension and platform. On Linux, make its shared libraries discoverable and install the platform's `libaio`/`libnsl` prerequisites. The extension build must match the exact DuckDB ABI. The application uses a private extension directory, so an unrelated unsigned developer extension in the user's global DuckDB cache cannot be loaded accidentally.
@@ -170,7 +222,7 @@ OraDuck is available signed from the community repository. Leave **Allow unsigne
 extensions** disabled for its signed binary. On an offline server, use the
 [standard extension import](OFFLINE_EXTENSIONS.md), as for any other extension.
 
-The preset creates a temporary secret with `TYPE oraduck`, `USER`, `PASSWORD` and `DSN`, then uses `ATTACH` for read-only access. Source nodes select a connection, schema and resource. Export nodes emit `COPY (SELECT ...) TO ... (FORMAT oraduck, CONNECTION ...)` targeting an existing Oracle table; the columns expression supports explicit mapping. The destination table must already exist and be compatible with the selected columns.
+The preset creates a temporary secret with `TYPE oraduck`, `USER`, `PASSWORD` and `DSN`, then uses `ATTACH` for read-only access. Load table selects a connection, schema and table. Export Oracle nodes emit `COPY (SELECT ...) TO ... (FORMAT oraduck, CONNECTION ...)` targeting an existing Oracle table; the columns expression supports explicit mapping. The destination table must already exist and be compatible with the selected columns.
 
 Before each manual run, relevant attachments are recreated to refresh schema metadata. Materialized Duckpad results remain independent of those attachments. Export behavior is native OraDuck behavior: there is no hidden truncate, table recreation or extra write. The integration test compares native and generated exports, checks repeated appends, adds a source column and row between launches, then verifies refresh and cell lineage through the same logical connection.
 
@@ -186,7 +238,7 @@ The script creates uniquely named disposable test tables and drops only those ta
 
 ## Built-in and custom connector types
 
-Server folder, Amazon S3 and Oracle · OraDuck are built in: their definitions come with each Duckpad release and show a **Built-in** badge. An unedited built-in always matches the running release.
+Server folder, Amazon S3, PostgreSQL and Oracle · OraDuck are built in: their definitions come with each Duckpad release and show a **Built-in** badge. An unedited built-in always matches the running release.
 
 - **Edit** opens a built-in's JSON definition. Saving a change stores your version as an override: the definition shows **Customized**, keeps your edit across upgrades, and no longer follows the release. Saving it unchanged keeps it built-in.
 - **Reset to built-in** deletes the override. The definition matches the running release again; connections keep their values.
@@ -217,7 +269,9 @@ Every definition declares its `family`, `database` or `storage`; definitions wit
 }
 ```
 
-Create a named connection pointing to different database files in `dev` and `prod`. A source template can read `{{ connection }}.{{ resource }}`; an export template can explicitly `INSERT INTO` a declared attached destination from its input. This exact extension-free scenario is covered by `tests/test_catalog.py`, including reuse and historical project code using current catalog settings.
+Create a named connection pointing to different database files in `dev` and `prod`, grant it, and read and write it with [Load table and Export table](#database-tables), schema `main`: no template or code change is needed. Custom source and export templates can also read `{{ connection }}.{{ resource }}` or explicitly `INSERT INTO` a declared attached destination. `tests/test_database_connections.py` and `tests/test_catalog.py` cover this extension-free scenario, including reuse and historical project code using current catalog settings.
+
+The isolated worker opens only project files and the roots of storage connections, so database files such as this one and SQLite work in [trusted local mode](INSTALLATION.md#trusted-local-mode) only. Database servers, such as PostgreSQL and MySQL, work in both modes.
 
 A storage connector declares a `root` parameter, a folder or a URI prefix, and any setup its location needs. This one reaches Google Cloud Storage through `httpfs` with HMAC keys:
 
@@ -241,4 +295,61 @@ A storage connector declares a `root` parameter, a folder or a URI prefix, and a
 
 A connection with the root `gs://landing/raw/` in dev appears under **File storage** and as a Location of every file node in the projects it is granted to. In isolated execution, the worker may read the URI prefixes of the secret types it creates (`s3://`, `gcs://`, `gs://`, `r2://`) and below the URI roots of granted storage connections. A storage type whose root is `https://data.example.com/landing/` therefore needs no secret, only the `httpfs` extension, and cannot read `https://data.example.com/landing-archive/`.
 
-Connection parameter types are text, file, number, boolean and choice. Secret parameters add `"secret": true`. Setup placeholders use type-aware SQL escaping; `alias` and `secret_name` are reserved runtime identifiers. Setup permits declared extension loading, `CREATE OR REPLACE TEMPORARY SECRET {{ secret_name }}` and `ATTACH ... AS {{ alias }}`. Data queries and writes belong in source/export nodes and are rejected in initialization. Extensions are installed and loaded from the declared repository when needed.
+Connection parameter types are text, file, number, boolean and choice. Secret parameters add `"secret": true`. An optional `label` replaces the name in the connection form and an optional `description` explains the field there, as PostgreSQL's `options` parameter shows **Additional options**; neither changes what setup does or makes results stale. Setup placeholders use type-aware SQL escaping; `alias` and `secret_name` are reserved runtime identifiers. Setup permits declared extension loading, `CREATE OR REPLACE TEMPORARY SECRET {{ secret_name }}` and `ATTACH ... AS {{ alias }}`. Data queries and writes belong in source/export nodes and are rejected in initialization. Extensions are installed and loaded from the declared repository when needed.
+
+## Published examples: MySQL and SQLite
+
+These definitions reach databases that Duckpad does not ship, through DuckDB's `mysql` and `sqlite` extensions. Paste one into **New connector definition**, then create connections and read them with Load table, as you would read PostgreSQL. The files are also in `docs/connectors/`, and their validation records in `docs/validation/`.
+
+A community contribution follows the same shape: a definition plus a validation record produced by `scripts/integration.py`, the evidence the built-ins have.
+
+### MySQL
+
+```json
+{
+  "id": "mysql",
+  "name": "MySQL",
+  "family": "database",
+  "description": "A MySQL database, with its server and credentials for each environment.",
+  "parameters": [
+    {"name": "host", "type": "text"},
+    {"name": "port", "type": "number", "default": 3306},
+    {"name": "database", "type": "text"},
+    {"name": "user", "type": "text"},
+    {"name": "password", "type": "text", "secret": true},
+    {
+      "name": "options",
+      "type": "text",
+      "default": "",
+      "label": "Additional options",
+      "description": "Connection settings passed to the driver as is, such as ssl_mode=required."
+    }
+  ],
+  "extensions": [{"name": "mysql"}],
+  "capabilities": ["read", "write"],
+  "init_sql": "CREATE OR REPLACE TEMPORARY SECRET {{ secret_name }} (TYPE mysql, HOST {{ host }}, PORT {{ port }}, DATABASE {{ database }}, USER {{ user }}, PASSWORD {{ password }}); ATTACH {{ options }} AS {{ alias }} (TYPE mysql, SECRET {{ secret_name }});",
+  "compatibility": "Validated on DuckDB 2.0.0 with its matching mysql extension, MySQL 8.4, Linux x86_64. Other versions require validation."
+}
+```
+
+A MySQL schema is a database: Load table's schema is the database name. Keep the same database name in every environment, on a dev and a prod server, so that the project's schema does not change between environments. Validated in CI with two MySQL 8.4 servers, in embedded and isolated execution (`docs/validation/mysql.json`).
+
+### SQLite
+
+```json
+{
+  "id": "sqlite",
+  "name": "SQLite",
+  "family": "database",
+  "description": "A SQLite database file on the Duckpad server, for each environment.",
+  "parameters": [{"name": "path", "type": "file"}],
+  "extensions": [{"name": "sqlite"}],
+  "capabilities": ["read", "write"],
+  "init_sql": "ATTACH {{ path }} AS {{ alias }} (TYPE sqlite);",
+  "compatibility": "Validated on DuckDB 2.0.0 with its matching sqlite extension, Linux x86_64, in embedded execution. Other versions require validation."
+}
+```
+
+Set `path` to a SQLite file per environment, and use the schema `main`. Like other database files, it needs [trusted local mode](INSTALLATION.md#trusted-local-mode). Validated in CI in embedded execution (`docs/validation/sqlite.json`).
+
+On x86-64 processors without AVX2, the `mysql` and `sqlite` binaries published for DuckDB 2.0.0 stop their process when they load. Test connection reports it; such a server needs a compatible build of the extension, as Duckpad's container image provides for `postgres`.

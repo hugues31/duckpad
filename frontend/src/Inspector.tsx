@@ -25,6 +25,7 @@ import ResultSummary from "./ResultSummary";
 import { useRevisionDraft } from "./useRevisionDraft";
 import type {
   Column,
+  DatabaseObjects,
   Documentation,
   FlowEdge,
   FlowNode,
@@ -217,6 +218,38 @@ export default function Inspector({
       else params[name] = value;
       return { ...current, params };
     });
+  // Schema and table names are listed from the database connection their parameters name.
+  const valueOf = (name?: string) => {
+    const parameter = parameters.find((p) => p.name === name);
+    const value = draft.params?.[name ?? ""] ?? parameter?.default;
+    return typeof value === "string" ? value : "";
+  };
+  const argumentOf = (name?: string) =>
+    parameters.find((p) => p.name === name)?.type.match(/\((\w+)\)/)?.[1];
+  const database = valueOf(
+    argumentOf(parameters.find((p) => p.type.startsWith("schema_name("))?.name),
+  );
+  const objects = useApiResource<DatabaseObjects>(
+    tab === "parameters" &&
+      connections.some((c) => c.id === database && c.family === "database")
+      ? withQuery(
+          `/worktrees/${worktree}/connections/${encodeURIComponent(database)}/objects`,
+          { environment },
+        )
+      : null,
+  );
+  const objectNames = (parameter: { name: string; type: string }) => {
+    const base = parameter.type.split("(")[0];
+    if (base !== "schema_name" && base !== "table_name") return undefined;
+    const schema = valueOf(argumentOf(parameter.name));
+    const names =
+      base === "schema_name"
+        ? (objects.data?.schemas ?? [])
+        : (objects.data?.tables ?? [])
+            .filter((table) => table.schema === schema)
+            .map((table) => table.name);
+    return { names, pending: objects.pending, error: objects.error };
+  };
   // Connection parameters naming where file and destination parameters live.
   const locations = new Set(
     parameters
@@ -450,6 +483,7 @@ export default function Inspector({
                   location={
                     type === "connection" && locations.has(parameter.name)
                   }
+                  objects={objectNames(parameter)}
                   columns={port ? inputColumns[port] : undefined}
                   schemas={
                     (port && schemas[port]) || Object.values(schemas).flat()

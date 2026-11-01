@@ -1,0 +1,31 @@
+{
+  "checks": [
+    "test connection lists schemas and tables",
+    "inspector listing",
+    "Load table",
+    "transform",
+    "Export table inserts by name into an existing table",
+    "repeated append without truncation",
+    "dev and prod values",
+    "cell lineage",
+    "secret redaction"
+  ],
+  "connector": "sqlite",
+  "duckdb": "2.0.0",
+  "extensions": [
+    [
+      "sqlite_scanner",
+      "e223dc0149",
+      "REPOSITORY"
+    ]
+  ],
+  "modes": {
+    "embedded": {
+      "first_run_seconds": 0.16672931499999777,
+      "production_run_seconds": 0.17063186199999336,
+      "repeat_run_seconds": 0.08925016399999208
+    }
+  },
+  "platform": "Linux-7.0.0-1017-azure-x86_64-with-glibc2.43",
+  "status": "passed"
+}

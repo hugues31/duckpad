@@ -16,6 +16,8 @@ MASK = "••••"
 KINDS = ("connector", "connection")
 RESERVED_PARAMETERS = {"alias", "secret_name"}
 PARAMETER_TYPES = ("text", "number", "boolean", "file")
+# Optional parameter fields the connection form displays instead of the name.
+DESCRIPTIVE_FIELDS = ("label", "description")
 # Databases are attached and read as tables; file storage is a location for file nodes, below its root.
 FAMILIES = ("database", "storage")
 # Catalog identifiers.
@@ -25,6 +27,16 @@ NAME = re.compile(r"[A-Za-z][\w-]*")
 def secret_names(definition):
     """Names of a connector's parameters that must never be displayed or recorded."""
     return {p["name"] for p in definition.get("parameters", []) if p.get("secret")}
+
+
+def executable(definition):
+    """A definition without the documentation that never changes what its setup does."""
+    result = {k: v for k, v in definition.items() if k not in ("name", "description", "compatibility")}
+    result["parameters"] = [
+        {k: v for k, v in parameter.items() if k not in DESCRIPTIVE_FIELDS}
+        for parameter in definition.get("parameters", [])
+    ]
+    return result
 
 
 def redact(text: str, secrets: list[str]) -> str:
@@ -214,6 +226,8 @@ class Catalog:
             name, kind = parameter.get("name", ""), parameter.get("type", "text")
             if name in RESERVED_PARAMETERS or not IDENTIFIER.fullmatch(name):
                 raise Problem("Connector parameters must be identifiers other than alias and secret_name")
+            if any(not isinstance(parameter.get(key, ""), str) for key in DESCRIPTIVE_FIELDS):
+                raise Problem("Connector parameter labels and descriptions must be text")
             if kind not in PARAMETER_TYPES and not re.fullmatch(r"choice\([^()]+\)", kind):
                 raise Problem(f"Unsupported connector parameter type: {kind}")
         if not set(definition.get("capabilities", [])) <= {"read", "write"}:
@@ -260,95 +274,118 @@ class Catalog:
             connection = self.store.get("connection", reference)
             if not connection:
                 raise Problem(f"Missing connection: {reference}")
-            definition = self.connector(connection["connector"])
-            if not definition:
-                raise Problem(f"Missing connector definition: {connection['connector']}")
-            self.validate_definition(definition)
-            if environment not in connection["environments"]:
-                raise Problem(f"Connection {reference} has no configuration for {environment}")
-            values = copy.deepcopy(connection["environments"][environment])
-            for p in definition.get("parameters", []):
-                name = p["name"]
-                if name not in values:
-                    if "default" not in p:
-                        raise Problem(f"Connection {reference} requires {name} in {environment}")
-                    values[name] = p["default"]
-                if p.get("secret"):
-                    secrets.append(values[name])
-                kind = p.get("type", "text")
-                if kind == "number" and (
-                    isinstance(values[name], bool) or not isinstance(values[name], (int, float))
-                ):
-                    raise Problem(f"Connection {reference}: {name} requires a number")
-                if kind == "boolean" and not isinstance(values[name], bool):
-                    raise Problem(f"Connection {reference}: {name} requires a boolean")
-                if kind.startswith("choice(") and values[name] not in kind.removeprefix("choice(")[:-1].split(
-                    "|"
-                ):
-                    raise Problem(f"Connection {reference}: invalid choice for {name}")
-            hidden = secret_names(definition)
-            public_values = {k: v for k, v in values.items() if k not in hidden}
-            captured[reference] = {
-                "definition": definition,
-                "values": values,
-                "settings": public_values,
-                "name": connection["name"],
-                "fingerprint": digest(
-                    [
-                        {
-                            k: v
-                            for k, v in definition.items()
-                            if k not in ("name", "description", "compatibility")
-                        },
-                        values,
-                    ]
-                ),
-                "alias": "conn_" + digest(reference)[:12],
-                "secret_name": "secret_" + digest(reference)[:12],
-            }
+            captured[reference], hidden = self.capture_connection(reference, connection, environment)
+            secrets += hidden
+        return captured, secrets
+
+    def capture_draft(self, data: Record, environment: str) -> tuple[Connections, list[str]]:
+        """Capture a connection as edited in its form, saved or not, like a run would in one environment.
+
+        Masked secrets keep the stored values of the connection being edited.
+        """
+        data = copy.deepcopy(data)
+        data["id"] = data.get("id") or "unsaved"
+        data = self.check("connection", data, create=self.store.get("connection", data["id"]) is None)
+        if environment not in self.environment_names():
+            raise Problem("Unknown environment", 404)
+        captured, secrets = self.capture_connection(data["id"], data, environment)
+        return {data["id"]: captured}, secrets
+
+    def capture_connection(
+        self, reference: str, connection: Record, environment: str
+    ) -> tuple[Record, list[str]]:
+        """The definition, values and runtime names of one connection in an environment, with its secrets."""
+        secrets = []
+        definition = self.connector(connection["connector"])
+        if not definition:
+            raise Problem(f"Missing connector definition: {connection['connector']}")
+        self.validate_definition(definition)
+        if environment not in connection["environments"]:
+            raise Problem(f"Connection {reference} has no configuration for {environment}")
+        values = copy.deepcopy(connection["environments"][environment])
+        for p in definition.get("parameters", []):
+            name = p["name"]
+            if name not in values:
+                if "default" not in p:
+                    raise Problem(f"Connection {reference} requires {name} in {environment}")
+                values[name] = p["default"]
+            if p.get("secret"):
+                secrets.append(values[name])
+            kind = p.get("type", "text")
+            if kind == "number" and (
+                isinstance(values[name], bool) or not isinstance(values[name], (int, float))
+            ):
+                raise Problem(f"Connection {reference}: {name} requires a number")
+            if kind == "boolean" and not isinstance(values[name], bool):
+                raise Problem(f"Connection {reference}: {name} requires a boolean")
+            if kind.startswith("choice(") and values[name] not in kind.removeprefix("choice(")[:-1].split(
+                "|"
+            ):
+                raise Problem(f"Connection {reference}: invalid choice for {name}")
+        hidden = secret_names(definition)
+        public_values = {k: v for k, v in values.items() if k not in hidden}
+        captured = {
+            "definition": definition,
+            "values": values,
+            "settings": public_values,
+            "name": connection["name"],
+            "fingerprint": digest([executable(definition), values]),
+            "alias": "conn_" + digest(reference)[:12],
+            "secret_name": "secret_" + digest(reference)[:12],
+        }
         return captured, secrets
 
     def prepare(self, db, captured, offline=None):
         if offline is None:
             offline = self.store.get("settings", "offline_extensions", {}) if self else {}
-        for connection in captured.values():
-            definition = connection["definition"]
-            for ext in definition.get("extensions", []):
-                name = ext["name"]
-                if name in offline:
-                    # Imported files never fall back to a network install when loading fails.
-                    db.execute(f"LOAD {qi(name)} FROM {qi(offline[name]['repository'])}")
-                    continue
-                try:
-                    db.execute(f"LOAD {qi(name)}")
-                except duckdb.Error:
-                    repository = ext.get("repository")
-                    suffix = (
-                        (" FROM community" if repository == "community" else f" FROM {literal(repository)}")
-                        if repository
-                        else ""
-                    )
-                    db.execute(f"INSTALL {qi(name)}{suffix}")
-                    db.execute(f"LOAD {qi(name)}")
-            aliases = {r[1] for r in db.execute("PRAGMA database_list").fetchall()}
-            if connection["alias"] in aliases:
-                db.execute(f"DETACH {qi(connection['alias'])}")
-            values = connection["values"]
-            types = {p["name"]: p["type"] for p in definition.get("parameters", [])}
+        setup_connections(db, captured, offline)
 
-            def replace(match, connection=connection, values=values, types=types):
-                key = match[1].strip()
-                if key in RESERVED_PARAMETERS:
-                    return qi(connection[key])
-                if key not in values:
-                    raise Problem(f"Undeclared connector parameter: {key}")
-                value = values[key]
-                if types.get(key) == "number":
-                    value = float(value)
-                if types.get(key) == "boolean" and not isinstance(value, bool):
-                    raise Problem(f"{key} requires a boolean")
-                return literal(value)
 
-            sql = REFERENCE.sub(replace, definition.get("init_sql", ""))
-            if sql.strip():
-                db.execute(sql)
+def setup_connections(db, captured, offline):
+    """Load each captured connection's extensions, then run its setup SQL, in a DuckDB session.
+
+    Extensions imported for offline use load from their import, never from the network.
+    """
+    for connection in captured.values():
+        definition = connection["definition"]
+        for ext in definition.get("extensions", []):
+            name = ext["name"]
+            if name in offline:
+                # Imported files never fall back to a network install when loading fails.
+                db.execute(f"LOAD {qi(name)} FROM {qi(offline[name]['repository'])}")
+                continue
+            try:
+                db.execute(f"LOAD {qi(name)}")
+            except duckdb.Error:
+                repository = ext.get("repository")
+                suffix = (
+                    (" FROM community" if repository == "community" else f" FROM {literal(repository)}")
+                    if repository
+                    else ""
+                )
+                db.execute(f"INSTALL {qi(name)}{suffix}")
+                db.execute(f"LOAD {qi(name)}")
+        aliases = {r[1] for r in db.execute("PRAGMA database_list").fetchall()}
+        if connection["alias"] in aliases:
+            db.execute(f"DETACH {qi(connection['alias'])}")
+        values = connection["values"]
+        types = {p["name"]: p["type"] for p in definition.get("parameters", [])}
+
+        def replace(match, connection=connection, values=values, types=types):
+            key = match[1].strip()
+            if key in RESERVED_PARAMETERS:
+                return qi(connection[key])
+            if key not in values:
+                raise Problem(f"Undeclared connector parameter: {key}")
+            value = values[key]
+            if types.get(key) == "number":
+                # Drivers such as libpq refuse `5432.0` as a port.
+                value = float(value)
+                value = int(value) if value.is_integer() else value
+            if types.get(key) == "boolean" and not isinstance(value, bool):
+                raise Problem(f"{key} requires a boolean")
+            return literal(value)
+
+        sql = REFERENCE.sub(replace, definition.get("init_sql", ""))
+        if sql.strip():
+            db.execute(sql)
