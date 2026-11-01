@@ -14,6 +14,7 @@ from duckpad import connection_probe
 from duckpad.app import create_app
 from duckpad.builtin_templates import BUILTINS
 from duckpad.catalog import MASK
+from duckpad.services import Services
 from duckpad.util import Problem
 
 # An administrator-declared connector without extensions: a DuckDB file per environment.
@@ -222,6 +223,35 @@ def test_embedded_runs_load_connector_extensions_in_a_child_first(services, tmp_
     assert "Cannot load the extensions of connection Warehouse" in error
     # This process survived: only the child loading the extension stopped.
     assert "SIGILL" in error
+
+
+def test_isolated_sessions_install_connector_extensions_in_a_child_first(tmp_path, monkeypatch):
+    instance = Services.open(tmp_path / "instance", enforce_access=True)
+    try:
+        instance.catalog.save(
+            "connector", {**NATIVE, "extensions": [{"name": "crashing_isolated_extension"}]}
+        )
+        instance.catalog.save(
+            "connection",
+            {
+                "id": "warehouse",
+                "name": "Warehouse",
+                "connector": "native",
+                "environments": databases(tmp_path),
+            },
+            create=True,
+        )
+        worktree = instance.projects.create("Tables")
+        assert instance.engine.access is not None
+        instance.engine.access.grant_connections(worktree["project"], ["warehouse"])
+        monkeypatch.setattr(connection_probe, "COMMAND", CRASH)
+        # The server used to load the extension itself before starting the worker.
+        with pytest.raises(Problem, match="Cannot install the extensions of connection Warehouse") as crashed:
+            instance.engine.context(worktree["id"], "dev", create=True)
+        assert crashed.value.status == 503
+        assert "SIGILL" in str(crashed.value)
+    finally:
+        instance.close()
 
 
 def test_postgres_passes_additional_options_to_the_driver_unchanged(services):

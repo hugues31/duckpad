@@ -36,7 +36,7 @@ A database connection then lists the schemas and tables it attached; a storage c
 
 ![Test a PostgreSQL connection in production before saving it](images/connection-test.png)
 
-Runs get the same protection in embedded execution: Duckpad loads each connector extension in a separate process once before loading it in the server, so an extension that crashes fails the node instead of stopping Duckpad. The isolated worker is already a separate process.
+Runs get the same protection. Duckpad loads each connector extension once in a separate process before relying on it: in embedded execution before loading it in the server, in isolated execution before starting the worker. An extension that crashes then fails the node, or the start of the isolated session, instead of stopping Duckpad.
 
 ## Environments
 

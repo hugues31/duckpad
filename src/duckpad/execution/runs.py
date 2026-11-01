@@ -587,15 +587,20 @@ class Runner:
             if reference not in execution.prepared:
                 try:
                     if not self.isolated:
-                        captured = {reference: execution.captured[reference]}
+                        connection = execution.captured[reference]
                         # An extension that stops its process must not stop the server.
-                        connection_probe.check_extensions(
-                            self.pool.probe_config(),
-                            captured,
-                            self.store.get("settings", "offline_extensions", {}),
-                            execution.secrets,
-                        )
-                        self.catalog.prepare(execution.cursor, captured)
+                        try:
+                            connection_probe.check_extensions(
+                                self.pool.probe_config(),
+                                connection,
+                                self.store.get("settings", "offline_extensions", {}),
+                                execution.secrets,
+                            )
+                        except Problem as error:
+                            raise Problem(
+                                f"Cannot load the extensions of connection {connection['name']}: {error}", 422
+                            ) from None
+                        self.catalog.prepare(execution.cursor, {reference: connection})
                     execution.prepared[reference] = None
                 except Exception as error:
                     execution.prepared[reference] = error

@@ -83,20 +83,18 @@ def key(connection: Record, offline: Record) -> str:
     return json.dumps([extensions, imports], sort_keys=True)
 
 
-def check_extensions(config: Record, captured: Connections, offline: Record, secrets: list[str]) -> None:
-    """Load connector extensions in a child before this process loads them, once per server process."""
-    for reference, connection in captured.items():
-        if not connection["definition"].get("extensions"):
-            continue
-        with _verified_lock:
-            if key(connection, offline) in _verified:
-                continue
-        try:
-            run(config, {reference: connection}, offline, secrets, setup=False)
-        except Problem as error:
-            raise Problem(
-                f"Cannot load the extensions of connection {connection['name']}: {error}", 422
-            ) from None
+def check_extensions(config: Record, connection: Record, offline: Record, secrets: list[str]) -> None:
+    """Load a connection's extensions in a child before this process relies on them, once per process.
+
+    The child installs missing ones into the instance cache from their declared repository, and its
+    failure, crash included, is raised here.
+    """
+    if not connection["definition"].get("extensions"):
+        return
+    with _verified_lock:
+        if key(connection, offline) in _verified:
+            return
+    run(config, {"extensions": connection}, offline, secrets, setup=False)
 
 
 def objects(db: SQLCursor, alias: str) -> Record:
