@@ -182,6 +182,13 @@ test("capture the quickstart using the SQL printed in the guide", async ({
   await expect(revenue).toBeVisible();
   await expect(results.locator("tbody tr").last()).toContainText("80.00");
   await page.getByRole("button", { name: "Fit view", exact: true }).click();
+  const connection = page.locator(".react-flow__edge-path");
+  await expect(connection).toHaveCount(1);
+  // Horizontal SVG paths have zero-height boxes but still paint their stroke.
+  expect(
+    await connection.evaluate((path: SVGPathElement) => path.getTotalLength()),
+  ).toBeGreaterThan(100);
+  await expect(connection).not.toHaveCSS("stroke", "none");
   await capture(page, "quickstart-results");
   await revenue.click();
   const lineage = page.getByRole("dialog", {
