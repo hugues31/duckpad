@@ -1,6 +1,7 @@
 import { NavLink } from "react-router";
 import {
   Blocks,
+  Cpu,
   MessageSquare,
   Database,
   GitBranch,
@@ -16,6 +17,7 @@ import EnvironmentsPanel from "./EnvironmentsPanel";
 import ExtensionSettings from "./ExtensionSettings";
 import GitHostsSettings from "./GitHostsSettings";
 import { useT } from "./i18n";
+import SQLResourceSettings from "./SQLResourceSettings";
 import SSOSettings from "./SSOSettings";
 import type { Workspace } from "./types";
 
@@ -27,6 +29,7 @@ const sectionIcons = {
   environments: Server,
   connections: Database,
   extensions: Blocks,
+  sqlResources: Cpu,
 };
 
 export default function InstanceSettings({
@@ -77,6 +80,7 @@ export default function InstanceSettings({
             {section === "usersPermissions" && <UsersPage refresh={refresh} />}
             {section === "assistant" && <AssistantSettings />}
             {section === "extensions" && <ExtensionSettings />}
+            {section === "sqlResources" && <SQLResourceSettings />}
             {section === "ssoSettings" && <SSOSettings />}
             {section === "gitHosts" && <GitHostsSettings />}
             {section === "environments" && (

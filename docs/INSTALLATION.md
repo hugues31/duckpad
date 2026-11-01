@@ -98,6 +98,32 @@ The CLI accepts only `127.0.0.1` (the default), `localhost` or `::1` as `--host`
 with this option. Keep the default isolated mode for shared deployments. A
 missing sandbox never enables trusted mode automatically.
 
+## SQL resources
+
+Each branch and environment that runs SQL gets its own DuckDB session: an isolated
+worker process by default, or a database inside the application process in trusted
+local mode. By default, DuckDB sizes every session from the server: one thread per
+available CPU core, and a memory limit of 80% of the server's memory, both within
+Linux cgroup limits when they apply. Intermediate results that exceed the memory limit
+spill to temporary files on disk.
+
+Instance admins can set explicit limits in **Instance settings → SQL resources**:
+
+- **Threads per session**: from 1 to 1,024. More threads than CPU cores can help
+  queries that mostly wait for remote storage.
+- **Memory limit per session**: a size such as `16GB` or `512MiB`, or a share of the
+  server's memory such as `50%`.
+
+Leave a field empty to keep DuckDB's automatic value, which the page shows. Each session
+restarts with new values at its next run, which computes its results again. Running
+executions keep their current values, and no server restart is needed.
+
+These limits apply to each session, not to the whole instance. Sessions keep their
+results in memory between runs, and several can run at the same time. On a server
+shared by several users or projects, choose a memory limit that lets the sessions
+likely to run together fit in the server's memory. Otherwise, the operating system
+may stop Duckpad processes when memory runs out.
+
 ## Develop from source
 
 Contributors also need [uv](https://docs.astral.sh/uv/) and Node.js 20+.
@@ -156,7 +182,7 @@ Project roles form a hierarchy: Reader < Operator < Editor < Project Admin.
 Instance administrators have every project right. Job result worktrees remain
 read-only for everyone, including instance administrators. Jobs execute a pinned
 tag or an acceptance branch in their own worktree; Operators cannot run arbitrary
-branch versions directly. See [Jobs in the user guide](AUTHORING.md#jobs).
+branch versions directly. See the [Jobs guide](JOBS.md).
 
 Open a project and select **Project settings** to add participants, change roles or
 remove access. Every instance and project must retain an active admin. Instance

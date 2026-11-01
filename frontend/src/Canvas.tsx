@@ -11,6 +11,7 @@ import {
   ReactFlowProvider,
   useReactFlow,
   useNodesInitialized,
+  useUpdateNodeInternals,
   getNodesBounds,
   getViewportForBounds,
   type Connection,
@@ -99,8 +100,14 @@ type PipelineData = {
 };
 type PipelineNode = Node<PipelineData, "pipeline">;
 
-function PipelineNode({ data, selected }: NodeProps<PipelineNode>) {
+function PipelineNode({ id, data, selected }: NodeProps<PipelineNode>) {
   const t = useT();
+  const updateNodeInternals = useUpdateNodeInternals();
+  const portLayout = JSON.stringify([data.kind, data.inputs, data.outputs]);
+  useEffect(() => {
+    // SQL edits can rename or move handles without resizing the node.
+    updateNodeInternals(id);
+  }, [id, portLayout, updateNodeInternals]);
   const source = data.kind === "source";
   const portPosition = (index: number, count: number) => {
     const spacing = Math.min(24, 72 / Math.max(1, count - 1));

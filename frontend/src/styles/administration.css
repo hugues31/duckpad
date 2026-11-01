@@ -119,7 +119,8 @@
   }
 }
 .sso-fields,
-.git-hosts-fields {
+.git-hosts-fields,
+.sql-resource-fields {
   border: 0;
   padding: 0;
   margin: 0;

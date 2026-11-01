@@ -27,6 +27,8 @@ READER_POLL_INTERVAL = 0.005
 REMOTE_PREFIXES = {"s3": ("s3://", "s3a://", "s3n://"), "r2": ("r2://",), "gcs": ("gcs://", "gs://")}
 SECRET_OPTIONS = re.compile(r"\bSECRET\s+\{\{\s*secret_name\s*\}\}\s*\(([^)]*)", re.IGNORECASE)
 SECRET_TYPE = re.compile(r"\bTYPE\s+[\"']?(\w+)", re.IGNORECASE)
+# Instance SQL resources; None leaves DuckDB's automatic sizing from the server's CPUs and memory.
+SQL_RESOURCES: Record = {"threads": None, "memory_limit": None}
 
 
 def remote_prefixes(captured: Connections) -> list[str]:
@@ -38,6 +40,20 @@ def remote_prefixes(captured: Connections) -> list[str]:
             for kind in SECRET_TYPE.findall(options):
                 prefixes += [p for p in REMOTE_PREFIXES.get(kind.lower(), ()) if p not in prefixes]
     return prefixes
+
+
+def resource_config(resources: Record) -> Record:
+    """The DuckDB settings of explicit SQL resources."""
+    return {key: resources[key] for key in SQL_RESOURCES if resources.get(key) is not None}
+
+
+def automatic_resources() -> Record:
+    """DuckDB's own sizing on this server, which sessions use without explicit resources."""
+    with duckdb.connect() as db:
+        row = db.execute("SELECT current_setting('threads'), current_setting('memory_limit')").fetchone()
+    assert row is not None
+    threads, memory_limit = row
+    return {"threads": threads, "memory_limit": memory_limit}
 
 
 def interrupt(cursor: SQLCursor) -> None:
@@ -115,6 +131,7 @@ class ContextPool:
             else:
                 bundle = self.projects.snapshot(worktree, committed=True)["bundle"]
                 requirements = project_extensions.enabled((bundle or {}).get("extensions"))
+        resources = self.sql_resources() if opening else {}
         while True:
             self.projects.get(worktree)
             if environment not in self.catalog.environment_names():
@@ -124,19 +141,21 @@ class ContextPool:
                 if (
                     context is None
                     or getattr(context.db, "closed", False)
-                    or (create and context.extensions != requirements)
+                    or (create and (context.extensions != requirements or context.resources != resources))
                 ):
                     if context is not None:
                         with context.lock:
                             cancel_lineage(context)
                     stopped = context.db if context is not None else None
-                    context = self.contexts[key] = Context(*key, db=None, extensions=requirements or [])
+                    context = self.contexts[key] = Context(
+                        *key, db=None, extensions=requirements or [], resources=resources
+                    )
             if stopped:
                 # Reap the replaced worker's process and release its descriptors.
                 stopped.close()
             if context.db is not None or (self.access and not create):
                 return context
-            database = self._open(worktree, environment, requirements or [])
+            database = self._open(worktree, environment, requirements or [], resources)
             with self.lock:
                 if self.contexts.get(key) is context and context.db is None:
                     context.db = database
@@ -166,7 +185,13 @@ class ContextPool:
     def extension_settings(self) -> dict[str, bool]:
         return {"allow_unsigned_extensions": self.store.get("settings", "allow_unsigned_extensions", False)}
 
-    def _open(self, worktree: str, environment: str, requirements: list[Record]) -> SQLDatabase:
+    def sql_resources(self) -> Record:
+        """DuckDB threads and memory limit of new SQL sessions; None leaves DuckDB's automatic sizing."""
+        return {**SQL_RESOURCES, **self.store.get("settings", "sql_resources", {})}
+
+    def _open(
+        self, worktree: str, environment: str, requirements: list[Record], resources: Record
+    ) -> SQLDatabase:
         extensions = self.store.paths.extensions
         extensions.mkdir(exist_ok=True)
         config = {**database_config(extensions), **self.extension_settings()}
@@ -175,7 +200,7 @@ class ContextPool:
             # Check native loading in a child first, even in trusted-local mode.
             if requirements:
                 project_extensions.check(config, requirements, imports)
-            db = duckdb.connect(":memory:", config=config)
+            db = duckdb.connect(":memory:", config={**config, **resource_config(resources)})
             try:
                 project_extensions.load(db, requirements, imports, config["allow_unsigned_extensions"])
                 return db
@@ -205,6 +230,7 @@ class ContextPool:
                     "write_paths": [str(p) for p in [*writable, directory]],
                     "temporary": str(temporary),
                     "remote_paths": remote_prefixes(captured),
+                    "resources": resource_config(resources),
                 }
             )
         except Problem as error:

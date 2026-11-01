@@ -14,7 +14,7 @@ from . import project_extensions
 from .access import Access
 from .catalog import Catalog
 from .datasets import Context
-from .execution.contexts import ContextPool
+from .execution.contexts import ContextPool, automatic_resources
 from .execution.exports import Exports
 from .execution.fingerprints import Fingerprints
 from .execution.results import Results
@@ -254,6 +254,14 @@ class Engine:
             self.reset_catalog()
             self.store.put("settings", "allow_unsigned_extensions", allow_unsigned)
             return self.extension_settings()
+
+    def sql_resources(self) -> Record:
+        return {**self.pool.sql_resources(), "automatic": automatic_resources()}
+
+    def configure_sql_resources(self, resources: Record) -> Record:
+        """Save the resources of SQL sessions; each session restarts with them at its next run."""
+        self.store.put("settings", "sql_resources", resources)
+        return self.sql_resources()
 
     def close(self) -> None:
         """Cancel active runs, wait for their workers, then close every context."""
