@@ -109,7 +109,7 @@ def test_a_connection_not_granted_to_the_project_stays_refused(instance, tmp_pat
         {
             "id": "share",
             "name": "Finance share",
-            "connector": "local",
+            "connector": "folder",
             "environments": {"dev": {"root": str(share)}},
         },
         create=True,

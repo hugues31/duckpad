@@ -3,7 +3,7 @@
 Duckpad stores instance metadata in SQLite through SQLModel. Alembic applies the
 packaged revisions in `src/duckpad/migrations/versions/` before the application
 starts serving requests. The initial revision creates 20 business tables and
-seeds the default environments and connectors, but no connection. It does not
+seeds the default environments, but no connector or connection. It does not
 import the former `records` document table. Use a fresh data directory for this
 breaking change; an existing document database is rejected without deleting it.
 
@@ -20,6 +20,13 @@ and key are persisted in the same transaction before starting the execution
 thread. Expired entries are ignored on lookup and removed when another accepted
 key is written. Deleting a Job removes its keys while retaining its run history.
 
+Revision `0006_builtin_connectors` drops the foreign key from `connection` to
+`connector`. Built-in connector definitions come with the release and are not
+stored: the `connector` table holds custom connector types and administrators'
+overrides of built-in ones, under the built-in identifier. A connection may
+therefore name a built-in connector without a row. Rows seeded by earlier
+versions are not converted; recreate such an instance.
+
 ## Data model
 
 ```mermaid
@@ -33,7 +40,7 @@ erDiagram
     project ||--|{ worktree : contains
     project ||--o| git_remote : configures
     project ||--o{ git_consent : requires
-    connector ||--o{ connection : defines
+    connector |o--o{ connection : defines
     connection ||--o{ project_connection : shared_with
     connection ||--o{ connection_environment : configures
     environment ||--o{ connection_environment : selects
@@ -108,8 +115,9 @@ conflicts, runs, artifacts, latest export results and access links. Project
 deletion also removes its remote and consents. Shared connections and accounts
 survive. Deleting a user cascades to sessions, keys, memberships and consents.
 Updating a row uses ORM updates rather than SQLite `INSERT OR REPLACE`, which
-would inadvertently cascade deletions. A connector with connections cannot be
-deleted until those connections have been removed.
+would inadvertently cascade deletions. The catalog refuses to delete a custom
+connector with connections until those connections have been removed; built-in
+connectors cannot be deleted, only reset by deleting their override.
 
 Environments and connection parameters are separate tables. Removing an
 environment deletes its live connection parameters; historical run, artifact

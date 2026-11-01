@@ -5,6 +5,7 @@ from pathlib import Path
 
 from .auth import Auth
 from .git.credentials import KEY_KIND
+from .templates import URI
 from .util import Problem
 
 LEVELS = {"reader": 1, "operator": 2, "editor": 3, "admin": 4}
@@ -151,7 +152,8 @@ class Access:
         roots, writable = [resource], [resource]
         for connection in captured.values():
             root = connection["values"].get("root")
-            if not root:
+            # URI roots are remote prefixes, which the worker allows separately.
+            if not root or URI.match(root):
                 continue
             path = Path(root).expanduser().resolve()
             # Instance credentials, Git metadata and other projects must never

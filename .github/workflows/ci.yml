@@ -48,6 +48,28 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: python scripts/check_typing_policy.py
 
+  s3-acceptance:
+    name: S3 storage acceptance on a Moto endpoint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - uses: astral-sh/setup-uv@v7
+      - run: uv sync --locked --python 3.12 --group integration
+      # Downloads the httpfs extension matching DuckDB's PyPI wheel.
+      - run: uv run --group integration python scripts/integration.py s3 --output s3-validation.json
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: s3-validation
+          path: s3-validation.json
+          if-no-files-found: ignore
+
   windows-projects:
     name: Windows projects and trusted local execution
     runs-on: windows-latest

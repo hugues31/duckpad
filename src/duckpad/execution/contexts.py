@@ -20,6 +20,7 @@ from ..extensions import database_config
 from ..materialize import drop_dataset
 from ..projects import Projects
 from ..store import Store
+from ..templates import URI
 from ..types import Connections, Record, SQLCursor, SQLDatabase
 from ..util import Problem
 
@@ -34,13 +35,20 @@ SQL_RESOURCES: Record = {"threads": None, "memory_limit": None}
 
 
 def remote_prefixes(captured: Connections) -> list[str]:
-    """Remote URL prefixes covered by the connections' storage secret types, whatever their IDs."""
+    """Remote URL prefixes covered by the connections' storage secret types, whatever their IDs,
+    and the URI roots of their storage connections."""
     prefixes: list[str] = []
     for connection in captured.values():
         sql = re.sub(r"--[^\n]*|/\*.*?\*/", "", connection["definition"].get("init_sql", ""), flags=re.DOTALL)
+        found = []
         for options in SECRET_OPTIONS.findall(sql):
             for kind in SECRET_TYPE.findall(options):
-                prefixes += [p for p in REMOTE_PREFIXES.get(kind.lower(), ()) if p not in prefixes]
+                found += REMOTE_PREFIXES.get(kind.lower(), ())
+        root = connection["values"].get("root")
+        if connection["definition"].get("family") == "storage" and isinstance(root, str) and URI.match(root):
+            # A folder prefix: `s3://bucket/landing` must not also open `s3://bucket/landing-archive`.
+            found.append(root if root.endswith("/") else root + "/")
+        prefixes += [p for p in found if p not in prefixes]
     return prefixes
 
 

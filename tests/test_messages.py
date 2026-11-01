@@ -218,6 +218,7 @@ def test_messages_are_redacted_in_results_previews_errors_and_logs(services, tmp
         "connector",
         {
             "id": "hidden",
+            "family": "database",
             "name": "Hidden",
             "parameters": [{"name": "password", "type": "text", "secret": True}],
             "capabilities": ["read"],

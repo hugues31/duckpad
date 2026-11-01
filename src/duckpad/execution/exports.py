@@ -48,7 +48,9 @@ class Exports:
             roots.extend(writable)
         else:
             roots.extend(
-                Path(c["values"]["root"]).resolve() for c in captured.values() if c["values"].get("root")
+                Path(c["values"]["root"]).resolve()
+                for c in captured.values()
+                if c["values"].get("root") and not URI.match(c["values"]["root"])
             )
         try:
             return self.artifacts.capture(export_file, run, node, roots)

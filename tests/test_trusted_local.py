@@ -101,6 +101,7 @@ def test_trusted_mode_prepares_connections_and_enforces_connection_grants(local,
     endpoint = f"/api/worktrees/{worktree['id']}"
     connector = {
         "id": "prepared",
+        "family": "database",
         "name": "Prepared database",
         "parameters": [{"name": "database", "type": "file"}],
         "extensions": [],

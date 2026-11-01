@@ -19,7 +19,7 @@ import GitHostsSettings from "./GitHostsSettings";
 import { useT } from "./i18n";
 import SQLResourceSettings from "./SQLResourceSettings";
 import SSOSettings from "./SSOSettings";
-import type { Workspace } from "./types";
+import type { ConnectorEditor, Workspace } from "./types";
 
 const sectionIcons = {
   usersPermissions: Users,
@@ -41,7 +41,7 @@ export default function InstanceSettings({
   section: string;
   workspace: Workspace;
   refresh: () => Promise<void>;
-  onConnectorEditor: (data: { title: string; value: string }) => void;
+  onConnectorEditor: (editor: ConnectorEditor) => void;
 }) {
   const t = useT();
   return (

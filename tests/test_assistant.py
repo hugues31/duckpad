@@ -278,7 +278,7 @@ def test_preview_limit_lineage_and_connection_revocation(instance):
         "nodes/source.sql": '-- @kind source\n-- @param connection: connection = "files"\n-- @output result\nSELECT range AS value FROM range(100);'
     }
     projects.write(worktree["id"], snapshot["revision"], bundle_to_files(bundle))
-    files = {"id": "files", "name": "Files", "connector": "local", "environments": {"dev": {"root": ""}}}
+    files = {"id": "files", "name": "Files", "connector": "folder", "environments": {"dev": {"root": ""}}}
     assert client.put("/api/catalog/connection?create=true", json=files).status_code == 200
     app.state.access.grant_connections(worktree["project"], ["files"])
     run = app.state.services.engine.launch(worktree["id"], "dev")

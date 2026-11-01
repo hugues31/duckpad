@@ -3,7 +3,7 @@ import { nodeCode, nodeCodePath, nodeGraph } from "./nodeCode";
 import { useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { Boxes } from "lucide-react";
-import { api, errorDetail, importProjectArchive, send } from "./api";
+import { api, errorDetail, importProjectArchive, send, withQuery } from "./api";
 import DuckMark from "./DuckMark";
 import GitWorkspace from "./GitWorkspace";
 import NewProjectModal from "./NewProjectModal";
@@ -15,6 +15,7 @@ import { useShell } from "./shell";
 import type {
   Bundle,
   Conflict,
+  ConnectorEditor,
   Environment,
   Snapshot,
   Worktree,
@@ -38,7 +39,7 @@ SELECT * FROM {{ source }};
 export type ModalState =
   | { kind: "about" }
   | { kind: "newProject" }
-  | { kind: "connector"; title: string; value: string }
+  | ({ kind: "connector" } & ConnectorEditor)
   | WorktreeModal;
 
 /** Dialogs about one working branch; they never act on another one. */
@@ -139,16 +140,33 @@ function AboutDialog({ onClose }: { onClose: () => void }) {
 function ConnectorDialog({
   title,
   value,
+  identity,
   onClose,
-}: {
-  title: string;
-  value: string;
-  onClose: () => void;
-}) {
-  const { refreshWorkspace } = useShell();
+}: ConnectorEditor & { onClose: () => void }) {
+  const t = useT();
+  const { refreshWorkspace, notify } = useShell();
   const save = async (text: string) => {
-    await api("/catalog/connector", send(JSON.parse(text), "PUT"));
+    const definition = JSON.parse(text);
+    const create = definition?.id !== identity;
+    try {
+      await api(
+        withQuery("/catalog/connector", { create }),
+        send(definition, "PUT"),
+      );
+    } catch (error) {
+      if (errorDetail(error).code === "connector_exists")
+        throw new Error(t("connectorAlreadyExists"), { cause: error });
+      throw error;
+    }
     await refreshWorkspace();
+    // A new definition is listed at the end of its family, often out of view.
+    if (create)
+      notify(
+        t("connectorCreated").replace(
+          "{name}",
+          definition.name ?? definition.id,
+        ),
+      );
   };
   return (
     <EditorModal

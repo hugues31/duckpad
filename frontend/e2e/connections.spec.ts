@@ -79,14 +79,14 @@ test("switching connectors removes obsolete values across all environments", asy
 }) => {
   await signIn(page);
   const identity = "switch_connector_ui";
-  // A second connector declaring root keeps the values entered for Local files.
-  const local = (
+  // A second connector declaring root keeps the values entered for Server folder.
+  const folder = (
     await (await page.request.get("/api/catalog")).json()
-  ).connectors.find((c: { id: string }) => c.id === "local");
+  ).connectors.find((c: { id: string }) => c.id === "folder");
   expect(
     (
       await page.request.put("/api/catalog/connector", {
-        data: { ...local, id: "archive_ui", name: "Archive UI" },
+        data: { ...folder, id: "archive_ui", name: "Archive UI" },
       })
     ).ok(),
   ).toBeTruthy();
@@ -125,7 +125,7 @@ test("switching connectors removes obsolete values across all environments", asy
       name: "Connector",
       exact: true,
     });
-    await connector.selectOption("local");
+    await connector.selectOption("folder");
     await connector.selectOption("oracle");
     for (const env of ["dev", "prod"]) {
       await dialog.getByRole("button", { name: env, exact: true }).click();
@@ -134,7 +134,7 @@ test("switching connectors removes obsolete values across all environments", asy
       );
       await expect(dialog.getByLabel("user", { exact: true })).toHaveValue("");
     }
-    await connector.selectOption("local");
+    await connector.selectOption("folder");
     for (const env of ["dev", "prod"]) {
       await dialog.getByRole("button", { name: env, exact: true }).click();
       await dialog.getByLabel("root", { exact: true }).fill(`data/${env}`);
@@ -178,7 +178,7 @@ test("saving a deleted connection reports the missing record without recreating 
       data: {
         id: identity,
         name: "Deleted connection UI",
-        connector: "local",
+        connector: "folder",
         environments: { dev: {} },
       },
     },
@@ -205,5 +205,175 @@ test("saving a deleted connection reports the missing record without recreating 
     ).toBe(false);
   } finally {
     await page.request.delete(`/api/catalog/connection/${identity}`);
+  }
+});
+
+test("connector definitions are grouped by family, customized built-ins reset and duplicates are new types", async ({
+  page,
+}) => {
+  await signIn(page);
+  const listed = (await (await page.request.get("/api/catalog")).json())
+    .connectors as { id: string; origin: string }[];
+  const { origin: _, ...s3 } = listed.find((c) => c.id === "s3")!;
+  const landing = {
+    id: "landing_ui",
+    name: "Landing UI",
+    family: "storage",
+    parameters: [{ name: "root", type: "text" }],
+    capabilities: ["read"],
+    init_sql: "",
+  };
+  try {
+    for (const data of [{ ...s3, name: "Company S3" }, landing])
+      expect(
+        (await page.request.put("/api/catalog/connector", { data })).ok(),
+      ).toBeTruthy();
+    await page.reload();
+    await openInstanceSettings(page, "Connections");
+    const family = (name: string) =>
+      page
+        .locator(".connector-family")
+        .filter({ has: page.getByRole("heading", { name, exact: true }) })
+        .locator(".connector-row");
+    const storage = family("File storage");
+    await expect(
+      family("Databases and warehouses").filter({ hasText: "Oracle" }),
+    ).toContainText("Built-in");
+    await expect(storage.filter({ hasText: "Server folder" })).toContainText(
+      "Built-in",
+    );
+    await expect(storage.filter({ hasText: "Company S3" })).toContainText(
+      "Customized",
+    );
+    // An administrator's own storage type is grouped like the built-ins.
+    const custom = storage.filter({ hasText: "Landing UI" });
+    await expect(custom).toBeVisible();
+    await expect(custom.locator(".badge")).toHaveText(["Read"]);
+
+    await storage
+      .getByRole("button", { name: "Duplicate Server folder", exact: true })
+      .click();
+    const editor = page.getByRole("dialog");
+    await editor.getByRole("button", { name: "Save changes" }).click();
+    await expect(editor).toHaveCount(0);
+    // The copy is listed at the end of its family, so saving confirms it.
+    await expect(page.locator(".toast")).toContainText(
+      "Connector definition Server folder (copy) created",
+    );
+    await expect(
+      storage.filter({ hasText: "Server folder (copy)" }),
+    ).not.toContainText("Built-in");
+    // Editing a definition under an identifier already taken never replaces it.
+    await storage
+      .getByRole("button", { name: "Edit Landing UI", exact: true })
+      .click();
+    await editor.locator(".monaco-editor").getByText("landing_ui").dblclick();
+    await page.keyboard.insertText("folder_copy");
+    await editor.getByRole("button", { name: "Save changes" }).click();
+    await expect(editor.locator(".notice.error")).toHaveText(
+      "A connector with this identifier already exists. Choose another identifier.",
+    );
+    await editor
+      .locator("footer")
+      .getByRole("button", { name: "Close", exact: true })
+      .click();
+    await expect(
+      storage.filter({ hasText: "Server folder (copy)" }),
+    ).toHaveCount(1);
+    // A second duplicate keeps the identifier of the first and is refused.
+    await storage
+      .getByRole("button", { name: "Duplicate Server folder", exact: true })
+      .click();
+    await editor.getByRole("button", { name: "Save changes" }).click();
+    await expect(editor.locator(".notice.error")).toHaveText(
+      "A connector with this identifier already exists. Choose another identifier.",
+    );
+    await editor
+      .locator("footer")
+      .getByRole("button", { name: "Close", exact: true })
+      .click();
+
+    await storage
+      .getByRole("button", { name: "Reset to built-in Company S3" })
+      .click();
+    await page
+      .getByRole("dialog")
+      .getByRole("button", { name: "Reset to built-in", exact: true })
+      .click();
+    await expect(storage.filter({ hasText: "Amazon S3" })).toContainText(
+      "Built-in",
+    );
+    await expect(
+      storage.getByRole("button", { name: /^Reset to built-in/ }),
+    ).toHaveCount(0);
+  } finally {
+    await page.request.post("/api/catalog/connector/s3/reset");
+    await page.request.delete("/api/catalog/connector/landing_ui");
+    await page.request.delete("/api/catalog/connector/folder_copy");
+  }
+});
+
+test("file nodes offer granted storage connections as locations, custom types included", async ({
+  page,
+}) => {
+  await signIn(page);
+  const connector = {
+    id: "landing_location_ui",
+    name: "Landing bucket",
+    family: "storage",
+    parameters: [{ name: "root", type: "text" }],
+    capabilities: ["read", "write"],
+    init_sql: "",
+  };
+  const connections = [
+    { id: "landing_ui", name: "Landing", connector: connector.id },
+    { id: "finance_ui", name: "Finance share", connector: "folder" },
+    { id: "warehouse_location_ui", name: "Warehouse", connector: "oracle" },
+  ];
+  const worktree = await (
+    await page.request.post("/api/projects", { data: { name: "Locations" } })
+  ).json();
+  try {
+    expect(
+      (
+        await page.request.put("/api/catalog/connector", { data: connector })
+      ).ok(),
+    ).toBeTruthy();
+    for (const { id, name, connector } of connections)
+      expect(
+        (
+          await page.request.put("/api/catalog/connection?create=true", {
+            data: {
+              id,
+              name,
+              connector,
+              environments: { dev: { root: "gs://landing/raw/" } },
+            },
+          })
+        ).ok(),
+      ).toBeTruthy();
+    expect(
+      (
+        await page.request.put(
+          `/api/projects/${worktree.project}/connections`,
+          { data: { connections: connections.map((c) => c.id) } },
+        )
+      ).ok(),
+    ).toBeTruthy();
+    await page.goto(`/worktrees/${worktree.id}/flow`);
+    await page.getByRole("button", { name: "Load XLSX", exact: true }).click();
+    const location = page
+      .locator(".inspector")
+      .getByRole("combobox", { name: "Location", exact: true });
+    await expect(location.locator("option")).toHaveText([
+      "Project files",
+      "Landing",
+      "Finance share",
+    ]);
+  } finally {
+    await page.request.delete(`/api/projects/${worktree.project}`);
+    for (const { id } of connections)
+      await page.request.delete(`/api/catalog/connection/${id}`);
+    await page.request.delete(`/api/catalog/connector/${connector.id}`);
   }
 });

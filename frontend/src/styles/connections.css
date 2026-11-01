@@ -1,9 +1,23 @@
 /* Connections and environments. */
+.connection-family {
+  margin: 25px 0 35px;
+}
+.connection-family h3,
+.connector-family h3 {
+  margin: 0 0 14px;
+  font-size: 15px;
+}
 .connection-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
   gap: 17px;
-  margin: 25px 0 45px;
+}
+.connector-family {
+  margin-bottom: 30px;
+}
+.connector-actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 .connection-card {
   padding: 22px;

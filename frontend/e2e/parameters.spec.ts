@@ -224,6 +224,7 @@ test("connection numbers use defaults after clearing and commit focused drafts o
         data: {
           id,
           name: "Numeric connector",
+          family: "database",
           parameters: [{ name: "port", type: "number", default: 5432 }],
           extensions: [],
           capabilities: ["read"],

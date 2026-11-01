@@ -48,7 +48,7 @@ Built-in and user-created connectors use the same definition format. The require
 
 | Preset | Required scope |
 | - | - |
-| Local files | Read CSV and Parquet; export CSV. |
+| Server folder | Read CSV and Parquet; export CSV. |
 | S3 | Read CSV and Parquet; export CSV through DuckDB-compatible S3 access. |
 | Oracle | Read Oracle resources and export tabular results to Oracle using `oraduck`. |
 

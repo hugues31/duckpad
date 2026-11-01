@@ -423,6 +423,13 @@ def is_project_files(reference):
     return reference in (None, "")
 
 
+def under_root(root, path):
+    """Append a relative path to a storage root; a URI prefix such as `s3://bucket/landing` stays as written."""
+    if URI.match(root):
+        return root + ("" if root.endswith("/") else "/") + path
+    return str(Path(root) / path)
+
+
 def render_parameter(
     template,
     parameter,
@@ -468,11 +475,13 @@ def render_parameter(
         return literal(connection_for(connections, parameters[argument])["secret_name"])
     if kind in RESOURCE_TYPES:
         reference = parameters[argument] if argument else None
-        root = (
-            ""
-            if is_project_files(reference)
-            else connection_for(connections, reference)["values"].get("root", "")
-        )
+        if is_project_files(reference):
+            root = str(project_files[kind])
+        else:
+            connection = connection_for(connections, reference)
+            if connection["definition"].get("family") != "storage":
+                raise Problem(f"Connection {reference} is not a file storage location")
+            root = connection["values"].get("root") or ""
         path, binding = str(value), (bound or {}).get(name)
         if binding is not None and binding.get("source") == "node":
             # A value read from data must not choose a resource outside the captured root.
@@ -483,13 +492,16 @@ def render_parameter(
             template = None
         if template is not None:
             path = render_path(name, template, values)
-            resource_root = root or project_files[kind]
-            if URI.match(str(resource_root)) and not URI.match(path) and not Path(path).is_absolute():
-                path = str(resource_root).rstrip("/") + "/" + path
-            return literal(authorize_path(template, path, resource_root, kind, connections, reference))
-        if not URI.match(path) and not Path(path).is_absolute():
-            path = str(Path(root or project_files[kind]) / path)
-        return literal(path)
+        relative = not URI.match(path) and not Path(path).is_absolute()
+        if relative and not root:
+            raise Problem(f"Connection {reference} has no root in this environment; use an absolute path")
+        if template is None:
+            return literal(under_root(root, path) if relative else path)
+        if relative and URI.match(root):
+            path = under_root(root, path)
+        return literal(
+            authorize_path(template, path, root or str(project_files[kind]), kind, connections, reference)
+        )
     if kind in ("column", "identifier"):
         return ".".join(qi(part) for part in str(value).split("."))
     if kind == "schema":
