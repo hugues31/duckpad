@@ -1,14 +1,43 @@
 """Project-owned reusable subgraphs with stable boundary ports."""
 
 import copy
-import re
 
-from .templates import parse_template
+from . import variables, views
+from .node_code import code_path, node_sql
+from .templates import IDENTIFIER, directives, parse_template
 from .util import Problem, uid
+
+DOCUMENTATION_SECTIONS = ("nodes", "datasets", "columns")
+
+
+def in_subtree(key, root):
+    """Whether an expanded node key is the root node or nested inside that component instance."""
+    return key == root or key.startswith(root + "::")
+
+
+def expand_for(bundle, environment, tolerant=True):
+    """Expand a bundle with variable references bound to their values in an environment."""
+    nodes, edges, boundaries = expand(bundle, tolerant=tolerant)
+    variables.bind(bundle, nodes, environment)
+    return nodes, edges, boundaries
 
 
 def expand(bundle, tolerant=False):
     nodes, edges, boundaries = {}, [], {}
+
+    def add_leaf(node, key, template, text, local_ports, error=None):
+        nodes[key] = {
+            **copy.deepcopy(node),
+            "id": key,
+            "root": key.split("::")[0],
+            "parsed": template,
+            "template_sql": text,
+            **({"error": error} if error else {}),
+        }
+        local_ports[node["id"]] = {
+            direction: {port: (key, port) for port in template[direction]}
+            for direction in ("inputs", "outputs")
+        }
 
     def visit(graph, prefix="", stack=()):
         local_ports = {}
@@ -44,58 +73,40 @@ def expand(bundle, tolerant=False):
                     local_ports[node["id"]] = ports
                     boundaries[key] = ports
                 else:
-                    if node.get("template") not in bundle["templates"]:
-                        raise Problem(f"Missing template: {node.get('template')}")
-                    template = parse_template(bundle["templates"][node["template"]])
-                    nodes[key] = {
-                        **copy.deepcopy(node),
-                        "id": key,
-                        "root": key.split("::")[0],
-                        "parsed": template,
-                        "template_sql": bundle["templates"][node["template"]],
-                    }
-                    local_ports[node["id"]] = {
-                        direction: {p: (key, p) for p in template[direction]}
-                        for direction in ("inputs", "outputs")
-                    }
+                    text = node_sql(bundle, node, stack[-1] if stack else None)
+                    add_leaf(node, key, parse_template(text), text, local_ports)
             except (Problem, KeyError, TypeError) as error:
                 if not tolerant:
                     raise
                 for old in list(nodes):
-                    if old == key or old.startswith(key + "::"):
+                    if in_subtree(old, key):
                         del nodes[old]
                 edges[:] = [
                     e
                     for e in edges
                     if not (e["source"].startswith(key + "::") or e["target"].startswith(key + "::"))
                 ]
-                text = bundle["templates"].get(node.get("template"), "")
-                inputs = set(re.findall(r"--\s*@input\s+(\w+)", text))
-                outputs = set(re.findall(r"--\s*@output\s+(\w+)", text))
+                try:
+                    text = node_sql(bundle, node, stack[-1] if stack else None)
+                except Problem:
+                    text = ""
+                declared = directives(text)
+                inputs = {port for kind, port in declared if kind == "input" and IDENTIFIER.fullmatch(port)}
+                outputs = {port for kind, port in declared if kind == "output" and IDENTIFIER.fullmatch(port)}
                 inputs.update(e["targetHandle"] for e in graph.get("edges", []) if e["target"] == node["id"])
                 outputs.update(e["sourceHandle"] for e in graph.get("edges", []) if e["source"] == node["id"])
                 for direction, ports in (("inputs", inputs), ("outputs", outputs)):
                     ports.update(
                         p["port"] for p in graph.get(direction, {}).values() if p["node"] == node["id"]
                     )
+                # Keep the node and its known ports so its error is shown in place.
                 template = {
                     "kind": "transform",
                     "inputs": sorted(inputs),
                     "outputs": sorted(outputs),
                     "parameters": [],
                 }
-                nodes[key] = {
-                    **copy.deepcopy(node),
-                    "id": key,
-                    "root": key.split("::")[0],
-                    "parsed": template,
-                    "template_sql": text,
-                    "error": str(error),
-                }
-                local_ports[node["id"]] = {
-                    direction: {p: (key, p) for p in template[direction]}
-                    for direction in ("inputs", "outputs")
-                }
+                add_leaf(node, key, template, text, local_ports, str(error))
         for edge in graph.get("edges", []):
             try:
                 source, output = local_ports[edge["source"]]["outputs"][edge["sourceHandle"]]
@@ -106,7 +117,7 @@ def expand(bundle, tolerant=False):
                     raise Problem(message) from error
                 target_key = prefix + edge["target"]
                 for key, node in nodes.items():
-                    if key == target_key or key.startswith(target_key + "::"):
+                    if in_subtree(key, target_key):
                         node["error"] = message
                 continue
             edges.append(
@@ -137,6 +148,8 @@ def expand(bundle, tolerant=False):
 
 def group(bundle, selection, label, exposed=None, parent=None):
     bundle = copy.deepcopy(bundle)
+    if parent and parent not in bundle["components"]:
+        raise Problem(f"Missing component: {parent}", 404)
     graph = bundle["components"][parent] if parent else bundle["flow"]
     selected = set(selection)
     internal = [n for n in graph["nodes"] if n["id"] in selected]
@@ -154,7 +167,7 @@ def group(bundle, selection, label, exposed=None, parent=None):
         "parameters": exposed or {},
     }
     prefixes = component_paths(bundle).get(parent, []) if parent else [""]
-    for section in ("nodes", "datasets", "columns"):
+    for section in DOCUMENTATION_SECTIONS:
         values = bundle.get("documentation", {}).get(section, {})
         for prefix in prefixes:
             for key in list(values):
@@ -201,12 +214,13 @@ def group(bundle, selection, label, exposed=None, parent=None):
             else:
                 targets.append(target)
         parameter["targets"] = targets
+    instance_params = expose_variables(bundle, internal, definition["parameters"], parent)
     # Expose unconnected terminal outputs too, so a grouped result is inspectable.
     for node in internal:
         outputs = (
             bundle["components"][node["component"]].get("outputs", {})
             if node.get("component")
-            else parse_template(bundle["templates"][node["template"]])["outputs"]
+            else parse_template(node_sql(bundle, node, parent))["outputs"]
         )
         for output in outputs:
             key = (node["id"], output)
@@ -215,19 +229,64 @@ def group(bundle, selection, label, exposed=None, parent=None):
             ):
                 port = f"output_{len(definition['outputs']) + 1}"
                 definition["outputs"][port] = {"node": key[0], "port": key[1]}
+    for node in internal:
+        if not node.get("template") and not node.get("component"):
+            code = bundle.setdefault("node_sql", {})
+            code[code_path(node["id"], component_id)] = code.pop(code_path(node["id"], parent))
     bundle["components"][component_id] = definition
     graph["nodes"] = [n for n in graph["nodes"] if n["id"] not in selected] + [
         {
             "id": instance_id,
             "component": component_id,
             "label": label,
-            "params": {},
+            "params": instance_params,
             "position": internal[0].get("position", {"x": 100, "y": 100}),
         }
     ]
     graph["edges"] = outer
     expand(bundle)
     return bundle, instance_id
+
+
+def expose_variables(bundle, internal, exposed, parent=None):
+    """Move variable bindings and references of grouped nodes to exposed parameters of the new instance.
+
+    Definitions never reference variables, so each bound parameter, and each expression that
+    references variables, becomes an exposed parameter, or reuses one already targeting it. The
+    instance binds it to the same variable or holds the same expression.
+    """
+    instance_params = {}
+    for node in internal:
+        params = node.get("params")
+        using = variables.references(params).keys() | variables.referenced(params).keys()
+        for param in [param for param in (params or {}) if param in using]:
+            target = {"node": node["id"], "param": param}
+            key = next(
+                (k for k, p in exposed.items() if isinstance(p, dict) and target in p.get("targets", [])),
+                None,
+            )
+            if key is None:
+                key = param
+                suffix = 2
+                while key in exposed:
+                    key, suffix = f"{param}_{suffix}", suffix + 1
+                exposed[key] = {"targets": [target]}
+                parameter_type = parameter_types(bundle, node, parent).get(param)
+                if parameter_type:
+                    exposed[key]["type"] = parameter_type
+            instance_params[key] = node["params"].pop(param)
+    return instance_params
+
+
+def parameter_types(bundle, node, parent=None):
+    """Parameter name -> declared type of a template node or component instance."""
+    if node.get("component"):
+        parameters = bundle["components"].get(node["component"], {}).get("parameters", {})
+        return {name: p["type"] for name, p in parameters.items() if isinstance(p, dict) and p.get("type")}
+    try:
+        return {p["name"]: p["type"] for p in parse_template(node_sql(bundle, node, parent))["parameters"]}
+    except (Problem, KeyError):
+        return {}
 
 
 def import_definition(destination, source, kind, identity, origin):
@@ -247,15 +306,26 @@ def import_definition(destination, source, kind, identity, origin):
             prefixes = component_paths(source).get(key, [])
             if prefixes:
                 prefix = prefixes[0]
-                for section in ("nodes", "datasets", "columns"):
+                for section in DOCUMENTATION_SECTIONS:
                     for path, text in source.get("documentation", {}).get(section, {}).items():
                         if path.startswith(prefix):
                             value.setdefault("documentation", {}).setdefault(section, {})[
                                 path[len(prefix) :]
                             ] = copy.deepcopy(text)
             for node in value["nodes"]:
-                field = "component" if node.get("component") else "template"
-                node[field] = transfer("components" if field == "component" else "templates", node[field])
+                if not node.get("component") and (
+                    preset := node.get("preset") or node.get("template") or node.get("origin")
+                ):
+                    node["preset"] = preset
+                if not node.get("component") and not node.get("template"):
+                    result.setdefault("node_sql", {})[code_path(node["id"], new_id)] = node_sql(
+                        source, node, key
+                    )
+                    # An imported copy never points at an unrelated template with the same ID.
+                    node.pop("origin", None)
+                else:
+                    field = "component" if node.get("component") else "template"
+                    node[field] = transfer("components" if field == "component" else "templates", node[field])
         result[category][new_id] = value
         return new_id
 
@@ -280,12 +350,12 @@ def component_paths(bundle):
 
 
 def reconcile_documentation(previous, current):
-    """Copy imported documentation and prune explicitly deleted owning nodes."""
+    """Copy imported documentation and prune the documentation and views of deleted owning nodes."""
     documentation = current.setdefault("documentation", {})
     paths = component_paths(current)
     for identity, prefixes in paths.items():
         defaults = current["components"][identity].get("documentation", {})
-        for section in ("nodes", "datasets", "columns"):
+        for section in DOCUMENTATION_SECTIONS:
             for key, value in defaults.get(section, {}).items():
                 for prefix in prefixes:
                     documentation.setdefault(section, {}).setdefault(prefix + key, copy.deepcopy(value))
@@ -301,7 +371,8 @@ def reconcile_documentation(previous, current):
     for before, after, prefixes in pairs:
         removed = {n["id"] for n in before.get("nodes", [])} - {n["id"] for n in after.get("nodes", [])}
         owners = [prefix + node for prefix in prefixes for node in removed]
-        for section in ("nodes", "datasets", "columns"):
+        views.prune(current.get("views"), owners)
+        for section in DOCUMENTATION_SECTIONS:
             values = documentation.get(section, {})
             for key in list(values):
                 if any(key == owner or key.startswith(owner + ":") for owner in owners):
