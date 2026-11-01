@@ -7,6 +7,7 @@ import sys
 import tempfile
 from pathlib import Path
 
+import duckdb
 import uvicorn
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ed25519
@@ -18,6 +19,7 @@ from duckpad.util import Problem
 # A real signing provider is exposed only by this disposable test entry point.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tests"))
 from assistant_model import test_model
+from helpers import excel_built_in
 from oidc_provider import Provider
 from pydantic_ai import models
 
@@ -27,6 +29,12 @@ port = int(os.environ.get("DUCKPAD_E2E_PORT", "8766"))
 
 with tempfile.TemporaryDirectory(prefix="duckpad-e2e-") as directory:
     app = create_app(Path(directory))
+    # Duckpad's container image links excel. With other DuckDB builds, such as the PyPI wheel,
+    # browser XLSX tests enable it in their project, from a binary installed as an administrator would.
+    if not excel_built_in():
+        extensions = str(app.state.services.store.paths.extensions)
+        with duckdb.connect(config={"extension_directory": extensions}) as db:
+            db.execute("INSTALL excel")
     app.state.assistant.configuration.model_override = test_model()
     provider = Provider(f"http://127.0.0.1:{port}/test-oidc")
     app.router.routes.insert(0, Mount("/test-oidc", app=provider.application()))

@@ -372,7 +372,10 @@ def test_connection_switch_filters_parameters_in_every_environment(app, client, 
     for env, values in connection["environments"].items():
         values["root"] = f"data/{env}"
     expected = {env: {"root": f"data/{env}"} for env in ("dev", "prod")}
-    for connector in ("local", "xlsx"):
+    # Another connector declaring root keeps the values entered for it.
+    archive = {**app.state.services.store.get("connector", "local"), "id": "archive", "name": "Archive"}
+    assert client.put("/api/catalog/connector", json=archive).status_code == 200
+    for connector in ("local", "archive"):
         connection["connector"] = connector
         response = client.put("/api/catalog/connection" + query, json=connection)
         assert response.status_code == 200, response.text

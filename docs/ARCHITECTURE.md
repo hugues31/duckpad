@@ -262,7 +262,9 @@ The explicit `--trusted-local` startup option selects in-process DuckDB executio
 for a single trusted user, including on Windows. It retains HTTP authentication,
 API authorization, connection grants and template validation, but skips the SQL
 worker and its OS and DuckDB sandbox configuration. Connections are prepared
-lazily in the native cursor for each run, as for trusted service clients. SQL and
+lazily in the native cursor for each run, as for trusted service clients. As in the
+worker, sessions load only built-in, project and connection extensions and never
+load or install one on demand, so a project behaves the same in both modes. SQL and
 extensions have the application's OS permissions; this mode provides no SQL
 isolation between projects or from instance metadata. The CLI requires a loopback
 bind and prints a startup notice. It is not suitable for shared deployments or

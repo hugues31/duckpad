@@ -144,8 +144,7 @@ def serve(descriptor):
                 "allow_unsigned_extensions": policy.get("allow_unsigned_extensions", False),
                 "allow_persistent_secrets": False,
                 "allow_unredacted_secrets": False,
-                "autoload_known_extensions": False,
-                "autoinstall_known_extensions": False,
+                **project_extensions.EXPLICIT_LOADING,
                 "temp_directory": policy["temporary"],
                 # Explicit instance resources; DuckDB sizes the others from the server's CPUs and memory.
                 **policy["resources"],

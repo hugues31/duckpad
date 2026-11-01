@@ -1,54 +1,52 @@
 import { readFile } from "node:fs/promises";
 import { execFileSync } from "node:child_process";
 import { expect, test } from "@playwright/test";
-import { openInstanceSettings, signIn } from "./helpers";
+import { signIn } from "./helpers";
 
 test.use({ actionTimeout: 10000 });
 
-test("configure Excel, upload a worksheet and export it through the canvas", async ({
+test("upload a worksheet and export it as project files through the canvas", async ({
   page,
 }, testInfo) => {
   test.setTimeout(90000);
   const file = testInfo.outputPath("workbook.xlsx");
   execFileSync("../.venv/bin/python", ["../tests/xlsx_fixture.py", file]);
   await signIn(page);
-  await openInstanceSettings(page, "Connections");
-  await page
-    .getByRole("button", { name: "New connection", exact: true })
-    .click();
-  const dialog = page.getByRole("dialog");
-  await dialog.getByLabel("ID", { exact: true }).fill("xlsx_browser");
-  await dialog.getByLabel("Name", { exact: true }).fill("Browser workbooks");
-  await dialog
-    .getByRole("combobox", { name: /Connector/ })
-    .selectOption("xlsx");
-  await expect(dialog.getByLabel("root", { exact: true })).toHaveValue("");
-  await dialog
-    .getByRole("button", { name: "Save changes", exact: true })
-    .click();
-  await expect(dialog).toHaveCount(0);
-
   const worktree = await (
     await page.request.post("/api/projects", { data: { name: "XLSX browser" } })
   ).json();
   const endpoint = `/api/worktrees/${worktree.id}`;
   try {
-    expect(
-      (
-        await page.request.put(
-          `/api/projects/${worktree.project}/connections`,
-          {
-            data: { connections: ["xlsx_browser"] },
-          },
-        )
-      ).ok(),
-    ).toBeTruthy();
+    // Duckpad's container image links excel. Other DuckDB builds, such as the
+    // PyPI wheel used in CI, need it enabled in the project; the test server
+    // installs it.
+    const available = await (
+      await page.request.get(`${endpoint}/extensions`)
+    ).json();
+    if (
+      !available.core_extensions.find(
+        (extension: { name: string }) => extension.name === "excel",
+      )?.built_in
+    ) {
+      const current = await (await page.request.get(endpoint)).json();
+      current.bundle.extensions = { excel: { source: "core", enabled: true } };
+      expect(
+        (
+          await page.request.put(endpoint, {
+            data: { revision: current.revision, bundle: current.bundle },
+          })
+        ).ok(),
+      ).toBeTruthy();
+    }
     await page.goto(`/worktrees/${worktree.id}/flow`);
     await page.getByRole("button", { name: "Load XLSX", exact: true }).click();
     const inspector = page.locator(".inspector");
-    await inspector
-      .getByRole("combobox", { name: "Location", exact: true })
-      .selectOption("xlsx_browser");
+    const location = inspector.getByRole("combobox", {
+      name: "Location",
+      exact: true,
+    });
+    await expect(location).toHaveValue("");
+    await expect(location.locator("option")).toHaveText(["Project files"]);
     const upload = inspector.getByLabel("Upload file", { exact: true });
     await expect(upload).toHaveAttribute("accept", /\.xlsx/);
     await upload.setInputFiles(file);
@@ -81,9 +79,7 @@ test("configure Excel, upload a worksheet and export it through the canvas", asy
             .length,
       )
       .toBe(1);
-    await inspector
-      .getByRole("combobox", { name: "Location", exact: true })
-      .selectOption("xlsx_browser");
+    await expect(location).toHaveValue("");
     await inspector
       .getByRole("textbox", { name: /sheet/ })
       .fill("Exported orders");
@@ -96,9 +92,9 @@ test("configure Excel, upload a worksheet and export it through the canvas", asy
         const parameters = current.bundle.flow.nodes.find(
           (node: any) => (node.template || node.origin) === "export_xlsx",
         )?.params;
-        return [parameters?.connection, parameters?.sheet];
+        return [parameters?.connection ?? "", parameters?.sheet];
       })
-      .toEqual(["xlsx_browser", "Exported orders"]);
+      .toEqual(["", "Exported orders"]);
     const launched = page.waitForResponse(
       (response) =>
         response.url().endsWith("/runs") &&
@@ -156,7 +152,6 @@ test("configure Excel, upload a worksheet and export it through the canvas", asy
       id: "roundtrip",
       template: "load_xlsx",
       params: {
-        connection: "xlsx_browser",
         file: exportPath,
         sheet: "Exported orders",
       },
@@ -189,6 +184,5 @@ test("configure Excel, upload a worksheet and export it through the canvas", asy
     );
   } finally {
     await page.request.delete(`/api/projects/${worktree.project}`);
-    await page.request.delete("/api/catalog/connection/xlsx_browser");
   }
 });

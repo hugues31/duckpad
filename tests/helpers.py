@@ -3,9 +3,8 @@
 import threading
 import time
 
-import duckdb
-
 from duckpad.execution.runs import UNFINISHED_RUN_STATUSES
+from duckpad.extensions import core_catalog
 from duckpad.lineage import Lineage
 
 
@@ -37,16 +36,19 @@ def join_run(store, run_id, timeout=30):
     return store.get("run", run_id)
 
 
+def excel_built_in():
+    """Whether the installed DuckDB build links excel, as Duckpad's container image does."""
+    return any(extension["name"] == "excel" and extension["built_in"] for extension in core_catalog())
+
+
 def enable_excel(bundle):
     """Enable excel in the project unless the installed DuckDB build links it statically.
 
-    Duckpad's runtime links excel. Other builds, such as the PyPI wheel, read workbooks once the
-    project enables it, from a binary an instance administrator installed.
+    Other builds, such as the PyPI wheel, read workbooks once the project enables it, from a binary
+    an instance administrator installed.
     """
-    with duckdb.connect() as db:
-        query = "SELECT install_mode = 'STATICALLY_LINKED' FROM duckdb_extensions() WHERE extension_name = 'excel'"
-        if not db.execute(query).fetchone()[0]:
-            bundle["extensions"] = {"excel": {"source": "core", "enabled": True}}
+    if not excel_built_in():
+        bundle["extensions"] = {"excel": {"source": "core", "enabled": True}}
     return bundle
 
 
