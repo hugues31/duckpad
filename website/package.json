@@ -17,16 +17,16 @@
     "releases:update": "node scripts/update-releases.mjs"
   },
   "dependencies": {
-    "@astrojs/markdown-remark": "^7.3.4",
+    "@astrojs/markdown-remark": "^7.3.5",
     "@fontsource-variable/manrope": "^5.2.8",
-    "astro": "7.4.2",
+    "astro": "7.4.4",
     "rehype-sanitize": "^6.0.0"
   },
   "devDependencies": {
     "@astrojs/check": "0.9.12",
-    "@types/node": "^22.20.5",
+    "@types/node": "^26.6.6",
     "prettier": "^3.9.10",
     "prettier-plugin-astro": "^1.1.2",
-    "typescript": "^5.7.0"
+    "typescript": "^7.0.2"
   }
 }
