@@ -102,6 +102,8 @@ h2 {
   padding-inline: clamp(20px, 5vw, 76px);
 }
 .site-header {
+  position: relative;
+  z-index: 30;
   max-width: 1440px;
   margin: auto;
   padding: 25px clamp(20px, 5vw, 76px);
@@ -949,7 +951,7 @@ pre {
   }
   .mobile-nav nav {
     position: absolute;
-    top: 78px;
+    top: 100%;
     left: 20px;
     right: 20px;
     padding: 18px;

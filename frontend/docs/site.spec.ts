@@ -412,6 +412,52 @@ test("search uses guide content, handles no results and supports the keyboard", 
   await expect(page.getByRole("dialog")).not.toBeVisible();
 });
 
+for (const reducedMotion of ["no-preference", "reduce"] as const) {
+  test(`mobile menu links receive taps with ${reducedMotion} motion`, async ({
+    browser,
+    baseURL,
+  }) => {
+    const context = await browser.newContext({
+      baseURL,
+      viewport: { width: 390, height: 844 },
+      isMobile: true,
+      hasTouch: true,
+      reducedMotion,
+    });
+    const page = await context.newPage();
+    await page.goto("docs/quickstart/");
+    await page.getByLabel("Navigation menu").tap();
+    await page
+      .getByRole("navigation", { name: "Mobile navigation", exact: true })
+      .getByRole("link", { name: "Releases", exact: true })
+      .tap();
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText(
+      "What’s new in Duckpad.",
+    );
+    await page.getByLabel("Navigation menu").tap();
+    await page.keyboard.press("Escape");
+    await expect(page.getByLabel("Navigation menu")).toBeFocused();
+    await expect(
+      page.getByRole("navigation", { name: "Mobile navigation", exact: true }),
+    ).not.toBeVisible();
+    await page.getByLabel("Navigation menu").tap();
+    await page
+      .getByRole("navigation", { name: "Mobile navigation", exact: true })
+      .getByRole("link", { name: "Why Duckpad", exact: true })
+      .tap();
+    await expect(page).toHaveURL(/\/#features$/);
+    await page.getByLabel("Navigation menu").tap();
+    await page
+      .getByRole("navigation", { name: "Mobile navigation", exact: true })
+      .getByRole("link", { name: "Documentation", exact: true })
+      .tap();
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText(
+      "Duckpad in 15 minutes",
+    );
+    await context.close();
+  });
+}
+
 test("mobile navigation, theme persistence and reduced motion", async ({
   page,
 }, testInfo) => {
