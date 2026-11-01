@@ -1,4 +1,4 @@
-import { Link } from "react-router";
+import { Link, useSearchParams } from "react-router";
 import { worktreeUrl } from "./navigation";
 import AskAssistant from "./AskAssistant";
 import { useState } from "react";
@@ -67,6 +67,15 @@ export default function HistoryPanel({
     withQuery(`/worktrees/${worktree}/git/history`, { limit: 100 }),
   );
   const runs = runHistory.data || [];
+  // The results panel links to the run behind a result with `?run=`.
+  const [params] = useSearchParams();
+  const requested = params.get("run");
+  const [opened, setOpened] = useState<string | null>(null);
+  if (requested && requested !== opened && runs.length) {
+    setOpened(requested);
+    const found = runs.find((item) => item.id === requested);
+    if (found) setSelected(found);
+  }
   const commits = gitHistory.data?.items || [];
   const error =
     runHistory.error || gitHistory.error || tags.error || more.error;

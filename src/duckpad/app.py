@@ -31,6 +31,7 @@ from .auth import SESSION_LIFETIME, Auth
 from .bundle import bundle_to_files
 from .components import group, import_definition
 from .example import create_example
+from .execution.samples import Sample
 from .git.identity import commit_author
 from .jobs import Jobs
 from .oidc import CALLBACK_PATH, OIDC, TRANSACTION_LIFETIME, OIDCSettings
@@ -144,7 +145,12 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
             if len(parts) >= 4 and parts[3] == "connections" and request.method != "GET":
                 access.instance_admin(user)
         elif route == "worktrees" and len(parts) >= 3:
-            read = request.method == "GET" or (request.method == "POST" and parts[3:] == ["lineage"])
+            # Explaining a value and computing column statistics read results without changing them.
+            read = (
+                request.method == "GET"
+                or (request.method == "POST" and parts[3:] == ["lineage"])
+                or (request.method in ("POST", "DELETE") and parts[3:4] == ["statistics"])
+            )
             access.worktree(user, parts[2], "reader" if read else "editor")
             if parts[3:] == ["git", "remote"] and request.method == "PUT":
                 access.worktree(user, parts[2], "admin")
@@ -917,16 +923,41 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
         sort: str | None = None,
         descending: bool = False,
         filters: str = "{}",
+        search: str = "",
+        filter: str = "",
+        order: str = "[]",
+        method: str = "first",
+        rows: int | None = None,
+        seed: int = 0,
     ) -> Record:
         try:
-            filter_values = json.loads(filters)
+            filter_values, order_values = json.loads(filters), json.loads(order)
         except ValueError as error:
             raise Problem("Invalid preview filters") from error
         if not isinstance(filter_values, dict):
             raise Problem("Invalid preview filters")
+        sample = Sample(method=method, rows=rows, seed=seed, filter=filter, search=search, order=order_values)
         return engine.preview(
-            worktree, environment, node, port, limit, offset, sort, descending, filter_values
+            worktree, environment, node, port, limit, offset, sort, descending, filter_values, sample
         )
+
+    @app.get("/api/worktrees/{worktree}/statistics/{node}", response_model=None)
+    def statistics(worktree: str, node: str, environment: str, port: str = "result") -> Record:
+        return engine.statistics(worktree, environment, node, port)
+
+    @app.post("/api/worktrees/{worktree}/statistics/{node}", response_model=None)
+    def compute_statistics(worktree: str, node: str, environment: str, port: str = "result") -> Record:
+        return engine.compute_statistics(worktree, environment, node, port)
+
+    @app.delete("/api/worktrees/{worktree}/statistics/{node}", response_model=None)
+    def cancel_statistics(worktree: str, node: str, environment: str, port: str = "result") -> Record:
+        return engine.cancel_statistics(worktree, environment, node, port)
+
+    @app.get("/api/worktrees/{worktree}/test-rows/{node}/{test}", response_model=None)
+    def test_rows(
+        worktree: str, node: str, test: str, environment: str, limit: int = 100, offset: int = 0
+    ) -> Record:
+        return engine.test_rows(worktree, environment, node, test, limit, offset)
 
     @app.get("/api/worktrees/{worktree}/generations/{identity}", response_model=None)
     def generation(worktree: str, identity: str, environment: str) -> Record:

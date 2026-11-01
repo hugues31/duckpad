@@ -686,7 +686,7 @@ def summary(bundle, environments):
 
 
 def rename(bundle, old, new):
-    """A copy of a bundle with a declared variable and every root flow reference to it renamed."""
+    """A copy of a bundle with a declared variable and its root flow and view references renamed."""
     variables, file_error = declarations(bundle)
     if file_error:
         raise Problem(f"Correct {FILE} before renaming a variable: {file_error}", 422)
@@ -700,14 +700,22 @@ def rename(bundle, old, new):
     result["variables"] = {
         (new if name == old else name): value for name, value in result["variables"].items()
     }
+
+    def renamed(name):
+        return f"{{{{ var.{new if name == old else name} }}}}"
+
     for node in result["flow"].get("nodes", []):
         for param, name in references(node.get("params")).items():
             if name == old:
                 node["params"][param] = {KEY: new}
         for param in referenced(node.get("params")):
-            node["params"][param] = substitute(
-                node["params"][param], lambda name: f"{{{{ var.{new if name == old else name} }}}}"
-            )
+            node["params"][param] = substitute(node["params"][param], renamed)
+    # Shared result views filter with the same references.
+    saved = result.get("views")
+    for views in saved.values() if isinstance(saved, dict) else []:
+        for view in views if isinstance(views, list) else []:
+            if isinstance(view, dict) and "filter" in view:
+                view["filter"] = substitute(view["filter"], renamed)
     return result
 
 

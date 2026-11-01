@@ -7,7 +7,7 @@ Resource handles and run coordination are typed independently of their payloads.
 from __future__ import annotations
 
 import threading
-from typing import Any, Protocol, TypedDict
+from typing import Any, NotRequired, Protocol, TypedDict
 
 Record = dict[str, Any]
 Files = dict[str, str]
@@ -37,3 +37,5 @@ class LineageRequest(TypedDict):
     nodes: set[str]
     canceled: threading.Event
     cursor: SQLCursor
+    # Display readers accept stale results; they stop only before those results are dropped.
+    display: NotRequired[bool]

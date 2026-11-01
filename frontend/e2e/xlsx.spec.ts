@@ -122,10 +122,10 @@ test("configure Excel, upload a worksheet and export it through the canvas", asy
       12.5, 20, 7.5,
     ]);
 
-    const downloadButton = inspector.getByRole("button", {
-      name: "Download exported data",
-      exact: true,
-    });
+    // The export's results panel opens on its Log, which offers the download.
+    const downloadButton = page
+      .getByRole("region", { name: "Results", exact: true })
+      .getByRole("button", { name: "Download exported data", exact: true });
     await expect(downloadButton).toBeEnabled();
     const pendingDownload = page.waitForEvent("download");
     await downloadButton.click();

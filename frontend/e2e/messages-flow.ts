@@ -15,6 +15,11 @@ export async function verifyMessages(page: Page) {
   const node = (id: string) =>
     page.locator(`.react-flow__node[data-id="${id}"]`);
   const inspector = page.locator(".inspector");
+  const results = page.getByRole("region", { name: "Results", exact: true });
+  const summary = inspector.getByRole("group", {
+    name: "Result summary",
+    exact: true,
+  });
   const select = async () => {
     await page.getByRole("button", { name: "Fit view", exact: true }).click();
     await node("validated").locator(".node-shape").click();
@@ -72,12 +77,12 @@ export async function verifyMessages(page: Page) {
   await expect(
     node("validated").getByLabel("Warnings: 1", { exact: true }),
   ).toBeVisible();
-  const messages = inspector.getByRole("region", {
-    name: "Execution messages",
-  });
-  await expect(messages).toContainText("paid orders checked");
-  await expect(messages).toContainText("Warning");
-  await expect(messages).toContainText("Message block 1 · orders");
+  // The inspector only counts warnings; its badge opens the Log.
+  await summary.getByRole("button", { name: "1 message", exact: true }).click();
+  const message = results.locator(".log-entry.warning");
+  await expect(message).toContainText("paid orders checked");
+  await expect(message).toContainText("Warning");
+  await expect(message).toContainText("Message block 1 · orders");
   await page.getByRole("link", { name: "History", exact: true }).click();
   const history = page.locator(".history-row").first();
   await expect(
@@ -108,7 +113,10 @@ export async function verifyMessages(page: Page) {
   );
   await expect(node("export").locator(".node-status")).toContainText("Blocked");
   // The notice may also offer "Ask the assistant" when a preview has it enabled.
-  await expect(inspector.locator(".notice.error p")).toHaveText(
+  await summary
+    .getByRole("button", { name: "Last run failed", exact: true })
+    .click();
+  await expect(results.locator(".log-error p")).toHaveText(
     "Orders need review",
   );
   // The stale preview still shows the messages from its successful generation.

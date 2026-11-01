@@ -1,4 +1,3 @@
-import AskAssistant from "./AskAssistant";
 import Select from "./Select";
 import { nodeCodePath, nodeEntity, templateUsage } from "./nodeCode";
 import { lazy, Suspense, useRef, useState } from "react";
@@ -19,11 +18,10 @@ import { nodeInterface, type NodeInterface } from "./graph";
 import { templateLabel, useT } from "./i18n";
 import NodeDocumentation from "./NodeDocumentation";
 import NodeInfo from "./NodeInfo";
-import ExportDownload from "./ExportDownload";
-import ExecutionMessages from "./ExecutionMessages";
-import NodeTests from "./NodeTests";
 import ParameterField from "./ParameterField";
 import QueryBuilder from "./QueryBuilder";
+import type { ResultsTab } from "./ResultsPanel";
+import ResultSummary from "./ResultSummary";
 import { useRevisionDraft } from "./useRevisionDraft";
 import type {
   Column,
@@ -70,7 +68,6 @@ export default function Inspector({
   environment,
   connections,
   statuses,
-  preview,
   onSave,
   onSaveDocumentation,
   onInput,
@@ -84,6 +81,7 @@ export default function Inspector({
   onRelink,
   onDuplicate,
   onHistory,
+  onResults,
   onClose,
 }: {
   readOnly?: boolean;
@@ -99,7 +97,6 @@ export default function Inspector({
   environment: string;
   connections: Snapshot["connections"];
   statuses: Statuses;
-  preview: PreviewPage | null;
   /** Save the node, with the variables it binds for the first time, in one change. */
   onSave: (
     node: FlowNode,
@@ -121,6 +118,8 @@ export default function Inspector({
   onRelink: () => void;
   onDuplicate: () => void;
   onHistory: () => void;
+  /** Open the results panel on one of its tabs. */
+  onResults: (tab: ResultsTab) => void;
   onClose: () => void;
 }) {
   const t = useT();
@@ -143,7 +142,6 @@ export default function Inspector({
     },
     { autosave: !readOnly },
   );
-  const [sqlMode, setSqlMode] = useState<"current" | "executed">("current");
   const [saveError, setError] = useState("");
   const worktree = snapshot.worktree.id;
   const prefix = fullNode.includes("::")
@@ -182,7 +180,7 @@ export default function Inspector({
       },
     ).data || {};
   const compilation = useApiResource<Statement[]>(
-    tab === "sql" && sqlMode === "current"
+    tab === "sql"
       ? withQuery(
           `/worktrees/${worktree}/compile/${encodeURIComponent(fullNode)}`,
           { environment },
@@ -222,10 +220,7 @@ export default function Inspector({
   const nodeProblems = snapshot.diagnostics.filter(
     (item) => item.file === "flow.json" && item.node === node.id,
   );
-  const statements: Statement[] =
-    sqlMode === "executed"
-      ? preview?.executed_sql || []
-      : compilation.data || [];
+  const statements: Statement[] = compilation.data || [];
   return (
     <aside className="inspector">
       <div className="inspector-title">
@@ -269,12 +264,14 @@ export default function Inspector({
           <Play size={16} />
         </button>
       </div>
-      {signature.kind !== "component" && signature.definition?.download && (
-        <ExportDownload
-          key={`${snapshot.worktree.id}:${environment}:${fullNode}:${snapshot.revision}`}
-          worktree={snapshot.worktree.id}
-          environment={environment}
-          node={fullNode}
+      {(signature.outputs.length > 0 || kind === "export") && (
+        <ResultSummary
+          bundle={snapshot.bundle}
+          fullNode={fullNode}
+          ports={signature.outputs}
+          exportNode={kind === "export"}
+          statuses={statuses}
+          onOpen={onResults}
         />
       )}
       <div className="tabs inspector-tabs">
@@ -293,34 +290,6 @@ export default function Inspector({
       </div>
       <div className="inspector-body">
         {error && <div className="notice error">{error}</div>}
-        {statuses.nodes[fullNode]?.error && (
-          <div className="notice error">
-            <p>{statuses.nodes[fullNode].error}</p>
-            <AskAssistant
-              node={fullNode}
-              run={statuses.nodes[fullNode].error_run}
-              environment={environment}
-            />
-          </div>
-        )}
-        <ExecutionMessages
-          results={(
-            preview?.results ?? statuses.nodes[fullNode]?.results
-          )?.filter((result) => result.origin.kind !== "test")}
-        />
-        {/* History is only requested for nodes whose code declares tests. */}
-        {signature.kind !== "component" &&
-          signature.definition?.blocks?.some((block) => block.test_name) && (
-            <NodeTests
-              worktree={worktree}
-              node={fullNode}
-              environment={environment}
-              refresh={JSON.stringify([
-                statuses.active?.id,
-                statuses.nodes[fullNode],
-              ])}
-            />
-          )}
         {tab === "parameters" ? (
           <fieldset className="readonly-fields" disabled={readOnly}>
             <label className="field">
@@ -538,49 +507,17 @@ export default function Inspector({
           </fieldset>
         ) : tab === "sql" ? (
           <>
-            <div className="segmented">
-              <button
-                className={sqlMode === "current" ? "active" : ""}
-                aria-pressed={sqlMode === "current"}
-                onClick={() => setSqlMode("current")}
-              >
-                {t("currentSql")}
-              </button>
-              <button
-                className={sqlMode === "executed" ? "active" : ""}
-                aria-pressed={sqlMode === "executed"}
-                onClick={() => setSqlMode("executed")}
-              >
-                {t("executedSql")}
-              </button>
-            </div>
-            <p className="muted small">
-              {sqlMode === "current"
-                ? t("compileHint")
-                : preview
-                  ? `${t("commit")} ${preview.commit.slice(0, 8)}`
-                  : t("noResultHint")}
-            </p>
+            <p className="muted small">{t("compileHint")}</p>
             <Suspense fallback={<p>{t("loading")}</p>}>
               <CodeEditor
-                value={statements
-                  .map((s) =>
-                    sqlMode === "executed" && s.materialization_sql
-                      ? s.materialization_sql.join(";\n") + ";"
-                      : s.sql + ";",
-                  )
-                  .join("\n\n")}
+                value={statements.map((s) => s.sql + ";").join("\n\n")}
                 readOnly
                 height="330px"
               />
             </Suspense>
             <StatementVariables
               statements={statements}
-              environment={
-                sqlMode === "executed" && preview
-                  ? preview.environment
-                  : environment
-              }
+              environment={environment}
             />
             {statements.some(
               (s) => Object.keys(s.bindings || {}).length > 0,
@@ -617,7 +554,6 @@ export default function Inspector({
           <NodeDocumentation
             snapshot={snapshot}
             fullNode={fullNode}
-            preview={preview}
             onSave={onSaveDocumentation}
           />
         )}

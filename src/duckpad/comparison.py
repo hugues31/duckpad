@@ -2,7 +2,7 @@
 
 from collections import Counter
 
-from . import project_extensions, variables
+from . import project_extensions, variables, views
 from .bundle import files_to_bundle
 from .components import expand
 from .graph import reachable
@@ -72,6 +72,14 @@ def entities(bundle):
             result[f"variable/{key}"]["usages"] = used_by.get(key, [])
     elif declared is not None:
         add(f"file/{variables.FILE}", "file", variables.FILE, declared, variables.FILE)
+    shared = bundle.get("views")
+    named = views.by_name(shared)
+    if named is not None:
+        for key, values in sorted(named.items()):
+            for name, value in values.items():
+                add(f"view/{key}/{name}", "view", f"{name} view of {key}", value, views.FILE)
+    elif shared is not None:
+        add(f"file/{views.FILE}", "file", views.FILE, shared, views.FILE)
 
     def instance_name(identity):
         graph = bundle["flow"]
@@ -130,7 +138,8 @@ def fields(before, after, prefix=""):
 
 
 def categories(kind, paths, before, after):
-    if kind == "documentation":
+    # Views choose which rows are displayed; they never change a result.
+    if kind in ("documentation", "view"):
         return ["documentation"]
     if kind == "node" and "sql" in paths and isinstance(before, dict) and isinstance(after, dict):
         other = [p for p in paths if p != "sql"]
