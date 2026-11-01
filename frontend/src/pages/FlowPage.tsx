@@ -128,6 +128,11 @@ export default function FlowPage() {
   const sizes = usePanelSizes();
   const [selection, setSelection] = useState<string[]>([]);
   const [resultsTab, setResultsTab] = useState<ResultsTab>("data");
+  // Badges and summary links open their results tab, even when the panel is hidden.
+  const showResults = (tab: ResultsTab) => {
+    setResultsTab(tab);
+    panels.set({ preview: true });
+  };
   const [focusRequest, setFocusRequest] = useState<{
     id: string;
     key: string;
@@ -458,7 +463,7 @@ export default function FlowPage() {
             }
             onOpen={openComponent}
             onSelection={updateSelection}
-            onWarnings={() => setResultsTab("log")}
+            onWarnings={() => showResults("log")}
           />
         </div>
         {node && signature && hasResults ? (
@@ -632,10 +637,7 @@ export default function FlowPage() {
                 entity: nodeEntity(node.id, parent),
               })
             }
-            onResults={(tab) => {
-              setResultsTab(tab);
-              panels.set({ preview: true });
-            }}
+            onResults={showResults}
             onClose={() => panels.set({ inspector: false })}
           />
         ) : null}
