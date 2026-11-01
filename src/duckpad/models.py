@@ -128,6 +128,7 @@ class JobIdempotency(SQLModel, table=True):
     expires: float = Field(index=True)
 
 
+# A custom connector type, or an administrator's override of a built-in one.
 class Connector(SQLModel, table=True):
     __tablename__ = "connector"
     id: str = Field(primary_key=True)
@@ -139,7 +140,8 @@ class Connection(SQLModel, table=True):
     __tablename__ = "connection"
     id: str = Field(primary_key=True)
     name: str
-    connector: str = Field(foreign_key="connector.id", ondelete="RESTRICT", index=True)
+    # A built-in connector or a stored one; built-in definitions come with the release, not the database.
+    connector: str = Field(index=True)
     secret_fields: list[str] = Field(sa_type=JSON)
 
 

@@ -356,6 +356,7 @@ test("connection capabilities constrain source and export forms without a projec
     data: {
       id: "read_only",
       name: "Read only files",
+      family: "storage",
       parameters: [{ name: "root", type: "text", default: "" }],
       capabilities: ["read"],
       init_sql: "",

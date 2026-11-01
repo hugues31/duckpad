@@ -32,7 +32,10 @@ export default function ParameterField({
   onChange: (value: Json | undefined) => void;
   onBlur?: () => void;
   connections: Snapshot["connections"];
-  /** A connection that file or destination parameters resolve against; empty selects project files. */
+  /**
+   * A connection that file or destination parameters resolve against; empty
+   * selects project files. It lists file storage connections only.
+   */
   location?: boolean;
   schemas?: string[];
   columns?: Column[];
@@ -50,6 +53,10 @@ export default function ParameterField({
   const type = parameter.type || "text";
   const base = type.split(/[<(]/)[0];
   const text = value == null ? "" : String(value);
+  // A location lists file storage; other connection parameters reach databases.
+  const choices = connections.filter(
+    (c) => (c.family === "storage") === !!location,
+  );
   if (base === "secret") return null;
   if (["column_selection", "value_cleaning"].includes(base))
     return (
@@ -96,12 +103,12 @@ export default function ParameterField({
           ) : (
             !text && <option value="">{t("notConnected")}</option>
           )}
-          {text && !connections.some((c) => c.id === text) && (
+          {text && !choices.some((c) => c.id === text) && (
             <option value={text} disabled>
               {text} · {t("unavailableConnection")}
             </option>
           )}
-          {connections.map((c) => (
+          {choices.map((c) => (
             <option key={c.id} value={c.id}>
               {c.name}
             </option>

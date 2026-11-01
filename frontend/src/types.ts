@@ -151,10 +151,17 @@ export interface Diagnostic {
   node?: string;
 }
 export type Capability = "read" | "write";
+/** Databases are read as tables; file storage is a location for file nodes. */
+export type ConnectorFamily = "database" | "storage";
 export interface Snapshot {
   role: ProjectRole;
   /** The connections granted to the project. */
-  connections: { id: string; name: string; capabilities: Capability[] }[];
+  connections: {
+    id: string;
+    name: string;
+    family: ConnectorFamily | null;
+    capabilities: Capability[];
+  }[];
   worktree: Worktree;
   revision: string;
   commit: string;
@@ -182,9 +189,25 @@ export interface ConnectorParameter {
   secret?: boolean;
 }
 /** A connector definition, as written by an administrator. */
+/** A connector definition opened in the JSON editor. */
+export interface ConnectorEditor {
+  title: string;
+  value: string;
+  /**
+   * The identifier being edited. New definitions and duplicates have none: like
+   * an edit that changes the identifier, saving them never replaces a connector.
+   */
+  identity?: string;
+}
 export interface Connector {
   id: string;
   name?: string;
+  family?: ConnectorFamily;
+  /**
+   * Added by the catalog listing, not part of the definition: shipped with the
+   * release, a built-in edited by an administrator, or an administrator's own type.
+   */
+  origin?: "built-in" | "customized" | "custom";
   description?: string;
   compatibility?: string;
   capabilities?: Capability[];

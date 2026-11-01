@@ -541,7 +541,8 @@ def test_cleanup_releases_engine_contexts_and_catalog_remains_writable(tmp_path,
             assert database.process.poll() is not None
         assert client.get(f"/api/worktrees/{feature['id']}/status?environment=dev").status_code == 404
         response = client.put(
-            "/api/catalog/connector", json={"id": "cleanup_test", "name": "Cleanup test", "init_sql": ""}
+            "/api/catalog/connector",
+            json={"id": "cleanup_test", "name": "Cleanup test", "family": "database", "init_sql": ""},
         )
         assert response.status_code == 200, response.text
         assert services.store.get("connector", "cleanup_test")["name"] == "Cleanup test"
@@ -553,7 +554,7 @@ def test_cleanup_releases_engine_contexts_and_catalog_remains_writable(tmp_path,
 def test_catalog_invalidation_discards_orphaned_worktree_contexts(project, services, operation):
     projects, main = project
     store, _, catalog, engine = services
-    connector = {"id": "cleanup_test", "name": "Cleanup test", "init_sql": ""}
+    connector = {"id": "cleanup_test", "name": "Cleanup test", "family": "database", "init_sql": ""}
     catalog.save("connector", connector)
     feature = projects.branch(main["id"], "feature")
     engine.statuses(feature["id"], "dev")

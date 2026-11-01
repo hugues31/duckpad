@@ -78,7 +78,7 @@ def create_example(projects, catalog, name=None, record=None):
         {
             "id": connection_id,
             "name": "Northstar sample data",
-            "connector": "local",
+            "connector": "folder",
             "environments": {env: {"root": str(root / env)} for env in ("dev", "prod")},
         },
         create=True,

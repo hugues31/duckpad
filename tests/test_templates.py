@@ -72,7 +72,13 @@ def source(body):
     )
 
 
-LOCAL = {"local": {"alias": "local", "definition": {"capabilities": ["read"]}, "values": {"root": "/data"}}}
+LOCAL = {
+    "local": {
+        "alias": "local",
+        "definition": {"family": "storage", "capabilities": ["read"]},
+        "values": {"root": "/data"},
+    }
+}
 
 
 @pytest.mark.parametrize(
@@ -137,7 +143,7 @@ def test_relative_project_file_sources_resolve_under_resources_and_destinations_
     connections = {
         "local": {
             "alias": "local",
-            "definition": {"capabilities": ["read", "write"]},
+            "definition": {"family": "storage", "capabilities": ["read", "write"]},
             "values": {"root": "/data"},
         }
     }
@@ -146,6 +152,90 @@ def test_relative_project_file_sources_resolve_under_resources_and_destinations_
         parse_template(BUILTINS[name]), params, inputs, {"result": "out"}, connections, PROJECT_FILES
     )
     assert f"'{path}'" in statement["query"]
+
+
+@pytest.mark.parametrize(
+    ("root", "file", "path"),
+    [
+        ("gs://bucket/landing/", "a.csv", "gs://bucket/landing/a.csv"),
+        ("s3://bucket/landing", "inbox/a.csv", "s3://bucket/landing/inbox/a.csv"),
+        ("s3://bucket/landing", "s3://other/b.csv", "s3://other/b.csv"),
+        ("/srv/finance", "inbox/budget.xlsx", "/srv/finance/inbox/budget.xlsx"),
+        ("", "/srv/elsewhere/a.csv", "/srv/elsewhere/a.csv"),
+    ],
+)
+def test_storage_roots_receive_relative_paths_and_uri_roots_stay_as_written(root, file, path):
+    connections = {
+        "lake": {
+            "alias": "lake",
+            "definition": {"family": "storage", "capabilities": ["read"]},
+            "values": {"root": root},
+        }
+    }
+    [statement] = compile_template(
+        parse_template(BUILTINS["load_csv"]),
+        {"connection": "lake", "file": file},
+        {},
+        {"result": "out"},
+        connections,
+        PROJECT_FILES,
+    )
+    assert f"READ_CSV('{path}'" in statement["query"]
+
+
+@pytest.mark.parametrize(
+    ("root", "file", "expected"),
+    [
+        ("s3://bucket/landing", "inbox/{{ var.name }}.csv", "s3://bucket/landing/inbox/orders.csv"),
+        ("s3://bucket/landing", "s3://bucket/other/{{ var.name }}.csv", "outside the connection root"),
+        ("", "{{ var.name }}.csv", "has no root in this environment"),
+    ],
+)
+def test_path_references_stay_under_storage_roots(root, file, expected):
+    connections = {
+        "lake": {
+            "alias": "lake",
+            "definition": {"family": "storage", "capabilities": ["read"]},
+            "values": {"root": root},
+        }
+    }
+
+    def compile_path():
+        [statement] = compile_template(
+            parse_template(BUILTINS["load_csv"]),
+            {"connection": "lake", "file": file},
+            {},
+            {"result": "out"},
+            connections,
+            PROJECT_FILES,
+            variables={"name": {"type": "text", "value": "orders"}},
+        )
+        return statement["query"]
+
+    if expected.startswith("s3://"):
+        assert f"READ_CSV('{expected}'" in compile_path()
+    else:
+        with pytest.raises(Problem, match=expected):
+            compile_path()
+
+
+def test_file_locations_need_a_storage_connection_with_a_root_for_relative_paths():
+    def compile_with(definition, values, file="a.csv"):
+        connection = {"alias": "conn", "definition": definition, "values": values}
+        return compile_template(
+            parse_template(BUILTINS["load_csv"]),
+            {"connection": "conn", "file": file},
+            {},
+            {"result": "out"},
+            {"conn": connection},
+            PROJECT_FILES,
+        )
+
+    with pytest.raises(Problem, match="Connection conn is not a file storage location"):
+        compile_with({"family": "database", "capabilities": ["read"]}, {"root": "/data"})
+    # Relative paths never fall back to project files once a location is chosen.
+    with pytest.raises(Problem, match="Connection conn has no root in this environment"):
+        compile_with({"family": "storage", "capabilities": ["read"]}, {"root": ""})
 
 
 def test_a_connection_without_a_value_selects_project_files():

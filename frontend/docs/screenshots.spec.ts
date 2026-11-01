@@ -488,12 +488,96 @@ test("capture connection setup and environment policies", async ({ page }) => {
   await dialog.getByLabel("Name", { exact: true }).fill("Finance share");
   await dialog
     .getByRole("combobox", { name: "Connector", exact: true })
-    .selectOption("local");
+    .selectOption("folder");
   const root = dialog.getByLabel("root", { exact: true });
   await root.fill("/srv/finance-dev");
   await root.blur();
   await capture(page, "connection", dialog);
   await page.keyboard.press("Escape");
+
+  // Journey 2 of the connections design: a Server folder per environment, granted to a project.
+  const catalog = await (await page.request.get("/api/catalog")).json();
+  const { origin: _, ...s3 } = catalog.connectors.find(
+    (c: { id: string }) => c.id === "s3",
+  );
+  const connections = [
+    {
+      id: "finance_share",
+      name: "Finance share",
+      connector: "folder",
+      environments: {
+        dev: { root: "/srv/finance-dev" },
+        prod: { root: "/srv/finance" },
+      },
+    },
+    {
+      id: "landing_bucket",
+      name: "Landing bucket",
+      connector: "s3",
+      environments: {
+        dev: { root: "s3://landing-dev/raw/", key_id: "dev", secret: "dev" },
+        prod: { root: "s3://landing/raw/", key_id: "prod", secret: "prod" },
+      },
+    },
+  ];
+  // An administrator exposed a session token on S3: the built-in becomes Customized.
+  const customized = {
+    ...s3,
+    parameters: [...s3.parameters, { name: "session_token", type: "text" }],
+  };
+  expect(
+    (
+      await page.request.put("/api/catalog/connector", { data: customized })
+    ).ok(),
+  ).toBeTruthy();
+  for (const data of connections)
+    expect(
+      (
+        await page.request.put("/api/catalog/connection?create=true", { data })
+      ).ok(),
+    ).toBeTruthy();
+  const created = await page.request.post("/api/projects", {
+    data: { name: "Finance" },
+  });
+  const worktree = await created.json();
+  try {
+    await page.reload();
+    await expect(
+      page.locator(".connector-row").filter({ hasText: "Amazon S3" }),
+    ).toContainText("Customized");
+    await capture(page, "connections", page.locator(".settings-layout"));
+    await page.request.put(`/api/projects/${worktree.project}/connections`, {
+      data: { connections: ["finance_share"] },
+    });
+    await page.goto(`/worktrees/${worktree.id}/flow`);
+    await page.getByRole("button", { name: "Load XLSX", exact: true }).click();
+    const inspector = page.locator(".inspector");
+    await inspector
+      .getByRole("combobox", { name: "Location", exact: true })
+      .selectOption("finance_share");
+    await inspector
+      .getByRole("textbox", { name: /file/ })
+      .fill("inbox/budget.xlsx");
+    await inspector
+      .getByRole("button", { name: "Save changes", exact: true })
+      .click();
+    await expect
+      .poll(
+        async () =>
+          (
+            await (
+              await page.request.get(`/api/worktrees/${worktree.id}`)
+            ).json()
+          ).bundle.flow.nodes[0]?.params.file,
+      )
+      .toBe("inbox/budget.xlsx");
+    await capture(page, "server-folder-location", inspector);
+  } finally {
+    await page.request.delete(`/api/projects/${worktree.project}`);
+    for (const { id } of connections)
+      await page.request.delete(`/api/catalog/connection/${id}`);
+    await page.request.post("/api/catalog/connector/s3/reset");
+  }
   await openInstanceSettings(page, "Environments");
   await expect(page.locator(".environment-card")).toHaveCount(2);
   await expect(

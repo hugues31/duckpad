@@ -19,7 +19,7 @@ from duckpad.util import Problem
 FILES = {
     "id": "files",
     "name": "Files",
-    "connector": "local",
+    "connector": "folder",
     "environments": {"dev": {"root": ""}, "prod": {"root": ""}},
 }
 
@@ -368,14 +368,14 @@ def test_connection_switch_filters_parameters_in_every_environment(app, client, 
     assert client.put("/api/catalog/connection?create=true", json=connection).status_code == 200
     public = client.get("/api/catalog").json()
     connection = next(c for c in public["connections"] if c["id"] == "switch_connector")
-    connection["connector"] = "local"
+    connection["connector"] = "folder"
     for env, values in connection["environments"].items():
         values["root"] = f"data/{env}"
     expected = {env: {"root": f"data/{env}"} for env in ("dev", "prod")}
     # Another connector declaring root keeps the values entered for it.
-    archive = {**app.state.services.store.get("connector", "local"), "id": "archive", "name": "Archive"}
+    archive = {**app.state.services.catalog.connector("folder"), "id": "archive", "name": "Archive"}
     assert client.put("/api/catalog/connector", json=archive).status_code == 200
-    for connector in ("local", "archive"):
+    for connector in ("folder", "archive"):
         connection["connector"] = connector
         response = client.put("/api/catalog/connection" + query, json=connection)
         assert response.status_code == 200, response.text
@@ -460,7 +460,7 @@ def test_rejected_connection_save_intent_preserves_results(
     body = {
         "id": identity,
         "name": "Rejected connection",
-        "connector": "local",
+        "connector": "folder",
         "environments": {"dev": {"root": ""}},
     }
     assert_rejected_admin_edit(
@@ -473,11 +473,14 @@ def test_rejected_connection_save_intent_preserves_results(
     [
         ("unknown", {"id": "local"}, 404),
         ("connector", {"id": "../invalid"}, 400),
-        ("connector", {"id": "local", "init_sql": "ATTACH"}, 400),
-        ("connector", {"id": "local", "init_sql": "SELECT 1"}, 400),
-        ("connector", {"id": "local", "parameters": [{"name": "alias"}]}, 400),
+        ("connector", {"id": "custom", "family": "database", "init_sql": "ATTACH"}, 400),
+        ("connector", {"id": "custom", "family": "database", "init_sql": "SELECT 1"}, 400),
+        ("connector", {"id": "custom", "family": "database", "parameters": [{"name": "alias"}]}, 400),
+        ("connector", {"id": "custom", "init_sql": ""}, 400),
+        ("connector", {"id": "custom", "family": "files", "init_sql": ""}, 400),
+        ("connector", {"id": "custom", "family": "storage", "init_sql": ""}, 400),
         ("connection", {"id": "files", "connector": "missing", "environments": {}}, 400),
-        ("connection", {"id": "files", "connector": "local"}, 400),
+        ("connection", {"id": "files", "connector": "folder"}, 400),
         ("connector", [], 422),
     ],
 )
@@ -485,10 +488,23 @@ def test_invalid_catalog_save_preserves_results(app, client, executed_projects, 
     assert_rejected_admin_edit(app, client, executed_projects, "PUT", f"/api/catalog/{kind}", body, status)
 
 
-def test_invalid_catalog_deletion_preserves_results(app, client, executed_projects):
-    assert_rejected_admin_edit(
-        app, client, executed_projects, "DELETE", "/api/catalog/unknown/local", None, 404
-    )
+@pytest.mark.parametrize(
+    ("path", "status"),
+    [
+        ("/api/catalog/unknown/local", 404),
+        # Built-in connectors come with the release; only their overrides are stored.
+        ("/api/catalog/connector/folder", 409),
+        # A connector that connections still use.
+        ("/api/catalog/connector/archive", 409),
+    ],
+)
+def test_invalid_catalog_deletion_preserves_results(app, client, executed_projects, path, status):
+    # Stored directly, so that the executed results stay current.
+    store, catalog = app.state.services.store, app.state.services.catalog
+    store.put("connector", "archive", {**catalog.connector("folder"), "id": "archive", "name": "Archive"})
+    connection = {"id": "archived", "name": "Archived", "connector": "archive", "environments": {}}
+    store.put("connection", "archived", catalog.check("connection", connection, create=True))
+    assert_rejected_admin_edit(app, client, executed_projects, "DELETE", path, None, status)
 
 
 @pytest.mark.parametrize("body", [[], {}, {"id": "../invalid"}])
@@ -513,7 +529,8 @@ def test_invalid_connection_grants_preserve_results(app, client, executed_projec
 @pytest.mark.parametrize(
     ("method", "path", "body"),
     [
-        ("PUT", "/api/catalog/connector", {"id": "local", "name": "Updated", "init_sql": ""}),
+        ("PUT", "/api/catalog/connector", {"id": "custom", "name": "Updated", "family": "database"}),
+        ("POST", "/api/catalog/connector/folder/reset", None),
         ("DELETE", "/api/catalog/connection/files", None),
         ("PUT", "/api/projects/{project}/connections", {"connections": ["files"]}),
     ],
@@ -523,6 +540,10 @@ def test_admin_edits_reset_results_only_when_idle(app, client, executed_projects
     worktree = executed_projects[0]
     engine = app.state.services.engine
     path = path.format(project=worktree["project"])
+    if path.endswith("/reset"):
+        # Store an override directly, so that results from before it stay current.
+        services = app.state.services
+        services.store.put("connector", "folder", {**services.catalog.connector("folder"), "name": "Shared"})
     if active:
         engine.active[worktree["id"]] = {"id": "active"}
         try:

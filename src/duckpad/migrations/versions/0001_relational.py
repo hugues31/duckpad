@@ -282,58 +282,6 @@ def upgrade():
             {"id": "prod", "label": "prod", "color": "#e05252", "confirm_before_run": True},
         ],
     )
-    op.bulk_insert(
-        sa.table("connector", sa.column("id"), sa.column("name"), sa.column("definition", sa.JSON())),
-        [
-            {
-                "id": "local",
-                "name": "Local files",
-                "definition": {
-                    "description": "CSV and Parquet on this computer.",
-                    "parameters": [{"name": "root", "type": "text", "default": ""}],
-                    "extensions": [],
-                    "init_sql": "",
-                    "capabilities": ["read", "write"],
-                    "compatibility": "Validated on DuckDB 2.0.0, Linux x86_64, with native CSV and Parquet. Other DuckDB versions and platforms require validation.",
-                },
-            },
-            {
-                "id": "s3",
-                "name": "Amazon S3",
-                "definition": {
-                    "description": "CSV and Parquet in S3-compatible object storage.",
-                    "parameters": [
-                        {"name": "key_id", "type": "text", "secret": True},
-                        {"name": "secret", "type": "text", "secret": True},
-                        {"name": "region", "type": "text", "default": "us-east-1"},
-                        {"name": "endpoint", "type": "text", "default": "s3.amazonaws.com"},
-                        {"name": "use_ssl", "type": "boolean", "default": True},
-                        {"name": "url_style", "type": "text", "default": "vhost"},
-                    ],
-                    "extensions": [{"name": "httpfs"}],
-                    "init_sql": "CREATE OR REPLACE TEMPORARY SECRET {{ secret_name }} (TYPE S3, KEY_ID {{ key_id }}, SECRET {{ secret }}, REGION {{ region }}, ENDPOINT {{ endpoint }}, USE_SSL {{ use_ssl }}, URL_STYLE {{ url_style }});",
-                    "capabilities": ["read", "write"],
-                    "compatibility": "Validated on DuckDB 2.0.0 with matching httpfs, Linux x86_64, and a Moto S3 endpoint. Live AWS IAM/TLS behavior requires deployment validation.",
-                },
-            },
-            {
-                "id": "oracle",
-                "name": "Oracle · OraDuck",
-                "definition": {
-                    "description": "Read Oracle tables and load existing tables through OraDuck.",
-                    "parameters": [
-                        {"name": "user", "type": "text"},
-                        {"name": "password", "type": "text", "secret": True},
-                        {"name": "dsn", "type": "text"},
-                    ],
-                    "extensions": [{"name": "oraduck", "repository": "community"}],
-                    "init_sql": "CREATE OR REPLACE TEMPORARY SECRET {{ secret_name }} (TYPE oraduck, USER {{ user }}, PASSWORD {{ password }}, DSN {{ dsn }}); ATTACH '' AS {{ alias }} (TYPE oraduck, SECRET {{ secret_name }});",
-                    "capabilities": ["read", "write"],
-                    "compatibility": "Validated with DuckDB 2.0.0, OraDuck 0.4.0, Oracle 19.3, Instant Client 19.32 on Linux x86_64. Requires a matching extension, Instant Client 19+ (Basic/Basic Light), libaio and libnsl on Linux. Other platforms and versions require validation.",
-                },
-            },
-        ],
-    )
 
 
 def downgrade():

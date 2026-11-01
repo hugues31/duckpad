@@ -9,11 +9,18 @@ const connections = [
   {
     id: "finance_share",
     name: "Finance share",
+    family: "storage" as const,
+    capabilities: ["read" as const],
+  },
+  {
+    id: "warehouse",
+    name: "Warehouse",
+    family: "database" as const,
     capabilities: ["read" as const],
   },
 ];
 
-it("names a file node's connection Location and defaults it to project files", () => {
+it("names a file node's connection Location and lists only file storage", () => {
   const onChange = vi.fn();
   render(
     <ParameterField
@@ -50,7 +57,7 @@ it("keeps project files selectable once a connection is chosen", () => {
   expect(onChange).toHaveBeenLastCalledWith("");
 });
 
-it("asks for a connection that SQL uses directly", () => {
+it("asks for a database connection that SQL uses directly", () => {
   render(
     <ParameterField
       parameter={{ name: "connection", type: "connection", default: "" }}
@@ -62,5 +69,5 @@ it("asks for a connection that SQL uses directly", () => {
   const connection = screen.getByRole("combobox", { name: "connection" });
   expect(
     Array.from(connection.querySelectorAll("option"), (o) => o.textContent),
-  ).toEqual(["Choose a source…", "Finance share"]);
+  ).toEqual(["Choose a source…", "Warehouse"]);
 });

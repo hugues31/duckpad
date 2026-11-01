@@ -1,6 +1,6 @@
 # Connections, file storage and extensions (design proposal)
 
-**Status: accepted on 1 November 2026 (see [Decisions](#decisions)). Steps 1 and 2, project files without a connection and the removal of the Excel connector, are implemented; each remaining delivery step has its own ticket.**
+**Status: accepted on 1 November 2026 (see [Decisions](#decisions)). Steps 1 to 3 are implemented: project files without a connection, the removal of the Excel connector, and Server folder with connector families and customizable built-ins. Step 4, the database family, has its own ticket.**
 
 ## Summary
 

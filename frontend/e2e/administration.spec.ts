@@ -10,6 +10,7 @@ async function createConnection(page: Page, id: string, name: string) {
       {
         id,
         name,
+        family: "storage",
         parameters: [{ name: "root", type: "text", default: "" }],
         capabilities: ["read"],
         init_sql: "",
