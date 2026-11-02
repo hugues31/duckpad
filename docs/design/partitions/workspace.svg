@@ -1,0 +1,169 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="940" viewBox="0 0 1440 940" role="img" aria-labelledby="title desc">
+<title id="title">Partition workspace and output declaration</title>
+<desc id="desc">Mockup · Filter declarations belong to output ports; execution context propagates through the graph.</desc>
+<style>text { font-family: Inter, ui-sans-serif, system-ui, -apple-system, sans-serif; }</style>
+<rect x="0" y="0" width="1440" height="940" rx="0" fill="#f5f7fb"/>
+<rect x="0" y="0" width="1440" height="54" rx="0" fill="#19283d"/>
+<text x="24" y="35" font-size="23" fill="white" font-weight="700">duckpad</text>
+<text x="151" y="33" font-size="14" fill="#d7e0ee" font-weight="400">/  Order processing</text>
+<rect x="1175" y="15" width="161" height="25" rx="5" fill="#eef1f5"/>
+<text x="1185" y="32" font-size="12" fill="#566577" font-weight="600">DESIGN PROPOSAL</text>
+<rect x="0" y="54" width="180" height="886" rx="0" fill="#ffffff"/>
+<text x="22" y="88" font-size="10" fill="#566577" font-weight="700">WORKSPACE</text>
+<rect x="12" y="105" width="156" height="35" rx="6" fill="#edf2ff"/>
+<text x="26" y="128" font-size="14" fill="#315cce" font-weight="600">Flow</text>
+<text x="26" y="172" font-size="14" fill="#566577" font-weight="400">Code</text>
+<text x="26" y="216" font-size="14" fill="#566577" font-weight="400">Documentation</text>
+<text x="26" y="260" font-size="14" fill="#566577" font-weight="400">Variables</text>
+<text x="26" y="304" font-size="14" fill="#566577" font-weight="400">History</text>
+<path d="M180 54 L180 940" fill="none" stroke="#dce3ec" stroke-width="1.5"/>
+<rect x="181" y="54" width="1259" height="65" rx="0" fill="white"/>
+<rect x="204" y="68" width="132" height="36" rx="6" fill="white" stroke="#dce3ec"/>
+<text x="217" y="91" font-size="13" fill="#202a38" font-weight="600">main  ▾</text>
+<rect x="348" y="68" width="132" height="36" rx="6" fill="white" stroke="#dce3ec"/>
+<text x="361" y="91" font-size="13" fill="#202a38" font-weight="600">prod  ▾</text>
+<rect x="492" y="68" width="240" height="36" rx="6" fill="white" stroke="#dce3ec"/>
+<text x="505" y="91" font-size="13" fill="#202a38" font-weight="600">Partition: batch-012  ▾</text>
+<text x="753" y="91" font-size="12" fill="#566577" font-weight="400">batch · 30 keys</text>
+<rect x="1248" y="68" width="163" height="36" rx="6" fill="#315cce"/>
+<text x="1261" y="91" font-size="13" fill="white" font-weight="600">Run pipeline ▾</text>
+<path d="M181 119 L1440 119" fill="none" stroke="#dce3ec" stroke-width="1.5"/>
+<text x="205" y="917" font-size="12" fill="#566577" font-weight="400">Mockup · Filter declarations belong to output ports; execution context propagates through the graph.</text>
+<text x="209" y="151" font-size="11" fill="#566577" font-weight="700">FLOW</text>
+<text x="208" y="181" font-size="20" fill="#202a38" font-weight="600">One graph, one partition at a time</text>
+<rect x="795" y="157" width="207" height="25" rx="5" fill="#fff5df"/>
+<text x="805" y="174" font-size="12" fill="#936011" font-weight="600">12/30 complete · 1 failed</text>
+<rect x="205" y="205" width="805" height="302" rx="8" fill="#f8faff" stroke="#dce3ec"/>
+<path d="M382 284 L439 284" fill="none" stroke="#315cce" stroke-width="1.5"/>
+<path d="M625 284 L670 284" fill="none" stroke="#315cce" stroke-width="1.5"/>
+<path d="M833 284 L885 284" fill="none" stroke="#315cce" stroke-width="1.5"/>
+<path d="M530 426 L530 334" fill="none" stroke="#8a97a8" stroke-width="1.5"/>
+<rect x="222" y="234" width="164" height="100" rx="8" fill="white" stroke="#315cce"/>
+<rect x="222" y="234" width="4" height="100" rx="2" fill="#315cce"/>
+<text x="237" y="259" font-size="14" fill="#202a38" font-weight="600">Orders</text>
+<text x="237" y="281" font-size="12" fill="#566577" font-weight="400">result · source</text>
+<rect x="234" y="295" width="130.8" height="25" rx="5" fill="#edf2ff"/>
+<text x="244" y="312" font-size="12" fill="#315cce" font-weight="600">batch · filtered</text>
+<rect x="437" y="234" width="192" height="100" rx="8" fill="white" stroke="#315cce"/>
+<rect x="437" y="234" width="4" height="100" rx="2" fill="#315cce"/>
+<text x="452" y="259" font-size="14" fill="#202a38" font-weight="600">Enriched orders</text>
+<text x="452" y="281" font-size="12" fill="#566577" font-weight="400">join + transform</text>
+<rect x="449" y="295" width="137.6" height="25" rx="5" fill="#edf2ff"/>
+<text x="459" y="312" font-size="12" fill="#315cce" font-weight="600">batch · inherited</text>
+<rect x="673" y="234" width="164" height="100" rx="8" fill="white" stroke="#315cce"/>
+<rect x="673" y="234" width="4" height="100" rx="2" fill="#315cce"/>
+<text x="688" y="259" font-size="14" fill="#202a38" font-weight="600">Batch summary</text>
+<text x="688" y="281" font-size="12" fill="#566577" font-weight="400">report</text>
+<rect x="685" y="295" width="137.6" height="25" rx="5" fill="#edf2ff"/>
+<text x="695" y="312" font-size="12" fill="#315cce" font-weight="600">batch · inherited</text>
+<rect x="872" y="234" width="122" height="100" rx="8" fill="white" stroke="#dce3ec"/>
+<rect x="872" y="234" width="4" height="100" rx="2" fill="#8a97a8"/>
+<text x="887" y="259" font-size="14" fill="#202a38" font-weight="600">Status</text>
+<text x="887" y="281" font-size="12" fill="#566577" font-weight="400">export</text>
+<rect x="884" y="295" width="42.4" height="25" rx="5" fill="#eef1f5"/>
+<text x="894" y="312" font-size="12" fill="#566577" font-weight="600">All</text>
+<rect x="437" y="381" width="192" height="100" rx="8" fill="white" stroke="#dce3ec"/>
+<rect x="437" y="381" width="4" height="100" rx="2" fill="#8a97a8"/>
+<text x="452" y="406" font-size="14" fill="#202a38" font-weight="600">Customers</text>
+<text x="452" y="428" font-size="12" fill="#566577" font-weight="400">reference lookup</text>
+<rect x="449" y="442" width="110.39999999999999" height="25" rx="5" fill="#eef1f5"/>
+<text x="459" y="459" font-size="12" fill="#566577" font-weight="600">Shared · once</text>
+<text x="228" y="358" font-size="12" fill="#315cce" font-weight="600">Filtered by partition</text>
+<text x="680" y="385" font-size="11" fill="#566577" font-weight="600">Current key</text>
+<text x="680" y="412" font-size="21" fill="#202a38" font-weight="600">batch-012</text>
+<text x="680" y="439" font-size="13" fill="#566577" font-weight="400">task_id = task-842</text>
+<text x="680" y="467" font-size="12" fill="#566577" font-weight="400">2 outputs retained for collection</text>
+<rect x="1030" y="137" width="389" height="713" rx="8" fill="white" stroke="#dce3ec"/>
+<text x="1051" y="169" font-size="22" fill="#202a38" font-weight="600">Orders</text>
+<text x="1051" y="193" font-size="13" fill="#566577" font-weight="400">Source · Oracle table</text>
+<path d="M1050 211 L1398 211" fill="none" stroke="#dce3ec" stroke-width="1.5"/>
+<text x="1051" y="240" font-size="13" fill="#315cce" font-weight="600">Parameters</text>
+<text x="1170" y="240" font-size="13" fill="#566577" font-weight="400">SQL</text>
+<text x="1230" y="240" font-size="13" fill="#566577" font-weight="400">Documentation</text>
+<text x="1051" y="274" font-size="12" fill="#566577" font-weight="600">Output</text>
+<rect x="1051" y="284" width="346" height="34" rx="5" fill="white" stroke="#dce3ec"/>
+<text x="1061" y="306" font-size="13" fill="#202a38" font-weight="400">result  ▾</text>
+<text x="1051" y="357" font-size="16" fill="#202a38" font-weight="600">Partition</text>
+<rect x="1280" y="339" width="118" height="25" rx="5" fill="#edf2ff"/>
+<text x="1290" y="356" font-size="12" fill="#315cce" font-weight="600">Declared here</text>
+<text x="1051" y="385" font-size="12" fill="#566577" font-weight="600">Dimension</text>
+<rect x="1051" y="395" width="346" height="34" rx="5" fill="white" stroke="#dce3ec"/>
+<text x="1061" y="417" font-size="13" fill="#202a38" font-weight="400">batch  ▾</text>
+<text x="1051" y="453" font-size="12" fill="#566577" font-weight="600">Partition column</text>
+<rect x="1051" y="463" width="346" height="34" rx="5" fill="white" stroke="#dce3ec"/>
+<text x="1061" y="485" font-size="13" fill="#202a38" font-weight="400">PARTITION_ID  ▾</text>
+<rect x="1051" y="516" width="346" height="84" rx="8" fill="#edf2ff"/>
+<text x="1065" y="540" font-size="13" fill="#315cce" font-weight="600">Filtered by partition</text>
+<text x="1065" y="563" font-size="12" fill="#315cce" font-weight="400">WHERE &quot;PARTITION_ID&quot; = $key</text>
+<text x="1065" y="585" font-size="12" fill="#566577" font-weight="400">Key is passed as a typed parameter.</text>
+<text x="1051" y="638" font-size="14" fill="#202a38" font-weight="500">□  Collect all input partitions</text>
+<text x="1051" y="664" font-size="12" fill="#566577" font-weight="400">Requires a partitioned input.</text>
+<path d="M1051 686 L1397 686" fill="none" stroke="#dce3ec" stroke-width="1.5"/>
+<text x="1051" y="716" font-size="14" fill="#202a38" font-weight="600">Retention</text>
+<text x="1051" y="741" font-size="12" fill="#566577" font-weight="400">Last 1 partition · optional limit 1 GiB</text>
+<text x="1051" y="765" font-size="12" fill="#566577" font-weight="400">Collection artifacts are retained separately.</text>
+<rect x="1051" y="789" width="225" height="36" rx="6" fill="white" stroke="#dce3ec"/>
+<text x="1064" y="812" font-size="13" fill="#202a38" font-weight="600">Edit dimension settings</text>
+<rect x="205" y="525" width="805" height="325" rx="8" fill="white" stroke="#dce3ec"/>
+<text x="224" y="556" font-size="16" fill="#202a38" font-weight="600">Results · Enriched orders</text>
+<rect x="474" y="536" width="70" height="25" rx="5" fill="#fceff0"/>
+<text x="484" y="553" font-size="12" fill="#b13a42" font-weight="600">Failed</text>
+<text x="551" y="555" font-size="12" fill="#566577" font-weight="400">batch-012 · 50,000,000 rows · 42.8 s</text>
+<text x="224" y="590" font-size="12" fill="#566577" font-weight="600">Partitions</text>
+<rect x="224" y="602" width="42" height="32" rx="4" fill="#eaf6ef"/>
+<text x="235" y="623" font-size="12" fill="#19734c" font-weight="600">01</text>
+<rect x="273" y="602" width="42" height="32" rx="4" fill="#eaf6ef"/>
+<text x="284" y="623" font-size="12" fill="#19734c" font-weight="600">02</text>
+<rect x="322" y="602" width="42" height="32" rx="4" fill="#eaf6ef"/>
+<text x="333" y="623" font-size="12" fill="#19734c" font-weight="600">03</text>
+<rect x="371" y="602" width="42" height="32" rx="4" fill="#eaf6ef"/>
+<text x="382" y="623" font-size="12" fill="#19734c" font-weight="600">04</text>
+<rect x="420" y="602" width="42" height="32" rx="4" fill="#eaf6ef"/>
+<text x="431" y="623" font-size="12" fill="#19734c" font-weight="600">05</text>
+<rect x="469" y="602" width="42" height="32" rx="4" fill="#eaf6ef"/>
+<text x="480" y="623" font-size="12" fill="#19734c" font-weight="600">06</text>
+<rect x="518" y="602" width="42" height="32" rx="4" fill="#eaf6ef"/>
+<text x="529" y="623" font-size="12" fill="#19734c" font-weight="600">07</text>
+<rect x="567" y="602" width="42" height="32" rx="4" fill="#eaf6ef"/>
+<text x="578" y="623" font-size="12" fill="#19734c" font-weight="600">08</text>
+<rect x="616" y="602" width="42" height="32" rx="4" fill="#eaf6ef"/>
+<text x="627" y="623" font-size="12" fill="#19734c" font-weight="600">09</text>
+<rect x="665" y="602" width="42" height="32" rx="4" fill="#eaf6ef"/>
+<text x="676" y="623" font-size="12" fill="#19734c" font-weight="600">10</text>
+<rect x="714" y="602" width="42" height="32" rx="4" fill="#eaf6ef"/>
+<text x="725" y="623" font-size="12" fill="#19734c" font-weight="600">11</text>
+<rect x="763" y="602" width="42" height="32" rx="4" fill="#fceff0" stroke="#315cce"/>
+<text x="774" y="623" font-size="12" fill="#b13a42" font-weight="600">12</text>
+<rect x="812" y="602" width="42" height="32" rx="4" fill="#f0f3f7"/>
+<text x="823" y="623" font-size="12" fill="#566577" font-weight="600">13</text>
+<rect x="861" y="602" width="42" height="32" rx="4" fill="#f0f3f7"/>
+<text x="872" y="623" font-size="12" fill="#566577" font-weight="600">14</text>
+<rect x="910" y="602" width="42" height="32" rx="4" fill="#f0f3f7"/>
+<text x="921" y="623" font-size="12" fill="#566577" font-weight="600">15</text>
+<text x="225" y="659" font-size="13" fill="#315cce" font-weight="600">Data</text>
+<text x="288" y="659" font-size="13" fill="#566577" font-weight="400">Columns</text>
+<text x="375" y="659" font-size="13" fill="#566577" font-weight="400">Tests</text>
+<text x="437" y="659" font-size="13" fill="#566577" font-weight="400">Log</text>
+<text x="700" y="659" font-size="12" fill="#566577" font-weight="400">Showing retained result</text>
+<rect x="219" y="675" width="777" height="30" rx="0" fill="#f5f7fa"/>
+<text x="233" y="695" font-size="12" fill="#566577" font-weight="600">order_id</text>
+<text x="406" y="695" font-size="12" fill="#566577" font-weight="600">customer</text>
+<text x="650" y="695" font-size="12" fill="#566577" font-weight="600">amount</text>
+<text x="841" y="695" font-size="12" fill="#566577" font-weight="600">status</text>
+<text x="233" y="731" font-size="13" fill="#202a38" font-weight="400">127001</text>
+<text x="406" y="731" font-size="13" fill="#202a38" font-weight="400">Northwind</text>
+<text x="650" y="731" font-size="13" fill="#202a38" font-weight="400">240.00</text>
+<text x="841" y="731" font-size="13" fill="#202a38" font-weight="400">paid</text>
+<path d="M220 743 L997 743" fill="none" stroke="#dce3ec" stroke-width="1.5"/>
+<text x="233" y="764" font-size="13" fill="#202a38" font-weight="400">127002</text>
+<text x="406" y="764" font-size="13" fill="#202a38" font-weight="400">Acme</text>
+<text x="650" y="764" font-size="13" fill="#202a38" font-weight="400">189.50</text>
+<text x="841" y="764" font-size="13" fill="#202a38" font-weight="400">paid</text>
+<path d="M220 776 L997 776" fill="none" stroke="#dce3ec" stroke-width="1.5"/>
+<text x="233" y="797" font-size="13" fill="#202a38" font-weight="400">127003</text>
+<text x="406" y="797" font-size="13" fill="#202a38" font-weight="400">Northwind</text>
+<text x="650" y="797" font-size="13" fill="#202a38" font-weight="400">432.00</text>
+<text x="841" y="797" font-size="13" fill="#202a38" font-weight="400">paid</text>
+<path d="M220 809 L997 809" fill="none" stroke="#dce3ec" stroke-width="1.5"/>
+<text x="225" y="832" font-size="11" fill="#b13a42" font-weight="400">Partition 12: latest attempt failed; this retained result is from the previous successful run.</text>
+</svg>
