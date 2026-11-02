@@ -139,9 +139,14 @@ export function FlowToolbar({ tab }: { tab: WorkspaceTab }) {
             <button
               className="button primary"
               disabled={!canEdit || starting || !snapshot.bundle}
+              aria-busy={starting}
               onClick={() => run()}
             >
-              <Play size={14} fill="currentColor" />
+              {starting ? (
+                <Loader2 size={14} className="spin" />
+              ) : (
+                <Play size={14} fill="currentColor" />
+              )}
               {t("run")}
             </button>
             <PartitionRunMenu />

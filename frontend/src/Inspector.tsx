@@ -1,5 +1,5 @@
 import { PartitionInspector } from "./PartitionControls";
-import { usePartitionQuery } from "./worktree";
+import { useOptionalWorktree, usePartitionQuery } from "./worktree";
 import Select from "./Select";
 import { nodeCodePath, nodeEntity, templateUsage } from "./nodeCode";
 import { lazy, Suspense, useRef, useState } from "react";
@@ -10,6 +10,7 @@ import {
   Code2,
   Info,
   Link,
+  Loader2,
   Play,
   Settings2,
   Trash2,
@@ -126,6 +127,7 @@ export default function Inspector({
   onClose: () => void;
 }) {
   const t = useT();
+  const starting = useOptionalWorktree()?.starting;
   const partition = usePartitionQuery(fullNode);
   const [tab, setTab] = useState<(typeof TABS)[number][0]>("parameters");
   // Variables created from a parameter, declared by the save that binds it.
@@ -316,10 +318,15 @@ export default function Inspector({
         <button
           className="icon run-node"
           title={t("runNode")}
-          disabled={readOnly || !!statuses.active}
+          disabled={readOnly || starting || !!statuses.active}
+          aria-busy={starting}
           onClick={onRun}
         >
-          <Play size={16} />
+          {starting ? (
+            <Loader2 size={16} className="spin" />
+          ) : (
+            <Play size={16} />
+          )}
         </button>
       </div>
       {(signature.outputs.length > 0 || kind === "export") && (
