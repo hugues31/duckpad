@@ -148,7 +148,9 @@ export function ColumnPicker({
           value={value}
           onChange={(e) => onChange(e.target.value)}
         >
-          <option value="">{t(allowNone ? "partitionNoFilter" : "chooseColumn")}</option>
+          <option value="">
+            {t(allowNone ? "partitionNoFilter" : "chooseColumn")}
+          </option>
           {value && !columns.some((c) => c.name === value) && (
             <option value={value}>
               {value} · {t("absent")}
