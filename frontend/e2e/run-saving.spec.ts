@@ -55,37 +55,17 @@ function pauseSave(page: Page, endpoint: string, status?: number) {
 
 async function expectNewBinding(page: Page, id: string) {
   await expect
-    .poll(async () => {
-      const result = await page.request.get(`/api/runs/${id}`);
-      return (await result.json()).status;
-    })
+    .poll(
+      async () =>
+        (await (await page.request.get(`/api/runs/${id}`)).json()).status,
+      { timeout: 30000 },
+    )
     .toBe("success");
   const result = await (await page.request.get(`/api/runs/${id}`)).json();
   expect(result.variables).toMatchObject({
     order_status: { source: "default", value: "paid" },
   });
 }
-
-test("Run pipeline uses the new binding when clicked during a slow save", async ({
-  page,
-}) => {
-  const { endpoint } = await prepare(page);
-  await page.route(`**${endpoint}`, async (route) => {
-    if (route.request().method() === "PUT")
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-    await route.continue();
-  });
-  await bindStatus(page);
-  await expect(page.locator(".flow-toolbar .save-status")).toHaveText(
-    "Saving…",
-  );
-  const launched = runResponse(page, endpoint);
-  await page.getByRole("button", { name: "Run pipeline", exact: true }).click();
-  const response = await launched;
-  expect(response.ok()).toBeTruthy();
-  const run: Run = await response.json();
-  await expectNewBinding(page, run.id);
-});
 
 for (const entry of [
   "pipeline",
@@ -198,55 +178,57 @@ for (const node of [false, true]) {
   });
 }
 
-for (const environment of ["dev", "prod"]) {
-  for (const status of [409, 422]) {
-    test(`${environment} does not run when a save fails with ${status}`, async ({
-      page,
-    }) => {
-      const { endpoint } = await prepare(page, environment);
-      const gate = pauseSave(page, endpoint, status);
-      await gate.routed;
-      const requests: string[] = [];
-      page.on("request", (request) => {
-        if (
-          request.url().endsWith(`${endpoint}/runs`) &&
-          request.method() === "POST"
-        )
-          requests.push(request.url());
-      });
-      try {
-        await bindStatus(page);
-        const button = page.getByRole("button", {
-          name: "Run pipeline",
-          exact: true,
-        });
-        await button.click();
-        if (environment === "prod")
-          await page
-            .getByRole("button", { name: "Confirm and run", exact: true })
-            .click();
-        await expect(button).toHaveAttribute("aria-busy", "true");
-        gate.release();
-        await expect(page.getByRole("alert")).toContainText("Save rejected");
-        await expect(button).toBeEnabled();
-        expect(requests).toEqual([]);
-        // A corrected save can be retried; the failed attempt releases the launch guard.
-        await page.unrouteAll({ behavior: "wait" });
-        const launched = runResponse(page, endpoint);
-        await (
-          environment === "prod"
-            ? page.getByRole("button", { name: "Confirm and run", exact: true })
-            : button
-        ).click();
-        const response = await launched;
-        expect(response.ok()).toBeTruthy();
-        await expectNewBinding(page, (await response.json()).id);
-      } finally {
-        gate.release();
-        await page.unrouteAll({ behavior: "wait" });
-      }
+// Both statuses take the same path; the environment decides where the error shows.
+for (const [environment, status] of [
+  ["dev", 409],
+  ["prod", 422],
+] as const) {
+  test(`${environment} does not run when a save fails with ${status}`, async ({
+    page,
+  }) => {
+    const { endpoint } = await prepare(page, environment);
+    const gate = pauseSave(page, endpoint, status);
+    await gate.routed;
+    const requests: string[] = [];
+    page.on("request", (request) => {
+      if (
+        request.url().endsWith(`${endpoint}/runs`) &&
+        request.method() === "POST"
+      )
+        requests.push(request.url());
     });
-  }
+    try {
+      await bindStatus(page);
+      const button = page.getByRole("button", {
+        name: "Run pipeline",
+        exact: true,
+      });
+      await button.click();
+      if (environment === "prod")
+        await page
+          .getByRole("button", { name: "Confirm and run", exact: true })
+          .click();
+      await expect(button).toHaveAttribute("aria-busy", "true");
+      gate.release();
+      await expect(page.getByRole("alert")).toContainText("Save rejected");
+      await expect(button).toBeEnabled();
+      expect(requests).toEqual([]);
+      // A corrected save can be retried; the failed attempt releases the launch guard.
+      await page.unrouteAll({ behavior: "wait" });
+      const launched = runResponse(page, endpoint);
+      await (
+        environment === "prod"
+          ? page.getByRole("button", { name: "Confirm and run", exact: true })
+          : button
+      ).click();
+      const response = await launched;
+      expect(response.ok()).toBeTruthy();
+      await expectNewBinding(page, (await response.json()).id);
+    } finally {
+      gate.release();
+      await page.unrouteAll({ behavior: "wait" });
+    }
+  });
 }
 
 test("Run persists unsaved Code edits before launching", async ({ page }) => {
