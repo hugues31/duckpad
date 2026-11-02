@@ -422,8 +422,17 @@ def database_run(home, mode, connector, environments, tables, attach, extra=None
         else:
             worktree = projects.create(f"{connector} acceptance", bundle)["id"]
         first = wait(store, engine, worktree)
-        listed = engine.connection_objects(worktree, "warehouse", "dev")
-        assert {"schema": schema, "name": destination, "view": False} in listed["tables"], listed
+        # The run's session attached the database: a table created since then is listed too.
+        late = f"{destination}_late"
+        with attached(attach["dev"]) as db:
+            db.execute(f"CREATE TABLE fixture.{qi(schema)}.{qi(late)} (id INTEGER)")
+        try:
+            listed = engine.connection_objects(worktree, "warehouse", "dev")
+        finally:
+            with attached(attach["dev"]) as db:
+                db.execute(f"DROP TABLE fixture.{qi(schema)}.{qi(late)}")
+        for table in (destination, late):
+            assert {"schema": schema, "name": table, "view": False} in listed["tables"], listed
         rows = engine.preview(worktree, "dev", "read")["rows"]
         assert [row["values"][1:] for row in rows] == [["North", 10], ["South", 20], ["North", 30]], rows
         preview = engine.preview(worktree, "dev", "totals")

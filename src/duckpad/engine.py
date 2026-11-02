@@ -230,20 +230,32 @@ class Engine:
         connection = captured[reference]
         if connection["definition"].get("family") != "database":
             raise Problem(f"Connection {reference} is not a database", 422)
-        # A session that already attached the connection lists it: a second attachment of a
-        # database file would wait for its lock.
-        context = self.pool.find(worktree, environment)
-        if context is not None and context.db is not None and not getattr(context.db, "closed", False):
-            cursor = context.db.cursor()
-            try:
-                if connection_probe.attached(cursor, connection["alias"]):
-                    return connection_probe.objects(cursor, connection["alias"])
-            except (duckdb.Error, Problem):
-                pass
-            finally:
-                cursor.close()
         imports = self.store.get("settings", "offline_extensions", {})
-        return connection_probe.run(self.pool.probe_config(), captured, imports, secrets)
+        try:
+            # A new attachment lists the tables created since a session attached the database:
+            # attached catalogs, such as PostgreSQL's, are cached.
+            return connection_probe.run(self.pool.probe_config(), captured, imports, secrets)
+        except Problem:
+            # A database file that a session attached is locked: list the session's attachment.
+            listed = self._session_objects(worktree, environment, connection["alias"])
+            if listed is None:
+                raise
+            return listed
+
+    def _session_objects(self, worktree: str, environment: str, alias: str) -> Record | None:
+        """The schemas and tables of a session's attachment, if a session attached the database."""
+        context = self.pool.find(worktree, environment)
+        if context is None or context.db is None or getattr(context.db, "closed", False):
+            return None
+        cursor = context.db.cursor()
+        try:
+            if not connection_probe.attached(cursor, alias):
+                return None
+            return connection_probe.objects(cursor, alias)
+        except (duckdb.Error, Problem):
+            return None
+        finally:
+            cursor.close()
 
     def check_project_extension(self, worktree: str, name: str, source: str) -> Record:
         self.projects.get(worktree)

@@ -21,6 +21,8 @@ from .types import Connections, Record, SQLCursor
 from .util import Problem
 
 TIMEOUT = 30
+# Loading extensions alone may first download them from their repository.
+INSTALL_TIMEOUT = 300
 # Database objects listed for the inspector; larger databases list their first ones.
 MAX_TABLES = 5000
 # Catalog schemas that hold no user data: DuckDB's, and PostgreSQL's reserved `pg_` schemas
@@ -42,19 +44,24 @@ def run(
     checks that a folder root exists. Errors never contain the connection's secrets.
     """
     payload = {"config": config, "captured": captured, "offline": offline, "setup": setup}
+    timeout = TIMEOUT if setup else INSTALL_TIMEOUT
     try:
         result = subprocess.run(
             COMMAND,
             input=json.dumps(payload),
             text=True,
             capture_output=True,
-            timeout=TIMEOUT,
+            timeout=timeout,
             check=False,
         )
     except subprocess.TimeoutExpired:
         raise Problem(
-            f"The connection did not respond within {TIMEOUT} seconds. Check the host, the port and "
-            "network access from the Duckpad server.",
+            f"The connection did not respond within {timeout} seconds. Check the host, the port and "
+            "network access from the Duckpad server."
+            if setup
+            # Callers name the connection whose extensions were loading.
+            else f"Loading did not finish within {timeout} seconds. Check network access to the "
+            "extension repository from the Duckpad server.",
             422,
         ) from None
     if result.returncode < 0:
@@ -130,6 +137,8 @@ def main() -> None:
     if not payload["setup"]:
         connection["definition"]["init_sql"] = ""
     with duckdb.connect(config={**payload["config"], "threads": 1, **EXPLICIT_LOADING}) as db:
+        # The progress bar would write to stdout, which carries the result.
+        db.execute("SET enable_progress_bar = false")
         setup_connections(db, payload["captured"], payload["offline"])
         if not payload["setup"]:
             result: Record = {}

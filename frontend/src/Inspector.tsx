@@ -218,7 +218,8 @@ export default function Inspector({
       else params[name] = value;
       return { ...current, params };
     });
-  // Schema and table names are listed from the database connection their parameters name.
+  // Schema and table names are listed from the database connection of the first schema
+  // parameter. Fields bound to another connection get no suggestions.
   const valueOf = (name?: string) => {
     const parameter = parameters.find((p) => p.name === name);
     const value = draft.params?.[name ?? ""] ?? parameter?.default;
@@ -226,9 +227,11 @@ export default function Inspector({
   };
   const argumentOf = (name?: string) =>
     parameters.find((p) => p.name === name)?.type.match(/\((\w+)\)/)?.[1];
-  const database = valueOf(
-    argumentOf(parameters.find((p) => p.type.startsWith("schema_name("))?.name),
-  );
+  const listedSchema = parameters.find((p) =>
+    p.type.startsWith("schema_name("),
+  )?.name;
+  const listedConnection = argumentOf(listedSchema);
+  const database = valueOf(listedConnection);
   const objects = useApiResource<DatabaseObjects>(
     tab === "parameters" &&
       connections.some((c) => c.id === database && c.family === "database")
@@ -239,16 +242,24 @@ export default function Inspector({
       : null,
   );
   const objectNames = (parameter: { name: string; type: string }) => {
+    if (!listedConnection) return undefined;
     const base = parameter.type.split("(")[0];
-    if (base !== "schema_name" && base !== "table_name") return undefined;
-    const schema = valueOf(argumentOf(parameter.name));
-    const names =
-      base === "schema_name"
-        ? (objects.data?.schemas ?? [])
-        : (objects.data?.tables ?? [])
-            .filter((table) => table.schema === schema)
-            .map((table) => table.name);
-    return { names, pending: objects.pending, error: objects.error };
+    const argument = argumentOf(parameter.name);
+    // The listing's progress and error show once, under the first schema field.
+    const status =
+      parameter.name === listedSchema
+        ? { pending: objects.pending, error: objects.error }
+        : { pending: false, error: "" };
+    if (base === "schema_name" && argument === listedConnection)
+      return { names: objects.data?.schemas ?? [], ...status };
+    if (base === "table_name" && argumentOf(argument) === listedConnection)
+      return {
+        names: (objects.data?.tables ?? [])
+          .filter((table) => table.schema === valueOf(argument))
+          .map((table) => table.name),
+        ...status,
+      };
+    return undefined;
   };
   // Connection parameters naming where file and destination parameters live.
   const locations = new Set(

@@ -114,7 +114,7 @@ def test_an_administrator_declared_database_works_through_load_table_and_export_
         run = wait_run(store, engine.launch(worktree, environment), timeout=30)
         assert run["status"] == "success", run
     assert engine.preview(worktree, "prod", "read")["rows"][0]["values"] == [1, "North", 100]
-    # The session now holds the file's lock: listing reads its attachment instead.
+    # The session now holds the file's lock: listing falls back to its attachment.
     assert engine.connection_objects(worktree, "warehouse", "dev") == listed
     for environment, rows in (("dev", [("North", 10, None)] * 2), ("prod", [("North", 100, None)])):
         alias = catalog.capture(["warehouse"], environment)[0]["warehouse"]["alias"]
@@ -194,6 +194,10 @@ def test_a_crashing_connection_setup_is_reported_without_stopping_the_server(ser
     monkeypatch.setattr(connection_probe, "COMMAND", [sys.executable, "-c", "import time; time.sleep(30)"])
     with pytest.raises(Problem, match=r"did not respond within 0\.5 seconds"):
         engine.test_connection(connection, "dev")
+    # Loading extensions alone may download them: it gets its own, longer limit.
+    monkeypatch.setattr(connection_probe, "INSTALL_TIMEOUT", 0.5)
+    with pytest.raises(Problem, match=r"Loading did not finish within 0\.5 seconds"):
+        connection_probe.run({}, {}, {}, [], setup=False)
     monkeypatch.undo()
     assert engine.test_connection(connection, "dev")["schemas"] == ["main", "sales"]
 

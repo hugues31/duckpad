@@ -203,7 +203,7 @@ Configure a host, port, database, user and password per environment. The built-i
 
 Duckpad's container image links `postgres` statically, built for x86-64 processors without AVX2 or BMI2, so nothing is downloaded. Other DuckDB builds, such as the PyPI wheel of `pip install duckpad`, install the extension from DuckDB's core repository on first use; air-gapped instances [import it](OFFLINE_EXTENSIONS.md) like any other extension.
 
-The acceptance test creates a uniquely named schema in a dev and a prod database, then runs Load table, an aggregate and Export table in both environments, in embedded and isolated execution. It checks repeated appends without truncation, cell lineage, Test connection, the inspector's listing, Additional options (`application_name` and TLS on the server side), and the errors for a wrong password, an unreachable host and a refused certificate. It drops only its own schema. CI runs it on every pull request against a PostgreSQL service.
+The acceptance test creates a uniquely named schema in a dev and a prod database, then runs Load table, an aggregate and Export table in both environments, in embedded and isolated execution. It checks repeated appends without truncation, cell lineage, Test connection, the inspector's listing, including a table created after a run, Additional options (`application_name` and TLS on the server side), and the errors for a wrong password, an unreachable host and a refused certificate. It drops only its own schema. CI runs it on every pull request against a PostgreSQL service.
 
 ```sh
 # Credentials of a disposable test server, never a production one.
