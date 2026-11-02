@@ -81,6 +81,7 @@ export default function ResultsData({
   dataset,
   canEdit,
   active,
+  starting = false,
   sample,
   view,
   failing,
@@ -102,6 +103,7 @@ export default function ResultsData({
   dataset?: Dataset;
   canEdit: boolean;
   active: boolean;
+  starting?: boolean;
   sample: Sample;
   view?: string;
   failing: FailingRows | null;
@@ -203,10 +205,15 @@ export default function ResultsData({
         </div>
         <button
           className="button secondary small"
-          disabled={!canEdit || active}
+          disabled={!canEdit || active || starting}
+          aria-busy={starting}
           onClick={onRun}
         >
-          <Play size={13} />
+          {starting ? (
+            <Loader2 size={13} className="spin" />
+          ) : (
+            <Play size={13} />
+          )}
           {runLabel || t("runNode")}
         </button>
       </div>

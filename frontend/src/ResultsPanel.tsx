@@ -335,10 +335,15 @@ export default function ResultsPanel({
             className="icon"
             title={runLabel}
             aria-label={runLabel}
-            disabled={readOnly || !!statuses.active}
+            disabled={readOnly || worktree?.starting || !!statuses.active}
+            aria-busy={worktree?.starting}
             onClick={runResult}
           >
-            <Play size={15} />
+            {worktree?.starting ? (
+              <Loader2 size={15} className="spin" />
+            ) : (
+              <Play size={15} />
+            )}
           </button>
           <button
             className="icon"
@@ -394,6 +399,7 @@ export default function ResultsPanel({
           dataset={dataset}
           canEdit={!readOnly}
           active={!!statuses.active}
+          starting={worktree?.starting}
           sample={shownSample.sample}
           view={shownSample.view}
           failing={failing}

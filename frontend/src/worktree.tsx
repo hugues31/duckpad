@@ -82,6 +82,7 @@ export function WorktreeProvider({
     notify,
     openModal,
     closeModal,
+    drafts,
   } = useShell();
   const [assistantSelection, setAssistantSelection] = useState({
     worktree: id,
@@ -109,6 +110,7 @@ export function WorktreeProvider({
   const [saves, setSaves] = useState(0);
   const pendingWrites = useRef(new Set<Promise<Snapshot>>());
   const [starting, setStarting] = useState(false);
+  const launching = useRef(false);
   const [gitVersion, setGitVersion] = useState(0);
   const {
     snapshot,
@@ -210,20 +212,32 @@ export function WorktreeProvider({
     }
   }
 
+  async function flush() {
+    while (pendingWrites.current.size)
+      await Promise.all([...pendingWrites.current]);
+  }
+
   async function launch(
     environment: string,
     node?: string,
     confirmed = false,
     options?: PartitionLaunchOptions,
   ) {
+    if (launching.current) return;
+    launching.current = true;
     setStarting(true);
     try {
+      // Observe failures from saves already in flight before persisting drafts.
+      await flush();
+      await drafts.persist();
+      await flush();
       const run = await api<Run>(
         `/worktrees/${id}/runs`,
         send({ environment, node, entry_point: "ui", confirmed, ...options }),
       );
       setActive(id, run);
     } finally {
+      launching.current = false;
       setStarting(false);
     }
   }
@@ -262,10 +276,7 @@ export function WorktreeProvider({
     starting,
     gitVersion,
     refresh: () => refresh(),
-    flush: async () => {
-      while (pendingWrites.current.size)
-        await Promise.all([...pendingWrites.current]);
-    },
+    flush,
     save: (base, change) => {
       const bundle = structuredClone(base.bundle!);
       change(bundle);
