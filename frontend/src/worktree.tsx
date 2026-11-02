@@ -6,7 +6,9 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import type { PartitionContext, PartitionEntry } from "./partitions";
 import { api, errorDetail, send } from "./api";
+import { outputSource } from "./graph";
 import { useT } from "./i18n";
 import { useShell } from "./shell";
 import type { Bundle, Environment, Run, Snapshot, Statuses } from "./types";
@@ -14,6 +16,9 @@ import { useWorktreeSnapshot } from "./useWorktreeSnapshot";
 
 /** The working branch opened by the URL, with the actions that change it. */
 export interface Worktree {
+  partition: PartitionContext | null;
+  partitionEntry: PartitionEntry | null;
+  selectPartition: (entry: PartitionEntry | null) => void;
   /** Empty outside the pipeline pages, where nothing is loaded. */
   id: string;
   assistantNode: string;
@@ -108,6 +113,22 @@ export function WorktreeProvider({
       return refreshWorkspace();
     },
   });
+  const manifest = snapshot?.partitions?.[environment]?.manifest?.id;
+  const partitionScope = `${id}:${environment}:${manifest || ""}`;
+  const [selectedPartition, setSelectedPartition] = useState<{
+    scope: string;
+    entry: PartitionEntry | null;
+  }>({ scope: "", entry: null });
+  const partitionEntry =
+    selectedPartition.scope === partitionScope ? selectedPartition.entry : null;
+  const partition: PartitionContext | null = manifest
+    ? {
+        manifest,
+        ...(partitionEntry
+          ? { partition_id: partitionEntry.partition_id }
+          : { partition_mode: "all" as const }),
+      }
+    : null;
   const canEdit =
     !snapshot?.worktree.read_only &&
     (snapshot?.role === "admin" || snapshot?.role === "editor");
@@ -165,6 +186,10 @@ export function WorktreeProvider({
     });
 
   const value: Worktree = {
+    partition,
+    partitionEntry,
+    selectPartition: (entry) =>
+      setSelectedPartition({ scope: partitionScope, entry }),
     id,
     assistantNode:
       assistantSelection.worktree === id ? assistantSelection.node : "",
@@ -240,4 +265,18 @@ export function useLoadedWorktree() {
   const { snapshot } = worktree;
   if (!snapshot) throw new Error("The working branch is not loaded");
   return { ...worktree, snapshot };
+}
+
+export const useOptionalWorktree = () => useContext(WorktreeContext);
+
+export function usePartitionQuery(node: string, port = "result") {
+  const worktree = useOptionalWorktree();
+  const source = worktree?.snapshot?.bundle
+    ? outputSource(worktree.snapshot.bundle, node, port)
+    : { node, port };
+  return worktree?.snapshot?.partitions?.[worktree.environment]?.nodes[
+    source.node
+  ]?.partitioned
+    ? { ...worktree.partition }
+    : {};
 }

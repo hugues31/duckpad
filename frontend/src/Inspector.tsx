@@ -1,3 +1,5 @@
+import { PartitionInspector } from "./PartitionControls";
+import { usePartitionQuery } from "./worktree";
 import Select from "./Select";
 import { nodeCodePath, nodeEntity, templateUsage } from "./nodeCode";
 import { lazy, Suspense, useRef, useState } from "react";
@@ -123,6 +125,7 @@ export default function Inspector({
   onClose: () => void;
 }) {
   const t = useT();
+  const partition = usePartitionQuery(fullNode);
   const [tab, setTab] = useState<(typeof TABS)[number][0]>("parameters");
   // Variables created from a parameter, declared by the save that binds it.
   const declared = useRef<Record<string, Declaration>>({});
@@ -183,7 +186,7 @@ export default function Inspector({
     tab === "sql"
       ? withQuery(
           `/worktrees/${worktree}/compile/${encodeURIComponent(fullNode)}`,
-          { environment },
+          { environment, ...partition },
         )
       : null,
     { refresh: snapshot.revision },
@@ -359,6 +362,12 @@ export default function Inspector({
                 })}
               </>
             )}
+            <PartitionInspector
+              node={draft}
+              fullNode={fullNode}
+              ports={signature.outputs}
+              onChange={(next) => update(() => next)}
+            />
             {!!parameters.length && <h4>{t("parameters")}</h4>}
             <QueryBuilder
               kind={node.preset || node.template || node.origin || ""}

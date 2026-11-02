@@ -1,3 +1,4 @@
+import { usePartitionQuery } from "./worktree";
 import { useRef, useState } from "react";
 import {
   BarChart3,
@@ -43,13 +44,14 @@ export default function ResultsColumns({
   onColumn: (column: string) => void;
 }) {
   const t = useT();
+  const partition = usePartitionQuery(target.node, target.port);
   const worktree = snapshot.worktree.id;
   const key = `${target.node}:${target.port}`;
   const documentation = snapshot.bundle?.documentation;
   const descriptions = documentation?.columns?.[key] || {};
   const endpoint = withQuery(
     `/worktrees/${worktree}/statistics/${encodeURIComponent(target.node)}`,
-    { environment, port: target.port },
+    { environment, port: target.port, ...partition },
   );
   const loaded = useApiResource<ResultStatistics>(dataset ? endpoint : null, {
     refresh: dataset?.id,

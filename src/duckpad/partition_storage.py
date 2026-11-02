@@ -170,6 +170,13 @@ class PartitionStorage:
         finally:
             temporary.unlink(missing_ok=True)
 
+    def artifact(self, identity):
+        if not identity:
+            return None
+        with self.lock, self.connect() as db:
+            row = db.execute("SELECT metadata FROM artifacts WHERE id=?", [identity]).fetchone()
+        return json.loads(row[0]) if row else None
+
     def available(self, metadata):
         if (
             not metadata

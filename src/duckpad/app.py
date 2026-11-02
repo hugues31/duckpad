@@ -651,6 +651,10 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
             if result["bundle"]
             else None
         )
+        result["partitions"] = {
+            environment: engine.partitions.describe(worktree, environment)
+            for environment in catalog.environment_names()
+        }
         return result
 
     @app.get("/api/worktrees/{worktree}/extensions", response_model=None)
@@ -913,9 +917,75 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
     def cancel(run: str) -> Record:
         return engine.cancel(run)
 
+    @app.get("/api/worktrees/{worktree}/partitions", response_model=None)
+    def partition_entries(
+        worktree: str,
+        environment: str,
+        manifest: str | None = None,
+        node: str | None = None,
+        port: str = "result",
+        cursor: str | None = None,
+        limit: int = 50,
+        search: str = "",
+        status: str | None = None,
+        run: str | None = None,
+    ) -> Record:
+        if run:
+            record = store.get("run", run)
+            if not record:
+                raise Problem("Run not found", 404)
+            if record["worktree"] != worktree or record["environment"] != environment:
+                raise Problem("Run does not belong to this context", 404)
+            manifest = record.get("partitions", {}).get("manifest")
+        return engine.partitions.page(
+            worktree,
+            environment,
+            manifest=manifest,
+            node=node,
+            port=port,
+            cursor=cursor,
+            limit=limit,
+            search=search,
+            status=status,
+            run=run,
+        )
+
+    def partition_context(
+        manifest: str | None, partition_id: str | None, partition_mode: str | None
+    ) -> Record | None:
+        return (
+            {"manifest": manifest, "partition_id": partition_id, "partition_mode": partition_mode}
+            if any((manifest, partition_id, partition_mode))
+            else None
+        )
+
+    @app.get("/api/worktrees/{worktree}/partition-attempts/{node}", response_model=None)
+    def partition_attempt(
+        worktree: str, node: str, environment: str, manifest: str, partition_id: str
+    ) -> Record:
+        return engine.partitions.attempt(
+            worktree, environment, node, {"manifest": manifest, "partition_id": partition_id}
+        )
+
     @app.get("/api/worktrees/{worktree}/compile/{node}", response_model=None)
-    def compile_sql(worktree: str, node: str, environment: str) -> list[Record]:
-        return engine.compile(worktree, environment, node)
+    def compile_sql(
+        worktree: str,
+        node: str,
+        environment: str,
+        manifest: str | None = None,
+        partition_id: str | None = None,
+        partition_mode: str | None = None,
+    ) -> list[Record]:
+        return engine.compile(
+            worktree,
+            environment,
+            node,
+            partition=engine.partitions.compile_entry(
+                worktree, environment, partition_context(manifest, partition_id, partition_mode)
+            )
+            if manifest or partition_id or partition_mode
+            else None,
+        )
 
     @app.get("/api/worktrees/{worktree}/exports/{node}", response_model=None)
     def export_result(worktree: str, node: str, environment: str) -> Record:
@@ -962,6 +1032,9 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
         method: str = "first",
         rows: int | None = None,
         seed: int = 0,
+        manifest: str | None = None,
+        partition_id: str | None = None,
+        partition_mode: str | None = None,
     ) -> Record:
         try:
             filter_values, order_values = json.loads(filters), json.loads(order)
@@ -971,20 +1044,60 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
             raise Problem("Invalid preview filters")
         sample = Sample(method=method, rows=rows, seed=seed, filter=filter, search=search, order=order_values)
         return engine.preview(
-            worktree, environment, node, port, limit, offset, sort, descending, filter_values, sample
+            worktree,
+            environment,
+            node,
+            port,
+            limit,
+            offset,
+            sort,
+            descending,
+            filter_values,
+            sample,
+            partition_context(manifest, partition_id, partition_mode),
         )
 
     @app.get("/api/worktrees/{worktree}/statistics/{node}", response_model=None)
-    def statistics(worktree: str, node: str, environment: str, port: str = "result") -> Record:
-        return engine.statistics(worktree, environment, node, port)
+    def statistics(
+        worktree: str,
+        node: str,
+        environment: str,
+        port: str = "result",
+        manifest: str | None = None,
+        partition_id: str | None = None,
+        partition_mode: str | None = None,
+    ) -> Record:
+        return engine.statistics(
+            worktree, environment, node, port, partition_context(manifest, partition_id, partition_mode)
+        )
 
     @app.post("/api/worktrees/{worktree}/statistics/{node}", response_model=None)
-    def compute_statistics(worktree: str, node: str, environment: str, port: str = "result") -> Record:
-        return engine.compute_statistics(worktree, environment, node, port)
+    def compute_statistics(
+        worktree: str,
+        node: str,
+        environment: str,
+        port: str = "result",
+        manifest: str | None = None,
+        partition_id: str | None = None,
+        partition_mode: str | None = None,
+    ) -> Record:
+        return engine.compute_statistics(
+            worktree, environment, node, port, partition_context(manifest, partition_id, partition_mode)
+        )
 
     @app.delete("/api/worktrees/{worktree}/statistics/{node}", response_model=None)
-    def cancel_statistics(worktree: str, node: str, environment: str, port: str = "result") -> Record:
-        return engine.cancel_statistics(worktree, environment, node, port)
+    def cancel_statistics(
+        worktree: str,
+        node: str,
+        environment: str,
+        port: str = "result",
+        manifest: str | None = None,
+        partition_id: str | None = None,
+        partition_mode: str | None = None,
+    ) -> Record:
+        return engine.cancel_statistics(
+            worktree, environment, node, port, partition_context(manifest, partition_id, partition_mode)
+        )
 
     @app.get("/api/worktrees/{worktree}/test-rows/{node}/{test}", response_model=None)
     def test_rows(

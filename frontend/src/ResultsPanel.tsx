@@ -1,3 +1,6 @@
+import { withQuery } from "./api";
+import { PartitionStrip } from "./PartitionControls";
+import { usePartitionQuery } from "./worktree";
 import { useState } from "react";
 import {
   Clock,
@@ -27,6 +30,7 @@ import type {
   Run,
   Snapshot,
   Statuses,
+  PreviewPage,
 } from "./types";
 import { useApiResource } from "./useApiResource";
 
@@ -161,7 +165,19 @@ export default function ResultsPanel({
     port: target.input ? ports[0] || "result" : target.port,
   }).node;
   const result = statuses.nodes[producer];
-  const dataset = datasetOf(target);
+  const partition = usePartitionQuery(target.node, target.port);
+  const partitionPreview = useApiResource<PreviewPage>(
+    partition.manifest
+      ? withQuery(
+          `/worktrees/${snapshot.worktree.id}/preview/${encodeURIComponent(target.node)}`,
+          { environment, port: target.port, limit: 1, ...partition },
+        )
+      : null,
+    { refresh: JSON.stringify(statuses) },
+  );
+  const dataset = partition.manifest
+    ? partitionPreview.data || undefined
+    : datasetOf(target);
   const running = computing(statuses, fullNode);
   // The run that produced the displayed rows, for the header.
   const generation = useApiResource<Run>(
@@ -292,6 +308,14 @@ export default function ResultsPanel({
           </button>
         </div>
       </header>
+      <PartitionStrip node={stored(target).node} port={target.port} />
+      {dataset?.incomplete && (
+        <div className="notice warning" role="status">
+          {t("partitionIncomplete")
+            .replace("{available}", String(dataset.incomplete.available))
+            .replace("{total}", String(dataset.incomplete.total))}
+        </div>
+      )}
       <div className="tabs results-tabs" role="tablist">
         {tabs.map((key) => {
           const Icon = {
@@ -321,7 +345,7 @@ export default function ResultsPanel({
       </div>
       {shown === "data" ? (
         <ResultsData
-          key={`${target.node}:${target.port}:${environment}`}
+          key={`${target.node}:${target.port}:${environment}:${JSON.stringify(partition)}`}
           snapshot={snapshot}
           environment={environment}
           target={target}
@@ -346,7 +370,7 @@ export default function ResultsPanel({
         />
       ) : shown === "columns" ? (
         <ResultsColumns
-          key={`${target.node}:${target.port}:${environment}`}
+          key={`${target.node}:${target.port}:${environment}:${JSON.stringify(partition)}`}
           snapshot={snapshot}
           environment={environment}
           target={target}

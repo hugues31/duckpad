@@ -41,6 +41,8 @@ class Dataset:
     partition: Record | None = None
     origins: list[Record] = field(default_factory=list)
     artifact_id: str | None = None
+    partition_context: Record | None = None
+    incomplete: Record | None = None
 
     @property
     def table(self) -> str:
@@ -57,10 +59,14 @@ class Dataset:
         return self.column_map.get(column, column)
 
     def public(self) -> Record:
-        return {
-            key: getattr(self, key)
-            for key in ("id", "node", "port", "columns", "count", "run", "status", "created")
-        }
+        return (
+            {
+                key: getattr(self, key)
+                for key in ("id", "node", "port", "columns", "count", "run", "status", "created")
+            }
+            | ({"partition_context": self.partition_context} if self.partition_context else {})
+            | ({"incomplete": self.incomplete} if self.incomplete else {})
+        )
 
 
 @dataclass
@@ -78,6 +84,7 @@ class Context:
     result_runs: dict[str, str] = field(default_factory=dict)
     retained_values: Record = field(default_factory=dict)
     value_attempts: Record = field(default_factory=dict)
+    partition_cache: dict[str, str] = field(default_factory=dict)
     lineage: dict[str, LineageRequest] = field(default_factory=dict)
     lock: threading.RLock = field(default_factory=threading.RLock)
     trace_lock: threading.RLock = field(default_factory=threading.RLock)

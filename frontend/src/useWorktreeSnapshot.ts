@@ -14,7 +14,8 @@ const unchanged = (old: Snapshot | null, value: Snapshot) =>
   JSON.stringify(old.connections) === JSON.stringify(value.connections) &&
   JSON.stringify(old.conflicts) === JSON.stringify(value.conflicts) &&
   // Variable values per environment also follow the instance's environments.
-  JSON.stringify(old.variables) === JSON.stringify(value.variables);
+  JSON.stringify(old.variables) === JSON.stringify(value.variables) &&
+  JSON.stringify(old.partitions) === JSON.stringify(value.partitions);
 
 /**
  * The saved state of a working branch and the result statuses of an

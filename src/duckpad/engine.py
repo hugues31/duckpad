@@ -21,6 +21,7 @@ from .execution.results import Results
 from .execution.runs import Runner
 from .execution.samples import Sample
 from .extensions import MAX_UPLOAD_BYTES, core_catalog, database_config, install, runtime
+from .partition_results import PartitionResults
 from .projects import Projects
 from .store import Store
 from .types import Record, RunToken
@@ -46,7 +47,9 @@ class Engine:
         self.pool = ContextPool(store, projects, catalog, access, self.isolated, self.lock)
         self.fingerprints = Fingerprints(projects, catalog, self.pool)
         self.exports = Exports(store, projects, catalog, access, self.fingerprints, self.lock, self.active)
+        self.partitions = PartitionResults(self)
         self.results = Results(store, projects, catalog, self.pool, self.lock, self.active)
+        self.results.partitions = self.partitions
         self.runs = Runner(
             store,
             projects,
@@ -95,19 +98,51 @@ class Engine:
         descending: bool = False,
         filters: Record | None = None,
         sample: Sample | None = None,
+        partition_context: Record | None = None,
     ) -> Record:
         return self.results.preview(
-            worktree, environment, node, port, limit, offset, sort, descending, filters, sample
+            worktree,
+            environment,
+            node,
+            port,
+            limit,
+            offset,
+            sort,
+            descending,
+            filters,
+            sample,
+            partition_context,
         )
 
-    def statistics(self, worktree: str, environment: str, node: str, port: str = "result") -> Record:
-        return self.results.statistics(worktree, environment, node, port)
+    def statistics(
+        self,
+        worktree: str,
+        environment: str,
+        node: str,
+        port: str = "result",
+        partition_context: Record | None = None,
+    ) -> Record:
+        return self.results.statistics(worktree, environment, node, port, partition_context)
 
-    def compute_statistics(self, worktree: str, environment: str, node: str, port: str = "result") -> Record:
-        return self.results.compute_statistics(worktree, environment, node, port)
+    def compute_statistics(
+        self,
+        worktree: str,
+        environment: str,
+        node: str,
+        port: str = "result",
+        partition_context: Record | None = None,
+    ) -> Record:
+        return self.results.compute_statistics(worktree, environment, node, port, partition_context)
 
-    def cancel_statistics(self, worktree: str, environment: str, node: str, port: str = "result") -> Record:
-        return self.results.cancel_statistics(worktree, environment, node, port)
+    def cancel_statistics(
+        self,
+        worktree: str,
+        environment: str,
+        node: str,
+        port: str = "result",
+        partition_context: Record | None = None,
+    ) -> Record:
+        return self.results.cancel_statistics(worktree, environment, node, port, partition_context)
 
     def test_rows(
         self, worktree: str, environment: str, node: str, test: str, limit: int = 100, offset: int = 0

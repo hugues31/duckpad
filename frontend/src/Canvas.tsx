@@ -1,3 +1,4 @@
+import { useOptionalWorktree } from "./worktree";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Controls,
@@ -79,6 +80,7 @@ function StatusIcon({ status, ...props }: LucideProps & { status: string }) {
 
 /** What the canvas shows of a node. */
 type PipelineData = {
+  fullNode: string;
   valueProducer?: boolean;
   label: string;
   kind: TemplateKind | "component";
@@ -103,6 +105,11 @@ type PipelineNode = Node<PipelineData, "pipeline">;
 
 function PipelineNode({ id, data, selected }: NodeProps<PipelineNode>) {
   const t = useT();
+  const worktree = useOptionalWorktree();
+  const partition =
+    worktree?.snapshot?.partitions?.[worktree.environment]?.nodes[
+      data.fullNode
+    ];
   const updateNodeInternals = useUpdateNodeInternals();
   const portLayout = JSON.stringify([data.kind, data.inputs, data.outputs]);
   useEffect(() => {
@@ -134,6 +141,13 @@ function PipelineNode({ id, data, selected }: NodeProps<PipelineNode>) {
           <Link size={11} />
           {data.linked}
         </div>
+      )}
+      {partition && (partition.partitioned || partition.collect.length > 0) && (
+        <span className="node-partition-badge">
+          {partition.collect.length
+            ? t("partitionCollector")
+            : `${partition.dimension} · ${Object.keys(partition.filters).length ? t("partitionFiltered") : t("partitionInherited")}`}
+        </span>
       )}
       <div className="node-status-slot">
         {data.valueProducer && (
@@ -341,6 +355,7 @@ function CanvasInner(props: CanvasProps) {
           position: node.position || { x: 0, y: 0 },
           selected: node.id === props.selected,
           data: {
+            fullNode: props.prefix + node.id,
             valueProducer: props.valueProducers?.includes(
               props.prefix + node.id,
             ),

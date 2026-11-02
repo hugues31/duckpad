@@ -449,6 +449,8 @@ def render_parameter(
     name, type_name = parameter["name"], parameter["type"]
     kind, argument = base_type(type_name), type_argument(type_name)
     value = parameters[name]
+    if (bound or {}).get(name, {}).get("plan"):
+        return literal("<partition parameter: " + name + ">") if kind in RESOURCE_TYPES else None
     if kind in ("expression", "expressions"):
         value = bind_variables(name, value, variables or {}, placeholders or {})
         return (
@@ -676,7 +678,11 @@ def compile_template(
     for parameter in template["parameters"]:
         name = parameter["name"]
         # A connection without a value selects project files.
-        if parameters[name] is None and parameter["type"] != "connection":
+        if (
+            parameters[name] is None
+            and parameter["type"] != "connection"
+            and not (bound or {}).get(name, {}).get("plan")
+        ):
             raise Problem(f"Parameter {name} is required")
         rendered = render_parameter(
             template,

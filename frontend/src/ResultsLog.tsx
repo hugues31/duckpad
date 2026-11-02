@@ -1,3 +1,5 @@
+import { usePartitionQuery } from "./worktree";
+import { withQuery } from "./api";
 import { lazy, Suspense, useState } from "react";
 import { Link } from "react-router";
 import {
@@ -77,21 +79,37 @@ export default function ResultsLog({
   onTests: () => void;
 }) {
   const t = useT();
+  const partition = usePartitionQuery(fullNode);
   const worktree = snapshot.worktree.id;
   const [filter, setFilter] = useState<LogFilter>("all");
   // Monaco loads only once the executed SQL is opened.
   const [sqlOpen, setSqlOpen] = useState(false);
   // The latest attempt: a failed run after the retained result, or the run that produced it.
   const runId = (result?.error && result.error_run) || result?.result_run;
+  const perKey = useApiResource<Run>(
+    partition.partition_id
+      ? withQuery(
+          `/worktrees/${worktree}/partition-attempts/${encodeURIComponent(fullNode)}`,
+          { environment, ...partition },
+        )
+      : null,
+    { refresh: JSON.stringify(statuses.active) },
+  );
   const loaded = useApiResource<Run>(
     runId ? `/runs/${encodeURIComponent(runId)}` : null,
     {
       refresh: JSON.stringify(result),
     },
   );
-  const run = loaded.data?.id === runId ? loaded.data : null;
+  const run = partition.manifest
+    ? perKey.data
+    : loaded.data?.id === runId
+      ? loaded.data
+      : null;
   const state = run?.nodes?.[fullNode];
-  if (!runId)
+  if (partition.partition_mode === "all")
+    return <p className="muted partition-strip">{t("partitionChooseKey")}</p>;
+  if (!runId && !run)
     return (
       <div className="results-empty-tab">
         <Info size={18} aria-hidden="true" />

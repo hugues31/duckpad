@@ -1,3 +1,4 @@
+import { usePartitionQuery } from "./worktree";
 import { useEffect, useState } from "react";
 import {
   Bookmark,
@@ -112,6 +113,7 @@ export default function ResultsData({
   onEditCode: () => void;
 }) {
   const t = useT();
+  const partition = usePartitionQuery(target.node, target.port);
   const worktree = snapshot.worktree.id;
   const [offset, setOffset] = useState(0);
   const [search, setSearch] = useState("");
@@ -133,12 +135,13 @@ export default function ResultsData({
   const path = failing
     ? withQuery(
         `/worktrees/${worktree}/test-rows/${encodeURIComponent(inspected.fullNode)}/${encodeURIComponent(failing.test)}`,
-        { environment, limit: PAGE_SIZE, offset },
+        { environment, limit: PAGE_SIZE, offset, ...partition },
       )
     : withQuery(
         `/worktrees/${worktree}/preview/${encodeURIComponent(target.node)}`,
         {
           environment,
+          ...partition,
           port: target.port,
           limit: PAGE_SIZE,
           offset,
@@ -148,7 +151,7 @@ export default function ResultsData({
       );
   // The current page stays visible while another page, sample or search loads.
   const { data, error, pending } = useResource<PreviewPage | TestRows | null>(
-    `${worktree}:${target.node}:${target.port}`,
+    `${worktree}:${target.node}:${target.port}:${JSON.stringify(partition)}`,
     async (signal) => {
       try {
         return await api<PreviewPage | TestRows>(path, { signal });

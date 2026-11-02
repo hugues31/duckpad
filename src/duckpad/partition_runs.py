@@ -339,6 +339,7 @@ class PartitionRun:
     def persist(self, run):
         for key in run["partition_nodes"]:
             state = run["nodes"][key]
+            state["run"] = run["id"]
             if state["status"] != "pending":
                 self.storage.attempt(run["id"], run["partition_attempt"], key, self.safe(state))
 

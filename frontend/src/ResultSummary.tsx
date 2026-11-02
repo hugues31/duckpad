@@ -1,3 +1,6 @@
+import { withQuery } from "./api";
+import { useApiResource } from "./useApiResource";
+import { useOptionalWorktree, usePartitionQuery } from "./worktree";
 import { AlertTriangle, ChevronRight, Clock, Loader2 } from "lucide-react";
 import { warningCount } from "./ExecutionMessages";
 import { outputSource } from "./graph";
@@ -27,14 +30,34 @@ export default function ResultSummary({
   onOpen: (tab: ResultsTab) => void;
 }) {
   const t = useT();
+  const worktree = useOptionalWorktree();
+  const partition = usePartitionQuery(fullNode, ports[0]);
+  const preview = useApiResource<Dataset>(
+    worktree && partition.manifest && !exportNode
+      ? withQuery(
+          `/worktrees/${worktree.id}/preview/${encodeURIComponent(fullNode)}`,
+          {
+            environment: worktree.environment,
+            port: ports[0],
+            limit: 1,
+            ...partition,
+          },
+        )
+      : null,
+    { refresh: JSON.stringify(statuses) },
+  );
   // A component instance stores no rows: its outputs are those of nodes inside it.
   const sources = ports.map((port) =>
     bundle ? outputSource(bundle, fullNode, port) : { node: fullNode, port },
   );
-  const datasets = sources.flatMap((source): Dataset[] => {
-    const dataset = statuses.nodes[source.node]?.outputs?.[source.port];
-    return dataset ? [dataset] : [];
-  });
+  const datasets = partition.manifest
+    ? preview.data
+      ? [preview.data]
+      : []
+    : sources.flatMap((source): Dataset[] => {
+        const dataset = statuses.nodes[source.node]?.outputs?.[source.port];
+        return dataset ? [dataset] : [];
+      });
   // As in the results panel, which opens on the first output.
   const result = statuses.nodes[sources[0]?.node ?? fullNode];
   const running = computing(statuses, fullNode);

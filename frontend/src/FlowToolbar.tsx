@@ -1,3 +1,4 @@
+import { PartitionSelector } from "./PartitionControls";
 import { Link } from "react-router";
 import {
   Activity,
@@ -71,6 +72,7 @@ export function FlowToolbar({ tab }: { tab: WorkspaceTab }) {
         })}
       </div>
       <div className="row gap">
+        <PartitionSelector />
         <Link
           className="button secondary small"
           to={`/projects/${snapshot.worktree.project}/jobs`}

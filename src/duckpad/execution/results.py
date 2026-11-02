@@ -16,6 +16,7 @@ from ..catalog import Catalog, redact
 from ..components import expand, expand_for, in_subtree
 from ..datasets import Context, Dataset
 from ..graph import connection_references
+from ..partition_results import PartitionResults
 from ..projects import Projects
 from ..store import Store
 from ..templates import VARIABLE_REFERENCE, compile_template
@@ -168,6 +169,7 @@ class Results:
         # The engine lock and the active runs it guards.
         self.lock, self.active = lock, active
         # Column statistics being computed, by result generation.
+        self.partitions: PartitionResults | None = None
         self.computations: dict[str, Computation] = {}
 
     def statuses(self, worktree: str, environment: str) -> Record:
@@ -210,8 +212,17 @@ class Results:
             return bool(dataset and dataset.status == "valid")
 
     def find_dataset(
-        self, worktree: str, environment: str, node: str, port: str = "result"
+        self,
+        worktree: str,
+        environment: str,
+        node: str,
+        port: str = "result",
+        partition_context: Record | None = None,
     ) -> tuple[Context, Dataset]:
+        if self.partitions:
+            loaded = self.partitions.load(worktree, environment, node, port, partition_context)
+            if loaded:
+                return loaded
         context = self.pool.get(worktree, environment)
         dataset = context.outputs.get(node, {}).get(port)
         if not dataset:
@@ -237,12 +248,13 @@ class Results:
         descending: bool = False,
         filters: Record | None = None,
         sample: Sample | None = None,
+        partition_context: Record | None = None,
     ) -> Record:
         """A page of a node output's sample: first or random rows, filtered and sorted.
 
         The sample only selects which retained rows are shown; it never changes the result.
         """
-        context, dataset = self.find_dataset(worktree, environment, node, port)
+        context, dataset = self.find_dataset(worktree, environment, node, port, partition_context)
         columns = [c["name"] for c in dataset.columns]
         sample = sample or Sample()
         sample.order = sample_order(sample.order, columns)
@@ -287,6 +299,11 @@ class Results:
         run = self.store.get("run", dataset.run)
         with context.lock:
             error = context.errors.get(dataset.node)
+        state = (
+            self.partitions.evidence(worktree, environment, dataset)
+            if self.partitions and dataset.partition
+            else run["nodes"][dataset.node]
+        )
         return {
             **dataset.public(),
             "rows": [{"id": row[0], "values": clean(row[1:])} for row in rows],
@@ -294,24 +311,38 @@ class Results:
             "filtered_count": matched if sample.rows is None else min(matched, sample.rows),
             "matched_count": matched,
             "offset": offset,
-            "executed_sql": run["nodes"][dataset.node].get("statements", []),
-            "results": run["nodes"][dataset.node].get("results", []),
+            "executed_sql": state.get("statements", []),
+            "results": state.get("results", []),
             "commit": run["commit"],
             "environment": environment,
             "error": error,
         }
 
-    def statistics(self, worktree: str, environment: str, node: str, port: str = "result") -> Record:
+    def statistics(
+        self,
+        worktree: str,
+        environment: str,
+        node: str,
+        port: str = "result",
+        partition_context: Record | None = None,
+    ) -> Record:
         """Column statistics of a result when they were computed, and its schema changes."""
-        _, dataset = self.find_dataset(worktree, environment, node, port)
+        _, dataset = self.find_dataset(worktree, environment, node, port, partition_context)
         return self._statistics_response(worktree, environment, dataset)
 
-    def compute_statistics(self, worktree: str, environment: str, node: str, port: str = "result") -> Record:
+    def compute_statistics(
+        self,
+        worktree: str,
+        environment: str,
+        node: str,
+        port: str = "result",
+        partition_context: Record | None = None,
+    ) -> Record:
         """Compute the column statistics of a whole retained result, once per result generation.
 
         A concurrent request for the same result waits for the first one instead of scanning again.
         """
-        context, dataset = self.find_dataset(worktree, environment, node, port)
+        context, dataset = self.find_dataset(worktree, environment, node, port, partition_context)
         if dataset.statistics is None:
             with self.lock:
                 computation = self.computations.get(dataset.id)
@@ -326,8 +357,15 @@ class Results:
                     raise Problem(computation.error or "Statistics are still being computed", 409)
         return self._statistics_response(worktree, environment, dataset)
 
-    def cancel_statistics(self, worktree: str, environment: str, node: str, port: str = "result") -> Record:
-        _, dataset = self.find_dataset(worktree, environment, node, port)
+    def cancel_statistics(
+        self,
+        worktree: str,
+        environment: str,
+        node: str,
+        port: str = "result",
+        partition_context: Record | None = None,
+    ) -> Record:
+        _, dataset = self.find_dataset(worktree, environment, node, port, partition_context)
         with self.lock:
             computation = self.computations.get(dataset.id)
             if computation is None:
@@ -510,5 +548,8 @@ class Results:
             partitions.filter_statements(statements, node, partition)
             for statement in statements:
                 statement["sql"] = redact(statement["sql"], secrets)
+            if partition and partition.get("plan"):
+                for statement in statements:
+                    statement["partition_plan"] = True
             output.extend(variables.annotate(statements, node))
         return output
