@@ -37,17 +37,27 @@ def test_new_project_has_a_dependency_manifest_and_separate_markdown(services, t
     assert projects.git(worktree["path"], "check-ignore", ".venv/lib/package.py")
 
 
-def test_old_project_documentation_moves_to_readme_on_save():
+@pytest.mark.parametrize("readme", [None, "", "Current context"])
+def test_project_documentation_in_json_is_rejected(readme):
     files = {
         "flow.json": '{"name":"Existing", "nodes":[], "edges":[]}',
         "documentation.json": '{"project":"Original context", "nodes":{"one":"Node context"}}',
     }
-    saved = bundle_to_files(files_to_bundle(files))
-    assert saved["README.md"] == "Original context"
-    assert json.loads(saved["documentation.json"]) == {"nodes": {"one": "Node context"}}
-    assert tomllib.loads(saved["pyproject.toml"])["project"]["dependencies"] == [f"duckpad=={__version__}"]
-    # An intentionally empty README must never revive the old JSON text.
-    assert "project" not in files_to_bundle({**files, "README.md": ""})["documentation"]
+    if readme is not None:
+        files["README.md"] = readme
+    original = dict(files)
+    with pytest.raises(Problem, match=r"Move project documentation.*README\.md"):
+        files_to_bundle(files)
+    assert files == original
+
+
+@pytest.mark.parametrize("readme", [None, "", "# Current context"])
+def test_project_documentation_comes_only_from_readme(readme):
+    files = {"flow.json": "{}", "documentation.json": '{"nodes":{"one":"Node context"}}'}
+    if readme is not None:
+        files["README.md"] = readme
+    documentation = files_to_bundle(files)["documentation"]
+    assert documentation == {"nodes": {"one": "Node context"}, **({"project": readme} if readme else {})}
 
 
 def test_raw_manifest_survives_bundle_saves_and_documentation_reconciliation(services, tmp_path):

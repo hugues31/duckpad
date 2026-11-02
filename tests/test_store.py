@@ -6,7 +6,7 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import closing
 
 import pytest
-from alembic import command
+from alembic import command, op
 from alembic.autogenerate import compare_metadata
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
@@ -19,7 +19,7 @@ from duckpad.catalog import Catalog
 from duckpad.migrations import configuration, migration_connection
 from duckpad.models import LoginSession, ProjectMember, User
 from duckpad.projects import Projects
-from duckpad.store import Store, metadata_engine
+from duckpad.store import Store
 from duckpad.util import Problem
 
 
@@ -54,7 +54,7 @@ def test_initial_migration_matches_models_and_survives_restart(store):
     with store.engine.connect() as connection:
         assert (
             connection.exec_driver_sql("SELECT version_num FROM alembic_version").scalar_one()
-            == "0007_partitions"
+            == "0001_baseline"
         )
         assert "records" not in inspect(connection).get_table_names()
         assert len(SQLModel.metadata.tables) == 29
@@ -76,7 +76,7 @@ def test_unknown_document_schema_is_not_modified(tmp_path):
     with closing(sqlite3.connect(path)) as connection, connection:
         connection.execute("CREATE TABLE records (kind TEXT, id TEXT, value TEXT)")
         connection.execute("INSERT INTO records VALUES ('settings', 'marker', 'kept')")
-    with pytest.raises(Problem, match="unsupported document schema"):
+    with pytest.raises(Problem, match="unsupported schema"):
         Store(tmp_path)
     with closing(sqlite3.connect(path)) as connection:
         assert connection.execute("SELECT value FROM records").fetchone() == ("kept",)
@@ -85,129 +85,60 @@ def test_unknown_document_schema_is_not_modified(tmp_path):
         ]
 
 
-@pytest.mark.parametrize("previous", ["0001_relational", "0002_assistant"])
-def test_api_token_migration_preserves_accounts_sessions_and_memberships(tmp_path, previous):
-    engine = metadata_engine(tmp_path / "instance.sqlite")
-    credentials = Auth.credentials("migration-password")
-    with migration_connection(engine) as connection:
-        command.upgrade(configuration(connection), previous)
-        connection.execute(
-            text(
-                "INSERT INTO user (id, username, username_key, role, active, salt, hash, session_version) "
-                "VALUES ('owner', 'owner', 'owner', 'admin', 1, :salt, :hash, 0)"
-            ),
-            credentials,
-        )
-        connection.execute(
-            text(
-                "INSERT INTO user (id, username, username_key, role, active, oidc_issuer, oidc_subject, session_version) "
-                "VALUES ('sso', 'sso', 'sso', 'member', 1, 'https://id.example.invalid', 'subject', 0)"
-            )
-        )
-        connection.execute(
-            text(
-                "INSERT INTO session (id, user, expires, version, credential) VALUES ('session', 'owner', 9999999999, 0, :hash)"
-            ),
-            credentials,
-        )
-        connection.execute(
-            text("INSERT INTO project VALUES ('project', 'Existing project', 'main', '2026-01-01')")
-        )
-        connection.execute(text("INSERT INTO worktree VALUES ('main', 'project', 'main', 'unused')"))
-        connection.execute(text("INSERT INTO project_member VALUES ('project', 'owner', 'admin')"))
-        connection.execute(text("INSERT INTO project_member VALUES ('project', 'sso', 'reader')"))
-        if previous == "0002_assistant":
-            connection.execute(
-                text(
-                    "INSERT INTO assistant_conversation VALUES "
-                    "('conversation', 'owner', 'project', 'main', 'main', 'Kept', '2026-01-01', 0, '[]', '[]')"
-                )
-            )
-    engine.dispose()
+@pytest.mark.parametrize(
+    "revision",
+    [
+        None,
+        "0001_relational",
+        "0002_assistant",
+        "0003_api_tokens",
+        "0004_jobs",
+        "0005_job_idempotency",
+        "0006_builtin_connectors",
+        "0007_partitions",
+        "unknown_revision",
+    ],
+)
+def test_unrecognized_database_is_rejected_without_changes(tmp_path, revision):
+    path = tmp_path / "instance.sqlite"
+    with closing(sqlite3.connect(path)) as connection, connection:
+        connection.execute("CREATE TABLE setting (id TEXT PRIMARY KEY, value JSON NOT NULL)")
+        connection.execute("INSERT INTO setting VALUES ('marker', '{\"kept\": true}')")
+        connection.execute("CREATE TABLE alembic_version (version_num VARCHAR(32) PRIMARY KEY)")
+        if revision is not None:
+            connection.execute("INSERT INTO alembic_version VALUES (?)", (revision,))
+        original = list(connection.iterdump())
+    with pytest.raises(Problem, match=r"unsupported schema.*--home <new-directory>"):
+        Store(tmp_path)
+    with closing(sqlite3.connect(path)) as connection:
+        assert list(connection.iterdump()) == original
+
+
+def test_baseline_initialization_failure_rolls_back_and_can_be_retried(tmp_path, monkeypatch):
+    def fail_seed(*args, **kwargs):
+        raise RuntimeError("seed failure")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(op, "bulk_insert", fail_seed)
+        with pytest.raises(RuntimeError, match="seed failure"):
+            Store(tmp_path)
+    with closing(sqlite3.connect(tmp_path / "instance.sqlite")) as connection:
+        assert connection.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall() == []
     store = Store(tmp_path)
     try:
-        assert store.get("user", "owner")["hash"] == credentials["hash"]
-        assert store.get("user", "owner")["service"] is False
-        assert store.get("user", "sso")["oidc"]["subject"] == "subject"
-        assert store.get("session", "session")["credential"] == credentials["hash"]
-        assert store.get("access", "project")["members"] == {"owner": "admin", "sso": "reader"}
-        if previous == "0002_assistant":
-            assert store.get("assistant_conversation", "conversation")["title"] == "Kept"
-        auth = Auth(store)
-        user = auth.create_user("migrated-service", service=True)
-        token = auth.create_api_token(auth.public(store.get("user", "owner")), user["id"], "After migration")
-        assert auth.check_api_token(token["token"])[0] == user
+        assert Catalog(store).environment_names() == ["dev", "prod"]
     finally:
         store.close()
 
 
-def test_job_migration_keeps_worktree_runs_and_accepts_operators(tmp_path):
-    engine = metadata_engine(tmp_path / "instance.sqlite")
-    with migration_connection(engine) as connection:
-        command.upgrade(configuration(connection), "0003_api_tokens")
-        connection.execute(
-            text(
-                "INSERT INTO user (id, username, username_key, role, active, session_version, service, description) "
-                "VALUES ('robot', 'robot', 'robot', 'member', 1, 0, 1, '')"
-            )
-        )
-        connection.execute(
-            text("INSERT INTO project VALUES ('project', 'Existing project', 'main', '2026-01-01')")
-        )
-        connection.execute(text("INSERT INTO worktree VALUES ('main', 'project', 'main', 'unused')"))
-        connection.execute(text("INSERT INTO project_member VALUES ('project', 'robot', 'reader')"))
-        connection.execute(
-            text(
-                "INSERT INTO run VALUES ('run', 'project', 'main', 'dev', 'success', '2026-01-01', NULL, NULL, '{}')"
-            )
-        )
-    engine.dispose()
-    store = Store(tmp_path)
-    try:
-        # Rebuilding the worktree table must not cascade into its run history.
-        assert store.get("run", "run")["status"] == "success"
-        assert store.get("worktree", "main") == {
-            "id": "main",
-            "project": "project",
-            "branch": "main",
-            "path": "unused",
-        }
-        access = store.get("access", "project")
-        access["members"]["robot"] = "operator"
-        store.put("access", "project", access)
-        assert store.get("access", "project")["members"] == {"robot": "operator"}
-    finally:
-        store.close()
-
-
-def test_connector_migration_keeps_connections_of_stored_connectors(tmp_path):
-    engine = metadata_engine(tmp_path / "instance.sqlite")
-    with migration_connection(engine) as connection:
-        command.upgrade(configuration(connection), "0005_job_idempotency")
-        connection.execute(text("INSERT INTO connector VALUES ('custom', 'Custom', '{\"id\": \"custom\"}')"))
-        connection.execute(text("INSERT INTO connection VALUES ('kept', 'Kept', 'custom', '[]')"))
-        connection.execute(
-            text("INSERT INTO connection_environment VALUES ('kept', 'dev', '{\"root\": \"/srv\"}')")
-        )
-    engine.dispose()
-    store = Store(tmp_path)
-    try:
-        # Rebuilding the connection table must not cascade into its environment values.
-        assert store.get("connection", "kept")["environments"] == {"dev": {"root": "/srv"}}
-        # Connections may now use built-in connectors, which are not stored.
-        Catalog(store).save(
-            "connection",
-            {
-                "id": "share",
-                "name": "Share",
-                "connector": "folder",
-                "environments": {"dev": {"root": "/srv"}},
-            },
-            create=True,
-        )
-        assert store.get("connection", "share")["connector"] == "folder"
-    finally:
-        store.close()
+def test_baseline_downgrade_and_recreation(store):
+    with migration_connection(store.engine) as connection:
+        command.downgrade(configuration(connection), "base")
+        assert inspect(connection).get_table_names() == ["alembic_version"]
+    with migration_connection(store.engine) as connection:
+        command.upgrade(configuration(connection), "head")
+        assert compare_metadata(MigrationContext.configure(connection), SQLModel.metadata) == []
+    assert Catalog(store).environment_names() == ["dev", "prod"]
 
 
 def test_schema_constraints_apply_outside_services(store):

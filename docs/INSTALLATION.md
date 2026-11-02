@@ -30,17 +30,21 @@ duckpad start --home /path/to/my-instance --port 8765 --no-browser
 
 Only one backend may own an instance directory at a time. Use separate `--home` directories for independent instances. The default address is `127.0.0.1`.
 
-If an older instance uses the legacy `records` document schema, startup exits with
-an error asking you to choose a new `--home`. That schema is not migrated
-automatically. Keep the old directory as a backup and start a fresh instance:
+Duckpad is in v0 and does not maintain compatibility with earlier storage
+formats. The current `0001_baseline` schema replaces all previous migrations,
+including instances using `0007_partitions` or the document schema. Startup
+rejects those databases without changing their tables or records. Keep the old
+directory as a backup and start a fresh instance:
 
 ```sh
 duckpad start --home /path/to/new-instance
 ```
 
 The new instance creates a new administrator password. Reconfigure accounts and
-connections and import your project Git repositories; the old instance's execution
-history remains in its original database.
+connections and import project Git repositories using the current
+[file format](AUTHORING.md). The old instance's execution history remains in its
+original database. There is no automatic upgrade from the previous baseline;
+do not change its Alembic revision manually.
 
 For air-gapped deployments, [download extensions on any connected computer and
 import them into Duckpad](OFFLINE_EXTENSIONS.md) before running connectors that

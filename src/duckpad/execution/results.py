@@ -251,9 +251,6 @@ class Results:
         port: str = "result",
         limit: int = 100,
         offset: int = 0,
-        sort: str | None = None,
-        descending: bool = False,
-        filters: Record | None = None,
         sample: Sample | None = None,
         partition_context: Record | None = None,
     ) -> Record:
@@ -265,14 +262,6 @@ class Results:
         columns = [c["name"] for c in dataset.columns]
         sample = sample or Sample()
         sample.order = sample_order(sample.order, columns)
-        if sort:
-            if sort not in columns:
-                raise Problem("Unknown sort column")
-            sample.order = sample.order or [(sort, "desc" if descending else "asc")]
-        for column, value in (filters or {}).items():
-            if column not in columns:
-                raise Problem("Unknown filter column")
-            sample.contains[column] = str(value)
         check_sample(sample.method, sample.rows, sample.seed)
         bundle = (
             self.projects.snapshot(worktree)["bundle"] if VARIABLE_REFERENCE.search(sample.filter) else None
@@ -285,7 +274,7 @@ class Results:
             computed=self.pool.computed(worktree, environment, bundle) if bundle else None,
         )
         common, row, ordering = sample_query(dataset, sample, condition)
-        bindings = sample_bindings(sample, columns, bindings)
+        bindings = sample_bindings(sample, bindings)
         projection = ", ".join(qi(c) for c in columns)
         page = max(1, min(limit, MAX_PREVIEW_ROWS))
         with reading(context, [dataset]) as cursor:

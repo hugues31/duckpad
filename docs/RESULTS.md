@@ -156,3 +156,12 @@ the statements, bound values and variables of that run, with secrets masked.
 - `GET /api/worktrees/{worktree}/test-rows/{node}/{test}?environment&limit&offset`
   returns a page of a test's failing rows for a valid result.
 - Run records keep each output's `duration` in seconds.
+
+## Result preview API
+
+The UI preview endpoint uses `filter` for a SQL condition, `order` for a JSON
+array of `[column, "asc" | "desc"]` pairs, and `search` for text across columns.
+For example: `filter=amount > 100` and `order=[["amount", "desc"]]`. The former
+`sort`, `descending` and `filters` parameters have been removed. Python callers
+pass a `Sample(filter="amount > 100", order=[["amount", "desc"]])` to
+`engine.preview(..., sample=sample)`.

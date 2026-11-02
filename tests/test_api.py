@@ -912,7 +912,7 @@ def test_import_reports_absolute_files_from_any_operating_system(client, worktre
         (
             {"documentation.json": '{"project": 123}', "README.md": None},
             False,
-            'documentation.json: "project" must be Markdown text',
+            "Move project documentation from documentation.json to README.md",
         ),
     ],
 )

@@ -12,7 +12,7 @@ from fastapi.testclient import TestClient
 from duckpad import cli
 
 
-def test_legacy_schema_startup_reports_new_home_without_traceback(tmp_path):
+def test_unsupported_schema_startup_reports_new_home_without_traceback(tmp_path):
     path = tmp_path / "instance.sqlite"
     with closing(sqlite3.connect(path)) as connection, connection:
         connection.execute("CREATE TABLE records (kind TEXT, id TEXT, value TEXT)")
@@ -24,7 +24,7 @@ def test_legacy_schema_startup_reports_new_home_without_traceback(tmp_path):
         timeout=15,
     )
     assert result.returncode != 0
-    assert "unsupported document schema" in result.stderr
+    assert "unsupported schema" in result.stderr
     assert "duckpad start --home <new-directory>" in result.stderr
     assert "Traceback" not in result.stderr
     with closing(sqlite3.connect(path)) as connection:

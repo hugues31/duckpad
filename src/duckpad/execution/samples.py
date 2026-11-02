@@ -49,8 +49,6 @@ class Sample:
     search: str = ""
     # `[column, "asc" | "desc"]` pairs, checked against the dataset by `sample_order`.
     order: list[Any] = field(default_factory=list)
-    # Former one-column "contains" filters of the preview API.
-    contains: dict[str, str] = field(default_factory=dict)
 
 
 def sample_order(value: object, columns: Iterable[str]) -> list[tuple[str, str]]:
@@ -183,10 +181,6 @@ def sample_query(dataset: Dataset, sample: Sample, condition: str) -> tuple[str,
             + " OR ".join(f"contains(lower(CAST({qi(c)} AS VARCHAR)), lower(${SEARCH}))" for c in columns)
             + ")"
         )
-    where.extend(
-        f"CAST({qi(column)} AS VARCHAR) ILIKE ${contains_parameter(column, columns)}"
-        for column in sample.contains
-    )
     order = ", ".join(f"{qi(column)} {direction.upper()}" for column, direction in sample.order)
     ordering = f"{order}, {qi(row)}" if order else qi(row)
     if sample.rows is None:
@@ -203,16 +197,10 @@ def sample_query(dataset: Dataset, sample: Sample, condition: str) -> tuple[str,
     return common, row, ordering
 
 
-def contains_parameter(column: str, columns: list[str]) -> str:
-    return f"duckpad_contains_{columns.index(column)}"
-
-
-def sample_bindings(sample: Sample, columns: list[str], condition_bindings: Record) -> Record:
+def sample_bindings(sample: Sample, condition_bindings: Record) -> Record:
     bindings = dict(condition_bindings)
     if sample.search:
         bindings[SEARCH] = sample.search
-    for column, value in sample.contains.items():
-        bindings[contains_parameter(column, columns)] = f"%{value}%"
     return bindings
 
 

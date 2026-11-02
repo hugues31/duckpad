@@ -12,6 +12,7 @@ from pydantic_ai import RunContext
 from .. import variables
 from ..auth import Auth
 from ..components import expand_for
+from ..execution.samples import Sample
 from ..graph import connection_references
 from ..node_code import code_path
 from ..search import node_entries
@@ -384,17 +385,23 @@ def preview_output(
     port: str = "result",
     offset: int = 0,
     limit: int = 50,
-    filters: dict[str, str] | None = None,
+    filter: str = "",
 ) -> dict:
     """Read a bounded page of existing output values. Never executes or launches the flow.
 
-    Filters match column values as text. For explain_value, copy this result's top-level
+    The filter is one SQL condition on output columns. For explain_value, copy this result's top-level
     `id` into `dataset` and a `rows[].id` into `row`; do not use the node ID as the dataset.
     """
     worktree, environment = ctx.deps.results(data=True)
     maximum = ctx.deps.configuration.get()["max_rows"]
     result = ctx.deps.services.engine.preview(
-        worktree, environment, node, port, max(1, min(limit, maximum)), max(0, offset), filters=filters
+        worktree,
+        environment,
+        node,
+        port,
+        max(1, min(limit, maximum)),
+        max(0, offset),
+        sample=Sample(filter=filter),
     )
     end = result["offset"] + len(result["rows"])
     return ctx.deps.safe(

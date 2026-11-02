@@ -104,9 +104,6 @@ class Engine:
         port: str = "result",
         limit: int = 100,
         offset: int = 0,
-        sort: str | None = None,
-        descending: bool = False,
-        filters: Record | None = None,
         sample: Sample | None = None,
         partition_context: Record | None = None,
     ) -> Record:
@@ -117,9 +114,6 @@ class Engine:
             port,
             limit,
             offset,
-            sort,
-            descending,
-            filters,
             sample,
             partition_context,
         )
