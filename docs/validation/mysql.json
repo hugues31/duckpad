@@ -1,0 +1,36 @@
+{
+  "checks": [
+    "test connection lists schemas and tables",
+    "inspector listing",
+    "Load table",
+    "transform",
+    "Export table inserts by name into an existing table",
+    "repeated append without truncation",
+    "dev and prod values",
+    "cell lineage",
+    "secret redaction"
+  ],
+  "connector": "mysql",
+  "duckdb": "2.0.0",
+  "extensions": [
+    [
+      "mysql_scanner",
+      "f7fc0d4271",
+      "REPOSITORY"
+    ]
+  ],
+  "modes": {
+    "embedded": {
+      "first_run_seconds": 0.18913796999999022,
+      "production_run_seconds": 0.24246099500001606,
+      "repeat_run_seconds": 0.10041694600002415
+    },
+    "isolated": {
+      "first_run_seconds": 0.261369019,
+      "production_run_seconds": 0.09692868600001248,
+      "repeat_run_seconds": 0.13083734500000332
+    }
+  },
+  "platform": "Linux-7.0.0-1017-azure-x86_64-with-glibc2.43",
+  "status": "passed"
+}
