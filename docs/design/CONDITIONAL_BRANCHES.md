@@ -1,6 +1,6 @@
 # Conditional branches (design proposal)
 
-**Status: proposed, awaiting human approval. No implementation is included.** This document and its mockups are step 0. Implementation belongs in a separate issue after acceptance, following the structure of [Project variables](PROJECT_VARIABLES.md).
+**Status: accepted on 2 November 2026 (see [Decisions](#decisions)), not implemented yet.** This document defines the first version; the mockups illustrate the proposed interface.
 
 ## Summary
 
@@ -22,7 +22,9 @@ A false SQL `WHERE` predicate can still bind a missing table or open a file. An 
 
 These are design inspirations, not compatibility claims. Duckpad keeps its typed variables, SQL engine, explicit runs, component boundaries and immutable result evidence. A generic “ignore missing inputs” setting is unsuitable: an inner join, an export and arbitrary SQL have no common meaning when one input disappears.
 
-## Proposed decisions
+## Decisions
+
+Accepted on 2 November 2026:
 
 1. `enabled` belongs to a node, including component instances, never to an output port in v1. Omission means active; there is no implicit environment predicate.
 2. Conditions use a restricted boolean expression over typed variables and literals. They cannot query data, call functions or refer to columns or partitions.
@@ -64,7 +66,7 @@ The following proposed flow fragment uses existing source templates. Referenced 
 }
 ```
 
-`operation` is a **proposed new engine-managed node kind**, mutually exclusive with `template`, `component` and node-owned SQL. Its palette label is **Union active branches**. Reserve `union_active_branches` in the model and validate its interface; do not infer behavior from `label`, `preset`, `origin` or a user template's name. Those fields do not currently select executable code. The inspector shows generated SQL read-only. Duplication, component grouping and project import preserve this operation; converting it to editable SQL requires an explicit warning that its inactive-input semantics would be lost. No automatic conversion in v1.
+`operation` is a **new engine-managed node kind**, mutually exclusive with `template`, `component` and node-owned SQL. A template cannot carry this behavior: built-in templates are copied into each project as editable files, and the engine must generate the SQL over whichever inputs are active. Its palette label is **Union active branches**. Reserve `union_active_branches` in the model and validate its interface; do not infer behavior from `label`, `preset`, `origin` or a user template's name. Those fields do not currently select executable code. The inspector shows generated SQL read-only. Duplication, component grouping and project import preserve this operation; converting it to editable SQL requires an explicit warning that its inactive-input semantics would be lost. No automatic conversion in v1.
 
 ### Condition language and evaluation
 
@@ -80,7 +82,7 @@ Use the existing `{{ var.name }}` reference parser and scalar binding types: boo
 
 Reject columns, `SELECT`, subqueries, table references, functions (including clock, random and environment access), arbitrary casts, comments, statement separators, other namespaces and `{{ partition }}` / `{{ partition.attribute }}`. Dates compare with dates; boolean truthiness, text-to-number coercion and a bare string such as `'false'` are not accepted. A missing/unavailable variable or a nonboolean/NULL result is an error, never silently false.
 
-Parse the expression with the existing SQL parser after substituting reference tokens with generated bindings; validate a closed AST allowlist and operand types. Evaluate only that validated scalar expression with bound values on a restricted connection with no project catalogs, extensions or external access. Type-check all references even if a boolean branch could short-circuit. Never use Python `eval`, Jinja execution or a general project SQL connection. An evaluation failure blocks the affected node and its consumers while independent branches can run.
+Parse the expression with sqlglot after substituting reference tokens, as the sample filter already does (`sample_condition` in `execution/samples.py`, with `check_variables` and `variable_values`); then validate a closed AST allowlist and operand types. Evaluate only that validated scalar expression with bound values on a restricted connection with no project catalogs, extensions or external access. Type-check all references even if a boolean branch could short-circuit. Never use Python `eval`, Jinja execution or a general project SQL connection. An evaluation failure blocks the affected node and its consumers while independent branches can run.
 
 ### Components and exposed boolean controls
 
@@ -100,9 +102,9 @@ A definition cannot reference `var.*`. Extend the existing exposed-parameter tar
 }
 ```
 
-A root instance can bind that parameter with the existing `{"$var": "with_adjustments"}`. To preserve a compound condition when grouping, introduce `{"$condition": "{{ var.source }} = 'legacy'"}` **only for exposed boolean activation controls on root instances**. It uses exactly the restricted evaluator above and yields a boolean before expansion; it is not a general expression-valued parameter. A control qualifies only when all its targets, including nested forwarding, terminate at activation fields. Mixed SQL-parameter/control targets are rejected in v1. Missing required controls diagnose their affected subtree.
+A root instance sets that parameter with the same values as `enabled`: a boolean, the existing `{"$var": "with_adjustments"}` binding, or a condition string such as `"{{ var.source }} = 'legacy'"`, evaluated with the restricted evaluator above before expansion. The instance holds the expression, as it already does for the grouped expression parameters of `expose_variables`, so no new binding form is needed. A parameter is an activation control only when all its targets, including nested forwarding, end at `field: "enabled"`; mixing SQL-parameter and activation targets is rejected in v1. Missing required controls diagnose their affected subtree.
 
-**Group into component** moves each selected node's `enabled` expression to one such instance parameter, creates a boolean activation target, and leaves no project references in the definition. Unchanged controls preserve effective activation and result validity. Import copies the boolean interface but never captures variables from the source project. Ungrouping restores equivalent root conditions; comparison, rename, usage search and ZIP handling cover `$condition` as well as `enabled` references.
+**Group into component** moves each selected node's `enabled` value to one such instance parameter, creates its activation target, and leaves no project references in the definition. Unchanged controls preserve effective activation and result validity. Import copies the boolean interface but never captures variables from the source project. Ungrouping restores equivalent root conditions; comparison, rename, usage search and ZIP handling cover activation parameter values as well as `enabled`.
 
 ## Planning and execution
 
@@ -113,10 +115,10 @@ The current runner already separates computed-value sources from consumers. Exte
 1. Capture the committed bundle, requested scope, environment and ordinary values. Expand structure without preparing source connections, binding table schemas or reading files. Read-only catalog settings may be captured as an immutable snapshot, but missing settings must remain deferred diagnostics until a node is known to be active; targeted launches cannot reject a disabled connection.
 2. Validate control dependencies. The computed-value phase's producers, their ancestors and enclosing component gates may depend **only on ordinary values**, including their activation controls. Evaluate those controls first and record the decisions. Reject a computed-value control in this closure, with the actual dependency path (`value_dependency_cycle` for a cycle, `value_chain` otherwise). Thus a control file cannot decide whether to read itself, even indirectly.
 3. Run the included, active value-source closure once. Existing scope semantics apply: an out-of-scope producer is not silently added; use its retained value frozen at launch, or report `value_not_calculated`. An included producer that becomes inactive yields `value_source_inactive` for its declarations in this run; do not reuse its previous scalar as a fallback. Successful extraction freezes typed values and provenance. An unused unavailable value does not create a failure by itself; an active consumer needing it is blocked.
-4. Evaluate remaining consumer conditions once, propagate inactivity, and freeze the active input lists and effective execution scope. Do not reevaluate early ordinary-only decisions. Conditions inside an already inactive component, or behind an inactive required input, need no evaluation: record the inherited reason instead. No value-source data dependency is allowed to come from this later phase. Shared value/data producers execute only once.
+4. Evaluate remaining consumer conditions once, propagate inactivity, and freeze the active input lists. Do not reevaluate early ordinary-only decisions. Conditions inside an already inactive component, or behind an inactive required input, need no evaluation: record the inherited reason instead. No value-source data dependency is allowed to come from this later phase. Shared value/data producers execute only once.
 5. Compute fingerprints and prepare only active consumer resources. Resolve paths, connection validation, probes, schema binding, SQL compilation and export authorization only for executable nodes. Run active nodes in dependency order; preserve inactive nodes as terminal records with reasons. Late variable edits affect future plans and current-result validity, never this frozen run.
 
-Project-wide launches still request all active nodes, including disconnected sources. A condition on a transformation alone cannot prevent an independently requested upstream source from running; place the gate on the source or a component containing that branch. Targeted launches first identify candidate ancestors, then retain only ancestors demanded by an active target or active junction input, plus the required included control phase. Undemanded ancestors are outside effective scope, not invented inactive results. Record requested and effective scope separately. Targeting an inactive node never overrides its gate.
+Launch scope does not change: whole-flow and targeted launches select nodes as today, then run the active ones. Inactivity only propagates downstream, as in KNIME, so a condition on a transformation does not stop its upstream source from running; place the gate on the source or on a component containing that branch. Targeting an inactive node never overrides its gate.
 
 Future [partitions](PARTITIONS.md) consume this frozen plan: one activation decision per run, shared by every partition. No per-partition reevaluation or references. Partition enumeration needed by active work follows the same source dependency rules; an inactive partitioned branch cannot trigger its data reads or exports.
 
@@ -145,7 +147,7 @@ V1 has two ordered input ports, `left` then `right`, and one `result` output. Ea
 - Default `mode: "all"` uses positional SQL `UNION ALL` over active inputs; optional `mode: "distinct"` uses `UNION`. Use existing DuckDB union rules for column count, positional alignment, common types, nulls and duplicate elimination. No automatic name alignment, column padding or new schema coercion policy.
 - One active input in `all` mode is an identity projection preserving its values, SQL types, column names and observed row ordinals. In `distinct` mode it applies the explicitly requested duplicate elimination to that input.
 - With two active inputs, names come from the first active input and common types are derived only from those inputs. An incompatible active schema fails normally. Never inspect the schema of an inactive source, even if it has a retained result.
-- Preserve active input port order and observed input row ordinals in `all` mode using the execution engine's result-order machinery. General SQL and `distinct` do not acquire a guaranteed total order. Exact native-order comparisons require an explicit total `ORDER BY`; otherwise compare multisets and test recorded input/row ordering separately. Removing inactive inputs must give the same result as the equivalent active-only operation.
+- Preserve active input port order and each input's row order in `all` mode, for example by ordering on the port index and the input's storage `rowid`. No such machinery exists yet: `materialize.py` gives set operations no row witnesses, so the junction adds this order itself. General SQL and `distinct` do not acquire a guaranteed total order. Exact native-order comparisons require an explicit total `ORDER BY`; otherwise compare multisets and test recorded input/row ordering separately. Removing inactive inputs must give the same result as the equivalent active-only operation.
 - Zero active inputs means inactive, not a typed empty result. A later branch switch may change the output schema; downstream schema errors are real errors, not a reason to probe the inactive branch for a hypothetical common schema.
 
 An optional transformation needs two paths: adjusted input gated by `with_adjustments`, bypass gated by `NOT with_adjustments`, then a junction. Merely disabling the transformation does not pass its input through automatically.
@@ -193,7 +195,7 @@ Inside a definition, offer **Always active**, **Always inactive** and an exposed
 
 **Used by** includes **Activation condition** and exposed activation controls, linking to the root instance or expanded child. Rename updates declarations, conditions and `$condition` values atomically; deletion is blocked while any reference remains, including on inactive nodes. The impact preview separates activation changes from value changes in SQL parameters.
 
-Protected-environment confirmation lists known inactive branches, their reasons and disabled exports. For conditions depending on included computed sources, show **Calculated at launch** and the possible branches/resources, not an invented decision based on a retained value. Confirmation authorizes this captured candidate scope, with runtime access checks on the actual active resources. It does not require a second mid-run confirmation. A changed scope/definition before launch requires a refreshed confirmation under the existing confirmation contract.
+Protected-environment confirmation lists known inactive branches, their reasons and disabled exports, from the same prediction as `variables/scope`. For conditions depending on included computed sources, show **Calculated at launch** and the possible branches, not a decision based on a retained value. The confirmation flow itself does not change: one confirmation before launch, none during the run, and normal access checks on the resources that are actually active.
 
 ### History and Compare versions
 
@@ -211,13 +213,13 @@ Proposed additions use the same runner, sandbox, authorization and admission rul
 | --- | --- |
 | Worktree bundle/save/ZIP | Round-trip `enabled`, activation targets, `$condition` and the reserved junction operation; diagnose unsupported/invalid definitions |
 | `GET /api/worktrees/{worktree}/variables/scope` | Add `activation` predictions with `active`, `inactive`, `pending` or `blocked`, reasons and candidate resources; never execute producers |
-| Worktree run launch and `POST /api/v1/jobs/{slug}/runs` | Existing request bodies; capture requested/effective scope and immutable condition decisions server-side |
+| Worktree run launch and `POST /api/v1/jobs/{slug}/runs` | Existing request bodies; record immutable condition decisions server-side |
 | Worktree state and run details | Current activation separate from retained result validity and last attempt; component summaries plus expanded node records |
 | `GET /api/v1/runs/{id}` | Preserve existing `nodes` **count object**; add `nodes.inactive` and an `activation` map keyed by expanded node ID with decisions/reasons and junction active inputs |
 | `GET /api/v1/runs/{id}/log` | Inactive lines with a readable reason and no fabricated SQL, duration, row count or export outcome |
 | Compile/preview/lineage | Inactive diagnostic or explicitly retained generation; no SQL preparation on inactive sources; unresolved computed conditions remain pending |
 
-In the existing public API, `nodes` is counts, not a node dictionary. The additive `activation` map supplies individual decisions without changing that contract. Counts include inactive nodes in `total`; the sum of all status counts equals `total`. Nodes outside effective scope are excluded from these counts and recorded separately as scope exclusions. Component boundaries have their own activation summary, but do not double-count expanded leaves.
+In the existing public API, `nodes` is counts, not a node dictionary. The additive `activation` map supplies individual decisions without changing that contract. Counts include inactive nodes in `total`; the sum of all status counts equals `total`. Component boundaries have their own activation summary, but do not double-count expanded leaves.
 
 Example excerpt of a completed public run (illustrative IDs):
 
@@ -229,10 +231,10 @@ Example excerpt of a completed public run (illustrative IDs):
     "legacy_orders": {
       "state": "inactive",
       "condition": "{{ var.source }} = 'legacy'",
-      "evaluated": false,
+      "value": false,
       "reason": {"code": "condition_false", "variables": ["source"], "causes": []}
     },
-    "warehouse_orders": {"state": "active", "evaluated": true},
+    "warehouse_orders": {"state": "active", "condition": "{{ var.source }} = 'warehouse'", "value": true},
     "orders": {
       "state": "active",
       "active_inputs": [{"port": "right", "node": "warehouse_orders", "output": "result"}]
@@ -242,7 +244,7 @@ Example excerpt of a completed public run (illustrative IDs):
 }
 ```
 
-`evaluated` is the resulting boolean, present only when a condition was evaluated; an inherited decision omits it. Reason codes are `condition_false`, `component_inactive`, `input_inactive` and `all_inputs_inactive`; `causes` contains node/port references, preserving the originating decision. Use `condition_syntax`, `condition_type`, `condition_reference`, `condition_unavailable` and `condition_evaluation` for blocked decisions, plus existing value dependency codes. The run's `variables` map supplies typed values and computed provenance. Store original expressions, values used, decisions and ordered active inputs durably; never recalculate historical reasons from current definitions. Unavailable values remain error entries, not `null` constants.
+`value` is the condition's result, present only when it was evaluated; an inherited decision omits it. Reason codes are `condition_false`, `component_inactive`, `input_inactive` and `all_inputs_inactive`; `causes` contains node/port references, preserving the originating decision. Use `condition_syntax`, `condition_type`, `condition_reference`, `condition_unavailable` and `condition_evaluation` for blocked decisions, plus existing value dependency codes. The run's `variables` map supplies typed values and computed provenance. Store original expressions, values used, decisions and ordered active inputs durably; never recalculate historical reasons from current definitions. Unavailable values remain error entries, not `null` constants.
 
 `duckpad run` prints inactive counts and reasons, and includes the additive fields in JSON output. No new CLI flag is required. Preserve exit codes: success 0, failed 1, partial failure 2, canceled/interrupted 3, busy 4, invalid/refused 5, timeout 6, unreachable 7. An all-inactive successful run exits 0. Existing wait, detach, cancel, Job idempotency and trigger audit behavior remain unchanged.
 
@@ -264,9 +266,7 @@ No ordinary SQL template should gain scheduling privileges from its name. No fro
 
 ## Delivery and acceptance
 
-**Step 0 (this issue):** review this document, three mockups and the proposed decisions. A documentation PR and an exact-commit preview are delivered for human review. The preview verifies the existing application and sign-in; the new controls exist only in the mockups. Approval of this proposal precedes all feature code.
-
-After acceptance, a dedicated implementation issue delivers these steps in order:
+Step 0, this document and its mockups, was accepted on 2 November 2026. A dedicated implementation issue delivers these steps in order:
 
 | Step | Deliverable | Required evidence |
 | --- | --- | --- |
