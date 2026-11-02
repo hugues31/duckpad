@@ -216,22 +216,22 @@ def test_busy_job_exits_4_and_names_the_active_run(server, monkeypatch):
 @pytest.mark.parametrize(
     ("args", "token", "message"),
     [
-        ((), None, "set DUCKPAD_TOKEN or pass --token-file"),
-        ((), "dpk_unknown", "HTTP 401, unauthenticated"),
-        ((), "dpk_secret\nsecond line", "the token must be a single line without spaces"),
-        ((), "reader", "HTTP 403, forbidden"),
+        (("daily",), None, "set DUCKPAD_TOKEN or pass --token-file"),
+        (("daily",), "dpk_unknown", "HTTP 401, unauthenticated"),
+        (("daily",), "dpk_secret\nsecond line", "the token must be a single line without spaces"),
+        (("daily",), "reader", "HTTP 403, forbidden"),
         (("missing",), "operator", "HTTP 404, job_not_found"),
-        (("--source", "x" * 129), "operator", "HTTP 422, invalid_request"),
-        (("--timeout", "soon"), "operator", "invalid duration 'soon'"),
-        (("--token-file", "/nonexistent/token"), None, "cannot read the token file"),
-        (("--server", "ftp://example.com"), "operator", "is not an http:// or https:// address"),
-        (("--bogus",), "operator", "unrecognized arguments: --bogus"),
+        (("daily", "--source", "x" * 129), "operator", "HTTP 422, invalid_request"),
+        (("daily", "--timeout", "soon"), "operator", "invalid duration 'soon'"),
+        (("daily", "--token-file", "/nonexistent/token"), None, "cannot read the token file"),
+        (("daily", "--server", "ftp://example.com"), "operator", "is not an http:// or https:// address"),
+        (("daily", "--bogus"), "operator", "unrecognized arguments: --bogus"),
+        ((), "operator", "the following arguments are required: JOB"),
     ],
 )
 def test_refused_requests_exit_5(server, args, token, message):
     app, url, tokens = server
-    options = args if args == ("missing",) else ("daily", *args)
-    result = duckpad_run(url, *options, token=tokens.get(token, token))
+    result = duckpad_run(url, *args, token=tokens.get(token, token))
     assert result.returncode == client.REFUSED, result.stdout + result.stderr
     assert message in result.stderr
     assert "Traceback" not in result.stderr and "dpk_secret" not in result.stderr
