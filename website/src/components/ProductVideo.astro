@@ -1,0 +1,152 @@
+---
+import { url } from "../lib/docs";
+import "../styles/product-video.css";
+---
+
+<figure class="demo-player">
+  <div class="product-video" data-product-video>
+    <div class="product-video-screen">
+      <video
+        controls
+        playsinline
+        preload="none"
+        poster={url("demos/duckpad-overview.jpg")}
+        width="1920"
+        height="1080"
+        aria-label="Duckpad in one minute: build visual pipelines, explore results and version your work"
+        aria-describedby="product-video-caption"
+      >
+        <source src={url("demos/duckpad-overview.mp4")} type="video/mp4" />
+        <track
+          kind="captions"
+          src={url("demos/duckpad-overview.vtt")}
+          srclang="en"
+          label="English"
+          default
+        />
+        Your browser cannot play this video.{" "}
+        <a href={url("demos/duckpad-overview.mp4")}>
+          Download the one-minute video.
+        </a>
+      </video>
+      <button class="video-cover" type="button" data-cover hidden>
+        <span class="video-cover-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24">
+            <path d="m9 5 11 7-11 7Z" />
+          </svg>
+        </span>
+        <span>
+          <strong data-cover-label>Watch the film</strong>
+          <small>Duckpad in 60 seconds</small>
+        </span>
+      </button>
+    </div>
+    <div class="video-controls" role="group" aria-label="Video controls" hidden>
+      <input
+        class="video-seek"
+        data-seek
+        type="range"
+        min="0"
+        max="60"
+        step="0.1"
+        value="0"
+        aria-label="Video progress"
+        aria-valuetext="0:00 of 1:00"
+        disabled
+      />
+      <div class="video-controls-row">
+        <button
+          type="button"
+          class="video-button"
+          data-play
+          aria-label="Play video"
+          title="Play video"
+        >
+          <svg class="icon-play" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="m8 5 11 7-11 7Z" />
+          </svg>
+          <svg class="icon-pause" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M8 5v14M16 5v14" />
+          </svg>
+        </button>
+        <span class="video-time">
+          <span data-time>0:00</span>
+          <span class="video-time-divider">/</span>
+          <span data-duration>1:00</span>
+        </span>
+        <span class="video-controls-title" aria-hidden="true">
+          THE DUCKPAD FILM
+        </span>
+        <div class="video-volume">
+          <button
+            type="button"
+            class="video-button"
+            data-mute
+            aria-label="Mute video"
+            title="Mute video"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="m11 5-6 4H2v6h3l6 4Z" />
+              <path
+                class="icon-sound"
+                d="M15 8a6 6 0 0 1 0 8m3-11a10 10 0 0 1 0 14"
+              />
+              <path class="icon-muted" d="m16 9 6 6m0-6-6 6" />
+            </svg>
+          </button>
+          <input
+            data-volume
+            type="range"
+            min="0"
+            max="1"
+            step="0.05"
+            value="1"
+            aria-label="Volume"
+            aria-valuetext="100%"
+          />
+        </div>
+        <button
+          type="button"
+          class="video-button video-captions"
+          data-captions
+          aria-label="English captions"
+          aria-pressed="true"
+          title="English captions"
+        >
+          CC
+        </button>
+        <button
+          type="button"
+          class="video-button"
+          data-fullscreen
+          aria-label="Enter fullscreen"
+          title="Enter fullscreen"
+          hidden
+        >
+          <svg class="icon-expand" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5" />
+          </svg>
+          <svg class="icon-collapse" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M3 8h5V3m8 0v5h5M8 21v-5H3m13 5v-5h5" />
+          </svg>
+        </button>
+      </div>
+    </div>
+    <p class="video-message" role="status" hidden>
+      <span data-message></span>{" "}
+      <a href={url("demos/duckpad-overview.mp4")}>Open the video directly ↗</a>
+    </p>
+  </div>
+  <figcaption id="product-video-caption">
+    <span class="live-dot" aria-hidden="true"></span> Duckpad in one minute ·
+    English narration · Real app footage, edited for pace{" "}
+    <a href={url("docs/quickstart/")}>Build your first pipeline ↗</a>
+  </figcaption>
+</figure>
+
+<script>
+  import { enhanceProductVideo } from "../lib/product-video";
+  document
+    .querySelectorAll<HTMLElement>("[data-product-video]")
+    .forEach(enhanceProductVideo);
+</script>
