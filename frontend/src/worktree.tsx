@@ -1,0 +1,363 @@
+import { useApiResource } from "./useApiResource";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
+import type {
+  PartitionPage,
+  PartitionContext,
+  PartitionEntry,
+  PartitionLaunchOptions,
+} from "./partitions";
+import { api, errorDetail, send, withQuery } from "./api";
+import { outputSource } from "./graph";
+import { useT } from "./i18n";
+import { useShell } from "./shell";
+import type { Bundle, Environment, Run, Snapshot, Statuses } from "./types";
+import { useWorktreeSnapshot } from "./useWorktreeSnapshot";
+
+/** The working branch opened by the URL, with the actions that change it. */
+export interface Worktree {
+  partition: PartitionContext | null;
+  partitionEntry: PartitionEntry | null;
+  selectPartition: (entry: PartitionEntry | null) => void;
+  /** Empty outside the pipeline pages, where nothing is loaded. */
+  id: string;
+  assistantNode: string;
+  assistantFile: string;
+  setAssistantNode: (node: string) => void;
+  setAssistantFile: (file: string) => void;
+  environment: string;
+  snapshot: Snapshot | null;
+  statuses: Statuses;
+  /** Why the latest read of the snapshot failed. */
+  loadError: string;
+  canEdit: boolean;
+  saving: boolean;
+  /** A run is being started. */
+  starting: boolean;
+  /** Changes after Git operations, so Git indicators reload. */
+  gitVersion: number;
+  /** Reload the snapshot after a change; a failed read is left to polling. */
+  refresh: () => Promise<void>;
+  /** Wait for saves already started by the canvas or an editor. */
+  flush: () => Promise<void>;
+  /** Save a change applied to a copy of the bundle of `base`. */
+  save: (base: Snapshot, change: (bundle: Bundle) => void) => Promise<Snapshot>;
+  saveFiles: (
+    files: Record<string, string>,
+    base: Snapshot,
+  ) => Promise<Snapshot>;
+  /** Run the pipeline or a node, asking first when the environment requires it. */
+  run: (node?: string, options?: PartitionLaunchOptions) => Promise<void>;
+  /** Run after the user confirmed it for this environment. */
+  runConfirmed: (
+    environment: string,
+    node?: string,
+    options?: PartitionLaunchOptions,
+  ) => Promise<void>;
+  stop: () => Promise<void>;
+  /** Reload what a Git operation may have changed. */
+  gitChanged: () => Promise<void>;
+}
+
+const WorktreeContext = createContext<Worktree | null>(null);
+
+export function WorktreeProvider({
+  worktree: id,
+  children,
+}: {
+  worktree: string;
+  children: ReactNode;
+}) {
+  const t = useT();
+  const {
+    workspace,
+    environment,
+    refreshWorkspace,
+    notify,
+    openModal,
+    closeModal,
+    drafts,
+  } = useShell();
+  const [assistantSelection, setAssistantSelection] = useState({
+    worktree: id,
+    node: "",
+    file: "",
+  });
+  const setAssistantNode = useCallback(
+    (node: string) =>
+      setAssistantSelection((value) => ({
+        worktree: id,
+        node,
+        file: value.worktree === id ? value.file : "",
+      })),
+    [id],
+  );
+  const setAssistantFile = useCallback(
+    (file: string) =>
+      setAssistantSelection((value) => ({
+        worktree: id,
+        file,
+        node: value.worktree === id ? value.node : "",
+      })),
+    [id],
+  );
+  const [saves, setSaves] = useState(0);
+  const pendingWrites = useRef(new Set<Promise<Snapshot>>());
+  const [starting, setStarting] = useState(false);
+  const launching = useRef(false);
+  const [gitVersion, setGitVersion] = useState(0);
+  const {
+    snapshot,
+    statuses,
+    loadError,
+    refresh: reload,
+    setActive,
+  } = useWorktreeSnapshot(id, environment, {
+    enabled: true,
+    onUnavailable: () => {
+      closeModal();
+      return refreshWorkspace();
+    },
+  });
+  const manifest = snapshot?.partitions?.[environment]?.manifest?.id;
+  const dimension = snapshot?.partitions?.[environment]?.dimension;
+  const partitionScope = JSON.stringify([
+    id,
+    environment,
+    dimension?.name,
+    dimension?.type,
+    dimension?.values,
+  ]);
+  const [selectedPartition, setSelectedPartition] = useState<{
+    scope: string;
+    manifest?: string;
+    entry: PartitionEntry | null;
+  }>({ scope: "", entry: null });
+  const selected =
+    selectedPartition.scope === partitionScope ? selectedPartition.entry : null;
+  const remapped = useApiResource<PartitionPage>(
+    selected?.key_hash && manifest && selectedPartition.manifest !== manifest
+      ? withQuery(`/worktrees/${id}/partitions`, {
+          environment,
+          manifest,
+          key_hash: selected.key_hash,
+          limit: 1,
+        })
+      : null,
+  );
+  if (
+    selected &&
+    selectedPartition.manifest !== manifest &&
+    remapped.data &&
+    manifest &&
+    remapped.data.manifest?.id === manifest
+  ) {
+    setSelectedPartition({
+      scope: partitionScope,
+      manifest,
+      entry: remapped.data.entries[0] || null,
+    });
+  }
+  const partitionEntry =
+    selectedPartition.manifest === manifest || remapped.pending
+      ? selected
+      : remapped.data?.entries[0] || null;
+  const partition: PartitionContext | null = manifest
+    ? {
+        manifest:
+          remapped.pending && selected ? selectedPartition.manifest! : manifest,
+        ...(partitionEntry
+          ? { partition_id: partitionEntry.partition_id }
+          : { partition_mode: "all" as const }),
+      }
+    : null;
+  const canEdit =
+    !snapshot?.worktree.read_only &&
+    (snapshot?.role === "admin" || snapshot?.role === "editor");
+  const refresh = useCallback(
+    (worktree?: string) => reload(worktree).catch(() => undefined),
+    [reload],
+  );
+  // Stable, because the Git dialog reloads its repository when it changes.
+  const gitChanged = useCallback(async () => {
+    setGitVersion((version) => version + 1);
+    await refreshWorkspace();
+    await refresh();
+  }, [refreshWorkspace, refresh]);
+
+  async function write(
+    base: Snapshot,
+    change: { bundle: Bundle } | { files: Record<string, string> },
+  ) {
+    if (!canEdit) throw new Error(t("readerNotice"));
+    setSaves((count) => count + 1);
+    const pending = api<Snapshot>(
+      `/worktrees/${base.worktree.id}`,
+      send({ revision: base.revision, ...change }, "PUT"),
+    );
+    pendingWrites.current.add(pending);
+    try {
+      return await pending;
+    } finally {
+      pendingWrites.current.delete(pending);
+      // Show the saved revision, or the one that rejected the change.
+      await refresh(base.worktree.id);
+      setSaves((count) => count - 1);
+    }
+  }
+
+  async function flush() {
+    while (pendingWrites.current.size)
+      await Promise.all([...pendingWrites.current]);
+  }
+
+  async function launch(
+    environment: string,
+    node?: string,
+    confirmed = false,
+    options?: PartitionLaunchOptions,
+  ) {
+    if (launching.current) return;
+    launching.current = true;
+    setStarting(true);
+    try {
+      // Observe failures from saves already in flight before persisting drafts.
+      await flush();
+      await drafts.persist();
+      await flush();
+      const run = await api<Run>(
+        `/worktrees/${id}/runs`,
+        send({ environment, node, entry_point: "ui", confirmed, ...options }),
+      );
+      setActive(id, run);
+    } finally {
+      launching.current = false;
+      setStarting(false);
+    }
+  }
+
+  const confirmRun = (
+    settings: Environment,
+    node?: string,
+    options?: PartitionLaunchOptions,
+  ) =>
+    openModal({
+      kind: "runConfirmation",
+      options,
+      worktree: id,
+      environment: settings,
+      node,
+    });
+
+  const value: Worktree = {
+    partition,
+    partitionEntry,
+    selectPartition: (entry) =>
+      setSelectedPartition({ scope: partitionScope, manifest, entry }),
+    id,
+    assistantNode:
+      assistantSelection.worktree === id ? assistantSelection.node : "",
+    assistantFile:
+      assistantSelection.worktree === id ? assistantSelection.file : "",
+    setAssistantNode,
+    setAssistantFile,
+    environment,
+    snapshot,
+    statuses,
+    loadError,
+    canEdit,
+    saving: saves > 0,
+    starting,
+    gitVersion,
+    refresh: () => refresh(),
+    flush,
+    save: (base, change) => {
+      const bundle = structuredClone(base.bundle!);
+      change(bundle);
+      return write(base, { bundle });
+    },
+    saveFiles: (files, base) => write(base, { files }),
+    run: async (node, options) => {
+      if (node && !options && partitionEntry)
+        options = {
+          partitions: {
+            mode: "selected",
+            keys: [
+              {
+                type: partitionEntry.key.type,
+                value: partitionEntry.key.value,
+              },
+            ],
+          },
+        };
+      if (!canEdit || starting) return;
+      const settings = workspace?.catalog.environment_details.find(
+        (item) => item.id === environment,
+      );
+      if (settings?.confirm_before_run)
+        return confirmRun(settings, node, options);
+      try {
+        await launch(environment, node, false, options);
+      } catch (e) {
+        const required = errorDetail(e).confirmation_required as
+          Environment | undefined;
+        if (required) confirmRun(required, node, options);
+        else notify((e as Error).message, true);
+      }
+    },
+    runConfirmed: (environment, node, options) =>
+      launch(environment, node, true, options),
+    stop: async () => {
+      if (!statuses.active) return;
+      try {
+        const run = await api<Run>(
+          `/runs/${statuses.active.id}/cancel`,
+          send({}),
+        );
+        setActive(id, run);
+      } catch (e) {
+        notify((e as Error).message, true);
+      }
+    },
+    gitChanged,
+  };
+  return (
+    <WorktreeContext.Provider value={value}>
+      {children}
+    </WorktreeContext.Provider>
+  );
+}
+
+export function useWorktree() {
+  const worktree = useContext(WorktreeContext);
+  if (!worktree) throw new Error("useWorktree is only available inside App");
+  return worktree;
+}
+
+/** The working branch of a pipeline tab, which renders once it is loaded. */
+export function useLoadedWorktree() {
+  const worktree = useWorktree();
+  const { snapshot } = worktree;
+  if (!snapshot) throw new Error("The working branch is not loaded");
+  return { ...worktree, snapshot };
+}
+
+export const useOptionalWorktree = () => useContext(WorktreeContext);
+
+export function usePartitionQuery(node: string, port = "result") {
+  const worktree = useOptionalWorktree();
+  const source = worktree?.snapshot?.bundle
+    ? outputSource(worktree.snapshot.bundle, node, port)
+    : { node, port };
+  return worktree?.snapshot?.partitions?.[worktree.environment]?.nodes[
+    source.node
+  ]?.partitioned
+    ? { ...worktree.partition }
+    : {};
+}
