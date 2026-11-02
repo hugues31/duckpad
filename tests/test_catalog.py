@@ -151,11 +151,13 @@ def test_built_in_connectors_come_with_the_release_and_edits_are_overrides(servi
     assert {identity: c["origin"] for identity, c in listed.items()} == {
         "folder": "built-in",
         "s3": "built-in",
+        "postgres": "built-in",
         "oracle": "built-in",
     }
     assert {identity: c["family"] for identity, c in listed.items()} == {
         "folder": "storage",
         "s3": "storage",
+        "postgres": "database",
         "oracle": "database",
     }
     assert listed["folder"]["name"] == "Server folder"
@@ -199,6 +201,7 @@ def test_duplicates_are_custom_types_under_a_new_identifier(services):
     assert listed == {
         "folder": "built-in",
         "s3": "built-in",
+        "postgres": "built-in",
         "oracle": "built-in",
         "finance_folder": "custom",
     }

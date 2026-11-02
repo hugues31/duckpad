@@ -30,13 +30,14 @@ SELECT * FROM read_parquet({{ file }});
 -- @output result
 SELECT * FROM read_xlsx({{ file }}, sheet={{ sheet }}, header={{ header }}, all_varchar={{ all_varchar }});
 """,
-    "load_oracle": """-- @label Load Oracle
+    "load_table": """-- @label Load table
+-- @description Read a table or view of a database connection.
 -- @kind source
--- @param connection: connection = "oracle"
--- @param schema: identifier = "DEMO"
--- @param resource: identifier = "ORDERS"
+-- @param connection: connection = ""
+-- @param schema: schema_name(connection) = "public"
+-- @param table: table_name(schema) = ""
 -- @output result
-SELECT * FROM {{ connection }}.{{ schema }}.{{ resource }};
+SELECT * FROM {{ connection }}.{{ schema }}.{{ table }};
 """,
     "join": """-- @label Join
 -- @input left
@@ -92,6 +93,15 @@ COPY {{ source }} TO {{ destination }} (FORMAT CSV, HEADER {{ header }}, DELIMIT
 -- @param sheet: text = "Sheet1"
 -- @param header: boolean = true
 COPY {{ source }} TO {{ destination }} (FORMAT XLSX, SHEET {{ sheet }}, HEADER {{ header }});
+""",
+    "export_table": """-- @label Export table
+-- @description Insert the rows into an existing table of a database connection, matching columns by name. Nothing is truncated or created.
+-- @kind export
+-- @input source
+-- @param connection: connection = ""
+-- @param schema: schema_name(connection) = "public"
+-- @param table: table_name(schema) = ""
+INSERT INTO {{ connection }}.{{ schema }}.{{ table }} BY NAME SELECT * FROM {{ source }};
 """,
     "export_oracle": """-- @label Export Oracle
 -- @kind export
