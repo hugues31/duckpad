@@ -8,7 +8,13 @@ import { useApiResource } from "./useApiResource";
 import { useOptionalWorktree } from "./worktree";
 
 /** Run pages read that run's immutable attempts, independently of current previews. */
-export function PartitionHistory({ run }: { run: Run }) {
+export function PartitionHistory({
+  run,
+  onRetry,
+}: {
+  run: Run;
+  onRetry?: () => void;
+}) {
   const t = useT();
   const translate = useTranslateValue();
   const worktree = useOptionalWorktree();
@@ -38,6 +44,11 @@ export function PartitionHistory({ run }: { run: Run }) {
         {t("partitionNotStarted")}
       </p>
       <div className="row gap">
+        {onRetry && (
+          <button className="button secondary small" onClick={onRetry}>
+            {t("partitionRunFailed")}
+          </button>
+        )}
         <input
           aria-label={t("partitionSearch")}
           placeholder={t("partitionSearch")}
@@ -98,6 +109,8 @@ export function PartitionHistory({ run }: { run: Run }) {
                 <td>
                   {translate(state?.status || "not_started")}
                   {state?.skipped && ` · ${t("partitionSkipped")}`}
+                  {state?.attempt?.external_outcome &&
+                    ` · ${t("externalOutcome")}: ${translate(state.attempt.external_outcome)}`}
                 </td>
                 <td>{state?.rows ?? "—"}</td>
                 <td>

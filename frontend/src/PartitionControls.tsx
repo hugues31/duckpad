@@ -1,6 +1,7 @@
 import { createPortal } from "react-dom";
 import { useState } from "react";
 import { Settings2 } from "lucide-react";
+import { Link } from "react-router";
 import { withQuery } from "./api";
 import { useT, useTranslateValue } from "./i18n";
 import { Modal } from "./modals";
@@ -112,7 +113,11 @@ export function PartitionStrip({
       {!description.manifest ? (
         <p>
           {t("partitionNotCalculated")} ·{" "}
-          <code>{description.dimension.values.node}</code>
+          <Link
+            to={`/worktrees/${worktree.id}/flow?${new URLSearchParams({ environment: worktree.environment, node: description.dimension.values.node })}`}
+          >
+            {description.dimension.values.node}
+          </Link>
         </p>
       ) : (
         <>
@@ -145,6 +150,17 @@ export function PartitionStrip({
               {loaded.data?.total ?? description.manifest.count}{" "}
               {t("partitions")}
             </span>
+            {node && worktree.canEdit && (
+              <button
+                className="button secondary small"
+                disabled={!!worktree.statuses.active || worktree.starting}
+                onClick={() =>
+                  worktree.run(undefined, { partitions: { mode: "failed" } })
+                }
+              >
+                {t("partitionRunFailed")}
+              </button>
+            )}
           </div>
           <div className="partition-segments">
             <button

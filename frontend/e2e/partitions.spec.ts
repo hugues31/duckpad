@@ -153,3 +153,75 @@ test("inspect retained keys, unavailable previews and global collectors without 
     page.getByRole("region", { name: "Partitions", exact: true }),
   ).toContainText("1/1");
 });
+
+test("Job history retries failed keys using the Job launch contract", async ({
+  page,
+}) => {
+  await signIn(page);
+  const created = await (
+    await page.request.post("/api/projects", {
+      data: { name: "Partition Job review" },
+    })
+  ).json();
+  const endpoint = `/api/worktrees/${created.id}`;
+  const snapshot = await (await page.request.get(endpoint)).json();
+  const project = structuredClone(partitionFlow);
+  project.templates.transform = project.templates.transform.replace(
+    "d.amount * l.rate",
+    "CASE WHEN d.amount = 2 THEN error('Synthetic partition failure') ELSE d.amount * l.rate END",
+  );
+  expect(
+    (
+      await page.request.put(endpoint, {
+        data: { revision: snapshot.revision, bundle: project },
+      })
+    ).ok(),
+  ).toBeTruthy();
+  const job = await (
+    await page.request.post(`/api/projects/${created.project}/jobs`, {
+      data: {
+        slug: "partition-retry",
+        name: "Partition retry",
+        environment: "dev",
+        target: { kind: "branch", ref: "main" },
+      },
+    })
+  ).json();
+  expect(job.slug).toBe("partition-retry");
+  const first = await (
+    await page.request.post(`/api/jobs/${job.slug}/runs`, { data: {} })
+  ).json();
+  await expect
+    .poll(
+      async () =>
+        (await (await page.request.get(`/api/runs/${first.id}`)).json()).status,
+    )
+    .toBe("partial_failure");
+  await page.goto(`/projects/${created.project}/jobs`);
+  await page
+    .getByRole("button", { name: "Partition retry", exact: true })
+    .click();
+  await page.locator(".job-details button.history-row").first().click();
+  const launching = page.waitForResponse(
+    (response) =>
+      response.url().endsWith(`/jobs/${job.slug}/runs`) &&
+      response.request().method() === "POST",
+  );
+  await page
+    .getByRole("button", { name: "Run failed partitions", exact: true })
+    .click();
+  const response = await launching;
+  expect(response.ok()).toBeTruthy();
+  const retry = await response.json();
+  expect(retry.partition_selection).toEqual({ mode: "failed" });
+  await expect
+    .poll(
+      async () =>
+        (await (await page.request.get(`/api/runs/${retry.id}`)).json()).status,
+    )
+    .toBe("failed");
+  expect(
+    (await (await page.request.get(`/api/runs/${retry.id}`)).json()).partitions
+      .selected,
+  ).toBe(1);
+});

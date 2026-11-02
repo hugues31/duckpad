@@ -48,7 +48,11 @@ export interface PartitionEntry {
       error?: string;
       run?: string;
       skipped?: boolean;
-      attempt?: NodeResult & { statements?: Statement[]; status: string };
+      attempt?: NodeResult & {
+        statements?: Statement[];
+        status: string;
+        external_outcome?: string;
+      };
     }
   >;
 }

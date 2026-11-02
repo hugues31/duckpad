@@ -324,7 +324,7 @@ class PartitionRun:
                 execution.token.setdefault("cursors", []).append(execution.cursor)
         with self.lock:
             self.active.add(entry["partition_id"])
-            self.root["partitions"]["active"] = sorted(self.active)
+            self.update_active()
             self.runner._persist(self.root, execution.secrets)
         remaining = Counter(
             (e["source"], e["sourceHandle"])
@@ -379,7 +379,17 @@ class PartitionRun:
                         execution.token["cursors"].remove(execution.cursor)
                 with self.lock:
                     self.active.discard(entry["partition_id"])
-                    self.root["partitions"]["active"] = sorted(self.active)
+                    self.update_active()
+
+    def update_active(self):
+        self.root["partitions"].update(
+            active=sorted(self.active),
+            active_keys=[
+                {k: entry["key"][k] for k in ("type", "value")}
+                for entry in self.selected
+                if entry["partition_id"] in self.active
+            ],
+        )
 
     def for_entry(self, entry, unit):
         execution = self.execution

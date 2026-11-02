@@ -8,6 +8,8 @@ const state = vi.hoisted(() => ({
   environment: "dev",
   partitionEntry: null,
   selectPartition: vi.fn(),
+  canEdit: true,
+  run: vi.fn(),
   snapshot: {
     partitions: {
       dev: {
@@ -77,6 +79,16 @@ it("collecting removes conflicting output declarations in the same edit", () => 
   expect(save).toHaveBeenCalledWith(
     expect.objectContaining({ partitions: "all", outputs: { result: {} } }),
   );
+});
+
+it("retries failed keys as a normal launch that refreshes the manifest", () => {
+  render(<PartitionStrip node="source" />);
+  fireEvent.click(
+    screen.getByRole("button", { name: "Run failed partitions" }),
+  );
+  expect(state.run).toHaveBeenCalledWith(undefined, {
+    partitions: { mode: "failed" },
+  });
 });
 
 it("renames expression and typed attribute references without changing literals", async () => {

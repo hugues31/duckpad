@@ -112,6 +112,8 @@ export function FlowToolbar({ tab }: { tab: WorkspaceTab }) {
           <span role="status">
             {active.partitions.completed}/{active.partitions.selected}{" "}
             {t("partitions")} · {active.partitions.failed} {t("failed")}
+            {!!active.partitions.active_keys?.length &&
+              ` · ${t("running")}: ${active.partitions.active_keys.map((key) => String(key.value)).join(", ")}`}
           </span>
         )}
         {!active && <PartitionRunMenu />}

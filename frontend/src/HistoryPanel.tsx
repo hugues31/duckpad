@@ -279,9 +279,11 @@ export default function HistoryPanel({
 export function RunDetails({
   run,
   onClose,
+  onPartitionRetry,
 }: {
   run: Run;
   onClose: () => void;
+  onPartitionRetry?: () => void;
 }) {
   const t = useT();
   return (
@@ -323,7 +325,7 @@ export function RunDetails({
           />
         </section>
       )}
-      <PartitionHistory key={run.id} run={run} />
+      <PartitionHistory key={run.id} run={run} onRetry={onPartitionRetry} />
       <details className="run-step">
         <summary>{t("executionConfiguration")}</summary>
         <pre className="expression">

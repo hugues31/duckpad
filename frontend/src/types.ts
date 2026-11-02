@@ -398,6 +398,7 @@ export interface Run {
     failed: number;
     not_started: number;
     active?: string[];
+    active_keys?: { type: string; value: string | number | boolean }[];
     phase: string;
     execution: { parallelism: number; on_error: string };
   };
