@@ -32,6 +32,7 @@ export interface PartitionDescription {
   errors?: Record<string, string>;
 }
 export interface PartitionEntry {
+  key_hash?: string;
   partition_id: string;
   ordinal: number;
   key: { type: PartitionType; value: string | number | boolean };

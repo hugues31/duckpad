@@ -1,3 +1,4 @@
+import { useApiResource } from "./useApiResource";
 import {
   createContext,
   useCallback,
@@ -7,11 +8,12 @@ import {
   type ReactNode,
 } from "react";
 import type {
+  PartitionPage,
   PartitionContext,
   PartitionEntry,
   PartitionLaunchOptions,
 } from "./partitions";
-import { api, errorDetail, send } from "./api";
+import { api, errorDetail, send, withQuery } from "./api";
 import { outputSource } from "./graph";
 import { useT } from "./i18n";
 import { useShell } from "./shell";
@@ -122,16 +124,52 @@ export function WorktreeProvider({
     },
   });
   const manifest = snapshot?.partitions?.[environment]?.manifest?.id;
-  const partitionScope = `${id}:${environment}:${manifest || ""}`;
+  const dimension = snapshot?.partitions?.[environment]?.dimension;
+  const partitionScope = JSON.stringify([
+    id,
+    environment,
+    dimension?.name,
+    dimension?.type,
+    dimension?.values,
+  ]);
   const [selectedPartition, setSelectedPartition] = useState<{
     scope: string;
+    manifest?: string;
     entry: PartitionEntry | null;
   }>({ scope: "", entry: null });
-  const partitionEntry =
+  const selected =
     selectedPartition.scope === partitionScope ? selectedPartition.entry : null;
+  const remapped = useApiResource<PartitionPage>(
+    selected?.key_hash && manifest && selectedPartition.manifest !== manifest
+      ? withQuery(`/worktrees/${id}/partitions`, {
+          environment,
+          manifest,
+          key_hash: selected.key_hash,
+          limit: 1,
+        })
+      : null,
+  );
+  if (
+    selected &&
+    selectedPartition.manifest !== manifest &&
+    remapped.data &&
+    manifest &&
+    remapped.data.manifest?.id === manifest
+  ) {
+    setSelectedPartition({
+      scope: partitionScope,
+      manifest,
+      entry: remapped.data.entries[0] || null,
+    });
+  }
+  const partitionEntry =
+    selectedPartition.manifest === manifest || remapped.pending
+      ? selected
+      : remapped.data?.entries[0] || null;
   const partition: PartitionContext | null = manifest
     ? {
-        manifest,
+        manifest:
+          remapped.pending && selected ? selectedPartition.manifest! : manifest,
         ...(partitionEntry
           ? { partition_id: partitionEntry.partition_id }
           : { partition_mode: "all" as const }),
@@ -207,7 +245,7 @@ export function WorktreeProvider({
     partition,
     partitionEntry,
     selectPartition: (entry) =>
-      setSelectedPartition({ scope: partitionScope, entry }),
+      setSelectedPartition({ scope: partitionScope, manifest, entry }),
     id,
     assistantNode:
       assistantSelection.worktree === id ? assistantSelection.node : "",

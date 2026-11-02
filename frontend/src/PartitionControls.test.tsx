@@ -7,6 +7,7 @@ const state = vi.hoisted(() => ({
   id: "w",
   environment: "dev",
   partitionEntry: null,
+  failed: false,
   selectPartition: vi.fn(),
   canEdit: true,
   run: vi.fn(),
@@ -19,7 +20,7 @@ const state = vi.hoisted(() => ({
       },
     },
   },
-  statuses: { active: null },
+  statuses: { active: null, nodes: {} },
 }));
 vi.mock("./worktree", () => ({ useOptionalWorktree: () => state }));
 vi.mock("./useApiResource", () => ({
@@ -29,7 +30,7 @@ vi.mock("./useApiResource", () => ({
         {
           partition_id: "p",
           key: { value: "quoted ' key" },
-          validity: "valid",
+          validity: state.failed ? "failed" : "valid",
           attributes: {},
           nodes: {
             source: { rows: null, duration: null, preview_available: true },
@@ -45,6 +46,7 @@ vi.mock("./useApiResource", () => ({
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  state.failed = false;
 });
 
 it("selects an opaque identity, keeping raw keys as labels", () => {
@@ -82,6 +84,7 @@ it("collecting removes conflicting output declarations in the same edit", () => 
 });
 
 it("retries failed keys as a normal launch that refreshes the manifest", () => {
+  state.failed = true;
   render(<PartitionStrip node="source" />);
   fireEvent.click(
     screen.getByRole("button", { name: "Run failed partitions" }),
@@ -109,4 +112,11 @@ it("renames expression and typed attribute references without changing literals"
     literal: "task",
     variable: "{{ var.task }}",
   });
+});
+
+it("does not offer a failed retry when no key has failed", () => {
+  render(<PartitionStrip node="source" />);
+  expect(
+    screen.queryByRole("button", { name: "Run failed partitions" }),
+  ).toBeNull();
 });

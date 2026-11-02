@@ -1210,7 +1210,7 @@
   "partitionKeepLast": "Última chave executada",
   "partitionKeepAll": "Todas as chaves dentro do limite",
   "partitionKeepNone": "Sem prévias intermediárias",
-  "partitionPreviewBytes": "Limite de prévias (bytes)",
+  "partitionPreviewBytes": "Limite das prévias (MiB)",
   "partitionRetentionHint": "As entradas dos coletores ficam em disco independentemente do limite de prévias. Ler uma prévia nunca executa as fontes.",
   "partitionCollector": "Todas as partições",
   "partitionShared": "Compartilhado entre partições",
@@ -1244,5 +1244,14 @@
   "partitionReplayMissing": "Esta chave não existe no manifesto atual. Atualize os valores antes de a executar.",
   "partitionRenameAttribute": "Renomear o atributo {name}",
   "partitionAttributeUsed": "Este atributo ainda é utilizado. Renomeie-o ou remova primeiro as referências.",
-  "partitionRemoveDimension": "Remover dimensão não utilizada"
+  "partitionRemoveDimension": "Remover dimensão não utilizada",
+  "partitionColumnHint": "Execute esta origem para escolher uma coluna, ou introduza o nome da coluna.",
+  "partitionNotRetainedHint": "A prévia desta chave não foi guardada. Execute esta chave para a inspecionar.",
+  "missing": "Em falta",
+  "not_started": "Não iniciado",
+  "text": "Texto",
+  "number": "Número",
+  "date": "Data",
+  "boolean": "Booleano",
+  "selected": "Selecionadas"
 }

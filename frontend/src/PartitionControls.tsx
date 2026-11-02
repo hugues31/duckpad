@@ -1,5 +1,6 @@
+import { ColumnPicker, ValueSourceFields } from "./ValueSourceFields";
 import { createPortal } from "react-dom";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Settings2 } from "lucide-react";
 import { Link } from "react-router";
 import { withQuery } from "./api";
@@ -24,27 +25,64 @@ export function PartitionSelector() {
   const worktree = useOptionalWorktree();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(false);
+  const root = useRef<HTMLDivElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const close = () => {
+    setOpen(false);
+    trigger.current?.focus();
+  };
+  useEffect(() => {
+    if (!open) return;
+    const outside = (event: PointerEvent) => {
+      if (!root.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setOpen(false);
+        trigger.current?.focus();
+      }
+    };
+    document.addEventListener("pointerdown", outside);
+    document.addEventListener("keydown", escape);
+    return () => {
+      document.removeEventListener("pointerdown", outside);
+      document.removeEventListener("keydown", escape);
+    };
+  }, [open]);
   const description = worktree?.snapshot?.partitions?.[worktree.environment];
   if (!worktree?.snapshot) return null;
   return (
-    <div className="partition-selector">
+    <div className="partition-selector" ref={root}>
       <button
-        className="button secondary small"
+        ref={trigger}
+        className={
+          description?.dimension
+            ? "button secondary small partition-trigger"
+            : "icon"
+        }
+        aria-label={description?.dimension ? undefined : t("partitionSettings")}
+        title={description?.dimension ? undefined : t("partitionSettings")}
         aria-expanded={open}
-        onClick={() => setOpen(!open)}
+        onClick={() =>
+          description?.dimension ? setOpen(!open) : setEditing(true)
+        }
       >
-        {t("partition")}:{" "}
-        {description?.dimension
-          ? description.manifest
-            ? worktree.partitionEntry
-              ? String(worktree.partitionEntry.key.value)
-              : t("partitionAll")
-            : t("partitionNotCalculated")
-          : t("partitionNone")}
+        {description?.dimension ? (
+          <>
+            {t("partition")}:{" "}
+            {description.manifest
+              ? worktree.partitionEntry
+                ? String(worktree.partitionEntry.key.value)
+                : t("partitionAll")
+              : t("partitionNotCalculated")}
+          </>
+        ) : (
+          <Settings2 size={16} />
+        )}
       </button>
       {open && (
         <div className="partition-menu">
-          <PartitionStrip />
+          <PartitionStrip onSelect={close} />
           <button
             className="button secondary small"
             onClick={() => {
@@ -70,10 +108,12 @@ export function PartitionStrip({
   node,
   port = "result",
   run,
+  onSelect,
 }: {
   node?: string;
   port?: string;
   run?: string;
+  onSelect?: () => void;
 }) {
   const t = useT();
   const translate = useTranslateValue();
@@ -107,6 +147,7 @@ export function PartitionStrip({
     );
   const select = (entry: PartitionEntry | null) => {
     worktree.selectPartition(entry);
+    onSelect?.();
   };
   return (
     <section className="partition-strip" aria-label={t("partitions")}>
@@ -116,7 +157,9 @@ export function PartitionStrip({
           <Link
             to={`/worktrees/${worktree.id}/flow?${new URLSearchParams({ environment: worktree.environment, node: description.dimension.values.node })}`}
           >
-            {description.dimension.values.node}
+            {worktree.snapshot?.bundle?.flow.nodes.find(
+              (n) => n.id === description.dimension!.values.node,
+            )?.label || description.dimension.values.node}
           </Link>
         </p>
       ) : (
@@ -150,17 +193,21 @@ export function PartitionStrip({
               {loaded.data?.total ?? description.manifest.count}{" "}
               {t("partitions")}
             </span>
-            {node && worktree.canEdit && (
-              <button
-                className="button secondary small"
-                disabled={!!worktree.statuses.active || worktree.starting}
-                onClick={() =>
-                  worktree.run(undefined, { partitions: { mode: "failed" } })
-                }
-              >
-                {t("partitionRunFailed")}
-              </button>
-            )}
+            {node &&
+              worktree.canEdit &&
+              loaded.data?.entries.some(
+                (entry) => entry.validity === "failed",
+              ) && (
+                <button
+                  className="button secondary small"
+                  disabled={!!worktree.statuses.active || worktree.starting}
+                  onClick={() =>
+                    worktree.run(undefined, { partitions: { mode: "failed" } })
+                  }
+                >
+                  {t("partitionRunFailed")}
+                </button>
+              )}
           </div>
           <div className="partition-segments">
             <button
@@ -228,6 +275,7 @@ export function PartitionStrip({
 
 function DimensionEditor({ onClose }: { onClose: () => void }) {
   const t = useT();
+  const translate = useTranslateValue();
   const worktree = useOptionalWorktree()!;
   const snapshot = worktree.snapshot!;
   const original = Object.entries(snapshot.bundle?.flow.partitions || {})[0];
@@ -304,42 +352,11 @@ function DimensionEditor({ onClose }: { onClose: () => void }) {
             <span>{t("partitionDimension")}</span>
             <input value={name} onChange={(e) => setName(e.target.value)} />
           </label>
-          <label className="field">
-            <span>{t("partitionSource")}</span>
-            <input
-              value={draft.values.node}
-              onChange={(e) =>
-                setDraft({
-                  ...draft,
-                  values: { ...draft.values, node: e.target.value },
-                })
-              }
-            />
-          </label>
-          <label className="field">
-            <span>{t("output")}</span>
-            <input
-              value={draft.values.port || "result"}
-              onChange={(e) =>
-                setDraft({
-                  ...draft,
-                  values: { ...draft.values, port: e.target.value },
-                })
-              }
-            />
-          </label>
-          <label className="field">
-            <span>{t("partitionKeyColumn")}</span>
-            <input
-              value={draft.values.column}
-              onChange={(e) =>
-                setDraft({
-                  ...draft,
-                  values: { ...draft.values, column: e.target.value },
-                })
-              }
-            />
-          </label>
+          <ValueSourceFields
+            snapshot={snapshot}
+            value={draft.values}
+            onChange={(values) => setDraft({ ...draft, values })}
+          />
           <label className="field">
             <span>{t("partitionKeyType")}</span>
             <Select
@@ -349,7 +366,9 @@ function DimensionEditor({ onClose }: { onClose: () => void }) {
               }
             >
               {["text", "number", "date", "boolean"].map((kind) => (
-                <option key={kind}>{kind}</option>
+                <option key={kind} value={kind}>
+                  {translate(kind)}
+                </option>
               ))}
             </Select>
           </label>
@@ -434,13 +453,14 @@ function DimensionEditor({ onClose }: { onClose: () => void }) {
             <input
               type="number"
               min="1"
-              value={draft.preview?.max_bytes ?? 1073741824}
+              step="1"
+              value={(draft.preview?.max_bytes ?? 1073741824) / 1048576}
               onChange={(e) =>
                 setDraft({
                   ...draft,
                   preview: {
                     ...draft.preview,
-                    max_bytes: Number(e.target.value),
+                    max_bytes: Math.round(Number(e.target.value) * 1048576),
                   },
                 })
               }
@@ -524,7 +544,7 @@ export function PartitionInspector({
           : declaration
             ? t("partitionDeclared")
             : info?.partitioned
-              ? `${dimension.name} · ${t("partitionInherited")} ${info.origin || ""}`
+              ? `${dimension.name} · ${t("partitionInherited")} ${worktree?.snapshot?.bundle?.flow.nodes.find((n) => n.id === info.origin)?.label || info.origin || ""}`
               : t("partitionShared")}
       </p>
       {!!ports.length && (
@@ -537,25 +557,21 @@ export function PartitionInspector({
               ))}
             </Select>
           </label>
-          <label className="field">
-            <span>{t("partitionKeyColumn")}</span>
-            <input
-              value={declaration?.column || ""}
-              placeholder={t("partitionNoFilter")}
-              disabled={node.partitions === "all"}
-              onChange={(e) => {
-                const outputs = structuredClone(node.outputs || {});
-                outputs[port] = { ...outputs[port] };
-                if (e.target.value)
-                  outputs[port].partition = {
-                    by: dimension.name,
-                    column: e.target.value,
-                  };
-                else delete outputs[port].partition;
-                onChange({ ...node, outputs });
-              }}
-            />
-          </label>
+          <ColumnPicker
+            node={fullNode}
+            port={port}
+            value={declaration?.column || ""}
+            label={t("partitionKeyColumn")}
+            disabled={node.partitions === "all"}
+            onChange={(column) => {
+              const outputs = structuredClone(node.outputs || {});
+              outputs[port] = { ...outputs[port] };
+              if (column)
+                outputs[port].partition = { by: dimension.name, column };
+              else delete outputs[port].partition;
+              onChange({ ...node, outputs });
+            }}
+          />
         </>
       )}
       <label className="row gap">

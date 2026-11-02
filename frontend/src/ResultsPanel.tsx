@@ -1,6 +1,6 @@
 import { withQuery } from "./api";
 import { PartitionStrip } from "./PartitionControls";
-import { usePartitionQuery } from "./worktree";
+import { useOptionalWorktree, usePartitionQuery } from "./worktree";
 import { useState } from "react";
 import {
   Clock,
@@ -164,6 +164,15 @@ export default function ResultsPanel({
     node: fullNode,
     port: target.input ? ports[0] || "result" : target.port,
   }).node;
+  const worktree = useOptionalWorktree();
+  const collector =
+    snapshot.partitions?.[environment]?.nodes[producer]?.collect.length;
+  const runResult =
+    collector && worktree
+      ? () => {
+          void worktree.run();
+        }
+      : onRun;
   const baseResult = statuses.nodes[producer];
   const partition = usePartitionQuery(target.node, target.port);
   const partitionPreview = useApiResource<PreviewPage>(
@@ -299,10 +308,10 @@ export default function ResultsPanel({
           )}
           <button
             className="icon"
-            title={t("runNode")}
-            aria-label={t("runNode")}
+            title={t(collector ? "run" : "runNode")}
+            aria-label={t(collector ? "run" : "runNode")}
             disabled={readOnly || !!statuses.active}
-            onClick={onRun}
+            onClick={runResult}
           >
             <Play size={15} />
           </button>
@@ -369,7 +378,8 @@ export default function ResultsPanel({
             storeSample(storage(target), sample, view);
           }}
           onFailing={setFailing}
-          onRun={onRun}
+          onRun={runResult}
+          runLabel={collector ? t("run") : undefined}
           onExplain={onExplain}
           onSave={onSave}
           onAddFilter={(condition) => onAddFilter(target.port, condition)}

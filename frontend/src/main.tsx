@@ -5,7 +5,6 @@ import { createBrowserRouter } from "react-router";
 import { RouterProvider } from "react-router/dom";
 import { pageRoutes } from "./routes";
 import "./styles/index.css";
-import "./partitions.css";
 const router = createBrowserRouter([{ Component: App, children: pageRoutes }]);
 createRoot(document.getElementById("root")!).render(
   <React.StrictMode>

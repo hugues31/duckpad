@@ -116,7 +116,6 @@ export function FlowToolbar({ tab }: { tab: WorkspaceTab }) {
               ` · ${t("running")}: ${active.partitions.active_keys.map((key) => String(key.value)).join(", ")}`}
           </span>
         )}
-        {!active && <PartitionRunMenu />}
         {active?.phase && (
           <span role="status" className="muted small">
             {active.phase === "values"
@@ -135,14 +134,17 @@ export function FlowToolbar({ tab }: { tab: WorkspaceTab }) {
             {t(active.status === "canceling" ? "canceling" : "stop")}
           </button>
         ) : (
-          <button
-            className="button primary"
-            disabled={!canEdit || starting || !snapshot.bundle}
-            onClick={() => run()}
-          >
-            <Play size={14} fill="currentColor" />
-            {t("run")}
-          </button>
+          <div className="run-control">
+            <button
+              className="button primary"
+              disabled={!canEdit || starting || !snapshot.bundle}
+              onClick={() => run()}
+            >
+              <Play size={14} fill="currentColor" />
+              {t("run")}
+            </button>
+            <PartitionRunMenu />
+          </div>
         )}
       </div>
     </div>

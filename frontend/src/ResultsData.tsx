@@ -88,6 +88,7 @@ export default function ResultsData({
   onSample,
   onFailing,
   onRun,
+  runLabel,
   onExplain,
   onSave,
   onAddFilter,
@@ -107,6 +108,7 @@ export default function ResultsData({
   onSample: (sample: Sample, view?: string) => void;
   onFailing: (failing: FailingRows | null) => void;
   onRun: () => void;
+  runLabel?: string;
   onExplain: (cell: Cell) => void;
   onSave: SaveProject;
   onAddFilter: (condition: string) => Promise<unknown>;
@@ -185,7 +187,11 @@ export default function ResultsData({
       <div className="preview-empty">
         <Database size={25} aria-hidden="true" />
         <div>
-          <strong>{error || t("noResult")}</strong>
+          <strong>
+            {error.startsWith("partition_not_retained:")
+              ? t("partitionNotRetainedHint")
+              : error || t("noResult")}
+          </strong>
           <p>{t(canEdit ? "noResultHint" : "readerNoResult")}</p>
         </div>
         <button
@@ -194,7 +200,7 @@ export default function ResultsData({
           onClick={onRun}
         >
           <Play size={13} />
-          {t("runNode")}
+          {runLabel || t("runNode")}
         </button>
       </div>
     );

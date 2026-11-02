@@ -1,7 +1,8 @@
+import { ChevronDown } from "lucide-react";
 import { createPortal } from "react-dom";
 import { useState } from "react";
 import { withQuery } from "./api";
-import { useT } from "./i18n";
+import { useT, useTranslateValue } from "./i18n";
 import { Modal } from "./modals";
 import type {
   PartitionEntry,
@@ -20,6 +21,7 @@ export function PartitionRunSummary({
   node?: string;
 }) {
   const t = useT();
+  const translate = useTranslateValue();
   const worktree = useOptionalWorktree();
   const description = worktree?.snapshot?.partitions?.[worktree.environment];
   if (!description?.dimension) return null;
@@ -31,7 +33,9 @@ export function PartitionRunSummary({
     <div className="partition-strip">
       <p>
         {t(node ? "partitionRetainedLaunch" : "partitionFreshLaunch")} ·{" "}
-        <code>{description.dimension.values.node}</code>
+        {worktree?.snapshot?.bundle?.flow.nodes.find(
+          (n) => n.id === description.dimension!.values.node,
+        )?.label || description.dimension.values.node}
       </p>
       <p>
         {t("partitionParallelism")}: {policy.parallelism || 1} ·{" "}
@@ -43,7 +47,8 @@ export function PartitionRunSummary({
         )}
       </p>
       <p>
-        {t("partitionSelection")}: {options?.partitions?.mode || "all"}
+        {t("partitionSelection")}:{" "}
+        {translate(options?.partitions?.mode || "all")}
         {options?.partitions?.keys
           ?.map((key) => ` · ${String(key.value)}`)
           .join("")}
@@ -68,11 +73,13 @@ export function PartitionRunMenu() {
   return (
     <>
       <button
-        className="button secondary small"
+        className="button primary run-options-trigger"
+        aria-label={t("partitionRunOptions")}
+        title={t("partitionRunOptions")}
         disabled={!worktree.canEdit || worktree.starting}
         onClick={() => setOpen(true)}
       >
-        {t("partitionRunOptions")}
+        <ChevronDown size={15} />
       </button>
       {open &&
         createPortal(
