@@ -111,6 +111,9 @@ class Database:
         return Cursor(self, self.call("cursor"))
 
     def close(self) -> None:
+        if self.socket.fileno() == -1:
+            # Already released, for example after its results failed to move to a new worker.
+            return
         if self.process.poll() is None:
             self.process.terminate()
         try:

@@ -352,7 +352,9 @@ class Catalog:
             "values": values,
             "settings": public_values,
             "name": connection["name"],
-            "fingerprint": digest([executable(definition), values]),
+            # Secret parameters authenticate; the settings that select data are not secret. Rotating
+            # a credential therefore never makes results stale.
+            "fingerprint": digest([executable(definition), public_values]),
             "alias": "conn_" + digest(reference)[:12],
             "secret_name": "secret_" + digest(reference)[:12],
         }

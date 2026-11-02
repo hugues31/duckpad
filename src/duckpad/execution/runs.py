@@ -239,12 +239,12 @@ class Runner:
             partition_plan.get("dimension"), partition_selection, partition_execution
         )
         phase |= partition_plan["value_phase"]
-        context = self.pool.get(
-            worktree,
-            environment,
-            create=True,
-            requirements=project_extensions.enabled(bundle.get("extensions")),
-        )
+        requirements = project_extensions.enabled(bundle.get("extensions"))
+        context = self.pool.get(worktree, environment, create=True, requirements=requirements)
+        self.pool.renew(context)
+        if getattr(context.db, "closed", False):
+            # The results could not move to a worker with the new connection settings.
+            context = self.pool.get(worktree, environment, create=True, requirements=requirements)
         values = self.pool.computed(worktree, environment, bundle)
         nodes, edges, _ = expand_for(bundle, environment, computed=values)
         scope = self._partition_scope(
@@ -252,9 +252,7 @@ class Runner:
         )
         order = [n for n in topological(nodes, edges, tolerant=True) if n in scope]
         self._check_conflicts(snapshot["conflicts"], scope, environment)
-        captured, secrets = self._capture_connections(
-            worktree, nodes, scope, environment, strict=bool(target)
-        )
+        captured, secrets = self._capture_connections(context, nodes, scope, strict=bool(target))
         fingerprints = self.fingerprints.of(bundle, environment, captured, values)
         affected = reachable(scope, edges, upstream=False)
         self.exports.mark_stale(worktree, environment, affected - scope)
@@ -385,17 +383,24 @@ class Runner:
                 raise Problem("Resolve computation-affecting edit conflicts before running", 409)
 
     def _capture_connections(
-        self, worktree: str, nodes: dict[str, Record], scope: set[str], environment: str, strict: bool
+        self, context: Context, nodes: dict[str, Record], scope: set[str], strict: bool
     ) -> tuple[Connections, list[str]]:
-        """Freeze connection settings for the scope; invalid ones block their nodes (or the run if strict)."""
+        """Freeze connection settings for the scope; invalid ones block their nodes (or the run if strict).
+
+        An isolated run uses the settings its worker attached, which its fingerprints then describe.
+        """
         captured: Connections = {}
-        secrets: list[str] = []
+        secrets: list[str] = list(context.secrets)
         for key in scope:
             node = nodes[key]
+            references = connection_references(node)
             try:
-                values, hidden = self.pool.capture(worktree, connection_references(node), environment)
-                captured.update(values)
-                secrets.extend(hidden)
+                if self.isolated and all(r in context.connections for r in references):
+                    captured.update({r: context.connections[r] for r in references})
+                else:
+                    values, hidden = self.pool.capture(context.worktree, references, context.environment)
+                    captured.update(values)
+                    secrets.extend(hidden)
             except Problem as error:
                 node["error"] = str(error)
                 if strict:

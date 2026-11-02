@@ -5,7 +5,7 @@ from __future__ import annotations
 import threading
 from dataclasses import dataclass, field
 
-from .types import LineageRequest, Record, SQLDatabase
+from .types import Connections, LineageRequest, Record, SQLDatabase
 from .util import now
 
 
@@ -77,6 +77,9 @@ class Context:
     extensions: list[Record] = field(default_factory=list)
     # The SQL resources its database started with.
     resources: Record = field(default_factory=dict)
+    # The connections an isolated worker attached, with their secrets; kept in memory only.
+    connections: Connections = field(default_factory=dict)
+    secrets: list[str] = field(default_factory=list)
     outputs: dict[str, dict[str, Dataset]] = field(default_factory=dict)
     datasets: dict[str, Dataset] = field(default_factory=dict)
     errors: dict[str, str] = field(default_factory=dict)

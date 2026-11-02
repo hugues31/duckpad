@@ -214,6 +214,14 @@ class Engine:
             for project in self.store.all("project"):
                 self.reset_project(project["id"])
 
+    def reset_connection(self, reference: str) -> None:
+        """Close the sessions of the projects that may use a connection, so that removing it
+        applies at once instead of at their next run."""
+        with self.lock:
+            for project in self.store.all("project"):
+                if self.access is None or reference in self.access.record(project["id"])["connections"]:
+                    self.reset_project(project["id"])
+
     def invalidate(self, worktree: str | None = None) -> None:
         """Mark results of changed definitions stale.
 
