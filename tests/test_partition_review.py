@@ -380,3 +380,22 @@ def test_empty_selection_reports_its_reason(services):
     assert run["status"] == "success", run
     assert run["partitions"]["selected"] == 0
     assert run["partitions"]["reason"] == "No partitions match the selection"
+
+
+def test_blocked_collector_status_keeps_its_reason(services, monkeypatch):
+    store, projects, _, engine = services
+    project = bundle()
+    project["flow"]["partitions"]["batch"]["execution"] = {"on_error": "continue"}
+    worktree = projects.create("Blocked collector reason", project)["id"]
+    compute = engine.runs._compute
+
+    def fail(execution, key, tables):
+        if key == "transform" and execution.partition["key"]["value"] == "b":
+            raise Problem("Conversion failed")
+        return compute(execution, key, tables)
+
+    monkeypatch.setattr(engine.runs, "_compute", fail)
+    assert join_run(store, engine.launch(worktree, "dev")["id"])["status"] == "partial_failure"
+    status = engine.statuses(worktree, "dev")["nodes"]["collect"]
+    assert status["execution_status"] == "blocked"
+    assert status["error"] == "partition_incomplete: transform.result lacks valid results for b"
