@@ -66,7 +66,7 @@ class Run(BaseModel):
     variables: dict[str, Record] = Field(default_factory=dict)
     partitions: Record | None = None
     trigger: Trigger | None
-    requester: Requester | None
+    requester: Requester
     links: RunLinks
 
 
@@ -148,7 +148,7 @@ def public_run(run):
             },
         },
         "trigger": run.get("external_trigger"),
-        "requester": run.get("requester"),
+        "requester": run["requester"],
         "links": {"self": path, "log": path + "/log", "cancel": path + "/cancel"},
     }
 
