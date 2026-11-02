@@ -178,7 +178,7 @@ HTTP/1.1 202 Accepted
 ```bash
 export DUCKPAD_SERVER=https://duckpad.example.com
 export DUCKPAD_TOKEN=dpk_…
-duckpad run --job sales-daily-prod --timeout 2h
+duckpad run sales-daily-prod --timeout 2h
 ```
 
 - `duckpad run` launches the Job, prints node progress to standard output, waits for the outcome and exits with a code orchestrators can act on. `--detach` returns as soon as the run is accepted and prints its identifier.
@@ -206,7 +206,7 @@ It works as is in a Control-M OS job, an Airflow `BashOperator`, cron, CI pipeli
 BashOperator(
     task_id="sales_daily",
     bash_command=(
-        "duckpad run --job sales-daily-prod --source airflow"
+        "duckpad run sales-daily-prod --source airflow"
         " --reference '{{ dag.dag_id }}/{{ run_id }}'"
         " --idempotency-key '{{ dag.dag_id }}:{{ task.task_id }}:{{ run_id }}:{{ ti.try_number }}'"
     ),

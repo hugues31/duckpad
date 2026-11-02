@@ -110,7 +110,7 @@ def test_success_waits_prints_progress_and_records_the_trigger(server, tmp_path)
     app, url, tokens = server
     token_file = tmp_path / "token"
     token_file.write_text(tokens["operator"] + "\n")
-    result = duckpad_run(url, "--job", "daily", "--token-file", str(token_file))
+    result = duckpad_run(url, "daily", "--token-file", str(token_file))
     assert result.returncode == client.SUCCESS, result.stderr
     run = only_run(app)
     assert run["status"] == "success"
@@ -151,7 +151,7 @@ def test_failed_and_partial_failure_exit_codes(server, instance):
     project = instance[1]["project"]
     failing = source("SELECT error('Broken source') AS value;")
     tagged_job(instance, "broken", {"templates/source.sql": failing})
-    result = duckpad_run(url, "--job", "broken", token=tokens["operator"])
+    result = duckpad_run(url, "broken", token=tokens["operator"])
     assert result.returncode == client.FAILED, result.stdout + result.stderr
     assert "Outcome: failed" in result.stdout and "Broken source" in result.stdout
     tagged_job(
@@ -163,14 +163,14 @@ def test_failed_and_partial_failure_exit_codes(server, instance):
             "templates/broken.sql": failing,
         },
     )
-    result = duckpad_run(url, "--job", "partial", token=tokens["operator"])
+    result = duckpad_run(url, "partial", token=tokens["operator"])
     assert result.returncode == client.PARTIAL_FAILURE, result.stdout + result.stderr
     assert "1/2 nodes succeeded, 1 failed" in result.stdout and "Outcome: partial_failure" in result.stdout
 
 
 def test_detach_prints_the_run_id_and_a_key_reattaches_to_its_run(server):
     app, url, tokens = server
-    options = ("--job", "daily", "--source", "airflow", "--reference", "daily/scheduled-1")
+    options = ("daily", "--source", "airflow", "--reference", "daily/scheduled-1")
     detached = duckpad_run(
         url, *options, "--detach", "--idempotency-key", "daily:1", token=tokens["operator"]
     )
@@ -189,7 +189,7 @@ def test_canceled_elsewhere_exits_3(server, monkeypatch):
     app, url, tokens = server
     _, release = test_automation.hold_execution(app, monkeypatch)
     try:
-        process = start(url, "--job", "daily", token=tokens["operator"])
+        process = start(url, "daily", token=tokens["operator"])
         run = wait_for(lambda: app.state.services.store.all("run"), "Run was not launched")[0]
         app.state.services.engine.cancel(run["id"])
         release.set()
@@ -204,8 +204,8 @@ def test_busy_job_exits_4_and_names_the_active_run(server, monkeypatch):
     app, url, tokens = server
     _, release = test_automation.hold_execution(app, monkeypatch)
     try:
-        active = duckpad_run(url, "--job", "daily", "--detach", token=tokens["operator"])
-        result = duckpad_run(url, "--job", "daily", token=tokens["operator"])
+        active = duckpad_run(url, "daily", "--detach", token=tokens["operator"])
+        result = duckpad_run(url, "daily", token=tokens["operator"])
     finally:
         release.set()
     assert result.returncode == client.BUSY, result.stderr
@@ -220,7 +220,7 @@ def test_busy_job_exits_4_and_names_the_active_run(server, monkeypatch):
         ((), "dpk_unknown", "HTTP 401, unauthenticated"),
         ((), "dpk_secret\nsecond line", "the token must be a single line without spaces"),
         ((), "reader", "HTTP 403, forbidden"),
-        (("--job", "missing"), "operator", "HTTP 404, job_not_found"),
+        (("missing",), "operator", "HTTP 404, job_not_found"),
         (("--source", "x" * 129), "operator", "HTTP 422, invalid_request"),
         (("--timeout", "soon"), "operator", "invalid duration 'soon'"),
         (("--token-file", "/nonexistent/token"), None, "cannot read the token file"),
@@ -230,7 +230,7 @@ def test_busy_job_exits_4_and_names_the_active_run(server, monkeypatch):
 )
 def test_refused_requests_exit_5(server, args, token, message):
     app, url, tokens = server
-    options = ("--job", "daily", *args) if "--job" not in args else args
+    options = args if args == ("missing",) else ("daily", *args)
     result = duckpad_run(url, *options, token=tokens.get(token, token))
     assert result.returncode == client.REFUSED, result.stdout + result.stderr
     assert message in result.stderr
@@ -242,7 +242,7 @@ def test_timeout_cancels_waits_for_the_stop_and_exits_6(server, monkeypatch):
     app, url, tokens = server
     _, release = test_automation.hold_execution(app, monkeypatch)
     try:
-        process = start(url, "--job", "daily", "--timeout", "1s", token=tokens["operator"])
+        process = start(url, "daily", "--timeout", "1s", token=tokens["operator"])
         wait_for(lambda: only_run_status(app) == "canceling", "Timeout did not request cancellation")
         assert process.poll() is None, "The command must wait for the run to stop"
         release.set()
@@ -277,7 +277,7 @@ def test_signals_cancel_wait_for_the_stop_and_exit_3(server, monkeypatch, signum
     app, url, tokens = server
     _, release = test_automation.hold_execution(app, monkeypatch)
     try:
-        process = start(url, "--job", "daily", token=tokens["operator"])
+        process = start(url, "daily", token=tokens["operator"])
         assert process.stdout is not None
         assert " accepted: " in process.stdout.readline()
         process.send_signal(signum)
@@ -355,7 +355,7 @@ def test_lost_launch_response_is_retried_with_the_same_key(server):
     app, url, tokens = server
     proxy = Proxy(url, lose_launch=True)
     try:
-        result = duckpad_run(proxy.url, "--job", "daily", token=tokens["operator"])
+        result = duckpad_run(proxy.url, "daily", token=tokens["operator"])
     finally:
         proxy.close()
     assert result.returncode == client.SUCCESS, result.stdout + result.stderr
@@ -370,7 +370,7 @@ def test_unreachable_server_exits_7(monkeypatch, capsys):
     monkeypatch.setenv("DUCKPAD_TOKEN", "dpk_test")
     with socket.create_server(("127.0.0.1", 0)) as closed:
         port = closed.getsockname()[1]
-    assert client.main(["--job", "daily", "--server", f"http://127.0.0.1:{port}"]) == client.UNREACHABLE
+    assert client.main(["daily", "--server", f"http://127.0.0.1:{port}"]) == client.UNREACHABLE
     stderr = capsys.readouterr().err
     assert "retrying in 1 s" in stderr and f"Cannot reach Duckpad at http://127.0.0.1:{port}" in stderr
 
@@ -382,7 +382,7 @@ def test_lost_contact_while_waiting_exits_7(server, monkeypatch, capsys):
     _, release = test_automation.hold_execution(app, monkeypatch)
     proxy = Proxy(url, cut_after_launch=True)
     try:
-        assert client.main(["--job", "daily", "--server", proxy.url]) == client.UNREACHABLE
+        assert client.main(["daily", "--server", proxy.url]) == client.UNREACHABLE
     finally:
         proxy.close()
         release.set()
