@@ -286,7 +286,7 @@ def router(jobs, access):
     def log(run_id: str, request: Request, partition_id: str | None = None):
         run = request.state.automation_record
         if partition_id:
-            storage = PartitionStorage(store.paths, run["worktree"], run["environment"])
+            storage = PartitionStorage(store, run["worktree"], run["environment"])
             storage.entry(run.get("partitions", {}).get("manifest", ""), partition_id)
             run = {**run, "nodes": storage.attempts(run_id, partition_id)}
         return run_log(run)

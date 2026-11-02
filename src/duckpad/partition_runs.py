@@ -24,7 +24,7 @@ class PartitionRun:
     def __init__(self, runner, execution):
         self.runner, self.execution = runner, execution
         self.storage = PartitionStorage(
-            runner.store.paths, execution.context.worktree, execution.context.environment
+            runner.store, execution.context.worktree, execution.context.environment
         )
         self.plan = execution.partition_plan
         self.dimension = self.plan["dimension"]
@@ -34,6 +34,8 @@ class PartitionRun:
         self.active = set()
         self.stopped = False
         self.schemas = {}
+        self.attempt_states = {}
+        self.persisted = {}
         self.saved = {}
         self.root = execution.run
         self.selection = self.root.get("partition_selection", {"mode": "all"})
@@ -46,8 +48,7 @@ class PartitionRun:
         self.required = {
             (e["source"], e["sourceHandle"])
             for e in execution.edges
-            if e["target"] in execution.order
-            and e["targetHandle"] in execution.nodes[e["target"]].get("partition_collect_inputs", [])
+            if e["targetHandle"] in execution.nodes[e["target"]].get("partition_collect_inputs", [])
         }
         self.root["partitions"] = {
             "dimension": self.dimension,
@@ -95,7 +96,7 @@ class PartitionRun:
         self.root["partitions"].update(
             manifest=self.manifest["id"], total=len(self.entries), phase="consumers", source=source
         )
-        execution.fingerprints = self.runner.fingerprints.of(
+        execution.fingerprints, self.key_fingerprints = self.runner.fingerprints.batch(
             execution.bundle,
             execution.context.environment,
             execution.captured,
@@ -130,7 +131,9 @@ class PartitionRun:
             else:
                 included = any(
                     not r.get("success")
-                    or r.get("attempt", {}).get("status") in ("interrupted", "not_started", "canceled")
+                    or r["success"].get("fingerprint") != self.key_fingerprints[entry["key_hash"]].get(k)
+                    or r.get("attempt", {}).get("status")
+                    in ("failed", "blocked", "interrupted", "not_started", "canceled")
                     or any(
                         not self.storage.available(r["success"].get("artifacts", {}).get(port))
                         for node, port in self.required
@@ -146,6 +149,8 @@ class PartitionRun:
         """Resolve all file destinations against the whole manifest before any export."""
         execution = self.execution
         destinations = {}
+        if not any(execution.nodes[k]["parsed"]["kind"] == "export" for k in self.partitioned):
+            return
         for entry in self.entries:
             nodes, _, _ = expand_for(
                 execution.bundle, execution.context.environment, computed=execution.values, partition=entry
@@ -206,7 +211,7 @@ class PartitionRun:
             for e in execution.edges
             if e["source"] in owners and e["target"] in owners and owners[e["source"]] != owners[e["target"]]
         ]
-        return [groups[k] for k in topological(groups, edges)]
+        return [groups[k] for k in topological({k: {} for k in groups}, edges, tolerant=True)]
 
     def execute(self):
         execution = self.execution
@@ -219,14 +224,6 @@ class PartitionRun:
             self.runner._execute_nodes(
                 execution, [k for k in execution.order if k not in execution.value_phase]
             )
-            return
-        if not self.selected and self.entries:
-            self.root["partitions"].update(phase="finished", reason="No partitions match the selection")
-            for key in execution.order:
-                if key not in execution.value_phase:
-                    self.root["nodes"][key].update(
-                        status="success", skipped=True, reason="Empty partition selection"
-                    )
             return
         # Inputs used only by empty zones need schema binding, never data evaluation.
         terminals = set(execution.order) - {e["source"] for e in execution.edges}
@@ -255,6 +252,9 @@ class PartitionRun:
                     self.runner._execute_nodes(execution, unit)
                 except Problem as error:
                     self.root["nodes"][key].update(status="blocked", error=str(error))
+                    with execution.context.lock:
+                        execution.context.errors[key] = str(error)
+                        execution.context.result_runs[key] = self.root["id"]
                 finally:
                     execution.schema_only = False
         self.summarize()
@@ -311,6 +311,7 @@ class PartitionRun:
                     "kind": self.execution.nodes[key]["parsed"]["kind"],
                     "run": self.root["id"],
                 }
+                self.attempt_states.setdefault(entry["partition_id"], {})[key] = state["status"]
                 self.storage.attempt(self.root["id"], entry["partition_id"], key, state)
                 self.storage.record(key, entry, state)
 
@@ -335,10 +336,12 @@ class PartitionRun:
             for key in unit:
                 try:
                     self.collect_inputs(execution, key)
-                    old = self.storage.result(key, entry["key_hash"]).get("success", {})
+                    result = self.storage.result(key, entry["key_hash"])
+                    old = result.get("success", {})
                     if (
                         self.selection["mode"] != "all"
                         and execution.nodes[key]["parsed"]["kind"] == "export"
+                        and result.get("attempt", {}).get("status") == "success"
                         and old.get("fingerprint") == execution.fingerprints[key]
                     ):
                         execution.run["nodes"][key] = {
@@ -396,14 +399,15 @@ class PartitionRun:
         nodes, _, _ = expand_for(
             execution.bundle, execution.context.environment, computed=execution.values, partition=entry
         )
-        fingerprints = self.runner.fingerprints.of(
-            execution.bundle,
-            execution.context.environment,
-            execution.captured,
-            execution.values,
-            partition=entry,
-            manifest=self.entries,
-        )
+        fingerprints = self.key_fingerprints.get(partitions.identity(entry["key"]))
+        if fingerprints is None:  # Schema binding for an empty manifest.
+            fingerprints = self.runner.fingerprints.of(
+                execution.bundle,
+                execution.context.environment,
+                execution.captured,
+                execution.values,
+                partition=entry,
+            )
         states = {
             **execution.run["nodes"],
             **{
@@ -435,11 +439,21 @@ class PartitionRun:
         )
 
     def persist(self, run):
-        for key in run["partition_nodes"]:
-            state = run["nodes"][key]
-            state["run"] = run["id"]
-            if state["status"] != "pending":
+        with self.lock, self.storage.store.transaction():
+            for key in run["partition_nodes"]:
+                state = run["nodes"][key]
+                state["run"] = run["id"]
+                if state["status"] == "pending":
+                    continue
+                identity = (run["partition_attempt"], key)
+                signature = digest(state)
+                if self.persisted.get(identity) == signature:
+                    continue
                 self.storage.attempt(run["id"], run["partition_attempt"], key, self.safe(state))
+                self.persisted[identity] = signature
+                if state.get("error"):
+                    self.root["nodes"][key]["error"] = state["error"]
+                self.attempt_states.setdefault(run["partition_attempt"], {})[key] = state["status"]
 
     def safe(self, value):
         if isinstance(value, str):
@@ -451,16 +465,13 @@ class PartitionRun:
         return value
 
     def publish(self, execution, key, staged) -> dict[str, Dataset]:
-        with self.lock:
-            return self._publish(execution, key, staged)
-
-    def _publish(self, execution, key, staged) -> dict[str, Dataset]:
         entry = execution.partition
         saved = {}
         preview = self.dimension["preview"]
         keep = preview["keep"] != "none"
         for port, data in staged.items():
-            previous = self.schemas.setdefault((key, port), data.columns)
+            with self.lock:
+                previous = self.schemas.setdefault((key, port), data.columns)
             if previous != data.columns:
                 raise Problem(f"partition_schema: {key}.{port} changes columns or types between keys")
             data.partition = copy.deepcopy(entry)
@@ -506,7 +517,8 @@ class PartitionRun:
                     execution.run["nodes"][key]["preview_reason"] = (
                         "Preview not retained: storage unavailable"
                     )
-        self.saved[entry["partition_id"], key] = saved
+        with self.lock:
+            self.saved[entry["partition_id"], key] = saved
         execution.published[key] = staged
         with execution.context.lock:
             execution.context.datasets.update({d.id: d for d in staged.values()})
@@ -532,14 +544,7 @@ class PartitionRun:
             for entry in self.entries:
                 record = self.storage.result(source, entry["key_hash"])
                 result = record.get("success", {})
-                fingerprint = self.runner.fingerprints.of(
-                    execution.bundle,
-                    execution.context.environment,
-                    execution.captured,
-                    execution.values,
-                    partition=entry,
-                    manifest=self.entries,
-                ).get(source)
+                fingerprint = self.key_fingerprints[partitions.identity(entry["key"])].get(source)
                 artifact = result.get("artifacts", {}).get(port)
                 if (
                     record.get("attempt", {}).get("status") in ("failed", "blocked")
@@ -598,8 +603,8 @@ class PartitionRun:
         summary = self.root["partitions"]
         completed = failed = not_started = 0
         for entry in self.selected:
-            attempts = self.storage.attempts(self.root["id"], entry["partition_id"])
-            states = [attempts.get(k, {}).get("status", "not_started") for k in self.partitioned]
+            attempts = self.attempt_states.get(entry["partition_id"], {})
+            states = [attempts.get(k, "not_started") for k in self.partitioned]
             if all(s == "success" for s in states):
                 completed += 1
             elif any(s in ("failed", "blocked", "canceled", "interrupted") for s in states):
@@ -613,9 +618,7 @@ class PartitionRun:
             summary["phase"] = "finished"
             for key in self.partitioned:
                 states = [
-                    self.storage.attempts(self.root["id"], e["partition_id"])
-                    .get(key, {})
-                    .get("status", "not_started")
+                    self.attempt_states.get(e["partition_id"], {}).get(key, "not_started")
                     for e in self.selected
                 ]
                 self.root["nodes"][key]["status"] = (
@@ -625,6 +628,11 @@ class PartitionRun:
                     if "failed" in states
                     else "blocked"
                 )
+            with self.execution.context.lock:
+                for key in self.partitioned:
+                    self.execution.context.result_runs[key] = self.root["id"]
+                    if self.root["nodes"][key]["status"] == "success":
+                        self.execution.context.errors.pop(key, None)
         self.runner._persist(self.root, self.execution.secrets)
 
     def prune(self):
@@ -646,4 +654,4 @@ class PartitionRun:
                     drop_dataset(self.execution.cursor, dataset)
                     del context.datasets[identity]
             pinned = {d.artifact_id for d in context.datasets.values() if d.artifact_id}
-            self.storage.prune(self.entries, self.dimension["preview"], pinned)
+            self.storage.prune(self.entries, self.dimension["preview"], pinned, self.required)

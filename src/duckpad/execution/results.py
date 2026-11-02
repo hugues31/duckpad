@@ -186,6 +186,8 @@ class Results:
                 }
                 for node, outputs in context.outputs.items()
             }
+            for node, status in context.node_status.items():
+                result.setdefault(node, {"outputs": {}, "error": None, "execution_status": status})
             for node, error in context.errors.items():
                 result.setdefault(
                     node, {"outputs": {}, "error": error, "execution_status": context.node_status.get(node)}

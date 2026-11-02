@@ -18,6 +18,7 @@ from .util import Problem, uid
 CHUNK_SIZE = 64 * 1024
 MEDIA_TYPES = {
     "csv": "text/csv",
+    "parquet": "application/vnd.apache.parquet",
     "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 }
 
@@ -68,7 +69,13 @@ class Artifacts:
         if ".." in path.parts or not any(path.is_relative_to(root) for root in roots):
             raise OSError("Export destination is outside authorized roots")
         identity = uid("artifact_")
-        destination = self.directory / identity
+        directory = (
+            self.store.paths.partition_artifacts(run["worktree"], run["environment"])
+            if spec["format"] == "parquet"
+            else self.directory
+        )
+        directory.mkdir(parents=True, exist_ok=True, mode=0o700)
+        destination = directory / identity
         try:
             with open_regular(path) as source, destination.open("xb") as output:
                 before = signature(os.fstat(source.fileno()))
@@ -101,6 +108,14 @@ class Artifacts:
             destination.unlink(missing_ok=True)
             raise
 
+    def path(self, record: Record) -> Path:
+        directory = (
+            self.store.paths.partition_artifacts(record["worktree"], record["environment"])
+            if record["media_type"] == MEDIA_TYPES["parquet"]
+            else self.directory
+        )
+        return directory / record["id"]
+
     @contextmanager
     def open(
         self, identity: str, worktree: str, environment: str, node: str, run: str
@@ -121,7 +136,7 @@ class Artifacts:
         ):
             raise Problem("Exported file is unavailable. Run the export again.", 404)
         try:
-            with open_regular(self.directory / identity) as stream:
+            with open_regular(self.path(record)) as stream:
                 if signature(os.fstat(stream.fileno())) != record["signature"]:
                     raise OSError("Artifact was replaced")
                 yield stream, record

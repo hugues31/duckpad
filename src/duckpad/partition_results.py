@@ -32,7 +32,7 @@ class PartitionResults:
         manifest = None
         if dimension:
             signature = digest({k: dimension.get(k) for k in ("type", "values", "attributes")})
-            manifest = PartitionStorage(self.engine.store.paths, worktree, environment).manifest(
+            manifest = PartitionStorage(self.engine.store, worktree, environment).manifest(
                 signature=signature
             )
         return {
@@ -57,7 +57,7 @@ class PartitionResults:
             raise Problem("An explicit partition manifest is required", 422)
         if bool(context.get("partition_id")) == (context.get("partition_mode") == "all"):
             raise Problem("Select one partition_id or partition_mode=all", 422)
-        storage = PartitionStorage(self.engine.store.paths, worktree, environment)
+        storage = PartitionStorage(self.engine.store, worktree, environment)
         manifest = storage.manifest(identity=context["manifest"])
         if manifest is None:
             raise Problem("Partition manifest does not belong to this worktree and environment", 404)
@@ -67,22 +67,24 @@ class PartitionResults:
             storage.entry(manifest["id"], context["partition_id"]) if context.get("partition_id") else None,
         )
 
-    def validity(self, worktree, environment, node, entry, result):
+    def fingerprints(self, worktree, environment):
+        bundle = self.engine.projects.snapshot(worktree, committed=True)["bundle"]
+        if not bundle:
+            return {}
+        return self.engine.fingerprints.batch(
+            bundle,
+            environment,
+            computed=self.engine.pool.computed(worktree, environment, bundle),
+            manifest=self.engine.fingerprints.manifest(worktree, environment, bundle),
+        )[1]
+
+    def validity(self, node, entry, result, fingerprints):
         if result.get("attempt", {}).get("status") in ("failed", "blocked"):
             return "failed"
         success = result.get("success")
         if not success:
             return "missing"
-        bundle = self.engine.projects.snapshot(worktree, committed=True)["bundle"]
-        if not bundle:
-            return "stale"
-        current = self.engine.fingerprints.of(
-            bundle,
-            environment,
-            computed=self.engine.pool.computed(worktree, environment, bundle),
-            partition=entry,
-            manifest=self.engine.fingerprints.manifest(worktree, environment, bundle),
-        )
+        current = fingerprints.get(partitions.identity(entry["key"]), {})
         return "valid" if success.get("fingerprint") == current.get(node) else "stale"
 
     def page(
@@ -98,16 +100,17 @@ class PartitionResults:
         search="",
         status=None,
         run=None,
+        key_hash=None,
     ):
         description = self.describe(worktree, environment)
         manifest = manifest or (description.get("manifest") or {}).get("id")
         if not manifest:
             return {**description, "entries": [], "next_cursor": None, "total": 0}
-        storage = PartitionStorage(self.engine.store.paths, worktree, environment)
+        storage = PartitionStorage(self.engine.store, worktree, environment)
         metadata = storage.manifest(identity=manifest)
         if not metadata:
             raise Problem("Partition manifest not found", 404)
-        signature = digest([manifest, node, port, search, status, run])
+        signature = digest([manifest, node, port, search, status, run, key_hash])
         offset = 0
         if cursor:
             try:
@@ -121,6 +124,7 @@ class PartitionResults:
         if run and not node:
             record = self.engine.store.get("run", run) or {}
             selected = [k for k, value in record.get("nodes", {}).items() if value.get("partitioned")]
+        fingerprints = self.fingerprints(worktree, environment)
         page, next_offset = [], offset
         limit = max(1, min(int(limit), 200))
         # Bound each database read; filters scan pages, never inline all node/key logs.
@@ -130,6 +134,8 @@ class PartitionResults:
                 break
             for entry in entries:
                 next_offset = entry["ordinal"] + 1
+                if key_hash and entry["key_hash"] != key_hash:
+                    continue
                 if (
                     search.casefold()
                     not in json.dumps(
@@ -150,7 +156,7 @@ class PartitionResults:
                     )
                     states[key] = {
                         "status": evidence.get("status", "not_started"),
-                        "validity": self.validity(worktree, environment, key, entry, result),
+                        "validity": self.validity(key, entry, result, fingerprints),
                         "preview_available": storage.available(artifact),
                         "rows": evidence.get("outputs", {}).get(port, {}).get("count"),
                         "duration": evidence.get("duration"),
@@ -205,14 +211,18 @@ class PartitionResults:
         self.authorize(worktree, node)
         storage, manifest, entry = self.selected(worktree, environment, selection)
         entries = [entry] if entry else storage.entries(manifest["id"])
+        fingerprints = self.fingerprints(worktree, environment)
         artifacts, validities = [], []
         for key in entries:
             result = storage.result(node, key["key_hash"])
             artifact = result.get("success", {}).get("artifacts", {}).get(port)
             if storage.available(artifact):
                 artifacts.append(artifact)
-                validities.append(self.validity(worktree, environment, node, key, result))
+                validities.append(self.validity(node, key, result, fingerprints))
         if entry and not artifacts:
+            attempt = storage.result(node, entry["key_hash"]).get("attempt", {})
+            if attempt.get("error"):
+                raise Problem(attempt["error"], 409)
             raise Problem(
                 "partition_not_retained: this partition's result is not retained; run this key to inspect it",
                 409,
@@ -265,7 +275,7 @@ class PartitionResults:
         }
 
     def evidence(self, worktree, environment, dataset):
-        storage = PartitionStorage(self.engine.store.paths, worktree, environment)
+        storage = PartitionStorage(self.engine.store, worktree, environment)
         return storage.attempts(dataset.run, dataset.partition["partition_id"]).get(dataset.node, {})
 
     def attempt(self, worktree, environment, node, selection):
@@ -297,7 +307,7 @@ class PartitionResults:
             return {"status": "unsupported"}
         result = storage.result(node, entry["key_hash"])
         success = result.get("success", {})
-        valid = self.validity(worktree, environment, node, entry, result)
+        valid = self.validity(node, entry, result, self.fingerprints(worktree, environment))
         if valid != "valid":
             return {"status": "not_run" if valid == "missing" else valid}
         record = self.engine.store.get("artifact", success.get("artifact", ""))

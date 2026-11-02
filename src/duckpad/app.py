@@ -947,6 +947,7 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
         search: str = "",
         status: str | None = None,
         run: str | None = None,
+        key_hash: str | None = None,
     ) -> Record:
         if run:
             record = store.get("run", run)
@@ -968,6 +969,7 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
             search=search,
             status=status,
             run=run,
+            key_hash=key_hash,
         )
 
     def partition_context(

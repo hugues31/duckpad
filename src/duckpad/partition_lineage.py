@@ -1,7 +1,5 @@
 """Occurrence origins and retained evidence, without reopening external sources."""
 
-import json
-
 import sqlglot
 
 from .partition_storage import PartitionStorage
@@ -15,7 +13,7 @@ class PartitionLineage:
         self.engine = engine
 
     def storage(self, context):
-        return PartitionStorage(self.engine.store.paths, context.worktree, context.environment)
+        return PartitionStorage(self.engine.store, context.worktree, context.environment)
 
     def restore_inputs(self, context, cursor, dataset, visited=None):
         """Rebind captured SQL to immutable generations; never substitute current inputs."""
@@ -31,12 +29,7 @@ class PartitionLineage:
                 cached = context.partition_cache.get("generation:" + identity)
                 data = context.datasets.get(cached)
                 if data is None:
-                    with storage.connect() as db:
-                        row = db.execute(
-                            "SELECT metadata FROM artifacts WHERE json_extract(metadata, '$.dataset.id')=?",
-                            [identity],
-                        ).fetchone()
-                    artifact = json.loads(row[0]) if row else None
+                    artifact = storage.artifact(dataset=identity)
                     if not storage.available(artifact):
                         missing.append(identity)
                         dependencies[table] = identity
@@ -59,12 +52,9 @@ class PartitionLineage:
         replacements = {}
         storage = self.storage(context)
         for dataset in datasets:
-            with storage.connect() as db:
-                row = db.execute(
-                    "SELECT metadata FROM artifacts WHERE id=?", [dataset.artifact_id]
-                ).fetchone()
-            if row:
-                replacements[json.loads(row[0])["dataset"]["id"]] = dataset.id
+            artifact = storage.artifact(dataset.artifact_id)
+            if artifact:
+                replacements[artifact["dataset"]["id"]] = dataset.id
             before = dict(dataset.dependencies)
             if self.restore_inputs(context, cursor, dataset):
                 raise Problem("Intermediate results not retained; run this key to inspect failing rows", 409)
@@ -130,7 +120,7 @@ class PartitionLineage:
                 contributions=[],
                 context=[],
                 context_total=0,
-                warnings=[f"Origin available; intermediate results of {key['value']} not retained"],
+                warnings=[f"Origin available; intermediate results for {key['value']} are not retained"],
                 replay={
                     "node": origin["node"],
                     "partitions": {

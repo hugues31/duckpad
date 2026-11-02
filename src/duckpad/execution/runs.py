@@ -125,7 +125,7 @@ class Runner:
                         node["external_outcome"] = "unknown"
                     node["status"] = "interrupted"
             if manifest := run.get("partitions", {}).get("manifest"):
-                storage = PartitionStorage(self.store.paths, run["worktree"], run["environment"])
+                storage = PartitionStorage(self.store, run["worktree"], run["environment"])
                 for entry in storage.entries(manifest):
                     for key, state in storage.attempts(run["id"], entry["partition_id"]).items():
                         if state["status"] in ("pending", "running"):
@@ -134,7 +134,7 @@ class Runner:
                                 state["external_outcome"] = "unknown"
                             storage.attempt(run["id"], entry["partition_id"], key, state)
                             storage.record(key, entry, state)
-                for partial in storage.data.glob("*.partial"):
+                for partial in storage.temporary.glob("partition_*.partial"):
                     partial.unlink(missing_ok=True)
             self._persist(run, [])
 
@@ -316,7 +316,7 @@ class Runner:
                 }
         dimension = partitions.definition(bundle["flow"])
         if dimension:
-            manifest = PartitionStorage(self.store.paths, worktree, environment).manifest(
+            manifest = PartitionStorage(self.store, worktree, environment).manifest(
                 signature=digest({k: dimension.get(k) for k in ("type", "values", "attributes")})
             )
             source = partitions.plan(bundle, nodes, edges, boundaries).get("source")
