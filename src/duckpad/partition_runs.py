@@ -1,7 +1,9 @@
 """Partition-major execution inside the ordinary Runner and SQL session."""
 
 import copy
+import threading
 from collections import Counter
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from dataclasses import replace
 
 from . import partitions, variables
@@ -11,6 +13,7 @@ from .components import expand_for
 from .datasets import Dataset
 from .graph import reachable
 from .materialize import drop_dataset
+from .native import Cursor as NativeCursor
 from .partition_storage import PartitionStorage
 from .templates import compile_template
 from .types import Record
@@ -27,6 +30,9 @@ class PartitionRun:
         self.dimension = self.plan["dimension"]
         self.entries = []
         self.manifest: Record | None = None
+        self.lock = threading.RLock()
+        self.active = set()
+        self.stopped = False
         self.schemas = {}
         self.saved = {}
         self.root = execution.run
@@ -89,7 +95,17 @@ class PartitionRun:
         self.root["partitions"].update(
             manifest=self.manifest["id"], total=len(self.entries), phase="consumers", source=source
         )
-        self.selected = self.select()
+        execution.fingerprints = self.runner.fingerprints.of(
+            execution.bundle,
+            execution.context.environment,
+            execution.captured,
+            execution.values,
+            manifest=self.entries,
+        )
+        for key in execution.order:
+            self.root["nodes"][key]["fingerprint"] = execution.fingerprints.get(key)
+        self.runner.fingerprints.invalidate(execution.context)
+        self.selected = self.select() if self.partitioned else []
         self.root["partitions"]["selected"] = len(self.selected)
         self.preflight()
 
@@ -108,13 +124,19 @@ class PartitionRun:
             results = {k: self.storage.result(k, entry["key_hash"]) for k in self.partitioned}
             if mode == "failed":
                 included = any(
-                    r.get("attempt", {}).get("status") in ("failed", "blocked") for r in results.values()
+                    r.get("attempt", {}).get("status") in ("failed", "blocked", "interrupted", "canceled")
+                    for r in results.values()
                 )
             else:
                 included = any(
                     not r.get("success")
-                    or any(not self.storage.available(a) for a in r["success"].get("artifacts", {}).values())
-                    for r in results.values()
+                    or r.get("attempt", {}).get("status") in ("interrupted", "not_started", "canceled")
+                    or any(
+                        not self.storage.available(r["success"].get("artifacts", {}).get(port))
+                        for node, port in self.required
+                        if node == k
+                    )
+                    for k, r in results.items()
                 )
             if included:
                 selected.append(entry)
@@ -242,27 +264,76 @@ class PartitionRun:
         if not self.entries:
             self.empty_zone(unit)
             return
-        stopped = False
-        for entry in self.selected:
-            if stopped or self.execution.canceled:
-                for key in unit:
-                    state = {
-                        "status": "canceled" if self.execution.canceled else "not_started",
-                        "kind": self.execution.nodes[key]["parsed"]["kind"],
-                    }
-                    self.storage.attempt(self.root["id"], entry["partition_id"], key, state)
-                    self.storage.record(key, entry, state)
-                continue
-            execution = self.for_entry(entry, unit)
-            self.root["partitions"].update(active=[entry["partition_id"]])
+        # All cursors belong to the same database and its scheduler, buffer manager,
+        # memory limit and spill directory. No per-key session multiplies resources.
+        threads = self.execution.cursor.execute("SELECT current_setting('threads')").fetchone()[0]
+        workers = max(1, min(self.policy.get("parallelism", 1), threads))
+        self.root["partitions"]["effective_parallelism"] = workers
+        queued = iter(self.selected)
+        pending = {}
+
+        def admit(pool):
+            if self.stopped or self.execution.canceled:
+                return False
+            entry = next(queued, None)
+            if entry is None:
+                return False
+            pending[pool.submit(self.execute_key, entry, unit)] = entry
+            return True
+
+        if workers == 1:
+            while not self.stopped and not self.execution.canceled:
+                entry = next(queued, None)
+                if entry is None:
+                    break
+                if self.execute_key(entry, unit) and self.policy.get("on_error", "stop") == "stop":
+                    self.stopped = True
+                self.summarize(finished=False)
+        else:
+            with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="partition") as pool:
+                for _ in range(workers):
+                    if not admit(pool):
+                        break
+                while pending:
+                    done, _ = wait(pending, return_when=FIRST_COMPLETED)
+                    for future in done:
+                        pending.pop(future)
+                        if future.result() and self.policy.get("on_error", "stop") == "stop":
+                            self.stopped = True
+                    self.summarize(finished=False)
+                    for _ in done:
+                        if not admit(pool):
+                            break
+        for entry in queued:
+            for key in unit:
+                state = {
+                    "status": "canceled" if self.execution.canceled else "not_started",
+                    "kind": self.execution.nodes[key]["parsed"]["kind"],
+                    "run": self.root["id"],
+                }
+                self.storage.attempt(self.root["id"], entry["partition_id"], key, state)
+                self.storage.record(key, entry, state)
+
+    def execute_key(self, entry, unit):
+        execution = self.for_entry(entry, unit)
+        owns_cursor = self.root["partitions"]["effective_parallelism"] > 1
+        if owns_cursor:
+            cursor = execution.context.db.cursor()
+            execution.cursor = cursor if self.runner.isolated else NativeCursor(cursor)
+            with self.runner.lock:
+                execution.token.setdefault("cursors", []).append(execution.cursor)
+        with self.lock:
+            self.active.add(entry["partition_id"])
+            self.root["partitions"]["active"] = sorted(self.active)
             self.runner._persist(self.root, execution.secrets)
-            remaining = Counter(
-                (e["source"], e["sourceHandle"])
-                for e in execution.edges
-                if e["source"] in unit and e["target"] in unit
-            )
-            try:
-                for key in unit:
+        remaining = Counter(
+            (e["source"], e["sourceHandle"])
+            for e in execution.edges
+            if e["source"] in unit and e["target"] in unit
+        )
+        try:
+            for key in unit:
+                try:
                     self.collect_inputs(execution, key)
                     old = self.storage.result(key, entry["key_hash"]).get("success", {})
                     if (
@@ -278,21 +349,37 @@ class PartitionRun:
                         }
                     else:
                         self.runner._execute_nodes(execution, [key])
-                    state = execution.run["nodes"][key]
+                except Problem as error:
+                    execution.run["nodes"][key].update(status="blocked", error=str(error))
+                state = execution.run["nodes"][key]
+                with self.lock:
                     saved = self.saved.pop((entry["partition_id"], key), {})
-                    state["partition_artifacts"] = {port: artifact["id"] for port, artifact in saved.items()}
-                    self.storage.record(key, entry, self.safe(state), saved)
-                    self.persist(execution.run)
-                    for edge in execution.edges:
-                        if edge["target"] == key and edge["source"] in unit:
-                            remaining[edge["source"], edge["sourceHandle"]] -= 1
+                state["partition_artifacts"] = {port: artifact["id"] for port, artifact in saved.items()}
+                state["run"] = self.root["id"]
+                self.storage.record(key, entry, self.safe(state), saved)
+                self.persist(execution.run)
+                for edge in execution.edges:
+                    if edge["target"] == key and edge["source"] in unit:
+                        remaining[edge["source"], edge["sourceHandle"]] -= 1
+                if not execution.canceled:
                     self.release(execution, unit, remaining)
-                stopped = self.policy.get("on_error", "stop") == "stop" and any(
-                    execution.run["nodes"][k]["status"] != "success" for k in unit
-                )
+            return any(execution.run["nodes"][k]["status"] != "success" for k in unit)
+        finally:
+            # Cancellation makes the active cursor permanently unusable. Cleanup uses
+            # a fresh cursor in the same session after all of this key's work stopped.
+            cleanup = execution.context.db.cursor() if execution.canceled else execution.cursor
+            try:
+                self.release(replace(execution, cursor=cleanup), unit, Counter())
             finally:
-                self.release(execution, unit, Counter())
-            self.summarize(finished=False)
+                if cleanup is not execution.cursor:
+                    cleanup.close()
+                if owns_cursor:
+                    execution.cursor.close()
+                    with self.runner.lock:
+                        execution.token["cursors"].remove(execution.cursor)
+                with self.lock:
+                    self.active.discard(entry["partition_id"])
+                    self.root["partitions"]["active"] = sorted(self.active)
 
     def for_entry(self, entry, unit):
         execution = self.execution
@@ -332,7 +419,7 @@ class PartitionRun:
             fingerprints=fingerprints,
             run=run,
             partition=entry,
-            published={**execution.published},
+            published={k: dict(v) for k, v in execution.published.items()},
             prepared=execution.prepared,
         )
 
@@ -353,12 +440,14 @@ class PartitionRun:
         return value
 
     def publish(self, execution, key, staged) -> dict[str, Dataset]:
+        with self.lock:
+            return self._publish(execution, key, staged)
+
+    def _publish(self, execution, key, staged) -> dict[str, Dataset]:
         entry = execution.partition
         saved = {}
         preview = self.dimension["preview"]
-        keep = preview["keep"] == "all" or (
-            preview["keep"] == "last" and entry in self.selected[-preview["count"] :]
-        )
+        keep = preview["keep"] != "none"
         for port, data in staged.items():
             previous = self.schemas.setdefault((key, port), data.columns)
             if previous != data.columns:
@@ -367,18 +456,30 @@ class PartitionRun:
             mandatory = (key, port) in self.required
             if mandatory or keep:
                 try:
-                    artifact = self.storage.save(
-                        execution.cursor,
-                        data,
-                        entry,
-                        mandatory,
-                        max(0, preview["max_bytes"] - self.preview_bytes),
-                        self.root["started"],
-                    )
+                    # The optional writer can be interrupted at its byte cap without
+                    # canceling the key's execution cursor or its later nodes.
+                    copy_cursor = execution.cursor if mandatory else execution.context.db.cursor()
+                    try:
+                        artifact = self.storage.save(
+                            copy_cursor, data, entry, mandatory, preview["max_bytes"], self.root["started"]
+                        )
+                    finally:
+                        if not mandatory:
+                            copy_cursor.close()
                     if artifact:
                         saved[port] = artifact
                         if not mandatory:
-                            self.preview_bytes += artifact["bytes"]
+                            with execution.context.lock:
+                                pinned = (
+                                    {
+                                        d.artifact_id
+                                        for d in execution.context.datasets.values()
+                                        if d.artifact_id
+                                    }
+                                    if execution.context.lineage
+                                    else set()
+                                )
+                            self.storage.trim_optional(preview, pinned)
                     else:
                         execution.run["nodes"][key]["preview_reason"] = "Preview not retained: size limit"
                 except Exception as error:
@@ -486,7 +587,9 @@ class PartitionRun:
                 failed += 1
             else:
                 not_started += 1
-        summary.update(completed=completed, failed=failed, not_started=not_started, active=[])
+        summary.update(
+            completed=completed, failed=failed, not_started=not_started, active=sorted(self.active)
+        )
         if finished:
             summary["phase"] = "finished"
             for key in self.partitioned:

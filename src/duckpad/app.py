@@ -894,7 +894,17 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
             "username": request.state.user["username"],
             "token_name": request.state.token_name,
         }
-        return engine.launch(worktree, data.environment, data.node, entry_point, requester=requester)
+        return engine.launch(
+            worktree,
+            data.environment,
+            data.node,
+            entry_point,
+            requester=requester,
+            partition_selection=data.partitions.model_dump(exclude_none=True) if data.partitions else None,
+            partition_execution=data.partition_execution.model_dump(exclude_none=True)
+            if data.partition_execution
+            else None,
+        )
 
     @app.get("/api/runs", response_model=None)
     def runs(request: Request, worktree: str | None = None, include_jobs: bool = False) -> list[Record]:
@@ -937,6 +947,8 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
             if record["worktree"] != worktree or record["environment"] != environment:
                 raise Problem("Run does not belong to this context", 404)
             manifest = record.get("partitions", {}).get("manifest")
+            if not manifest:
+                raise Problem("This run has no partition manifest", 404)
         return engine.partitions.page(
             worktree,
             environment,
@@ -988,13 +1000,38 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
         )
 
     @app.get("/api/worktrees/{worktree}/exports/{node}", response_model=None)
-    def export_result(worktree: str, node: str, environment: str) -> Record:
-        return engine.export_result(worktree, environment, node)
+    def export_result(
+        worktree: str,
+        node: str,
+        environment: str,
+        manifest: str | None = None,
+        partition_id: str | None = None,
+        partition_mode: str | None = None,
+    ) -> Record:
+        selection = partition_context(manifest, partition_id, partition_mode)
+        return (
+            engine.partitions.export_result(worktree, environment, node, selection)
+            if selection
+            else engine.export_result(worktree, environment, node)
+        )
 
     @app.get("/api/worktrees/{worktree}/exports/{node}/download", response_model=None)
-    def download_export(worktree: str, node: str, run: str, environment: str) -> StreamingResponse:
+    def download_export(
+        worktree: str,
+        node: str,
+        run: str,
+        environment: str,
+        manifest: str | None = None,
+        partition_id: str | None = None,
+        partition_mode: str | None = None,
+    ) -> StreamingResponse:
         opened = ExitStack()
-        stream, record = opened.enter_context(engine.open_export(worktree, environment, node, run))
+        selection = partition_context(manifest, partition_id, partition_mode)
+        stream, record = opened.enter_context(
+            engine.partitions.open_export(worktree, environment, node, run, selection)
+            if selection
+            else engine.open_export(worktree, environment, node, run)
+        )
 
         def chunks() -> Iterator[bytes]:
             try:

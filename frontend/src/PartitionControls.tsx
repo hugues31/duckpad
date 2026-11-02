@@ -1,3 +1,4 @@
+import { createPortal } from "react-dom";
 import { useState } from "react";
 import { Settings2 } from "lucide-react";
 import { withQuery } from "./api";
@@ -54,7 +55,7 @@ export function PartitionSelector() {
           </button>
         </div>
       )}
-      {editing && <DimensionEditor onClose={() => setEditing(false)} />}
+      {editing && createPortal(<DimensionEditor onClose={() => setEditing(false)} />, document.body)}
     </div>
   );
 }

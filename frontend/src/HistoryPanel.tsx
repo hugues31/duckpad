@@ -1,3 +1,4 @@
+import { PartitionHistory } from "./PartitionHistory";
 import { Link, useSearchParams } from "react-router";
 import { worktreeUrl } from "./navigation";
 import AskAssistant from "./AskAssistant";
@@ -322,6 +323,7 @@ export function RunDetails({
           />
         </section>
       )}
+      <PartitionHistory key={run.id} run={run} />
       <details className="run-step">
         <summary>{t("executionConfiguration")}</summary>
         <pre className="expression">

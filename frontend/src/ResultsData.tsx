@@ -611,6 +611,7 @@ function SamplePopover({
   onAddFilter: (condition: string) => Promise<void>;
 }) {
   const t = useT();
+  const partition = usePartitionQuery(target.node, target.port);
   const [draft, setDraft] = useState<Sample>({
     ...sample,
     rows: sample.rows,
@@ -637,6 +638,7 @@ function SamplePopover({
             environment,
             port: target.port,
             limit: 1,
+            ...partition,
             filter: checked,
           },
         ),

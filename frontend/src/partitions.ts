@@ -57,3 +57,14 @@ export interface PartitionPage extends PartitionDescription {
   total: number;
   next_cursor: string | null;
 }
+
+export interface PartitionLaunchOptions {
+  partitions?: {
+    mode: "all" | "failed" | "missing" | "selected";
+    keys?: PartitionEntry["key"][];
+  };
+  partition_execution?: {
+    parallelism?: number;
+    on_error?: "stop" | "continue";
+  };
+}

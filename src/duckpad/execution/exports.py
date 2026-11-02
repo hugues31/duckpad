@@ -143,11 +143,7 @@ class Exports:
                     self.access.connections(snapshot["worktree"]["project"], references)
                 except Problem:
                     return {**public, "status": "stale"}
-            current = self.fingerprints.of(
-                snapshot["bundle"],
-                environment,
-                computed=self.fingerprints.pool.computed(worktree, environment, snapshot["bundle"]),
-            )
+            current = self.fingerprints.current(worktree, environment)
             if current.get(node) != result["fingerprint"]:
                 return {**public, "status": "stale"}
             if result["run_status"] in ("canceled", "interrupted"):

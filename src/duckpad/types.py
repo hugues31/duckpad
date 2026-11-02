@@ -31,6 +31,7 @@ class RunToken(TypedDict):
     id: str
     cancel: threading.Event
     cursor: SQLCursor | None
+    cursors: NotRequired[list[SQLCursor]]
 
 
 class LineageRequest(TypedDict):

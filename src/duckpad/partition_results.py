@@ -12,6 +12,7 @@ if TYPE_CHECKING:
 from . import partitions
 from .components import expand
 from .datasets import Context, Dataset
+from .graph import connection_references, reachable
 from .partition_storage import PartitionStorage
 from .util import Problem, digest
 
@@ -116,6 +117,9 @@ class PartitionResults:
             except (ValueError, KeyError, TypeError) as error:
                 raise Problem("Invalid or outdated partition cursor", 422) from error
         selected = [node] if node else [k for k, n in description["nodes"].items() if n["partitioned"]]
+        if run and not node:
+            record = self.engine.store.get("run", run) or {}
+            selected = [k for k, value in record.get("nodes", {}).items() if value.get("partitioned")]
         page, next_offset = [], offset
         limit = max(1, min(int(limit), 200))
         # Bound each database read; filters scan pages, never inline all node/key logs.
@@ -178,6 +182,7 @@ class PartitionResults:
         return {
             **description,
             "manifest": metadata,
+            "dimension": metadata["dimension"],
             "entries": page,
             "total": metadata["count"],
             "next_cursor": next_cursor,
@@ -196,6 +201,7 @@ class PartitionResults:
             if selection:
                 self.selected(worktree, environment, selection)
             return None
+        self.authorize(worktree, node)
         storage, manifest, entry = self.selected(worktree, environment, selection)
         entries = [entry] if entry else storage.entries(manifest["id"])
         artifacts, validities = [], []
@@ -270,3 +276,42 @@ class PartitionResults:
         if not run:
             raise Problem("No attempt for this key", 404)
         return {**run, "nodes": {node: state}, "partition": entry}
+
+    def authorize(self, worktree, node):
+        if self.engine.access:
+            snapshot = self.engine.projects.snapshot(worktree)
+            nodes, edges, _ = expand(snapshot["bundle"], tolerant=True)
+            references = [
+                r
+                for k in reachable({node}, edges, upstream=True)
+                if k in nodes
+                for r in connection_references(nodes[k])
+            ]
+            self.engine.access.connections(snapshot["worktree"]["project"], references)
+
+    def export_result(self, worktree, environment, node, selection):
+        self.authorize(worktree, node)
+        storage, _, entry = self.selected(worktree, environment, selection)
+        if entry is None:
+            return {"status": "unsupported"}
+        result = storage.result(node, entry["key_hash"])
+        success = result.get("success", {})
+        valid = self.validity(worktree, environment, node, entry, result)
+        if valid != "valid":
+            return {"status": "not_run" if valid == "missing" else valid}
+        record = self.engine.store.get("artifact", success.get("artifact", ""))
+        if not record:
+            return {"status": "missing"}
+        with self.engine.exports.artifacts.open(record["id"], worktree, environment, node, record["run"]):
+            return {
+                "status": "available",
+                **{k: record[k] for k in ("run", "filename", "size", "media_type")},
+            }
+
+    def open_export(self, worktree, environment, node, run, selection):
+        info = self.export_result(worktree, environment, node, selection)
+        if info.get("run") != run or info["status"] != "available":
+            raise Problem("This partition export is unavailable or has changed", 409)
+        storage, _, entry = self.selected(worktree, environment, selection)
+        artifact = storage.result(node, entry["key_hash"])["success"]["artifact"]
+        return self.engine.exports.artifacts.open(artifact, worktree, environment, node, run)

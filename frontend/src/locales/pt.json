@@ -1214,5 +1214,17 @@
   "partitionCollectHint": "Este nó sai da zona particionada. Todas as chaves necessárias devem ser válidas antes da execução.",
   "partitionInvalidName": "Use letras, números e sublinhados no nome da dimensão.",
   "partitionIncomplete": "Prévia incompleta: {available} de {total} partições retidas.",
-  "partitionChooseKey": "Escolha uma partição para consultar o SQL executado e o registro."
+  "partitionChooseKey": "Escolha uma partição para consultar o SQL executado e o registro.",
+  "partitionRunOptions": "Executar com opções…",
+  "partitionSelection": "Seleção de chaves",
+  "partitionRunFailed": "Executar partições com falha",
+  "partitionRunMissing": "Executar partições ausentes",
+  "partitionRunSelected": "Chaves selecionadas",
+  "partitionFreshLaunch": "A lista de chaves será calculada ao iniciar",
+  "partitionRetainedLaunch": "A lista de chaves vem do manifesto retido neste ambiente",
+  "partitionStorageEstimate": "Última lista conhecida: {count} chaves. Tamanhos e novas chaves são desconhecidos até o início. Entradas dos coletores exigem espaço em disco; prévias têm um limite separado.",
+  "partitionExportNotice": "Exportações no escopo selecionado podem gravar externamente. Exportações bem-sucedidas são ignoradas ao repetir a mesma chave e definição. Chaves paralelas compartilham os limites de threads e memória da sessão.",
+  "partitionNotStarted": "Não iniciadas",
+  "partitionSkipped": "Ignorado",
+  "partitionDuration": "Duração"
 }

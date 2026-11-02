@@ -284,6 +284,12 @@ class Jobs:
                 job["scope"],
                 data.entry_point,
                 requester=requester,
+                partition_selection=data.partitions.model_dump(exclude_none=True)
+                if data.partitions
+                else None,
+                partition_execution=data.partition_execution.model_dump(exclude_none=True)
+                if data.partition_execution
+                else None,
                 external_trigger=external_trigger,
                 idempotency=idempotency,
                 job={

@@ -164,7 +164,7 @@ export default function ResultsPanel({
     node: fullNode,
     port: target.input ? ports[0] || "result" : target.port,
   }).node;
-  const result = statuses.nodes[producer];
+  const baseResult = statuses.nodes[producer];
   const partition = usePartitionQuery(target.node, target.port);
   const partitionPreview = useApiResource<PreviewPage>(
     partition.manifest
@@ -178,6 +178,14 @@ export default function ResultsPanel({
   const dataset = partition.manifest
     ? partitionPreview.data || undefined
     : datasetOf(target);
+  const result = partition.manifest
+    ? {
+        outputs: dataset ? { [target.port]: dataset } : {},
+        results: partitionPreview.data?.results || [],
+        error: partitionPreview.data?.error || null,
+        result_run: dataset?.run,
+      }
+    : baseResult;
   const running = computing(statuses, fullNode);
   // The run that produced the displayed rows, for the header.
   const generation = useApiResource<Run>(

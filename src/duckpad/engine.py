@@ -74,8 +74,18 @@ class Engine:
         entry_point: str = "api",
         *,
         requester: Record | None = None,
+        partition_selection: Record | None = None,
+        partition_execution: Record | None = None,
     ) -> Record:
-        return self.runs.launch(worktree, environment, target, entry_point, requester=requester)
+        return self.runs.launch(
+            worktree,
+            environment,
+            target,
+            entry_point,
+            requester=requester,
+            partition_selection=partition_selection,
+            partition_execution=partition_execution,
+        )
 
     def scope_variables(self, worktree: str, environment: str, target: str | None = None) -> Record:
         return self.runs.scope_variables(worktree, environment, target)

@@ -315,7 +315,7 @@ class Results:
             "results": state.get("results", []),
             "commit": run["commit"],
             "environment": environment,
-            "error": error,
+            "error": state.get("error") if dataset.partition else error,
         }
 
     def statistics(

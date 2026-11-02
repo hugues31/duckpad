@@ -81,6 +81,7 @@ def test_job_and_run_contract_trigger_requester_and_log(api):
     trigger = {"source": "airflow", "reference": "daily/scheduled-1"}
     run = launch(call, body={"trigger": trigger})
     assert set(run) == {
+        "partitions",
         "variables",
         "id",
         "job",
@@ -407,6 +408,7 @@ def test_openapi_only_documents_public_routes_and_error_contract(api):
         "/api/v1/runs/{run_id}",
         "/api/v1/runs/{run_id}/cancel",
         "/api/v1/runs/{run_id}/log",
+        "/api/v1/runs/{run_id}/partitions",
     }
     assert schema["security"] == [{"BearerAuth": []}, {"SessionCookie": []}]
     assert schema["paths"]["/api/v1/jobs/{slug}/runs"]["post"]["responses"]["422"]["content"][

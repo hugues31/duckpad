@@ -38,3 +38,39 @@ previews. Mandatory collector inputs use separate retention. An evicted preview
 still has run evidence; explicitly run that key when fresh inspection is needed.
 Neither Git nor project ZIPs contain manifests, selected keys or retained data.
 Each branch and environment has its own manifest and results.
+
+**Run pipeline** recalculates the list and runs every key. **Run with options…**
+offers **Failed**, **Missing** and **Selected keys**, plus a parallelism limit and
+failure policy for this run. Targeted node runs reuse the retained list; selecting
+a key before running a node limits that launch to the key. Protected environments
+confirm the source, selection and policies before admission.
+
+Parallel keys share one SQL session's thread scheduler, memory limit and spill
+directory. The effective concurrency cannot exceed its thread budget. **Stop**
+stops admitting new keys after an error and lets already active keys finish;
+**Continue** attempts the remaining keys. File destinations must be distinct
+across the whole manifest. Remote writes remain serial even with parallel keys.
+
+Retrying **Failed** recalculates the list and shared inputs, then runs the currently
+failed keys. Successful exports with the same key and computation fingerprint are
+skipped, including exports that succeeded earlier within a failed key. Unknown
+write outcomes after cancellation or a crash need care: retrying a non-idempotent
+external append can duplicate rows. A retry does not replay a past source snapshot.
+New keys are **Missing**; stale keys remain visible and need **All** or an explicit
+selection. History pages keep the original manifest, attempts and export outcomes.
+
+Jobs accept the same options through `POST /api/v1/jobs/{slug}/runs`. The body is
+part of the idempotency identity. Readers can page through
+`GET /api/v1/runs/{id}/partitions` and filter the text log by opaque `partition_id`;
+launch and retry require the existing Operator role. Read contexts use
+`manifest=<id>&partition_id=<id>` or `manifest=<id>&partition_mode=all`.
+
+```sh
+duckpad run daily-orders --partitions failed
+duckpad run daily-orders --partition-keys keys.json --partition-parallelism 2
+```
+
+`keys.json` contains a typed array such as `[{"type":"text","value":"batch-012"}]`.
+The selector flags are mutually exclusive. Existing `--job`, wait, cancellation,
+detach, authentication and terminal exit codes remain supported; partial failure
+returns exit code 2. Progress reports the phase and completed/failed key counts.

@@ -1214,5 +1214,17 @@
   "partitionCollectHint": "Ce nœud sort de la zone partitionnée. Toutes les clés requises doivent être valides avant son exécution.",
   "partitionInvalidName": "Utilisez des lettres, chiffres et tirets bas pour le nom de la dimension.",
   "partitionIncomplete": "Aperçu incomplet : {available} partitions conservées sur {total}.",
-  "partitionChooseKey": "Choisissez une partition pour consulter son SQL exécuté et son journal."
+  "partitionChooseKey": "Choisissez une partition pour consulter son SQL exécuté et son journal.",
+  "partitionRunOptions": "Exécuter avec des options…",
+  "partitionSelection": "Sélection des clés",
+  "partitionRunFailed": "Relancer les partitions en échec",
+  "partitionRunMissing": "Exécuter les partitions manquantes",
+  "partitionRunSelected": "Clés sélectionnées",
+  "partitionFreshLaunch": "La liste des clés sera calculée au lancement",
+  "partitionRetainedLaunch": "La liste des clés provient du manifeste conservé dans cet environnement",
+  "partitionStorageEstimate": "Dernière liste connue : {count} clés. Les tailles et nouvelles clés sont inconnues avant le lancement. Les entrées des collecteurs nécessitent de l’espace disque ; les aperçus ont un budget distinct.",
+  "partitionExportNotice": "Les exports du périmètre sélectionné peuvent écrire à l’extérieur. Les exports réussis sont ignorés lors d’une relance de la même clé et définition. Les clés parallèles partagent les limites de threads et mémoire de la session.",
+  "partitionNotStarted": "Non démarrées",
+  "partitionSkipped": "Ignoré",
+  "partitionDuration": "Durée"
 }

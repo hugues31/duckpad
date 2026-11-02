@@ -1214,5 +1214,17 @@
   "partitionCollectHint": "This node leaves the partitioned zone. Every required key must be valid before it runs.",
   "partitionInvalidName": "Use letters, numbers and underscores for the dimension name.",
   "partitionIncomplete": "Incomplete preview: {available} of {total} partitions retained.",
-  "partitionChooseKey": "Choose one partition to inspect its executed SQL and log."
+  "partitionChooseKey": "Choose one partition to inspect its executed SQL and log.",
+  "partitionRunOptions": "Run with options…",
+  "partitionSelection": "Key selection",
+  "partitionRunFailed": "Run failed partitions",
+  "partitionRunMissing": "Run missing partitions",
+  "partitionRunSelected": "Selected keys",
+  "partitionFreshLaunch": "The key list will be calculated at launch",
+  "partitionRetainedLaunch": "The key list comes from this environment’s retained manifest",
+  "partitionStorageEstimate": "Last known list: {count} keys. Input sizes and new keys are unknown until launch. Collector inputs require disk space; preview retention has a separate cap.",
+  "partitionExportNotice": "Exports in the selected scope may write externally. Successful exports are skipped when retrying the same key and definition. Parallel keys share the session’s thread and memory limits.",
+  "partitionNotStarted": "Not started",
+  "partitionSkipped": "Skipped",
+  "partitionDuration": "Duration"
 }

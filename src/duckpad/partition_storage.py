@@ -140,6 +140,23 @@ class PartitionStorage:
         path = self.data / (identity + ".parquet")
         temporary = self.data / (identity + ".partial")
         ordinal = uid("__dp_order_")
+        finished, exceeded = threading.Event(), threading.Event()
+
+        def bound_write():
+            while not finished.wait(0.01):
+                try:
+                    if temporary.stat().st_size > budget:
+                        exceeded.set()
+                        cursor.interrupt()
+                        return
+                except FileNotFoundError:
+                    pass
+
+        monitor = (
+            threading.Thread(target=bound_write, name="partition-preview-cap") if not mandatory else None
+        )
+        if monitor:
+            monitor.start()
         try:
             cursor.execute(
                 f"COPY (SELECT rowid AS {qi(ordinal)}, * FROM {qi(dataset.storage)} ORDER BY rowid) TO {literal(str(temporary))} (FORMAT PARQUET)"
@@ -166,8 +183,13 @@ class PartitionStorage:
             return metadata
         except Exception:
             path.unlink(missing_ok=True)
+            if exceeded.is_set():
+                return None
             raise
         finally:
+            finished.set()
+            if monitor:
+                monitor.join()
             temporary.unlink(missing_ok=True)
 
     def artifact(self, identity):
@@ -268,6 +290,35 @@ class PartitionStorage:
         projection = ", ".join(f"{qi(data.stored(c['name']))} AS {qi(c['name'])}" for c in columns)
         cursor.execute(f"CREATE VIEW {qi(data.table)} AS SELECT {projection} FROM {qi(data.storage)}")
         return data, inputs
+
+    def trim_optional(self, preview, pinned):
+        """Retain the most recent successful output keys within one global byte cap."""
+        with self.lock, self.connect() as db:
+            rows = [
+                json.loads(row[0]) for row in db.execute("SELECT metadata FROM artifacts WHERE mandatory=0")
+            ]
+            rows.sort(
+                key=lambda a: (a["retention_run"], a["partition"]["ordinal"], a["dataset"]["created"]),
+                reverse=True,
+            )
+            used = sum(a["bytes"] for a in rows if a["id"] in pinned)
+            counts, seen = {}, set()
+            for artifact in rows:
+                output = (artifact["dataset"]["node"], artifact["dataset"]["port"])
+                key = (*output, artifact["partition"]["key_hash"])
+                keep = key not in seen and (
+                    preview["keep"] == "all" or counts.get(output, 0) < preview.get("count", 1)
+                )
+                seen.add(key)
+                if artifact["id"] in pinned:
+                    counts[output] = counts.get(output, 0) + 1
+                    continue
+                if keep and used + artifact["bytes"] <= preview["max_bytes"]:
+                    used += artifact["bytes"]
+                    counts[output] = counts.get(output, 0) + 1
+                else:
+                    (self.data / (artifact["id"] + ".parquet")).unlink(missing_ok=True)
+                    db.execute("DELETE FROM artifacts WHERE id=?", [artifact["id"]])
 
     def prune(self, entries, preview, pinned):
         """Evict optional generations by run/ordinal; mandatory live inputs are never budgeted."""

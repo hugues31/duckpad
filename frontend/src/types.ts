@@ -343,6 +343,7 @@ export interface TestExecution {
 }
 /** What a run did with one node. */
 export interface NodeRun {
+  partitioned?: boolean;
   results?: ExecutionResult[];
   status: NodeRunStatus;
   label: string;
@@ -366,6 +367,17 @@ export interface NodeRun {
   references?: Record<string, string[]>;
 }
 export interface Run {
+  partitions?: {
+    manifest?: string;
+    total: number;
+    selected: number;
+    completed: number;
+    failed: number;
+    not_started: number;
+    active?: string[];
+    phase: string;
+    execution: { parallelism: number; on_error: string };
+  };
   phase?: "values" | "consumers";
   job?: {
     slug: string;

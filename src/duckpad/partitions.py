@@ -487,3 +487,47 @@ def extract(cursor, dataset, dimension, source, run):
             }
         )
     return entries, columns
+
+
+def launch_options(dimension, selection=None, execution=None):
+    """Validate the same typed options for embedded, browser and automation launches."""
+    if selection is None and execution is None:
+        return {}, {}
+    if dimension is None:
+        raise Problem("partition_selection: partition options require a partitioned flow", 422)
+    selection = selection if selection is not None else {"mode": "all"}
+    execution = execution if execution is not None else {}
+    if (
+        not isinstance(selection, dict)
+        or selection.keys() - {"mode", "keys"}
+        or selection.get("mode") not in ("all", "selected", "failed", "missing")
+    ):
+        raise Problem("partition_selection: unknown partition selector", 422)
+    if (selection["mode"] == "selected") != ("keys" in selection):
+        raise Problem("partition_selection: only selected mode requires keys", 422)
+    seen = set()
+    if "keys" in selection:
+        if not isinstance(selection["keys"], list):
+            raise Problem("partition_selection: keys must be a typed array", 422)
+        for key in selection["keys"]:
+            if not isinstance(key, dict) or set(key) != {"type", "value"} or key["type"] != dimension["type"]:
+                raise Problem("partition_selection: selected key type differs from the dimension", 422)
+            kind, value = key["type"], key["value"]
+            expected = {"text": (str,), "date": (str,), "boolean": (bool,), "number": (int, float)}[kind]
+            if type(value) not in expected:
+                raise Problem("partition_selection: incompatible typed key", 422)
+            sql_type = {"text": "VARCHAR", "date": "VARCHAR", "boolean": "BOOLEAN", "number": "DOUBLE"}[kind]
+            canonical(kind, sql_type, value)
+            identity_value = identity(key)
+            if identity_value in seen:
+                raise Problem("partition_selection: duplicate selected key", 422)
+            seen.add(identity_value)
+    if not isinstance(execution, dict) or execution.keys() - {"parallelism", "on_error"}:
+        raise Problem("partition_execution: unknown execution setting", 422)
+    if "parallelism" in execution and (
+        type(execution["parallelism"]) is not int or execution["parallelism"] < 1
+    ):
+        raise Problem("partition_execution: parallelism must be a positive integer", 422)
+    if "on_error" in execution and execution["on_error"] not in ("stop", "continue"):
+        raise Problem("partition_execution: on_error must be stop or continue", 422)
+    return copy.deepcopy(selection), copy.deepcopy(execution)

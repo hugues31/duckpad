@@ -98,7 +98,8 @@ def parser():
         epilog="Exit codes: 0 success, 1 failed, 2 partial failure, 3 canceled or interrupted, "
         "4 Job already running, 5 request refused, 6 timeout, 7 server unreachable.",
     )
-    parser.add_argument("--job", required=True, metavar="SLUG", help="Job to launch")
+    parser.add_argument("job_name", nargs="?", metavar="JOB", help="Job to launch")
+    parser.add_argument("--job", metavar="SLUG", help="Job to launch (alternative to JOB)")
     parser.add_argument(
         "--server",
         help=f"Duckpad URL (default: DUCKPAD_SERVER, otherwise the local instance at {LOCAL_SERVER})",
@@ -121,6 +122,19 @@ def parser():
     parser.add_argument(
         "--idempotency-key",
         help="Launch key: retrying with the same key returns the same run (default: one per invocation)",
+    )
+    selection = parser.add_mutually_exclusive_group()
+    selection.add_argument(
+        "--partitions", choices=("all", "failed", "missing"), help="Keys to run (default: all)"
+    )
+    selection.add_argument(
+        "--partition-keys", type=Path, metavar="FILE", help="JSON array of typed partition keys"
+    )
+    parser.add_argument(
+        "--partition-parallelism", type=int, help="Maximum concurrent keys within the SQL session budget"
+    )
+    parser.add_argument(
+        "--partition-on-error", choices=("stop", "continue"), help="Override the partition failure policy"
     )
     return parser
 
@@ -193,6 +207,10 @@ def progress(run):
         for status in ("running", "failed", "blocked", "canceled", "interrupted")
         if nodes.get(status)
     ]
+    if partitions := run.get("partitions"):
+        counts.append(
+            f"{partitions['phase']}: {partitions['completed']}/{partitions['selected']} partitions complete, {partitions['failed']} failed"
+        )
     return f"{run['status']}: " + ", ".join(counts)
 
 
@@ -232,11 +250,29 @@ def launch(args, server, token):
     trigger = {"source": args.source}
     if args.reference is not None:
         trigger["reference"] = args.reference
+    body = {"trigger": trigger}
+    if args.partitions:
+        body["partitions"] = {"mode": args.partitions}
+    elif args.partition_keys:
+        try:
+            keys = json.loads(args.partition_keys.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as error:
+            raise Exit(REFUSED, f"Cannot read partition keys: {error}") from error
+        if not isinstance(keys, list):
+            raise Exit(REFUSED, "Partition keys must be a typed JSON array")
+        body["partitions"] = {"mode": "selected", "keys": keys}
+    policy = {
+        key: value
+        for key, value in (("parallelism", args.partition_parallelism), ("on_error", args.partition_on_error))
+        if value is not None
+    }
+    if policy:
+        body["partition_execution"] = policy
     try:
         run = api.call(
             "POST",
             f"/jobs/{urllib.parse.quote(args.job, safe='')}/runs",
-            {"trigger": trigger},
+            body,
             {"Idempotency-Key": key},
         )
     except Stop as signal_name:
@@ -283,7 +319,11 @@ def interrupt(signum, frame):
 
 
 def main(argv=None):
-    args = parser().parse_args(argv)
+    arguments = parser()
+    args = arguments.parse_args(argv)
+    if bool(args.job) == bool(args.job_name):
+        arguments.error("Provide one Job, as JOB or --job SLUG")
+    args.job = args.job or args.job_name
     server = (args.server or os.environ.get("DUCKPAD_SERVER") or LOCAL_SERVER).rstrip("/")
     location = urllib.parse.urlsplit(server)
     if location.scheme not in ("http", "https") or not location.hostname:

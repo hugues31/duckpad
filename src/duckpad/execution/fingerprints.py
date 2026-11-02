@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import logging
 
-from .. import project_extensions, variables
+from .. import partitions, project_extensions, variables
 from ..bundle import topological
 from ..catalog import Catalog
 from ..components import expand_for
 from ..datasets import Context
 from ..graph import connection_references
+from ..partition_storage import PartitionStorage
 from ..projects import Projects
 from ..templates import executable_sql
 from ..types import Connections, Record
@@ -30,10 +31,16 @@ class Fingerprints:
         captured: Connections | None = None,
         computed: Record | None = None,
         partition: Record | None = None,
+        manifest: list[Record] | None = None,
     ) -> dict[str, str]:
         """Fingerprint every node of a bundle from its SQL, parameters, connections and inputs."""
         # Resolved values make renames, descriptions and promoted literals transparent.
         nodes, edges, _ = expand_for(bundle, environment, computed=computed, partition=partition)
+        per_key = (
+            [(entry, self.of(bundle, environment, captured, computed, partition=entry)) for entry in manifest]
+            if manifest is not None
+            else []
+        )
         fingerprints: dict[str, str] = {}
         for key in topological(nodes, edges, tolerant=True):
             node = nodes[key]
@@ -79,6 +86,24 @@ class Fingerprints:
                         if node.get("partitioned") or node.get("partition_collect_inputs")
                         else {}
                     ),
+                    **(
+                        {
+                            "manifest": [
+                                (
+                                    entry["key_hash"],
+                                    [
+                                        (e["targetHandle"], values.get(e["source"]))
+                                        for e in edges
+                                        if e["target"] == key
+                                        and e["targetHandle"] in node.get("partition_collect_inputs", [])
+                                    ],
+                                )
+                                for entry, values in per_key
+                            ]
+                        }
+                        if node.get("partition_collect_inputs") and manifest is not None
+                        else {}
+                    ),
                     "inputs": [
                         (
                             e["targetHandle"],
@@ -93,6 +118,18 @@ class Fingerprints:
             )
         return fingerprints
 
+    def manifest(self, worktree: str, environment: str, bundle: Record) -> list[Record] | None:
+        try:
+            dimension = partitions.definition(bundle["flow"])
+        except Problem:
+            return None
+        if not dimension:
+            return None
+        signature = digest({k: dimension.get(k) for k in ("type", "values", "attributes")})
+        storage = PartitionStorage(self.projects.store.paths, worktree, environment)
+        metadata = storage.manifest(signature=signature)
+        return storage.entries(metadata["id"]) if metadata else None
+
     def current(self, worktree: str, environment: str) -> dict[str, str]:
         """Fingerprints of the committed files, or none when they cannot be expanded."""
         snapshot = self.projects.snapshot(worktree, committed=True)
@@ -103,6 +140,7 @@ class Fingerprints:
                 snapshot["bundle"],
                 environment,
                 computed=self.pool.computed(worktree, environment, snapshot["bundle"]),
+                manifest=self.manifest(worktree, environment, snapshot["bundle"]),
             )
         except Exception:
             # Unreadable definitions invalidate every result rather than blocking the caller.
@@ -121,7 +159,12 @@ class Fingerprints:
             self.pool.mark_stale(context, {})
             return
         computed = self.pool.computed(context.worktree, context.environment, bundle)
-        current = self.of(bundle, context.environment, computed=computed)
+        current = self.of(
+            bundle,
+            context.environment,
+            computed=computed,
+            manifest=self.manifest(context.worktree, context.environment, bundle),
+        )
         previous: dict[str, dict[str, str]] = {}
         with context.lock:
             recover = []

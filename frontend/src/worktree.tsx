@@ -6,7 +6,11 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import type { PartitionContext, PartitionEntry } from "./partitions";
+import type {
+  PartitionContext,
+  PartitionEntry,
+  PartitionLaunchOptions,
+} from "./partitions";
 import { api, errorDetail, send } from "./api";
 import { outputSource } from "./graph";
 import { useT } from "./i18n";
@@ -47,9 +51,13 @@ export interface Worktree {
     base: Snapshot,
   ) => Promise<Snapshot>;
   /** Run the pipeline or a node, asking first when the environment requires it. */
-  run: (node?: string) => Promise<void>;
+  run: (node?: string, options?: PartitionLaunchOptions) => Promise<void>;
   /** Run after the user confirmed it for this environment. */
-  runConfirmed: (environment: string, node?: string) => Promise<void>;
+  runConfirmed: (
+    environment: string,
+    node?: string,
+    options?: PartitionLaunchOptions,
+  ) => Promise<void>;
   stop: () => Promise<void>;
   /** Reload what a Git operation may have changed. */
   gitChanged: () => Promise<void>;
@@ -164,12 +172,17 @@ export function WorktreeProvider({
     }
   }
 
-  async function launch(environment: string, node?: string, confirmed = false) {
+  async function launch(
+    environment: string,
+    node?: string,
+    confirmed = false,
+    options?: PartitionLaunchOptions,
+  ) {
     setStarting(true);
     try {
       const run = await api<Run>(
         `/worktrees/${id}/runs`,
-        send({ environment, node, entry_point: "ui", confirmed }),
+        send({ environment, node, entry_point: "ui", confirmed, ...options }),
       );
       setActive(id, run);
     } finally {
@@ -177,9 +190,14 @@ export function WorktreeProvider({
     }
   }
 
-  const confirmRun = (settings: Environment, node?: string) =>
+  const confirmRun = (
+    settings: Environment,
+    node?: string,
+    options?: PartitionLaunchOptions,
+  ) =>
     openModal({
       kind: "runConfirmation",
+      options,
       worktree: id,
       environment: settings,
       node,
@@ -216,22 +234,36 @@ export function WorktreeProvider({
       return write(base, { bundle });
     },
     saveFiles: (files, base) => write(base, { files }),
-    run: async (node) => {
+    run: async (node, options) => {
+      if (node && !options && partitionEntry)
+        options = {
+          partitions: {
+            mode: "selected",
+            keys: [
+              {
+                type: partitionEntry.key.type,
+                value: partitionEntry.key.value,
+              },
+            ],
+          },
+        };
       if (!canEdit || starting) return;
       const settings = workspace?.catalog.environment_details.find(
         (item) => item.id === environment,
       );
-      if (settings?.confirm_before_run) return confirmRun(settings, node);
+      if (settings?.confirm_before_run)
+        return confirmRun(settings, node, options);
       try {
-        await launch(environment, node);
+        await launch(environment, node, false, options);
       } catch (e) {
         const required = errorDetail(e).confirmation_required as
           Environment | undefined;
-        if (required) confirmRun(required, node);
+        if (required) confirmRun(required, node, options);
         else notify((e as Error).message, true);
       }
     },
-    runConfirmed: (environment, node) => launch(environment, node, true),
+    runConfirmed: (environment, node, options) =>
+      launch(environment, node, true, options),
     stop: async () => {
       if (!statuses.active) return;
       try {

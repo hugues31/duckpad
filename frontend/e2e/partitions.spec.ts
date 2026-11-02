@@ -6,6 +6,7 @@ import { partitionFlow } from "./partitions-flow";
 test("inspect retained keys, unavailable previews and global collectors without executing", async ({
   page,
 }) => {
+  page.on("pageerror", (error) => { throw error; });
   await signIn(page);
   const created = await (
     await page.request.post("/api/projects", {
@@ -67,4 +68,29 @@ test("inspect retained keys, unavailable previews and global collectors without 
   await page.goto(`/worktrees/${created.id}/flow?environment=dev&node=collect`);
   await expect(panel).toContainText("All partitions");
   await expect(panel.locator(".data-table tbody tr")).toHaveCount(3);
+  await page
+    .getByRole("button", { name: "Run with options…", exact: true })
+    .click();
+  const options = page.getByRole("dialog", {
+    name: "Run with options…",
+    exact: true,
+  });
+  await options.getByLabel("Key selection").selectOption("selected");
+  await options.getByRole("checkbox", { name: "b", exact: true }).check();
+  await options.getByLabel("Parallel partitions").fill("2");
+  const launching = page.waitForResponse(response => response.url().endsWith("/runs") && response.request().method() === "POST");
+  await options.getByRole("button", {name: "Run pipeline", exact: true}).click();
+  const launched = await (await launching).json();
+  await expect.poll(async () => (await (await page.request.get(`/api/runs/${launched.id}`)).json()).status).toBe("success");
+  const latest = await (await page.request.get(`/api/runs/${launched.id}`)).json();
+  expect(latest.partition_selection.keys).toEqual([
+    { type: "text", value: "b" },
+  ]);
+  expect(latest.partitions.selected).toBe(1);
+  await page.goto(
+    `/worktrees/${created.id}/history?environment=dev&run=${latest.id}`,
+  );
+  await expect(
+    page.getByRole("region", { name: "Partitions", exact: true }),
+  ).toContainText("1/1");
 });

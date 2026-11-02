@@ -100,7 +100,36 @@ class JobPromotion(BaseModel):
     commit: str
 
 
-class JobLaunch(BaseModel):
+class PartitionKey(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    type: Literal["text", "number", "date", "boolean"]
+    value: str | int | float | bool
+
+
+class PartitionSelection(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    mode: Literal["all", "failed", "missing", "selected"]
+    keys: list[PartitionKey] | None = None
+
+    @model_validator(mode="after")
+    def selection_keys(self):
+        if (self.mode == "selected") != (self.keys is not None):
+            raise ValueError("Only selected mode requires a typed key array")
+        return self
+
+
+class PartitionExecution(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    parallelism: StrictInt | None = Field(default=None, ge=1)
+    on_error: Literal["stop", "continue"] | None = None
+
+
+class PartitionLaunch(BaseModel):
+    partitions: PartitionSelection | None = None
+    partition_execution: PartitionExecution | None = None
+
+
+class JobLaunch(PartitionLaunch):
     model_config = ConfigDict(extra="forbid")
     entry_point: Literal["ui", "api"] = "api"
     confirmed: StrictBool = False
@@ -253,7 +282,7 @@ class Import(BaseModel):
     id: str
 
 
-class Launch(BaseModel):
+class Launch(PartitionLaunch):
     environment: str
     node: str | None = None
     entry_point: str | None = None

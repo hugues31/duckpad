@@ -1,3 +1,4 @@
+import { PartitionRunMenu } from "./PartitionRunMenu";
 import { PartitionSelector } from "./PartitionControls";
 import { Link } from "react-router";
 import {
@@ -107,6 +108,13 @@ export function FlowToolbar({ tab }: { tab: WorkspaceTab }) {
             {t("merge")}
           </button>
         )}
+        {active?.partitions && (
+          <span role="status">
+            {active.partitions.completed}/{active.partitions.selected}{" "}
+            {t("partitions")} · {active.partitions.failed} {t("failed")}
+          </span>
+        )}
+        {!active && <PartitionRunMenu />}
         {active?.phase && (
           <span role="status" className="muted small">
             {active.phase === "values"

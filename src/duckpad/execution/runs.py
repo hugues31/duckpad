@@ -27,11 +27,12 @@ from ..materialize import (
 )
 from ..native import Cursor as NativeCursor
 from ..partition_runs import PartitionRun
+from ..partition_storage import PartitionStorage
 from ..projects import Projects
 from ..store import Store
 from ..templates import base_type, compile_template
 from ..types import Connections, Record, RunToken, SQLCursor
-from ..util import Problem, now, qi, uid
+from ..util import Problem, digest, now, qi, uid
 from .contexts import ContextPool, cancel_lineage, interrupt, wait_for_readers
 from .exports import Exports
 from .fingerprints import Fingerprints
@@ -123,6 +124,18 @@ class Runner:
                     if node["status"] == "running" and node.get("kind") == "export":
                         node["external_outcome"] = "unknown"
                     node["status"] = "interrupted"
+            if manifest := run.get("partitions", {}).get("manifest"):
+                storage = PartitionStorage(self.store.paths, run["worktree"], run["environment"])
+                for entry in storage.entries(manifest):
+                    for key, state in storage.attempts(run["id"], entry["partition_id"]).items():
+                        if state["status"] in ("pending", "running"):
+                            state["status"] = "interrupted"
+                            if state.get("kind") == "export":
+                                state["external_outcome"] = "unknown"
+                            storage.attempt(run["id"], entry["partition_id"], key, state)
+                            storage.record(key, entry, state)
+                for partial in storage.data.glob("*.partial"):
+                    partial.unlink(missing_ok=True)
             self._persist(run, [])
 
     def launch(
@@ -136,6 +149,8 @@ class Runner:
         job: Record | None = None,
         external_trigger: Record | None = None,
         idempotency: Record | None = None,
+        partition_selection: Record | None = None,
+        partition_execution: Record | None = None,
     ) -> Record:
         record = self.projects.get(worktree)
         if record.get("read_only") and job is None:
@@ -144,6 +159,13 @@ class Runner:
         self._admit(worktree, environment, token)
         try:
             execution = self._prepare(token, worktree, environment, target, entry_point)
+            selection, policy = partitions.launch_options(
+                execution.partition_plan.get("dimension"), partition_selection, partition_execution
+            )
+            if selection:
+                execution.run["partition_selection"] = selection
+            if policy:
+                execution.run["partition_execution"] = policy
             execution.run["requester"] = copy.deepcopy(requester)
             if job is not None:
                 execution.run.update(trigger="job", job=copy.deepcopy(job), tag=job.get("tag"))
@@ -292,6 +314,22 @@ class Runner:
                     "state": "pending",
                     "resolution": "calculated",
                 }
+        dimension = partitions.definition(bundle["flow"])
+        if dimension:
+            manifest = PartitionStorage(self.store.paths, worktree, environment).manifest(
+                signature=digest({k: dimension.get(k) for k in ("type", "values", "attributes")})
+            )
+            source = partitions.plan(bundle, nodes, edges, boundaries).get("source")
+            pending = bool(source and source["node"] in scope)
+            result["$partition"] = {
+                "type": dimension["type"],
+                "from": source.get("from") if source else dimension["values"],
+                "source": "node",
+                "state": "pending" if pending else "ready" if manifest else "unavailable",
+                "resolution": "calculated" if pending else "retained",
+                "manifest": manifest["id"] if manifest else None,
+                "count": manifest["count"] if manifest else None,
+            }
         return result
 
     def _check_conflicts(self, conflicts: list[Record], scope: set[str], environment: str) -> None:
@@ -340,8 +378,8 @@ class Runner:
             if not token or token["id"] != run_id:
                 return cast(Record, self.store.get("run", run_id))
             token["cancel"].set()
-            cursor = token["cursor"]
-        if cursor:
+            cursors = [*token.get("cursors", []), *([token["cursor"]] if token["cursor"] else [])]
+        for cursor in cursors:
             interrupt(cursor)
         # The run's later writes keep this status; its final write replaces it.
         with self.store.transaction():
@@ -411,8 +449,9 @@ class Runner:
             if execution.value_phase:
                 run["phase"] = "consumers"
             self._persist(run, secrets)
-            if execution.partition_plan.get("dimension") or any(
-                n.get("partitioned") for n in execution.nodes.values()
+            if (
+                any(execution.nodes[k].get("partitioned") for k in execution.order)
+                or (execution.partition_plan.get("source") or {}).get("node") in execution.order
             ):
                 controller = self.partition_runs[run["id"]] = PartitionRun(self, execution)
                 controller.execute()
@@ -616,17 +655,18 @@ class Runner:
 
     def _prepare_connections(self, execution: Execution, node: Record) -> None:
         """Prepare each logical connection once per run, replaying its first failure."""
-        for reference in connection_references(node):
-            if reference not in execution.prepared:
-                try:
-                    if not self.isolated:
-                        self.catalog.prepare(execution.cursor, {reference: execution.captured[reference]})
-                    execution.prepared[reference] = None
-                except Exception as error:
-                    execution.prepared[reference] = error
-            failure = execution.prepared[reference]
-            if failure is not None:
-                raise failure
+        with execution.context.lock:
+            for reference in connection_references(node):
+                if reference not in execution.prepared:
+                    try:
+                        if not self.isolated:
+                            self.catalog.prepare(execution.cursor, {reference: execution.captured[reference]})
+                        execution.prepared[reference] = None
+                    except Exception as error:
+                        execution.prepared[reference] = error
+                failure = execution.prepared[reference]
+                if failure is not None:
+                    raise failure
 
     def _compute(
         self, execution: Execution, key: str, created_tables: list[tuple[str, str]]
