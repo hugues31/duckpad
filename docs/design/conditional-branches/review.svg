@@ -1,0 +1,85 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="940" viewBox="0 0 1440 940" role="img" aria-labelledby="title desc">
+<title id="title">Conditional branches: variable usages and protected run confirmation</title><desc id="desc">Variables list activation conditions in Used by. A protected production run distinguishes known inactive branches from decisions that await a computed variable.</desc>
+<style>text {font-family: Inter, ui-sans-serif, system-ui, sans-serif;}</style>
+<rect x="0" y="0" width="1440" height="940" rx="0" fill="#f5f7fb" stroke="#f5f7fb"/>
+<rect x="0" y="0" width="1440" height="54" rx="0" fill="#19283d" stroke="#19283d"/>
+<text x="24" y="35" font-size="23" fill="white" font-weight="700">duckpad</text>
+<text x="155" y="34" font-size="14" fill="#d7e0ee" font-weight="400">/  Order processing</text>
+<rect x="1205" y="14" width="210" height="26" rx="5" fill="#eef1f5" stroke="#eef1f5"/>
+<text x="1215" y="32" font-size="12" fill="#566679" font-weight="600">DESIGN PROPOSAL</text>
+<rect x="0" y="54" width="180" height="886" rx="0" fill="white" stroke="#dce3ed"/>
+<text x="22" y="89" font-size="10" fill="#566679" font-weight="700">WORKSPACE</text>
+<text x="26" y="126" font-size="14" fill="#566679" font-weight="400">Flow</text>
+<text x="26" y="170" font-size="14" fill="#566679" font-weight="400">Code</text>
+<text x="26" y="214" font-size="14" fill="#566679" font-weight="400">Documentation</text>
+<rect x="12" y="234" width="156" height="35" rx="6" fill="#edf2ff" stroke="#edf2ff"/>
+<text x="26" y="258" font-size="14" fill="#315cce" font-weight="600">Variables</text>
+<text x="26" y="302" font-size="14" fill="#566679" font-weight="400">History</text>
+<rect x="180" y="54" width="1260" height="65" rx="0" fill="white" stroke="#dce3ed"/>
+<rect x="204" y="68" width="132" height="36" rx="8" fill="white" stroke="#dce3ed"/>
+<text x="218" y="91" font-size="13" fill="#202c3e" font-weight="600">main  ▾</text>
+<rect x="348" y="68" width="132" height="36" rx="8" fill="white" stroke="#dce3ed"/>
+<text x="362" y="91" font-size="13" fill="#202c3e" font-weight="600">prod  ▾</text>
+<text x="501" y="91" font-size="13" fill="#566679" font-weight="400">Current plan · source = warehouse</text>
+<rect x="1248" y="68" width="163" height="36" rx="8" fill="#315cce" stroke="#315cce"/>
+<text x="1261" y="91" font-size="13" fill="white" font-weight="600">Run pipeline  ▾</text>
+<text x="205" y="917" font-size="12" fill="#566679" font-weight="400">Design mockup · Synthetic data · Conditions are evaluated once per run.</text>
+<text x="208" y="160" font-size="24" fill="#202c3e" font-weight="600">Variables</text>
+<text x="208" y="189" font-size="14" fill="#566679" font-weight="400">One value can choose a branch and explain why it will run.</text>
+<rect x="205" y="213" width="573" height="243" rx="8" fill="white" stroke="#dce3ed"/>
+<text x="225" y="245" font-size="11" fill="#566679" font-weight="700">VARIABLE</text>
+<text x="465" y="245" font-size="11" fill="#566679" font-weight="700">PROD</text>
+<text x="642" y="245" font-size="11" fill="#566679" font-weight="700">USED BY</text>
+<path d="M224 260 L759 260" fill="none" stroke="#dce3ed" stroke-width="2"/>
+<text x="225" y="294" font-size="15" fill="#315cce" font-weight="600">source</text>
+<text x="465" y="294" font-size="14" fill="#202c3e" font-weight="400">warehouse</text>
+<text x="663" y="294" font-size="14" fill="#202c3e" font-weight="400">2</text>
+<text x="225" y="321" font-size="12" fill="#566679" font-weight="400">choice(legacy|warehouse)</text>
+<path d="M224 339 L759 339" fill="none" stroke="#dce3ed" stroke-width="2"/>
+<text x="225" y="373" font-size="15" fill="#315cce" font-weight="600">with_adjustments</text>
+<text x="465" y="373" font-size="13" fill="#936011" font-weight="600">At launch</text>
+<text x="663" y="373" font-size="14" fill="#202c3e" font-weight="400">2</text>
+<text x="225" y="402" font-size="12" fill="#566679" font-weight="400">boolean · computed from run_control</text>
+<text x="225" y="429" font-size="12" fill="#566679" font-weight="400">Last calculated: false · run 41</text>
+<rect x="205" y="476" width="573" height="392" rx="8" fill="white" stroke="#dce3ed"/>
+<text x="225" y="511" font-size="19" fill="#202c3e" font-weight="600">source · Used by</text>
+<text x="225" y="545" font-size="13" fill="#566679" font-weight="400">Default: legacy     prod: warehouse</text>
+<path d="M224 563 L759 563" fill="none" stroke="#dce3ed" stroke-width="2"/>
+<text x="225" y="596" font-size="14" fill="#315cce" font-weight="600">Legacy orders → Activation condition</text>
+<text x="225" y="626" font-size="13" fill="#202c3e" font-weight="400">{{ var.source }} = &#x27;legacy&#x27;</text>
+<rect x="225" y="644" width="529" height="26" rx="5" fill="#eef1f5" stroke="#eef1f5"/>
+<text x="235" y="662" font-size="12" fill="#566679" font-weight="600">dev: Active     prod: Inactive</text>
+<text x="225" y="709" font-size="14" fill="#315cce" font-weight="600">Warehouse orders → Activation condition</text>
+<text x="225" y="739" font-size="13" fill="#202c3e" font-weight="400">{{ var.source }} = &#x27;warehouse&#x27;</text>
+<rect x="225" y="757" width="529" height="26" rx="5" fill="#e9f6ee" stroke="#e9f6ee"/>
+<text x="235" y="775" font-size="12" fill="#19734d" font-weight="600">dev: Inactive     prod: Active</text>
+<text x="225" y="836" font-size="12" fill="#566679" font-weight="400">Rename updates both conditions in one save.</text>
+<rect x="799" y="137" width="620" height="731" rx="8" fill="white" stroke="#dce3ed"/>
+<text x="823" y="175" font-size="24" fill="#202c3e" font-weight="600">Run in prod?</text>
+<rect x="1215" y="151" width="181" height="26" rx="5" fill="#fff5df" stroke="#fff5df"/>
+<text x="1225" y="169" font-size="12" fill="#936011" font-weight="600">Protected environment</text>
+<text x="823" y="211" font-size="13" fill="#566679" font-weight="400">Review the captured scope before starting.</text>
+<text x="823" y="234" font-size="13" fill="#566679" font-weight="400">Conditions using computed values are decided after run_control.</text>
+<path d="M823 252 L1395 252" fill="none" stroke="#dce3ed" stroke-width="2"/>
+<text x="823" y="283" font-size="16" fill="#202c3e" font-weight="600">Known inactive branches</text>
+<rect x="823" y="298" width="572" height="110" rx="8" fill="#eef1f5" stroke="#e0e5ec"/>
+<text x="839" y="326" font-size="14" fill="#202c3e" font-weight="600">Legacy orders → Normalize orders</text>
+<text x="839" y="352" font-size="13" fill="#566679" font-weight="400">source = warehouse</text>
+<text x="839" y="381" font-size="13" fill="#566679" font-weight="400">No connection preparation or source reads.</text>
+<text x="823" y="444" font-size="16" fill="#202c3e" font-weight="600">Decisions calculated at launch</text>
+<rect x="823" y="459" width="572" height="173" rx="8" fill="#fffaf0" stroke="#efdfb8"/>
+<text x="839" y="488" font-size="14" fill="#202c3e" font-weight="600">with_adjustments ← run_control.result</text>
+<text x="839" y="520" font-size="13" fill="#566679" font-weight="400">Adjusted report: active when true</text>
+<text x="839" y="545" font-size="13" fill="#566679" font-weight="400">Standard report: active when false</text>
+<text x="839" y="570" font-size="13" fill="#566679" font-weight="400">The retained value does not predict this run.</text>
+<text x="839" y="595" font-size="13" fill="#566679" font-weight="400">Both possible paths are included in the approved scope.</text>
+<text x="823" y="669" font-size="16" fill="#202c3e" font-weight="600">Exports</text>
+<text x="823" y="700" font-size="14" fill="#202c3e" font-weight="400">Selected report → report.csv</text>
+<text x="823" y="728" font-size="12" fill="#566679" font-weight="400">Debug export · inactive: export_debug = false · Not written</text>
+<path d="M823 752 L1395 752" fill="none" stroke="#dce3ed" stroke-width="2"/>
+<text x="823" y="781" font-size="12" fill="#566679" font-weight="400">No second confirmation is needed during this captured run.</text>
+<rect x="1112" y="806" width="113" height="37" rx="8" fill="white" stroke="#dce3ed"/>
+<text x="1142" y="830" font-size="13" fill="#566679" font-weight="600">Cancel</text>
+<rect x="1238" y="806" width="157" height="37" rx="8" fill="#315cce" stroke="#315cce"/>
+<text x="1254" y="830" font-size="13" fill="white" font-weight="600">Run in prod</text>
+</svg>
