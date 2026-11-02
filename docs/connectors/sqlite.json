@@ -1,0 +1,11 @@
+{
+  "id": "sqlite",
+  "name": "SQLite",
+  "family": "database",
+  "description": "A SQLite database file on the Duckpad server, for each environment.",
+  "parameters": [{"name": "path", "type": "file"}],
+  "extensions": [{"name": "sqlite"}],
+  "capabilities": ["read", "write"],
+  "init_sql": "ATTACH {{ path }} AS {{ alias }} (TYPE sqlite);",
+  "compatibility": "Validated on DuckDB 2.0.0 with its matching sqlite extension, Linux x86_64, in embedded execution. Other versions require validation."
+}
