@@ -4,6 +4,7 @@ import threading
 from pathlib import Path
 
 from .auth import Auth
+from .catalog import database_files
 from .git.credentials import KEY_KIND
 from .templates import URI
 from .util import Problem
@@ -156,15 +157,45 @@ class Access:
             if not root or URI.match(root):
                 continue
             path = Path(root).expanduser().resolve()
-            # Instance credentials, Git metadata and other projects must never
-            # become reachable through a mistakenly broad connection root.
-            if self.store.home.is_relative_to(path) or (
-                path.is_relative_to(self.store.home) and not path.is_relative_to(resource)
-            ):
-                raise Problem("Local connection roots must exclude instance metadata and other projects")
-            if not path.is_dir():
-                raise Problem("Local connection root must be an existing directory")
+            self.validate_local_root(path, resource)
             roots.append(path)
             if "write" in connection["definition"].get("capabilities", []):
                 writable.append(path)
+        database_roots, database_writable = self.database_roots(captured, project)
+        roots.extend(database_roots)
+        writable.extend(database_writable)
+        return roots, writable
+
+    def validate_local_root(self, path, resource=None):
+        # Instance credentials, Git metadata and other projects must never
+        # become reachable through a mistakenly broad connection root.
+        if self.store.home.is_relative_to(path) or (
+            path.is_relative_to(self.store.home) and (resource is None or not path.is_relative_to(resource))
+        ):
+            raise Problem("Local connection roots must exclude instance metadata and other projects")
+        if not path.is_dir():
+            raise Problem("Local connection root must be an existing directory")
+
+    def database_roots(self, captured, project=None):
+        """Grant database parents for journals too, using the same boundary as Server folder.
+
+        An instance-wide Test connection has no project scope, so it requires database
+        directories outside the instance. Runs may also use their own project resources.
+        """
+        resource = self.store.paths.resources(project).resolve() if project else None
+        roots, writable = [], []
+        for connection in captured.values():
+            for name, path in database_files(connection["definition"], connection["values"]).items():
+                try:
+                    self.validate_local_root(path.parent, resource)
+                except Problem as error:
+                    raise Problem(
+                        f"Connection {connection['name']}, file parameter {name}: {error}. "
+                        "Choose an existing dedicated database directory outside the instance "
+                        "and its parent directories.",
+                        422,
+                    ) from None
+                roots.append(path.parent)
+                if "write" in connection["definition"].get("capabilities", []):
+                    writable.append(path.parent)
         return roots, writable

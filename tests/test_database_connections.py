@@ -34,7 +34,8 @@ def databases(tmp_path):
     """A dev and a prod database file with the same tables and different values."""
     environments = {}
     for environment, amount in (("dev", 10), ("prod", 100)):
-        path = tmp_path / f"{environment}.duckdb"
+        path = tmp_path / "databases" / environment / "warehouse.duckdb"
+        path.parent.mkdir(parents=True, exist_ok=True)
         with duckdb.connect(str(path)) as db:
             db.execute("CREATE SCHEMA sales")
             db.execute(
@@ -98,10 +99,23 @@ def table_bundle(connection="warehouse"):
     }
 
 
-def test_an_administrator_declared_database_works_through_load_table_and_export_table(services, tmp_path):
-    store, projects, catalog, engine = services
+@pytest.fixture(params=[False, True], ids=["embedded", "isolated"])
+def database_services(tmp_path, request):
+    instance = Services.open(tmp_path / "instance", enforce_access=request.param)
+    try:
+        yield instance.store, instance.projects, instance.catalog, instance.engine
+    finally:
+        instance.close()
+
+
+def test_an_administrator_declared_database_works_through_load_table_and_export_table(
+    database_services, tmp_path
+):
+    store, projects, catalog, engine = database_services
     warehouse(catalog, tmp_path)
     worktree = projects.create("Tables", table_bundle())["id"]
+    if engine.access:
+        engine.access.grant_connections(projects.get(worktree)["project"], ["warehouse"])
     # Before any run, a separate process attaches the database to list it.
     listed = engine.connection_objects(worktree, "warehouse", "dev")
     assert listed["schemas"] == ["main", "sales"]
@@ -121,7 +135,171 @@ def test_an_administrator_declared_database_works_through_load_table_and_export_
         context = engine.context(worktree, environment)
         query = f'SELECT region, total, note FROM "{alias}".sales.totals'
         # Appended by name on every run, without truncation or table creation.
-        assert context.db.execute(query).fetchall() == rows
+        cursor = context.db.cursor()
+        try:
+            assert cursor.execute(query).fetchall() == rows
+        finally:
+            cursor.close()
+
+
+@pytest.fixture
+def isolated(tmp_path):
+    instance = Services.open(tmp_path / "instance", enforce_access=True)
+    try:
+        yield instance
+    finally:
+        instance.close()
+
+
+@pytest.mark.parametrize("writable", [False, True], ids=["read-only", "writable"])
+def test_database_directory_access_is_scoped_to_the_grant_and_environment(isolated, tmp_path, writable):
+    connection = warehouse(isolated.catalog, tmp_path)
+    if not writable:
+        isolated.catalog.save(
+            "connector",
+            {
+                **NATIVE,
+                "capabilities": ["read"],
+                "init_sql": "ATTACH {{ database }} AS {{ alias }} (READ_ONLY);",
+            },
+        )
+    worktree = isolated.projects.create("Directory scope")
+    access = isolated.engine.access
+    access.grant_connections(worktree["project"], ["warehouse"])
+    dev = Path(connection["environments"]["dev"]["database"]).parent
+    sibling = dev / "sibling.csv"
+    sibling.write_text("value\n42\n")
+    outside = tmp_path / "private.csv"
+    outside.write_text("value\n99\n")
+    other = isolated.projects.create("Other project")
+    private = isolated.store.paths.resources(other["project"]) / "private.csv"
+    private.parent.mkdir(parents=True, exist_ok=True)
+    private.write_text("value\n100\n")
+    link = dev / "escape.csv"
+    link.symlink_to(private)
+    db = isolated.engine.context(worktree["id"], "dev", create=True).db.cursor()
+    assert db.execute("SELECT * FROM read_csv(?)", [str(sibling)]).fetchall() == [(42,)]
+    for forbidden in (
+        outside,
+        private,
+        link,
+        isolated.store.home / "instance.sqlite",
+        Path(connection["environments"]["prod"]["database"]),
+    ):
+        with pytest.raises((duckdb.Error, Problem)):
+            db.execute("SELECT * FROM read_blob(?)", [str(forbidden)]).fetchall()
+    output = dev / "journal-test.csv"
+    query = f"COPY (SELECT 1 AS value) TO '{output}' (HEADER)"
+    if writable:
+        db.execute(query)
+        assert output.read_text() == "value\n1\n"
+    else:
+        with pytest.raises((duckdb.Error, Problem)):
+            db.execute(query)
+        assert not output.exists()
+    # A project without this grant gets no access to the directory at all.
+    other_db = isolated.engine.context(other["id"], "dev", create=True).db.cursor()
+    with pytest.raises((duckdb.Error, Problem)):
+        other_db.execute("SELECT * FROM read_blob(?)", [str(sibling)]).fetchall()
+    other_db.close()
+    db.close()
+
+
+@pytest.mark.parametrize("location", ["metadata", "ancestor", "other-project", "symlink", "missing"])
+def test_database_directory_guards_apply_to_probes_listings_and_workers(isolated, tmp_path, location):
+    connection = warehouse(isolated.catalog, tmp_path)
+    worktree = isolated.projects.create("Guarded")
+    other = isolated.projects.create("Private")
+    other_files = isolated.store.paths.resources(other["project"])
+    other_files.mkdir(parents=True, exist_ok=True)
+    link = tmp_path / "database-link"
+    link.symlink_to(other_files, target_is_directory=True)
+    path = {
+        "metadata": isolated.store.home / "instance.sqlite",
+        "ancestor": tmp_path / "broad.duckdb",
+        "other-project": other_files / "private.duckdb",
+        "symlink": link / "private.duckdb",
+        "missing": tmp_path / "missing" / "database.duckdb",
+    }[location]
+    connection["environments"]["dev"]["database"] = str(path)
+    isolated.catalog.save("connection", connection)
+    isolated.engine.access.grant_connections(worktree["project"], ["warehouse"])
+    for operation in (
+        lambda: isolated.engine.test_connection(connection, "dev"),
+        lambda: isolated.engine.connection_objects(worktree["id"], "warehouse", "dev"),
+        lambda: isolated.engine.context(worktree["id"], "dev", create=True),
+    ):
+        with pytest.raises(Problem, match="Connection Warehouse, file parameter database") as refused:
+            operation()
+        assert "Choose an existing dedicated database directory" in str(refused.value)
+
+
+@pytest.mark.parametrize("missing", [True, False], ids=["missing-file", "write-permission"])
+def test_inaccessible_database_names_the_connection_and_explains_permissions(isolated, tmp_path, missing):
+    connection = warehouse(isolated.catalog, tmp_path)
+    isolated.catalog.save(
+        "connector",
+        {
+            **NATIVE,
+            "capabilities": ["read"],
+            "init_sql": (
+                "ATTACH {{ database }} AS {{ alias }} (READ_ONLY);" if missing else NATIVE["init_sql"]
+            ),
+        },
+    )
+    # The parent is authorized, but the file is missing or its write access is denied.
+    if missing:
+        Path(connection["environments"]["dev"]["database"]).unlink()
+    worktree = isolated.projects.create("Missing file")
+    isolated.engine.access.grant_connections(worktree["project"], ["warehouse"])
+    with pytest.raises(Problem, match="Cannot initialize connection Warehouse") as failed:
+        isolated.engine.context(worktree["id"], "dev", create=True)
+    assert "filesystem permissions" in str(failed.value)
+    assert "Read-only connectors must attach the database read-only" in str(failed.value)
+
+
+def test_a_database_in_project_resources_is_only_available_to_its_own_project(isolated):
+    owner = isolated.projects.create("Database owner")
+    outsider = isolated.projects.create("Other project")
+    directory = isolated.store.paths.resources(owner["project"])
+    directory.mkdir(parents=True, exist_ok=True)
+    warehouse(isolated.catalog, directory)
+    for project in (owner, outsider):
+        isolated.engine.access.grant_connections(project["project"], ["warehouse"])
+    isolated.engine.context(owner["id"], "dev", create=True)
+    with pytest.raises(Problem, match="instance metadata and other projects"):
+        isolated.engine.context(outsider["id"], "dev", create=True)
+
+
+def test_file_parameters_use_defaults_and_resolved_paths_without_granting_uris(
+    isolated, tmp_path, monkeypatch
+):
+    directory = tmp_path / "databases"
+    directory.mkdir()
+    monkeypatch.chdir(directory)
+    isolated.catalog.save(
+        "connector",
+        {
+            **NATIVE,
+            "parameters": [
+                {"name": "database", "type": "file", "default": "relative.duckdb"},
+                {"name": "remote", "type": "file", "default": "s3://bucket/database.duckdb"},
+                {"name": "memory", "type": "file", "default": ":memory:"},
+                {"name": "empty", "type": "file", "default": ""},
+                {"name": "text", "type": "text", "default": str(tmp_path)},
+            ],
+        },
+    )
+    captured, _ = isolated.catalog.capture_draft(
+        {
+            "name": "Defaults",
+            "connector": "native",
+            "environments": {"dev": {}},
+        },
+        "dev",
+    )
+    assert captured["unsaved"]["values"]["database"] == str(directory / "relative.duckdb")
+    assert isolated.engine.access.database_roots(captured) == ([directory], [directory])
 
 
 def test_listing_database_objects_needs_a_database_connection(services, tmp_path):

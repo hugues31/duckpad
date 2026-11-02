@@ -275,12 +275,18 @@ class Engine:
     def test_connection(self, data: Record, environment: str) -> Record:
         """Run a connection's setup for one environment, as edited and saved or not, in a child process."""
         captured, secrets = self.catalog.capture_draft(data, environment)
+        if self.pool.isolated:
+            assert self.access is not None
+            self.access.database_roots(captured)
         imports = self.store.get("settings", "offline_extensions", {})
         return connection_probe.run(self.pool.probe_config(), captured, imports, secrets)
 
     def connection_objects(self, worktree: str, reference: str, environment: str) -> Record:
         """The schemas and tables of a database connection granted to the worktree's project."""
         captured, secrets = self.pool.capture(worktree, [reference], environment)
+        if self.pool.isolated:
+            assert self.access is not None
+            self.access.database_roots(captured, self.projects.get(worktree)["project"])
         connection = captured[reference]
         if connection["definition"].get("family") != "database":
             raise Problem(f"Connection {reference} is not a database", 422)
