@@ -20,7 +20,7 @@ from duckpad.util import Problem
 def bundle(extensions=None):
     return {
         "flow": {"nodes": [{"id": "source", "template": "source", "params": {}}], "edges": []},
-        "templates": {"source": "-- @kind source\n-- @output result\nSELECT 42 AS value;"},
+        "templates": {"source": "-- @output result\nSELECT 42 AS value;"},
         "documentation": {},
         "components": {},
         "extensions": extensions,
@@ -102,13 +102,13 @@ def test_a_format_without_its_extension_names_the_extension_to_enable(tmp_path, 
         definitions = bundle()
         definitions["templates"].update(
             load_avro=(
-                "-- @kind source\n-- @output result\n"
+                "-- @output result\n"
                 '-- @param connection: connection = ""\n'
                 '-- @param file: file(connection) = "events.avro"\n'
                 "SELECT * FROM read_avro({{ file }});"
             ),
             export_avro=(
-                "-- @kind export\n-- @input source\n"
+                "-- @input source\n"
                 '-- @param connection: connection = ""\n'
                 '-- @param destination: destination(connection) = "events.avro"\n'
                 "COPY (SELECT * FROM {{ source }}) TO {{ destination }} (FORMAT AVRO);"
@@ -185,7 +185,7 @@ def test_editing_requirements_does_not_close_an_active_run_database(tmp_path, is
     try:
         definitions = bundle({"json": {"source": "core", "enabled": True}})
         definitions["templates"]["source"] = (
-            "-- @kind source\n-- @output result\nSELECT sum(random()) FROM range(1000000000000);"
+            "-- @output result\nSELECT sum(random()) FROM range(1000000000000);"
         )
         worktree = instance.projects.create("Active extension edit", definitions)
         if isolated:

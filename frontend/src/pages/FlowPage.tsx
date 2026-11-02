@@ -353,14 +353,8 @@ export default function FlowPage() {
   }
 
   if (!bundle || !graph) return <InvalidProject />;
-  const connections = snapshot.connections.filter(
-    (connection) =>
-      (signature?.kind !== "source" && signature?.kind !== "export") ||
-      connection.capabilities.includes(
-        signature.kind === "export" ? "write" : "read",
-      ),
-  );
-  const hasResults = ports.length > 0 || signature?.kind === "export";
+  const connections = snapshot.connections;
+  const hasResults = !!node;
   const shown = {
     palette: panels.open.palette,
     inspector: panels.open.inspector && !!node,

@@ -54,7 +54,6 @@ import type {
   FlowNode,
   ParsedTemplate,
   Statuses,
-  TemplateKind,
 } from "./types";
 
 /** The icon of a template, from its ID, or of any component. */
@@ -83,7 +82,7 @@ type PipelineData = {
   fullNode: string;
   valueProducer?: boolean;
   label: string;
-  kind: TemplateKind | "component";
+  kind: "sql" | "component";
   inputs: string[];
   outputs: string[];
   /** The run or result state shown on the node, if any. */
@@ -116,7 +115,10 @@ function PipelineNode({ id, data, selected }: NodeProps<PipelineNode>) {
     // SQL edits can rename or move handles without resizing the node.
     updateNodeInternals(id);
   }, [id, portLayout, updateNodeInternals]);
-  const source = data.kind === "source";
+  const source =
+    data.kind !== "component" &&
+    data.inputs.length === 0 &&
+    data.outputs.length > 0;
   const portPosition = (index: number, count: number) => {
     const spacing = Math.min(24, 72 / Math.max(1, count - 1));
     const top = 48 + (index - (count - 1) / 2) * spacing;
@@ -747,11 +749,7 @@ function CanvasInner(props: CanvasProps) {
           pannable
           zoomable
           nodeColor={(n) =>
-            n.data.kind === "source"
-              ? "#4a8aff"
-              : n.data.kind === "component"
-                ? "#9d91df"
-                : "#a4a4ac"
+            n.data.kind === "component" ? "#9d91df" : "#4a8aff"
           }
           maskColor="var(--minimap-mask)"
         />

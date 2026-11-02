@@ -275,7 +275,7 @@ def test_preview_limit_lineage_and_connection_revocation(instance):
     bundle = snapshot["bundle"]
     bundle["flow"]["nodes"] = [{"id": "source", "params": {}}]
     bundle["node_sql"] = {
-        "nodes/source.sql": '-- @kind source\n-- @param connection: connection = "files"\n-- @output result\nSELECT range AS value FROM range(100);'
+        "nodes/source.sql": '-- @param connection: connection = "files"\n-- @output result\nSELECT range AS value FROM range(100);'
     }
     projects.write(worktree["id"], snapshot["revision"], bundle_to_files(bundle))
     files = {"id": "files", "name": "Files", "connector": "folder", "environments": {"dev": {"root": ""}}}

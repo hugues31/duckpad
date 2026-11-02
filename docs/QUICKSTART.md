@@ -49,7 +49,6 @@ entire default code, including its `-- @input source` line, with:
 
 ```sql
 -- @label Sample orders
--- @kind source
 -- @output orders
 SELECT * FROM (VALUES
     (1, 'Europe',        'paid',    120.00),
@@ -62,7 +61,7 @@ SELECT * FROM (VALUES
 Choose **Save changes**, then **Run pipeline**. Select the node: its **Data** tab
 under the canvas shows all four orders.
 
-`-- @kind source` identifies a source node. `-- @output orders` names the table
+`-- @output orders` names the table
 it publishes. The rest is DuckDB SQL, ending in a semicolon. This source uses
 inline data; later you can replace it with a **Load CSV** or **Load Parquet** node
 from the palette and upload your own file.

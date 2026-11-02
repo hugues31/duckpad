@@ -329,16 +329,13 @@ export default function Inspector({
           )}
         </button>
       </div>
-      {(signature.outputs.length > 0 || kind === "export") && (
-        <ResultSummary
-          bundle={snapshot.bundle}
-          fullNode={fullNode}
-          ports={signature.outputs}
-          exportNode={kind === "export"}
-          statuses={statuses}
-          onOpen={onResults}
-        />
-      )}
+      <ResultSummary
+        bundle={snapshot.bundle}
+        fullNode={fullNode}
+        ports={signature.outputs}
+        statuses={statuses}
+        onOpen={onResults}
+      />
       <div className="tabs inspector-tabs">
         {TABS.map(([key, Icon]) => (
           <button

@@ -126,8 +126,7 @@ def test_error_retains_previous_outputs_and_messages_and_blocks_descendants(serv
 @pytest.mark.parametrize("level", ["warning", "error"])
 def test_limit_counts_all_rows_and_does_not_hide_a_late_error(services, level):
     _, projects, _, engine = services
-    sql = f"""-- @kind source
--- @output result
+    sql = f"""-- @output result
 SELECT range AS id FROM range(105);
 -- @message
 SELECT 'warning' AS level, 'Item ' || id AS message FROM {{{{ result }}}} ORDER BY id;
@@ -295,9 +294,8 @@ def test_isolated_export_checks_precede_writes_and_survive_in_history(tmp_path):
                 ],
             },
             "templates": {
-                "source": "-- @kind source\n-- @output result\nSELECT 1 AS id;",
-                "export": """-- @kind export
--- @input source
+                "source": "-- @output result\nSELECT 1 AS id;",
+                "export": """-- @input source
 -- @param destination: destination = "checked.csv"
 COPY {{ source }} TO {{ destination }} (FORMAT CSV, HEADER true);
 -- @message

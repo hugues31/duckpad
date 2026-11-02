@@ -207,7 +207,7 @@ def test_export_warning_and_variables_match_the_requested_scope(instance):
     bundle["variables"] = {"threshold": {"type": "number", "default": 5}}
     bundle["node_sql"] = {
         "nodes/source.sql": "-- @param amount: number = 1\n-- @output result\nSELECT {{ amount }} AS value;",
-        "nodes/export.sql": '-- @kind export\n-- @input rows\n-- @param connection: connection = ""\n-- @param target: destination(connection) = "approval.csv"\nCOPY {{ rows }} TO {{ target }} (FORMAT CSV);',
+        "nodes/export.sql": '-- @input rows\n-- @param connection: connection = ""\n-- @param target: destination(connection) = "approval.csv"\nCOPY {{ rows }} TO {{ target }} (FORMAT CSV);',
     }
     projects.write(context["worktree"], snapshot["revision"], bundle_to_files(bundle))
     identity, requested = request_run(app, client, context)

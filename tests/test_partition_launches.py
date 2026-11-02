@@ -207,7 +207,7 @@ def test_refreshing_only_values_invalidates_ordered_collectors(services):
     assert engine.preview(worktree, "dev", "collect")["status"] == "valid"
     snapshot = projects.snapshot(worktree)
     snapshot["bundle"]["templates"]["keys"] = (
-        "-- @kind source\n-- @output result\nSELECT 'b' batch, 'two' task UNION ALL SELECT 'a', 'one';"
+        "-- @output result\nSELECT 'b' batch, 'two' task UNION ALL SELECT 'a', 'one';"
     )
     projects.write(worktree, snapshot["revision"], bundle_to_files(snapshot["bundle"]))
     refreshed = join_run(store, engine.launch(worktree, "dev", "keys")["id"])
@@ -225,7 +225,7 @@ def test_restart_marks_running_keys_interrupted_and_preserves_success(services):
     storage = PartitionStorage(store, worktree, "dev")
     entry = storage.entries(run["partitions"]["manifest"])[0]
     successful = storage.result("transform", entry["key_hash"])["success"]
-    interrupted = {"status": "running", "kind": "export", "run": run["id"]}
+    interrupted = {"status": "running", "writes_external": True, "run": run["id"]}
     storage.attempt(run["id"], entry["partition_id"], "transform", interrupted)
     storage.record("transform", entry, interrupted)
     partial = storage.temporary / "partition_unfinished.partial"
@@ -283,9 +283,7 @@ def test_successive_zones_share_ordered_collector_fingerprints(services):
     before = engine.partitions.page(worktree, "dev", node="second")
     assert before["entries"][1]["validity"] == "valid"
     snapshot = projects.snapshot(worktree)
-    snapshot["bundle"]["templates"]["keys"] = (
-        "-- @kind source\n-- @output result\nSELECT 'b' AS batch, 'two' AS task;"
-    )
+    snapshot["bundle"]["templates"]["keys"] = "-- @output result\nSELECT 'b' AS batch, 'two' AS task;"
     projects.write(worktree, snapshot["revision"], bundle_to_files(snapshot["bundle"]))
     refreshed = join_run(store, engine.launch(worktree, "dev", "keys")["id"])
     assert refreshed["status"] == "success", refreshed

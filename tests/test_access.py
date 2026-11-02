@@ -703,9 +703,7 @@ def test_sql_worker_cancels_and_recovers_after_process_exit(instance):
     store, projects, engine = services.store, services.projects, services.engine
     snapshot = projects.snapshot(worktree["id"])
     bundle = snapshot["bundle"]
-    bundle["templates"]["slow"] = (
-        "-- @kind source\n-- @output result\nSELECT SUM(random()) AS value FROM range(10000000000);"
-    )
+    bundle["templates"]["slow"] = "-- @output result\nSELECT SUM(random()) AS value FROM range(10000000000);"
     bundle["flow"]["nodes"] = [{"id": "source", "template": "slow", "params": {}}]
     projects.write(worktree["id"], snapshot["revision"], bundle_to_files(bundle))
     run = engine.launch(worktree["id"], "dev")
@@ -720,7 +718,7 @@ def test_sql_worker_cancels_and_recovers_after_process_exit(instance):
     database.process.wait()
     database.reader.join(timeout=5)
     snapshot = projects.snapshot(worktree["id"])
-    bundle["templates"]["slow"] = "-- @kind source\n-- @output result\nSELECT 42 AS value;"
+    bundle["templates"]["slow"] = "-- @output result\nSELECT 42 AS value;"
     projects.write(worktree["id"], snapshot["revision"], bundle_to_files(bundle))
     assert wait_run(store, engine.launch(worktree["id"], "dev"))["status"] == "success"
     assert engine.context(worktree["id"], "dev").db.process.pid != database.process.pid

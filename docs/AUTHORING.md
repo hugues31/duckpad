@@ -88,7 +88,7 @@ in the Git workspace.
 
 ## SQL template contract
 
-Learn declarations, typed parameters, source nodes, transformations and exports
+Learn declarations, typed parameters, external reads, queries and writes
 in the [SQL syntax guide](SQL.md). The [15-minute quickstart](QUICKSTART.md)
 walks through two custom nodes from a blank project.
 

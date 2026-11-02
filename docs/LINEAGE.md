@@ -12,6 +12,13 @@ Pan and zoom to explore the graph. Automatic tracing has a request budget; an un
 
 ![Five source amounts and the sum they contribute to, with pagination for all 27 values](images/lineage.png)
 
+An output that directly reads an external resource forms a captured lineage boundary.
+This is decided per output query, independently of the node's other operations.
+To trace a calculation through external rows, load them into one output and reference
+that output from the calculation. Combining an external read and input-port data in
+one query captures their combined result at that boundary; external resources are
+never reread during an explanation.
+
 ## Validated baseline
 
 | Construct | Status | Behavior |

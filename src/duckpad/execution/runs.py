@@ -123,7 +123,11 @@ class Runner:
             )
             for node in run["nodes"].values():
                 if node["status"] in ("pending", "running"):
-                    if node["status"] == "running" and node.get("kind") == "export":
+                    if (
+                        node["status"] == "running"
+                        and node.get("writes_external")
+                        and not node.get("external_skipped")
+                    ):
                         node["external_outcome"] = "unknown"
                     node["status"] = "interrupted"
             if manifest := run.get("partitions", {}).get("manifest"):
@@ -132,7 +136,7 @@ class Runner:
                     for key, state in storage.attempts(run["id"], entry["partition_id"]).items():
                         if state["status"] in ("pending", "running"):
                             state["status"] = "interrupted"
-                            if state.get("kind") == "export":
+                            if state.get("writes_external") and not state.get("external_skipped"):
                                 state["external_outcome"] = "unknown"
                             storage.attempt(run["id"], entry["partition_id"], key, state)
                             storage.record(key, entry, state)
@@ -281,7 +285,7 @@ class Runner:
                 n: {
                     "status": "pending",
                     "label": nodes[n].get("label", n),
-                    "kind": nodes[n]["parsed"]["kind"],
+                    "writes_external": nodes[n]["parsed"].get("writes_external", False),
                     "fingerprint": fingerprints[n],
                     "results": [],
                     **variables.run_usages(nodes[n]),
@@ -640,7 +644,7 @@ class Runner:
         run, secrets, context = execution.run, execution.secrets, execution.context
         node, state = execution.nodes[key], run["nodes"][key]
         state.update(status="running", started=now(), parameters=node.get("params", {}))
-        if node["parsed"]["kind"] == "export":
+        if node["parsed"].get("writes_external", False) and not state.get("external_skipped"):
             state["external_outcome"] = "unknown"
         self._persist(run, secrets)
         node_start = time.monotonic()
@@ -667,7 +671,7 @@ class Runner:
             state.update(status="canceled" if execution.canceled else "failed", error=message)
             with context.lock:
                 context.errors[key] = message
-            if state.get("kind") == "export" and state.get("external_outcome") != "completed":
+            if state.get("writes_external") and state.get("external_outcome") != "completed":
                 state["external_outcome"] = (
                     "partial or unknown" if state.get("external_started") else "failed"
                 )
@@ -809,7 +813,7 @@ class Runner:
                 )
                 continue
             plan = plan_materialization(
-                cursor, statement, data_inputs, instrument=node["parsed"]["kind"] != "source"
+                cursor, statement, data_inputs, instrument=not statement["reads_external"]
             )
             statement["materialization_sql"] = [plan["sql"]]
             self._persist(run, execution.secrets)
@@ -846,7 +850,7 @@ class Runner:
                 storage=plan["storage"],
                 source_columns=source_columns or columns,
                 bound_values=copy.deepcopy(execution.values),
-                source=node["parsed"]["kind"] == "source",
+                source=statement["reads_external"],
                 column_map=column_map,
                 witnesses=plan["witnesses"],
                 groups=plan["groups"],
@@ -859,11 +863,15 @@ class Runner:
     def _export(self, execution: Execution, key: str, statement: Record) -> None:
         """Run an export statement, then keep a private copy of the file it wrote for download."""
         state = execution.run["nodes"][key]
+        if state.get("external_skipped"):
+            return
         # Serialize file writes and capture across worktrees sharing a destination.
         with self.exports.write_lock:
             if execution.canceled:
                 raise Problem("Execution canceled")
             state["external_started"] = True
+            state["external_outcome"] = "unknown"
+            self._persist(execution.run, execution.secrets)
             assert execution.cursor is not None
             execution.cursor.execute(statement["sql"], statement["bindings"])
             if statement.get("export_file"):

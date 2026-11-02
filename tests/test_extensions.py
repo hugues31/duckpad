@@ -13,7 +13,7 @@ from duckpad.services import Services
 def bundle(query="SELECT current_setting('allow_unsigned_extensions') AS allowed"):
     return {
         "flow": {"nodes": [{"id": "source", "template": "source", "params": {}}], "edges": []},
-        "templates": {"source": "-- @kind source\n-- @output result\n" + query + ";"},
+        "templates": {"source": "-- @output result\n" + query + ";"},
         "components": {},
         "documentation": {},
     }

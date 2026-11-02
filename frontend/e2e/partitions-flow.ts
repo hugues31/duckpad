@@ -101,10 +101,10 @@ export const partitionFlow: Bundle = {
     name: "Partitioned orders",
   },
   templates: {
-    keys: "-- @kind source\n-- @output result\nSELECT 'batch-011' AS batch, 'one' AS task UNION ALL SELECT 'batch-012', 'two';",
+    keys: "-- @output result\nSELECT 'batch-011' AS batch, 'one' AS task UNION ALL SELECT 'batch-012', 'two';",
     source:
-      "-- @kind source\n-- @output result\nSELECT * FROM (VALUES ('batch-011', 1), ('batch-011', 1), ('batch-012', 2)) t(batch, amount);",
-    lookup: "-- @kind source\n-- @output result\nSELECT 10 AS rate;",
+      "-- @output result\nSELECT * FROM (VALUES ('batch-011', 1), ('batch-011', 1), ('batch-012', 2)) t(batch, amount);",
+    lookup: "-- @output result\nSELECT 10 AS rate;",
     transform:
       "-- @input data\n-- @input lookup\n-- @param value: expression\n-- @output result\nSELECT d.amount * l.rate AS amount, {{ value }} AS task FROM {{ data }} d CROSS JOIN {{ lookup }} l;",
     collect: "-- @input data\n-- @output result\nSELECT * FROM {{ data }};",

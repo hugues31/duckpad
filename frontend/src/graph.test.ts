@@ -52,14 +52,12 @@ const component = (...children: string[]): ComponentDefinition => ({
 const parsed: Record<string, ParsedTemplate> = {
   load_csv: {
     label: "Load CSV",
-    kind: "source",
     inputs: [],
     outputs: ["output"],
     parameters: [{ name: "path", type: "file" }],
   },
   join: {
     label: "Join",
-    kind: "transform",
     inputs: ["left", "right"],
     outputs: ["output"],
     parameters: [{ name: "on", type: "string" }],
@@ -200,18 +198,18 @@ describe("nodeInterface", () => {
   it("describes a template node from its parsed template", () => {
     expect(nodeInterface({ template: "join" }, parsed)).toEqual({
       definition: parsed.join,
-      kind: "transform",
+      kind: "sql",
       inputs: ["left", "right"],
       outputs: ["output"],
       parameters: [{ name: "on", type: "string" }],
     });
-    expect(nodeInterface({ template: "load_csv" }, parsed).kind).toBe("source");
+    expect(nodeInterface({ template: "load_csv" }, parsed).kind).toBe("sql");
   });
 
-  it("describes a node whose template was removed as an empty transform", () => {
+  it("describes a node whose template was removed as an empty SQL interface", () => {
     expect(nodeInterface({ template: "missing" }, parsed)).toEqual({
       definition: undefined,
-      kind: "transform",
+      kind: "sql",
       inputs: [],
       outputs: [],
       parameters: [],

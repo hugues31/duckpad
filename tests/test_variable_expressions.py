@@ -21,7 +21,7 @@ ORDERS = (
     "(3, 'refunded', 1000, DATE '2026-11-01', true)) AS orders(id, status, amount, day, online);"
 )
 TEMPLATES = {
-    "orders": "-- @kind source\n-- @output result\n" + ORDERS,
+    "orders": "-- @output result\n" + ORDERS,
     "filter": '-- @input source\n-- @param condition: expression(source) = "amount > 0"\n-- @output result\n'
     "SELECT * FROM {{ source }} WHERE {{ condition }};",
     "aggregate": '-- @input source\n-- @param groups: expressions = "status"\n'
@@ -210,7 +210,7 @@ def test_case_insensitive_placeholder_collisions_preserve_values_in_runs(service
     store, projects, _, engine = services
     bundle = project_bundle()
     bundle["templates"]["values"] = (
-        "-- @kind source\n-- @param VAR_THRESHOLD: number = 1\n"
+        "-- @param VAR_THRESHOLD: number = 1\n"
         "-- @param Var_Threshold_2: number = 2\n-- @param projection: expressions\n-- @output result\n"
         "SELECT {{ VAR_THRESHOLD }} AS configured, {{ Var_Threshold_2 }} AS reserved, {{ projection }};"
     )
@@ -269,7 +269,7 @@ def test_references_inside_quotes_or_comments_are_rejected(condition):
 )
 def test_each_reference_in_an_expression_list_is_checked(projection):
     template = parse_template(
-        "-- @kind source\n-- @param projection: expressions\n-- @output result\nSELECT {{ projection }};"
+        "-- @param projection: expressions\n-- @output result\nSELECT {{ projection }};"
     )
     with pytest.raises(Problem, match=r"projection: write .* outside quotes and comments"):
         compile_template(

@@ -20,7 +20,7 @@ def test_serial_execution_preserves_duplicates_and_manifest_order(services, monk
     store, projects, _, engine = services
     project = bundle()
     project["templates"]["keys"] = (
-        "-- @kind source\n-- @output result\nSELECT 'b' batch, 'two' task UNION ALL SELECT 'a', 'one';"
+        "-- @output result\nSELECT 'b' batch, 'two' task UNION ALL SELECT 'a', 'one';"
     )
     worktree = projects.create("Partition equivalence", project)["id"]
     calls = Counter()
@@ -63,11 +63,9 @@ def test_serial_execution_preserves_duplicates_and_manifest_order(services, monk
 def test_empty_manifest_binds_source_schema_without_evaluating_rows(services):
     store, projects, _, engine = services
     project = bundle()
-    project["templates"]["keys"] = (
-        "-- @kind source\n-- @output result\nSELECT 'a' batch, 'one' task WHERE FALSE;"
-    )
+    project["templates"]["keys"] = "-- @output result\nSELECT 'a' batch, 'one' task WHERE FALSE;"
     project["templates"]["source"] = (
-        "-- @kind source\n-- @output result\nSELECT 'a' batch, error('must not scan')::INTEGER amount;"
+        "-- @output result\nSELECT 'a' batch, error('must not scan')::INTEGER amount;"
     )
     project["templates"]["collect"] = (
         "-- @input data\n-- @output result\nSELECT count(*) AS total FROM {{ data }};"
@@ -90,7 +88,7 @@ def test_empty_manifest_binds_source_schema_without_evaluating_rows(services):
 def test_invalid_manifest_does_not_start_partition_sources(services, sql, code):
     store, projects, _, engine = services
     project = bundle()
-    project["templates"]["keys"] = "-- @kind source\n-- @output result\n" + sql + ";"
+    project["templates"]["keys"] = "-- @output result\n" + sql + ";"
     worktree = projects.create("Invalid manifest", project)["id"]
     run = join_run(store, engine.launch(worktree, "dev")["id"])
     assert code in run["partitions"]["error"]
@@ -142,9 +140,7 @@ def test_schema_drift_rejects_collection_and_keeps_previous_generation(services)
     assert not storage.available(artifact)
     snapshot = projects.snapshot(worktree)
     project = snapshot["bundle"]
-    project["templates"]["keys"] = (
-        "-- @kind source\n-- @output result\nSELECT 'a' batch, 'one' task WHERE FALSE;"
-    )
+    project["templates"]["keys"] = "-- @output result\nSELECT 'a' batch, 'one' task WHERE FALSE;"
     projects.write(worktree, snapshot["revision"], bundle_to_files(project))
     refreshed = join_run(store, engine.launch(worktree, "dev")["id"])
     assert refreshed["status"] == "success", refreshed
@@ -167,11 +163,9 @@ def test_optional_preview_budget_never_evicts_collector_inputs(services):
 def test_empty_manifest_does_not_evaluate_shared_inputs_used_only_by_the_zone(services):
     store, projects, _, engine = services
     project = bundle()
-    project["templates"]["keys"] = (
-        "-- @kind source\n-- @output result\nSELECT 'a' batch, 'one' task WHERE FALSE;"
-    )
+    project["templates"]["keys"] = "-- @output result\nSELECT 'a' batch, 'one' task WHERE FALSE;"
     project["templates"]["lookup"] = (
-        "-- @kind source\n-- @output result\nSELECT error('shared source must not run')::INTEGER rate;"
+        "-- @output result\nSELECT error('shared source must not run')::INTEGER rate;"
     )
     worktree = projects.create("Empty shared input", project)["id"]
     run = join_run(store, engine.launch(worktree, "dev")["id"])

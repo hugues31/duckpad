@@ -7,7 +7,7 @@ import type { Snapshot } from "./types";
 
 export type { NodeKind } from "./graph";
 
-const CATEGORIES = ["sources", "transforms", "components", "exports"] as const;
+const CATEGORIES = ["template", "components"] as const;
 
 export default function NodePalette({
   readOnly,
@@ -47,10 +47,7 @@ export default function NodePalette({
           choice.kind === "component"
             ? choice.definition.name
             : templateLabel(choice.id, choice.definition.label, t),
-        category:
-          CATEGORIES.find(
-            (category) => category === choice.signature.kind + "s",
-          ) || "transforms",
+        category: choice.kind === "component" ? "components" : "template",
         description: choice.definition.description,
       }))
       .filter((item) => item.label?.toLowerCase().includes(query));

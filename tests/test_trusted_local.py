@@ -123,7 +123,7 @@ def test_trusted_mode_prepares_connections_and_enforces_connection_grants(local,
     )
     snapshot = client.get(endpoint).json()
     snapshot["bundle"]["templates"]["source"] = (
-        '-- @kind source\n-- @param connection: connection = "prepared"\n'
+        '-- @param connection: connection = "prepared"\n'
         "-- @output result\nSELECT * FROM {{ connection }}.numbers;"
     )
     snapshot["bundle"]["flow"]["nodes"] = [{"id": "source", "template": "source", "params": {}}]
@@ -153,7 +153,7 @@ def test_trusted_mode_cancels_native_sql_and_can_run_again(local):
     endpoint = f"/api/worktrees/{worktree}"
     snapshot = client.get(endpoint).json()
     snapshot["bundle"]["templates"]["slow"] = (
-        "-- @kind source\n-- @output result\nSELECT SUM(random()) AS value FROM range(10000000000);"
+        "-- @output result\nSELECT SUM(random()) AS value FROM range(10000000000);"
     )
     snapshot["bundle"]["flow"]["nodes"] = [{"id": "source", "template": "slow", "params": {}}]
     assert (
@@ -167,7 +167,7 @@ def test_trusted_mode_cancels_native_sql_and_can_run_again(local):
     assert client.post(f"/api/runs/{run['id']}/cancel").status_code == 200
     assert join_run(app.state.services.store, run["id"], timeout=30)["status"] == "canceled"
     snapshot = client.get(endpoint).json()
-    snapshot["bundle"]["templates"]["slow"] = "-- @kind source\n-- @output result\nSELECT 42 AS value;"
+    snapshot["bundle"]["templates"]["slow"] = "-- @output result\nSELECT 42 AS value;"
     assert (
         client.put(
             endpoint, json={"revision": snapshot["revision"], "bundle": snapshot["bundle"]}
@@ -184,7 +184,7 @@ def test_trusted_mode_preserves_cancellation_before_native_execute(local, monkey
     endpoint = f"/api/worktrees/{worktree}"
     snapshot = client.get(endpoint).json()
     snapshot["bundle"]["templates"]["slow"] = (
-        "-- @kind source\n-- @output result\nSELECT SUM(random()) AS value FROM range(10000000000);"
+        "-- @output result\nSELECT SUM(random()) AS value FROM range(10000000000);"
     )
     snapshot["bundle"]["flow"]["nodes"] = [{"id": "source", "template": "slow", "params": {}}]
     assert (
@@ -217,7 +217,7 @@ def test_trusted_mode_preserves_cancellation_before_native_execute(local, monkey
         engine.cancel(run["id"])
         join_run(app.state.services.store, run["id"], timeout=30)
     snapshot = client.get(endpoint).json()
-    snapshot["bundle"]["templates"]["slow"] = "-- @kind source\n-- @output result\nSELECT 42 AS value;"
+    snapshot["bundle"]["templates"]["slow"] = "-- @output result\nSELECT 42 AS value;"
     assert (
         client.put(
             endpoint, json={"revision": snapshot["revision"], "bundle": snapshot["bundle"]}
