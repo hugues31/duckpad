@@ -630,14 +630,20 @@ def mysql(home):
 
 
 def sqlite(home):
-    files = {name: home / f"{name}.sqlite" for name in ("dev", "prod")}
+    files = {name: home / "databases" / name / "warehouse.sqlite" for name in ("dev", "prod")}
+    for path in files.values():
+        path.parent.mkdir(parents=True)
     attach = {name: [f"ATTACH {literal(str(path))} AS fixture (TYPE sqlite)"] for name, path in files.items()}
     for name in files:
         seed(attach[name], "main", "orders", "order_totals", 1 if name == "dev" else 10, create_schema=False)
     environments = {name: {"path": str(path)} for name, path in files.items()}
-    # The isolated worker opens connection roots and project files, not database files elsewhere.
     return database(
-        home, "sqlite", environments, ("main", "orders", "order_totals"), attach, modes=("embedded",)
+        home,
+        "sqlite",
+        environments,
+        ("main", "orders", "order_totals"),
+        attach,
+        modes=("embedded", "isolated"),
     )
 
 
