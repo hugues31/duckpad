@@ -88,7 +88,7 @@ def test_failed_retry_refreshes_manifest_and_skips_successful_exports(services, 
     assert calls["transform", "a"] == 1
     assert calls["transform", "b"] == 2
     assert calls["export", "a"] == calls["export", "b"] == 1
-    storage = PartitionStorage(store.paths, worktree, "dev")
+    storage = PartitionStorage(store, worktree, "dev")
     entry = storage.entries(second["partitions"]["manifest"])[1]
     assert storage.attempts(second["id"], entry["partition_id"])["export"]["skipped"]
     info = engine.partitions.export_result(
@@ -195,7 +195,7 @@ def test_cancel_interrupts_every_admitted_cursor(services, monkeypatch):
         release.set()
     result = join_run(store, run["id"])
     assert result["status"] == "canceled"
-    storage = PartitionStorage(store.paths, worktree, "dev")
+    storage = PartitionStorage(store, worktree, "dev")
     for entry in storage.entries(result["partitions"]["manifest"]):
         assert storage.attempts(run["id"], entry["partition_id"])["source"]["status"] == "canceled"
 
@@ -222,13 +222,13 @@ def test_restart_marks_running_keys_interrupted_and_preserves_success(services):
     store, projects, _, engine = services
     worktree = projects.create("Recovered keys", bundle())["id"]
     run = join_run(store, engine.launch(worktree, "dev")["id"])
-    storage = PartitionStorage(store.paths, worktree, "dev")
+    storage = PartitionStorage(store, worktree, "dev")
     entry = storage.entries(run["partitions"]["manifest"])[0]
     successful = storage.result("transform", entry["key_hash"])["success"]
     interrupted = {"status": "running", "kind": "export", "run": run["id"]}
     storage.attempt(run["id"], entry["partition_id"], "transform", interrupted)
     storage.record("transform", entry, interrupted)
-    partial = storage.data / "unfinished.partial"
+    partial = storage.temporary / "partition_unfinished.partial"
     partial.write_bytes(b"incomplete")
     run["status"] = "running"
     store.put("run", run["id"], run)

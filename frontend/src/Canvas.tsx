@@ -346,7 +346,8 @@ function CanvasInner(props: CanvasProps) {
                     ? "stale"
                     : states.some((s) => Object.keys(s.outputs || {}).length)
                       ? "valid"
-                      : active.includes("success")
+                      : active.includes("success") ||
+                          states.some((s) => s.execution_status === "success")
                         ? "success"
                         : "";
         return {

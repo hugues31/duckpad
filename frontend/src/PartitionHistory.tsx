@@ -19,7 +19,13 @@ export function PartitionHistory({
   const translate = useTranslateValue();
   const worktree = useOptionalWorktree();
   const [node, setNode] = useState(
-    Object.keys(run.nodes).find((key) => run.nodes[key].partitioned) || "",
+    Object.keys(run.nodes).find(
+      (key) =>
+        run.nodes[key].partitioned &&
+        ["failed", "blocked"].includes(run.nodes[key].status),
+    ) ||
+      Object.keys(run.nodes).find((key) => run.nodes[key].partitioned) ||
+      "",
   );
   const [search, setSearch] = useState("");
   const [cursor, setCursor] = useState<string | undefined>();
@@ -44,7 +50,7 @@ export function PartitionHistory({
         {t("partitionNotStarted")}
       </p>
       <div className="row gap">
-        {onRetry && (
+        {onRetry && run.partitions.failed > 0 && (
           <button className="button secondary small" onClick={onRetry}>
             {t("partitionRunFailed")}
           </button>
@@ -74,7 +80,8 @@ export function PartitionHistory({
               </option>
             ))}
         </Select>
-        {worktree?.canEdit &&
+        {run.partitions.failed > 0 &&
+          worktree?.canEdit &&
           worktree.id === run.worktree &&
           worktree.environment === run.environment && (
             <button

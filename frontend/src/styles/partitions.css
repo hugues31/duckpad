@@ -57,3 +57,49 @@
 .partition-lineage-replay p {
   margin: 0;
 }
+
+.run-control {
+  display: flex;
+  flex-shrink: 0;
+}
+.run-control:has(.run-options-trigger) > .button:first-child {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+.run-control .run-options-trigger {
+  border-left: 1px solid currentColor;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  padding-inline: 7px;
+}
+.partition-trigger {
+  max-width: 210px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.partition-segment.valid {
+  border-color: light-dark(#187044, #7edba5);
+}
+.partition-segment.failed {
+  color: light-dark(#b43b43, #ff9aa3);
+  border-color: light-dark(#b43b43, #ff9aa3);
+  background: light-dark(#fff0f1, #3f2327);
+}
+.partition-segment.stale,
+.partition-segment.missing {
+  border-style: dashed;
+  color: var(--muted);
+}
+@media (min-width: 1051px) and (max-width: 1450px) {
+  .flow-toolbar .main-tabs a {
+    padding-inline: 7px;
+    gap: 4px;
+  }
+  .flow-toolbar:has(.partition-trigger) .save-status {
+    display: none;
+  }
+  .flow-toolbar .partition-trigger {
+    max-width: 150px;
+  }
+}

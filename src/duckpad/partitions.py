@@ -267,6 +267,27 @@ def plan(bundle, nodes, edges, boundaries):
             errors.append(
                 problem("partition_collect", "Collect all partitions needs a partitioned input", root)
             )
+    # A collector is a barrier for an entire connected partition zone. A path
+    # back into that zone would need future keys before the current key can finish.
+    zones = {k: {k} for k, n in nodes.items() if n.get("partitioned")}
+    for edge in edges:
+        left, right = edge["source"], edge["target"]
+        if left in zones and right in zones and (right, edge["targetHandle"]) not in collected:
+            merged = zones[left] | zones[right]
+            for key in merged:
+                zones[key] = merged
+    for root, inputs in collectors.items():
+        collector_nodes = {key for key, _ in inputs}
+        upstream = reachable(collector_nodes, edges, upstream=True) - collector_nodes
+        downstream = reachable(collector_nodes, edges, upstream=False) - collector_nodes
+        affected = set().union(*(zones[k] for k in upstream if k in zones)) if upstream else set()
+        if affected & downstream:
+            errors.extend(
+                problem(
+                    "partition_dependency_cycle", f"Partition zone cannot read its own collector {root}", key
+                )
+                for key in affected | collector_nodes
+            )
     phase = reachable({source["node"]}, edges, upstream=True) if source else set()
     scalars = value_sources.sources(bundle, nodes, boundaries)
     scalar_phase, scalar_errors = value_sources.dependencies(nodes, edges, scalars)

@@ -43,21 +43,22 @@ test("inspect retained keys, unavailable previews and global collectors without 
   const runs = await (
     await page.request.get(`/api/runs?worktree=${created.id}`)
   ).json();
-  await panel.getByRole("button", { name: /^a · Valid/ }).click();
+  await panel.getByRole("button", { name: /^batch-011 · Valid/ }).click();
   await expect(panel.locator(".data-table tbody tr")).toHaveCount(2);
   await expect(
-    page.getByRole("button", { name: "Partition: a", exact: true }),
+    page.getByRole("button", { name: "Partition: batch-011", exact: true }),
   ).toBeVisible();
   await panel.getByRole("tab", { name: "Log", exact: true }).click();
   await expect(panel).toContainText("Executed SQL");
   await panel.getByRole("tab", { name: "Data", exact: true }).click();
+  await page.getByRole("button", { name: "Fit view", exact: true }).click();
   await page.screenshot({
     path: resolve("../docs/images/partitions.png"),
     animations: "disabled",
     style: ".resource-monitor { visibility: hidden !important; }",
   });
   await page.goto(`/worktrees/${created.id}/flow?environment=dev&node=source`);
-  await panel.getByRole("button", { name: /^a · Valid/ }).click();
+  await panel.getByRole("button", { name: /^batch-011 · Valid/ }).click();
   await expect(panel).toContainText("not retained");
   await panel.getByRole("button", { name: "All", exact: true }).click();
   await expect(panel).toContainText(
@@ -81,7 +82,7 @@ test("inspect retained keys, unavailable previews and global collectors without 
     exact: true,
   });
   await expect(lineage).toContainText(
-    "Origin available; intermediate results of a not retained.",
+    "Origin available; intermediate results for batch-011 are not retained.",
   );
   await page.screenshot({
     path: resolve("../docs/images/partition-lineage.png"),
@@ -106,7 +107,7 @@ test("inspect retained keys, unavailable previews and global collectors without 
     .toBe("success");
   expect(replay.scope).toBe("transform");
   expect(replay.partition_selection.keys).toEqual([
-    { type: "text", value: "a" },
+    { type: "text", value: "batch-011" },
   ]);
   await expect(page).toHaveURL(/node=transform/);
   await expect(panel.locator(".data-table tbody tr")).toHaveCount(2);
@@ -118,8 +119,12 @@ test("inspect retained keys, unavailable previews and global collectors without 
     exact: true,
   });
   await options.getByLabel("Key selection").selectOption("selected");
-  await options.getByRole("checkbox", { name: "a", exact: true }).uncheck();
-  await options.getByRole("checkbox", { name: "b", exact: true }).check();
+  await options
+    .getByRole("checkbox", { name: "batch-011", exact: true })
+    .uncheck();
+  await options
+    .getByRole("checkbox", { name: "batch-012", exact: true })
+    .check();
   await options.getByLabel("Parallel partitions").fill("2");
   const launching = page.waitForResponse(
     (response) =>
@@ -143,7 +148,7 @@ test("inspect retained keys, unavailable previews and global collectors without 
     await page.request.get(`/api/runs/${launched.id}`)
   ).json();
   expect(latest.partition_selection.keys).toEqual([
-    { type: "text", value: "b" },
+    { type: "text", value: "batch-012" },
   ]);
   expect(latest.partitions.selected).toBe(1);
   await page.goto(
@@ -224,4 +229,110 @@ test("Job history retries failed keys using the Job launch contract", async ({
     (await (await page.request.get(`/api/runs/${retry.id}`)).json()).partitions
       .selected,
   ).toBe(1);
+});
+
+test("partition controls fit a laptop, preserve selection and explain failed keys", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1366, height: 900 });
+  await signIn(page);
+  const created = await (
+    await page.request.post("/api/projects", {
+      data: { name: "Partition controls review" },
+    })
+  ).json();
+  const endpoint = `/api/worktrees/${created.id}`;
+  const snapshot = await (await page.request.get(endpoint)).json();
+  const project = structuredClone(partitionFlow);
+  project.flow.partitions!.batch.execution = { on_error: "continue" };
+  project.flow.nodes.find((n) => n.id === "transform")!.params.value =
+    "CASE WHEN {{ partition }} = 'batch-012' THEN error('Order conversion failed') ELSE {{ partition.task }} END";
+  expect(
+    (
+      await page.request.put(endpoint, {
+        data: { revision: snapshot.revision, bundle: project },
+      })
+    ).ok(),
+  ).toBeTruthy();
+  await page.goto(
+    `/worktrees/${created.id}/flow?environment=dev&node=transform`,
+  );
+  const run = page.getByRole("button", { name: "Run pipeline", exact: true });
+  const bounds = await run.boundingBox();
+  expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(1366);
+  await run.click();
+  await expect
+    .poll(
+      async () =>
+        (
+          await (
+            await page.request.get(`/api/runs?worktree=${created.id}`)
+          ).json()
+        )[0]?.status,
+    )
+    .toBe("partial_failure");
+  const panel = page.getByRole("region", { name: "Results", exact: true });
+  await panel.getByRole("button", { name: /^batch-012 · Failed/ }).click();
+  await expect(panel).toContainText("Order conversion failed");
+  await expect(panel).not.toContainText("partition_not_retained:");
+  await expect(
+    page.locator('.react-flow__node[data-id="collect"] .node-status'),
+  ).toContainText("Blocked");
+  await page
+    .getByRole("button", { name: "Partition: batch-012", exact: true })
+    .click();
+  await expect(page.locator(".partition-menu")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".partition-menu")).toHaveCount(0);
+  await page
+    .getByRole("button", { name: "Partition: batch-012", exact: true })
+    .click();
+  await page
+    .locator(".partition-menu")
+    .getByRole("button", { name: /^batch-011 ·/ })
+    .click();
+  await expect(page.locator(".partition-menu")).toHaveCount(0);
+  await page
+    .getByRole("button", { name: "Partition: batch-011", exact: true })
+    .click();
+  await page.locator(".flow-toolbar").click({ position: { x: 1, y: 1 } });
+  await expect(page.locator(".partition-menu")).toHaveCount(0);
+  await page
+    .getByRole("button", { name: "Partition: batch-011", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Partition settings", exact: true })
+    .click();
+  const settings = page.getByRole("dialog", { name: "Partition settings" });
+  await expect(settings.getByLabel("Source node")).toHaveValue("keys");
+  await expect(
+    settings.getByLabel("Source node").locator("option:checked"),
+  ).toHaveText("Batches to process");
+  await expect(
+    settings.getByLabel("Source column", { exact: true }),
+  ).toHaveValue("batch");
+  await expect(settings.getByLabel("Preview budget (MiB)")).toHaveValue("1024");
+  await settings.getByRole("button", { name: "Cancel", exact: true }).click();
+  await run.click();
+  await expect
+    .poll(
+      async () =>
+        (
+          await (
+            await page.request.get(`/api/runs?worktree=${created.id}`)
+          ).json()
+        )[0]?.status,
+    )
+    .toBe("partial_failure");
+  await expect(
+    page.getByRole("button", { name: "Partition: batch-011", exact: true }),
+  ).toBeVisible();
+  await expect(panel.locator(".data-table tbody tr")).toHaveCount(2);
+  await page.goto(`/worktrees/${created.id}/history?environment=dev`);
+  await page
+    .getByRole("button", { name: /Partial failure/ })
+    .first()
+    .click();
+  const history = page.getByRole("region", { name: "Partitions", exact: true });
+  await expect(history.getByLabel("Node")).toHaveValue("transform");
 });

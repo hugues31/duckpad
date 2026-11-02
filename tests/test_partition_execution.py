@@ -50,7 +50,7 @@ def test_serial_execution_preserves_duplicates_and_manifest_order(services, monk
             )
     assert actual == expected
     assert run["partitions"]["completed"] == 2
-    storage = PartitionStorage(store.paths, worktree, "dev")
+    storage = PartitionStorage(store, worktree, "dev")
     entries = storage.entries(run["partitions"]["manifest"])
     assert all(storage.result("transform", e["key_hash"])["success"]["artifacts"] for e in entries)
     assert not any(
@@ -128,10 +128,10 @@ def test_schema_drift_rejects_collection_and_keeps_previous_generation(services)
     store, projects, _, engine = services
     worktree = projects.create("Retained partition generation", bundle())["id"]
     run = join_run(store, engine.launch(worktree, "dev")["id"])
-    storage = PartitionStorage(store.paths, worktree, "dev")
+    storage = PartitionStorage(store, worktree, "dev")
     entry = storage.entries(run["partitions"]["manifest"])[0]
     artifact = storage.result("transform", entry["key_hash"])["success"]["artifacts"]["result"]
-    path = storage.data / (artifact["id"] + ".parquet")
+    path = storage.data / (artifact["id"])
     path.write_bytes(b"corrupt")
     assert not storage.available(artifact)
     snapshot = projects.snapshot(worktree)
@@ -151,7 +151,7 @@ def test_optional_preview_budget_never_evicts_collector_inputs(services):
     worktree = projects.create("Preview budget", project)["id"]
     run = join_run(store, engine.launch(worktree, "dev")["id"])
     assert run["status"] == "success", run
-    storage = PartitionStorage(store.paths, worktree, "dev")
+    storage = PartitionStorage(store, worktree, "dev")
     for entry in storage.entries(run["partitions"]["manifest"]):
         assert storage.result("source", entry["key_hash"])["success"]["artifacts"] == {}
         artifact = storage.result("transform", entry["key_hash"])["success"]["artifacts"]["result"]

@@ -31,7 +31,7 @@ import {
 } from "lucide-react";
 import { api, send, withQuery } from "./api";
 import { formatValue } from "./graph";
-import { useT } from "./i18n";
+import { useT, useTranslateValue } from "./i18n";
 import { useResource } from "./useApiResource";
 import { isFinal, usePolling } from "./usePolling";
 import {
@@ -83,6 +83,7 @@ const isExplained = (
 
 function CalculationCard({ data }: NodeProps<CardNode>) {
   const t = useT();
+  const translate = useTranslateValue();
   const { entry, disabled } = data;
   const { result, query, group } = entry;
   const source = result.kind === "source" && !entry.deferred;
@@ -150,7 +151,7 @@ function CalculationCard({ data }: NodeProps<CardNode>) {
       {result.origin && (
         <p className="lineage-source-location">
           {t("partitionOrigin")}: {String(result.origin.partition.key.value)} ·{" "}
-          {result.origin.partition.key.type}
+          {translate(result.origin.partition.key.type)}
           <br />
           {t("partitionProducingRun")}: <code>{result.origin.run}</code>
         </p>

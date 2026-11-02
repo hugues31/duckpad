@@ -226,6 +226,10 @@ class Projects:
             self.pending.pop(worktree["id"], None)
             shutil.rmtree(worktree["path"], ignore_errors=True)
             shutil.rmtree(self.store.paths.exports(worktree["id"]), ignore_errors=True)
+            partition_artifacts = self.store.paths.partition_artifacts(worktree["id"])
+            shutil.rmtree(partition_artifacts, ignore_errors=True)
+            with suppress(OSError):
+                partition_artifacts.parent.rmdir()
 
     def job_worktree(self, project: str, commit: str) -> Record:
         """Create an internal detached checkout; the caller holds the repository lock."""
