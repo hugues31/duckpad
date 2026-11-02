@@ -21,9 +21,14 @@
   ],
   "modes": {
     "embedded": {
-      "first_run_seconds": 0.16672931499999777,
-      "production_run_seconds": 0.17063186199999336,
-      "repeat_run_seconds": 0.08925016399999208
+      "first_run_seconds": 0.21736663299999748,
+      "production_run_seconds": 0.20597721599999375,
+      "repeat_run_seconds": 0.11355784899998866
+    },
+    "isolated": {
+      "first_run_seconds": 0.12359257299999626,
+      "production_run_seconds": 0.13395190900000387,
+      "repeat_run_seconds": 0.1468775729999976
     }
   },
   "platform": "Linux-7.0.0-1017-azure-x86_64-with-glibc2.43",
