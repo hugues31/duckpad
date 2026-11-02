@@ -271,26 +271,11 @@ Every definition declares its `family`, `database` or `storage`; definitions wit
 
 Create a named connection pointing to different database files in `dev` and `prod`, grant it, and read and write it with [Load table and Export table](#database-tables), schema `main`: no template or code change is needed. Custom source and export templates can also read `{{ connection }}.{{ resource }}` or explicitly `INSERT INTO` a declared attached destination. `tests/test_database_connections.py` and `tests/test_catalog.py` cover this extension-free scenario, including reuse and historical project code using current catalog settings.
 
-Database files work in isolated execution, including attached DuckDB files and SQLite.
-For each granted database connection in the selected environment, the worker opens
-the parent directory of every local parameter declared with `"type": "file"`.
-The directory is readable, and writable when the connector declares the `write`
-capability. DuckDB WAL files and SQLite journals need this directory access.
+Database files work in isolated execution, including attached DuckDB files and SQLite. For each granted database connection, the worker opens the parent directory of every local parameter declared with `"type": "file"` in the selected environment. The directory is readable, and writable when the connector declares the `write` capability: DuckDB WAL files and SQLite journals are created beside the database.
 
-**Keep each database, and each environment's database, in its own dedicated directory.**
-Granting the connection gives the project's SQL access to every file in that directory
-and its subdirectories, including unrelated files. A read-only connector should omit
-`write` and attach its database with the driver's read-only option, for example
-`ATTACH {{ database }} AS {{ alias }} (READ_ONLY)` for DuckDB.
+**Keep each database, and each environment's database, in its own dedicated directory.** Granting the connection gives the project's SQL access to every file in that directory and its subdirectories. A read-only connector should omit `write` and attach its database read-only, for example `ATTACH {{ database }} AS {{ alias }} (READ_ONLY)` for DuckDB.
 
-The administrator chooses an existing directory outside the instance and its parent
-directories. The worker rejects instance metadata and other projects, including
-paths that resolve there through symlinks; a run may also use its own project resources.
-Test connection checks these guards before attaching a database; because that test
-has no project scope, it requires database directories outside the instance.
-Relative paths and `~` resolve on the server. Empty paths, `:memory:` and remote URIs
-do not grant a local directory. The server account still needs filesystem permissions
-on the database and, for writes, permission to create journal files beside it.
+Paths resolve on the Duckpad server, including relative paths, `~` and symlinks. The directory must exist outside the instance directory and its parent directories; Test connection checks this before attaching the database. The one exception is a database among a project's own files, which only that project's runs can open. Empty paths, `:memory:` and remote URIs open no directory. The server account still needs filesystem permissions on the database and, for writes, permission to create files in its directory.
 
 A storage connector declares a `root` parameter, a folder or a URI prefix, and any setup its location needs. This one reaches Google Cloud Storage through `httpfs` with HMAC keys:
 

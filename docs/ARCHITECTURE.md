@@ -245,9 +245,9 @@ The whole directory and its descendants are exposed: administrators should keep
 each database and environment in a separate directory. Resolved directories must
 exist and pass the same guards as Server folder roots. Test connection validates
 database directories without a project scope; object listings and worker startup
-validate them for the requesting project. Project Git metadata, other projects and instance
-SQLite remain outside the data allowlist. Traversal and symlink escapes are denied
-by the kernel. DuckDB external access is then disabled with explicit allowed paths;
+validate them for the requesting project. Project Git metadata, other projects and
+instance SQLite remain outside the data allowlist. Traversal and symlink escapes
+are denied by the kernel. DuckDB external access is then disabled with explicit allowed paths;
 auto-installation/loading of extensions and unredacted/persistent secrets are
 disabled, and its configuration is locked before user SQL executes.
 
