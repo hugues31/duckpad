@@ -67,7 +67,7 @@ class PartitionRun:
         execution, source = self.execution, self.plan["source"]
         if not source or not self.dimension:
             raise Problem("partition_definition: partition values have no valid source")
-        signature = digest({k: self.dimension.get(k) for k in ("type", "values", "attributes")})
+        signature = partitions.signature(self.dimension)
         if source["node"] in execution.order:
             if self.root["nodes"][source["node"]]["status"] != "success":
                 raise Problem("partition_not_calculated: the partition value source failed")
@@ -552,11 +552,13 @@ class PartitionRun:
                     or result.get("fingerprint") != fingerprint
                     or not self.storage.available(artifact)
                 ):
-                    missing.append(entry["key"]["value"])
+                    missing.append(str(entry["key"]["value"]))
                 else:
                     artifacts.append(artifact)
             if missing:
-                raise Problem(f"partition_incomplete: {source}.{port} lacks valid results for {missing}")
+                raise Problem(
+                    f"partition_incomplete: {source}.{port} lacks valid results for {', '.join(missing)}"
+                )
             data, inputs = self.storage.collect(
                 execution.cursor, source, port, artifacts, self.schemas.get((source, port))
             )

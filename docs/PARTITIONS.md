@@ -106,8 +106,9 @@ The preview budget is shown in MiB (1 MiB = 1,048,576 bytes).
 
 **Run pipeline** recalculates the list and runs every key. The arrow beside it opens **Run with options…**, which
 offers **Failed**, **Missing** and **Selected keys**, plus a parallelism limit and
-failure policy for this run. Targeted node runs reuse the retained list; selecting
-a key before running a node limits that launch to the key. Protected environments
+failure policy for this run. Targeted node runs reuse the retained list, or calculate
+it first when none exists yet; selecting a key before running a node limits that
+launch to the key. Protected environments
 confirm the source, selection and policies before admission.
 
 Parallel keys share one SQL session's thread scheduler, memory limit and spill

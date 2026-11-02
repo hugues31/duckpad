@@ -423,6 +423,11 @@ def canonical(kind, sql_type, value):
     return result
 
 
+def signature(dimension):
+    """Manifests are reusable while the key definition is unchanged."""
+    return digest({k: dimension.get(k) for k in ("type", "values", "attributes")})
+
+
 def identity(key):
     value = key["value"]
     if key["type"] == "number" and float(value).is_integer():

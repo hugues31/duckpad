@@ -32,7 +32,7 @@ from ..projects import Projects
 from ..store import Store
 from ..templates import base_type, compile_template
 from ..types import Connections, Record, RunToken, SQLCursor
-from ..util import Problem, digest, now, qi, uid
+from ..util import Problem, now, qi, uid
 from .contexts import ContextPool, cancel_lineage, interrupt, wait_for_readers
 from .exports import Exports
 from .fingerprints import Fingerprints
@@ -178,6 +178,29 @@ class Runner:
                 self.active.pop(worktree, None)
             raise
 
+    def _partition_scope(
+        self,
+        worktree: str,
+        environment: str,
+        nodes: dict[str, Record],
+        edges: list[Record],
+        scope: set[str],
+        plan: Record,
+    ) -> set[str]:
+        """A targeted run in a zone also calculates the key list while none is retained."""
+        source, dimension = plan.get("source"), plan.get("dimension")
+        if (
+            not source
+            or not dimension
+            or source["node"] in scope
+            or not any(nodes[k].get("partitioned") or nodes[k].get("partition_collect_inputs") for k in scope)
+            or PartitionStorage(self.store, worktree, environment).manifest(
+                signature=partitions.signature(dimension)
+            )
+        ):
+            return scope
+        return scope | reachable({source["node"]}, edges, upstream=True)
+
     def _admit(self, worktree: str, environment: str, token: RunToken) -> None:
         """Reserve the worktree for a run; a busy worktree refuses it instead of queuing it."""
         with self.lock:
@@ -224,7 +247,9 @@ class Runner:
         )
         values = self.pool.computed(worktree, environment, bundle)
         nodes, edges, _ = expand_for(bundle, environment, computed=values)
-        scope = launch_scope(nodes, edges, target)
+        scope = self._partition_scope(
+            worktree, environment, nodes, edges, launch_scope(nodes, edges, target), partition_plan
+        )
         order = [n for n in topological(nodes, edges, tolerant=True) if n in scope]
         self._check_conflicts(snapshot["conflicts"], scope, environment)
         captured, secrets = self._capture_connections(
@@ -315,7 +340,10 @@ class Runner:
         bundle = snapshot["bundle"]
         values = self.pool.computed(worktree, environment, bundle)
         nodes, edges, boundaries = expand_for(bundle, environment, computed=values)
-        scope = launch_scope(nodes, edges, target)
+        plan = partitions.plan(bundle, nodes, edges, boundaries)
+        scope = self._partition_scope(
+            worktree, environment, nodes, edges, launch_scope(nodes, edges, target), plan
+        )
         result = variables.used(bundle, nodes, scope, environment, values)
         for name, source in value_sources.sources(bundle, nodes, boundaries).items():
             if source.get("node") in scope:
@@ -329,9 +357,9 @@ class Runner:
         dimension = partitions.definition(bundle["flow"])
         if dimension:
             manifest = PartitionStorage(self.store, worktree, environment).manifest(
-                signature=digest({k: dimension.get(k) for k in ("type", "values", "attributes")})
+                signature=partitions.signature(dimension)
             )
-            source = partitions.plan(bundle, nodes, edges, boundaries).get("source")
+            source = plan.get("source")
             pending = bool(source and source["node"] in scope)
             result["$partition"] = {
                 "type": dimension["type"],

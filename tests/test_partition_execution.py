@@ -13,6 +13,7 @@ from test_partitions import bundle
 
 from duckpad.bundle import bundle_to_files
 from duckpad.partition_storage import PartitionStorage
+from duckpad.util import Problem
 
 
 def test_serial_execution_preserves_duplicates_and_manifest_order(services, monkeypatch):
@@ -100,8 +101,13 @@ def test_invalid_manifest_does_not_start_partition_sources(services, sql, code):
 def test_targeted_run_reuses_its_environment_manifest(services):
     store, projects, _, engine = services
     worktree = projects.create("Targeted partitions", bundle())["id"]
-    run = join_run(store, engine.launch(worktree, "dev", "collect")["id"])
-    assert "partition_not_calculated" in run["partitions"]["error"]
+    with pytest.raises(Problem, match="partition_not_calculated"):
+        engine.preview(worktree, "dev", "transform")
+    # Without a retained list, the first targeted run calculates it.
+    run = join_run(store, engine.launch(worktree, "dev", "transform")["id"])
+    assert run["status"] == "success", run
+    assert run["nodes"]["keys"]["status"] == "success"
+    assert run["partitions"]["total"] == 2
     first = join_run(store, engine.launch(worktree, "dev")["id"])
     second = join_run(store, engine.launch(worktree, "dev", "collect")["id"])
     assert second["status"] == "success", second

@@ -31,9 +31,8 @@ class PartitionResults:
         dimension = plan["dimension"]
         manifest = None
         if dimension:
-            signature = digest({k: dimension.get(k) for k in ("type", "values", "attributes")})
             manifest = PartitionStorage(self.engine.store, worktree, environment).manifest(
-                signature=signature
+                signature=partitions.signature(dimension)
             )
         return {
             "dimension": dimension,
@@ -210,6 +209,8 @@ class PartitionResults:
                 self.selected(worktree, environment, selection)
             return None
         self.authorize(worktree, node)
+        if not selection and description["manifest"] is None:
+            raise Problem("partition_not_calculated: Partition values not calculated; run the pipeline", 409)
         storage, manifest, entry = self.selected(worktree, environment, selection)
         entries = [entry] if entry else storage.entries(manifest["id"])
         fingerprints = self.fingerprints(worktree, environment)

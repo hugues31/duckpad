@@ -158,9 +158,8 @@ class Fingerprints:
             return None
         if not dimension:
             return None
-        signature = digest({k: dimension.get(k) for k in ("type", "values", "attributes")})
         storage = PartitionStorage(self.projects.store, worktree, environment)
-        metadata = storage.manifest(signature=signature)
+        metadata = storage.manifest(signature=partitions.signature(dimension))
         return storage.entries(metadata["id"]) if metadata else None
 
     def current(self, worktree: str, environment: str) -> dict[str, str]:
