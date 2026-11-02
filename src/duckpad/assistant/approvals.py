@@ -49,8 +49,8 @@ class Approvals:
             record = assistant.owned(user, identity)
             if identity in assistant.active:
                 raise Problem("A response is already in progress", 409)
-            turn = record["turns"][-1] if record["turns"] else {}
-            if turn.get("id") != data.turn or turn.get("status") != "awaiting_approval":
+            turn = record["turns"][-1] if record["turns"] else None
+            if not turn or turn["id"] != data.turn or turn["status"] != "awaiting_approval":
                 raise Problem("This run request has already been answered", 409)
             card = next(
                 (c for c in turn["tools"] if c["id"] == data.tool and c["id"] in turn["approvals"]), None

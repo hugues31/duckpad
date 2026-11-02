@@ -107,7 +107,7 @@ class Actions:
             assistant.services.engine.access.worktree(user, record["worktree"], "editor")
             if identity in assistant.active:
                 raise Problem("Wait for the assistant response before undoing", 409)
-            turn = next((t for t in record["turns"] if t.get("id") == data.turn), None)
+            turn = next((t for t in record["turns"] if t["id"] == data.turn), None)
             if turn is None:
                 raise Problem("Assistant turn not found", 404)
             actions = [t["action"] for t in turn["tools"] if t.get("action") and t["action"].get("commit")]
@@ -165,7 +165,7 @@ class Actions:
                     result = self.projects.resolve(conflict_id, choice, files)
                 record = self.store.get("assistant_conversation", link["conversation"]) if link else None
                 if record:
-                    turn = next(t for t in record["turns"] if t.get("id") == link["turn"])
+                    turn = next(t for t in record["turns"] if t["id"] == link["turn"])
                     action = next(t["action"] for t in turn["tools"] if t["id"] == link["action"])
                     action.pop("conflict", None)
                     if link["operation"] == "undo":
