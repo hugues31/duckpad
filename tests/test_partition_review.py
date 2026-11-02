@@ -143,7 +143,8 @@ def test_graph_expansions_grow_linearly_for_run_and_validity_reads(services, mon
             return original(*args, **kwargs)
 
         monkeypatch.setattr(fingerprints, "expand_for", count)
-        run = join_run(store, engine.launch(worktree, "dev")["id"])
+        # This counts expansions; 30 keys can exceed the default wait on a loaded runner.
+        run = join_run(store, engine.launch(worktree, "dev")["id"], timeout=120)
         assert run["status"] == "success", run
         engine.partitions.page(worktree, "dev", limit=200)
         engine.invalidate(worktree)
