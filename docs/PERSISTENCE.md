@@ -7,14 +7,11 @@ business tables, including assistant conversations, API tokens, Jobs,
 idempotency keys and partitions. It seeds the `dev` and `prod` environments,
 but no connector or connection.
 
-Duckpad is in v0: compatibility with earlier instance schemas is not maintained.
-This baseline replaces the former migration chain; there is no upgrade or
-conversion from it. Startup rejects databases with an unrecognized revision or
-an unversioned nonempty schema without changing their tables or records. Keep
-the previous instance directory as a backup and start a new one with
-`duckpad start --home <new-directory>`. Reconfigure accounts and connections, and import project
-repositories that use the current file format. Do not stamp an old database with
-the new revision: its schema and stored data have not been validated or converted.
+Duckpad is in v0: earlier instance schemas are not upgraded. Startup rejects a
+database with an unknown revision, or a nonempty one without a revision, without
+changing it; start a new instance as described in
+[Installation](INSTALLATION.md). Do not stamp an old database with the current
+revision: its schema and data were never converted.
 
 Private assistant conversations belong to their author and optionally a project.
 Foreign keys cascade on author or project deletion; the `setting` table retains

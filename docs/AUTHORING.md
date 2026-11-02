@@ -35,9 +35,8 @@ components/<id>/*.sql   Code owned by nodes inside a component
 
 The **Documentation** tab edits the same `README.md` shown in **Code**. Project
 text belongs only in `README.md`; a missing or empty file means no project
-documentation. A `project` entry in `documentation.json` is rejected. To open a
-project using that old format, move its Markdown text to `README.md` and remove
-the `project` key first. Duckpad does not convert old project formats on save.
+documentation. A `project` entry in `documentation.json` is rejected: move its
+Markdown text to `README.md` and remove the key before opening the project.
 
 New projects include a standard `[project]` table in `pyproject.toml`, with a
 normalized name, Python `>=3.11`, and `duckpad` pinned to the creating instance's

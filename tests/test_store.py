@@ -85,20 +85,8 @@ def test_unknown_document_schema_is_not_modified(tmp_path):
         ]
 
 
-@pytest.mark.parametrize(
-    "revision",
-    [
-        None,
-        "0001_relational",
-        "0002_assistant",
-        "0003_api_tokens",
-        "0004_jobs",
-        "0005_job_idempotency",
-        "0006_builtin_connectors",
-        "0007_partitions",
-        "unknown_revision",
-    ],
-)
+# 0007_partitions was the head of the migration chain replaced by the baseline.
+@pytest.mark.parametrize("revision", [None, "0007_partitions", "unknown_revision"])
 def test_unrecognized_database_is_rejected_without_changes(tmp_path, revision):
     path = tmp_path / "instance.sqlite"
     with closing(sqlite3.connect(path)) as connection, connection:

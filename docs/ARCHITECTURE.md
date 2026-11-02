@@ -121,8 +121,8 @@ saves and inverse merges. Run tools require durable Pydantic AI deferred approva
 and call the shared engine with current editor permissions. There is no arbitrary
 SQL or network tool. `api.ts` owns the streaming HTTP client.
 
-Alembic revision `0002_assistant` adds `assistant_conversation`, with cascading
-foreign keys to the author and optional project. Its messages use Pydantic AI’s
+The `assistant_conversation` table has cascading foreign keys to the author and
+optional project. Its messages use Pydantic AI’s
 `ModelMessagesTypeAdapter`; UI turns hold safe text and compact tool cards.
 Ownership checks do not grant an instance-admin override. Concurrent turns in
 one conversation return 409. Provider errors never echo SDK exception bodies.
