@@ -16,7 +16,7 @@ from sqlmodel import Session, create_engine, select
 from . import models as m
 from .migrations import upgrade
 from .paths import InstancePaths
-from .sealing import MasterKeys, sealed_fields, sealed_with
+from .sealing import MasterKeys, sealable, sealed_fields, sealed_with
 from .util import dumps
 
 MODELS = {
@@ -122,7 +122,7 @@ class Store:
         with self.transaction():
             for kind, key, record in records:
                 if any(
-                    container[field] not in (None, "") and sealed_with(container[field]) != self.keys.primary
+                    sealable(container[field]) and sealed_with(container[field]) != self.keys.primary
                     for container, field, _ in sealed_fields(kind, key, record)
                 ):
                     self.put(kind, key, self._open(kind, key, record))

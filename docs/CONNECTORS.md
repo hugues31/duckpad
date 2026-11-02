@@ -11,7 +11,7 @@ Fresh instances have no connection. File nodes read uploads and write exports as
 
 ![Connections and connector definitions grouped by family, with a customized built-in](images/connections.png)
 
-The instance-admin-only `PUT /api/catalog/connector` and `PUT /api/catalog/connection` endpoints accept those same JSON objects, so an administrator can submit declarative files without changing application code. Secret fields are masked in public catalog responses and execution records. Definition snapshots and non-secret settings used by each run remain in its history. Instance admins grant each project access to connections in **Project settings**. Members see only the names and capabilities of granted connections, not the global catalog.
+The instance-admin-only `PUT /api/catalog/connector` and `PUT /api/catalog/connection` endpoints accept those same JSON objects, so an administrator can submit declarative files without changing application code. Secret fields are encrypted in the instance database and masked in public catalog responses and execution records; they can also [come from the server](#secrets-from-the-server). Definition snapshots and non-secret settings used by each run remain in its history. Instance admins grant each project access to connections in **Project settings**. Members see only the names and capabilities of granted connections, not the global catalog.
 
 Connection identifiers are fixed after creation; edit the display name to rename
 a connection without changing project references. The editor rejects duplicate
@@ -23,6 +23,61 @@ identifier exists). For updates, use `?create=false` or omit `create` (404 if th
 connection does not exist). Masked secrets in an update retain their stored values.
 
 ![Create a server folder connection with separate development and production settings](images/connection.png)
+
+## Secrets from the server
+
+A secret parameter can name an environment variable or a file of the server
+instead of holding a value. The instance database then never contains that
+secret, and connection files submitted to the API can be versioned without it.
+In the connection form, choose **Environment variable** or **Secret file** next to
+a secret field. In JSON, write a reference in place of the value:
+
+```json
+{
+  "id": "warehouse",
+  "name": "Warehouse",
+  "connector": "postgres",
+  "environments": {
+    "prod": {
+      "host": "db.internal",
+      "database": "sales",
+      "user": "duckpad",
+      "password": {"from": "file", "name": "pg_prod_password"}
+    },
+    "dev": {
+      "host": "localhost",
+      "database": "sales_dev",
+      "user": "duckpad",
+      "password": {"from": "env", "name": "DUCKPAD_SECRET_PG_DEV_PASSWORD"}
+    }
+  }
+}
+```
+
+- An environment variable must start with `DUCKPAD_SECRET_` and contain only
+  upper case letters, digits and underscores. Git commands never inherit these
+  variables, and SQL workers never inherit the server environment.
+- A secret file is named without a slash, in the directory `DUCKPAD_SECRETS_DIR`
+  (`/run/secrets` by default, where Docker mounts secrets). After symbolic links
+  are resolved, it must be a regular file inside that directory: Kubernetes
+  secret volumes qualify, while their service account token, in a subdirectory,
+  stays out of reach, and so does the master key file. Files are limited to
+  64 KiB; trailing line breaks are removed.
+
+These limits keep instance administrators from reading other variables or files
+of the server, such as the master key or cloud credentials, through a connection.
+
+The server reads a reference at each run, connection test and session start;
+SQL workers only receive the value. A rotated file therefore applies at the next
+run, without restarting Duckpad or losing results. References are displayed as
+they are, since they say where a secret is rather than what it is, and values
+read from the server are masked in messages like stored secrets. When the server
+does not provide a referenced secret, nodes that use the connection are blocked
+with a message such as `Connection warehouse: DUCKPAD_SECRET_PG_DEV_PASSWORD is
+not set on the server (dev)`. Their results stay valid: secrets never count in
+fingerprints, and fingerprints never read references. See
+[Installation](INSTALLATION.md#secrets-from-docker-or-kubernetes) for Docker
+Compose and Kubernetes examples.
 
 ## Test a connection
 

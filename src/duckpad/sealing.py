@@ -39,6 +39,11 @@ def key_id(key: bytes) -> str:
     return hashlib.sha256(b"duckpad master key\0" + key).hexdigest()[:12]
 
 
+def sealable(value: Any) -> bool:
+    """Empty values and references to server secrets hide nothing."""
+    return value not in (None, "") and not isinstance(value, dict)
+
+
 def sealed_with(value: Any) -> str | None:
     """The identifier of the key that sealed a stored value, or None for a plain value."""
     match = SEALED.fullmatch(value) if isinstance(value, str) else None
@@ -133,7 +138,7 @@ class MasterKeys:
         return keys
 
     def seal(self, value: Any, location: str) -> Any:
-        if value is None or value == "":
+        if not sealable(value):
             return value
         nonce = os.urandom(12)
         data = self.ciphers[self.primary].encrypt(nonce, json.dumps(value).encode(), location.encode())

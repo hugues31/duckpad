@@ -114,6 +114,57 @@ controls the Duckpad process or can read the key can decrypt the secrets. An
 instance administrator can also change a connection's host while keeping its
 saved password, and so send that password to a server they control.
 
+### Secrets from Docker or Kubernetes
+
+Connections can also [read their secrets from the server](CONNECTORS.md#secrets-from-the-server),
+from `DUCKPAD_SECRET_*` environment variables or files in `DUCKPAD_SECRETS_DIR`
+(`/run/secrets` by default), instead of storing them. With Docker Compose and the
+repository's `Dockerfile`, which runs as UID 10001 with its home in `/data`:
+
+```yaml
+services:
+  duckpad:
+    build: .
+    ports: ["8765:8765"]
+    volumes: ["duckpad-data:/data"]
+    environment:
+      DUCKPAD_MASTER_KEY_FILE: /run/secrets/duckpad_master_key
+      DUCKPAD_SECRET_PG_DEV_PASSWORD: ${PG_DEV_PASSWORD}
+    secrets: [duckpad_master_key, pg_prod_password]
+secrets:
+  duckpad_master_key:
+    file: ./secrets/duckpad-master.key
+  pg_prod_password:
+    file: ./secrets/pg_prod_password
+volumes:
+  duckpad-data:
+```
+
+A connection then names `{"from": "file", "name": "pg_prod_password"}` or
+`{"from": "env", "name": "DUCKPAD_SECRET_PG_DEV_PASSWORD"}`. Connections cannot
+read the master key, even when it is in the same directory.
+
+On Kubernetes, mount a Secret and point `DUCKPAD_SECRETS_DIR` at it. Kubernetes
+updates mounted files in place, so a rotated password applies at the next run:
+
+```yaml
+containers:
+  - name: duckpad
+    env:
+      - name: DUCKPAD_MASTER_KEY_FILE
+        value: /run/duckpad-key/duckpad-master.key
+      - name: DUCKPAD_SECRETS_DIR
+        value: /run/duckpad-secrets
+    volumeMounts:
+      - { name: master-key, mountPath: /run/duckpad-key, readOnly: true }
+      - { name: connection-secrets, mountPath: /run/duckpad-secrets, readOnly: true }
+volumes:
+  - name: master-key
+    secret: { secretName: duckpad-master-key }
+  - name: connection-secrets
+    secret: { secretName: duckpad-connection-secrets }
+```
+
 ## Trusted local mode
 
 For your own trusted projects on a single-user Windows workstation, run:

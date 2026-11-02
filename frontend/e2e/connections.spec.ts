@@ -75,6 +75,60 @@ test("connection IDs stay fixed and duplicate creation preserves the original", 
   }
 });
 
+test("a secret can come from a server environment variable", async ({
+  page,
+}) => {
+  await signIn(page);
+  await openInstanceSettings(page, "Connections");
+  const dialog = page.getByRole("dialog");
+  const identity = "server_secret_ui";
+  const reference = { from: "env", name: "DUCKPAD_SECRET_E2E_UNSET" };
+  const source = dialog.getByRole("combobox", {
+    name: "password source",
+    exact: true,
+  });
+  try {
+    await page
+      .getByRole("button", { name: "New connection", exact: true })
+      .click();
+    await dialog.getByLabel("ID", { exact: true }).fill(identity);
+    await dialog.getByLabel("Name", { exact: true }).fill("Server secret UI");
+    await dialog
+      .getByRole("combobox", { name: "Connector", exact: true })
+      .selectOption("oracle");
+    await source.selectOption("env");
+    await dialog.getByLabel("password", { exact: true }).fill(reference.name);
+    await dialog
+      .getByRole("button", { name: "Test connection", exact: true })
+      .click();
+    await expect(dialog.getByRole("alert")).toContainText(
+      "DUCKPAD_SECRET_E2E_UNSET is not set on the server (dev)",
+    );
+    await dialog
+      .getByRole("button", { name: "Save changes", exact: true })
+      .click();
+    await expect(dialog).toHaveCount(0);
+    const { connections } = await (
+      await page.request.get("/api/catalog")
+    ).json();
+    expect(
+      connections.find((c: { id: string }) => c.id === identity).environments
+        .dev.password,
+    ).toEqual(reference);
+
+    await page
+      .locator(".connection-card")
+      .filter({ hasText: "Server secret UI" })
+      .click();
+    await expect(source).toHaveValue("env");
+    await expect(dialog.getByLabel("password", { exact: true })).toHaveValue(
+      reference.name,
+    );
+  } finally {
+    await page.request.delete(`/api/catalog/connection/${identity}`);
+  }
+});
+
 test("switching connectors removes obsolete values across all environments", async ({
   page,
 }) => {
