@@ -57,7 +57,8 @@ export const sections = [
       {
         slug: "partitions",
         title: "Data partitions",
-        description: "Process ordered batches with bounded memory, retry failed keys and explain their results.",
+        description:
+          "Process ordered batches with bounded memory, retry failed keys and explain their results.",
       },
       {
         slug: "documentation",

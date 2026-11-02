@@ -426,13 +426,6 @@ Out of scope: multiple dimensions; dependencies from key P to P-1; generated tim
 
 ### Optional-write cost
 
-The implementation copies collector inputs concurrently and validates private
-artifacts by file identity, without hashing their bytes on every read. Fingerprint
-batches expand the graph once per key and reuse each collector's ordered inputs.
+The implementation copies collector inputs concurrently and validates private artifacts by file identity, without hashing their bytes on every read. Fingerprint batches expand the graph once per key and reuse each collector's ordered inputs.
 
-With `preview.keep: last`, a successful intermediate may still require a full
-optional write before the next key runs: the next key can fail, and the previous
-successful preview must remain available without keeping another partition in
-memory or rerunning its sources. Writes for older parallel keys are skipped when
-the requested number of newer successful keys is already retained. Optional
-writes stop at the byte cap, and no extra sort is added to the materialized row order.
+With `preview.keep: last`, a successful intermediate may still require a full optional write before the next key runs: the next key can fail, and the previous successful preview must remain available without keeping another partition in memory or rerunning its sources. Writes for older parallel keys are skipped when the requested number of newer successful keys is already retained. Optional writes stop at the byte cap, and no extra sort is added to the materialized row order.
