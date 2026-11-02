@@ -189,8 +189,17 @@ def test_isolated_worker_can_read_but_cannot_overwrite_partition_artifacts(tmp_p
 
     instance = Services.open(tmp_path / "instance", enforce_access=True)
     try:
-        worktree = instance.projects.create("Private collector inputs", bundle())
+        ordinary = bundle()
+        ordinary["flow"] = {"nodes": [ordinary["flow"]["nodes"][0]], "edges": []}
+        worktree = instance.projects.create("Private collector inputs", ordinary)
         instance.engine.access.grant_connections(worktree["project"], [])
+        assert (
+            join_run(instance.store, instance.engine.launch(worktree["id"], "dev")["id"])["status"]
+            == "success"
+        )
+        assert not instance.store.paths.partition_artifacts(worktree["id"]).exists()
+        snapshot = instance.projects.snapshot(worktree["id"])
+        instance.projects.write(worktree["id"], snapshot["revision"], bundle_to_files(bundle()))
         run = join_run(instance.store, instance.engine.launch(worktree["id"], "dev")["id"])
         assert run["status"] == "success", run
         storage = PartitionStorage(instance.store, worktree["id"], "dev")

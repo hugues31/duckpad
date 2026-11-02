@@ -85,6 +85,7 @@ class Context:
     retained_values: Record = field(default_factory=dict)
     value_attempts: Record = field(default_factory=dict)
     partition_cache: dict[str, str] = field(default_factory=dict)
+    partition_artifacts: bool = False
     lineage: dict[str, LineageRequest] = field(default_factory=dict)
     lock: threading.RLock = field(default_factory=threading.RLock)
     trace_lock: threading.RLock = field(default_factory=threading.RLock)
