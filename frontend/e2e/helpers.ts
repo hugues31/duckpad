@@ -20,6 +20,10 @@ export async function submitLogin(page: Page, labels: LoginLabels = en) {
 export async function signIn(page: Page) {
   await page.goto("/");
   await submitLogin(page);
+  // The navigation rail appears before the workspace loads and redirects home.
+  await expect(
+    page.getByRole("heading", { name: en.projects, exact: true }),
+  ).toBeVisible();
 }
 
 export async function openInstanceSettings(
