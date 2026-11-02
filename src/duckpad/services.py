@@ -25,6 +25,9 @@ class Services:
     def open(cls, home: Path, *, enforce_access: bool = False, trusted_local: bool = False) -> Services:
         store = Store(home)
         projects, catalog = Projects(store), Catalog(store)
+        # A release can mark a built-in connector parameter secret.
+        if catalog.track_secret_fields():
+            store.compact()
         engine = Engine(
             store,
             projects,

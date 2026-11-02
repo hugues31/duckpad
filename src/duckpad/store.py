@@ -2,8 +2,10 @@
 
 Services exchange dictionaries; only explicit models define storage. Unknown
 entity kinds cannot be persisted, and there is no generic document table.
+Secrets are sealed on write and opened on read (see `sealing`).
 """
 
+import copy
 import threading
 from contextlib import contextmanager
 from pathlib import Path
@@ -14,6 +16,7 @@ from sqlmodel import Session, create_engine, select
 from . import models as m
 from .migrations import upgrade
 from .paths import InstancePaths
+from .sealing import MasterKeys, sealable, sealed_fields, sealed_with
 from .util import dumps
 
 MODELS = {
@@ -39,6 +42,8 @@ MODELS = {
     "oidc_transaction": m.OIDCTransaction,
 }
 SNAPSHOTS = {"connector": "definition", "conflict": "snapshot", "run": "snapshot"}
+# Kinds whose records can hold secrets.
+SEALED_KINDS = ("connection", "settings", "ssh_key")
 
 
 def reject_unknown_fields(kind, data, fields):
@@ -83,9 +88,76 @@ class Store:
         self.engine = metadata_engine(path)
         try:
             upgrade(self.engine)
+            records = self._sealed_records()
+            self.keys = MasterKeys.load(
+                self.home,
+                {
+                    identity
+                    for kind, key, record in records
+                    for container, field, _ in sealed_fields(kind, key, record)
+                    if (identity := sealed_with(container[field]))
+                },
+            )
+            self._reseal(records)
         except BaseException:
             self.engine.dispose()
             raise
+
+    def _sealed_records(self):
+        """Every record that can hold secrets, as (kind, key, record), its values still sealed."""
+        with self.session() as session:
+            return [
+                (kind, *self._identified(kind, row, session, sealed=True))
+                for kind in SEALED_KINDS
+                for row in session.exec(select(MODELS[kind]).order_by(literal_column("rowid"))).all()
+            ]
+
+    def _reseal(self, records):
+        """Seal plaintext secrets, and those sealed before a rotation, with the first master key.
+
+        This also encrypts instances created before secrets were sealed. Rewriting the file
+        afterwards drops the pages that held the previous values.
+        """
+        changed = False
+        with self.transaction():
+            for kind, key, record in records:
+                if any(
+                    sealable(container[field]) and sealed_with(container[field]) != self.keys.primary
+                    for container, field, _ in sealed_fields(kind, key, record)
+                ):
+                    self.put(kind, key, self._open(kind, key, record))
+                    changed = True
+        if changed:
+            self.compact()
+
+    def compact(self):
+        """Rewrite the database and empty its write-ahead log, leaving no deleted page behind.
+
+        Call it outside transactions; it waits for those of other threads.
+        """
+        with self.lock:
+            connection = self.engine.raw_connection()
+            try:
+                connection.driver_connection.execute("VACUUM")
+                connection.driver_connection.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+            finally:
+                connection.close()
+
+    def _open(self, kind, key, record):
+        if kind not in SEALED_KINDS:
+            return record
+        record = copy.deepcopy(record)
+        for container, field, location in sealed_fields(kind, key, record):
+            container[field] = self.keys.open(container[field], location)
+        return record
+
+    def _seal(self, kind, key, record):
+        if kind not in SEALED_KINDS:
+            return record
+        record = copy.deepcopy(record)
+        for container, field, location in sealed_fields(kind, key, record):
+            container[field] = self.keys.seal(container[field], location)
+        return record
 
     @contextmanager
     def transaction(self):
@@ -122,6 +194,27 @@ class Store:
         return key
 
     def _record(self, kind, row, session):
+        return self._identified(kind, row, session)[1]
+
+    def _identified(self, kind, row, session, *, sealed=False):
+        """A row's key and record, with its secrets opened unless `sealed`."""
+        key = self._identity(kind, row)
+        data = self._fields(kind, row, session)
+        return key, data if sealed else self._open(kind, key, data)
+
+    @staticmethod
+    def _identity(kind, row):
+        if kind == "revision":
+            return f"{row.worktree}:{row.revision}"
+        if kind == "git_consent":
+            return f"{row.project}/{row.user}"
+        if kind == "ssh_key":
+            return row.user
+        if kind == "git_remote":
+            return row.project
+        return row.id
+
+    def _fields(self, kind, row, session):
         data = row.model_dump()
         if kind in SNAPSHOTS:
             data = {**data.pop(SNAPSHOTS[kind]), **data}
@@ -200,20 +293,7 @@ class Store:
         """Read entities in stable insertion order, including composite identifiers."""
         with self.session() as session:
             rows = session.exec(select(MODELS[kind]).order_by(literal_column("rowid"))).all()
-            result = []
-            for row in rows:
-                if kind == "revision":
-                    key = f"{row.worktree}:{row.revision}"
-                elif kind == "git_consent":
-                    key = f"{row.project}/{row.user}"
-                elif kind == "ssh_key":
-                    key = row.user
-                elif kind == "git_remote":
-                    key = row.project
-                else:
-                    key = row.id
-                result.append((key, self._record(kind, row, session)))
-            return result
+            return [self._identified(kind, row, session) for row in rows]
 
     @staticmethod
     def _access(project, session):
@@ -222,6 +302,7 @@ class Store:
         return {"members": {m.user: m.role for m in members}, "connections": [g.connection for g in grants]}
 
     def put(self, kind, key, value):
+        stored = self._seal(kind, key, value)
         with self.session() as session:
             if kind == "access":
                 reject_unknown_fields(kind, value, {"members", "connections"})
@@ -234,19 +315,19 @@ class Store:
             else:
                 model = MODELS[kind]
                 if kind == "settings":
-                    data = {"id": key, "value": value}
+                    data = {"id": key, "value": stored}
                 elif kind == "revision":
                     worktree, revision = self._key(kind, key)
                     data = {"worktree": worktree, "revision": revision, "files": value}
                 elif kind == "ssh_key":
-                    data = {**value, "user": key}
+                    data = {**stored, "user": key}
                 elif kind == "git_remote":
-                    data = {**value, "project": key}
+                    data = {**stored, "project": key}
                 elif kind == "git_consent":
                     project, user = self._key(kind, key)
-                    data = {**value, "project": project, "user": user}
+                    data = {**stored, "project": project, "user": user}
                 else:
-                    data = {**value, "id": key}
+                    data = {**stored, "id": key}
                 if kind in SNAPSHOTS:
                     field = SNAPSHOTS[kind]
                     data[field] = {k: data.pop(k) for k in list(data) if k not in model.model_fields}

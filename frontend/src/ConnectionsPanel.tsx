@@ -1,6 +1,7 @@
 import Select from "./Select";
 import { useRef, useState } from "react";
 import ParameterInput from "./ParameterInput";
+import SecretInput from "./SecretInput";
 import {
   Copy,
   Database,
@@ -481,8 +482,13 @@ export default function ConnectionsPanel({
                 const hint = p.description
                   ? `connection-parameter-${p.name}-hint`
                   : undefined;
+                // A secret has two controls, a source and a value, each with its own label.
+                const Field =
+                  p.secret && p.type !== "boolean" && p.type !== "number"
+                    ? "div"
+                    : "label";
                 return (
-                  <label
+                  <Field
                     className="field"
                     key={`${selected.connector}:${env}:${p.name}`}
                   >
@@ -517,12 +523,28 @@ export default function ConnectionsPanel({
                         }
                         onChange={(value) => changeValue(p.name, value)}
                       />
+                    ) : p.secret ? (
+                      <SecretInput
+                        label={name}
+                        hint={hint}
+                        disabled={saving}
+                        value={
+                          selected.environments?.[env]?.[p.name] ?? p.default
+                        }
+                        saved={
+                          creating
+                            ? undefined
+                            : catalog.connections.find(
+                                (c) => c.id === selected.id,
+                              )?.environments?.[env]?.[p.name]
+                        }
+                        onChange={(value) => changeValue(p.name, value)}
+                      />
                     ) : (
                       <input
                         aria-label={name}
                         aria-describedby={hint}
                         disabled={saving}
-                        type={p.secret ? "password" : "text"}
                         value={String(
                           selected.environments?.[env]?.[p.name] ??
                             p.default ??
@@ -536,7 +558,7 @@ export default function ConnectionsPanel({
                         {p.description}
                       </small>
                     )}
-                  </label>
+                  </Field>
                 );
               })}
               <p className="muted small">{t("secretHint")}</p>

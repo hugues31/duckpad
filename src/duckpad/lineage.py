@@ -79,11 +79,12 @@ class Lineage:
                     raise Problem("A lineage dependency was replaced", 409)
                 visit(context.datasets[dependency])
 
-        cursor = context.db.cursor()
+        database = context.db
+        cursor = database.cursor()
         request_id = uid("lineage_")
         canceled = threading.Event()
         with context.lock:
-            if dataset.status != "valid":
+            if dataset.status != "valid" or context.db is not database:
                 cursor.close()
                 raise Problem("Lineage interrupted by recalculation", 409)
             context.lineage[request_id] = {"cursor": cursor, "canceled": canceled, "nodes": dependencies}

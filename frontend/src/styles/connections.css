@@ -24,6 +24,11 @@
 .connection-test-error {
   white-space: pre-wrap;
 }
+.secret-input {
+  display: grid;
+  grid-template-columns: minmax(150px, auto) 1fr;
+  gap: 8px;
+}
 .connector-actions {
   flex-wrap: wrap;
   justify-content: flex-end;

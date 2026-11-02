@@ -135,7 +135,7 @@ def test_concurrent_startup_closes_unpublished_database(isolated, monkeypatch, d
         if database is unused:
             entered.set()
             assert release.wait(30)
-        return database
+        return database, {}, []
 
     monkeypatch.setattr(engine.pool, "_open", open_database)
     with ThreadPoolExecutor(1) as pool:

@@ -214,8 +214,9 @@ def reading(
     interrupts it first, and it stops after `timeout` seconds.
     """
     datasets = list(datasets)
-    assert context.db is not None
-    cursor = context.db.cursor()
+    database = context.db
+    assert database is not None
+    cursor = database.cursor()
     if isinstance(cursor, duckdb.DuckDBPyConnection):
         cursor = NativeCursor(cursor)
     request = uid("read_")
@@ -229,7 +230,10 @@ def reading(
     timer = threading.Timer(timeout, expire)
     timer.daemon = True
     with context.lock:
-        if any(context.datasets.get(dataset.id) is not dataset for dataset in datasets):
+        # A run that changed connection settings may have moved the results to a new worker.
+        if context.db is not database or any(
+            context.datasets.get(dataset.id) is not dataset for dataset in datasets
+        ):
             cursor.close()
             raise Problem("This result was replaced. Reload it.", 409)
         context.lineage[request] = {
