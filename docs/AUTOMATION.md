@@ -43,7 +43,7 @@ in about a tenth of a second.
 ```bash
 export DUCKPAD_SERVER=https://duckpad.example.com
 # DUCKPAD_TOKEN is supplied by your secret store.
-duckpad run --job sales-daily-prod --timeout 2h
+duckpad run sales-daily-prod --timeout 2h
 ```
 
 Without `DUCKPAD_SERVER` or `--server`, the command targets the local instance at
@@ -51,7 +51,7 @@ Without `DUCKPAD_SERVER` or `--server`, the command targets the local instance a
 
 | Option | Effect |
 | --- | --- |
-| `--job SLUG` | Job to launch (required) |
+| `JOB` | Slug of the Job to launch (required) |
 | `--server URL` | Duckpad address, instead of `DUCKPAD_SERVER` |
 | `--token-file PATH` | Read the token from a file, instead of `DUCKPAD_TOKEN` |
 | `--detach` | Print the run ID as soon as the run is accepted, then exit with 0 |
@@ -100,7 +100,7 @@ from airflow.providers.standard.operators.bash import BashOperator  # Airflow 2:
 sales_daily = BashOperator(
     task_id="sales_daily",
     bash_command=(
-        "duckpad run --job sales-daily-prod --source airflow"
+        "duckpad run sales-daily-prod --source airflow"
         " --reference '{{ dag.dag_id }}/{{ run_id }}'"
         " --idempotency-key '{{ dag.dag_id }}:{{ task.task_id }}:{{ run_id }}:{{ ti.try_number }}'"
     ),
@@ -121,7 +121,7 @@ Run the command in an OS job with a token file that only the agent's user can re
 on each rerun, so a rerun starts a new run. The job's command line:
 
 ```bash
-duckpad run --job sales-daily-prod --timeout 2h --server https://duckpad.example.com --token-file /opt/controlm/duckpad/sales.token --source control-m --reference '%%JOBNAME/%%ORDERID' --idempotency-key 'ctm:%%ORDERID:%%RUNCOUNT'
+duckpad run sales-daily-prod --timeout 2h --server https://duckpad.example.com --token-file /opt/controlm/duckpad/sales.token --source control-m --reference '%%JOBNAME/%%ORDERID' --idempotency-key 'ctm:%%ORDERID:%%RUNCOUNT'
 ```
 
 Add an **On/Do** action for `COMPSTAT=4` (Job already running) that reruns the job
@@ -133,7 +133,7 @@ cron starts commands with a minimal `PATH`: call the command by its full path, a
 keep its output for diagnosis.
 
 ```text
-0 2 * * * DUCKPAD_SERVER=https://duckpad.example.com /opt/duckpad/bin/duckpad run --job sales-daily-prod --token-file /etc/duckpad/sales.token --source cron --timeout 2h >> /var/log/duckpad/sales-daily.log 2>&1
+0 2 * * * DUCKPAD_SERVER=https://duckpad.example.com /opt/duckpad/bin/duckpad run sales-daily-prod --token-file /etc/duckpad/sales.token --source cron --timeout 2h >> /var/log/duckpad/sales-daily.log 2>&1
 ```
 
 ## Without installing Duckpad

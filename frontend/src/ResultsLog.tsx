@@ -174,10 +174,7 @@ export default function ResultsLog({
         </>
       ),
       detail: `${output.count.toLocaleString()} ${t(output.count === 1 ? "row" : "rows")} · ${countLabel(t, output.columns.length, "logColumnsOne", "logColumns")}`,
-      aside:
-        typeof output.duration === "number"
-          ? seconds(output.duration)
-          : undefined,
+      aside: seconds(output.duration),
     });
   for (const item of messages)
     entries.push({

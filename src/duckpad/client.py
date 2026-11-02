@@ -98,8 +98,7 @@ def parser():
         epilog="Exit codes: 0 success, 1 failed, 2 partial failure, 3 canceled or interrupted, "
         "4 Job already running, 5 request refused, 6 timeout, 7 server unreachable.",
     )
-    parser.add_argument("job_name", nargs="?", metavar="JOB", help="Job to launch")
-    parser.add_argument("--job", metavar="SLUG", help="Job to launch (alternative to JOB)")
+    parser.add_argument("job", metavar="JOB", help="Job to launch")
     parser.add_argument(
         "--server",
         help=f"Duckpad URL (default: DUCKPAD_SERVER, otherwise the local instance at {LOCAL_SERVER})",
@@ -321,11 +320,7 @@ def interrupt(signum, frame):
 
 
 def main(argv=None):
-    arguments = parser()
-    args = arguments.parse_args(argv)
-    if bool(args.job) == bool(args.job_name):
-        arguments.error("Provide one Job, as JOB or --job SLUG")
-    args.job = args.job or args.job_name
+    args = parser().parse_args(argv)
     server = (args.server or os.environ.get("DUCKPAD_SERVER") or LOCAL_SERVER).rstrip("/")
     location = urllib.parse.urlsplit(server)
     if location.scheme not in ("http", "https") or not location.hostname:

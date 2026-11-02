@@ -119,7 +119,7 @@ class Assistant:
             record = self.store.get("assistant_conversation", identity)
             if not record:
                 return
-            index = next((i for i, t in enumerate(record["turns"]) if t.get("id") == turn["id"]), None)
+            index = next((i for i, t in enumerate(record["turns"]) if t["id"] == turn["id"]), None)
             if index is None:
                 record["turns"].append(turn)
             else:
@@ -429,7 +429,7 @@ class Assistant:
             with self.lock, self.store.transaction():
                 current = self.store.get("assistant_conversation", identity)
                 if current and current["user"] == record["user"]:
-                    current["turns"] = [turn if t.get("id") == turn["id"] else t for t in current["turns"]]
+                    current["turns"] = [turn if t["id"] == turn["id"] else t for t in current["turns"]]
                     current["updated"] = now()
                     current["allow_data"] = current["allow_data"] or config["allow_data"]
                     if len(current["turns"]) == 1:

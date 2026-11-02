@@ -139,9 +139,9 @@ duckpad run daily-orders --partition-keys keys.json --partition-parallelism 2
 ```
 
 `keys.json` contains a typed array such as `[{"type":"text","value":"batch-012"}]`.
-The selector flags are mutually exclusive. Existing `--job`, wait, cancellation,
-detach, authentication and terminal exit codes remain supported; partial failure
-returns exit code 2. Progress reports the phase and completed/failed key counts.
+The selector flags are mutually exclusive. Waiting, cancellation, `--detach`,
+authentication and exit codes work as for any Job; partial failure returns exit
+code 2. Progress reports the phase and completed/failed key counts.
 
 ## Explain a collected value
 
