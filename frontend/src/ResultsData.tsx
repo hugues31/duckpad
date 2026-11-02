@@ -22,6 +22,7 @@ import { formatValue } from "./graph";
 import { useT } from "./i18n";
 import type { Cell } from "./lineageGraph";
 import { Modal } from "./modals";
+import { partitionMessage } from "./partitions";
 import {
   appendBlock,
   MAX_SAMPLE_ROWS,
@@ -89,6 +90,7 @@ export default function ResultsData({
   onFailing,
   onRun,
   runLabel,
+  reason,
   onExplain,
   onSave,
   onAddFilter,
@@ -109,6 +111,8 @@ export default function ResultsData({
   onFailing: (failing: FailingRows | null) => void;
   onRun: () => void;
   runLabel?: string;
+  /** Why the node has no result, such as the inputs a blocked collector waits for. */
+  reason?: string;
   onExplain: (cell: Cell) => void;
   onSave: SaveProject;
   onAddFilter: (condition: string) => Promise<unknown>;
@@ -182,17 +186,20 @@ export default function ResultsData({
     setOffset(0);
     onSample(normalizedSample(next), name);
   };
-  if (!dataset && !page && !failing)
+  const errorText = (message: string) =>
+    partitionMessage(t, message, partition.partition_mode === "all");
+  if (!dataset && !page && !failing) {
+    const message = error || reason || "";
+    const explained = errorText(message);
     return (
       <div className="preview-empty">
         <Database size={25} aria-hidden="true" />
         <div>
-          <strong>
-            {error.startsWith("partition_not_retained:")
-              ? t("partitionNotRetainedHint")
-              : error || t("noResult")}
-          </strong>
-          <p>{t(canEdit ? "noResultHint" : "readerNoResult")}</p>
+          <strong>{explained || t("noResult")}</strong>
+          {/* A translated partition message already says what to run. */}
+          {(!canEdit || explained === message) && (
+            <p>{t(canEdit ? "noResultHint" : "readerNoResult")}</p>
+          )}
         </div>
         <button
           className="button secondary small"
@@ -204,6 +211,7 @@ export default function ResultsData({
         </button>
       </div>
     );
+  }
   const sampleLabel = sample.rows
     ? t(
         sample.method === "random" ? "sampleRandomRows" : "sampleFirstRows",
@@ -357,7 +365,7 @@ export default function ResultsData({
       </div>
       {(error || page?.error) && (
         <div className="inline-error" role="alert">
-          {error || page?.error}
+          {errorText(error || page?.error || "")}
           {error && !failing && !sameSample(sample, ALL_ROWS) && (
             <button className="text-button" onClick={() => change(ALL_ROWS)}>
               {t("resetSample")}

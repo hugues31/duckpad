@@ -62,9 +62,11 @@ export default function ResultSummary({
   const result = statuses.nodes[sources[0]?.node ?? fullNode];
   const running = computing(statuses, fullNode);
   const status = datasets.length
-    ? datasets.every((dataset) => dataset.status === "valid")
-      ? "valid"
-      : "stale"
+    ? datasets.some((dataset) => dataset.incomplete)
+      ? "incomplete"
+      : datasets.every((dataset) => dataset.status === "valid")
+        ? "valid"
+        : "stale"
     : exportNode
       ? result?.execution_status
       : null;

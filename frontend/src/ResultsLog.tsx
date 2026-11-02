@@ -1,5 +1,6 @@
 import { usePartitionQuery } from "./worktree";
 import { withQuery } from "./api";
+import { partitionMessage } from "./partitions";
 import { lazy, Suspense, useState } from "react";
 import { Link } from "react-router";
 import {
@@ -256,7 +257,7 @@ export default function ResultsLog({
       kind: "step",
       level: "error",
       time: state.finished,
-      message: state.error || t(state.status),
+      message: state.error ? partitionMessage(t, state.error) : t(state.status),
       aside: t(state.status),
     });
   const counts = {
@@ -311,7 +312,7 @@ export default function ResultsLog({
       <div className="data-scroll log-scroll">
         {state.error && (
           <div className="notice error log-error">
-            <p>{state.error}</p>
+            <p>{partitionMessage(t, state.error)}</p>
             <AskAssistant
               node={fullNode}
               run={run.id}

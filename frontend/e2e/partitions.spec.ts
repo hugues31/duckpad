@@ -27,6 +27,10 @@ test("inspect retained keys, unavailable previews and global collectors without 
   await expect(
     page.getByRole("button", { name: "Partition: Not calculated" }),
   ).toBeVisible();
+  const panel = page.getByRole("region", { name: "Results", exact: true });
+  await expect(panel).toContainText(
+    "The partition key list is not calculated yet.",
+  );
   await page.getByRole("button", { name: "Run pipeline", exact: true }).click();
   await expect
     .poll(
@@ -38,7 +42,6 @@ test("inspect retained keys, unavailable previews and global collectors without 
         )[0]?.status,
     )
     .toBe("success");
-  const panel = page.getByRole("region", { name: "Results", exact: true });
   await expect(panel.locator(".data-table tbody tr")).toHaveCount(3);
   const runs = await (
     await page.request.get(`/api/runs?worktree=${created.id}`)
@@ -63,6 +66,9 @@ test("inspect retained keys, unavailable previews and global collectors without 
   await panel.getByRole("button", { name: "All", exact: true }).click();
   await expect(panel).toContainText(
     "Incomplete preview: 1 of 2 partitions retained.",
+  );
+  await expect(panel.locator(".results-identity .badge")).toHaveText(
+    "Incomplete",
   );
   expect(
     (await (await page.request.get(`/api/runs?worktree=${created.id}`)).json())
@@ -335,4 +341,32 @@ test("partition controls fit a laptop, preserve selection and explain failed key
     .click();
   const history = page.getByRole("region", { name: "Partitions", exact: true });
   await expect(history.getByLabel("Node")).toHaveValue("transform");
+  await page.goto(`/worktrees/${created.id}/flow?environment=dev&node=collect`);
+  await expect(
+    page.locator('.react-flow__node[data-id="transform"] .node-status'),
+  ).toContainText("Failed");
+  // A blocked collector tells which keys it waits for and retries only those.
+  await expect(panel).toContainText(
+    "Waiting for every partition: no valid result for batch-012.",
+  );
+  await expect(panel).not.toContainText("Ready when you are");
+  const retryButtons = panel.getByRole("button", {
+    name: "Run failed partitions",
+    exact: true,
+  });
+  await expect(retryButtons).toHaveCount(2);
+  const retrying = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/runs") &&
+      response.request().method() === "POST",
+  );
+  await retryButtons.last().click();
+  const retry = await (await retrying).json();
+  expect(retry.partition_selection).toEqual({ mode: "failed" });
+  await expect
+    .poll(
+      async () =>
+        (await (await page.request.get(`/api/runs/${retry.id}`)).json()).status,
+    )
+    .toBe("failed");
 });

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { withQuery } from "./api";
 import { useT, useTranslateValue } from "./i18n";
-import type { PartitionPage } from "./partitions";
+import { partitionMessage, type PartitionPage } from "./partitions";
 import type { Run } from "./types";
 import Select from "./Select";
 import { useApiResource } from "./useApiResource";
@@ -102,7 +102,7 @@ export function PartitionHistory({
           <tr>
             <th>{t("partition")}</th>
             <th>{t("partitionState")}</th>
-            <th>{t("rows")}</th>
+            <th>{t("sampleRows")}</th>
             <th>{t("partitionDuration")}</th>
             <th>{t("results_log")}</th>
           </tr>
@@ -126,7 +126,7 @@ export function PartitionHistory({
                     : `${state.duration.toFixed(2)} s`}
                 </td>
                 <td>
-                  {state?.error || (
+                  {(state?.error && partitionMessage(t, state.error)) || (
                     <details>
                       <summary>{t("executedSqlTitle")}</summary>
                       {state?.attempt?.statements?.map((statement, index) => (

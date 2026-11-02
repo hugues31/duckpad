@@ -327,6 +327,7 @@ function CanvasInner(props: CanvasProps) {
               id.startsWith(props.prefix + node.id + "::"),
           )
           .map(([, v]) => v.status as string);
+        // A partitioned node whose keys failed has a failed status but no single error.
         const status = active.includes("running")
           ? "running"
           : active.includes("failed")
@@ -336,7 +337,7 @@ function CanvasInner(props: CanvasProps) {
               ? "blocked"
               : states.some((s) => s.execution_status === "canceled")
                 ? "canceled"
-                : states.some((s) => s.error)
+                : states.some((s) => s.error || s.execution_status === "failed")
                   ? "failed"
                   : states.some((s) =>
                         Object.values(s.outputs || {}).some(

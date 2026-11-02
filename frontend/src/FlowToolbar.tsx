@@ -54,6 +54,7 @@ export function FlowToolbar({ tab }: { tab: WorkspaceTab }) {
     stop,
   } = useLoadedWorktree();
   const dirty = drafts.dirty("worktree");
+  const saveState = t(saving ? "saving" : dirty ? "unsavedChanges" : "saved");
   return (
     <div className="flow-toolbar">
       <div className="tabs main-tabs">
@@ -87,7 +88,7 @@ export function FlowToolbar({ tab }: { tab: WorkspaceTab }) {
           <Settings2 size={14} />
           {t("projectSettings")}
         </Link>
-        <span className="save-status">
+        <span className="save-status" title={saveState}>
           {saving ? (
             <Loader2 size={13} className="spin" />
           ) : dirty ? (
@@ -95,7 +96,7 @@ export function FlowToolbar({ tab }: { tab: WorkspaceTab }) {
           ) : (
             <Check size={13} />
           )}{" "}
-          {t(saving ? "saving" : dirty ? "unsavedChanges" : "saved")}
+          <span className="save-status-label">{saveState}</span>
         </span>
         {canEdit && snapshot.worktree.branch !== "main" && (
           <button

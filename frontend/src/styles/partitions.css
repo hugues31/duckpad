@@ -74,9 +74,12 @@
 }
 .partition-trigger {
   max-width: 210px;
+  min-width: 0;
+}
+.partition-trigger-label {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
 }
 .partition-segment.valid {
   border-color: light-dark(#187044, #7edba5);
@@ -91,15 +94,22 @@
   border-style: dashed;
   color: var(--muted);
 }
+/* The partition selector takes room from the tabs and the save label, only in
+   partitioned projects; the save state keeps its icon and tooltip. */
 @media (min-width: 1051px) and (max-width: 1450px) {
-  .flow-toolbar .main-tabs a {
+  .flow-toolbar:has(.partition-trigger) .main-tabs a {
     padding-inline: 7px;
     gap: 4px;
   }
-  .flow-toolbar:has(.partition-trigger) .save-status {
-    display: none;
-  }
   .flow-toolbar .partition-trigger {
     max-width: 150px;
+  }
+  .flow-toolbar:has(.partition-trigger) .save-status-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
 }

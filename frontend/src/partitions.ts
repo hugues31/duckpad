@@ -1,3 +1,4 @@
+import type { Translate } from "./i18n";
 import type { Json, NodeResult, Statement } from "./types";
 
 export type PartitionType = "text" | "number" | "date" | "boolean";
@@ -97,4 +98,32 @@ export function renamePartitionReferences(
       ]),
     );
   return value;
+}
+
+/**
+ * A partition error reported by the server as `<code>: <detail>`, in the
+ * interface language. `all` tells that no single key is selected. Other
+ * messages, and details this cannot read, are shown as is.
+ */
+export function partitionMessage(t: Translate, message: string, all = false) {
+  const [, code, detail = ""] =
+    /^(partition_[a-z_]+): ([\s\S]*)$/.exec(message) || [];
+  if (code === "partition_not_calculated")
+    return t("partitionNotCalculatedHint");
+  if (code === "partition_not_retained")
+    return t(all ? "partitionNoneRetainedHint" : "partitionNotRetainedHint");
+  const keys = /lacks valid results for (.+)$/.exec(detail)?.[1];
+  if (code === "partition_incomplete" && keys)
+    return t("partitionIncompleteHint").replace("{keys}", keys);
+  const [, column, problem] =
+    /^(.+?) (is missing or ambiguous|cannot losslessly compare this key)$/.exec(
+      detail,
+    ) || [];
+  if (code === "partition_column" && column)
+    return t(
+      problem === "is missing or ambiguous"
+        ? "partitionColumnMissing"
+        : "partitionColumnLossy",
+    ).replace("{column}", column);
+  return message;
 }

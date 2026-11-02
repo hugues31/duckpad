@@ -13,7 +13,7 @@ import type {
   PartitionType,
 } from "./partitions";
 import type { FlowNode } from "./types";
-import { renamePartitionReferences } from "./partitions";
+import { partitionMessage, renamePartitionReferences } from "./partitions";
 import Select from "./Select";
 import { useApiResource } from "./useApiResource";
 import { useAsyncAction } from "./useAsyncAction";
@@ -68,14 +68,14 @@ export function PartitionSelector() {
         }
       >
         {description?.dimension ? (
-          <>
+          <span className="partition-trigger-label">
             {t("partition")}:{" "}
             {description.manifest
               ? worktree.partitionEntry
                 ? String(worktree.partitionEntry.key.value)
                 : t("partitionAll")
               : t("partitionNotCalculated")}
-          </>
+          </span>
         ) : (
           <Settings2 size={16} />
         )}
@@ -227,18 +227,24 @@ export function PartitionStrip({
                     worktree.partitionEntry?.partition_id === entry.partition_id
                   }
                   onClick={() => select(entry)}
-                  title={Object.entries(entry.attributes)
-                    .map(([key, value]) => `${key}: ${String(value.value)}`)
+                  title={[
+                    ...Object.entries(entry.attributes).map(
+                      ([key, value]) => `${key}: ${String(value.value)}`,
+                    ),
+                    state?.error && partitionMessage(t, state.error),
+                  ]
+                    .filter(Boolean)
                     .join(" · ")}
                 >
                   <strong>{String(entry.key.value)}</strong> ·{" "}
                   {translate(entry.validity)}
                   {state?.rows != null &&
-                    ` · ${state.rows.toLocaleString()} ${t("rows")}`}
+                    ` · ${state.rows.toLocaleString()} ${t(state.rows === 1 ? "row" : "rows")}`}
                   {state?.duration != null &&
                     ` · ${state.duration.toFixed(2)} s`}
                   {state &&
                     !state.preview_available &&
+                    state.validity !== "failed" &&
                     ` · ${t("partitionNotRetained")}`}
                 </button>
               );
@@ -283,7 +289,7 @@ function DimensionEditor({ onClose }: { onClose: () => void }) {
   const [draft, setDraft] = useState<PartitionDefinition>(
     original?.[1] || {
       type: "text",
-      values: { node: "", port: "result", column: "" },
+      values: { node: "", column: "" },
       attributes: [],
       execution: { parallelism: 1, on_error: "stop" },
       preview: { keep: "last", count: 1, max_bytes: 1073741824 },
@@ -506,7 +512,12 @@ function DimensionEditor({ onClose }: { onClose: () => void }) {
         </button>
         <button
           className="button primary"
-          disabled={!worktree.canEdit || action.pending}
+          disabled={
+            !worktree.canEdit ||
+            action.pending ||
+            !draft.values.node ||
+            !draft.values.column.trim()
+          }
           onClick={save}
         >
           {t("save")}
@@ -535,6 +546,11 @@ export function PartitionInspector({
   if (!dimension) return null;
   const declaration = node.outputs?.[port]?.partition;
   const info = description.nodes[fullNode];
+  const origin =
+    info?.origin &&
+    (worktree?.snapshot?.bundle?.flow.nodes.find((n) => n.id === info.origin)
+      ?.label ||
+      info.origin);
   return (
     <section className="partition-inspector">
       <h4>{t("partition")}</h4>
@@ -544,7 +560,11 @@ export function PartitionInspector({
           : declaration
             ? t("partitionDeclared")
             : info?.partitioned
-              ? `${dimension.name} · ${t("partitionInherited")} ${worktree?.snapshot?.bundle?.flow.nodes.find((n) => n.id === info.origin)?.label || info.origin || ""}`
+              ? `${dimension.name} · ${
+                  origin
+                    ? t("partitionInheritedFrom").replace("{node}", origin)
+                    : t("partitionInherited")
+                }`
               : t("partitionShared")}
       </p>
       {!!ports.length && (
