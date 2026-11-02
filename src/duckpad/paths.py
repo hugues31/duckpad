@@ -19,6 +19,13 @@ class InstancePaths:
         """Private copies of completed file exports, offered for download."""
         return self.home / "artifacts"
 
+    def partition_artifacts(self, worktree: str, environment: str | None = None) -> Path:
+        """Immutable partition data, readable but never writable by its SQL worker."""
+        from .util import digest
+
+        path = self.artifacts / "partitions" / worktree
+        return path / digest(environment) if environment is not None else path
+
     def project(self, project: str) -> Path:
         """The main Git repository of a project."""
         return self.home / "projects" / project
@@ -46,4 +53,4 @@ class InstancePaths:
 
     def worktree_directories(self) -> list[Path]:
         """Every directory with one child per recorded worktree, named after it."""
-        return [self.home / "worktrees", self.home / "exports"]
+        return [self.home / "worktrees", self.home / "exports", self.artifacts / "partitions"]

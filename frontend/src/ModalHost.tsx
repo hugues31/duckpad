@@ -1,3 +1,5 @@
+import type { PartitionLaunchOptions } from "./partitions";
+import { PartitionRunSummary } from "./PartitionRunMenu";
 import ConvertNodeDialog from "./ConvertNodeDialog";
 import { nodeCode, nodeCodePath, nodeGraph } from "./nodeCode";
 import { useRef, useState } from "react";
@@ -51,7 +53,12 @@ type WorktreeModal = { worktree: string } & (
       commit?: string;
       entity?: string;
     }
-  | { kind: "runConfirmation"; environment: Environment; node?: string }
+  | {
+      kind: "runConfirmation";
+      environment: Environment;
+      node?: string;
+      options?: PartitionLaunchOptions;
+    }
   | { kind: "conflict"; conflict: string }
   | { kind: "combinedResolution"; conflict: string }
   | { kind: "template"; template: string; create?: boolean }
@@ -223,7 +230,9 @@ function WorktreeDialog({
         <ConfirmModal
           title={t("confirmRun")}
           confirmLabel={t("confirmAndRun")}
-          onConfirm={() => runConfirmed(modal.environment.id, modal.node)}
+          onConfirm={() =>
+            runConfirmed(modal.environment.id, modal.node, modal.options)
+          }
           onClose={onClose}
         >
           <div className="row gap">
@@ -239,6 +248,7 @@ function WorktreeDialog({
             {snapshot.bundle?.flow.name || ""} · {snapshot.worktree.branch} ·{" "}
             {modal.node || t("run")}
           </p>
+          <PartitionRunSummary options={modal.options} node={modal.node} />
           <ScopeVariables
             worktree={modal.worktree}
             environment={modal.environment.id}

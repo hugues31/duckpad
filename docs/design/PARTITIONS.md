@@ -1,6 +1,6 @@
 # Data partitions (design proposal)
 
-**Status: accepted on 1 November 2026 (see [Decisions](#decisions)), not implemented yet.** This document defines the first version; the mockups illustrate the proposed interface.
+**Status: implemented (steps A–E); live OraDuck/Oracle pushdown validation remains pending.** See the [user guide](../PARTITIONS.md) for the delivered interface and actual screenshots. This accepted design records the first-version contract; its mockups illustrate the original proposal.
 
 ## Summary
 
@@ -416,10 +416,16 @@ Parts B and D must share the final artifact and export-outcome model from the st
 5. **Failure and retry.** Fail one key after another has exported, then retry it. Successful keys and successful exports within that failed key are not rewritten. Collection uses all required generations in manifest order. Test both policies, active-key completion after stop, not-started/missing selection, unknown write outcomes, and keys added to or removed from the manifest before the retry.
 6. **Lifecycle and isolation.** Test storage exhaustion, optional preview caps, checksum failures, worker loss and restart, concurrent readers, generation cleanup, distinct environments/worktrees, revoked permissions and malicious keys/paths. Retained data must not escape the existing worker sandbox.
 7. **UI/API consistency.** Selection, progress, validity, history, log filtering, pagination and lineage agree on the same manifest/key/generation. Invalid definitions block only affected nodes. Old API callers remain valid, and `duckpad run` reports `partial_failure` with exit code 2.
-8. **Delivery checks.** Relevant pytest, Vitest, `ty check`, Ruff, ESLint and Playwright scenarios pass at each implementation step. Update translations, user documentation and screenshots. Deploy and verify the exact delivered commit before requesting human review. These implementation tests are future acceptance criteria, not claims of functionality delivered by this proposal.
+8. **Delivery checks.** Relevant pytest, Vitest, `ty check`, Ruff, ESLint and Playwright scenarios pass at each implementation step. Update translations, user documentation and screenshots. Deploy and verify the exact delivered commit before requesting human review. The live OraDuck/Oracle predicate and transfer-volume checks require an available Oracle test source. Local bound-filter and Parquet pushdown tests do not replace that integration evidence.
 
 ## Decisions
 
 Accepted on 1 November 2026: a single `flow.json` dimension; per-output filter declarations with node execution inheritance; strict typed keys and attributes; preview retention of the last executed key with a 1 GiB cap; complete rather than partial executable collection; serial execution by default; collector inputs kept for the latest successful attempt of each key; detailed lineage only for retained keys, with a single-key run to explain the others; retry as an ordinary launch of the failed keys. The storage and lineage defaults are product choices, not existing behavior.
 
 Out of scope: multiple dimensions; dependencies from key P to P-1; generated time ranges; automatic discovery beyond the resolved manifest and **Missing** selection; repeated components; caller-supplied values from [Job automation step 3](JOB_AUTOMATION.md#delivery-plan); Python nodes; automatic retry; distributed workers; exactly-once arbitrary remote writes; frozen retries replaying a past run's manifest and shared data; and automatic external-source snapshots. None is required to deliver the declared-partition model above.
+
+### Optional-write cost
+
+The implementation copies collector inputs concurrently and validates private artifacts by file identity, without hashing their bytes on every read. Fingerprint batches expand the graph once per key and reuse each collector's ordered inputs.
+
+With `preview.keep: last`, a successful intermediate may still require a full optional write before the next key runs: the next key can fail, and the previous successful preview must remain available without keeping another partition in memory or rerunning its sources. Writes for older parallel keys are skipped when the requested number of newer successful keys is already retained. Optional writes stop at the byte cap, and no extra sort is added to the materialized row order.

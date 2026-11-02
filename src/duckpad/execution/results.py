@@ -11,14 +11,18 @@ import duckdb
 import sqlglot
 from sqlglot import exp
 
-from .. import variables
+from .. import partitions, variables
 from ..catalog import Catalog, redact
 from ..components import expand, expand_for, in_subtree
 from ..datasets import Context, Dataset
 from ..graph import connection_references
+from ..partition_lineage import PartitionLineage
+from ..partition_results import PartitionResults
 from ..projects import Projects
+from ..sqlast import sql
 from ..store import Store
 from ..templates import VARIABLE_REFERENCE, compile_template
+from ..trace.normalize import rename_tables
 from ..types import Record, RunToken, SQLCursor
 from ..util import Problem, clean, now, qi
 from .contexts import ContextPool, interrupt
@@ -168,6 +172,7 @@ class Results:
         # The engine lock and the active runs it guards.
         self.lock, self.active = lock, active
         # Column statistics being computed, by result generation.
+        self.partitions: PartitionResults | None = None
         self.computations: dict[str, Computation] = {}
 
     def statuses(self, worktree: str, environment: str) -> Record:
@@ -181,6 +186,10 @@ class Results:
                 }
                 for node, outputs in context.outputs.items()
             }
+            for node, status in context.node_status.items():
+                result.setdefault(
+                    node, {"outputs": {}, "error": context.errors.get(node), "execution_status": status}
+                )
             for node, error in context.errors.items():
                 result.setdefault(
                     node, {"outputs": {}, "error": error, "execution_status": context.node_status.get(node)}
@@ -210,8 +219,17 @@ class Results:
             return bool(dataset and dataset.status == "valid")
 
     def find_dataset(
-        self, worktree: str, environment: str, node: str, port: str = "result"
+        self,
+        worktree: str,
+        environment: str,
+        node: str,
+        port: str = "result",
+        partition_context: Record | None = None,
     ) -> tuple[Context, Dataset]:
+        if self.partitions:
+            loaded = self.partitions.load(worktree, environment, node, port, partition_context)
+            if loaded:
+                return loaded
         context = self.pool.get(worktree, environment)
         dataset = context.outputs.get(node, {}).get(port)
         if not dataset:
@@ -237,12 +255,13 @@ class Results:
         descending: bool = False,
         filters: Record | None = None,
         sample: Sample | None = None,
+        partition_context: Record | None = None,
     ) -> Record:
         """A page of a node output's sample: first or random rows, filtered and sorted.
 
         The sample only selects which retained rows are shown; it never changes the result.
         """
-        context, dataset = self.find_dataset(worktree, environment, node, port)
+        context, dataset = self.find_dataset(worktree, environment, node, port, partition_context)
         columns = [c["name"] for c in dataset.columns]
         sample = sample or Sample()
         sample.order = sample_order(sample.order, columns)
@@ -287,6 +306,11 @@ class Results:
         run = self.store.get("run", dataset.run)
         with context.lock:
             error = context.errors.get(dataset.node)
+        state = (
+            self.partitions.evidence(worktree, environment, dataset)
+            if self.partitions and dataset.partition
+            else run["nodes"][dataset.node]
+        )
         return {
             **dataset.public(),
             "rows": [{"id": row[0], "values": clean(row[1:])} for row in rows],
@@ -294,24 +318,38 @@ class Results:
             "filtered_count": matched if sample.rows is None else min(matched, sample.rows),
             "matched_count": matched,
             "offset": offset,
-            "executed_sql": run["nodes"][dataset.node].get("statements", []),
-            "results": run["nodes"][dataset.node].get("results", []),
+            "executed_sql": state.get("statements", []),
+            "results": state.get("results", []),
             "commit": run["commit"],
             "environment": environment,
-            "error": error,
+            "error": state.get("error") if dataset.partition else error,
         }
 
-    def statistics(self, worktree: str, environment: str, node: str, port: str = "result") -> Record:
+    def statistics(
+        self,
+        worktree: str,
+        environment: str,
+        node: str,
+        port: str = "result",
+        partition_context: Record | None = None,
+    ) -> Record:
         """Column statistics of a result when they were computed, and its schema changes."""
-        _, dataset = self.find_dataset(worktree, environment, node, port)
+        _, dataset = self.find_dataset(worktree, environment, node, port, partition_context)
         return self._statistics_response(worktree, environment, dataset)
 
-    def compute_statistics(self, worktree: str, environment: str, node: str, port: str = "result") -> Record:
+    def compute_statistics(
+        self,
+        worktree: str,
+        environment: str,
+        node: str,
+        port: str = "result",
+        partition_context: Record | None = None,
+    ) -> Record:
         """Compute the column statistics of a whole retained result, once per result generation.
 
         A concurrent request for the same result waits for the first one instead of scanning again.
         """
-        context, dataset = self.find_dataset(worktree, environment, node, port)
+        context, dataset = self.find_dataset(worktree, environment, node, port, partition_context)
         if dataset.statistics is None:
             with self.lock:
                 computation = self.computations.get(dataset.id)
@@ -326,8 +364,15 @@ class Results:
                     raise Problem(computation.error or "Statistics are still being computed", 409)
         return self._statistics_response(worktree, environment, dataset)
 
-    def cancel_statistics(self, worktree: str, environment: str, node: str, port: str = "result") -> Record:
-        _, dataset = self.find_dataset(worktree, environment, node, port)
+    def cancel_statistics(
+        self,
+        worktree: str,
+        environment: str,
+        node: str,
+        port: str = "result",
+        partition_context: Record | None = None,
+    ) -> Record:
+        _, dataset = self.find_dataset(worktree, environment, node, port, partition_context)
         with self.lock:
             computation = self.computations.get(dataset.id)
             if computation is None:
@@ -399,6 +444,7 @@ class Results:
         test: str,
         limit: int = 100,
         offset: int = 0,
+        partition_context: Record | None = None,
     ) -> Record:
         """The failing rows of a data test, recomputed on demand from the retained result.
 
@@ -408,17 +454,40 @@ class Results:
         context = self.pool.get(worktree, environment)
         with context.lock:
             outputs = dict(context.outputs.get(node, {}))
+        assert self.partitions is not None
+        description = self.partitions.describe(worktree, environment)
+        partitioned = description["nodes"].get(node, {}).get("partitioned")
+        if partitioned:
+            storage, _, entry = self.partitions.selected(worktree, environment, partition_context)
+            if entry is None:
+                raise Problem("Choose one key to inspect its failing rows", 422)
+            artifacts = storage.result(node, entry["key_hash"]).get("success", {}).get("artifacts", {})
+            outputs = {}
+            for port in artifacts:
+                loaded = self.partitions.load(worktree, environment, node, port, partition_context)
+                if loaded:
+                    context, outputs[port] = loaded
         if not outputs:
             raise Problem("No materialized result. Run this node to see its failing rows.", 404)
         datasets = list(outputs.values())
         if any(dataset.status != "valid" for dataset in datasets):
             raise Problem("This result is stale. Run the node again to see its failing rows.", 409)
         run = self.store.get("run", datasets[0].run)
-        statement = next(
-            (s for s in run["nodes"][node].get("statements", []) if s.get("test_name") == test), None
+        evidence = (
+            self.partitions.evidence(worktree, environment, datasets[0])
+            if partitioned
+            else run["nodes"][node]
         )
+        statement = next((s for s in evidence.get("statements", []) if s.get("test_name") == test), None)
         if statement is None:
             raise Problem("This test did not run for the displayed result", 404)
+        if partitioned:
+            with reading(context, datasets) as cursor, context.lock:
+                replacements = PartitionLineage(self.partitions.engine).test_inputs(context, cursor, datasets)
+            statement = {
+                **statement,
+                "sql": sql(rename_tables(sqlglot.parse_one(statement["sql"], read="duckdb"), replacements)),
+            }
         readable = {dataset.id: dataset for dataset in datasets}
         with context.lock:
             for dataset in datasets:
@@ -455,7 +524,9 @@ class Results:
             "offset": offset,
         }
 
-    def compile(self, worktree: str, environment: str, node_id: str) -> list[Record]:
+    def compile(
+        self, worktree: str, environment: str, node_id: str, *, partition: Record | None = None
+    ) -> list[Record]:
         """The statements of a node subtree, compiled from the current files without running them."""
         snapshot = self.projects.snapshot(worktree)
         self.catalog.environment(environment)
@@ -466,6 +537,7 @@ class Results:
             environment,
             tolerant=False,
             computed=self.pool.computed(worktree, environment, snapshot["bundle"]),
+            partition=partition,
         )
         selected = [key for key in nodes if in_subtree(key, node_id)]
         if not selected:
@@ -504,7 +576,11 @@ class Results:
                 variables=variables.expression_values(node),
                 bound=node.get("variables"),
             )
+            partitions.filter_statements(statements, node, partition)
             for statement in statements:
                 statement["sql"] = redact(statement["sql"], secrets)
+            if partition and partition.get("plan"):
+                for statement in statements:
+                    statement["partition_plan"] = True
             output.extend(variables.annotate(statements, node))
         return output

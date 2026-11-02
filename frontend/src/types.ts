@@ -1,9 +1,16 @@
+import type {
+  PartitionContext,
+  PartitionDefinition,
+  PartitionDescription,
+} from "./partitions";
 import type { ProjectExtension } from "./extensions";
 /** A value that JSON can represent, such as a parameter set by a user. */
 export type Json =
   string | number | boolean | null | Json[] | { [key: string]: Json };
 export type Theme = "light" | "dark";
 export interface FlowNode {
+  partitions?: "all";
+  outputs?: Record<string, { partition?: { by: string; column: string } }>;
   id: string;
   template?: string;
   origin?: string;
@@ -71,6 +78,7 @@ export interface Documentation {
 }
 export interface Bundle {
   flow: Graph & {
+    partitions?: Record<string, PartitionDefinition>;
     id: string;
     name: string;
     description?: string;
@@ -154,6 +162,7 @@ export type Capability = "read" | "write";
 /** Databases are read as tables; file storage is a location for file nodes. */
 export type ConnectorFamily = "database" | "storage";
 export interface Snapshot {
+  partitions?: Record<string, PartitionDescription>;
   role: ProjectRole;
   /** The connections granted to the project. */
   connections: {
@@ -278,6 +287,8 @@ export interface Column {
 }
 /** A materialized output of a node. */
 export interface Dataset {
+  partition_context?: PartitionContext;
+  incomplete?: { available: number; total: number };
   id: string;
   node: string;
   port: string;
@@ -355,6 +366,7 @@ export interface TestExecution {
 }
 /** What a run did with one node. */
 export interface NodeRun {
+  partitioned?: boolean;
   results?: ExecutionResult[];
   status: NodeRunStatus;
   label: string;
@@ -378,6 +390,18 @@ export interface NodeRun {
   references?: Record<string, string[]>;
 }
 export interface Run {
+  partitions?: {
+    manifest?: string;
+    total: number;
+    selected: number;
+    completed: number;
+    failed: number;
+    not_started: number;
+    active?: string[];
+    active_keys?: { type: string; value: string | number | boolean }[];
+    phase: string;
+    execution: { parallelism: number; on_error: string };
+  };
   phase?: "values" | "consumers";
   job?: {
     slug: string;

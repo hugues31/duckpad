@@ -219,6 +219,58 @@ class Artifact(SQLModel, table=True):
     signature: list = Field(sa_type=JSON)
 
 
+class PartitionManifest(SQLModel, table=True):
+    __tablename__ = "partition_manifest"
+    __table_args__ = (Index("partition_manifest_lookup", "worktree", "environment", "signature", "created"),)
+    id: str = Field(primary_key=True)
+    worktree: str = Field(foreign_key="worktree.id", ondelete="CASCADE")
+    environment: str
+    run: str = Field(foreign_key="run.id", ondelete="CASCADE", index=True)
+    signature: str
+    created: str
+    evidence: dict = Field(sa_type=JSON)
+
+
+class PartitionEntry(SQLModel, table=True):
+    __tablename__ = "partition_entry"
+    __table_args__ = (UniqueConstraint("manifest", "partition_id", name="partition_entry_identity"),)
+    manifest: str = Field(primary_key=True, foreign_key="partition_manifest.id", ondelete="CASCADE")
+    ordinal: int = Field(primary_key=True)
+    partition_id: str
+    key_hash: str
+    evidence: dict = Field(sa_type=JSON)
+
+
+class PartitionAttempt(SQLModel, table=True):
+    __tablename__ = "partition_attempt"
+    run: str = Field(primary_key=True, foreign_key="run.id", ondelete="CASCADE")
+    partition_id: str = Field(primary_key=True)
+    node: str = Field(primary_key=True)
+    state: dict = Field(sa_type=JSON)
+
+
+class PartitionResult(SQLModel, table=True):
+    __tablename__ = "partition_result"
+    worktree: str = Field(primary_key=True, foreign_key="worktree.id", ondelete="CASCADE")
+    environment: str = Field(primary_key=True)
+    node: str = Field(primary_key=True)
+    key_hash: str = Field(primary_key=True)
+    state: dict = Field(sa_type=JSON)
+
+
+class PartitionOutput(SQLModel, table=True):
+    __tablename__ = "partition_output"
+    __table_args__ = (Index("partition_output_lookup", "worktree", "environment", "node", "key_hash"),)
+    id: str = Field(primary_key=True, foreign_key="artifact.id", ondelete="CASCADE")
+    worktree: str = Field(foreign_key="worktree.id", ondelete="CASCADE")
+    environment: str
+    node: str
+    key_hash: str
+    dataset: str = Field(index=True)
+    mandatory: bool
+    evidence: dict = Field(sa_type=JSON)
+
+
 class ExportResult(SQLModel, table=True):
     __tablename__ = "export_result"
     __table_args__ = (UniqueConstraint("worktree", "environment", "node", name="export_result_node"),)

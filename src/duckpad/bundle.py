@@ -5,7 +5,7 @@ import re
 import tomllib
 from pathlib import Path
 
-from . import __version__, project_extensions, variables, views
+from . import __version__, partitions, project_extensions, variables, views
 from .components import expand
 from .node_code import node_sql
 from .templates import parse_template
@@ -185,7 +185,8 @@ def validate(bundle):
     errors.extend(variables.problems(bundle))
     errors.extend(views.problems(bundle))
     try:
-        nodes, edges, _ = expand(bundle)
+        nodes, edges, boundaries = expand(bundle)
+        errors.extend(partitions.plan(bundle, nodes, edges, boundaries)["errors"])
         errors.extend(variables.node_problems(bundle, nodes))
         identifiers = [n["id"] for n in bundle["flow"].get("nodes", [])]
         if len(set(identifiers)) != len(identifiers):

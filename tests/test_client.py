@@ -16,6 +16,7 @@ import uvicorn
 from helpers import join_run
 
 from duckpad import client
+from duckpad.bundle import bundle_to_files
 
 instance = test_jobs.instance
 
@@ -120,6 +121,29 @@ def test_success_waits_prints_progress_and_records_the_trigger(server, tmp_path)
     assert lines[0].endswith(", environment dev")
     assert any(line.endswith("] success: 1/1 nodes succeeded") for line in lines)
     assert "Node source (source): success" in lines and "Outcome: success" in lines
+
+
+def test_typed_partition_file_and_partial_failure_exit_code(server, instance, tmp_path):
+    from test_partitions import bundle
+
+    _, url, tokens = server
+    project = bundle()
+    project["flow"]["partitions"]["batch"]["execution"] = {"on_error": "continue"}
+    project["flow"]["nodes"][3]["params"]["value"] = (
+        "CASE WHEN {{ partition }} = 'b' THEN error('key failed') ELSE {{ partition.task }} END"
+    )
+    tagged_job(instance, "partitioned", bundle_to_files(project))
+    result = duckpad_run(url, "partitioned", "--partitions", "all", token=tokens["operator"])
+    assert result.returncode == client.PARTIAL_FAILURE, result.stdout + result.stderr
+    assert "1/2 partitions complete, 1 failed" in result.stdout
+    keys = tmp_path / "keys.json"
+    keys.write_text('[{"type":"text","value":"a"}]')
+    result = duckpad_run(url, "partitioned", "--partition-keys", str(keys), token=tokens["operator"])
+    assert result.returncode == client.PARTIAL_FAILURE  # The collector still lacks b.
+    incompatible = duckpad_run(
+        url, "partitioned", "--partitions", "all", "--partition-keys", str(keys), token=tokens["operator"]
+    )
+    assert incompatible.returncode == client.REFUSED
 
 
 def test_failed_and_partial_failure_exit_codes(server, instance):

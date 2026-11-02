@@ -6,7 +6,7 @@ import copy
 import re
 import threading
 import time
-from collections.abc import Collection
+from collections.abc import Mapping
 from contextlib import suppress
 
 import duckdb
@@ -128,19 +128,18 @@ class ContextPool:
         """
         key = (worktree, environment)
         opening = create or not self.access
-        if opening and requirements is None:
-            with self.lock:
-                existing = self.contexts.get(key)
-            if (
-                not create
-                and existing is not None
-                and existing.db is not None
-                and not getattr(existing.db, "closed", False)
-            ):
-                requirements = existing.extensions
-            else:
-                bundle = self.projects.snapshot(worktree, committed=True)["bundle"]
+        with self.lock:
+            existing = self.contexts.get(key)
+        partition_artifacts = existing.partition_artifacts if existing else False
+        if opening and (
+            create or existing is None or existing.db is None or getattr(existing.db, "closed", False)
+        ):
+            bundle = self.projects.snapshot(worktree, committed=True)["bundle"]
+            partition_artifacts = bool((bundle or {}).get("flow", {}).get("partitions"))
+            if requirements is None:
                 requirements = project_extensions.enabled((bundle or {}).get("extensions"))
+        elif opening and requirements is None and existing:
+            requirements = existing.extensions
         resources = self.sql_resources() if opening else {}
         while True:
             self.projects.get(worktree)
@@ -151,21 +150,32 @@ class ContextPool:
                 if (
                     context is None
                     or getattr(context.db, "closed", False)
-                    or (create and (context.extensions != requirements or context.resources != resources))
+                    or (
+                        create
+                        and (
+                            context.extensions != requirements
+                            or context.resources != resources
+                            or context.partition_artifacts != partition_artifacts
+                        )
+                    )
                 ):
                     if context is not None:
                         with context.lock:
                             cancel_lineage(context)
                     stopped = context.db if context is not None else None
                     context = self.contexts[key] = Context(
-                        *key, db=None, extensions=requirements or [], resources=resources
+                        *key,
+                        db=None,
+                        extensions=requirements or [],
+                        resources=resources,
+                        partition_artifacts=partition_artifacts,
                     )
             if stopped:
                 # Reap the replaced worker's process and release its descriptors.
                 stopped.close()
             if context.db is not None or (self.access and not create):
                 return context
-            database = self._open(worktree, environment, requirements or [], resources)
+            database = self._open(worktree, environment, requirements or [], resources, partition_artifacts)
             with self.lock:
                 if self.contexts.get(key) is context and context.db is None:
                     context.db = database
@@ -233,7 +243,12 @@ class ContextPool:
         return {**SQL_RESOURCES, **self.store.get("settings", "sql_resources", {})}
 
     def _open(
-        self, worktree: str, environment: str, requirements: list[Record], resources: Record
+        self,
+        worktree: str,
+        environment: str,
+        requirements: list[Record],
+        resources: Record,
+        partition_artifacts: bool,
     ) -> SQLDatabase:
         extensions = self.store.paths.extensions
         extensions.mkdir(exist_ok=True)
@@ -263,6 +278,10 @@ class ContextPool:
         directory.mkdir(parents=True, exist_ok=True)
         temporary = directory / ".temporary"
         temporary.mkdir(exist_ok=True)
+        if partition_artifacts:
+            partition_data = self.store.paths.partition_artifacts(worktree, environment)
+            partition_data.mkdir(parents=True, exist_ok=True, mode=0o700)
+            roots = [*roots, partition_data]
         self._install_extensions(captured, config, secrets)
         try:
             return Database(
@@ -319,24 +338,33 @@ class ContextPool:
                     f"Cannot install the extensions of connection {connection['name']}: {error}", 503
                 ) from None
 
-    def mark_stale(self, context: Context, fingerprints: dict[str, str]) -> None:
+    def mark_stale(
+        self, context: Context, fingerprints: dict[str, str], generations: dict[str, str] | None = None
+    ) -> None:
         """Mark results whose fingerprint changed stale, and interrupt lineage requests reading them."""
         with context.lock:
             changed = set()
             for dataset in context.datasets.values():
-                if fingerprints.get(dataset.node) != dataset.fingerprint:
+                if (generations or {}).get(dataset.id, fingerprints.get(dataset.node)) != dataset.fingerprint:
                     dataset.status = "stale"
                     changed.add(dataset.node)
             cancel_lineage(context, changed)
 
-    def forget_removed(self, context: Context, nodes: Collection[str]) -> None:
+    def forget_removed(self, context: Context, nodes: Mapping[str, Record]) -> None:
         """Drop the results and states of nodes absent from the definitions, once no lineage
         request reads them. Only the run that owns the worktree may call this."""
+        from ..partition_storage import PartitionStorage
+
+        partitioned = {key for key, node in nodes.items() if node.get("partitioned")}
         with context.lock:
             removed = {d.node for d in context.datasets.values()}
             removed |= {*context.outputs, *context.errors, *context.node_status, *context.result_runs}
             removed -= set(nodes)
             if not removed:
+                PartitionStorage(self.store, context.worktree, context.environment).forget_removed(
+                    partitioned,
+                    {d.artifact_id for d in context.datasets.values() if d.artifact_id},
+                )
                 return
             for dataset in context.datasets.values():
                 if dataset.node in removed:
@@ -355,6 +383,10 @@ class ContextPool:
             for node in removed:
                 for states in (context.outputs, context.errors, context.node_status, context.result_runs):
                     states.pop(node, None)
+            PartitionStorage(self.store, context.worktree, context.environment).forget_removed(
+                partitioned,
+                {d.artifact_id for d in context.datasets.values() if d.artifact_id},
+            )
 
     def discard(self, worktree: str) -> None:
         """Close every environment context of a worktree, even after the worktree was removed."""

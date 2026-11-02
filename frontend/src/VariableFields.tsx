@@ -342,7 +342,12 @@ export function ScopeVariables({
       <h4 className="eyebrow">
         {fill(t("variablesUsedByRun"), { environment })}
       </h4>
-      <VariableValues variables={scope.data} environment={environment} />
+      <VariableValues
+        variables={Object.fromEntries(
+          Object.entries(scope.data).filter(([name]) => name !== "$partition"),
+        )}
+        environment={environment}
+      />
       <p className="muted small">{t("variablesRecordedHint")}</p>
     </section>
   );

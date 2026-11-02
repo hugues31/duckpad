@@ -55,6 +55,12 @@ export const sections = [
           "Bind shared values and SQL expressions, with overrides per environment.",
       },
       {
+        slug: "partitions",
+        title: "Data partitions",
+        description:
+          "Process ordered batches with bounded memory, retry failed keys and explain their results.",
+      },
+      {
         slug: "documentation",
         title: "Document a project",
         description: "Explain a project, its nodes, output tables and columns.",

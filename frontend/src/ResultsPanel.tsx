@@ -1,3 +1,7 @@
+import { withQuery } from "./api";
+import { PartitionStrip } from "./PartitionControls";
+import { partitionMessage, type PartitionPage } from "./partitions";
+import { useOptionalWorktree, usePartitionQuery } from "./worktree";
 import { useState } from "react";
 import {
   Clock,
@@ -27,6 +31,7 @@ import type {
   Run,
   Snapshot,
   Statuses,
+  PreviewPage,
 } from "./types";
 import { useApiResource } from "./useApiResource";
 
@@ -160,8 +165,58 @@ export default function ResultsPanel({
     node: fullNode,
     port: target.input ? ports[0] || "result" : target.port,
   }).node;
-  const result = statuses.nodes[producer];
-  const dataset = datasetOf(target);
+  const worktree = useOptionalWorktree();
+  const collector =
+    snapshot.partitions?.[environment]?.nodes[producer]?.collect.length;
+  const baseResult = statuses.nodes[producer];
+  // A blocked collector waits for keys: retry those that failed rather than every key.
+  const blocked = collector ? baseResult?.error || undefined : undefined;
+  const failedKeys = useApiResource<PartitionPage>(
+    blocked
+      ? withQuery(`/worktrees/${snapshot.worktree.id}/partitions`, {
+          environment,
+          status: "failed",
+          limit: 1,
+        })
+      : null,
+    { refresh: JSON.stringify([statuses.active?.id, blocked]) },
+  );
+  const retryFailed = !!failedKeys.data?.entries.length;
+  const runLabel = t(
+    !collector ? "runNode" : retryFailed ? "partitionRunFailed" : "run",
+  );
+  const runResult =
+    collector && worktree
+      ? () => {
+          void worktree.run(
+            undefined,
+            retryFailed ? { partitions: { mode: "failed" } } : undefined,
+          );
+        }
+      : onRun;
+  const partition = usePartitionQuery(target.node, target.port);
+  const partitionPreview = useApiResource<PreviewPage>(
+    partition.manifest
+      ? withQuery(
+          `/worktrees/${snapshot.worktree.id}/preview/${encodeURIComponent(target.node)}`,
+          { environment, port: target.port, limit: 1, ...partition },
+        )
+      : null,
+    { refresh: JSON.stringify(statuses) },
+  );
+  const dataset = partition.manifest
+    ? partitionPreview.data || undefined
+    : datasetOf(target);
+  const result = partition.manifest
+    ? {
+        outputs: dataset ? { [target.port]: dataset } : {},
+        results: partitionPreview.data?.results || [],
+        error: partitionPreview.data?.error || null,
+        result_run: dataset?.run,
+      }
+    : baseResult;
+  // A preview lacking some partitions is incomplete, as the banner below details.
+  const datasetStatus = dataset?.incomplete ? "incomplete" : dataset?.status;
   const running = computing(statuses, fullNode);
   // The run that produced the displayed rows, for the header.
   const generation = useApiResource<Run>(
@@ -237,14 +292,17 @@ export default function ResultsPanel({
               {t("running")}
             </span>
           ) : (
-            dataset && (
-              <span className={`badge ${dataset.status}`}>
-                {t(dataset.status)}
+            datasetStatus && (
+              <span className={`badge ${datasetStatus}`}>
+                {t(datasetStatus)}
               </span>
             )
           )}
           {result?.error && dataset && (
-            <span className="results-failure" title={result.error}>
+            <span
+              className="results-failure"
+              title={partitionMessage(t, result.error)}
+            >
               {t("lastRunFailed")}
             </span>
           )}
@@ -275,10 +333,10 @@ export default function ResultsPanel({
           )}
           <button
             className="icon"
-            title={t("runNode")}
-            aria-label={t("runNode")}
+            title={runLabel}
+            aria-label={runLabel}
             disabled={readOnly || !!statuses.active}
-            onClick={onRun}
+            onClick={runResult}
           >
             <Play size={15} />
           </button>
@@ -292,6 +350,14 @@ export default function ResultsPanel({
           </button>
         </div>
       </header>
+      <PartitionStrip node={stored(target).node} port={target.port} />
+      {dataset?.incomplete && (
+        <div className="notice warning" role="status">
+          {t("partitionIncomplete")
+            .replace("{available}", String(dataset.incomplete.available))
+            .replace("{total}", String(dataset.incomplete.total))}
+        </div>
+      )}
       <div className="tabs results-tabs" role="tablist">
         {tabs.map((key) => {
           const Icon = {
@@ -321,7 +387,7 @@ export default function ResultsPanel({
       </div>
       {shown === "data" ? (
         <ResultsData
-          key={`${target.node}:${target.port}:${environment}`}
+          key={`${target.node}:${target.port}:${environment}:${JSON.stringify(partition)}`}
           snapshot={snapshot}
           environment={environment}
           target={target}
@@ -337,7 +403,9 @@ export default function ResultsPanel({
             storeSample(storage(target), sample, view);
           }}
           onFailing={setFailing}
-          onRun={onRun}
+          onRun={runResult}
+          runLabel={runLabel}
+          reason={target.input ? undefined : blocked}
           onExplain={onExplain}
           onSave={onSave}
           onAddFilter={(condition) => onAddFilter(target.port, condition)}
@@ -346,7 +414,7 @@ export default function ResultsPanel({
         />
       ) : shown === "columns" ? (
         <ResultsColumns
-          key={`${target.node}:${target.port}:${environment}`}
+          key={`${target.node}:${target.port}:${environment}:${JSON.stringify(partition)}`}
           snapshot={snapshot}
           environment={environment}
           target={target}

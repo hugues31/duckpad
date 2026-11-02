@@ -66,7 +66,7 @@ class Exports:
         """
         replaced: list[str] = []
         for key, state in run["nodes"].items():
-            if state.get("kind") != "export":
+            if state.get("kind") != "export" or state.get("partitioned"):
                 continue
             identity = digest([run["worktree"], run["environment"], key])
             previous = self.store.get("export_result", identity)
@@ -143,11 +143,7 @@ class Exports:
                     self.access.connections(snapshot["worktree"]["project"], references)
                 except Problem:
                     return {**public, "status": "stale"}
-            current = self.fingerprints.of(
-                snapshot["bundle"],
-                environment,
-                computed=self.fingerprints.pool.computed(worktree, environment, snapshot["bundle"]),
-            )
+            current = self.fingerprints.current(worktree, environment)
             if current.get(node) != result["fingerprint"]:
                 return {**public, "status": "stale"}
             if result["run_status"] in ("canceled", "interrupted"):

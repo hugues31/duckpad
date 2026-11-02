@@ -12,6 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from . import schemas
 from .execution.runs import UNFINISHED_RUN_STATUSES
+from .partition_storage import PartitionStorage
 from .types import Record
 from .util import Problem
 
@@ -22,7 +23,7 @@ class Trigger(BaseModel):
     reference: str | None = Field(default=None, max_length=2048)
 
 
-class LaunchRequest(BaseModel):
+class LaunchRequest(schemas.PartitionLaunch):
     model_config = ConfigDict(extra="forbid")
     trigger: Trigger | None = None
 
@@ -63,6 +64,7 @@ class Run(BaseModel):
     finished: str | None
     nodes: NodeCounts
     variables: dict[str, Record] = Field(default_factory=dict)
+    partitions: Record | None = None
     trigger: Trigger | None
     requester: Requester | None
     links: RunLinks
@@ -127,6 +129,7 @@ def public_run(run):
         "commit": run["commit"],
         "environment": run["environment"],
         "variables": run.get("variables", {}),
+        "partitions": run.get("partitions"),
         "started": run["started"],
         "finished": run.get("finished"),
         "nodes": {
@@ -247,7 +250,7 @@ def router(jobs, access):
         try:
             run = jobs.launch(
                 slug,
-                schemas.JobLaunch(),
+                schemas.JobLaunch(partitions=data.partitions, partition_execution=data.partition_execution),
                 requester,
                 external_trigger=data.trigger.model_dump() if data.trigger else None,
                 idempotency_key=idempotency_key,
@@ -280,8 +283,41 @@ def router(jobs, access):
         return public_run(jobs.engine.cancel(run_id))
 
     @api.get("/runs/{run_id}/log", response_class=PlainTextResponse, summary="Read the current text log")
-    def log(run_id: str, request: Request):
-        return run_log(request.state.automation_record)
+    def log(run_id: str, request: Request, partition_id: str | None = None):
+        run = request.state.automation_record
+        if partition_id:
+            storage = PartitionStorage(store, run["worktree"], run["environment"])
+            storage.entry(run.get("partitions", {}).get("manifest", ""), partition_id)
+            run = {**run, "nodes": storage.attempts(run_id, partition_id)}
+        return run_log(run)
+
+    @api.get("/runs/{run_id}/partitions", summary="Page through immutable partition run evidence")
+    def run_partitions(
+        run_id: str,
+        request: Request,
+        cursor: str | None = None,
+        limit: Annotated[int, Query(ge=1, le=200)] = 50,
+        node: str | None = None,
+        port: str = "result",
+        search: str = "",
+        status: str | None = None,
+    ):
+        run = request.state.automation_record
+        manifest = run.get("partitions", {}).get("manifest")
+        if not manifest:
+            raise Problem("This run has no partition manifest", 404, {"code": "run_not_found"})
+        return jobs.engine.partitions.page(
+            run["worktree"],
+            run["environment"],
+            manifest=manifest,
+            node=node,
+            port=port,
+            cursor=cursor,
+            limit=limit,
+            search=search,
+            status=status,
+            run=run_id,
+        )
 
     @api.get("/openapi.json", include_in_schema=False)
     def openapi():

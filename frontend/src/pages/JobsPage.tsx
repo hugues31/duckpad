@@ -236,23 +236,37 @@ function JobDetails({
   });
   const [runId, setRunId] = useState<string | null>(null);
   const [confirmation, setConfirmation] = useState<
-    (Environment & { job_revision: string }) | null
+    (Environment & { job_revision: string; failedPartitions?: boolean }) | null
   >(null);
   const selected = runs.data?.find((run) => run.id === runId);
   const busy = active(job.last_run);
   const canRun = project.role !== "reader";
-  const launch = async (confirmed = false, revision = job.revision) => {
+  const launch = async (
+    confirmed = false,
+    revision = job.revision,
+    failedPartitions = false,
+  ) => {
     try {
       await api(
         `/jobs/${job.slug}/runs`,
-        send({ entry_point: "ui", confirmed, revision }),
+        send({
+          entry_point: "ui",
+          confirmed,
+          revision,
+          ...(failedPartitions ? { partitions: { mode: "failed" } } : {}),
+        }),
       );
       runs.reload();
       await onChanged();
     } catch (error) {
       const settings = errorDetail(error).confirmation_required as
         Environment | undefined;
-      if (settings) setConfirmation({ ...settings, job_revision: revision });
+      if (settings)
+        setConfirmation({
+          ...settings,
+          job_revision: revision,
+          failedPartitions,
+        });
       else throw error;
     }
   };
@@ -406,7 +420,18 @@ function JobDetails({
               </span>{" "}
               · <code>{selected.id}</code>
             </p>
-            <RunDetails run={selected} onClose={() => setRunId(null)} />
+            <RunDetails
+              run={selected}
+              onClose={() => setRunId(null)}
+              onPartitionRetry={
+                canRun && !busy && !action.pending
+                  ? () => {
+                      setRunId(null);
+                      void action.run(() => launch(false, job.revision, true));
+                    }
+                  : undefined
+              }
+            />
           </div>
         </Modal>
       )}
@@ -415,7 +440,13 @@ function JobDetails({
           title={t("runJob")}
           confirmLabel={t("runJob")}
           onClose={() => setConfirmation(null)}
-          onConfirm={() => launch(true, confirmation.job_revision)}
+          onConfirm={() =>
+            launch(
+              true,
+              confirmation.job_revision,
+              confirmation.failedPartitions,
+            )
+          }
         >
           <p>
             {t("jobConfirmEnvironment")} <strong>{confirmation.label}</strong>
@@ -423,6 +454,12 @@ function JobDetails({
           <p>
             {job.name} · {version(job.target)}
           </p>
+          {confirmation.failedPartitions && (
+            <p>
+              {t("partitionRunFailed")} · {t("partitionFreshLaunch")} ·{" "}
+              {t("partitionExportNotice")}
+            </p>
+          )}
         </ConfirmModal>
       )}
     </section>

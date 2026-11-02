@@ -1,3 +1,5 @@
+import { PartitionRunMenu } from "./PartitionRunMenu";
+import { PartitionSelector } from "./PartitionControls";
 import { Link } from "react-router";
 import {
   Activity,
@@ -52,6 +54,7 @@ export function FlowToolbar({ tab }: { tab: WorkspaceTab }) {
     stop,
   } = useLoadedWorktree();
   const dirty = drafts.dirty("worktree");
+  const saveState = t(saving ? "saving" : dirty ? "unsavedChanges" : "saved");
   return (
     <div className="flow-toolbar">
       <div className="tabs main-tabs">
@@ -71,6 +74,7 @@ export function FlowToolbar({ tab }: { tab: WorkspaceTab }) {
         })}
       </div>
       <div className="row gap">
+        <PartitionSelector />
         <Link
           className="button secondary small"
           to={`/projects/${snapshot.worktree.project}/jobs`}
@@ -84,7 +88,7 @@ export function FlowToolbar({ tab }: { tab: WorkspaceTab }) {
           <Settings2 size={14} />
           {t("projectSettings")}
         </Link>
-        <span className="save-status">
+        <span className="save-status" title={saveState}>
           {saving ? (
             <Loader2 size={13} className="spin" />
           ) : dirty ? (
@@ -92,7 +96,7 @@ export function FlowToolbar({ tab }: { tab: WorkspaceTab }) {
           ) : (
             <Check size={13} />
           )}{" "}
-          {t(saving ? "saving" : dirty ? "unsavedChanges" : "saved")}
+          <span className="save-status-label">{saveState}</span>
         </span>
         {canEdit && snapshot.worktree.branch !== "main" && (
           <button
@@ -104,6 +108,14 @@ export function FlowToolbar({ tab }: { tab: WorkspaceTab }) {
             <GitMerge size={14} />
             {t("merge")}
           </button>
+        )}
+        {active?.partitions && (
+          <span role="status">
+            {active.partitions.completed}/{active.partitions.selected}{" "}
+            {t("partitions")} · {active.partitions.failed} {t("failed")}
+            {!!active.partitions.active_keys?.length &&
+              ` · ${t("running")}: ${active.partitions.active_keys.map((key) => String(key.value)).join(", ")}`}
+          </span>
         )}
         {active?.phase && (
           <span role="status" className="muted small">
@@ -123,14 +135,17 @@ export function FlowToolbar({ tab }: { tab: WorkspaceTab }) {
             {t(active.status === "canceling" ? "canceling" : "stop")}
           </button>
         ) : (
-          <button
-            className="button primary"
-            disabled={!canEdit || starting || !snapshot.bundle}
-            onClick={() => run()}
-          >
-            <Play size={14} fill="currentColor" />
-            {t("run")}
-          </button>
+          <div className="run-control">
+            <button
+              className="button primary"
+              disabled={!canEdit || starting || !snapshot.bundle}
+              onClick={() => run()}
+            >
+              <Play size={14} fill="currentColor" />
+              {t("run")}
+            </button>
+            <PartitionRunMenu />
+          </div>
         )}
       </div>
     </div>

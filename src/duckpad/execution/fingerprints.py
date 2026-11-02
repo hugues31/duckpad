@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import logging
 
-from .. import project_extensions, variables
+from .. import partitions, project_extensions, variables
 from ..bundle import topological
 from ..catalog import Catalog
 from ..components import expand_for
 from ..datasets import Context
 from ..graph import connection_references
+from ..partition_storage import PartitionStorage
 from ..projects import Projects
 from ..templates import executable_sql
 from ..types import Connections, Record
@@ -29,50 +30,137 @@ class Fingerprints:
         environment: str,
         captured: Connections | None = None,
         computed: Record | None = None,
+        partition: Record | None = None,
+        manifest: list[Record] | None = None,
     ) -> dict[str, str]:
-        """Fingerprint every node of a bundle from its SQL, parameters, connections and inputs."""
-        # Resolved values make renames, descriptions and promoted literals transparent.
+        shared, keys = self.batch(bundle, environment, captured, computed, manifest, partition)
+        return keys[partitions.identity(partition["key"])] if partition else shared
+
+    def batch(
+        self,
+        bundle: Record,
+        environment: str,
+        captured: Connections | None = None,
+        computed: Record | None = None,
+        manifest: list[Record] | None = None,
+        partition: Record | None = None,
+    ) -> tuple[dict[str, str], dict[str, dict[str, str]]]:
+        """One expansion per key, one topological pass, including successive collection barriers.
+
+        Callers reuse this batch for the entire run or read. Collector fingerprints
+        consume already computed per-key inputs instead of recursively expanding the graph.
+        """
         nodes, edges, _ = expand_for(bundle, environment, computed=computed)
-        fingerprints: dict[str, str] = {}
-        for key in topological(nodes, edges, tolerant=True):
-            node = nodes[key]
-            # An omitted parameter and an explicit value equal to its default compute
-            # the same result, including when that value comes from a variable.
+        entries = {partitions.identity(e["key"]): e for e in manifest or []}
+        if partition:
+            entries.setdefault(partitions.identity(partition["key"]), partition)
+        variants = {
+            key: expand_for(bundle, environment, computed=computed, partition=entry)[0]
+            for key, entry in entries.items()
+        }
+        shared: dict[str, str] = {}
+        values: dict[str, dict[str, str]] = {key: {} for key in entries}
+        incoming = {key: [] for key in nodes}
+        for edge in edges:
+            incoming[edge["target"]].append(edge)
+        connections = {}
+        for node in nodes.values():
+            for reference in connection_references(node):
+                if reference in connections:
+                    continue
+                try:
+                    captured_values = captured or self.catalog.capture([reference], environment)[0]
+                    connections[reference] = captured_values[reference]["fingerprint"]
+                except (Problem, KeyError) as error:
+                    connections[reference] = "invalid:" + str(error)
+        extensions = project_extensions.enabled(bundle.get("extensions"))
+
+        def fingerprint(key: str, node: Record, inputs: dict[str, str], entry: Record | None = None) -> str:
             params = {
                 parameter["name"]: parameter["default"]
                 for parameter in node["parsed"]["parameters"]
                 if "default" in parameter
             }
             params.update(node.get("params", {}))
-            # Expression references count by the type and value they bind, not by their name.
-            params = variables.fingerprinted(node, params)
-            connections = {}
-            for reference in connection_references(node):
-                try:
-                    values = captured or self.catalog.capture([reference], environment)[0]
-                    connections[reference] = values[reference]["fingerprint"]
-                except (Problem, KeyError) as error:
-                    connections[reference] = "invalid:" + str(error)
-            fingerprints[key] = digest(
+            collected = node.get("partition_collect_inputs", [])
+            return digest(
                 {
                     "sql": executable_sql(node["template_sql"]),
                     "error": node.get("error"),
-                    "params": params,
-                    "connections": connections,
-                    "extensions": project_extensions.enabled(bundle.get("extensions")),
+                    "params": variables.fingerprinted(node, params),
+                    "connections": {r: connections[r] for r in connection_references(node)},
+                    "extensions": extensions,
+                    **(
+                        {
+                            "partition": {
+                                "key": {k: entry["key"][k] for k in ("type", "value")}
+                                if entry and node.get("partitioned")
+                                else None,
+                                "filters": {
+                                    p: d.get("column") if isinstance(d, dict) else d
+                                    for p, d in node.get("partition_filters", {}).items()
+                                },
+                                "collect": collected,
+                            }
+                        }
+                        if node.get("partitioned") or collected
+                        else {}
+                    ),
+                    **(
+                        {
+                            "manifest": [
+                                (
+                                    e["key_hash"],
+                                    [
+                                        (
+                                            edge["targetHandle"],
+                                            values[partitions.identity(e["key"])].get(edge["source"]),
+                                        )
+                                        for edge in incoming[key]
+                                        if edge["targetHandle"] in collected
+                                    ],
+                                )
+                                for e in manifest
+                            ]
+                        }
+                        if collected and manifest is not None
+                        else {}
+                    ),
                     "inputs": [
                         (
                             e["targetHandle"],
                             e["source"],
                             e["sourceHandle"],
-                            fingerprints.get(e["source"], "invalid"),
+                            "collected"
+                            if manifest is not None and e["targetHandle"] in collected
+                            else inputs.get(e["source"], "invalid"),
                         )
-                        for e in edges
-                        if e["target"] == key
+                        for e in incoming[key]
                     ],
                 }
             )
-        return fingerprints
+
+        for key in topological(nodes, edges, tolerant=True):
+            node = nodes[key]
+            shared[key] = fingerprint(key, node, shared)
+            for identity, entry in entries.items():
+                values[identity][key] = (
+                    fingerprint(key, variants[identity][key], values[identity], entry)
+                    if node.get("partitioned")
+                    else shared[key]
+                )
+        return shared, values
+
+    def manifest(self, worktree: str, environment: str, bundle: Record) -> list[Record] | None:
+        try:
+            dimension = partitions.definition(bundle["flow"])
+        except Problem:
+            return None
+        if not dimension:
+            return None
+        storage = PartitionStorage(self.projects.store, worktree, environment)
+        metadata = storage.manifest(signature=partitions.signature(dimension))
+        return storage.entries(metadata["id"]) if metadata else None
 
     def current(self, worktree: str, environment: str) -> dict[str, str]:
         """Fingerprints of the committed files, or none when they cannot be expanded."""
@@ -84,6 +172,7 @@ class Fingerprints:
                 snapshot["bundle"],
                 environment,
                 computed=self.pool.computed(worktree, environment, snapshot["bundle"]),
+                manifest=self.manifest(worktree, environment, snapshot["bundle"]),
             )
         except Exception:
             # Unreadable definitions invalidate every result rather than blocking the caller.
@@ -102,9 +191,27 @@ class Fingerprints:
             self.pool.mark_stale(context, {})
             return
         computed = self.pool.computed(context.worktree, context.environment, bundle)
-        current = self.of(bundle, context.environment, computed=computed)
+        manifest = self.manifest(context.worktree, context.environment, bundle)
+        current, per_key = self.batch(bundle, context.environment, computed=computed, manifest=manifest)
         previous: dict[str, dict[str, str]] = {}
         with context.lock:
+            generations = {}
+            for dataset in context.datasets.values():
+                if dataset.partition:
+                    identity = partitions.identity(dataset.partition["key"])
+                    generations[dataset.id] = per_key.get(identity, {}).get(dataset.node, "invalid")
+            published = {data.id for outputs in context.outputs.values() for data in outputs.values()}
+            for dataset in context.datasets.values():
+                if dataset.origins and dataset.id not in published:
+                    generations[dataset.id] = (
+                        dataset.fingerprint
+                        if all(
+                            (target := context.datasets.get(origin["dataset"]))
+                            and generations.get(target.id, current.get(target.node)) == target.fingerprint
+                            for origin in dataset.origins
+                        )
+                        else "invalid"
+                    )
             recover = []
             for dataset in context.datasets.values():
                 if current.get(dataset.node) == dataset.fingerprint:
@@ -118,7 +225,7 @@ class Fingerprints:
                             bundle, context.environment, computed=dataset.bound_values
                         )
                     dataset.value_stale = previous[signature].get(dataset.node) == dataset.fingerprint
-            self.pool.mark_stale(context, current)
+            self.pool.mark_stale(context, current, generations)
             for dataset in recover:
                 dataset.status = "valid"
                 dataset.value_stale = False

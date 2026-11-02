@@ -1,6 +1,13 @@
 import type { Node, Edge } from "@xyflow/react";
 import type { VariableValue } from "./types";
 import type { Translate } from "./i18n";
+import type {
+  PartitionContext,
+  PartitionEntry,
+  PartitionLaunchOptions,
+} from "./partitions";
+
+type Origin = { partition: PartitionEntry; run: string; row: number };
 
 export type Cell = {
   dataset: string;
@@ -8,6 +15,8 @@ export type Cell = {
   column: string;
   node?: string;
   port?: string;
+  partition_context?: PartitionContext;
+  origin?: Origin;
 };
 export type Input = Cell & { value: unknown; source?: boolean };
 export type Query = Cell & {
@@ -16,6 +25,11 @@ export type Query = Cell & {
   context?: boolean;
 };
 export type Explanation = Input & {
+  partition_groups?: { partition: PartitionEntry; run: string; rows: number }[];
+  replay?: {
+    node: string;
+    partitions: NonNullable<PartitionLaunchOptions["partitions"]>;
+  };
   variables?: Record<string, VariableValue>;
   environment?: string;
   kind?: string;
@@ -52,6 +66,7 @@ export const requestId = (query: Query) =>
     query.offset || 0,
     query.group,
     !!query.context,
+    query.partition_context,
   ]);
 
 const sourceResult = (cell: Input): Explanation => ({
@@ -101,6 +116,7 @@ export async function buildLineageGraph(
         dataset: current.dataset,
         row: current.row,
         column: current.column,
+        partition_context: current.partition_context,
         ...pages[id],
       };
       const deferred = !current.source && remaining-- <= 0;

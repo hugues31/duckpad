@@ -1,3 +1,4 @@
+import { usePartitionQuery } from "./worktree";
 import { Download } from "lucide-react";
 import { api, apiUrl, withQuery } from "./api";
 import { useT } from "./i18n";
@@ -61,14 +62,18 @@ export default function ExportDownload({
   node: string;
 }) {
   const t = useT();
+  const partition = usePartitionQuery(node);
   const endpoint = `/worktrees/${encodeURIComponent(worktree)}/exports/${encodeURIComponent(node)}`;
   const {
     data: result,
     error: pollError,
     setData: setResult,
-  } = useApiResource<ExportResult>(withQuery(endpoint, { environment }), {
-    interval: 1500,
-  });
+  } = useApiResource<ExportResult>(
+    withQuery(endpoint, { environment, ...partition }),
+    {
+      interval: 1500,
+    },
+  );
   // A download failure stays until the next attempt; a polling failure until the next poll.
   const download = useAsyncAction();
   const error = download.error || pollError;
@@ -82,7 +87,7 @@ export default function ExportDownload({
         onClick={() =>
           download.run(async () => {
             const current = await api<ExportResult>(
-              withQuery(endpoint, { environment }),
+              withQuery(endpoint, { environment, ...partition }),
             );
             setResult(current);
             if (current.status !== "available") return;
@@ -93,6 +98,7 @@ export default function ExportDownload({
               apiUrl(
                 withQuery(endpoint + "/download", {
                   environment,
+                  ...partition,
                   run: current.run,
                 }),
               ),

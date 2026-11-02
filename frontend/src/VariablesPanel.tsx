@@ -1,3 +1,4 @@
+import { ValueSourceFields } from "./ValueSourceFields";
 import { localDefinitions } from "./nodeCode";
 import { useEffect, useId, useMemo, useState } from "react";
 import { useSearchParams } from "react-router";
@@ -526,23 +527,6 @@ function VariableEditor({
     });
   const usages = summary?.usages || [];
   const nodes = snapshot.bundle?.flow.nodes || [];
-  const outputs = (node: (typeof nodes)[number]) =>
-    nodeInterface(
-      node,
-      snapshot.parsed_templates,
-      snapshot.bundle?.components,
-      localDefinitions(snapshot),
-    ).outputs;
-  // Exports have no output, so they cannot supply a value.
-  const sources = nodes.filter((node) => outputs(node).length);
-  const source =
-    draft.from && nodes.find((node) => node.id === draft.from!.node);
-  const ports = source ? outputs(source) : [];
-  // Keep the usual key order, so reverting an edit leaves the draft unchanged.
-  const setSource = (change: Partial<NonNullable<Draft["from"]>>) => {
-    const { node, port, column } = { ...draft.from!, ...change };
-    set({ from: { node, ...(port ? { port } : {}), column } });
-  };
   const usedNodes = [...new Set(usages.map((usage) => usage.node))];
   const changed = saved
     ? changedEnvironments(
@@ -677,62 +661,11 @@ function VariableEditor({
         </label>
         {draft.from ? (
           <>
-            <label className="field">
-              <span>{t("valueSourceNode")}</span>
-              <Select
-                aria-label={t("valueSourceNode")}
-                value={draft.from.node}
-                onChange={(e) =>
-                  setSource({ node: e.target.value, port: undefined })
-                }
-              >
-                <option value="">{t("chooseValueSource")}</option>
-                {draft.from.node &&
-                  !sources.some((node) => node.id === draft.from!.node) && (
-                    <option value={draft.from.node} disabled>
-                      {draft.from.node} · {t("absent")}
-                    </option>
-                  )}
-                {sources.map((node) => (
-                  <option key={node.id} value={node.id}>
-                    {node.label || node.id}
-                  </option>
-                ))}
-              </Select>
-            </label>
-            <label className="field">
-              <span>{t("valueSourcePort")}</span>
-              <Select
-                aria-label={t("valueSourcePort")}
-                value={draft.from.port || ""}
-                onChange={(e) =>
-                  setSource({ port: e.target.value || undefined })
-                }
-              >
-                <option value="">
-                  {ports.length === 1
-                    ? `${ports[0]} · ${t("uniqueOutputHint")}`
-                    : t("uniqueOutputHint")}
-                </option>
-                {draft.from.port && !ports.includes(draft.from.port) && (
-                  <option value={draft.from.port} disabled>
-                    {draft.from.port} · {t("absent")}
-                  </option>
-                )}
-                {ports.map((port) => (
-                  <option key={port} value={port}>
-                    {port}
-                  </option>
-                ))}
-              </Select>
-            </label>
-            <label className="field">
-              <span>{t("valueSourceColumn")}</span>
-              <input
-                value={draft.from.column}
-                onChange={(e) => setSource({ column: e.target.value })}
-              />
-            </label>
+            <ValueSourceFields
+              snapshot={snapshot}
+              value={draft.from}
+              onChange={(from) => set({ from })}
+            />
             <p className="muted small">{t("computedVariableHint")}</p>
             {onRunSource && saved?.from && !dirty && (
               <button

@@ -79,13 +79,22 @@ test("a sample filters, sorts and limits displayed rows without changing the res
     .click();
   await expect(panel.locator(".preview-footer")).toContainText("/ 107");
 
+  const searched = page.waitForResponse(
+    (response) =>
+      response.url().includes("/preview/") &&
+      new URL(response.url()).searchParams.get("search") === "Juniper",
+  );
   await panel
     .getByRole("textbox", { name: "Search all columns…", exact: true })
     .fill("Juniper");
+  const searchedRows = await (await searched).json();
   await expect(panel.locator(".preview-footer")).toContainText(
     "of 107 rows match",
   );
-  await expect(panel.locator(".data-table tbody tr")).not.toHaveCount(0);
+  await expect(panel.locator(".data-table tbody tr")).toHaveCount(
+    searchedRows.rows.length,
+  );
+  expect(searchedRows.rows.length).toBeGreaterThan(0);
   for (const row of await panel.locator(".data-table tbody tr").all())
     await expect(row).toContainText("Juniper Studio");
 

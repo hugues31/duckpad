@@ -11,15 +11,23 @@ from typing import Any, cast
 
 import duckdb
 
-from .. import connection_probe, project_extensions, value_sources, variables
+from .. import connection_probe, partitions, project_extensions, value_sources, variables
 from ..bundle import files_to_bundle, topological
 from ..catalog import Catalog, redact
 from ..components import expand, expand_for, in_subtree
 from ..data_preparation import failure_hint
 from ..datasets import Context, Dataset
 from ..graph import connection_references, reachable
-from ..materialize import drop_dataset, drop_relations, plan_materialization, publish_view
+from ..materialize import (
+    collected_pass_through,
+    drop_dataset,
+    drop_relations,
+    plan_materialization,
+    publish_view,
+)
 from ..native import Cursor as NativeCursor
+from ..partition_runs import PartitionRun
+from ..partition_storage import PartitionStorage
 from ..projects import Projects
 from ..store import Store
 from ..templates import base_type, compile_template
@@ -53,7 +61,12 @@ class Execution:
     validation_errors: Record = field(default_factory=dict)
     cursor: SQLCursor | None = None
     prepared: dict[str, Exception | None] = field(default_factory=dict)
+    # Parallel partition keys share one database: each connection is attached once.
+    preparing: threading.Lock = field(default_factory=threading.Lock)
     published: dict[str, dict[str, Dataset]] = field(default_factory=dict)
+    partition_plan: Record = field(default_factory=dict)
+    partition: Record | None = None
+    schema_only: bool = False
 
     @property
     def canceled(self) -> bool:
@@ -99,6 +112,7 @@ class Runner:
         self.lock, self.active = lock, active
         self.isolated = isolated
         self.threads: list[threading.Thread] = []
+        self.partition_runs: dict[str, PartitionRun] = {}
 
     def recover(self) -> None:
         """Close runs left unfinished by a stopped backend; nothing is replayed."""
@@ -112,6 +126,18 @@ class Runner:
                     if node["status"] == "running" and node.get("kind") == "export":
                         node["external_outcome"] = "unknown"
                     node["status"] = "interrupted"
+            if manifest := run.get("partitions", {}).get("manifest"):
+                storage = PartitionStorage(self.store, run["worktree"], run["environment"])
+                for entry in storage.entries(manifest):
+                    for key, state in storage.attempts(run["id"], entry["partition_id"]).items():
+                        if state["status"] in ("pending", "running"):
+                            state["status"] = "interrupted"
+                            if state.get("kind") == "export":
+                                state["external_outcome"] = "unknown"
+                            storage.attempt(run["id"], entry["partition_id"], key, state)
+                            storage.record(key, entry, state)
+                for partial in storage.temporary.glob("partition_*.partial"):
+                    partial.unlink(missing_ok=True)
             self._persist(run, [])
 
     def launch(
@@ -125,6 +151,8 @@ class Runner:
         job: Record | None = None,
         external_trigger: Record | None = None,
         idempotency: Record | None = None,
+        partition_selection: Record | None = None,
+        partition_execution: Record | None = None,
     ) -> Record:
         record = self.projects.get(worktree)
         if record.get("read_only") and job is None:
@@ -132,7 +160,9 @@ class Runner:
         token: RunToken = {"id": uid("run_"), "cancel": threading.Event(), "cursor": None}
         self._admit(worktree, environment, token)
         try:
-            execution = self._prepare(token, worktree, environment, target, entry_point)
+            execution = self._prepare(
+                token, worktree, environment, target, entry_point, partition_selection, partition_execution
+            )
             execution.run["requester"] = copy.deepcopy(requester)
             if job is not None:
                 execution.run.update(trigger="job", job=copy.deepcopy(job), tag=job.get("tag"))
@@ -148,6 +178,29 @@ class Runner:
                 self.active.pop(worktree, None)
             raise
 
+    def _partition_scope(
+        self,
+        worktree: str,
+        environment: str,
+        nodes: dict[str, Record],
+        edges: list[Record],
+        scope: set[str],
+        plan: Record,
+    ) -> set[str]:
+        """A targeted run in a zone also calculates the key list while none is retained."""
+        source, dimension = plan.get("source"), plan.get("dimension")
+        if (
+            not source
+            or not dimension
+            or source["node"] in scope
+            or not any(nodes[k].get("partitioned") or nodes[k].get("partition_collect_inputs") for k in scope)
+            or PartitionStorage(self.store, worktree, environment).manifest(
+                signature=partitions.signature(dimension)
+            )
+        ):
+            return scope
+        return scope | reachable({source["node"]}, edges, upstream=True)
+
     def _admit(self, worktree: str, environment: str, token: RunToken) -> None:
         """Reserve the worktree for a run; a busy worktree refuses it instead of queuing it."""
         with self.lock:
@@ -161,7 +214,14 @@ class Runner:
             self.active[worktree] = token
 
     def _prepare(
-        self, token: RunToken, worktree: str, environment: str, target: str | None, entry_point: str
+        self,
+        token: RunToken,
+        worktree: str,
+        environment: str,
+        target: str | None,
+        entry_point: str,
+        partition_selection: Record | None = None,
+        partition_execution: Record | None = None,
     ) -> Execution:
         """Capture the committed definitions and connection settings the run will use."""
         snapshot = self.projects.flush(worktree)
@@ -173,6 +233,12 @@ class Runner:
         structural, edges, boundaries = expand(bundle, tolerant=True)
         sources = value_sources.sources(bundle, structural, boundaries)
         phase, validation_errors = value_sources.dependencies(structural, edges, sources)
+        partition_plan = partitions.plan(bundle, structural, edges, boundaries)
+        # Refuse invalid options before marking any result stale.
+        selection, policy = partitions.launch_options(
+            partition_plan.get("dimension"), partition_selection, partition_execution
+        )
+        phase |= partition_plan["value_phase"]
         context = self.pool.get(
             worktree,
             environment,
@@ -181,7 +247,9 @@ class Runner:
         )
         values = self.pool.computed(worktree, environment, bundle)
         nodes, edges, _ = expand_for(bundle, environment, computed=values)
-        scope = launch_scope(nodes, edges, target)
+        scope = self._partition_scope(
+            worktree, environment, nodes, edges, launch_scope(nodes, edges, target), partition_plan
+        )
         order = [n for n in topological(nodes, edges, tolerant=True) if n in scope]
         self._check_conflicts(snapshot["conflicts"], scope, environment)
         captured, secrets = self._capture_connections(
@@ -232,6 +300,10 @@ class Runner:
             "variable_declarations": bundle.get("variables"),
             "extensions": bundle.get("extensions"),
         }
+        if selection:
+            run["partition_selection"] = selection
+        if policy:
+            run["partition_execution"] = policy
         for name, source in sources.items():
             if source.get("node") in scope:
                 run["variables"][name] = {
@@ -256,6 +328,7 @@ class Runner:
             values=values,
             value_phase=phase & scope,
             validation_errors=validation_errors,
+            partition_plan=partition_plan,
         )
 
     def scope_variables(self, worktree: str, environment: str, target: str | None = None) -> Record:
@@ -267,7 +340,10 @@ class Runner:
         bundle = snapshot["bundle"]
         values = self.pool.computed(worktree, environment, bundle)
         nodes, edges, boundaries = expand_for(bundle, environment, computed=values)
-        scope = launch_scope(nodes, edges, target)
+        plan = partitions.plan(bundle, nodes, edges, boundaries)
+        scope = self._partition_scope(
+            worktree, environment, nodes, edges, launch_scope(nodes, edges, target), plan
+        )
         result = variables.used(bundle, nodes, scope, environment, values)
         for name, source in value_sources.sources(bundle, nodes, boundaries).items():
             if source.get("node") in scope:
@@ -278,6 +354,22 @@ class Runner:
                     "state": "pending",
                     "resolution": "calculated",
                 }
+        dimension = partitions.definition(bundle["flow"])
+        if dimension:
+            manifest = PartitionStorage(self.store, worktree, environment).manifest(
+                signature=partitions.signature(dimension)
+            )
+            source = plan.get("source")
+            pending = bool(source and source["node"] in scope)
+            result["$partition"] = {
+                "type": dimension["type"],
+                "from": source.get("from") if source else dimension["values"],
+                "source": "node",
+                "state": "pending" if pending else "ready" if manifest else "unavailable",
+                "resolution": "calculated" if pending else "retained",
+                "manifest": manifest["id"] if manifest else None,
+                "count": manifest["count"] if manifest else None,
+            }
         return result
 
     def _check_conflicts(self, conflicts: list[Record], scope: set[str], environment: str) -> None:
@@ -312,6 +404,7 @@ class Runner:
                 binding.get("source") == "node" and "error" in binding
                 for binding in [*node.get("variables", {}).values(), *variables.expression_bindings(node)]
             )
+            deferred |= str(node.get("error", "")).startswith("Partition values not calculated")
             if strict and node.get("error") and not deferred:
                 raise Problem(node["error"], 422)
         return captured, secrets
@@ -325,8 +418,8 @@ class Runner:
             if not token or token["id"] != run_id:
                 return cast(Record, self.store.get("run", run_id))
             token["cancel"].set()
-            cursor = token["cursor"]
-        if cursor:
+            cursors = [*token.get("cursors", []), *([token["cursor"]] if token["cursor"] else [])]
+        for cursor in cursors:
             interrupt(cursor)
         # The run's later writes keep this status; its final write replaces it.
         with self.store.transaction():
@@ -337,6 +430,10 @@ class Runner:
         return cast(Record, run)
 
     def _persist(self, run: Record, secrets: list[str], *, idempotency: Record | None = None) -> None:
+        if run.get("partition_attempt"):
+            if run["partition_attempt"] != "empty":
+                self.partition_runs[run["id"]].persist(run)
+            return
         run["warning_count"] = sum(
             result_counts(state.get("results", []))["warning"] for state in run["nodes"].values()
         )
@@ -392,11 +489,25 @@ class Runner:
             if execution.value_phase:
                 run["phase"] = "consumers"
             self._persist(run, secrets)
-            self._execute_nodes(execution, [k for k in execution.order if k not in execution.value_phase])
+            if (
+                any(execution.nodes[k].get("partitioned") for k in execution.order)
+                or (execution.partition_plan.get("source") or {}).get("node") in execution.order
+            ):
+                controller = self.partition_runs[run["id"]] = PartitionRun(self, execution)
+                controller.execute()
+            else:
+                self._execute_nodes(execution, [k for k in execution.order if k not in execution.value_phase])
             statuses = {n["status"] for n in run["nodes"].values()}
             if any(v.get("resolution") == "calculated" and v.get("error") for v in run["variables"].values()):
                 statuses.add("failed")
             run["status"] = run_outcome(statuses, execution.canceled)
+            partition_summary = run.get("partitions", {})
+            if (
+                partition_summary.get("selected")
+                and not execution.canceled
+                and (partition_summary.get("failed") or partition_summary.get("not_started"))
+            ):
+                run["status"] = "partial_failure" if partition_summary.get("completed") else "failed"
         except Exception as error:
             run.update(
                 status="canceled" if execution.canceled else "failed",
@@ -419,6 +530,7 @@ class Runner:
                     self._persist(run, secrets)
                 finally:
                     self.active.pop(context.worktree, None)
+                    self.partition_runs.pop(run["id"], None)
 
     def _execute_nodes(self, execution: Execution, order: list[str]) -> None:
         for key in order:
@@ -583,30 +695,32 @@ class Runner:
 
     def _prepare_connections(self, execution: Execution, node: Record) -> None:
         """Prepare each logical connection once per run, replaying its first failure."""
-        for reference in connection_references(node):
-            if reference not in execution.prepared:
-                try:
-                    if not self.isolated:
-                        connection = execution.captured[reference]
-                        # An extension that stops its process must not stop the server.
-                        try:
-                            connection_probe.check_extensions(
-                                self.pool.probe_config(),
-                                connection,
-                                self.store.get("settings", "offline_extensions", {}),
-                                execution.secrets,
-                            )
-                        except Problem as error:
-                            raise Problem(
-                                f"Cannot load the extensions of connection {connection['name']}: {error}", 422
-                            ) from None
-                        self.catalog.prepare(execution.cursor, {reference: connection})
-                    execution.prepared[reference] = None
-                except Exception as error:
-                    execution.prepared[reference] = error
-            failure = execution.prepared[reference]
-            if failure is not None:
-                raise failure
+        with execution.preparing:
+            for reference in connection_references(node):
+                if reference not in execution.prepared:
+                    try:
+                        if not self.isolated:
+                            connection = execution.captured[reference]
+                            # An extension that stops its process must not stop the server.
+                            try:
+                                connection_probe.check_extensions(
+                                    self.pool.probe_config(),
+                                    connection,
+                                    self.store.get("settings", "offline_extensions", {}),
+                                    execution.secrets,
+                                )
+                            except Problem as error:
+                                raise Problem(
+                                    f"Cannot load the extensions of connection {connection['name']}: {error}",
+                                    422,
+                                ) from None
+                            self.catalog.prepare(execution.cursor, {reference: connection})
+                        execution.prepared[reference] = None
+                    except Exception as error:
+                        execution.prepared[reference] = error
+                failure = execution.prepared[reference]
+                if failure is not None:
+                    raise failure
 
     def _compute(
         self, execution: Execution, key: str, created_tables: list[tuple[str, str]]
@@ -643,6 +757,8 @@ class Runner:
             if execution.canceled:
                 raise Problem("Execution canceled")
             if statement.get("message_block") or statement.get("test_name"):
+                if execution.schema_only:
+                    continue
                 execute_check = execute_test if statement.get("test_name") else execute_messages
                 failure = execute_check(
                     cursor, statement, run, key, execution.secrets, lambda: execution.canceled
@@ -652,13 +768,46 @@ class Runner:
                 self._persist(run, execution.secrets)
                 continue
             if not statement["output"]:
+                if execution.schema_only:
+                    continue
                 if check_failure is not None:
                     raise Problem(check_failure or "An execution check reported an error")
                 self._export(execution, key, statement)
                 continue
             table = statement["table"]
+            if execution.partition is not None:
+                partitions.filter_statements([statement], node, execution.partition, cursor)
+            if execution.schema_only:
+                statement["query"] = f"SELECT * FROM ({statement['query']}) AS empty_partition LIMIT 0"
             output_start = time.monotonic()
             data_inputs = {data.table: data for data in [*input_datasets.values(), *staged.values()]}
+            collected = collected_pass_through(statement["query"], data_inputs)
+            if collected and not execution.schema_only:
+                storage = table + "_disk"
+                cursor.execute(f"CREATE VIEW {qi(storage)} AS SELECT * FROM {qi(collected.storage)}")
+                created_tables.append((table, storage))
+                projection = ", ".join(
+                    f"{qi(collected.stored(c['name']))} AS {qi(c['name'])}" for c in collected.columns
+                )
+                cursor.execute(f"CREATE VIEW {qi(table)} AS SELECT {projection} FROM {qi(storage)}")
+                staged[statement["output"]] = Dataset(
+                    id=table,
+                    node=key,
+                    port=statement["output"],
+                    columns=collected.columns,
+                    count=collected.count,
+                    run=run["id"],
+                    query=statement["query"],
+                    bindings=statement["bindings"],
+                    dependencies={collected.table: collected.id},
+                    fingerprint=execution.fingerprints[key],
+                    storage=storage,
+                    disk=True,
+                    column_map=collected.column_map,
+                    origins=copy.deepcopy(collected.origins),
+                    duration=time.monotonic() - output_start,
+                )
+                continue
             plan = plan_materialization(
                 cursor, statement, data_inputs, instrument=node["parsed"]["kind"] != "source"
             )
@@ -674,7 +823,7 @@ class Runner:
             source_columns = plan["columns"]
             if source_columns is None and any(
                 s.get("node") == key and s.get("port") == statement["output"]
-                for s in execution.sources.values()
+                for s in [*execution.sources.values(), execution.partition_plan.get("source") or {}]
             ):
                 source_columns = [
                     {"name": c[0], "type": c[1]}
@@ -726,6 +875,8 @@ class Runner:
     def _publish(self, execution: Execution, key: str, staged: dict[str, Dataset]) -> dict[str, Dataset]:
         """Atomically replace a node's outputs; return the previous output set."""
         context = execution.context
+        if execution.partition is not None:
+            return self.partition_runs[execution.run["id"]].publish(execution, key, staged)
         # A later edit must not turn a result for the old snapshot valid.
         with self.projects.locked(context.worktree):
             current = self.fingerprints.current(context.worktree, context.environment)

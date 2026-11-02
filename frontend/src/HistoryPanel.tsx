@@ -1,3 +1,5 @@
+import { PartitionHistory } from "./PartitionHistory";
+import { partitionMessage } from "./partitions";
 import { Link, useSearchParams } from "react-router";
 import { worktreeUrl } from "./navigation";
 import AskAssistant from "./AskAssistant";
@@ -278,9 +280,11 @@ export default function HistoryPanel({
 export function RunDetails({
   run,
   onClose,
+  onPartitionRetry,
 }: {
   run: Run;
   onClose: () => void;
+  onPartitionRetry?: () => void;
 }) {
   const t = useT();
   return (
@@ -300,7 +304,9 @@ export function RunDetails({
           {run.tag || run.job.branch} · <code>{run.commit.slice(0, 8)}</code>
         </p>
       )}
-      {run.error && <p className="notice error">{run.error}</p>}
+      {run.error && (
+        <p className="notice error">{partitionMessage(t, run.error)}</p>
+      )}
       {run.requester && (
         <p>
           {t("runRequester")}: <strong>{run.requester.username}</strong>
@@ -322,6 +328,7 @@ export function RunDetails({
           />
         </section>
       )}
+      <PartitionHistory key={run.id} run={run} onRetry={onPartitionRetry} />
       <details className="run-step">
         <summary>{t("executionConfiguration")}</summary>
         <pre className="expression">
@@ -353,11 +360,13 @@ export function RunDetails({
             <span className={`badge ${state.status}`}>{t(state.status)}</span>
             <strong>{state.label}</strong>
             <WarningBadge count={warningCount(state.results)} />
-            <span className="muted">{state.duration?.toFixed(3)} s</span>
+            {state.duration != null && (
+              <span className="muted">{state.duration.toFixed(3)} s</span>
+            )}
           </summary>
           {state.error && (
             <div className="notice error">
-              <p>{state.error}</p>
+              <p>{partitionMessage(t, state.error)}</p>
               <AskAssistant
                 onOpen={onClose}
                 node={key}

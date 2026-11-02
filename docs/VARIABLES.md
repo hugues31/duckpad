@@ -321,3 +321,9 @@ and resolved resource for inspection.
 Rename, Used by, grouping and version comparison include path references. Git
 comparison, merge and ZIP export contain declarations only. A computed `from`
 descriptor merges as one unit, so competing source edits require a choice.
+
+## Process several values
+
+A computed variable supplies one scalar value. To execute a data zone once per
+row of a control output, declare a [data partition dimension](PARTITIONS.md).
+Both editors use the same source node, output and column selector.

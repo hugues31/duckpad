@@ -1,3 +1,4 @@
+import { useApiResource } from "./useApiResource";
 import {
   createContext,
   useCallback,
@@ -6,7 +7,14 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { api, errorDetail, send } from "./api";
+import type {
+  PartitionPage,
+  PartitionContext,
+  PartitionEntry,
+  PartitionLaunchOptions,
+} from "./partitions";
+import { api, errorDetail, send, withQuery } from "./api";
+import { outputSource } from "./graph";
 import { useT } from "./i18n";
 import { useShell } from "./shell";
 import type { Bundle, Environment, Run, Snapshot, Statuses } from "./types";
@@ -14,6 +22,9 @@ import { useWorktreeSnapshot } from "./useWorktreeSnapshot";
 
 /** The working branch opened by the URL, with the actions that change it. */
 export interface Worktree {
+  partition: PartitionContext | null;
+  partitionEntry: PartitionEntry | null;
+  selectPartition: (entry: PartitionEntry | null) => void;
   /** Empty outside the pipeline pages, where nothing is loaded. */
   id: string;
   assistantNode: string;
@@ -42,9 +53,13 @@ export interface Worktree {
     base: Snapshot,
   ) => Promise<Snapshot>;
   /** Run the pipeline or a node, asking first when the environment requires it. */
-  run: (node?: string) => Promise<void>;
+  run: (node?: string, options?: PartitionLaunchOptions) => Promise<void>;
   /** Run after the user confirmed it for this environment. */
-  runConfirmed: (environment: string, node?: string) => Promise<void>;
+  runConfirmed: (
+    environment: string,
+    node?: string,
+    options?: PartitionLaunchOptions,
+  ) => Promise<void>;
   stop: () => Promise<void>;
   /** Reload what a Git operation may have changed. */
   gitChanged: () => Promise<void>;
@@ -108,6 +123,58 @@ export function WorktreeProvider({
       return refreshWorkspace();
     },
   });
+  const manifest = snapshot?.partitions?.[environment]?.manifest?.id;
+  const dimension = snapshot?.partitions?.[environment]?.dimension;
+  const partitionScope = JSON.stringify([
+    id,
+    environment,
+    dimension?.name,
+    dimension?.type,
+    dimension?.values,
+  ]);
+  const [selectedPartition, setSelectedPartition] = useState<{
+    scope: string;
+    manifest?: string;
+    entry: PartitionEntry | null;
+  }>({ scope: "", entry: null });
+  const selected =
+    selectedPartition.scope === partitionScope ? selectedPartition.entry : null;
+  const remapped = useApiResource<PartitionPage>(
+    selected?.key_hash && manifest && selectedPartition.manifest !== manifest
+      ? withQuery(`/worktrees/${id}/partitions`, {
+          environment,
+          manifest,
+          key_hash: selected.key_hash,
+          limit: 1,
+        })
+      : null,
+  );
+  if (
+    selected &&
+    selectedPartition.manifest !== manifest &&
+    remapped.data &&
+    manifest &&
+    remapped.data.manifest?.id === manifest
+  ) {
+    setSelectedPartition({
+      scope: partitionScope,
+      manifest,
+      entry: remapped.data.entries[0] || null,
+    });
+  }
+  const partitionEntry =
+    selectedPartition.manifest === manifest || remapped.pending
+      ? selected
+      : remapped.data?.entries[0] || null;
+  const partition: PartitionContext | null = manifest
+    ? {
+        manifest:
+          remapped.pending && selected ? selectedPartition.manifest! : manifest,
+        ...(partitionEntry
+          ? { partition_id: partitionEntry.partition_id }
+          : { partition_mode: "all" as const }),
+      }
+    : null;
   const canEdit =
     !snapshot?.worktree.read_only &&
     (snapshot?.role === "admin" || snapshot?.role === "editor");
@@ -143,12 +210,17 @@ export function WorktreeProvider({
     }
   }
 
-  async function launch(environment: string, node?: string, confirmed = false) {
+  async function launch(
+    environment: string,
+    node?: string,
+    confirmed = false,
+    options?: PartitionLaunchOptions,
+  ) {
     setStarting(true);
     try {
       const run = await api<Run>(
         `/worktrees/${id}/runs`,
-        send({ environment, node, entry_point: "ui", confirmed }),
+        send({ environment, node, entry_point: "ui", confirmed, ...options }),
       );
       setActive(id, run);
     } finally {
@@ -156,15 +228,24 @@ export function WorktreeProvider({
     }
   }
 
-  const confirmRun = (settings: Environment, node?: string) =>
+  const confirmRun = (
+    settings: Environment,
+    node?: string,
+    options?: PartitionLaunchOptions,
+  ) =>
     openModal({
       kind: "runConfirmation",
+      options,
       worktree: id,
       environment: settings,
       node,
     });
 
   const value: Worktree = {
+    partition,
+    partitionEntry,
+    selectPartition: (entry) =>
+      setSelectedPartition({ scope: partitionScope, manifest, entry }),
     id,
     assistantNode:
       assistantSelection.worktree === id ? assistantSelection.node : "",
@@ -191,22 +272,36 @@ export function WorktreeProvider({
       return write(base, { bundle });
     },
     saveFiles: (files, base) => write(base, { files }),
-    run: async (node) => {
+    run: async (node, options) => {
+      if (node && !options && partitionEntry)
+        options = {
+          partitions: {
+            mode: "selected",
+            keys: [
+              {
+                type: partitionEntry.key.type,
+                value: partitionEntry.key.value,
+              },
+            ],
+          },
+        };
       if (!canEdit || starting) return;
       const settings = workspace?.catalog.environment_details.find(
         (item) => item.id === environment,
       );
-      if (settings?.confirm_before_run) return confirmRun(settings, node);
+      if (settings?.confirm_before_run)
+        return confirmRun(settings, node, options);
       try {
-        await launch(environment, node);
+        await launch(environment, node, false, options);
       } catch (e) {
         const required = errorDetail(e).confirmation_required as
           Environment | undefined;
-        if (required) confirmRun(required, node);
+        if (required) confirmRun(required, node, options);
         else notify((e as Error).message, true);
       }
     },
-    runConfirmed: (environment, node) => launch(environment, node, true),
+    runConfirmed: (environment, node, options) =>
+      launch(environment, node, true, options),
     stop: async () => {
       if (!statuses.active) return;
       try {
@@ -240,4 +335,18 @@ export function useLoadedWorktree() {
   const { snapshot } = worktree;
   if (!snapshot) throw new Error("The working branch is not loaded");
   return { ...worktree, snapshot };
+}
+
+export const useOptionalWorktree = () => useContext(WorktreeContext);
+
+export function usePartitionQuery(node: string, port = "result") {
+  const worktree = useOptionalWorktree();
+  const source = worktree?.snapshot?.bundle
+    ? outputSource(worktree.snapshot.bundle, node, port)
+    : { node, port };
+  return worktree?.snapshot?.partitions?.[worktree.environment]?.nodes[
+    source.node
+  ]?.partitioned
+    ? { ...worktree.partition }
+    : {};
 }
