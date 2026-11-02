@@ -271,7 +271,26 @@ Every definition declares its `family`, `database` or `storage`; definitions wit
 
 Create a named connection pointing to different database files in `dev` and `prod`, grant it, and read and write it with [Load table and Export table](#database-tables), schema `main`: no template or code change is needed. Custom source and export templates can also read `{{ connection }}.{{ resource }}` or explicitly `INSERT INTO` a declared attached destination. `tests/test_database_connections.py` and `tests/test_catalog.py` cover this extension-free scenario, including reuse and historical project code using current catalog settings.
 
-The isolated worker opens only project files and the roots of storage connections, so database files such as this one and SQLite work in [trusted local mode](INSTALLATION.md#trusted-local-mode) only. Database servers, such as PostgreSQL and MySQL, work in both modes.
+Database files work in isolated execution, including attached DuckDB files and SQLite.
+For each granted database connection in the selected environment, the worker opens
+the parent directory of every local parameter declared with `"type": "file"`.
+The directory is readable, and writable when the connector declares the `write`
+capability. DuckDB WAL files and SQLite journals need this directory access.
+
+**Keep each database, and each environment's database, in its own dedicated directory.**
+Granting the connection gives the project's SQL access to every file in that directory
+and its subdirectories, including unrelated files. A read-only connector should omit
+`write` and attach its database with the driver's read-only option, for example
+`ATTACH {{ database }} AS {{ alias }} (READ_ONLY)` for DuckDB.
+
+The administrator chooses an existing directory outside the instance and its parent
+directories. The worker rejects instance metadata and other projects, including
+paths that resolve there through symlinks; a run may also use its own project resources.
+Test connection checks these guards before attaching a database; because that test
+has no project scope, it requires database directories outside the instance.
+Relative paths and `~` resolve on the server. Empty paths, `:memory:` and remote URIs
+do not grant a local directory. The server account still needs filesystem permissions
+on the database and, for writes, permission to create journal files beside it.
 
 A storage connector declares a `root` parameter, a folder or a URI prefix, and any setup its location needs. This one reaches Google Cloud Storage through `httpfs` with HMAC keys:
 
@@ -346,10 +365,13 @@ A MySQL schema is a database: Load table's schema is the database name. Keep the
   "extensions": [{"name": "sqlite"}],
   "capabilities": ["read", "write"],
   "init_sql": "ATTACH {{ path }} AS {{ alias }} (TYPE sqlite);",
-  "compatibility": "Validated on DuckDB 2.0.0 with its matching sqlite extension, Linux x86_64, in embedded execution. Other versions require validation."
+  "compatibility": "Validated on DuckDB 2.0.0 with its matching sqlite extension, Linux x86_64, in embedded and isolated execution. Other versions require validation."
 }
 ```
 
-Set `path` to a SQLite file per environment, and use the schema `main`. Like other database files, it needs [trusted local mode](INSTALLATION.md#trusted-local-mode). Validated in CI in embedded execution (`docs/validation/sqlite.json`).
+Set `path` to a SQLite file per environment, in a dedicated directory as described
+above, and use the schema `main`. CI runs `scripts/integration.py sqlite` in embedded
+and isolated execution, checking Load table, Export table and different dev/prod
+values (`docs/validation/sqlite.json`).
 
 On x86-64 processors without AVX2, the `mysql` and `sqlite` binaries published for DuckDB 2.0.0 stop their process when they load. Test connection reports it; such a server needs a compatible build of the extension, as Duckpad's container image provides for `postgres`.

@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import copy
 import re
+from pathlib import Path
 
 import duckdb
 
 from .builtin_connectors import BUILTIN_CONNECTORS
-from .templates import IDENTIFIER, REFERENCE
+from .templates import IDENTIFIER, REFERENCE, URI
 from .types import Connections, Record
 from .util import Problem, digest, literal, qi
 
@@ -27,6 +28,21 @@ NAME = re.compile(r"[A-Za-z][\w-]*")
 def secret_names(definition):
     """Names of a connector's parameters that must never be displayed or recorded."""
     return {p["name"] for p in definition.get("parameters", []) if p.get("secret")}
+
+
+def database_files(definition, values):
+    """Local database files declared by an administrator, excluding URIs and memory databases."""
+    if definition.get("family") != "database":
+        return {}
+    return {
+        p["name"]: Path(value).expanduser().resolve()
+        for p in definition.get("parameters", [])
+        if p.get("type") == "file"
+        and isinstance(value := values.get(p["name"]), str)
+        and value
+        and value != ":memory:"
+        and not URI.match(value)
+    }
 
 
 def executable(definition):
@@ -322,6 +338,13 @@ class Catalog:
                 "|"
             ):
                 raise Problem(f"Connection {reference}: invalid choice for {name}")
+        # The probe and worker must attach the same file, including relative paths,
+        # home expansion and symlinks. The sandbox grants its resolved parent.
+        for name, path in database_files(definition, values).items():
+            resolved = str(path)
+            if name in secret_names(definition) and resolved != values[name]:
+                secrets.append(resolved)
+            values[name] = resolved
         hidden = secret_names(definition)
         public_values = {k: v for k, v in values.items() if k not in hidden}
         captured = {
@@ -388,4 +411,16 @@ def setup_connections(db, captured, offline):
 
         sql = REFERENCE.sub(replace, definition.get("init_sql", ""))
         if sql.strip():
-            db.execute(sql)
+            try:
+                db.execute(sql)
+            except duckdb.Error as error:
+                if not database_files(definition, values):
+                    raise
+                raise Problem(
+                    f"Cannot initialize connection {connection['name']}: {error}. "
+                    "Check its database file settings for this environment and the Duckpad server's "
+                    "filesystem permissions. Use an existing dedicated directory outside the instance; "
+                    "writing requires the connector's write capability and permission to create journal files "
+                    "in that directory. Read-only connectors must attach the database read-only.",
+                    422,
+                ) from error

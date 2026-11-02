@@ -236,8 +236,16 @@ SQL runs in a separate process per worktree/environment. The worker receives onl
 the project's authorized connection configuration and enabled extension requirements, and communicates through a
 JSON-only protocol. It does not inherit the API's environment credentials or
 SQLite descriptors. Before DuckDB creates threads, Linux Landlock restricts file
-access to project resources/exports, explicit administrator-authorized local roots,
-and read-only runtime libraries. Project Git metadata, other projects and instance
+access to project resources/exports, administrator-authorized local storage roots,
+the parent directories of local `file` parameters in granted database connections,
+and read-only runtime libraries. Only the selected environment's values apply.
+Database directories are readable and become writable with the connector's `write`
+capability, allowing DuckDB WAL files and SQLite journals beside the database.
+The whole directory and its descendants are exposed: administrators should keep
+each database and environment in a separate directory. Resolved directories must
+exist and pass the same guards as Server folder roots. Test connection validates
+database directories without a project scope; object listings and worker startup
+validate them for the requesting project. Project Git metadata, other projects and instance
 SQLite remain outside the data allowlist. Traversal and symlink escapes are denied
 by the kernel. DuckDB external access is then disabled with explicit allowed paths;
 auto-installation/loading of extensions and unredacted/persistent secrets are
