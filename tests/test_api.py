@@ -601,6 +601,20 @@ def test_revocations_close_the_sessions_of_granted_projects_only_when_idle(
         assert client.get(key, params={"environment": "dev"}).json() == before[key]
 
 
+def test_a_refused_connection_deletion_closes_no_session(app, client, executed_projects):
+    """A run in one granted project refuses the deletion before any other project loses its results."""
+    for item in executed_projects:
+        app.state.access.grant_connections(item["project"], ["files"])
+    engine = app.state.services.engine
+    engine.active[executed_projects[-1]["id"]] = {"id": "active"}
+    try:
+        assert_rejected_admin_edit(
+            app, client, executed_projects, "DELETE", "/api/catalog/connection/files", None, 409
+        )
+    finally:
+        engine.active.clear()
+
+
 def test_environment_metadata_preserves_connections_and_survives_catalog_reload(app, client, worktree):
     from duckpad.catalog import Catalog
 

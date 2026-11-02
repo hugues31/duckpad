@@ -162,8 +162,11 @@ def test_rotating_a_secret_keeps_results_and_the_next_run_uses_the_new_value(ins
     assert instance.engine.preview(worktree, "dev", "double")["rows"][0]["values"] == [0, 40]
 
 
-@pytest.fixture
-def isolated(tmp_path):
+@pytest.fixture(params=["remote", "file"])
+def isolated(tmp_path, request, monkeypatch):
+    if request.param == "remote":
+        # A remote database, such as PostgreSQL, locks no file: the new worker starts first.
+        monkeypatch.setattr(contexts, "database_files", lambda definition, values: {})
     services = Services.open(tmp_path / "instance", enforce_access=True)
     try:
         yield services
@@ -171,7 +174,7 @@ def isolated(tmp_path):
         services.close()
 
 
-def test_a_failing_new_worker_keeps_the_old_one_and_its_results(isolated, tmp_path):
+def test_a_failing_new_worker_keeps_the_results(isolated, tmp_path, request):
     worktree, connection = keyed_project(isolated, tmp_path)
     before = results(isolated, worktree)
     worker = isolated.engine.context(worktree, "dev").db
@@ -183,10 +186,18 @@ def test_a_failing_new_worker_keeps_the_old_one_and_its_results(isolated, tmp_pa
     with pytest.raises(Problem, match="Cannot initialize isolated SQL execution") as refused:
         isolated.engine.launch(worktree, "dev", "other")
     assert str(broken) not in str(refused.value)
-    assert isolated.engine.context(worktree, "dev").db is worker
-    assert not worker.closed
     assert results(isolated, worktree) == before
     assert not isolated.engine.active
+    context = isolated.engine.context(worktree, "dev")
+    assert context.db is worker and not worker.closed
+    # The old worker released its database file, so the next run tries again.
+    assert ("warehouse" in context.connections) == (request.node.callspec.params["isolated"] == "remote")
+    connection["environments"]["dev"]["database"] = database(tmp_path, "second", 20)
+    isolated.catalog.save("connection", copy.deepcopy(connection))
+    run = wait_run(isolated.store, isolated.engine.launch(worktree, "dev", "other"), timeout=30)
+    assert run["status"] == "success", run
+    assert results(isolated, worktree)["double"] == before["double"]
+    assert not handoff_files(isolated, worktree)
 
 
 def test_results_that_cannot_be_saved_stay_in_the_old_worker(isolated, tmp_path, monkeypatch):
@@ -212,10 +223,36 @@ def test_results_that_cannot_be_saved_stay_in_the_old_worker(isolated, tmp_path,
         isolated.engine.launch(worktree, "dev", "other")
     assert refused.value.status == 503
     assert isolated.engine.context(worktree, "dev").db is worker
-    [(candidate, _, _)] = started
-    assert candidate.closed
+    assert all(candidate.closed for candidate, _, _ in started)
     assert results(isolated, worktree) == before
     assert not handoff_files(isolated, worktree)
+
+
+def test_a_writable_database_file_moves_to_the_new_worker(tmp_path, monkeypatch):
+    monkeypatch.setitem(KEYED, "init_sql", "ATTACH {{ database }} AS {{ alias }};")
+    monkeypatch.setitem(KEYED, "capabilities", ["read", "write"])
+    services = Services.open(tmp_path / "instance", enforce_access=True)
+    try:
+        worktree, connection = keyed_project(services, tmp_path)
+        before = results(services, worktree)
+        worker = services.engine.context(worktree, "dev").db
+        connection["name"] = "Renamed warehouse"
+        services.catalog.save("connection", copy.deepcopy(connection))
+        run = wait_run(services.store, services.engine.launch(worktree, "dev", "other"), timeout=30)
+        assert run["status"] == "success", run
+        # A new name changes no setup, so the worker stays.
+        assert services.engine.context(worktree, "dev").db is worker
+        # The old worker releases the lock on the file, so the new one can attach it.
+        connection["environments"]["dev"]["label"] = "second"
+        services.catalog.save("connection", copy.deepcopy(connection))
+        run = wait_run(services.store, services.engine.launch(worktree, "dev", "other"), timeout=30)
+        assert run["status"] == "success", run
+        assert services.engine.context(worktree, "dev").db is not worker
+        # A non-secret setting selects data: the moved result is stale, not lost.
+        after = results(services, worktree)["double"]
+        assert (after["id"], after["rows"]) == (before["double"]["id"], before["double"]["rows"])
+    finally:
+        services.close()
 
 
 def test_results_that_cannot_be_loaded_are_recalculated(isolated, tmp_path, monkeypatch, caplog):

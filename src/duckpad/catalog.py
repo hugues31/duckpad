@@ -157,8 +157,9 @@ class Catalog:
                 self.store.delete("connector", data["id"])
             else:
                 self.store.put(kind, data["id"], data)
-            if kind == "connector":
-                self.track_secret_fields(data["id"])
+            sealed = kind == "connector" and self.track_secret_fields(data["id"])
+        if sealed:
+            self.store.compact()
         self.on_change()
 
     def reset(self, identity, *, before_change=None):
@@ -171,14 +172,16 @@ class Catalog:
             before_change()
         with self.store.transaction():
             self.store.delete("connector", identity)
-            self.track_secret_fields(identity)
+            sealed = self.track_secret_fields(identity)
+        if sealed:
+            self.store.compact()
         self.on_change()
 
     def track_secret_fields(self, connector=None):
         """Record parameters a definition made secret on its connections, so the store seals them.
 
         A parameter stays sealed after its definition stops marking it secret. Returns whether
-        a connection changed.
+        a connection changed; `Store.compact` then drops the pages that held the plain values.
         """
         changed = False
         for connection in self.store.all("connection"):

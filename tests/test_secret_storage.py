@@ -277,6 +277,8 @@ def test_a_parameter_made_secret_is_sealed_at_once(tmp_path):
         assert stored(services.store, "SELECT parameters FROM connection_environment").count(SECRETS[0]) == 1
         services.catalog.save("connector", dict(CONNECTOR))
         assert SECRETS[0] not in stored(services.store, "SELECT parameters FROM connection_environment")
+        # Nor in the pages and journal that held the plain value.
+        assert SECRETS[0].encode() not in raw(tmp_path)
         assert services.store.get("connection", "pg")["secret_fields"] == ["password"]
         # It stays sealed when the definition no longer marks it secret.
         services.catalog.save("connector", public)

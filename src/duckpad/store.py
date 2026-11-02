@@ -131,13 +131,17 @@ class Store:
             self.compact()
 
     def compact(self):
-        """Rewrite the database and empty its write-ahead log, leaving no deleted page behind."""
-        connection = self.engine.raw_connection()
-        try:
-            connection.driver_connection.execute("VACUUM")
-            connection.driver_connection.execute("PRAGMA wal_checkpoint(TRUNCATE)")
-        finally:
-            connection.close()
+        """Rewrite the database and empty its write-ahead log, leaving no deleted page behind.
+
+        Call it outside transactions; it waits for those of other threads.
+        """
+        with self.lock:
+            connection = self.engine.raw_connection()
+            try:
+                connection.driver_connection.execute("VACUUM")
+                connection.driver_connection.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+            finally:
+                connection.close()
 
     def _open(self, kind, key, record):
         if kind not in SEALED_KINDS:

@@ -15,7 +15,7 @@ import duckdb
 
 from .. import connection_probe, project_extensions, value_sources
 from ..access import Access
-from ..catalog import Catalog, redact
+from ..catalog import Catalog, database_files, executable, redact
 from ..components import expand
 from ..datasets import Context
 from ..extensions import database_config
@@ -24,7 +24,7 @@ from ..projects import Projects
 from ..store import Store
 from ..templates import URI
 from ..types import Connections, Record, SQLCursor, SQLDatabase
-from ..util import Problem, digest, literal, uid
+from ..util import Problem, digest, literal, qi, uid
 
 logger = logging.getLogger(__name__)
 
@@ -113,6 +113,13 @@ def transfer(database: SQLDatabase, path: Path, *, save: bool) -> None:
             cursor.execute("DETACH handoff")
     finally:
         cursor.close()
+
+
+def attached(connections: Connections) -> str:
+    """What the setup of a worker's connections depends on, without names and descriptions."""
+    return digest(
+        {reference: [executable(c["definition"]), c["values"]] for reference, c in connections.items()}
+    )
 
 
 def wait_for_readers(context: Context, nodes: set[str]) -> None:
@@ -280,8 +287,20 @@ class ContextPool:
         project = self.projects.get(context.worktree)["project"]
         connections, secrets = self._configured_connections(project, context.environment)
         # Secret values only reach this in-memory comparison, never a stored fingerprint.
-        if digest(connections) == digest(context.connections):
+        if attached(connections) == attached(context.connections):
+            # A new name or description changes no setup: runs only report it.
+            context.connections, context.secrets = connections, secrets
             return
+        files = {r for r, c in context.connections.items() if database_files(c["definition"], c["values"])}
+        if files:
+            # DuckDB locks an attached database file: the old worker releases it for the new one.
+            cursor = previous.cursor()
+            try:
+                for reference in files:
+                    cursor.execute(f"DETACH DATABASE IF EXISTS {qi(context.connections[reference]['alias'])}")
+            finally:
+                cursor.close()
+            context.connections = {r: c for r, c in context.connections.items() if r not in files}
         candidate, _, _ = self._open(
             context.worktree,
             context.environment,

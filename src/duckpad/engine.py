@@ -197,9 +197,10 @@ class Engine:
             self.require_idle(worktree)
             self.pool.discard(worktree)
 
-    def reset_project(self, project: str) -> None:
+    def reset_project(self, *projects: str) -> None:
+        """Close the sessions of these projects, or of none while one of them runs."""
         with self.lock:
-            worktrees = {w["id"] for w in self.store.worktrees(project)}
+            worktrees = {w["id"] for project in projects for w in self.store.worktrees(project)}
             if worktrees & self.active.keys():
                 raise Problem(
                     "Stop active executions before changing project connections or deleting the project", 409
@@ -218,9 +219,13 @@ class Engine:
         """Close the sessions of the projects that may use a connection, so that removing it
         applies at once instead of at their next run."""
         with self.lock:
-            for project in self.store.all("project"):
-                if self.access is None or reference in self.access.record(project["id"])["connections"]:
-                    self.reset_project(project["id"])
+            self.reset_project(
+                *(
+                    project["id"]
+                    for project in self.store.all("project")
+                    if self.access is None or reference in self.access.record(project["id"])["connections"]
+                )
+            )
 
     def invalidate(self, worktree: str | None = None) -> None:
         """Mark results of changed definitions stale.
