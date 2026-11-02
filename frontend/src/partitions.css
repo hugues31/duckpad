@@ -1,0 +1,59 @@
+.partition-selector {
+  position: relative;
+}
+.partition-menu {
+  position: absolute;
+  z-index: 40;
+  top: 100%;
+  right: 0;
+  width: min(650px, 85vw);
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: 0 8px 24px #0003;
+}
+.partition-strip {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+}
+.partition-strip input {
+  min-width: 120px;
+}
+.partition-segments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  max-height: 160px;
+  overflow: auto;
+  padding: 8px 0;
+}
+.partition-segment[aria-pressed="true"] {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.partition-inspector {
+  padding-block: 8px;
+  border-block: 1px solid var(--border);
+}
+.node-partition-badge {
+  position: absolute;
+  top: -24px;
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  font-size: 10px;
+  padding: 2px 6px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+}
+.partition-lineage-replay {
+  display: grid;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.partition-lineage-replay p {
+  margin: 0;
+}

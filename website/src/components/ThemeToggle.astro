@@ -1,0 +1,110 @@
+<button
+  class="theme-toggle"
+  type="button"
+  role="switch"
+  aria-label="Dark theme"
+  aria-checked="false"
+  title="Switch to dark theme"
+  hidden
+>
+  <svg
+    class="theme-sun"
+    width="16"
+    height="16"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    stroke-width="1.75"
+    stroke-linecap="round"
+    aria-hidden="true"
+  >
+    <circle cx="12" cy="12" r="4" />
+    <path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5" />
+  </svg>
+  <svg
+    class="theme-moon"
+    width="16"
+    height="16"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    stroke-width="1.75"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    aria-hidden="true"
+  >
+    <path d="M20.5 13.2A8.5 8.5 0 0 1 10.8 3.5a8.5 8.5 0 1 0 9.7 9.7Z" />
+  </svg>
+</button>
+
+<script>
+  const toggle = document.querySelector<HTMLButtonElement>(".theme-toggle");
+  if (toggle) {
+    const syncToggle = () => {
+      const dark = document.documentElement.dataset.theme === "dark";
+      toggle.setAttribute("aria-checked", String(dark));
+      toggle.title = `Switch to ${dark ? "light" : "dark"} theme`;
+    };
+    syncToggle();
+    toggle.hidden = false;
+    toggle.addEventListener("click", () => {
+      const theme =
+        document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+      document.documentElement.dataset.theme = theme;
+      syncToggle();
+      try {
+        localStorage.setItem("duckpad-site-theme", theme);
+      } catch {}
+    });
+  }
+</script>
+
+<style>
+  .theme-toggle {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: space-around;
+    flex-shrink: 0;
+    width: 68px;
+    height: 36px;
+    padding: 3px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: var(--soft);
+    color: var(--muted);
+    transition: border-color 180ms ease;
+  }
+  .theme-toggle[hidden] {
+    display: none;
+  }
+  .theme-toggle:hover {
+    border-color: var(--blue);
+  }
+  .theme-toggle::before {
+    content: "";
+    position: absolute;
+    inset: 3px auto 3px 3px;
+    width: 28px;
+    border-radius: 50%;
+    background: var(--surface);
+    box-shadow: 0 1px 4px #12213a20;
+    transition: transform 280ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .theme-toggle svg {
+    position: relative;
+    transition:
+      color 180ms ease,
+      transform 280ms ease;
+  }
+  :global([data-theme="light"]) .theme-sun,
+  :global([data-theme="dark"]) .theme-moon {
+    color: var(--blue);
+  }
+  :global([data-theme="dark"]) .theme-toggle::before {
+    transform: translateX(32px);
+  }
+  :global([data-theme="dark"]) .theme-sun {
+    transform: rotate(45deg);
+  }
+</style>
