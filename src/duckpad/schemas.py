@@ -314,3 +314,4 @@ class Explain(BaseModel):
     offset: int = Field(default=0, ge=0)
     group: str | None = None
     context: bool = False
+    partition_context: dict | None = None

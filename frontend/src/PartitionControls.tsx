@@ -11,6 +11,7 @@ import type {
   PartitionType,
 } from "./partitions";
 import type { FlowNode } from "./types";
+import { renamePartitionReferences } from "./partitions";
 import Select from "./Select";
 import { useApiResource } from "./useApiResource";
 import { useAsyncAction } from "./useAsyncAction";
@@ -55,7 +56,11 @@ export function PartitionSelector() {
           </button>
         </div>
       )}
-      {editing && createPortal(<DimensionEditor onClose={() => setEditing(false)} />, document.body)}
+      {editing &&
+        createPortal(
+          <DimensionEditor onClose={() => setEditing(false)} />,
+          document.body,
+        )}
     </div>
   );
 }
@@ -165,9 +170,9 @@ export function PartitionStrip({
                 >
                   <strong>{String(entry.key.value)}</strong> ·{" "}
                   {translate(entry.validity)}
-                  {state?.rows !== undefined &&
+                  {state?.rows != null &&
                     ` · ${state.rows.toLocaleString()} ${t("rows")}`}
-                  {state?.duration !== undefined &&
+                  {state?.duration != null &&
                     ` · ${state.duration.toFixed(2)} s`}
                   {state &&
                     !state.preview_available &&
@@ -221,6 +226,7 @@ function DimensionEditor({ onClose }: { onClose: () => void }) {
     },
   );
   const action = useAsyncAction();
+  const [renames, setRenames] = useState<Record<string, string>>({});
   const [attributes, setAttributes] = useState(
     draft.attributes?.join(", ") || "",
   );
@@ -229,6 +235,36 @@ function DimensionEditor({ onClose }: { onClose: () => void }) {
       await worktree.save(snapshot, (bundle) => {
         if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(name))
           throw new Error(t("partitionInvalidName"));
+        const nextAttributes = attributes
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean)
+          .map((value) => renames[value] ?? value);
+        if (
+          nextAttributes.some(
+            (value) => !/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(value),
+          ) ||
+          new Set(nextAttributes).size !== nextAttributes.length
+        )
+          throw new Error(t("partitionInvalidName"));
+        for (const node of bundle.flow.nodes) {
+          node.params = renamePartitionReferences(
+            node.params || {},
+            renames,
+          ) as FlowNode["params"];
+          for (const attribute of original?.[1].attributes || []) {
+            const current = renames[attribute] ?? attribute;
+            if (nextAttributes.includes(current)) continue;
+            if (
+              JSON.stringify(
+                renamePartitionReferences(node.params || {}, {
+                  [current]: "__removed_partition_attribute",
+                }),
+              ) !== JSON.stringify(node.params || {})
+            )
+              throw new Error(t("partitionAttributeUsed"));
+          }
+        }
         if (original && original[0] !== name) {
           for (const node of bundle.flow.nodes)
             for (const output of Object.values(node.outputs || {}))
@@ -238,10 +274,7 @@ function DimensionEditor({ onClose }: { onClose: () => void }) {
         bundle.flow.partitions = {
           [name]: {
             ...draft,
-            attributes: attributes
-              .split(",")
-              .map((s) => s.trim())
-              .filter(Boolean),
+            attributes: nextAttributes,
           },
         };
       });
@@ -311,6 +344,19 @@ function DimensionEditor({ onClose }: { onClose: () => void }) {
               onChange={(e) => setAttributes(e.target.value)}
             />
           </label>
+          {(original?.[1].attributes || []).map((attribute) => (
+            <label className="field" key={attribute}>
+              <span>
+                {t("partitionRenameAttribute").replace("{name}", attribute)}
+              </span>
+              <input
+                value={renames[attribute] ?? attribute}
+                onChange={(event) =>
+                  setRenames({ ...renames, [attribute]: event.target.value })
+                }
+              />
+            </label>
+          ))}
           <label className="field">
             <span>{t("partitionParallelism")}</span>
             <input
@@ -393,6 +439,32 @@ function DimensionEditor({ onClose }: { onClose: () => void }) {
         )}
       </div>
       <footer>
+        {original && (
+          <button
+            className="button secondary"
+            disabled={
+              !worktree.canEdit ||
+              action.pending ||
+              snapshot.bundle!.flow.nodes.some(
+                (node) =>
+                  node.partitions === "all" ||
+                  Object.values(node.outputs || {}).some(
+                    (output) => output.partition,
+                  ),
+              )
+            }
+            onClick={() =>
+              action.run(async () => {
+                await worktree.save(snapshot, (bundle) => {
+                  delete bundle.flow.partitions;
+                });
+                onClose();
+              })
+            }
+          >
+            {t("partitionRemoveDimension")}
+          </button>
+        )}
         <button className="button secondary" onClick={onClose}>
           {t("cancel")}
         </button>

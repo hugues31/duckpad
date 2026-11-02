@@ -48,3 +48,12 @@
   border-radius: 10px;
   background: var(--surface);
 }
+.partition-lineage-replay {
+  display: grid;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.partition-lineage-replay p {
+  margin: 0;
+}

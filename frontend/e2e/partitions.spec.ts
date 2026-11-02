@@ -6,7 +6,9 @@ import { partitionFlow } from "./partitions-flow";
 test("inspect retained keys, unavailable previews and global collectors without executing", async ({
   page,
 }) => {
-  page.on("pageerror", (error) => { throw error; });
+  page.on("pageerror", (error) => {
+    throw error;
+  });
   await signIn(page);
   const created = await (
     await page.request.post("/api/projects", {
@@ -68,6 +70,46 @@ test("inspect retained keys, unavailable previews and global collectors without 
   await page.goto(`/worktrees/${created.id}/flow?environment=dev&node=collect`);
   await expect(panel).toContainText("All partitions");
   await expect(panel.locator(".data-table tbody tr")).toHaveCount(3);
+  await panel
+    .getByRole("button", {
+      name: "Explain this value: amount, rows 1, 10",
+      exact: true,
+    })
+    .click();
+  const lineage = page.getByRole("dialog", {
+    name: "How this value was calculated",
+    exact: true,
+  });
+  await expect(lineage).toContainText(
+    "Origin available; intermediate results of a not retained.",
+  );
+  await page.screenshot({
+    path: resolve("../docs/images/partition-lineage.png"),
+    animations: "disabled",
+    style: ".resource-monitor { visibility: hidden !important; }",
+  });
+  const replaying = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/runs") &&
+      response.request().method() === "POST",
+  );
+  await lineage
+    .getByRole("button", { name: "Run this key to explain", exact: true })
+    .click();
+  const replay = await (await replaying).json();
+  await expect
+    .poll(
+      async () =>
+        (await (await page.request.get(`/api/runs/${replay.id}`)).json())
+          .status,
+    )
+    .toBe("success");
+  expect(replay.scope).toBe("transform");
+  expect(replay.partition_selection.keys).toEqual([
+    { type: "text", value: "a" },
+  ]);
+  await expect(page).toHaveURL(/node=transform/);
+  await expect(panel.locator(".data-table tbody tr")).toHaveCount(2);
   await page
     .getByRole("button", { name: "Run with options…", exact: true })
     .click();
@@ -76,13 +118,30 @@ test("inspect retained keys, unavailable previews and global collectors without 
     exact: true,
   });
   await options.getByLabel("Key selection").selectOption("selected");
+  await options.getByRole("checkbox", { name: "a", exact: true }).uncheck();
   await options.getByRole("checkbox", { name: "b", exact: true }).check();
   await options.getByLabel("Parallel partitions").fill("2");
-  const launching = page.waitForResponse(response => response.url().endsWith("/runs") && response.request().method() === "POST");
-  await options.getByRole("button", {name: "Run pipeline", exact: true}).click();
-  const launched = await (await launching).json();
-  await expect.poll(async () => (await (await page.request.get(`/api/runs/${launched.id}`)).json()).status).toBe("success");
-  const latest = await (await page.request.get(`/api/runs/${launched.id}`)).json();
+  const launching = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/runs") &&
+      response.request().method() === "POST",
+  );
+  await options
+    .getByRole("button", { name: "Run pipeline", exact: true })
+    .click();
+  const launchResponse = await launching;
+  expect(launchResponse.ok()).toBeTruthy();
+  const launched = await launchResponse.json();
+  await expect
+    .poll(
+      async () =>
+        (await (await page.request.get(`/api/runs/${launched.id}`)).json())
+          .status,
+    )
+    .toBe("success");
+  const latest = await (
+    await page.request.get(`/api/runs/${launched.id}`)
+  ).json();
   expect(latest.partition_selection.keys).toEqual([
     { type: "text", value: "b" },
   ]);

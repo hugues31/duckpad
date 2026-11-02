@@ -155,9 +155,16 @@ class Engine:
         return self.results.cancel_statistics(worktree, environment, node, port, partition_context)
 
     def test_rows(
-        self, worktree: str, environment: str, node: str, test: str, limit: int = 100, offset: int = 0
+        self,
+        worktree: str,
+        environment: str,
+        node: str,
+        test: str,
+        limit: int = 100,
+        offset: int = 0,
+        partition_context: Record | None = None,
     ) -> Record:
-        return self.results.test_rows(worktree, environment, node, test, limit, offset)
+        return self.results.test_rows(worktree, environment, node, test, limit, offset, partition_context)
 
     def generation_valid(self, worktree: str, environment: str, dataset_id: str) -> bool:
         return self.results.generation_valid(worktree, environment, dataset_id)

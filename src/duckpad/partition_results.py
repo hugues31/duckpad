@@ -81,6 +81,7 @@ class PartitionResults:
             environment,
             computed=self.engine.pool.computed(worktree, environment, bundle),
             partition=entry,
+            manifest=self.engine.fingerprints.manifest(worktree, environment, bundle),
         )
         return "valid" if success.get("fingerprint") == current.get(node) else "stale"
 

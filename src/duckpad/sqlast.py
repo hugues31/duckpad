@@ -8,7 +8,7 @@ from sqlglot import exp
 VOLATILE_FUNCTIONS = (exp.Rand, exp.Uuid, exp.CurrentTimestamp, exp.CurrentDate)
 # A comment on a literal that holds a project variable's bound value, naming the variable.
 VARIABLE_LABEL = "duckpad-variable:"
-LABEL_COMMENT = re.compile(r"\s*/\* " + re.escape(VARIABLE_LABEL) + r"(\w+) \*/")
+LABEL_COMMENT = re.compile(r"\s*/\* " + re.escape(VARIABLE_LABEL) + r"(\w+(?:\.\w+)*) \*/")
 
 
 def sql(expression):

@@ -43,8 +43,8 @@ export interface PartitionEntry {
       status: string;
       validity: string;
       preview_available: boolean;
-      rows?: number;
-      duration?: number;
+      rows?: number | null;
+      duration?: number | null;
       error?: string;
       run?: string;
       skipped?: boolean;
@@ -67,4 +67,29 @@ export interface PartitionLaunchOptions {
     parallelism?: number;
     on_error?: "stop" | "continue";
   };
+}
+
+/** Rename bound references without changing literal SQL, keys or other parameters. */
+export function renamePartitionReferences(
+  value: Json,
+  names: Record<string, string>,
+): Json {
+  if (typeof value === "string")
+    return value.replace(
+      /\{\{\s*partition\.([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}/g,
+      (match, name: string) =>
+        names[name] ? `{{ partition.${names[name]} }}` : match,
+    );
+  if (Array.isArray(value))
+    return value.map((item) => renamePartitionReferences(item, names));
+  if (value && typeof value === "object")
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [
+        key,
+        key === "$partition" && typeof item === "string"
+          ? names[item] || item
+          : renamePartitionReferences(item, names),
+      ]),
+    );
+  return value;
 }

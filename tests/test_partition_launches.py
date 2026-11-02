@@ -216,3 +216,79 @@ def test_refreshing_only_values_invalidates_ordered_collectors(services):
     page = engine.partitions.page(worktree, "dev", node="transform")
     assert [e["key"]["value"] for e in page["entries"]] == ["b", "a"]
     assert all(e["validity"] == "valid" for e in page["entries"])
+
+
+def test_restart_marks_running_keys_interrupted_and_preserves_success(services):
+    store, projects, _, engine = services
+    worktree = projects.create("Recovered keys", bundle())["id"]
+    run = join_run(store, engine.launch(worktree, "dev")["id"])
+    storage = PartitionStorage(store.paths, worktree, "dev")
+    entry = storage.entries(run["partitions"]["manifest"])[0]
+    successful = storage.result("transform", entry["key_hash"])["success"]
+    interrupted = {"status": "running", "kind": "export", "run": run["id"]}
+    storage.attempt(run["id"], entry["partition_id"], "transform", interrupted)
+    storage.record("transform", entry, interrupted)
+    partial = storage.data / "unfinished.partial"
+    partial.write_bytes(b"incomplete")
+    run["status"] = "running"
+    store.put("run", run["id"], run)
+    engine.runs.recover()
+    recovered = storage.result("transform", entry["key_hash"])
+    assert recovered["attempt"]["status"] == "interrupted"
+    assert recovered["attempt"]["external_outcome"] == "unknown"
+    assert recovered["success"] == successful
+    assert store.get("run", run["id"])["status"] == "interrupted"
+    assert not partial.exists()
+
+
+def test_successive_zones_share_ordered_collector_fingerprints(services):
+    store, projects, _, engine = services
+    project = bundle()
+    project["templates"]["collect"] = (
+        "-- @input data\n-- @output result\nSELECT *, CASE task WHEN 'one' THEN 'a' ELSE 'b' END AS batch FROM {{ data }};"
+    )
+    project["templates"]["second"] = "-- @input data\n-- @output result\nSELECT * FROM {{ data }};"
+    project["flow"]["nodes"].extend(
+        [
+            {
+                "id": "second",
+                "template": "second",
+                "outputs": {"result": {"partition": {"by": "batch", "column": "batch"}}},
+            },
+            {"id": "final", "template": "second", "partitions": "all"},
+        ]
+    )
+    project["flow"]["edges"].extend(
+        [
+            {
+                "id": "d",
+                "source": "collect",
+                "sourceHandle": "result",
+                "target": "second",
+                "targetHandle": "data",
+            },
+            {
+                "id": "e",
+                "source": "second",
+                "sourceHandle": "result",
+                "target": "final",
+                "targetHandle": "data",
+            },
+        ]
+    )
+    worktree = projects.create("Successive zones", project)["id"]
+    run = join_run(store, engine.launch(worktree, "dev")["id"])
+    assert run["status"] == "success", run
+    assert engine.preview(worktree, "dev", "final")["count"] == 3
+    before = engine.partitions.page(worktree, "dev", node="second")
+    assert before["entries"][1]["validity"] == "valid"
+    snapshot = projects.snapshot(worktree)
+    snapshot["bundle"]["templates"]["keys"] = (
+        "-- @kind source\n-- @output result\nSELECT 'b' AS batch, 'two' AS task;"
+    )
+    projects.write(worktree, snapshot["revision"], bundle_to_files(snapshot["bundle"]))
+    refreshed = join_run(store, engine.launch(worktree, "dev", "keys")["id"])
+    assert refreshed["status"] == "success", refreshed
+    assert engine.partitions.page(worktree, "dev", node="second")["entries"][0]["validity"] == "stale"
+    # A key before the collector still has its own unchanged computation.
+    assert engine.partitions.page(worktree, "dev", node="source")["entries"][0]["validity"] == "valid"

@@ -16,10 +16,13 @@ from ..catalog import Catalog, redact
 from ..components import expand, expand_for, in_subtree
 from ..datasets import Context, Dataset
 from ..graph import connection_references
+from ..partition_lineage import PartitionLineage
 from ..partition_results import PartitionResults
 from ..projects import Projects
+from ..sqlast import sql
 from ..store import Store
 from ..templates import VARIABLE_REFERENCE, compile_template
+from ..trace.normalize import rename_tables
 from ..types import Record, RunToken, SQLCursor
 from ..util import Problem, clean, now, qi
 from .contexts import ContextPool, interrupt
@@ -437,6 +440,7 @@ class Results:
         test: str,
         limit: int = 100,
         offset: int = 0,
+        partition_context: Record | None = None,
     ) -> Record:
         """The failing rows of a data test, recomputed on demand from the retained result.
 
@@ -446,17 +450,40 @@ class Results:
         context = self.pool.get(worktree, environment)
         with context.lock:
             outputs = dict(context.outputs.get(node, {}))
+        assert self.partitions is not None
+        description = self.partitions.describe(worktree, environment)
+        partitioned = description["nodes"].get(node, {}).get("partitioned")
+        if partitioned:
+            storage, _, entry = self.partitions.selected(worktree, environment, partition_context)
+            if entry is None:
+                raise Problem("Choose one key to inspect its failing rows", 422)
+            artifacts = storage.result(node, entry["key_hash"]).get("success", {}).get("artifacts", {})
+            outputs = {}
+            for port in artifacts:
+                loaded = self.partitions.load(worktree, environment, node, port, partition_context)
+                if loaded:
+                    context, outputs[port] = loaded
         if not outputs:
             raise Problem("No materialized result. Run this node to see its failing rows.", 404)
         datasets = list(outputs.values())
         if any(dataset.status != "valid" for dataset in datasets):
             raise Problem("This result is stale. Run the node again to see its failing rows.", 409)
         run = self.store.get("run", datasets[0].run)
-        statement = next(
-            (s for s in run["nodes"][node].get("statements", []) if s.get("test_name") == test), None
+        evidence = (
+            self.partitions.evidence(worktree, environment, datasets[0])
+            if partitioned
+            else run["nodes"][node]
         )
+        statement = next((s for s in evidence.get("statements", []) if s.get("test_name") == test), None)
         if statement is None:
             raise Problem("This test did not run for the displayed result", 404)
+        if partitioned:
+            with reading(context, datasets) as cursor, context.lock:
+                replacements = PartitionLineage(self.partitions.engine).test_inputs(context, cursor, datasets)
+            statement = {
+                **statement,
+                "sql": sql(rename_tables(sqlglot.parse_one(statement["sql"], read="duckdb"), replacements)),
+            }
         readable = {dataset.id: dataset for dataset in datasets}
         with context.lock:
             for dataset in datasets:

@@ -74,3 +74,21 @@ duckpad run daily-orders --partition-keys keys.json --partition-parallelism 2
 The selector flags are mutually exclusive. Existing `--job`, wait, cancellation,
 detach, authentication and terminal exit codes remain supported; partial failure
 returns exit code 2. Progress reports the phase and completed/failed key counts.
+
+Select **Explain this value** on a collected row to see its typed partition key,
+producing run and occurrence within that key. Duplicate business rows keep distinct
+occurrences. A global aggregate lists the partitions that contributed to it.
+Detailed calculations use only the immutable intermediate generations still retained;
+they never substitute current inputs or read an external source during inspection.
+
+![A retained origin with unavailable intermediate results](images/partition-lineage.png)
+
+When intermediates are unavailable, **Run this key to explain** targets the producing
+node and its ancestors for that key, using the retained manifest. It rereads sources,
+opens a new result and leaves downstream exports out of scope. The new execution is
+not a reconstruction of the old cell's value. Protected-environment confirmation still
+applies. The typed key and attributes appear as evidence beside the calculation.
+
+Renaming an attribute in Partition settings updates its expression and whole-parameter
+references in the same save. Remove its references before deleting an attribute;
+remove all partition declarations and collectors before removing the dimension.

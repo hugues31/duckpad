@@ -32,18 +32,32 @@ class Fingerprints:
         computed: Record | None = None,
         partition: Record | None = None,
         manifest: list[Record] | None = None,
+        _shared: dict[str, str] | None = None,
     ) -> dict[str, str]:
         """Fingerprint every node of a bundle from its SQL, parameters, connections and inputs."""
         # Resolved values make renames, descriptions and promoted literals transparent.
         nodes, edges, _ = expand_for(bundle, environment, computed=computed, partition=partition)
-        per_key = (
-            [(entry, self.of(bundle, environment, captured, computed, partition=entry)) for entry in manifest]
-            if manifest is not None
-            else []
-        )
         fingerprints: dict[str, str] = {}
         for key in topological(nodes, edges, tolerant=True):
             node = nodes[key]
+            if _shared and not node.get("partitioned") and key in _shared:
+                fingerprints[key] = _shared[key]
+                continue
+            # Earlier collector barriers are shared by every later key. Reuse their
+            # ordered manifest fingerprints when computing the next zone's inputs.
+            per_key = (
+                [
+                    (
+                        entry,
+                        self.of(
+                            bundle, environment, captured, computed, partition=entry, _shared=fingerprints
+                        ),
+                    )
+                    for entry in manifest or []
+                ]
+                if node.get("partition_collect_inputs") and manifest is not None
+                else []
+            )
             # An omitted parameter and an explicit value equal to its default compute
             # the same result, including when that value comes from a variable.
             params = {
@@ -109,7 +123,10 @@ class Fingerprints:
                             e["targetHandle"],
                             e["source"],
                             e["sourceHandle"],
-                            fingerprints.get(e["source"], "invalid"),
+                            "collected"
+                            if manifest is not None
+                            and e["targetHandle"] in node.get("partition_collect_inputs", [])
+                            else fingerprints.get(e["source"], "invalid"),
                         )
                         for e in edges
                         if e["target"] == key
@@ -167,6 +184,37 @@ class Fingerprints:
         )
         previous: dict[str, dict[str, str]] = {}
         with context.lock:
+            manifest = self.manifest(context.worktree, context.environment, bundle)
+            entries = {entry["key_hash"]: entry for entry in manifest or []}
+            partition_values, generations = {}, {}
+            for dataset in context.datasets.values():
+                if dataset.partition:
+                    key = dataset.partition["key_hash"]
+                    if key not in partition_values:
+                        partition_values[key] = (
+                            self.of(
+                                bundle,
+                                context.environment,
+                                computed=computed,
+                                partition=entries[key],
+                                manifest=manifest,
+                            )
+                            if key in entries
+                            else {}
+                        )
+                    generations[dataset.id] = partition_values[key].get(dataset.node, "invalid")
+            published = {data.id for outputs in context.outputs.values() for data in outputs.values()}
+            for dataset in context.datasets.values():
+                if dataset.origins and dataset.id not in published:
+                    generations[dataset.id] = (
+                        dataset.fingerprint
+                        if all(
+                            (target := context.datasets.get(origin["dataset"]))
+                            and generations.get(target.id, current.get(target.node)) == target.fingerprint
+                            for origin in dataset.origins
+                        )
+                        else "invalid"
+                    )
             recover = []
             for dataset in context.datasets.values():
                 if current.get(dataset.node) == dataset.fingerprint:
@@ -180,7 +228,7 @@ class Fingerprints:
                             bundle, context.environment, computed=dataset.bound_values
                         )
                     dataset.value_stale = previous[signature].get(dataset.node) == dataset.fingerprint
-            self.pool.mark_stale(context, current)
+            self.pool.mark_stale(context, current, generations)
             for dataset in recover:
                 dataset.status = "valid"
                 dataset.value_stale = False

@@ -321,12 +321,14 @@ class ContextPool:
                         503,
                     ) from None
 
-    def mark_stale(self, context: Context, fingerprints: dict[str, str]) -> None:
+    def mark_stale(
+        self, context: Context, fingerprints: dict[str, str], generations: dict[str, str] | None = None
+    ) -> None:
         """Mark results whose fingerprint changed stale, and interrupt lineage requests reading them."""
         with context.lock:
             changed = set()
             for dataset in context.datasets.values():
-                if fingerprints.get(dataset.node) != dataset.fingerprint:
+                if (generations or {}).get(dataset.id, fingerprints.get(dataset.node)) != dataset.fingerprint:
                     dataset.status = "stale"
                     changed.add(dataset.node)
             cancel_lineage(context, changed)

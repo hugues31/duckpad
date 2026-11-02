@@ -163,7 +163,12 @@ export default function Inspector({
                 const result = await api<PreviewPage>(
                   withQuery(
                     `/worktrees/${worktree}/preview/${encodeURIComponent(prefix + edge.source)}`,
-                    { environment, port: edge.sourceHandle, limit: 1, ...partition },
+                    {
+                      environment,
+                      port: edge.sourceHandle,
+                      limit: 1,
+                      ...partition,
+                    },
                   ),
                   { signal },
                 );

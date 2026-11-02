@@ -46,6 +46,9 @@ import {
 } from "./lineageGraph";
 import { VariableValues } from "./VariableFields";
 import { trapFocus } from "./modals";
+import { useOptionalWorktree } from "./worktree";
+import { useNavigate } from "react-router";
+import type { PartitionPage } from "./partitions";
 
 type Props = {
   worktree: string;
@@ -61,6 +64,7 @@ type CardData = {
   select: (id: string) => void;
   page: (id: string, values: Partial<Query>) => void;
   expand: () => void;
+  replay?: (value: NonNullable<Explanation["replay"]>) => void;
 };
 type CardNode = Node<CardData, "lineage">;
 const nodeTypes = { lineage: CalculationCard };
@@ -143,6 +147,44 @@ function CalculationCard({ data }: NodeProps<CardNode>) {
         <span>=</span>
         <b title={formatValue(result.value)}>{formatValue(result.value)}</b>
       </div>
+      {result.origin && (
+        <p className="lineage-source-location">
+          {t("partitionOrigin")}: {String(result.origin.partition.key.value)} ·{" "}
+          {result.origin.partition.key.type}
+          <br />
+          {t("partitionProducingRun")}: <code>{result.origin.run}</code>
+        </p>
+      )}
+      {!!result.partition_groups?.length && (
+        <p className="lineage-source-location">
+          {t("partitionContributors")}:{" "}
+          {result.partition_groups
+            .map(
+              (group) => `${String(group.partition.key.value)} (${group.rows})`,
+            )
+            .join(", ")}
+        </p>
+      )}
+      {result.replay && (
+        <div className="partition-lineage-replay">
+          <p>
+            {t("partitionOriginUnavailable").replace(
+              "{key}",
+              String(result.origin?.partition.key.value),
+            )}
+          </p>
+          {data.replay && (
+            <button
+              className="button secondary small nodrag"
+              disabled={disabled}
+              onClick={() => data.replay!(result.replay!)}
+            >
+              {t("partitionRunToExplain")}
+            </button>
+          )}
+          <p>{t("partitionReplayHint")}</p>
+        </div>
+      )}
       {source ? (
         <div className="lineage-source-location">
           {result.node?.split("::").at(-1)} · {t("lineageRow")} {result.row + 1}
@@ -299,6 +341,8 @@ export default function LineagePanel(props: Props) {
 
 function LineageDialog({ worktree, environment, cell, onClose }: Props) {
   const t = useT();
+  const currentWorktree = useOptionalWorktree();
+  const navigate = useNavigate();
   const titleId = useId();
   const dialog = useRef<HTMLDialogElement>(null);
   const stopped = useRef(false);
@@ -312,6 +356,52 @@ function LineageDialog({ worktree, environment, cell, onClose }: Props) {
   const [error, setError] = useState("");
   const [interrupted, setInterrupted] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
+  const replay = useCallback(
+    async (value: NonNullable<Explanation["replay"]>) => {
+      if (
+        !currentWorktree?.canEdit ||
+        currentWorktree.id !== worktree ||
+        currentWorktree.environment !== environment
+      )
+        return;
+      setPending(true);
+      try {
+        const key = value.partitions.keys![0];
+        let cursor: string | undefined;
+        do {
+          const page = await api<PartitionPage>(
+            withQuery(`/worktrees/${worktree}/partitions`, {
+              environment,
+              node: value.node,
+              search: String(key.value),
+              cursor,
+            }),
+          );
+          const entry = page.entries.find(
+            (entry) =>
+              entry.key.type === key.type && entry.key.value === key.value,
+          );
+          if (entry) {
+            currentWorktree.selectPartition(entry);
+            onClose();
+            navigate(
+              `/worktrees/${worktree}/flow?${new URLSearchParams({ environment, node: value.node })}`,
+            );
+            await currentWorktree.run(value.node, {
+              partitions: value.partitions,
+            });
+            return;
+          }
+          cursor = page.next_cursor || undefined;
+        } while (cursor);
+        throw new Error(t("partitionReplayMissing"));
+      } catch (error) {
+        setError((error as Error).message);
+        setPending(false);
+      }
+    },
+    [currentWorktree, environment, navigate, onClose, t, worktree],
+  );
 
   useEffect(() => {
     const opener = document.activeElement as HTMLElement | null;
@@ -396,8 +486,14 @@ function LineageDialog({ worktree, environment, cell, onClose }: Props) {
           style: { pointerEvents: "auto" },
           height:
             entry.result.kind === "source" || entry.group || entry.deferred
-              ? 132
-              : 260,
+              ? entry.result.origin
+                ? 210
+                : 132
+              : entry.result.replay
+                ? 410
+                : entry.result.origin || entry.result.partition_groups?.length
+                  ? 330
+                  : 260,
           data: {
             entry,
             root: graph?.root === entry.id,
@@ -411,11 +507,17 @@ function LineageDialog({ worktree, environment, cell, onClose }: Props) {
               }));
             },
             expand: () => setBudget((value) => value + 60),
+            replay:
+              currentWorktree?.canEdit &&
+              !currentWorktree.statuses.active &&
+              !currentWorktree.starting
+                ? replay
+                : undefined,
           },
         })),
         graph?.edges || [],
       ),
-    [graph, pending],
+    [graph, pending, currentWorktree, replay],
   );
   const active = graph?.entries.find((entry) => entry.id === selected);
 
@@ -592,6 +694,7 @@ function CalculationDetails({
           column: current!.column,
           environment,
           context: true,
+          partition_context: current!.partition_context,
           offset,
         }),
         signal,

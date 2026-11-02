@@ -392,6 +392,7 @@ class PartitionRun:
             execution.captured,
             execution.values,
             partition=entry,
+            manifest=self.entries,
         )
         states = {
             **execution.run["nodes"],
@@ -453,6 +454,13 @@ class PartitionRun:
             if previous != data.columns:
                 raise Problem(f"partition_schema: {key}.{port} changes columns or types between keys")
             data.partition = copy.deepcopy(entry)
+            names = {
+                binding["name"]: "partition"
+                + ("." + binding["partition"] if isinstance(binding["partition"], str) else "")
+                for binding in variables.expression_bindings(execution.nodes[key])
+                if binding.get("partition")
+            }
+            data.labels = {placeholder: names.get(name, name) for placeholder, name in data.labels.items()}
             mandatory = (key, port) in self.required
             if mandatory or keep:
                 try:
@@ -520,6 +528,7 @@ class PartitionRun:
                     execution.captured,
                     execution.values,
                     partition=entry,
+                    manifest=self.entries,
                 ).get(source)
                 artifact = result.get("artifacts", {}).get(port)
                 if (

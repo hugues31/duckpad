@@ -29,7 +29,9 @@ vi.mock("./useApiResource", () => ({
           key: { value: "quoted ' key" },
           validity: "valid",
           attributes: {},
-          nodes: {},
+          nodes: {
+            source: { rows: null, duration: null, preview_available: true },
+          },
         },
       ],
       total: 1,
@@ -75,4 +77,24 @@ it("collecting removes conflicting output declarations in the same edit", () => 
   expect(save).toHaveBeenCalledWith(
     expect.objectContaining({ partitions: "all", outputs: { result: {} } }),
   );
+});
+
+it("renames expression and typed attribute references without changing literals", async () => {
+  const { renamePartitionReferences } = await import("./partitions");
+  expect(
+    renamePartitionReferences(
+      {
+        expression: "{{ partition.task }} + {{ partition }}",
+        typed: { $partition: "task" },
+        literal: "task",
+        variable: "{{ var.task }}",
+      },
+      { task: "job" },
+    ),
+  ).toEqual({
+    expression: "{{ partition.job }} + {{ partition }}",
+    typed: { $partition: "job" },
+    literal: "task",
+    variable: "{{ var.task }}",
+  });
 });

@@ -74,7 +74,11 @@ export function PartitionRunMenu() {
       >
         {t("partitionRunOptions")}
       </button>
-      {open && createPortal(<RunOptions onClose={() => setOpen(false)} />, document.body)}
+      {open &&
+        createPortal(
+          <RunOptions onClose={() => setOpen(false)} />,
+          document.body,
+        )}
     </>
   );
 }
@@ -106,7 +110,12 @@ function RunOptions({ onClose }: { onClose: () => void }) {
       : null,
   );
   const options: PartitionLaunchOptions = {
-    partitions: { mode, ...(mode === "selected" ? { keys: selected } : {}) },
+    partitions: {
+      mode,
+      ...(mode === "selected"
+        ? { keys: selected.map(({ type, value }) => ({ type, value })) }
+        : {}),
+    },
     partition_execution: { parallelism, on_error: onError },
   };
   return (

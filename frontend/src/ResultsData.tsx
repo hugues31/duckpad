@@ -409,6 +409,7 @@ export default function ResultsData({
                             dataset: page.id,
                             row: row.id,
                             column: columns[i].name,
+                            partition_context: page.partition_context,
                           })
                         }
                       >

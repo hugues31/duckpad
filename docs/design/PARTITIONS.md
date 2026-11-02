@@ -1,6 +1,6 @@
 # Data partitions (design proposal)
 
-**Status: accepted on 1 November 2026 (see [Decisions](#decisions)), not implemented yet.** This document defines the first version; the mockups illustrate the proposed interface.
+**Status: implemented (steps A–E); live OraDuck/Oracle pushdown validation remains pending.** See the [user guide](../PARTITIONS.md) for the delivered interface and actual screenshots. This accepted design records the first-version contract; its mockups illustrate the original proposal.
 
 ## Summary
 
@@ -416,7 +416,7 @@ Parts B and D must share the final artifact and export-outcome model from the st
 5. **Failure and retry.** Fail one key after another has exported, then retry it. Successful keys and successful exports within that failed key are not rewritten. Collection uses all required generations in manifest order. Test both policies, active-key completion after stop, not-started/missing selection, unknown write outcomes, and keys added to or removed from the manifest before the retry.
 6. **Lifecycle and isolation.** Test storage exhaustion, optional preview caps, checksum failures, worker loss and restart, concurrent readers, generation cleanup, distinct environments/worktrees, revoked permissions and malicious keys/paths. Retained data must not escape the existing worker sandbox.
 7. **UI/API consistency.** Selection, progress, validity, history, log filtering, pagination and lineage agree on the same manifest/key/generation. Invalid definitions block only affected nodes. Old API callers remain valid, and `duckpad run` reports `partial_failure` with exit code 2.
-8. **Delivery checks.** Relevant pytest, Vitest, `ty check`, Ruff, ESLint and Playwright scenarios pass at each implementation step. Update translations, user documentation and screenshots. Deploy and verify the exact delivered commit before requesting human review. These implementation tests are future acceptance criteria, not claims of functionality delivered by this proposal.
+8. **Delivery checks.** Relevant pytest, Vitest, `ty check`, Ruff, ESLint and Playwright scenarios pass at each implementation step. Update translations, user documentation and screenshots. Deploy and verify the exact delivered commit before requesting human review. The live OraDuck/Oracle predicate and transfer-volume checks require an available Oracle test source. Local bound-filter and Parquet pushdown tests do not replace that integration evidence.
 
 ## Decisions
 

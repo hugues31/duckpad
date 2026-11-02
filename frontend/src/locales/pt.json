@@ -1226,5 +1226,15 @@
   "partitionExportNotice": "Exportações no escopo selecionado podem gravar externamente. Exportações bem-sucedidas são ignoradas ao repetir a mesma chave e definição. Chaves paralelas compartilham os limites de threads e memória da sessão.",
   "partitionNotStarted": "Não iniciadas",
   "partitionSkipped": "Ignorado",
-  "partitionDuration": "Duração"
+  "partitionDuration": "Duração",
+  "partitionOrigin": "Partição de origem",
+  "partitionProducingRun": "Execução de origem",
+  "partitionContributors": "Partições contribuintes",
+  "partitionOriginUnavailable": "Origem disponível; resultados intermédios de {key} não retidos.",
+  "partitionRunToExplain": "Executar esta chave para explicar",
+  "partitionReplayHint": "Lê as fontes novamente e abre um novo resultado. Não explica o valor antigo nem executa exportações a jusante.",
+  "partitionReplayMissing": "Esta chave não existe no manifesto atual. Atualize os valores antes de a executar.",
+  "partitionRenameAttribute": "Renomear o atributo {name}",
+  "partitionAttributeUsed": "Este atributo ainda é utilizado. Renomeie-o ou remova primeiro as referências.",
+  "partitionRemoveDimension": "Remover dimensão não utilizada"
 }

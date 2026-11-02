@@ -1138,9 +1138,25 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
 
     @app.get("/api/worktrees/{worktree}/test-rows/{node}/{test}", response_model=None)
     def test_rows(
-        worktree: str, node: str, test: str, environment: str, limit: int = 100, offset: int = 0
+        worktree: str,
+        node: str,
+        test: str,
+        environment: str,
+        limit: int = 100,
+        offset: int = 0,
+        manifest: str | None = None,
+        partition_id: str | None = None,
+        partition_mode: str | None = None,
     ) -> Record:
-        return engine.test_rows(worktree, environment, node, test, limit, offset)
+        return engine.test_rows(
+            worktree,
+            environment,
+            node,
+            test,
+            limit,
+            offset,
+            partition_context(manifest, partition_id, partition_mode),
+        )
 
     @app.get("/api/worktrees/{worktree}/generations/{identity}", response_model=None)
     def generation(worktree: str, identity: str, environment: str) -> Record:
@@ -1157,6 +1173,7 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
             data.offset,
             data.group,
             data.context,
+            partition_context=data.partition_context,
         )
 
     # Interface

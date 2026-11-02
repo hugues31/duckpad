@@ -1226,5 +1226,15 @@
   "partitionExportNotice": "Exports in the selected scope may write externally. Successful exports are skipped when retrying the same key and definition. Parallel keys share the session’s thread and memory limits.",
   "partitionNotStarted": "Not started",
   "partitionSkipped": "Skipped",
-  "partitionDuration": "Duration"
+  "partitionDuration": "Duration",
+  "partitionOrigin": "Partition origin",
+  "partitionProducingRun": "Producing run",
+  "partitionContributors": "Contributing partitions",
+  "partitionOriginUnavailable": "Origin available; intermediate results of {key} not retained.",
+  "partitionRunToExplain": "Run this key to explain",
+  "partitionReplayHint": "Reads the sources again and opens a new result. It does not explain the old value or run downstream exports.",
+  "partitionReplayMissing": "This key is absent from the current manifest. Refresh the values before running it.",
+  "partitionRenameAttribute": "Rename attribute {name}",
+  "partitionAttributeUsed": "This attribute is still used. Rename it or remove its references first.",
+  "partitionRemoveDimension": "Remove unused dimension"
 }

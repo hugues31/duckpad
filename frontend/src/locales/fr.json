@@ -1226,5 +1226,15 @@
   "partitionExportNotice": "Les exports du périmètre sélectionné peuvent écrire à l’extérieur. Les exports réussis sont ignorés lors d’une relance de la même clé et définition. Les clés parallèles partagent les limites de threads et mémoire de la session.",
   "partitionNotStarted": "Non démarrées",
   "partitionSkipped": "Ignoré",
-  "partitionDuration": "Durée"
+  "partitionDuration": "Durée",
+  "partitionOrigin": "Partition d’origine",
+  "partitionProducingRun": "Exécution d’origine",
+  "partitionContributors": "Partitions contributrices",
+  "partitionOriginUnavailable": "Origine disponible ; résultats intermédiaires de {key} non conservés.",
+  "partitionRunToExplain": "Exécuter cette clé pour expliquer",
+  "partitionReplayHint": "Relit les sources et ouvre un nouveau résultat. Cela n’explique pas l’ancienne valeur et ne lance pas les exports en aval.",
+  "partitionReplayMissing": "Cette clé est absente du manifeste actuel. Actualisez les valeurs avant de l’exécuter.",
+  "partitionRenameAttribute": "Renommer l’attribut {name}",
+  "partitionAttributeUsed": "Cet attribut est encore utilisé. Renommez-le ou supprimez ses références.",
+  "partitionRemoveDimension": "Supprimer la dimension inutilisée"
 }

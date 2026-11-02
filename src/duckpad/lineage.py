@@ -7,6 +7,7 @@ they never reopen a source resource or change result values or cardinalities.
 import json
 import threading
 
+from .partition_lineage import PartitionLineage
 from .trace import Coverage, TraceQuery
 from .util import Problem, clean, qi, uid
 
@@ -25,6 +26,7 @@ def incomplete(response, warning):
 class Lineage:
     def __init__(self, engine):
         self.engine = engine
+        self.partitions = PartitionLineage(engine)
 
     def explain(
         self,
@@ -38,6 +40,7 @@ class Lineage:
         context_values=False,
         *,
         page_size=PAGE_SIZE,
+        partition_context=None,
     ):
         page_size = max(1, min(PAGE_SIZE, page_size))
         context = self.engine.context(worktree, environment)
@@ -49,6 +52,15 @@ class Lineage:
         columns = [c["name"] for c in dataset.columns]
         if column not in columns:
             raise Problem("Unknown column", 404)
+        if dataset.partition or dataset.partition_context:
+            _, manifest, entry = self.engine.partitions.selected(worktree, environment, partition_context)
+            if dataset.partition and (not entry or entry["key_hash"] != dataset.partition["key_hash"]):
+                raise Problem("Partition context does not match this result generation", 409)
+            if dataset.partition_context and manifest["id"] != dataset.partition_context["manifest"]:
+                raise Problem("Partition manifest does not match this result generation", 409)
+        elif partition_context:
+            self.engine.partitions.selected(worktree, environment, partition_context)
+        self.engine.partitions.authorize(worktree, dataset.node)
         dependencies, visited = set(), set()
 
         def visit(data):
@@ -58,12 +70,15 @@ class Lineage:
             dependencies.add(data.node)
             if data.status != "valid":
                 raise Problem("A lineage dependency is stale", 409)
+            if data.origins:
+                return
             for dependency in data.dependencies.values():
                 if dependency not in context.datasets:
+                    if data.partition:
+                        continue
                     raise Problem("A lineage dependency was replaced", 409)
                 visit(context.datasets[dependency])
 
-        visit(dataset)
         cursor = context.db.cursor()
         request_id = uid("lineage_")
         canceled = threading.Event()
@@ -93,6 +108,9 @@ class Lineage:
             "page_size": page_size,
         }
         try:
+            with context.lock:
+                self.partitions.restore_inputs(context, cursor, dataset)
+                visit(dataset)
             projection = ", ".join(qi(dataset.stored(c)) for c in columns)
             record = cursor.execute(
                 f"SELECT {projection} FROM {qi(dataset.relation)} WHERE rowid=?", [row]
@@ -101,6 +119,10 @@ class Lineage:
                 raise Problem("Row not found", 404)
             response["value"] = clean(record[columns.index(column)])
             response["sql"] = dataset.query
+            response["partition_context"] = partition_context
+            origin = self.partitions.origin_response(context, cursor, dataset, row, column, response)
+            if origin is not None:
+                return origin
             if dataset.source:
                 response.update(
                     kind="source",
@@ -165,6 +187,10 @@ class Lineage:
                 )
                 if not context_values:
                     response["calculation"] = tracer.describe(response)
+                response["partition_groups"] = self.partitions.groups(
+                    context, cursor, contribution_sql, tracer.sources
+                )
+            self.partitions.annotate(context, response)
             if (
                 canceled.is_set()
                 or dataset.status != "valid"
