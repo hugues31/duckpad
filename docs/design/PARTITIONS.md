@@ -423,3 +423,16 @@ Parts B and D must share the final artifact and export-outcome model from the st
 Accepted on 1 November 2026: a single `flow.json` dimension; per-output filter declarations with node execution inheritance; strict typed keys and attributes; preview retention of the last executed key with a 1 GiB cap; complete rather than partial executable collection; serial execution by default; collector inputs kept for the latest successful attempt of each key; detailed lineage only for retained keys, with a single-key run to explain the others; retry as an ordinary launch of the failed keys. The storage and lineage defaults are product choices, not existing behavior.
 
 Out of scope: multiple dimensions; dependencies from key P to P-1; generated time ranges; automatic discovery beyond the resolved manifest and **Missing** selection; repeated components; caller-supplied values from [Job automation step 3](JOB_AUTOMATION.md#delivery-plan); Python nodes; automatic retry; distributed workers; exactly-once arbitrary remote writes; frozen retries replaying a past run's manifest and shared data; and automatic external-source snapshots. None is required to deliver the declared-partition model above.
+
+### Optional-write cost
+
+The implementation copies collector inputs concurrently and validates private
+artifacts by file identity, without hashing their bytes on every read. Fingerprint
+batches expand the graph once per key and reuse each collector's ordered inputs.
+
+With `preview.keep: last`, a successful intermediate may still require a full
+optional write before the next key runs: the next key can fail, and the previous
+successful preview must remain available without keeping another partition in
+memory or rerunning its sources. Writes for older parallel keys are skipped when
+the requested number of newer successful keys is already retained. Optional
+writes stop at the byte cap, and no extra sort is added to the materialized row order.

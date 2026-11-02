@@ -319,6 +319,22 @@ class PartitionStorage:
                 statement = statement.where(col(m.PartitionOutput.mandatory).is_(False))
             return [(row.id, row.mandatory, row.evidence) for row in session.exec(statement)]
 
+    def needs_optional(self, node, port, entry, retention_run, preview):
+        """Do not copy an older parallel result after enough newer keys are retained."""
+        if preview["keep"] == "none":
+            return False
+        if preview["keep"] == "all":
+            return True
+        newer = sum(
+            metadata["dataset"]["node"] == node
+            and metadata["dataset"]["port"] == port
+            and metadata["retention_run"] == retention_run
+            and metadata["partition"]["ordinal"] > entry["ordinal"]
+            and self.available(metadata)
+            for _, _, metadata in self.outputs(optional=True)
+        )
+        return newer < preview["count"]
+
     def trim_optional(self, preview, pinned):
         """Retain successful keys by run/ordinal, independent of completion order."""
         rows = [meta for _, mandatory, meta in self.outputs(optional=True) if not mandatory]

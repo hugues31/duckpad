@@ -262,3 +262,33 @@ def test_missing_recomputes_stale_keys_without_counting_optional_eviction(servic
     assert run["status"] == "success", run
     assert run["partitions"]["selected"] == 2
     assert engine.preview(worktree, "dev", "collect")["rows"][-1]["values"][0] == 30
+
+
+def test_older_parallel_key_does_not_copy_an_unneeded_preview(services, monkeypatch):
+    import threading
+
+    store, projects, _, engine = services
+    store.put("settings", "sql_resources", {"threads": 2})
+    worktree = projects.create("Skip superseded preview writes", bundle())["id"]
+    retained = threading.Event()
+    compute, save = engine.runs._compute, PartitionStorage.save
+    copied = []
+
+    def wait_for_newer(execution, key, tables):
+        if key == "source" and execution.partition["key"]["value"] == "a":
+            assert retained.wait(10)
+        return compute(execution, key, tables)
+
+    def saved(self, cursor, dataset, entry, *args, **kwargs):
+        result = save(self, cursor, dataset, entry, *args, **kwargs)
+        if dataset.node == "source":
+            copied.append(entry["key"]["value"])
+            if entry["key"]["value"] == "b":
+                retained.set()
+        return result
+
+    monkeypatch.setattr(engine.runs, "_compute", wait_for_newer)
+    monkeypatch.setattr(PartitionStorage, "save", saved)
+    run = join_run(store, engine.launch(worktree, "dev", partition_execution={"parallelism": 2})["id"])
+    assert run["status"] == "success", run
+    assert copied == ["b"]

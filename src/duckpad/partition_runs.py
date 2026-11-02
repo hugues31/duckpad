@@ -468,7 +468,6 @@ class PartitionRun:
         entry = execution.partition
         saved = {}
         preview = self.dimension["preview"]
-        keep = preview["keep"] != "none"
         for port, data in staged.items():
             with self.lock:
                 previous = self.schemas.setdefault((key, port), data.columns)
@@ -483,7 +482,7 @@ class PartitionRun:
             }
             data.labels = {placeholder: names.get(name, name) for placeholder, name in data.labels.items()}
             mandatory = (key, port) in self.required
-            if mandatory or keep:
+            if mandatory or self.storage.needs_optional(key, port, entry, self.root["started"], preview):
                 try:
                     # The optional writer can be interrupted at its byte cap without
                     # canceling the key's execution cursor or its later nodes.
