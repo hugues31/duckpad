@@ -108,6 +108,8 @@ class PartitionRun:
         self.runner.fingerprints.invalidate(execution.context)
         self.selected = self.select() if self.partitioned else []
         self.root["partitions"]["selected"] = len(self.selected)
+        if self.partitioned and self.entries and not self.selected:
+            self.root["partitions"]["reason"] = "No partitions match the selection"
         self.preflight()
 
     def select(self):

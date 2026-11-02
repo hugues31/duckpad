@@ -292,3 +292,90 @@ def test_older_parallel_key_does_not_copy_an_unneeded_preview(services, monkeypa
     run = join_run(store, engine.launch(worktree, "dev", partition_execution={"parallelism": 2})["id"])
     assert run["status"] == "success", run
     assert copied == ["b"]
+
+
+def export_project():
+    project = bundle()
+    project["templates"]["export_csv"] = BUILTINS["export_csv"]
+    project["flow"]["nodes"].append(
+        {"id": "export", "template": "export_csv", "params": {"destination": "{{ partition }}.csv"}}
+    )
+    project["flow"]["edges"].append(
+        {
+            "id": "export",
+            "source": "transform",
+            "sourceHandle": "result",
+            "target": "export",
+            "targetHandle": "source",
+        }
+    )
+    return project
+
+
+def downloads(store):
+    with store.session() as session:
+        rows = session.exec(select(models.Artifact).where(models.Artifact.media_type == "text/csv")).all()
+    return {row.id for row in rows}, {f.name for f in store.paths.artifacts.iterdir() if f.is_file()}
+
+
+def test_each_key_keeps_one_export_download_copy(services):
+    store, projects, _, engine = services
+    worktree = projects.create("One download per key", export_project())["id"]
+    for _ in range(3):
+        run = join_run(store, engine.launch(worktree, "dev")["id"])
+        assert run["status"] == "success", run
+    rows, files = downloads(store)
+    storage = PartitionStorage(store, worktree, "dev")
+    current = {
+        storage.result("export", e["key_hash"])["success"]["artifact"]
+        for e in storage.entries(run["partitions"]["manifest"])
+    }
+    assert rows == files == current
+    assert len(current) == 2
+
+
+def test_removing_partition_declarations_releases_their_data(services):
+    store, projects, _, engine = services
+    worktree = projects.create("Unpartitioned again", export_project())["id"]
+    assert join_run(store, engine.launch(worktree, "dev")["id"])["status"] == "success"
+    storage = PartitionStorage(store, worktree, "dev")
+    assert storage.outputs()
+    project = projects.snapshot(worktree)["bundle"]
+    del project["flow"]["partitions"]
+    project["flow"]["nodes"] = [
+        {k: v for k, v in n.items() if k not in ("outputs", "partitions")}
+        for n in project["flow"]["nodes"]
+        if n["id"] != "export"
+    ]
+    project["flow"]["nodes"][3]["params"] = {"value": "'shared'"}
+    project["flow"]["edges"] = [e for e in project["flow"]["edges"] if e["id"] != "export"]
+    projects.write(worktree, projects.snapshot(worktree)["revision"], bundle_to_files(project))
+    assert join_run(store, engine.launch(worktree, "dev")["id"])["status"] == "success"
+    assert not storage.outputs()
+    assert not any(storage.data.iterdir())
+    with store.session() as session:
+        assert not session.exec(select(models.PartitionResult)).all()
+    assert downloads(store) == (set(), set())
+
+
+def test_refused_partition_options_leave_results_valid(services):
+    store, projects, _, engine = services
+    project = bundle()
+    del project["flow"]["partitions"]
+    project["flow"]["nodes"] = [{"id": "lookup", "template": "lookup"}]
+    project["flow"]["edges"] = []
+    worktree = projects.create("Refused options", project)["id"]
+    assert join_run(store, engine.launch(worktree, "dev")["id"])["status"] == "success"
+    with pytest.raises(Problem, match="partition options require a partitioned flow"):
+        engine.launch(worktree, "dev", partition_selection={"mode": "all"})
+    assert engine.preview(worktree, "dev", "lookup")["status"] == "valid"
+
+
+def test_empty_selection_reports_its_reason(services):
+    store, projects, _, engine = services
+    worktree = projects.create("Nothing failed", bundle())["id"]
+    assert join_run(store, engine.launch(worktree, "dev")["id"])["status"] == "success"
+    run = join_run(store, engine.launch(worktree, "dev", partition_selection={"mode": "failed"})["id"])
+    assert run["status"] == "success", run
+    assert run["partitions"]["selected"] == 0
+    assert run["partitions"]["reason"] == "No partitions match the selection"

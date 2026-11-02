@@ -6,7 +6,7 @@ import copy
 import re
 import threading
 import time
-from collections.abc import Collection
+from collections.abc import Mapping
 from contextlib import suppress
 
 import duckdb
@@ -350,18 +350,19 @@ class ContextPool:
                     changed.add(dataset.node)
             cancel_lineage(context, changed)
 
-    def forget_removed(self, context: Context, nodes: Collection[str]) -> None:
+    def forget_removed(self, context: Context, nodes: Mapping[str, Record]) -> None:
         """Drop the results and states of nodes absent from the definitions, once no lineage
         request reads them. Only the run that owns the worktree may call this."""
         from ..partition_storage import PartitionStorage
 
+        partitioned = {key for key, node in nodes.items() if node.get("partitioned")}
         with context.lock:
             removed = {d.node for d in context.datasets.values()}
             removed |= {*context.outputs, *context.errors, *context.node_status, *context.result_runs}
             removed -= set(nodes)
             if not removed:
                 PartitionStorage(self.store, context.worktree, context.environment).forget_removed(
-                    nodes,
+                    partitioned,
                     {d.artifact_id for d in context.datasets.values() if d.artifact_id},
                 )
                 return
@@ -383,7 +384,7 @@ class ContextPool:
                 for states in (context.outputs, context.errors, context.node_status, context.result_runs):
                     states.pop(node, None)
             PartitionStorage(self.store, context.worktree, context.environment).forget_removed(
-                nodes,
+                partitioned,
                 {d.artifact_id for d in context.datasets.values() if d.artifact_id},
             )
 

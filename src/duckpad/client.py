@@ -211,6 +211,8 @@ def progress(run):
         counts.append(
             f"{partitions['phase']}: {partitions['completed']}/{partitions['selected']} partitions complete, {partitions['failed']} failed"
         )
+        if partitions.get("reason"):
+            counts.append(partitions["reason"])
     return f"{run['status']}: " + ", ".join(counts)
 
 

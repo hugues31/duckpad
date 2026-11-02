@@ -196,12 +196,13 @@ class PartitionResults:
         }
 
     def load(self, worktree, environment, node, port, selection) -> tuple[Context, Dataset] | None:
-        description = self.describe(worktree, environment)
+        # Every preview reads through here: flows without partitions skip expansion.
         bundle = self.engine.projects.snapshot(worktree)["bundle"]
         if not bundle or not bundle["flow"].get("partitions"):
             if selection:
                 self.selected(worktree, environment, selection)
             return None
+        description = self.describe(worktree, environment)
         _nodes, _, boundaries = expand(bundle, tolerant=True)
         node, port = boundaries.get(node, {}).get("outputs", {}).get(port, (node, port))
         if not description["nodes"].get(node, {}).get("partitioned"):

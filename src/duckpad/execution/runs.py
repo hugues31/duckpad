@@ -61,6 +61,8 @@ class Execution:
     validation_errors: Record = field(default_factory=dict)
     cursor: SQLCursor | None = None
     prepared: dict[str, Exception | None] = field(default_factory=dict)
+    # Parallel partition keys share one database: each connection is attached once.
+    preparing: threading.Lock = field(default_factory=threading.Lock)
     published: dict[str, dict[str, Dataset]] = field(default_factory=dict)
     partition_plan: Record = field(default_factory=dict)
     partition: Record | None = None
@@ -158,14 +160,9 @@ class Runner:
         token: RunToken = {"id": uid("run_"), "cancel": threading.Event(), "cursor": None}
         self._admit(worktree, environment, token)
         try:
-            execution = self._prepare(token, worktree, environment, target, entry_point)
-            selection, policy = partitions.launch_options(
-                execution.partition_plan.get("dimension"), partition_selection, partition_execution
+            execution = self._prepare(
+                token, worktree, environment, target, entry_point, partition_selection, partition_execution
             )
-            if selection:
-                execution.run["partition_selection"] = selection
-            if policy:
-                execution.run["partition_execution"] = policy
             execution.run["requester"] = copy.deepcopy(requester)
             if job is not None:
                 execution.run.update(trigger="job", job=copy.deepcopy(job), tag=job.get("tag"))
@@ -194,7 +191,14 @@ class Runner:
             self.active[worktree] = token
 
     def _prepare(
-        self, token: RunToken, worktree: str, environment: str, target: str | None, entry_point: str
+        self,
+        token: RunToken,
+        worktree: str,
+        environment: str,
+        target: str | None,
+        entry_point: str,
+        partition_selection: Record | None = None,
+        partition_execution: Record | None = None,
     ) -> Execution:
         """Capture the committed definitions and connection settings the run will use."""
         snapshot = self.projects.flush(worktree)
@@ -207,6 +211,10 @@ class Runner:
         sources = value_sources.sources(bundle, structural, boundaries)
         phase, validation_errors = value_sources.dependencies(structural, edges, sources)
         partition_plan = partitions.plan(bundle, structural, edges, boundaries)
+        # Refuse invalid options before marking any result stale.
+        selection, policy = partitions.launch_options(
+            partition_plan.get("dimension"), partition_selection, partition_execution
+        )
         phase |= partition_plan["value_phase"]
         context = self.pool.get(
             worktree,
@@ -267,6 +275,10 @@ class Runner:
             "variable_declarations": bundle.get("variables"),
             "extensions": bundle.get("extensions"),
         }
+        if selection:
+            run["partition_selection"] = selection
+        if policy:
+            run["partition_execution"] = policy
         for name, source in sources.items():
             if source.get("node") in scope:
                 run["variables"][name] = {
@@ -655,7 +667,7 @@ class Runner:
 
     def _prepare_connections(self, execution: Execution, node: Record) -> None:
         """Prepare each logical connection once per run, replaying its first failure."""
-        with execution.context.lock:
+        with execution.preparing:
             for reference in connection_references(node):
                 if reference not in execution.prepared:
                     try:

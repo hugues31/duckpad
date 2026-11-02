@@ -4,9 +4,9 @@ import copy
 import os
 import re
 import threading
+from contextlib import suppress
 from dataclasses import asdict
 
-from sqlalchemy import delete
 from sqlalchemy.dialects.sqlite import insert
 from sqlmodel import col, select
 
@@ -123,11 +123,13 @@ class PartitionStorage:
             return row.state if row else {}
 
     def record(self, node, entry, state, outputs=None):
+        replaced = None
         with self.store.transaction() as session:
             previous = self.result(node, entry["key_hash"])
             record = {**previous, "attempt": copy.deepcopy(state)}
             if state["status"] == "success":
                 record["success"] = {**copy.deepcopy(state), "artifacts": outputs or {}}
+                replaced = previous.get("success", {}).get("artifact")
             statement = insert(m.PartitionResult).values(
                 worktree=self.worktree,
                 environment=self.environment,
@@ -141,6 +143,9 @@ class PartitionStorage:
                     set_={"state": statement.excluded.state},
                 )
             )
+        # A key keeps one export download copy, like an ordinary export node.
+        if replaced and replaced != state.get("artifact"):
+            self.remove(replaced, self.store.paths.artifacts)
 
     def save(self, cursor, dataset, entry, mandatory, budget, retention_run=None):
         self.temporary.mkdir(parents=True, exist_ok=True)
@@ -234,9 +239,18 @@ class PartitionStorage:
         except OSError:
             return False
 
-    def remove(self, identity):
+    def remove(self, identity, directory=None):
         self.store.delete("artifact", identity)
-        (self.data / identity).unlink(missing_ok=True)
+        # Windows keeps a file that a download is still reading.
+        with suppress(OSError):
+            ((directory or self.data) / identity).unlink(missing_ok=True)
+
+    def forget(self, session, row):
+        """Delete a key's result and the export download copy it owns."""
+        session.delete(row)
+        download = row.state.get("success", {}).get("artifact")
+        if download:
+            self.remove(download, self.store.paths.artifacts)
 
     def restore(self, cursor, metadata):
         if not self.available(metadata):
@@ -367,7 +381,7 @@ class PartitionStorage:
                 if row.key_hash in current:
                     successes.append(row.state.get("success", {}))
                 else:
-                    session.delete(row)
+                    self.forget(session, row)
         live = {a["id"] for state in successes for a in state.get("artifacts", {}).values()}
         for identity, mandatory, metadata in self.outputs():
             if identity in pinned:
@@ -377,15 +391,13 @@ class PartitionStorage:
                 self.remove(identity)
         self.trim_optional(preview, pinned)
 
-    def forget_removed(self, nodes, pinned):
+    def forget_removed(self, partitioned, pinned):
+        """Release the data of deleted nodes and of nodes that are no longer partitioned."""
         for identity, _, metadata in self.outputs():
-            if metadata["dataset"]["node"] not in nodes and identity not in pinned:
+            if metadata["dataset"]["node"] not in partitioned and identity not in pinned:
                 self.remove(identity)
         with self.store.session() as session:
-            session.execute(
-                delete(m.PartitionResult).where(
-                    col(m.PartitionResult.worktree) == self.worktree,
-                    col(m.PartitionResult.environment) == self.environment,
-                    col(m.PartitionResult.node).not_in(nodes),
-                )
-            )
+            for row in session.exec(
+                self.scoped(m.PartitionResult).where(col(m.PartitionResult.node).not_in(partitioned))
+            ):
+                self.forget(session, row)
