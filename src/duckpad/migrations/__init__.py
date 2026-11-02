@@ -6,6 +6,8 @@ from pathlib import Path
 
 from alembic import command
 from alembic.config import Config
+from alembic.migration import MigrationContext
+from alembic.script import ScriptDirectory
 from sqlalchemy import inspect
 
 from duckpad.util import Problem
@@ -20,6 +22,20 @@ def configuration(connection):
     return config
 
 
+def check_schema(connection):
+    """Only initialize empty databases or upgrade revisions from this baseline."""
+    tables = set(inspect(connection).get_table_names())
+    revisions = MigrationContext.configure(connection).get_current_heads()
+    supported = {
+        revision.revision
+        for revision in ScriptDirectory.from_config(configuration(connection)).walk_revisions()
+    }
+    if (tables - {"alembic_version"} and not revisions) or not set(revisions) <= supported:
+        raise Problem(
+            "This database uses an unsupported schema. Start with a new data directory using duckpad start --home <new-directory>."
+        )
+
+
 @contextmanager
 def migration_connection(engine):
     """Allow SQLite batch rebuilds without cascading deletes into child tables.
@@ -32,10 +48,7 @@ def migration_connection(engine):
         raw.execute("PRAGMA foreign_keys=OFF")
         try:
             with connection.begin():
-                if "records" in inspect(connection).get_table_names():
-                    raise Problem(
-                        "This database uses the unsupported document schema. Start with a new data directory using duckpad start --home <new-directory>."
-                    )
+                check_schema(connection)
                 yield connection
                 if connection.exec_driver_sql("PRAGMA foreign_key_check").first():
                     raise Problem("Migration left invalid foreign keys; changes were rolled back")

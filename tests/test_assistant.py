@@ -286,6 +286,11 @@ def test_preview_limit_lineage_and_connection_revocation(instance):
     ctx = dependencies(app, client, context)
     preview = preview_output(ctx, "source", limit=5000)
     assert len(preview["rows"]) == 1
+    filtered = preview_output(ctx, "source", limit=5000, filter="value >= 98")
+    assert [row["values"] for row in filtered["rows"]] == [[98]]
+    assert filtered["filtered_count"] == 2
+    with pytest.raises(Problem, match="Unknown column"):
+        preview_output(ctx, "source", filter="missing = 1")
     with pytest.raises(Problem, match="exact generation ID"):
         explain_value(ctx, "source", 0, "value")
     with pytest.raises(Problem, match=r"groups\[\].key"):

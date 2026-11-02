@@ -1,15 +1,24 @@
-"""Create the initial relational schema and default catalog on a fresh database."""
+"""Create the v0 baseline schema and default environments on a fresh database."""
 
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0001_relational"
+revision = "0001_baseline"
 down_revision = None
 branch_labels = None
 depends_on = None
 
 
 def upgrade():
+    op.create_table(
+        "connection",
+        sa.Column("id", sa.String(), nullable=False),
+        sa.Column("name", sa.String(), nullable=False),
+        sa.Column("connector", sa.String(), nullable=False),
+        sa.Column("secret_fields", sa.JSON(), nullable=False),
+        sa.PrimaryKeyConstraint("id"),
+    )
+    op.create_index(op.f("ix_connection_connector"), "connection", ["connector"], unique=False)
     op.create_table(
         "connector",
         sa.Column("id", sa.String(), nullable=False),
@@ -66,31 +75,66 @@ def upgrade():
         sa.Column("username_key", sa.String(), nullable=False),
         sa.Column("role", sa.String(), nullable=False),
         sa.Column("active", sa.Boolean(), nullable=False),
+        sa.Column("service", sa.Boolean(), nullable=False),
+        sa.Column("description", sa.String(), nullable=False),
         sa.Column("salt", sa.String(), nullable=True),
         sa.Column("hash", sa.String(), nullable=True),
         sa.Column("oidc_issuer", sa.String(), nullable=True),
         sa.Column("oidc_subject", sa.String(), nullable=True),
         sa.Column("session_version", sa.Integer(), nullable=False),
         sa.Column("commit_identity", sa.JSON(), nullable=True),
-        sa.CheckConstraint("role IN ('admin', 'member')", name="user_role"),
         sa.CheckConstraint(
-            "(oidc_issuer IS NULL AND oidc_subject IS NULL AND salt IS NOT NULL AND hash IS NOT NULL) OR (oidc_issuer IS NOT NULL AND oidc_subject IS NOT NULL AND salt IS NULL AND hash IS NULL)",
+            "(service = 0 AND ((oidc_issuer IS NULL AND oidc_subject IS NULL AND salt IS NOT NULL AND hash IS NOT NULL) OR (oidc_issuer IS NOT NULL AND oidc_subject IS NOT NULL AND salt IS NULL AND hash IS NULL))) OR (service = 1 AND role = 'member' AND oidc_issuer IS NULL AND oidc_subject IS NULL AND salt IS NULL AND hash IS NULL)",
             name="user_credentials",
         ),
+        sa.CheckConstraint("role IN ('admin', 'member')", name="user_role"),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("oidc_issuer", "oidc_subject", name="user_oidc_identity"),
         sa.UniqueConstraint("username_key"),
     )
     op.create_table(
-        "connection",
+        "api_token",
         sa.Column("id", sa.String(), nullable=False),
+        sa.Column("user", sa.String(), nullable=False),
+        sa.Column("hash", sa.String(), nullable=False),
         sa.Column("name", sa.String(), nullable=False),
-        sa.Column("connector", sa.String(), nullable=False),
-        sa.Column("secret_fields", sa.JSON(), nullable=False),
-        sa.ForeignKeyConstraint(["connector"], ["connector.id"], ondelete="RESTRICT"),
+        sa.Column("created", sa.Float(), nullable=False),
+        sa.Column("expires", sa.Float(), nullable=True),
+        sa.Column("last_used", sa.Float(), nullable=True),
+        sa.ForeignKeyConstraint(["user"], ["user.id"], ondelete="CASCADE"),
+        sa.PrimaryKeyConstraint("id"),
+        sa.UniqueConstraint("hash"),
+    )
+    op.create_index(op.f("ix_api_token_user"), "api_token", ["user"], unique=False)
+    op.create_table(
+        "assistant_conversation",
+        sa.Column("id", sa.String(), nullable=False),
+        sa.Column("user", sa.String(), nullable=False),
+        sa.Column("project", sa.String(), nullable=True),
+        sa.Column("branch", sa.String(), nullable=False),
+        sa.Column("worktree", sa.String(), nullable=False),
+        sa.Column("title", sa.String(), nullable=False),
+        sa.Column("updated", sa.String(), nullable=False),
+        sa.Column("allow_data", sa.Boolean(), nullable=False),
+        sa.Column("messages", sa.JSON(), nullable=False),
+        sa.Column("turns", sa.JSON(), nullable=False),
+        sa.ForeignKeyConstraint(["project"], ["project.id"], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(["user"], ["user.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index(op.f("ix_connection_connector"), "connection", ["connector"], unique=False)
+    op.create_index("assistant_owner_updated", "assistant_conversation", ["user", "updated"], unique=False)
+    op.create_table(
+        "connection_environment",
+        sa.Column("connection", sa.String(), nullable=False),
+        sa.Column("environment", sa.String(), nullable=False),
+        sa.Column("parameters", sa.JSON(), nullable=False),
+        sa.ForeignKeyConstraint(["connection"], ["connection.id"], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(["environment"], ["environment.id"], ondelete="CASCADE"),
+        sa.PrimaryKeyConstraint("connection", "environment"),
+    )
+    op.create_index(
+        op.f("ix_connection_environment_environment"), "connection_environment", ["environment"], unique=False
+    )
     op.create_table(
         "git_consent",
         sa.Column("project", sa.String(), nullable=False),
@@ -114,11 +158,22 @@ def upgrade():
         sa.PrimaryKeyConstraint("project"),
     )
     op.create_table(
+        "project_connection",
+        sa.Column("project", sa.String(), nullable=False),
+        sa.Column("connection", sa.String(), nullable=False),
+        sa.ForeignKeyConstraint(["connection"], ["connection.id"], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(["project"], ["project.id"], ondelete="CASCADE"),
+        sa.PrimaryKeyConstraint("project", "connection"),
+    )
+    op.create_index(
+        op.f("ix_project_connection_connection"), "project_connection", ["connection"], unique=False
+    )
+    op.create_table(
         "project_member",
         sa.Column("project", sa.String(), nullable=False),
         sa.Column("user", sa.String(), nullable=False),
         sa.Column("role", sa.String(), nullable=False),
-        sa.CheckConstraint("role IN ('reader', 'editor', 'admin')", name="project_member_role"),
+        sa.CheckConstraint("role IN ('reader', 'operator', 'editor', 'admin')", name="project_member_role"),
         sa.ForeignKeyConstraint(["project"], ["project.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["user"], ["user.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("project", "user"),
@@ -155,6 +210,7 @@ def upgrade():
         sa.Column("project", sa.String(), nullable=False),
         sa.Column("branch", sa.String(), nullable=False),
         sa.Column("path", sa.String(), nullable=False),
+        sa.Column("read_only", sa.Boolean(), nullable=False),
         sa.ForeignKeyConstraint(["project"], ["project.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("id", "project", name="worktree_project_identity"),
@@ -172,27 +228,37 @@ def upgrade():
     )
     op.create_index(op.f("ix_conflict_worktree"), "conflict", ["worktree"], unique=False)
     op.create_table(
-        "connection_environment",
-        sa.Column("connection", sa.String(), nullable=False),
-        sa.Column("environment", sa.String(), nullable=False),
-        sa.Column("parameters", sa.JSON(), nullable=False),
-        sa.ForeignKeyConstraint(["connection"], ["connection.id"], ondelete="CASCADE"),
-        sa.ForeignKeyConstraint(["environment"], ["environment.id"], ondelete="CASCADE"),
-        sa.PrimaryKeyConstraint("connection", "environment"),
-    )
-    op.create_index(
-        op.f("ix_connection_environment_environment"), "connection_environment", ["environment"], unique=False
-    )
-    op.create_table(
-        "project_connection",
+        "job",
+        sa.Column("id", sa.String(), nullable=False),
         sa.Column("project", sa.String(), nullable=False),
-        sa.Column("connection", sa.String(), nullable=False),
-        sa.ForeignKeyConstraint(["connection"], ["connection.id"], ondelete="CASCADE"),
-        sa.ForeignKeyConstraint(["project"], ["project.id"], ondelete="CASCADE"),
-        sa.PrimaryKeyConstraint("project", "connection"),
+        sa.Column("worktree", sa.String(), nullable=False),
+        sa.Column("name", sa.String(), nullable=False),
+        sa.Column("description", sa.String(), nullable=False),
+        sa.Column("environment", sa.String(), nullable=False),
+        sa.Column("scope", sa.String(), nullable=True),
+        sa.Column("target", sa.JSON(), nullable=False),
+        sa.Column("runtime_variables", sa.JSON(), nullable=False),
+        sa.Column("versions", sa.JSON(), nullable=False),
+        sa.Column("revision", sa.String(), nullable=False),
+        sa.ForeignKeyConstraint(
+            ["worktree", "project"],
+            ["worktree.id", "worktree.project"],
+            name="job_worktree_project",
+            ondelete="CASCADE",
+        ),
+        sa.PrimaryKeyConstraint("id"),
+        sa.UniqueConstraint("worktree"),
     )
-    op.create_index(
-        op.f("ix_project_connection_connection"), "project_connection", ["connection"], unique=False
+    op.create_index(op.f("ix_job_project"), "job", ["project"], unique=False)
+    op.create_table(
+        "partition_result",
+        sa.Column("worktree", sa.String(), nullable=False),
+        sa.Column("environment", sa.String(), nullable=False),
+        sa.Column("node", sa.String(), nullable=False),
+        sa.Column("key_hash", sa.String(), nullable=False),
+        sa.Column("state", sa.JSON(), nullable=False),
+        sa.ForeignKeyConstraint(["worktree"], ["worktree.id"], ondelete="CASCADE"),
+        sa.PrimaryKeyConstraint("worktree", "environment", "node", "key_hash"),
     )
     op.create_table(
         "revision",
@@ -247,6 +313,47 @@ def upgrade():
     op.create_index(op.f("ix_artifact_run"), "artifact", ["run"], unique=False)
     op.create_index(op.f("ix_artifact_worktree"), "artifact", ["worktree"], unique=False)
     op.create_table(
+        "job_idempotency",
+        sa.Column("job", sa.String(), nullable=False),
+        sa.Column("key", sa.String(), nullable=False),
+        sa.Column("request_hash", sa.String(), nullable=False),
+        sa.Column("run", sa.String(), nullable=False),
+        sa.Column("expires", sa.Float(), nullable=False),
+        sa.ForeignKeyConstraint(["job"], ["job.id"], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(["run"], ["run.id"], ondelete="CASCADE"),
+        sa.PrimaryKeyConstraint("job", "key"),
+    )
+    op.create_index(op.f("ix_job_idempotency_expires"), "job_idempotency", ["expires"], unique=False)
+    op.create_table(
+        "partition_attempt",
+        sa.Column("run", sa.String(), nullable=False),
+        sa.Column("partition_id", sa.String(), nullable=False),
+        sa.Column("node", sa.String(), nullable=False),
+        sa.Column("state", sa.JSON(), nullable=False),
+        sa.ForeignKeyConstraint(["run"], ["run.id"], ondelete="CASCADE"),
+        sa.PrimaryKeyConstraint("run", "partition_id", "node"),
+    )
+    op.create_table(
+        "partition_manifest",
+        sa.Column("id", sa.String(), nullable=False),
+        sa.Column("worktree", sa.String(), nullable=False),
+        sa.Column("environment", sa.String(), nullable=False),
+        sa.Column("run", sa.String(), nullable=False),
+        sa.Column("signature", sa.String(), nullable=False),
+        sa.Column("created", sa.String(), nullable=False),
+        sa.Column("evidence", sa.JSON(), nullable=False),
+        sa.ForeignKeyConstraint(["run"], ["run.id"], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(["worktree"], ["worktree.id"], ondelete="CASCADE"),
+        sa.PrimaryKeyConstraint("id"),
+    )
+    op.create_index(op.f("ix_partition_manifest_run"), "partition_manifest", ["run"], unique=False)
+    op.create_index(
+        "partition_manifest_lookup",
+        "partition_manifest",
+        ["worktree", "environment", "signature", "created"],
+        unique=False,
+    )
+    op.create_table(
         "export_result",
         sa.Column("id", sa.String(), nullable=False),
         sa.Column("worktree", sa.String(), nullable=False),
@@ -268,6 +375,38 @@ def upgrade():
     op.create_index(op.f("ix_export_result_artifact"), "export_result", ["artifact"], unique=False)
     op.create_index(op.f("ix_export_result_run"), "export_result", ["run"], unique=False)
     op.create_index(op.f("ix_export_result_worktree"), "export_result", ["worktree"], unique=False)
+    op.create_table(
+        "partition_entry",
+        sa.Column("manifest", sa.String(), nullable=False),
+        sa.Column("ordinal", sa.Integer(), nullable=False),
+        sa.Column("partition_id", sa.String(), nullable=False),
+        sa.Column("key_hash", sa.String(), nullable=False),
+        sa.Column("evidence", sa.JSON(), nullable=False),
+        sa.ForeignKeyConstraint(["manifest"], ["partition_manifest.id"], ondelete="CASCADE"),
+        sa.PrimaryKeyConstraint("manifest", "ordinal"),
+        sa.UniqueConstraint("manifest", "partition_id", name="partition_entry_identity"),
+    )
+    op.create_table(
+        "partition_output",
+        sa.Column("id", sa.String(), nullable=False),
+        sa.Column("worktree", sa.String(), nullable=False),
+        sa.Column("environment", sa.String(), nullable=False),
+        sa.Column("node", sa.String(), nullable=False),
+        sa.Column("key_hash", sa.String(), nullable=False),
+        sa.Column("dataset", sa.String(), nullable=False),
+        sa.Column("mandatory", sa.Boolean(), nullable=False),
+        sa.Column("evidence", sa.JSON(), nullable=False),
+        sa.ForeignKeyConstraint(["id"], ["artifact.id"], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(["worktree"], ["worktree.id"], ondelete="CASCADE"),
+        sa.PrimaryKeyConstraint("id"),
+    )
+    op.create_index(op.f("ix_partition_output_dataset"), "partition_output", ["dataset"], unique=False)
+    op.create_index(
+        "partition_output_lookup",
+        "partition_output",
+        ["worktree", "environment", "node", "key_hash"],
+        unique=False,
+    )
 
     op.bulk_insert(
         sa.table(
@@ -285,10 +424,20 @@ def upgrade():
 
 
 def downgrade():
+    op.drop_index("partition_output_lookup", table_name="partition_output")
+    op.drop_index(op.f("ix_partition_output_dataset"), table_name="partition_output")
+    op.drop_table("partition_output")
+    op.drop_table("partition_entry")
     op.drop_index(op.f("ix_export_result_worktree"), table_name="export_result")
     op.drop_index(op.f("ix_export_result_run"), table_name="export_result")
     op.drop_index(op.f("ix_export_result_artifact"), table_name="export_result")
     op.drop_table("export_result")
+    op.drop_index("partition_manifest_lookup", table_name="partition_manifest")
+    op.drop_index(op.f("ix_partition_manifest_run"), table_name="partition_manifest")
+    op.drop_table("partition_manifest")
+    op.drop_table("partition_attempt")
+    op.drop_index(op.f("ix_job_idempotency_expires"), table_name="job_idempotency")
+    op.drop_table("job_idempotency")
     op.drop_index(op.f("ix_artifact_worktree"), table_name="artifact")
     op.drop_index(op.f("ix_artifact_run"), table_name="artifact")
     op.drop_index(op.f("ix_artifact_project"), table_name="artifact")
@@ -299,10 +448,9 @@ def downgrade():
     op.drop_index(op.f("ix_run_environment"), table_name="run")
     op.drop_table("run")
     op.drop_table("revision")
-    op.drop_index(op.f("ix_project_connection_connection"), table_name="project_connection")
-    op.drop_table("project_connection")
-    op.drop_index(op.f("ix_connection_environment_environment"), table_name="connection_environment")
-    op.drop_table("connection_environment")
+    op.drop_table("partition_result")
+    op.drop_index(op.f("ix_job_project"), table_name="job")
+    op.drop_table("job")
     op.drop_index(op.f("ix_conflict_worktree"), table_name="conflict")
     op.drop_table("conflict")
     op.drop_index(op.f("ix_worktree_project"), table_name="worktree")
@@ -313,11 +461,17 @@ def downgrade():
     op.drop_table("session")
     op.drop_index(op.f("ix_project_member_user"), table_name="project_member")
     op.drop_table("project_member")
+    op.drop_index(op.f("ix_project_connection_connection"), table_name="project_connection")
+    op.drop_table("project_connection")
     op.drop_table("git_remote")
     op.drop_index(op.f("ix_git_consent_user"), table_name="git_consent")
     op.drop_table("git_consent")
-    op.drop_index(op.f("ix_connection_connector"), table_name="connection")
-    op.drop_table("connection")
+    op.drop_index(op.f("ix_connection_environment_environment"), table_name="connection_environment")
+    op.drop_table("connection_environment")
+    op.drop_index("assistant_owner_updated", table_name="assistant_conversation")
+    op.drop_table("assistant_conversation")
+    op.drop_index(op.f("ix_api_token_user"), table_name="api_token")
+    op.drop_table("api_token")
     op.drop_table("user")
     op.drop_table("setting")
     op.drop_table("project")
@@ -325,3 +479,5 @@ def downgrade():
     op.drop_table("oidc_transaction")
     op.drop_table("environment")
     op.drop_table("connector")
+    op.drop_index(op.f("ix_connection_connector"), table_name="connection")
+    op.drop_table("connection")

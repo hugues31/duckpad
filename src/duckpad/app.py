@@ -1070,9 +1070,6 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
         port: str = "result",
         limit: int = 100,
         offset: int = 0,
-        sort: str | None = None,
-        descending: bool = False,
-        filters: str = "{}",
         search: str = "",
         filter: str = "",
         order: str = "[]",
@@ -1084,11 +1081,9 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
         partition_mode: str | None = None,
     ) -> Record:
         try:
-            filter_values, order_values = json.loads(filters), json.loads(order)
+            order_values = json.loads(order)
         except ValueError as error:
-            raise Problem("Invalid preview filters") from error
-        if not isinstance(filter_values, dict):
-            raise Problem("Invalid preview filters")
+            raise Problem("Invalid sample order") from error
         sample = Sample(method=method, rows=rows, seed=seed, filter=filter, search=search, order=order_values)
         return engine.preview(
             worktree,
@@ -1097,9 +1092,6 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
             port,
             limit,
             offset,
-            sort,
-            descending,
-            filter_values,
             sample,
             partition_context(manifest, partition_id, partition_mode),
         )

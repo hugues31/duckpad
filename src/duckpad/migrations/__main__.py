@@ -8,6 +8,7 @@ from filelock import FileLock, Timeout
 
 from duckpad.migrations import configuration, migration_connection
 from duckpad.store import metadata_engine
+from duckpad.util import Problem
 
 
 def main():
@@ -31,6 +32,8 @@ def main():
                 getattr(command, args.action)(config)
     except Timeout:
         parser.error("Stop this Duckpad instance before running migration commands")
+    except Problem as error:
+        parser.error(str(error))
     finally:
         engine.dispose()
 

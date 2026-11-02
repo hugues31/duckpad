@@ -33,9 +33,13 @@ def is_declarative(name):
 def files_to_bundle(files):
     try:
         documentation = json.loads(files["documentation.json"])
-        if "README.md" in files and isinstance(documentation, dict):
-            documentation.pop("project", None)
-            if files["README.md"]:
+        if isinstance(documentation, dict):
+            if "project" in documentation:
+                raise Problem(
+                    'Move project documentation from documentation.json to README.md and remove the "project" key.',
+                    422,
+                )
+            if files.get("README.md"):
                 documentation["project"] = files["README.md"]
         return {
             "flow": json.loads(files["flow.json"]),

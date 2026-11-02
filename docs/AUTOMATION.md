@@ -259,8 +259,8 @@ The optional launch body is `{}` or `{"trigger":{"source":"…","reference":"…
 is optional (up to 2048 characters). The trigger is caller-declared metadata, while
 `requester` records the authenticated account and token name. Unknown fields are
 rejected: selecting a version or supplying runtime variable values at launch is
-not supported. `tag`, `trigger`, `requester` on older runs, and `finished` while
-active can be `null`.
+not supported. `tag` and `trigger` can be `null`, and so can `finished` while the
+run is active.
 
 A Job response contains its `slug`, `name`, `description`, `project`, `target`,
 `environment`, `scope` and `last_run` (the run representation above, or `null`).

@@ -34,10 +34,9 @@ components/<id>/*.sql   Code owned by nodes inside a component
 ```
 
 The **Documentation** tab edits the same `README.md` shown in **Code**. Project
-text is not duplicated in `documentation.json`. Older projects with a `project`
-entry in that JSON file remain readable; the next bundle save moves that text
-to `README.md` and adds the dependency manifest. When both sources exist,
-`README.md` takes precedence, including when it is empty.
+text belongs only in `README.md`; a missing or empty file means no project
+documentation. A `project` entry in `documentation.json` is rejected: move its
+Markdown text to `README.md` and remove the key before opening the project.
 
 New projects include a standard `[project]` table in `pyproject.toml`, with a
 normalized name, Python `>=3.11`, and `duckpad` pinned to the creating instance's

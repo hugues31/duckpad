@@ -104,11 +104,6 @@ def test_sample_filters_sorts_and_searches_without_changing_the_result(services,
         project, "dev", "checked", sample=Sample(order=[["channel", "asc"], ["amount", "desc"]])
     )
     assert ids(multi)[:3] == [29, 26, 23]
-    # The former one-column filter and sort keep working.
-    legacy = engine.preview(
-        project, "dev", "checked", sort="amount", descending=True, filters={"channel": "web"}
-    )
-    assert ids(legacy)[:2] == [30, 27]
 
 
 def test_random_samples_are_reproducible_with_their_seed(services, project):

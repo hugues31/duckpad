@@ -1,6 +1,5 @@
 """Git authorship follows authenticated requests across saves and integrations."""
 
-import json
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -107,7 +106,7 @@ def test_external_changes_never_take_the_requesting_accounts_identity(instance, 
     app, client, users = instance
     projects = app.state.services.projects
     worktree = shared_project(app, client, users)
-    Path(worktree["path"], "documentation.json").write_text(json.dumps({"project": "External edit"}))
+    Path(worktree["path"], "README.md").write_text("External edit")
     if finalize == "save":
         save(client, worktree, users["bob"][1], "UI edit")
         check_identity(projects, worktree, account_identity(users["bob"][0]))

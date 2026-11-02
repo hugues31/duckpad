@@ -2,30 +2,32 @@
 
 Duckpad stores instance metadata in SQLite through SQLModel. Alembic applies the
 packaged revisions in `src/duckpad/migrations/versions/` before the application
-starts serving requests. The initial revision creates 20 business tables and
-seeds the default environments, but no connector or connection. It does not
-import the former `records` document table. Use a fresh data directory for this
-breaking change; an existing document database is rejected without deleting it.
+starts serving requests. The single `0001_baseline` revision creates all 29
+business tables, including assistant conversations, API tokens, Jobs,
+idempotency keys and partitions. It seeds the `dev` and `prod` environments,
+but no connector or connection.
 
-Revision `0002_assistant` adds the twenty-first business table,
-`assistant_conversation`, with private model messages, UI turns, author, project,
-branch and title. Foreign keys cascade on author or project deletion; the
-`setting` table retains write-only provider configuration. Neither is part of
-project export.
+Duckpad is in v0: earlier instance schemas are not upgraded. Startup rejects a
+database with an unknown revision, or a nonempty one without a revision, without
+changing it; start a new instance as described in
+[Installation](INSTALLATION.md). Do not stamp an old database with the current
+revision: its schema and data were never converted.
 
-Revision `0005_job_idempotency` adds `job_idempotency`, keyed by Job and the hash
-of an idempotency key. It stores a canonical request hash, the accepted run and
-its seven-day expiry. Admission serializes retries per Job, and the initial run
-and key are persisted in the same transaction before starting the execution
-thread. Expired entries are ignored on lookup and removed when another accepted
-key is written. Deleting a Job removes its keys while retaining its run history.
+Private assistant conversations belong to their author and optionally a project.
+Foreign keys cascade on author or project deletion; the `setting` table retains
+write-only provider configuration. Neither is part of project export.
 
-Revision `0006_builtin_connectors` drops the foreign key from `connection` to
-`connector`. Built-in connector definitions come with the release and are not
-stored: the `connector` table holds custom connector types and administrators'
-overrides of built-in ones, under the built-in identifier. A connection may
-therefore name a built-in connector without a row. Rows seeded by earlier
-versions are not converted; recreate such an instance.
+`job_idempotency`, keyed by Job and the hash of an idempotency key, stores a
+canonical request hash, the accepted run and its seven-day expiry. Admission
+serializes retries per Job, and the initial run and key are persisted in the
+same transaction before starting the execution thread. Expired entries are
+ignored on lookup and removed when another accepted key is written. Deleting
+a Job removes its keys while retaining its run history.
+
+Built-in connector definitions come with the release and are not stored: the
+`connector` table holds custom connector types and administrators' overrides of
+built-in ones. A connection can name a built-in connector without a stored row,
+so its connector identifier has no database foreign key.
 
 ## Data model
 
@@ -106,9 +108,10 @@ The project `main` reference is a deferred composite foreign key to a worktree
 of that same project. Project and main worktree are inserted in one transaction.
 The `(project, branch)` pair is unique. A run's `(worktree, project)` pair must
 match its owning worktree. Membership and connection grants have composite
-primary keys; membership roles are constrained to reader, editor or admin.
+primary keys; membership roles are constrained to reader, operator, editor or admin.
 Usernames have a unique case-folded key, and `(oidc_issuer, oidc_subject)` is
-unique. Local credentials and OIDC identities are mutually exclusive.
+unique. Local credentials and OIDC identities are mutually exclusive. Service
+accounts have neither and must have the member role.
 
 Project/worktree deletion cascades to owned metadata, including revisions,
 conflicts, runs, artifacts, latest export results and access links. Project
@@ -152,8 +155,10 @@ and run visibility/filtering use SQL predicates and indexed columns.
 ## Evolving the schema
 
 Use a stopped, disposable development instance. Production startup applies
-pending revisions; never edit an already released migration. Back up a real
-instance's database and files while stopped before upgrading.
+pending revisions within the current baseline. Add a revision for subsequent
+schema changes, or explicitly document another breaking baseline reset during
+v0; never silently reuse a revision identifier for a different schema. Back up
+an instance's database and files while stopped before upgrading.
 
 ```sh
 uv run python -m duckpad.migrations current --home .duckpad-dev
@@ -172,5 +177,6 @@ rebuild from cascading into its children. Failed DDL and data changes roll back
 together. The migration runner serializes Alembic's process-global environment.
 
 Tests compare the initial schema to SQLModel metadata and exercise rollback,
-constraints, cascades, thread isolation and a failed batch rebuild with child
-rows. Migration scripts and their template ship inside the wheel and sdist.
+constraints, cascades, thread isolation, rejection of unsupported databases,
+initialization failure recovery and a failed batch rebuild with child rows.
+Migration scripts and their template ship inside the wheel and sdist.

@@ -36,7 +36,7 @@ The frontend in `frontend/src` mirrors this split: `api.ts` is the only HTTP cli
 
 An instance contains `instance.sqlite`, a private extension cache, `projects/`, separate `worktrees/`, uploads, example source files and `exports/<worktree>/<environment>/`. The database file is created with mode 0600 and the instance directory with mode 0700. Secrets are instance configuration; no project file contains resolved credentials. SQLite user records contain scrypt hashes and salts, never plaintext passwords. Sessions are stored by token hash, identify their owner and expire after seven days. A session also records the credential and revocation version; resetting a password or deactivating an account invalidates its sessions, including after reactivation. Account SSH private keys, trusted Git host keys and origin consents are records of the same database; deactivating an account deletes its key. Network Git copies a key to a 0600 file under `git-network/` only for the duration of one operation; copies left by a crash are removed at startup.
 
-Each project repository versions `flow.json`, `README.md`, `pyproject.toml`, `documentation.json`, `variables.json`, `extensions.json`, `templates/*.sql`, and `components/*.json`; `flow.json` and `documentation.json` are required. Project prose lives in `README.md`; node, output and column descriptions stay in `documentation.json`. The API combines them in `bundle.documentation` for UI editing and carries the manifest as raw `bundle.pyproject` text to preserve comments and custom settings. Older JSON project prose is read until a bundle save writes the new layout. Results, source data, virtual environments and export files are outside that versioned definition set. Connector definitions and environment settings have no configuration-version history. Historical project code always uses the current instance catalog when explicitly run.
+Each project repository versions `flow.json`, `README.md`, `pyproject.toml`, `documentation.json`, `variables.json`, `extensions.json`, `templates/*.sql`, and `components/*.json`; `flow.json` and `documentation.json` are required. Project prose lives in `README.md`; node, output and column descriptions stay in `documentation.json`. The API combines them in `bundle.documentation` for UI editing and carries the manifest as raw `bundle.pyproject` text to preserve comments and custom settings. Results, source data, virtual environments and export files are outside that versioned definition set. Connector definitions and environment settings have no configuration-version history. Historical project code always uses the current instance catalog when explicitly run.
 
 ## Settings scopes
 
@@ -121,8 +121,8 @@ saves and inverse merges. Run tools require durable Pydantic AI deferred approva
 and call the shared engine with current editor permissions. There is no arbitrary
 SQL or network tool. `api.ts` owns the streaming HTTP client.
 
-Alembic revision `0002_assistant` adds `assistant_conversation`, with cascading
-foreign keys to the author and optional project. Its messages use Pydantic AI’s
+The `assistant_conversation` table has cascading foreign keys to the author and
+optional project. Its messages use Pydantic AI’s
 `ModelMessagesTypeAdapter`; UI turns hold safe text and compact tool cards.
 Ownership checks do not grant an instance-admin override. Concurrent turns in
 one conversation return 409. Provider errors never echo SDK exception bodies.

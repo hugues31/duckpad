@@ -87,11 +87,7 @@ def archive_bundle(files):
                 raise Problem(f"{name} is not valid JSON: {error}", 422) from error
             if not isinstance(value, dict):
                 raise Problem(f"{name} must contain a JSON object", 422)
-    bundle = files_to_bundle(files)
-    # Without README.md, the project's Markdown documentation is read from documentation.json.
-    if not isinstance(bundle["documentation"].get("project", ""), str):
-        raise Problem('documentation.json: "project" must be Markdown text', 422)
-    return bundle
+    return files_to_bundle(files)
 
 
 def absolute_path(value):
