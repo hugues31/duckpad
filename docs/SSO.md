@@ -45,8 +45,10 @@ At least one active local administrator must remain available.
 Settings and the client secret live in the protected instance database, outside
 project Git repositories. The API never returns the secret. Leave its field
 blank to retain it; changing the issuer or client ID requires a new secret.
-Protect the instance directory and its backups: the database is not encrypted
-at rest. No provider access, refresh or ID tokens are retained after sign-in.
+The database stores it encrypted with the instance's
+[master key](INSTALLATION.md#secrets-and-the-master-key). Protect the instance
+directory and its backups: they contain that key unless you provide it from
+outside. No provider access, refresh or ID tokens are retained after sign-in.
 
 Every settings save invalidates pending sign-ins and existing SSO sessions.
 Disabling SSO hides the login button and prevents new SSO authentication. Account

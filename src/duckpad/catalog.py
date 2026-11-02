@@ -148,11 +148,14 @@ class Catalog:
         self.check(kind, data, create=create)
         if before_change is not None:
             before_change()
-        if kind == "connector" and data == BUILTIN_CONNECTORS.get(data["id"]):
-            # Saving a built-in unchanged keeps it following the release.
-            self.store.delete("connector", data["id"])
-        else:
-            self.store.put(kind, data["id"], data)
+        with self.store.transaction():
+            if kind == "connector" and data == BUILTIN_CONNECTORS.get(data["id"]):
+                # Saving a built-in unchanged keeps it following the release.
+                self.store.delete("connector", data["id"])
+            else:
+                self.store.put(kind, data["id"], data)
+            if kind == "connector":
+                self.track_secret_fields(data["id"])
         self.on_change()
 
     def reset(self, identity, *, before_change=None):
@@ -163,8 +166,28 @@ class Catalog:
             return
         if before_change is not None:
             before_change()
-        self.store.delete("connector", identity)
+        with self.store.transaction():
+            self.store.delete("connector", identity)
+            self.track_secret_fields(identity)
         self.on_change()
+
+    def track_secret_fields(self, connector=None):
+        """Record parameters a definition made secret on its connections, so the store seals them.
+
+        A parameter stays sealed after its definition stops marking it secret. Returns whether
+        a connection changed.
+        """
+        changed = False
+        for connection in self.store.all("connection"):
+            if connector is not None and connection["connector"] != connector:
+                continue
+            fields = sorted(
+                set(connection["secret_fields"]) | secret_names(self.connector(connection["connector"]) or {})
+            )
+            if fields != connection["secret_fields"]:
+                self.store.put("connection", connection["id"], {**connection, "secret_fields": fields})
+                changed = True
+        return changed
 
     def check(self, kind, data: Record, *, create=False):
         """Validate a connector or connection and complete it for storage, without writing it."""

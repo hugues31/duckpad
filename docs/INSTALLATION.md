@@ -76,6 +76,44 @@ File uploads are limited to 1 GiB per file. Allow request bodies of that size in
 proxy, for example with `client_max_body_size` in nginx. For larger files, an
 instance admin can grant a local connection whose root contains them.
 
+## Secrets and the master key
+
+Duckpad encrypts the secrets it stores in `instance.sqlite` with AES-256-GCM:
+secret connection parameters, the SSO client secret, assistant provider API keys
+and account SSH private keys. A copy of the database alone reveals none of them,
+and each value only decrypts in its own field. Passwords, sessions and API tokens
+are stored as hashes.
+
+The master key comes from the first of:
+
+- `DUCKPAD_MASTER_KEY_FILE`, the path of a file holding the key, such as a Docker
+  or Kubernetes secret;
+- `DUCKPAD_MASTER_KEY`, the key itself. Duckpad reads it at startup and removes it
+  from its environment, so Git and SQL workers never inherit it;
+- `duckpad-master.key` in the instance directory, created with mode 0600 on the
+  first start.
+
+Generate a key with `openssl rand -base64 32`. With the default key file, a copy or
+backup of the whole instance directory also contains the key. Keep it private, or
+provide the key from outside the directory: Duckpad prints a reminder at startup
+when it listens on a non-loopback address with the key in the instance directory.
+Back the key up separately from the instance. Without it, the secrets are lost:
+startup refuses an instance whose secrets were encrypted with a key that is not
+provided, names that key's identifier, and never replaces a missing key file.
+
+To rotate the key, put the new key on the first line of the key file and keep the
+previous one on a later line, then restart. The first key encrypts; the others
+only decrypt. At startup, Duckpad encrypts every secret again with the first key,
+then rewrites the database file so that no deleted page keeps a previous value.
+Remove the previous key after that restart. `DUCKPAD_MASTER_KEY` accepts several
+keys separated by commas. The same startup pass encrypts the secrets of an
+instance created before encryption.
+
+Encryption protects copies of the database, not a running server: anyone who
+controls the Duckpad process or can read the key can decrypt the secrets. An
+instance administrator can also change a connection's host while keeping its
+saved password, and so send that password to a server they control.
+
 ## Trusted local mode
 
 For your own trusted projects on a single-user Windows workstation, run:

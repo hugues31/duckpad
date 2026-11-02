@@ -85,6 +85,13 @@ def start_server(parser, args):
                 "set it to the proxy address; otherwise all users share the proxy's login attempt limit.",
                 flush=True,
             )
+        if args.host not in LOOPBACK_HOSTS and not app.state.services.store.keys.external:
+            print(
+                "The master key that encrypts stored secrets is in the instance directory, next to the "
+                "database it protects: a copy of the directory exposes them. Provide the key with "
+                "DUCKPAD_MASTER_KEY_FILE, for example as a Docker or Kubernetes secret.",
+                flush=True,
+            )
         if app.state.auth.initial_password:
             print(
                 f"Initial administrator login: admin\nPassword: {app.state.auth.initial_password}\nSave this password. It will not be displayed again.",
