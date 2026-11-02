@@ -371,8 +371,8 @@ export interface NodeRun {
   status: NodeRunStatus;
   label: string;
   kind: TemplateKind;
-  /** Each output with the seconds its statement took, recorded since per-output timings. */
-  outputs?: Record<string, Dataset & { duration?: number | null }>;
+  /** Each output with the seconds its statement took. */
+  outputs?: Record<string, Dataset & { duration: number }>;
   error?: string;
   duration?: number;
   external_outcome?: "completed" | "failed" | "partial or unknown" | "unknown";
