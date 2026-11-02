@@ -96,7 +96,7 @@
     padding-inline: 7px;
     gap: 4px;
   }
-  .flow-toolbar .save-status {
+  .flow-toolbar:has(.partition-trigger) .save-status {
     display: none;
   }
   .flow-toolbar .partition-trigger {
