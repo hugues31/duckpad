@@ -149,10 +149,32 @@ def publish_view(cursor, table, plan):
 
 
 def drop_dataset(cursor, dataset):
-    drop_relations(cursor, dataset.table, dataset.storage)
+    if dataset.disk:
+        cursor.execute(f"DROP VIEW IF EXISTS {qi(dataset.table)}")
+        cursor.execute(f"DROP VIEW IF EXISTS {qi(dataset.storage)}")
+    else:
+        drop_relations(cursor, dataset.table, dataset.storage)
 
 
 def drop_relations(cursor, view, storage):
     """Drop a published view and the private storage table behind it."""
     cursor.execute(f"DROP VIEW IF EXISTS {qi(view)}")
-    cursor.execute(f"DROP TABLE IF EXISTS {qi(storage)}")
+    cursor.execute(f"DROP {'VIEW' if storage.endswith('_disk') else 'TABLE'} IF EXISTS {qi(storage)}")
+
+
+def collected_pass_through(query, inputs):
+    """A plain projection of the complete union can stay a disk-backed relation."""
+    tree = sqlglot.parse_one(query, read="duckdb")
+    if (
+        not isinstance(tree, exp.Select)
+        or len(tree.expressions) != 1
+        or not isinstance(tree.expressions[0], exp.Star)
+    ):
+        return None
+    if any(value for name, value in tree.args.items() if name not in ("expressions", "from_")):
+        return None
+    source = tree.args.get("from_")
+    if not source or not isinstance(source.this, exp.Table):
+        return None
+    data = inputs.get(source.this.name)
+    return data if data and data.disk and data.origins else None

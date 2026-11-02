@@ -11,7 +11,7 @@ from . import value_sources, variables
 from .graph import reachable
 from .templates import base_type
 from .types import Record
-from .util import Problem, digest, qi
+from .util import Problem, digest, qi, uid
 
 REFERENCE = re.compile(r"\{\{\s*partition(?:\.([a-z][a-z0-9_]*))?\s*\}\}")
 TYPES = {"text", "number", "date", "boolean"}
@@ -407,3 +407,83 @@ def identity(key):
     if key["type"] == "number" and float(value).is_integer():
         value = int(value)
     return digest({"type": key["type"], "value": value})
+
+
+def scalar_type(sql_type):
+    if sql_type == "VARCHAR":
+        return "text"
+    if sql_type == "DATE":
+        return "date"
+    if sql_type == "BOOLEAN":
+        return "boolean"
+    if (
+        value_sources.INTEGER.fullmatch(sql_type)
+        or sql_type in ("FLOAT", "DOUBLE", "REAL")
+        or sql_type.startswith("DECIMAL(")
+    ):
+        return "number"
+    raise Problem(f"partition_type: {sql_type} is not a supported scalar type; cast it explicitly")
+
+
+def extract(cursor, dataset, dimension, source, run):
+    """Read the complete ordered value output, validating even a zero-row schema."""
+    requested = [source["from"]["column"], *dimension["attributes"]]
+    columns = []
+    for name in requested:
+        matches = [
+            c
+            for c in (dataset.source_columns or dataset.columns)
+            if c["name"].translate(value_sources.IDENTIFIER_CASE)
+            == name.translate(value_sources.IDENTIFIER_CASE)
+        ]
+        if len(matches) != 1:
+            raise Problem(f"invalid_value_source: column {name} is missing or ambiguous")
+        column = matches[0]
+        kind = scalar_type(column["type"])
+        if not columns and kind != dimension["type"] and not (kind == "text" and dimension["type"] == "date"):
+            raise Problem(
+                f"partition_type: column {name} has type {column['type']}, expected {dimension['type']}"
+            )
+        columns.append({**column, "scalar_type": dimension["type"] if not columns else kind})
+    if len({c["name"].translate(value_sources.IDENTIFIER_CASE) for c in columns}) != len(columns):
+        raise Problem("partition_definition: attributes must be distinct from the key column")
+    rows = cursor.execute(
+        f"SELECT {', '.join(qi(c['name']) for c in columns)} FROM {qi(dataset.table)}"
+    ).fetchall()
+    entries, seen = [], {}
+    for ordinal, row in enumerate(rows):
+        evidence = []
+        for column, cell in zip(columns, row, strict=True):
+            try:
+                value = canonical(column["scalar_type"], column["type"], cell)
+            except (Problem, ValueError, OverflowError) as error:
+                code = "partition_null" if cell is None else "partition_type"
+                raise Problem(f"{code}: column {column['name']}, row {ordinal}: {error}") from error
+            evidence.append(
+                {
+                    "type": column["scalar_type"],
+                    "value": value,
+                    "state": "ready",
+                    "source": "node",
+                    "from": {**source["from"], "column": column["name"]},
+                    "resolution": "calculated",
+                    "producer_run": run["id"],
+                    "producer_commit": run["commit"],
+                }
+            )
+        key_hash = identity(evidence[0])
+        if key_hash in seen:
+            raise Problem(
+                f"partition_duplicate: column {columns[0]['name']}, rows {seen[key_hash]} and {ordinal}"
+            )
+        seen[key_hash] = ordinal
+        entries.append(
+            {
+                "partition_id": uid("part_"),
+                "ordinal": ordinal,
+                "key_hash": key_hash,
+                "key": evidence[0],
+                "attributes": dict(zip(dimension["attributes"], evidence[1:], strict=True)),
+            }
+        )
+    return entries, columns

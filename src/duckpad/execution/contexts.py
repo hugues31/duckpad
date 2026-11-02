@@ -258,6 +258,9 @@ class ContextPool:
         directory.mkdir(parents=True, exist_ok=True)
         temporary = directory / ".temporary"
         temporary.mkdir(exist_ok=True)
+        from ..partition_storage import PartitionStorage
+
+        partition_data = PartitionStorage(self.store.paths, worktree, environment).data
         self._install_extensions(captured, config, secrets)
         try:
             return Database(
@@ -268,7 +271,7 @@ class ContextPool:
                     "offline_extensions": imports,
                     "project_extensions": requirements,
                     "read_paths": [str(p) for p in roots],
-                    "write_paths": [str(p) for p in [*writable, directory]],
+                    "write_paths": [str(p) for p in [*writable, directory, partition_data]],
                     "temporary": str(temporary),
                     "remote_paths": remote_prefixes(captured),
                     "resources": resource_config(resources),

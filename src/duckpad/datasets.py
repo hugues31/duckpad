@@ -37,6 +37,10 @@ class Dataset:
     duration: float | None = None
     # Column statistics computed on request; released with the result generation.
     statistics: Record | None = None
+    disk: bool = False
+    partition: Record | None = None
+    origins: list[Record] = field(default_factory=list)
+    artifact_id: str | None = None
 
     @property
     def table(self) -> str:
