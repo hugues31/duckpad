@@ -10,7 +10,7 @@ from typing import BinaryIO
 
 import duckdb
 
-from . import project_extensions
+from . import connection_probe, project_extensions
 from .access import Access
 from .catalog import Catalog
 from .datasets import Context
@@ -217,6 +217,45 @@ class Engine:
             "requirements": entries,
             "core_extensions": core_catalog(),
         }
+
+    def test_connection(self, data: Record, environment: str) -> Record:
+        """Run a connection's setup for one environment, as edited and saved or not, in a child process."""
+        captured, secrets = self.catalog.capture_draft(data, environment)
+        imports = self.store.get("settings", "offline_extensions", {})
+        return connection_probe.run(self.pool.probe_config(), captured, imports, secrets)
+
+    def connection_objects(self, worktree: str, reference: str, environment: str) -> Record:
+        """The schemas and tables of a database connection granted to the worktree's project."""
+        captured, secrets = self.pool.capture(worktree, [reference], environment)
+        connection = captured[reference]
+        if connection["definition"].get("family") != "database":
+            raise Problem(f"Connection {reference} is not a database", 422)
+        imports = self.store.get("settings", "offline_extensions", {})
+        try:
+            # A new attachment lists the tables created since a session attached the database:
+            # attached catalogs, such as PostgreSQL's, are cached.
+            return connection_probe.run(self.pool.probe_config(), captured, imports, secrets)
+        except Problem:
+            # A database file that a session attached is locked: list the session's attachment.
+            listed = self._session_objects(worktree, environment, connection["alias"])
+            if listed is None:
+                raise
+            return listed
+
+    def _session_objects(self, worktree: str, environment: str, alias: str) -> Record | None:
+        """The schemas and tables of a session's attachment, if a session attached the database."""
+        context = self.pool.find(worktree, environment)
+        if context is None or context.db is None or getattr(context.db, "closed", False):
+            return None
+        cursor = context.db.cursor()
+        try:
+            if not connection_probe.attached(cursor, alias):
+                return None
+            return connection_probe.objects(cursor, alias)
+        except (duckdb.Error, Problem):
+            return None
+        finally:
+            cursor.close()
 
     def check_project_extension(self, worktree: str, name: str, source: str) -> Record:
         self.projects.get(worktree)

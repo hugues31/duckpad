@@ -21,6 +21,7 @@ export default function ParameterField({
   location,
   schemas,
   columns,
+  objects,
   worktree,
   variable,
   expressionVariables,
@@ -39,6 +40,8 @@ export default function ParameterField({
   location?: boolean;
   schemas?: string[];
   columns?: Column[];
+  /** Schema or table names listed from the database connection, for name parameters. */
+  objects?: { names: string[]; pending: boolean; error: string };
   worktree?: string;
   /** The variable button shown next to the name, and the bound variable replacing the input. */
   variable?: { control: ReactNode; bound: ReactNode };
@@ -47,6 +50,7 @@ export default function ParameterField({
 }) {
   const t = useT();
   const columnList = useId();
+  const objectList = useId();
   const id = useId();
   const [uploadError, setUploadError] = useState("");
   const name = parameter.name;
@@ -164,8 +168,32 @@ export default function ParameterField({
           value={text}
           onChange={(e) => onChange(e.target.value)}
           onBlur={onBlur}
-          list={base === "column" && schemas ? columnList : undefined}
+          list={
+            base === "column" && schemas
+              ? columnList
+              : objects
+                ? objectList
+                : undefined
+          }
         />
+      )}
+      {objects && !variable?.bound && (
+        <>
+          <datalist id={objectList}>
+            {objects.names.map((name) => (
+              <option key={name} value={name} />
+            ))}
+          </datalist>
+          {objects.pending ? (
+            <small className="muted">{t("listingDatabaseObjects")}</small>
+          ) : (
+            objects.error && (
+              <small className="muted">
+                {t("databaseObjectsError").replace("{error}", objects.error)}
+              </small>
+            )
+          )}
+        </>
       )}
       {base === "file" && worktree && !variable?.bound && (
         <span className="file-upload">

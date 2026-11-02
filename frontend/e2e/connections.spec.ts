@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { expect, test } from "@playwright/test";
 import { openInstanceSettings, signIn } from "./helpers";
 
@@ -374,6 +375,123 @@ test("file nodes offer granted storage connections as locations, custom types in
     await page.request.delete(`/api/projects/${worktree.project}`);
     for (const { id } of connections)
       await page.request.delete(`/api/catalog/connection/${id}`);
+    await page.request.delete(`/api/catalog/connector/${connector.id}`);
+  }
+});
+
+test("database connections are tested from their form and list their tables in Load table", async ({
+  page,
+}, testInfo) => {
+  test.setTimeout(90000);
+  const database = testInfo.outputPath("warehouse.duckdb");
+  execFileSync("../.venv/bin/python", [
+    "-c",
+    [
+      "import duckdb, sys",
+      "with duckdb.connect(sys.argv[1]) as db:",
+      "    db.execute('CREATE SCHEMA sales')",
+      "    db.execute('CREATE TABLE sales.orders AS SELECT 1 AS id')",
+      "    db.execute('CREATE TABLE sales.totals (id INTEGER)')",
+    ].join("\n"),
+    database,
+  ]);
+  const connector = {
+    id: "attached_tables_ui",
+    name: "Attached DuckDB UI",
+    family: "database",
+    parameters: [
+      {
+        name: "database",
+        type: "text",
+        label: "Database file",
+        description: "A DuckDB file on the server",
+      },
+    ],
+    capabilities: ["read", "write"],
+    init_sql: "ATTACH {{ database }} AS {{ alias }};",
+  };
+  const identity = "sales_tables_ui";
+  await signIn(page);
+  const worktree = await (
+    await page.request.post("/api/projects", { data: { name: "Tables" } })
+  ).json();
+  try {
+    const created = await page.request.put("/api/catalog/connector", {
+      data: connector,
+    });
+    expect(created.ok(), await created.text()).toBeTruthy();
+    await page.reload();
+    await openInstanceSettings(page, "Connections");
+    const dialog = page.getByRole("dialog");
+    await page
+      .getByRole("button", { name: "New connection", exact: true })
+      .click();
+    // Built-in database connectors take driver settings as Additional options.
+    await dialog
+      .getByRole("combobox", { name: "Connector", exact: true })
+      .selectOption("postgres");
+    await expect(
+      dialog.getByLabel("Additional options", { exact: true }),
+    ).toHaveAccessibleDescription(/libpq keywords passed to the driver as is/);
+    await dialog.getByLabel("ID", { exact: true }).fill(identity);
+    await dialog.getByLabel("Name", { exact: true }).fill("Sales warehouse");
+    await dialog
+      .getByRole("combobox", { name: "Connector", exact: true })
+      .selectOption(connector.id);
+    const file = dialog.getByLabel("Database file", { exact: true });
+    await expect(file).toHaveAccessibleDescription(
+      "A DuckDB file on the server",
+    );
+    const testButton = dialog.getByRole("button", {
+      name: "Test connection",
+      exact: true,
+    });
+    // Unsaved values are tested, and a failure keeps the form open.
+    await file.fill(testInfo.outputPath("missing", "warehouse.duckdb"));
+    await testButton.click();
+    await expect(dialog.locator(".connection-test-error")).toBeVisible();
+    await file.fill(database);
+    await expect(dialog.locator(".connection-test-error")).toHaveCount(0);
+    await testButton.click();
+    await expect(dialog.getByRole("status")).toHaveText(
+      "Connected in dev. Schemas: 2, tables: 2.",
+    );
+    await dialog
+      .getByRole("button", { name: "Save changes", exact: true })
+      .click();
+    await expect(dialog).toHaveCount(0);
+    expect(
+      (
+        await page.request.put(
+          `/api/projects/${worktree.project}/connections`,
+          { data: { connections: [identity] } },
+        )
+      ).ok(),
+    ).toBeTruthy();
+
+    await page.goto(`/worktrees/${worktree.id}/flow`);
+    await page.getByRole("button", { name: "Load table", exact: true }).click();
+    const inspector = page.locator(".inspector");
+    await inspector
+      .getByRole("combobox", { name: "connection", exact: true })
+      .selectOption(identity);
+    const suggestions = async (name: string) => {
+      const input = inspector.getByRole("combobox", { name, exact: true });
+      const list = await input.getAttribute("list");
+      return page
+        .locator(`datalist[id="${list}"] option`)
+        .evaluateAll((options) =>
+          options.map((option) => (option as HTMLOptionElement).value),
+        );
+    };
+    await expect.poll(() => suggestions("schema")).toEqual(["main", "sales"]);
+    await inspector
+      .getByRole("combobox", { name: "schema", exact: true })
+      .fill("sales");
+    await expect.poll(() => suggestions("table")).toEqual(["orders", "totals"]);
+  } finally {
+    await page.request.delete(`/api/projects/${worktree.project}`);
+    await page.request.delete(`/api/catalog/connection/${identity}`);
     await page.request.delete(`/api/catalog/connector/${connector.id}`);
   }
 });

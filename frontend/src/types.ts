@@ -187,6 +187,29 @@ export interface ConnectorParameter {
   type?: string;
   default?: Json;
   secret?: boolean;
+  /** Shown in the connection form instead of the name. */
+  label?: string;
+  description?: string;
+}
+/** A connection setup run outside execution sessions, for one environment. */
+export interface ConnectionTest {
+  /** Database connections list what they attached. */
+  schemas?: string[];
+  tables?: DatabaseObject[];
+  /** Storage connections report their root. */
+  root?: string | null;
+}
+/** A table or view of a database connection. */
+export interface DatabaseObject {
+  schema: string;
+  name: string;
+  view: boolean;
+}
+export interface DatabaseObjects {
+  schemas: string[];
+  tables: DatabaseObject[];
+  /** Only the first tables are listed. */
+  truncated: boolean;
 }
 /** A connector definition, as written by an administrator. */
 /** A connector definition opened in the JSON editor. */

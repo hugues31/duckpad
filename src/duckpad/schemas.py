@@ -137,6 +137,13 @@ class SQLResources(BaseModel):
         return amount + MEMORY_UNITS[unit.lower()]
 
 
+class ConnectionTest(BaseModel):
+    """A connection as edited in its form, saved or not, and the environment whose setup to run."""
+
+    connection: dict[str, Any]
+    environment: str
+
+
 class ProjectExtension(BaseModel):
     name: str = Field(pattern=r"^[a-z][a-z0-9_]{0,63}$")
     source: Literal["core", "community", "unsigned"]

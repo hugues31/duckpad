@@ -250,8 +250,8 @@ def test_a_connection_without_a_value_selects_project_files():
 def test_sql_using_an_empty_connection_asks_for_one():
     with pytest.raises(Problem, match="Choose a connection for connection"):
         compile_template(
-            parse_template(BUILTINS["load_oracle"]),
-            {"connection": ""},
+            parse_template(BUILTINS["load_table"]),
+            {"connection": "", "table": "orders"},
             {},
             {"result": "out"},
             {},
@@ -303,3 +303,43 @@ def test_exports_without_a_single_local_csv_or_xlsx_file_are_not_downloadable(bo
         '-- @param target: destination(connection) = "out.csv"\n-- @param format: keyword(csv|parquet)\n'
     )
     assert export(body, parameters)["download"] is None
+
+
+def test_schema_and_table_names_are_chosen_from_their_connection():
+    with pytest.raises(Problem, match="schema must reference a declared connection parameter"):
+        parse_template("-- @kind source\n-- @param schema: schema_name\n-- @output result\nSELECT 1;")
+    with pytest.raises(Problem, match="table must reference a declared schema_name parameter"):
+        parse_template(
+            "-- @kind source\n-- @param connection: connection\n-- @param table: table_name(connection)\n"
+            "-- @output result\nSELECT 1;"
+        )
+    template = parse_template(BUILTINS["load_table"])
+    connections = {"pg": {"alias": "conn_1", "definition": {"capabilities": ["read"]}, "values": {}}}
+    # One quoted name each, even with dots or quotes.
+    [statement] = compile_template(
+        template,
+        {"connection": "pg", "schema": 'Sales "EU"', "table": "orders.2026"},
+        {},
+        {"result": "out"},
+        connections,
+        PROJECT_FILES,
+    )
+    assert statement["query"] == 'SELECT * FROM "conn_1"."Sales ""EU"""."orders.2026"'
+    with pytest.raises(Problem, match="Choose a table for table"):
+        compile_template(template, {"connection": "pg"}, {}, {"result": "out"}, connections, PROJECT_FILES)
+    export = parse_template(BUILTINS["export_table"])
+    assert export["download"] is None
+    with pytest.raises(Problem, match="Connection pg does not support write"):
+        compile_template(
+            export,
+            {"connection": "pg", "table": "totals"},
+            {"source": '"input"'},
+            {},
+            connections,
+            PROJECT_FILES,
+        )
+    connections["pg"]["definition"]["capabilities"].append("write")
+    [insert] = compile_template(
+        export, {"connection": "pg", "table": "totals"}, {"source": '"input"'}, {}, connections, PROJECT_FILES
+    )
+    assert insert["query"] == 'INSERT INTO "conn_1"."public"."totals" BY NAME SELECT * FROM "input"'

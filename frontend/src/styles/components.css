@@ -221,6 +221,11 @@ a.button {
   color: light-dark(#79551d, #efcc8d);
   border: 1px solid #bd944933;
 }
+.notice.success {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border: 1px solid var(--accent-soft);
+}
 .spin {
   animation: spin 1.2s linear infinite;
 }

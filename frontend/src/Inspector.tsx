@@ -25,6 +25,7 @@ import ResultSummary from "./ResultSummary";
 import { useRevisionDraft } from "./useRevisionDraft";
 import type {
   Column,
+  DatabaseObjects,
   Documentation,
   FlowEdge,
   FlowNode,
@@ -217,6 +218,49 @@ export default function Inspector({
       else params[name] = value;
       return { ...current, params };
     });
+  // Schema and table names are listed from the database connection of the first schema
+  // parameter. Fields bound to another connection get no suggestions.
+  const valueOf = (name?: string) => {
+    const parameter = parameters.find((p) => p.name === name);
+    const value = draft.params?.[name ?? ""] ?? parameter?.default;
+    return typeof value === "string" ? value : "";
+  };
+  const argumentOf = (name?: string) =>
+    parameters.find((p) => p.name === name)?.type.match(/\((\w+)\)/)?.[1];
+  const listedSchema = parameters.find((p) =>
+    p.type.startsWith("schema_name("),
+  )?.name;
+  const listedConnection = argumentOf(listedSchema);
+  const database = valueOf(listedConnection);
+  const objects = useApiResource<DatabaseObjects>(
+    tab === "parameters" &&
+      connections.some((c) => c.id === database && c.family === "database")
+      ? withQuery(
+          `/worktrees/${worktree}/connections/${encodeURIComponent(database)}/objects`,
+          { environment },
+        )
+      : null,
+  );
+  const objectNames = (parameter: { name: string; type: string }) => {
+    if (!listedConnection) return undefined;
+    const base = parameter.type.split("(")[0];
+    const argument = argumentOf(parameter.name);
+    // The listing's progress and error show once, under the first schema field.
+    const status =
+      parameter.name === listedSchema
+        ? { pending: objects.pending, error: objects.error }
+        : { pending: false, error: "" };
+    if (base === "schema_name" && argument === listedConnection)
+      return { names: objects.data?.schemas ?? [], ...status };
+    if (base === "table_name" && argumentOf(argument) === listedConnection)
+      return {
+        names: (objects.data?.tables ?? [])
+          .filter((table) => table.schema === valueOf(argument))
+          .map((table) => table.name),
+        ...status,
+      };
+    return undefined;
+  };
   // Connection parameters naming where file and destination parameters live.
   const locations = new Set(
     parameters
@@ -450,6 +494,7 @@ export default function Inspector({
                   location={
                     type === "connection" && locations.has(parameter.name)
                   }
+                  objects={objectNames(parameter)}
                   columns={port ? inputColumns[port] : undefined}
                   schemas={
                     (port && schemas[port]) || Object.values(schemas).flat()
