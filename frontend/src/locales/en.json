@@ -67,6 +67,7 @@
   "library": "Import from a project",
   "addLinked": "Add linked",
   "newSqlNode": "New SQL node",
+  "addingNode": "Adding node…",
   "linkedNode": "Linked node",
   "normalNode": "Normal node",
   "editNodeCode": "Edit code",

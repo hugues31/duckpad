@@ -67,6 +67,7 @@
   "library": "Importer depuis un projet",
   "addLinked": "Ajouter lié",
   "newSqlNode": "Nouveau nœud SQL",
+  "addingNode": "Ajout du nœud…",
   "linkedNode": "Nœud lié",
   "normalNode": "Nœud normal",
   "editNodeCode": "Modifier le code",
