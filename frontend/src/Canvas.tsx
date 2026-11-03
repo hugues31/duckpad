@@ -1,5 +1,13 @@
 import { useOptionalWorktree } from "./worktree";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+  type Ref,
+} from "react";
 import {
   Controls,
   ControlButton,
@@ -45,7 +53,7 @@ import { useT, templateLabel, nodeLabel } from "./i18n";
 import { DRAG_TYPE, nodeInterface, type NodeConnection } from "./graph";
 import ConnectionPalette from "./ConnectionPalette";
 import { WarningBadge, warningCount } from "./ExecutionMessages";
-import { layoutNodes } from "./graphLayout";
+import { findNodePosition, layoutNodes } from "./graphLayout";
 import { SearchField } from "./Search";
 import type { NodeKind } from "./NodePalette";
 import type {
@@ -204,7 +212,11 @@ function PipelineNode({ id, data, selected }: NodeProps<PipelineNode>) {
   );
 }
 const nodeTypes = { pipeline: PipelineNode };
+export interface CanvasHandle {
+  newNodePosition: (nodes: FlowNode[]) => FlowNode["position"];
+}
 interface CanvasProps {
+  ref?: Ref<CanvasHandle>;
   readOnly?: boolean;
   nodes: FlowNode[];
   edges: FlowEdge[];
@@ -234,13 +246,40 @@ interface CanvasProps {
   /** Show the results log of a node whose warning badge was clicked. */
   onWarnings?: (id: string) => void;
 }
-function CanvasInner(props: CanvasProps) {
+function CanvasInner({ ref, ...props }: CanvasProps) {
   const t = useT();
   const { getNodes, setViewport, screenToFlowPosition } = useReactFlow();
   const initialized = useNodesInitialized();
   const safeArea = useRef<HTMLDivElement>(null);
   const [frame, setFrame] = useState({ x: 0, y: 0, width: 0, height: 0 });
   const viewportTouched = useRef(false);
+  useImperativeHandle(ref, () => ({
+    newNodePosition: (graphNodes) => {
+      const rendered = new Map(getNodes().map((node) => [node.id, node]));
+      const area = safeArea.current?.getBoundingClientRect();
+      const start = area && screenToFlowPosition({ x: area.left, y: area.top });
+      const end =
+        area && screenToFlowPosition({ x: area.right, y: area.bottom });
+      return findNodePosition(
+        graphNodes.map((node) => ({
+          ...node,
+          position: rendered.get(node.id)?.position ?? node.position,
+          measured: rendered.get(node.id)?.measured,
+        })),
+        {
+          selected: props.selected,
+          visible:
+            start && end
+              ? {
+                  ...start,
+                  width: end.x - start.x,
+                  height: end.y - start.y,
+                }
+              : undefined,
+        },
+      );
+    },
+  }));
   const lastFit = useRef("");
   const [query, setQuery] = useState("");
   const [focus, setFocus] = useState<{ id: string } | null>(
