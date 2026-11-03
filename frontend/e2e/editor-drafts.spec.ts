@@ -185,6 +185,56 @@ for (const choice of ["Stay on this page", "Discard and leave"] as const) {
   });
 }
 
+test("discard does not retry edits typed during a failed navigation save", async ({
+  page,
+}) => {
+  const { endpoint, read } = await prepare(page);
+  await select(page, "filtered");
+  const before = await read();
+  const input = page.locator(".inspector").getByRole("textbox", {
+    name: "Display name",
+    exact: true,
+  });
+  let release!: () => void;
+  const released = new Promise<void>((resolve) => (release = resolve));
+  await page.route(`**${endpoint}`, async (route) => {
+    if (route.request().method() !== "PUT") return route.continue();
+    await released;
+    await route.fulfill({
+      status: 503,
+      json: { error: "Temporary save failure" },
+    });
+  });
+  try {
+    await input.fill("First attempt");
+    await page.getByRole("link", { name: "Code", exact: true }).click();
+    await expect(page.locator(".save-status")).toHaveText("Saving…");
+    await input.fill("Typed while saving");
+    release();
+    const guard = page.getByRole("dialog", {
+      name: "Unsaved changes",
+      exact: true,
+    });
+    await expect(guard).toContainText("Temporary save failure");
+    await expect(page.locator(".save-status")).toHaveText("Unsaved changes");
+    await page.unrouteAll({ behavior: "wait" });
+    const writes: string[] = [];
+    page.on("request", (request) => {
+      if (request.url().endsWith(endpoint) && request.method() === "PUT")
+        writes.push(request.url());
+    });
+    await guard
+      .getByRole("button", { name: "Discard and leave", exact: true })
+      .click();
+    await expect(page).toHaveURL(/\/code(\?|$)/);
+    expect((await read()).revision).toBe(before.revision);
+    expect(writes).toEqual([]);
+  } finally {
+    release();
+    await page.unrouteAll({ behavior: "wait" });
+  }
+});
+
 test("browser Back autosaves an Inspector draft that has not blurred", async ({
   page,
 }) => {

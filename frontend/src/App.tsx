@@ -330,13 +330,25 @@ function PendingNavigation({
   const settle = useEffectEvent(async () => {
     // Back can leave a field focused. Finish its blur now, so focusing an
     // error dialog cannot start another save after the failure was reported.
-    if (document.activeElement instanceof HTMLElement)
-      document.activeElement.blur();
+    const blur = () => {
+      if (document.activeElement instanceof HTMLElement)
+        document.activeElement.blur();
+    };
+    blur();
     // A tab click can blur a field before the router blocks it. That request
     // cannot be discarded: wait for it, then save any remaining automatic drafts.
-    await flush();
-    await drafts.autosave(scope);
-    await flush();
+    try {
+      await flush();
+      await drafts.autosave(scope);
+      await flush();
+    } catch (error) {
+      // The user may have resumed typing while the save was pending. Settle
+      // that field's blur too, before offering a choice about what remains.
+      blur();
+      await Promise.resolve();
+      await flush().catch(() => undefined);
+      throw error;
+    }
   });
   useEffect(() => {
     let live = true;
