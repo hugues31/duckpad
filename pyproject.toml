@@ -68,10 +68,32 @@ integration = ["oracledb>=3", "boto3>=1.38", "moto[server]>=5"]
 [tool.hatch.build.targets.wheel]
 packages = ["src/duckpad"]
 
+[tool.hatch.build.targets.wheel.force-include]
+"docs/SQL.md" = "duckpad/assistant/guides/SQL.md"
+"docs/AUTHORING.md" = "duckpad/assistant/guides/AUTHORING.md"
+"docs/VARIABLES.md" = "duckpad/assistant/guides/VARIABLES.md"
+"docs/COMPONENTS.md" = "duckpad/assistant/guides/COMPONENTS.md"
+"docs/CONNECTORS.md" = "duckpad/assistant/guides/CONNECTORS.md"
+"docs/PARTITIONS.md" = "duckpad/assistant/guides/PARTITIONS.md"
+"docs/TESTS.md" = "duckpad/assistant/guides/TESTS.md"
+"docs/MESSAGES.md" = "duckpad/assistant/guides/MESSAGES.md"
+"docs/RESULTS.md" = "duckpad/assistant/guides/RESULTS.md"
+"docs/ASSISTANT.md" = "duckpad/assistant/guides/ASSISTANT.md"
+
 [tool.hatch.build.targets.sdist]
 include = [
     "/src",
     "/tests",
+    "/docs/SQL.md",
+    "/docs/AUTHORING.md",
+    "/docs/VARIABLES.md",
+    "/docs/COMPONENTS.md",
+    "/docs/CONNECTORS.md",
+    "/docs/PARTITIONS.md",
+    "/docs/TESTS.md",
+    "/docs/MESSAGES.md",
+    "/docs/RESULTS.md",
+    "/docs/ASSISTANT.md",
     "/scripts/build_hook.py",
     "/scripts/benchmark*.py",
     "/scripts/release.py",

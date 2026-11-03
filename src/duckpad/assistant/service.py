@@ -37,6 +37,7 @@ from .approvals import Approvals
 from .config import Configuration, provider_error
 from .editing import WRITE_TOOLS
 from .gateway import TURN_TIMEOUT
+from .knowledge import AUTHORING_INSTRUCTIONS, read_guide
 from .runs import DEBUG_TOOLS, RUN_TOOLS, read_run_sql, run_record
 from .tools import DATA_TOOLS, READ_TOOLS, Dependencies, PageContext, validate_context
 
@@ -319,16 +320,16 @@ class Assistant:
         try:
             self.save_turn(identity, turn)
             yield event("start", conversation=identity)
-            tools = (
-                [
-                    *READ_TOOLS,
-                    *DEBUG_TOOLS,
-                    *([*DATA_TOOLS, read_run_sql] if config["allow_data"] else []),
-                    *([*WRITE_TOOLS, *RUN_TOOLS] if deps.can_write() else []),
-                ]
-                if deps.context["worktree"]
-                else []
-            )
+            tools = [read_guide]
+            if deps.context["worktree"]:
+                tools.extend(
+                    [
+                        *READ_TOOLS,
+                        *DEBUG_TOOLS,
+                        *([*DATA_TOOLS, read_run_sql] if config["allow_data"] else []),
+                        *([*WRITE_TOOLS, *RUN_TOOLS] if deps.can_write() else []),
+                    ]
+                )
             history = ModelMessagesTypeAdapter.validate_python(record["messages"])
             if resume is None:
                 # A new prompt can never answer older tool calls, e.g. after an interrupted resume.
@@ -342,7 +343,10 @@ class Assistant:
                         Tool(guarded(t), sequential=True, requires_approval=t.__name__ == "launch_run")
                         for t in tools
                     ],
-                    instructions=INSTRUCTIONS + "\nValidated page context: " + json.dumps(deps.context),
+                    instructions=INSTRUCTIONS
+                    + AUTHORING_INSTRUCTIONS
+                    + "\nValidated page context: "
+                    + json.dumps(deps.context),
                     model_settings={"max_tokens": 4096},
                     retries=1,
                 )

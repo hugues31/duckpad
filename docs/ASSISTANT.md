@@ -89,6 +89,13 @@ resolve it first. The server validates the context and reads saved content. On
 pages without an open working branch, the assistant can answer general questions
 but has no project-reading tools.
 
+The assistant receives Duckpad's SQL and parameter rules, including the difference
+between `-- @param` declarations and project variables. It can consult the bundled
+SQL, authoring, variables, components, connectors, partitions, tests, messages,
+results and assistant guides, even without an open project. These guides match
+the installed version and are separate from your project's README and descriptions.
+Try “How does @param work?” or “How do I bind a project variable to a node?”.
+
 For Northstar, try “How do paid orders reach the regional report?” or, after
 running the flow yourself, “Why does this region have this revenue?” Data tools
 inspect retained results; missing or stale data may require a run.
@@ -107,6 +114,13 @@ For example, ask “Add a normal SQL node that returns the number 1”, “Renam
 node to Paid orders”, or “Document the regional revenue output”. It can edit the
 flow, node/template SQL, documentation and variables. Shared template edits
 report how many linked instances they affect.
+
+For variables, it can inspect declarations, values by environment and usages;
+create, update, rename and delete; remove a default or environment override; and
+switch between ordinary and computed values. Updating an environment preserves
+the other overrides. Deletion refuses variables still used by node bindings,
+expressions, paths or saved result views. Ask it to inspect those usages first.
+Computed-value inspection does not execute the source node or read its retained data.
 
 Each successful writing tool call is one commit on the open branch, authored by
 your Git identity, with a `Duckpad-Assistant: <conversation>` trailer that

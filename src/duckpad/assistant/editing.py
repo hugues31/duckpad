@@ -10,7 +10,7 @@ from ..bundle import bundle_to_files
 from ..components import expand, group
 from ..node_code import code_path
 from ..util import Problem
-from .tools import Dependencies
+from .tools import Dependencies, variable_usages
 
 
 class NodeEdit(BaseModel):
@@ -208,30 +208,65 @@ def write_documentation(
 
 def edit_variable(
     ctx: RunContext[Dependencies],
-    operation: Literal["create", "update", "rename"],
+    operation: Literal["create", "update", "rename", "delete"],
     name: str,
     definition: dict[str, JsonValue] | None = None,
     new_name: str = "",
+    remove_fields: list[Literal["description", "default", "environments", "from"]] | None = None,
+    remove_environments: list[str] | None = None,
 ) -> dict:
-    """Create/update a project variable or rename it and its references using the UI rename service.
+    """Create, update, rename or delete a project variable, with a commit and Undo for each change.
 
-    Read existing declarations first. definition is the declaration (type, default, description,
-    environments); types include text, number, boolean, date, identifier, list<text>, list<number>
-    and choice(...). Update merges the supplied fields. Rename uses only new_name.
+    Read declarations/usages with read_variables first. definition contains type, description,
+    default and environments, or from={node, port, column} for a computed variable. Types include
+    text, number, boolean, date, identifier, list<text>, list<number> and choice(...).
+    Update merges fields and individual environments, preserving other overrides. Use remove_fields
+    to unset fields (not null) or switch ordinary/computed mode; remove_environments restores
+    inheritance for those environments. Removals happen before merging definition, only on update.
+    Rename uses only new_name and updates references. Delete uses only name and refuses variables
+    still used by node parameters, expressions, paths or saved views; inspect usages to resolve them.
     """
     snapshot = editable(ctx)
     bundle = snapshot["bundle"]
+    if operation != "update" and (remove_fields or remove_environments):
+        raise Problem("Field and environment removals require an update", 422)
+    if operation in ("rename", "delete") and definition is not None:
+        raise Problem("Rename and delete do not accept a definition", 422)
+    if operation != "rename" and new_name:
+        raise Problem("Only rename accepts a new name", 422)
+    declarations = bundle.get("variables") or {}
+    if not isinstance(declarations, dict):
+        raise Problem("Correct variables.json before editing variables", 422)
     if operation == "rename":
         bundle = variables.rename(bundle, name, new_name)
+    elif operation == "delete":
+        if name not in declarations:
+            raise Problem("Variable not found", 404)
+        if variable_usages(bundle, name):
+            raise Problem(
+                "Variable is still in use. Read its usages with read_variables before deleting.", 422
+            )
+        del declarations[name]
+        bundle["variables"] = declarations
     else:
-        declarations = bundle.get("variables") or {}
         if operation == "create" and name in declarations:
             raise Problem("Variable already exists", 409)
         if operation == "update" and name not in declarations:
             raise Problem("Variable not found", 404)
-        if not definition:
+        if not definition and not (remove_fields or remove_environments):
             raise Problem("Provide a variable definition", 422)
-        declarations[name] = {**declarations.get(name, {}), **definition}
+        updated = dict(declarations.get(name, {}))
+        for field in remove_fields or []:
+            updated.pop(field, None)
+        if remove_environments and isinstance(updated.get("environments"), dict):
+            updated["environments"] = {
+                k: v for k, v in updated["environments"].items() if k not in remove_environments
+            }
+        patch = dict(definition or {})
+        overrides = patch.get("environments")
+        if isinstance(overrides, dict) and isinstance(updated.get("environments"), dict):
+            patch["environments"] = {**updated["environments"], **overrides}
+        declarations[name] = {**updated, **patch}
         bundle["variables"] = declarations
     return save(ctx, snapshot, bundle)
 
