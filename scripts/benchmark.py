@@ -13,13 +13,12 @@ from pathlib import Path
 
 import duckdb
 
-from duckpad.catalog import Catalog
-from duckpad.engine import Engine
+from duckpad.builtin_templates import BUILTINS
 from duckpad.lineage import Lineage
-from duckpad.projects import Projects
-from duckpad.store import Store
-from duckpad.templates import BUILTINS
+from duckpad.services import Services
 from duckpad.util import dumps, literal
+
+RUN_TIMEOUT = 600
 
 
 def generate(folder, rows):
@@ -50,9 +49,8 @@ def generate(folder, rows):
 
 
 def worker(folder):
-    store = Store(folder / "instance")
-    projects, catalog = Projects(store), Catalog(store)
-    engine = Engine(store, projects, catalog)
+    instance = Services.open(folder / "instance")
+    projects, engine = instance.projects, instance.engine
     nodes = [
         {"id": "facts", "template": "load_parquet", "params": {"file": str(folder / "facts.parquet")}},
         {"id": "customers", "template": "load_csv", "params": {"file": str(folder / "customers.csv")}},
@@ -94,10 +92,8 @@ def worker(folder):
     try:
         start = time.perf_counter()
         run = engine.launch(worktree, "dev")
-        while engine.active:
-            time.sleep(0.005)
+        result = engine.wait(run["id"], RUN_TIMEOUT)
         pipeline_seconds = time.perf_counter() - start
-        result = store.get("run", run["id"])
         assert result["status"] == "success", {
             k: v.get("error") for k, v in result["nodes"].items() if v.get("error")
         }
@@ -166,8 +162,7 @@ def worker(folder):
             "extensions": ["core_functions 2.0.0", "parquet 2.0.0"],
         }
     finally:
-        engine.close()
-        store.close()
+        instance.close()
 
 
 if __name__ == "__main__":

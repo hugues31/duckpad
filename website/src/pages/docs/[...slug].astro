@@ -1,0 +1,100 @@
+---
+import { getCollection, render } from "astro:content";
+import Layout from "../../layouts/Layout.astro";
+import Search from "../../components/Search.astro";
+import Demo from "../../components/Demo.astro";
+import { sections, pages, url } from "../../lib/docs";
+export async function getStaticPaths() {
+  return (await getCollection("docs")).map((entry) => ({
+    params: { slug: entry.id },
+    props: { entry },
+  }));
+}
+const { entry } = Astro.props;
+const index = pages.findIndex((page) => page.slug === entry.id);
+const meta = pages[index];
+if (!meta) throw new Error(`No navigation entry for ${entry.id}`);
+const { Content, headings } = await render(entry);
+const next = pages[index + 1];
+---
+
+<Layout
+  title={`${meta.title} — Duckpad docs`}
+  description={meta.description}
+  docs
+>
+  <div class="docs-shell">
+    <aside class="docs-sidebar">
+      <nav aria-label="Documentation">
+        <button class="search-trigger">
+          Search docs <kbd>⌘ / Ctrl K</kbd>
+        </button>
+        {sections.map((section) => (
+          <>
+            <strong>{section.label}</strong>
+            {section.pages.map((page) => (
+              <a
+                href={url(`docs/${page.slug}/`)}
+                aria-current={entry.id === page.slug ? "page" : undefined}
+              >
+                {page.title}
+              </a>
+            ))}
+          </>
+        ))}
+      </nav>
+    </aside>
+    <main class="docs-content" id="main">
+      <details class="docs-mobile-menu">
+        <summary>Browse documentation</summary>
+        <nav aria-label="Documentation on mobile">
+          <button class="search-trigger">
+            Search docs <span aria-hidden="true">⌕</span>
+          </button>
+          {sections.map((section) => (
+            <>
+              <strong>{section.label}</strong>
+              {section.pages.map((page) => (
+                <a
+                  href={url(`docs/${page.slug}/`)}
+                  aria-current={entry.id === page.slug ? "page" : undefined}
+                >
+                  {page.title}
+                </a>
+              ))}
+            </>
+          ))}
+        </nav>
+      </details>
+      <p class="breadcrumb">DOCUMENTATION / {meta.title.toUpperCase()}</p>
+      <article class="prose">
+        <Content />
+      </article>
+      {entry.id === "example" && <Demo />}
+      <div class="doc-bottom">
+        <a
+          href={`https://github.com/hugues31/duckpad/edit/main/docs/${entry.id.toUpperCase()}.md`}
+        >
+          Improve this page ↗
+        </a>
+        {next && (
+          <a class="doc-next" href={url(`docs/${next.slug}/`)}>
+            <small>Up next</small>
+            {next.title} →
+          </a>
+        )}
+      </div>
+    </main>
+    <aside class="table-of-contents">
+      <nav aria-label="On this page">
+        <strong>On this page</strong>
+        {headings
+          .filter((heading) => heading.depth === 2)
+          .map((heading) => (
+            <a href={`#${heading.slug}`}>{heading.text}</a>
+          ))}
+      </nav>
+    </aside>
+  </div>
+  <Search />
+</Layout>
