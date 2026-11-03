@@ -73,7 +73,7 @@ include = [
     "/src",
     "/tests",
     "/scripts/build_hook.py",
-    "/scripts/benchmark_partitions.py",
+    "/scripts/benchmark*.py",
     "/scripts/release.py",
     "/scripts/check_typing_policy.py",
     "/cliff.toml",

@@ -47,6 +47,19 @@ npm run test:e2e --prefix frontend
 
 Use `uv run ruff format src tests scripts` and `npm run format --prefix frontend` to fix formatting. Add a regression test with every bug fix: a Python test for service behavior, a Vitest unit test for a frontend helper or shared hook, a Playwright scenario for interface behavior.
 
+CI also runs the Python suite from the extracted source archive. A script or file read by a test must be listed in the sdist `include` of `pyproject.toml`. To reproduce that check after building the frontend:
+
+```sh
+uv build
+archive_tests="$(mktemp -d)"
+tar -xzf dist/duckpad-*.tar.gz --strip-components=1 -C "$archive_tests"
+(
+    export PATH="$PWD/.venv/bin:$PATH"
+    cd "$archive_tests"
+    PYTHONPATH="$PWD/src" python -m pytest -q
+)
+```
+
 ## Conventions
 
 - Write code, comments, documentation, identifiers and commit messages in English. French and Portuguese are only used for values in `frontend/src/locales/fr.json` and `frontend/src/locales/pt.json`; add every new interface string to every locale file.

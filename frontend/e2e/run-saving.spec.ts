@@ -213,6 +213,8 @@ for (const [environment, status] of [
       await expect(page.getByRole("alert")).toContainText("Save rejected");
       await expect(button).toBeEnabled();
       expect(requests).toEqual([]);
+      // The rejected save settles after reloading the snapshot; a click before that joins it.
+      await expect(page.locator(".save-status")).not.toHaveText("Saving…");
       // A corrected save can be retried; the failed attempt releases the launch guard.
       await page.unrouteAll({ behavior: "wait" });
       const launched = runResponse(page, endpoint);
