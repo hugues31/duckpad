@@ -1,0 +1,66 @@
+/* Design tokens: colors, surfaces and shadows of the light and dark themes. */
+:root {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: var(--text);
+  background: var(--bg);
+  font-synthesis: none;
+  --bg: #f2f2f4;
+  --surface: #fafafa;
+  --surface-alt: #eaeaee;
+  --border: #71717a40;
+  --text: #16161b;
+  --muted: #191b22;
+  --accent: #1559df;
+  --accent-hover: #1048ba;
+  --accent-soft: #dbe7ff;
+  --accent-glow: #2b6be8;
+  --accent-depth: #1241aa;
+  --accent-gradient:
+    radial-gradient(ellipse at 18% 20%, var(--accent-glow), transparent 55%),
+    radial-gradient(ellipse at 85% 80%, var(--accent-depth), transparent 60%);
+  --edge: #92929e;
+  --glass: #ffffff8c;
+  --glass-border: #71717a40;
+  --glass-highlight: #ffffff80;
+  --glass-shadow: 0 2px 12px #18181b0d;
+  --shadow: 0 4px 16px #18181b14;
+  --minimap-mask: #f2f2f4b3;
+  color-scheme: light;
+  font-size: 13px;
+}
+:root[data-theme="dark"] {
+  --bg: #1c1c1e;
+  --surface: #29292c;
+  --surface-alt: #343438;
+  --border: #a1a1aa40;
+  --text: #fafafa;
+  --muted: #f0f0f3;
+  --accent: #63a5ff;
+  --accent-hover: #90bfff;
+  --accent-soft: #233c61;
+  --accent-glow: #97c3ff;
+  --accent-depth: #4d8ce5;
+  --edge: #92929e;
+  --glass: #1c1c1ea6;
+  --glass-border: #a1a1aa40;
+  --glass-highlight: #ffffff0d;
+  --glass-shadow: 0 2px 12px #0000001a;
+  --shadow: 0 4px 16px #00000030;
+  --minimap-mask: #1c1c1eb3;
+  color-scheme: dark;
+}
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+  :root,
+  :root[data-theme="dark"] {
+    --glass: var(--surface);
+    --glass-border: var(--muted);
+  }
+}
+@supports not (
+  (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))
+) {
+  :root,
+  :root[data-theme="dark"] {
+    --glass: var(--surface);
+  }
+}
