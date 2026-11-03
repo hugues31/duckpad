@@ -1295,5 +1295,7 @@
   "conflictKeepContent": "Manter este conteúdo (desmarcar para eliminar)",
   "conflictInvalidValue": "Introduza JSON válido para objetos, números, booleanos ou valores null. Os campos de texto aceitam texto simples.",
   "conflictRefreshed": "Os ficheiros guardados voltaram a mudar. Reveja o conflito atualizado antes de editar um novo resultado combinado.",
-  "reviewChanges": "Rever alterações"
+  "reviewChanges": "Rever alterações",
+  "fileVersion": "Versão do arquivo",
+  "myProposal": "Minha proposta"
 }

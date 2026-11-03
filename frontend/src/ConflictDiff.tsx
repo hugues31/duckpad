@@ -81,14 +81,19 @@ function HighlightedValue({
 }
 
 /** The same three-way field evidence in concurrent saves and Git merge reviews. */
+/** Version names; concurrent saves name the sides after their resolution buttons. */
+export type ConflictLabels = Partial<Record<MergeChoice, string>>;
+
 export function FieldConflictDiff({
   conflict,
   onChoose,
   disabled = false,
+  labels = {},
 }: {
   conflict: MergeConflict;
   onChoose?: (choice: MergeChoice) => void;
   disabled?: boolean;
+  labels?: ConflictLabels;
 }) {
   const t = useT();
   const [removedCurrent, current] = changedCharacters(
@@ -117,10 +122,10 @@ export function FieldConflictDiff({
                 disabled={disabled}
                 onChange={() => onChoose(choice)}
               />{" "}
-              {t(choice)}
+              {labels[choice] ?? t(choice)}
             </label>
           ) : (
-            <strong>{t(choice)}</strong>
+            <strong>{labels[choice] ?? t(choice)}</strong>
           )}
           <HighlightedValue
             value={conflict[choice]}
@@ -138,23 +143,31 @@ export function FileConflictDiff({
   file,
   text,
   onChange,
+  labels = {},
 }: {
   conflict: MergeConflict;
   file: string;
+  /** The combined result shown instead of the incoming version, editable with onChange. */
   text?: string;
   onChange?: (value: string) => void;
+  labels?: ConflictLabels;
 }) {
   const t = useT();
+  const current = labels.current ?? t("current");
+  const result =
+    text === undefined ? (labels.incoming ?? t("incoming")) : t("combined");
   return (
     <div className="conflict-file-diff">
       <div className="conflict-diff-labels">
         <span>
-          {t("current")}
+          {current}
           {!conflict.current.present && ` · ${t("absent")}`}
         </span>
         <span>
-          {onChange ? t("combined") : t("incoming")}
-          {!conflict.incoming.present && !onChange && ` · ${t("absent")}`}
+          {result}
+          {!conflict.incoming.present &&
+            text === undefined &&
+            ` · ${t("absent")}`}
         </span>
       </div>
       <Suspense fallback={<p>{t("loading")}</p>}>
@@ -163,8 +176,8 @@ export function FileConflictDiff({
           after={text ?? valueText(conflict.incoming)}
           language={projectFileLanguage(file)}
           onChange={onChange}
-          originalLabel={t("current")}
-          modifiedLabel={onChange ? t("combined") : t("incoming")}
+          originalLabel={current}
+          modifiedLabel={result}
         />
       </Suspense>
       <details className="conflict-base">

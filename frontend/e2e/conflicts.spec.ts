@@ -239,3 +239,48 @@ test("combined field editing keeps independent changes, distinguishes character 
     "Saved independent documentation",
   );
 });
+
+test("keeping a field deleted by the proposal starts from the file version", async ({
+  page,
+}) => {
+  const { tree, base } = await createProject(page);
+  const current = structuredClone(base.bundle);
+  current.flow.nodes[0].params.status = "pending";
+  const proposal = structuredClone(base.bundle);
+  delete proposal.flow.nodes[0].params.status;
+  expect(
+    (
+      await page.request.put(`/api/worktrees/${tree.id}`, {
+        data: { revision: base.revision, bundle: current },
+      })
+    ).ok(),
+  ).toBeTruthy();
+  expect(
+    (
+      await page.request.put(`/api/worktrees/${tree.id}`, {
+        data: { revision: base.revision, bundle: proposal },
+      })
+    ).status(),
+  ).toBe(409);
+  await page.goto(`/worktrees/${tree.id}/flow`);
+  await page.getByRole("button", { name: en.resolve, exact: true }).click();
+  let dialog = page.getByRole("dialog");
+  await expect(dialog.locator(".conflict-value strong")).toHaveText([
+    en.base,
+    en.fileVersion,
+    en.myProposal,
+  ]);
+  await dialog.getByRole("button", { name: en.combined, exact: true }).click();
+  dialog = page.getByRole("dialog", { name: en.combined });
+  const value = dialog.getByRole("textbox", { name: /Combined value/ });
+  await expect(value).toBeDisabled();
+  await dialog.getByRole("checkbox", { name: en.conflictKeepContent }).check();
+  await expect(value).toHaveValue("pending");
+  await value.fill("pending review");
+  await dialog.getByRole("button", { name: en.save, exact: true }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  const result = await (
+    await page.request.get(`/api/worktrees/${tree.id}`)
+  ).json();
+  expect(result.bundle.flow.nodes[0].params.status).toBe("pending review");
+});

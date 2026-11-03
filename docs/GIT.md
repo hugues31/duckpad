@@ -139,8 +139,8 @@ is explicit; no branch is deleted automatically.
 
 If another tab or user saves incompatible edits, select **Save resolution**.
 The dialog summarizes the conflicts and shows only the affected files and fields.
-File diffs compare **Current** (the saved file) with **Incoming** (your proposal),
-side by side or inline in a narrow window. Expand **Base** to see the original
+File diffs compare **File version**, the saved file, with **My proposal**, side
+by side or inline in a narrow window. Expand **Base** to see the original
 content. Field conflicts use the same character highlighting as merge reviews.
 
 ![A concurrent SQL edit shown as a file diff](images/conflict-resolution.png)
@@ -150,7 +150,8 @@ Choose **Keep file version**, **Use my proposal**, or **Combined files**. In
 value** for an individual field. The initial result uses your proposal for
 conflicts and retains independent edits from both versions. Strings accept plain
 text; other field values accept JSON. A deletion conflict also offers a checkbox
-to keep or remove that content. **Save changes** saves the combined result.
+to keep or remove that content; content your proposal deleted is kept from the
+file version. **Save changes** saves the combined result.
 If the saved files changed again, review the refreshed evidence before retrying.
 
 ## Origin, fetch, pull and push

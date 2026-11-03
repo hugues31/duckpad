@@ -1295,5 +1295,7 @@
   "conflictKeepContent": "Keep this content (uncheck to delete)",
   "conflictInvalidValue": "Enter valid JSON for object, number, boolean or null values. Text fields accept plain text.",
   "conflictRefreshed": "The saved files changed again. Review the refreshed conflict before editing a new combined result.",
-  "reviewChanges": "Review changes"
+  "reviewChanges": "Review changes",
+  "fileVersion": "File version",
+  "myProposal": "My proposal"
 }

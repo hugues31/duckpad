@@ -1295,5 +1295,7 @@
   "conflictKeepContent": "Conserver ce contenu (décocher pour supprimer)",
   "conflictInvalidValue": "Saisissez du JSON valide pour les objets, nombres, booléens ou valeurs null. Les champs texte acceptent du texte brut.",
   "conflictRefreshed": "Les fichiers enregistrés ont encore changé. Examinez le conflit actualisé avant de modifier un nouveau résultat combiné.",
-  "reviewChanges": "Examiner les modifications"
+  "reviewChanges": "Examiner les modifications",
+  "fileVersion": "Version du fichier",
+  "myProposal": "Ma proposition"
 }

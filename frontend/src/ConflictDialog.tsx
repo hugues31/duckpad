@@ -11,13 +11,20 @@ import {
   conflictDrafts,
   conflictPath,
   conflictTitle,
+  valueText,
 } from "./conflicts";
-import { useT } from "./i18n";
+import { useT, type Translate } from "./i18n";
 import { Modal } from "./modals";
 import { useShell } from "./shell";
 import type { Conflict } from "./types";
 import { useAsyncAction } from "./useAsyncAction";
 import { useWorktree } from "./worktree";
+
+/** Name both sides as the resolution buttons do. */
+const saveLabels = (t: Translate) => ({
+  current: t("fileVersion"),
+  incoming: t("myProposal"),
+});
 
 export function ConflictDialog({
   conflict,
@@ -27,6 +34,7 @@ export function ConflictDialog({
   onClose: () => void;
 }) {
   const t = useT();
+  const labels = saveLabels(t);
   const { openModal } = useShell();
   const { id, refresh } = useWorktree();
   const { pending, error, run } = useAsyncAction();
@@ -62,9 +70,13 @@ export function ConflictDialog({
                 />
               </h3>
               {parts.length ? (
-                <FieldConflictDiff conflict={field} />
+                <FieldConflictDiff conflict={field} labels={labels} />
               ) : (
-                <FileConflictDiff conflict={field} file={file} />
+                <FileConflictDiff
+                  conflict={field}
+                  file={file}
+                  labels={labels}
+                />
               )}
             </section>
           );
@@ -112,6 +124,7 @@ export function CombinedResolutionDialog({
   onClose: () => void;
 }) {
   const t = useT();
+  const labels = saveLabels(t);
   const { openModal } = useShell();
   const { id, refresh } = useWorktree();
   const [base] = useState(conflict);
@@ -166,7 +179,7 @@ export function CombinedResolutionDialog({
               </h3>
               {parts.length ? (
                 <>
-                  <FieldConflictDiff conflict={field} />
+                  <FieldConflictDiff conflict={field} labels={labels} />
                   <label className="conflict-result">
                     {t("combinedValue")}
                     <textarea
@@ -181,6 +194,7 @@ export function CombinedResolutionDialog({
                 <FileConflictDiff
                   conflict={field}
                   file={file}
+                  labels={labels}
                   text={draft.text}
                   onChange={
                     draft.present && !pending && !stale
@@ -196,7 +210,12 @@ export function CombinedResolutionDialog({
                     checked={draft.present}
                     disabled={pending || stale}
                     onChange={(event) =>
-                      update({ present: event.target.checked })
+                      update({
+                        present: event.target.checked,
+                        // Keeping content deleted by the proposal starts from the saved version.
+                        ...(event.target.checked &&
+                          !draft.text && { text: valueText(field.current) }),
+                      })
                     }
                   />{" "}
                   {t("conflictKeepContent")}
