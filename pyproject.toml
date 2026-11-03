@@ -72,6 +72,7 @@ packages = ["src/duckpad"]
 include = [
     "/src",
     "/tests",
+    "/docs/*.md",
     "/scripts/build_hook.py",
     "/scripts/benchmark*.py",
     "/scripts/release.py",

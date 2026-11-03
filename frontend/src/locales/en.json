@@ -944,6 +944,8 @@
   "assistantReadFile": "Reads a file",
   "assistantReadSql": "Reads SQL",
   "assistantReadDocs": "Reads documentation",
+  "assistantReadGuide": "Reads the Duckpad guide",
+  "assistantReadVariables": "Reads variables and usages",
   "assistantReadSchemas": "Reads output schemas",
   "assistantReadRuns": "Reads execution history",
   "assistantSearch": "Searches the project",
