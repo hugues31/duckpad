@@ -1,34 +1,63 @@
+import Select from "./Select";
 import { useState } from "react";
 import { useT } from "./i18n";
-import type { Json } from "./types";
+import type { Column, Json, VariablesSummary } from "./types";
+import {
+  expressionReference,
+  formatVariableValue,
+  usableInExpressions,
+} from "./variables";
 
 const quote = (name: string) => '"' + name.replaceAll('"', '""') + '"';
-const literal = (value: string) => {
-  if (/^-?\d+(\.\d+)?$/.test(value)) return value;
-  if (/^(true|false|null)$/i.test(value)) return value.toUpperCase();
+const literal = (value: string, type?: string) => {
+  const numeric =
+    /^(U?(TINYINT|SMALLINT|INTEGER|BIGINT|HUGEINT)|BIGNUM|FLOAT|DOUBLE|DECIMAL(?:\(\d+,\s*\d+\))?)$/i;
+  if (
+    numeric.test(type || "") &&
+    /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i.test(value)
+  )
+    return value;
+  if (type === "BOOLEAN" && /^(true|false)$/i.test(value))
+    return value.toUpperCase();
+  // Text, other types and unknown schemas keep the user's value as a string.
+  // Null checks use the explicit IS NULL / IS NOT NULL operators.
   return "'" + value.replaceAll("'", "''") + "'";
 };
 
 /** Optional form helpers write the same expression parameters as the SQL form. */
 export default function QueryBuilder({
   kind,
+  parameters,
   schemas,
+  variables,
+  environment,
   onApply,
 }: {
   kind: string;
-  schemas: Record<string, string[]>;
-  onApply: (parameters: Json) => void;
+  parameters?: string[];
+  schemas: Record<string, Column[]>;
+  /** The variables a filter value can reference; only root flow nodes can. */
+  variables?: VariablesSummary | null;
+  environment?: string;
+  onApply: (parameters: Record<string, Json>) => void;
 }) {
   const t = useT();
   const [column, setColumn] = useState("");
   const [right, setRight] = useState("");
   const [operator, setOperator] = useState("=");
   const [value, setValue] = useState("");
+  const [chosen, setVariable] = useState("");
+  const usable = Object.entries(variables?.declarations || {}).filter(
+    ([, declared]) => usableInExpressions(declared.type),
+  );
+  // A variable deleted or retyped since it was chosen is no longer offered.
+  const variable = usable.some(([name]) => name === chosen) ? chosen : "";
   const [groups, setGroups] = useState<string[]>([]);
   const [measures, setMeasures] = useState([
     { function: "SUM", column: "", alias: "total" },
   ]);
-  const columns = schemas.source || schemas.left || [];
+  const inputColumns = schemas.source || schemas.left || [];
+  const columns = inputColumns.map((column) => column.name);
   const choose = (
     label: string,
     selected: string,
@@ -37,7 +66,7 @@ export default function QueryBuilder({
   ) => (
     <label className="field">
       <span>{label}</span>
-      <select
+      <Select
         aria-label={label}
         value={selected}
         onChange={(e) => change(e.target.value)}
@@ -46,10 +75,19 @@ export default function QueryBuilder({
         {names.map((name) => (
           <option key={name}>{name}</option>
         ))}
-      </select>
+      </Select>
     </label>
   );
-  if (!["filter", "aggregate", "join"].includes(kind)) return null;
+  const required: Record<string, string[]> = {
+    filter: ["condition"],
+    join: ["condition"],
+    aggregate: ["groups", "measures"],
+  };
+  if (
+    !required[kind] ||
+    (parameters && !required[kind].every((name) => parameters.includes(name)))
+  )
+    return null;
   return (
     <details className="query-builder" open>
       <summary>{t("guidedConfiguration")}</summary>
@@ -59,7 +97,7 @@ export default function QueryBuilder({
           {choose(t("column"), column, setColumn, columns)}
           <label className="field">
             <span>{t("operator")}</span>
-            <select
+            <Select
               aria-label={t("operator")}
               value={operator}
               onChange={(e) => setOperator(e.target.value)}
@@ -77,20 +115,60 @@ export default function QueryBuilder({
               ].map((op) => (
                 <option key={op}>{op}</option>
               ))}
-            </select>
+            </Select>
           </label>
           {!operator.includes("NULL") && (
-            <label className="field">
+            <div className="field">
               <span>{t("value")}</span>
-              <input value={value} onChange={(e) => setValue(e.target.value)} />
-            </label>
+              <div className="filter-value">
+                {!!usable.length && (
+                  <Select
+                    aria-label={t("filterValueSource")}
+                    value={variable}
+                    onChange={(e) => setVariable(e.target.value)}
+                  >
+                    <option value="">{t("fixedValue")}</option>
+                    <optgroup label={t("variables")}>
+                      {usable.map(([name, declared]) => (
+                        <option key={name} value={name}>
+                          {name} ·{" "}
+                          {declared.values[environment || ""]?.error
+                            ? t("noVariableValue")
+                            : formatVariableValue(
+                                declared.values[environment || ""]?.value,
+                              )}
+                        </option>
+                      ))}
+                    </optgroup>
+                  </Select>
+                )}
+                {!variable && (
+                  <input
+                    aria-label={t("value")}
+                    value={value}
+                    onChange={(e) => setValue(e.target.value)}
+                  />
+                )}
+              </div>
+            </div>
           )}
           <button
             className="button secondary full"
             disabled={!column}
             onClick={() =>
               onApply({
-                condition: `${quote(column)} ${operator}${operator.includes("NULL") ? "" : " " + literal(value)}`,
+                condition: `${quote(column)} ${operator}${
+                  operator.includes("NULL")
+                    ? ""
+                    : " " +
+                      (variable
+                        ? expressionReference(variable)
+                        : literal(
+                            value,
+                            inputColumns.find((input) => input.name === column)
+                              ?.type,
+                          ))
+                }`,
               })
             }
           >
@@ -100,8 +178,18 @@ export default function QueryBuilder({
       )}
       {kind === "join" && (
         <>
-          {choose(t("leftKey"), column, setColumn, schemas.left || [])}
-          {choose(t("rightKey"), right, setRight, schemas.right || [])}
+          {choose(
+            t("leftKey"),
+            column,
+            setColumn,
+            (schemas.left || []).map((column) => column.name),
+          )}
+          {choose(
+            t("rightKey"),
+            right,
+            setRight,
+            (schemas.right || []).map((column) => column.name),
+          )}
           <button
             className="button secondary full"
             disabled={!column || !right}
@@ -117,7 +205,7 @@ export default function QueryBuilder({
         <>
           <label className="field">
             <span>{t("groupBy")}</span>
-            <select
+            <Select
               multiple
               value={groups}
               onChange={(e) =>
@@ -132,13 +220,13 @@ export default function QueryBuilder({
               {columns.map((name) => (
                 <option key={name}>{name}</option>
               ))}
-            </select>
+            </Select>
           </label>
           {measures.map((measure, index) => (
             <div className="measure-form" key={index}>
               <label className="field">
                 <span>{t("function")}</span>
-                <select
+                <Select
                   value={measure.function}
                   onChange={(e) =>
                     setMeasures(
@@ -153,7 +241,7 @@ export default function QueryBuilder({
                       <option key={fn}>{fn}</option>
                     ),
                   )}
-                </select>
+                </Select>
               </label>
               {choose(
                 t("column"),
