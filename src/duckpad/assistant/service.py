@@ -409,13 +409,15 @@ class Assistant:
                 yield event("text", text=chunk)
             if turn["status"] != "awaiting_approval":
                 turn["status"] = "complete"
-        except RunTimedOut:
+        except RunTimedOut as error:
+            self.configuration.log_failure(error, provider, data.model)
             turn.update(status="error", error="The assistant timed out. Try a narrower question.")
         except (RunCancelled, asyncio.CancelledError):
             turn["status"] = "stopped"
         except Problem as error:
             turn.update(status="error", error=deps.safe(str(error)))
         except Exception as error:
+            self.configuration.log_failure(error, provider, data.model)
             turn.update(status="error", error=provider_error(error))
         finally:
             if stream is not None:

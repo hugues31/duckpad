@@ -1281,6 +1281,7 @@
   "assistantErrorTokenRefused": "Le point de jeton a refusé les identifiants OAuth2. Vérifiez l’identifiant et le secret client.",
   "assistantErrorTokenNetwork": "Impossible de joindre le point de jeton OAuth2. Vérifiez son URL et la connexion.",
   "assistantErrorTokenResponse": "Le point de jeton OAuth2 a renvoyé une réponse invalide. Vérifiez sa configuration.",
+  "assistantErrorResponse": "Le fournisseur a renvoyé une réponse que l’assistant ne peut pas lire. Consultez les journaux du serveur.",
   "assistantErrorStreaming": "Le fournisseur n’a pas renvoyé un flux pris en charge. Désactivez Streaming dans ses réglages et réessayez.",
   "assistantErrorServer": "Le fournisseur a renvoyé une erreur serveur. Réessayez ou demandez à un administrateur de vérifier le fournisseur.",
   "assistantErrorTokenAccess": "Le fournisseur a refusé le jeton OAuth2 renouvelé. Vérifiez les permissions du client et le scope."

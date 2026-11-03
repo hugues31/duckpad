@@ -9,11 +9,57 @@ from time import monotonic
 from urllib.parse import quote_plus
 
 import httpx2
+from openai.types import chat
 from pydantic_ai.messages import ModelResponse, ToolCallPart
 from pydantic_ai.models import StreamedResponse
+from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.models.wrapper import WrapperModel
 
 TURN_TIMEOUT = 120
+
+
+class GatewayChatModel(OpenAIChatModel):
+    """Normalize gateways that split a complete answer into one choice per block."""
+
+    def _validate_completion(self, response: chat.ChatCompletion):
+        # Duckpad never requests n: multiple choices are fragments of one answer.
+        # Pydantic AI validates every choice but only consumes the first one.
+        if len(response.choices) > 1:
+            data = response.model_dump(warnings=False)
+            choices = sorted(data["choices"], key=lambda choice: choice.get("index") or 0)
+            texts, calls = [], []
+            for choice in choices:
+                message = choice.get("message") or {}
+                content = message.get("content")
+                if isinstance(content, list):
+                    content = "".join(
+                        part.get("text") or ""
+                        for part in content
+                        if isinstance(part, dict) and part.get("type") == "text"
+                    )
+                if isinstance(content, str) and content:
+                    texts.append(content)
+                calls.extend(message.get("tool_calls") or [])
+            finish = (
+                "tool_calls"
+                if calls
+                else next((c["finish_reason"] for c in choices if c.get("finish_reason")), "stop")
+            )
+            data["choices"] = [
+                {
+                    **choices[0],
+                    "index": 0,
+                    "finish_reason": finish,
+                    "message": {
+                        **(choices[0].get("message") or {}),
+                        "role": "assistant",
+                        "content": "\n\n".join(texts) or None,
+                        "tool_calls": calls or None,
+                    },
+                }
+            ]
+            response = chat.ChatCompletion.model_construct(**data)
+        return super()._validate_completion(response)
 
 
 class TokenError(Exception):

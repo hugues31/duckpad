@@ -1281,6 +1281,7 @@
   "assistantErrorTokenRefused": "O endpoint de token recusou as credenciais OAuth2. Verifique o ID e o segredo do cliente.",
   "assistantErrorTokenNetwork": "Não foi possível acessar o endpoint de token OAuth2. Verifique a URL e a conexão.",
   "assistantErrorTokenResponse": "O endpoint de token OAuth2 retornou uma resposta inválida. Verifique a configuração.",
+  "assistantErrorResponse": "The provider returned a response the assistant could not read. Check the server logs.",
   "assistantErrorStreaming": "O provedor não retornou um fluxo compatível. Desative Streaming nas configurações e tente novamente.",
   "assistantErrorServer": "O provedor retornou um erro de servidor. Tente novamente ou peça a um administrador para verificar o provedor.",
   "assistantErrorTokenAccess": "O provedor recusou o token OAuth2 renovado. Verifique as permissões e o escopo do cliente."

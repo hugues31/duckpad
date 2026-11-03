@@ -1281,6 +1281,7 @@
   "assistantErrorTokenRefused": "The token endpoint refused the OAuth2 credentials. Check the client ID and secret.",
   "assistantErrorTokenNetwork": "Could not reach the OAuth2 token endpoint. Check its URL and connection.",
   "assistantErrorTokenResponse": "The OAuth2 token endpoint returned an invalid response. Check its configuration.",
+  "assistantErrorResponse": "The provider returned a response the assistant could not read. Check the server logs.",
   "assistantErrorStreaming": "The provider did not return a supported stream. Disable Streaming in its settings and try again.",
   "assistantErrorServer": "The provider returned a server error. Try again or ask an administrator to check the provider.",
   "assistantErrorTokenAccess": "The provider refused the renewed OAuth2 token. Check the client permissions and scope."
