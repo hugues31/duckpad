@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import logging
 import secrets
 from contextlib import asynccontextmanager
 from typing import Literal
@@ -26,11 +27,14 @@ from ..util import Problem
 from .gateway import (
     TURN_TIMEOUT,
     ClientCredentialsAuth,
+    GatewayChatModel,
     NonStreamingModel,
     StreamingUnsupported,
     TokenError,
     TokenState,
 )
+
+logger = logging.getLogger("duckpad.assistant")
 
 ProviderKind = Literal["openai", "anthropic", "google", "mistral", "deepseek", "ollama", "custom"]
 BASE_URLS = {
@@ -87,7 +91,7 @@ class Settings(BaseModel):
 def provider_error(error):
     """Never stringify SDK errors: they can contain request bodies, URLs and keys."""
     # SDKs wrap transport/auth failures. Inspect only types and safe categories.
-    cause, seen = error, set()
+    cause, seen, unreadable = error, set(), False
     while cause is not None and id(cause) not in seen:
         seen.add(id(cause))
         if isinstance(cause, TokenError):
@@ -105,7 +109,10 @@ def provider_error(error):
             and cause.message.startswith("Streamed response ended without content")
         ):
             return "The provider did not return a supported stream. Disable Streaming in its settings and try again."
+        unreadable = unreadable or isinstance(cause, UnexpectedModelBehavior)
         cause = cause.__cause__
+    if unreadable:
+        return "The provider returned a response the assistant could not read. Check the server logs."
     status = error.status_code if isinstance(error, ModelHTTPError) else getattr(error, "status_code", None)
     if isinstance(error, httpx2.HTTPStatusError):
         status = error.response.status_code
@@ -136,6 +143,46 @@ class Configuration:
     def secrets(self):
         # Tokens are never offered to the model; holding back JWT-sized text would stall streaming.
         return [p.get(field, "") for p in self.get()["providers"] for field in ("api_key", "client_secret")]
+
+    def log_failure(self, error, provider, model="-", *, operation="turn"):
+        """Log categories by default and a redacted exception traceback at DEBUG."""
+        secrets = [
+            *self.secrets(),
+            *(provider.get(field, "") for field in ("api_key", "client_secret")),
+            *(state.token for state in self.tokens.values()),
+        ]
+        # SDK messages may render credentials as raw text, repr, or JSON.
+        masks = {
+            variant
+            for secret in secrets
+            if secret
+            for variant in (
+                secret,
+                repr(secret)[1:-1],
+                json.dumps(secret, ensure_ascii=False)[1:-1],
+                json.dumps(secret, ensure_ascii=True)[1:-1],
+            )
+        }
+
+        def safe(text):
+            for mask in sorted(masks, key=len, reverse=True):
+                text = text.replace(mask, "[redacted]")
+            return text
+
+        chain, seen, cause = [], set(), error
+        while cause is not None and id(cause) not in seen:
+            seen.add(id(cause))
+            chain.append(type(cause).__name__)
+            cause = cause.__cause__ or (None if cause.__suppress_context__ else cause.__context__)
+        summary = safe(
+            f"Assistant {operation} failed: provider={provider['id']} model={model} error={' <- '.join(chain)}"
+        )
+        logger.warning("%s", json.dumps(summary, ensure_ascii=False)[1:-1])
+        if logger.isEnabledFor(logging.DEBUG):
+            exc_info = (type(error), error, error.__traceback__)
+            # Format before emitting: no handler (including third-party ones) sees raw exceptions.
+            traceback = safe(logging.Formatter().formatException(exc_info))
+            logger.debug("%s\n%s", summary, traceback)
 
     def get(self):
         return {**Settings().model_dump(), "revision": "", **self.store.get("settings", "assistant", {})}
@@ -351,7 +398,7 @@ class Configuration:
                     sdk = OpenAIProvider(
                         base_url=provider["base_url"] or BASE_URLS[kind], api_key=key, http_client=client
                     )
-                model = OpenAIChatModel(name, provider=sdk)
+                model = (GatewayChatModel if custom else OpenAIChatModel)(name, provider=sdk)
             if custom and provider.get("streaming") is False:
                 model = NonStreamingModel(model)
             yield model
@@ -376,6 +423,7 @@ class Configuration:
                 async for _ in events:
                     pass
         except Exception as error:
+            self.log_failure(error, provider, name, operation="connection test")
             raise Problem(provider_error(error), 502) from None
         return {"ok": True}
 
@@ -417,6 +465,7 @@ class Configuration:
                     "listed": True,
                 }
         except Exception as error:
+            self.log_failure(error, provider, operation="model discovery")
             raise Problem(provider_error(error), 502) from None
 
 

@@ -99,6 +99,7 @@ for (const [node, defaultAmount] of [
 
     await amount.fill("");
     await expect(amount).toHaveValue("");
+    await expect(page.locator(".save-status")).toHaveText("Unsaved changes");
     expect(params(await (await page.request.get(url)).json()).amount).toBe(7);
     let snapshot = await save(page, url, () => amount.blur());
     expect(params(snapshot)).not.toHaveProperty("amount");
@@ -132,6 +133,7 @@ for (const [node, defaultAmount] of [
     await cities.fill("");
     await cities.pressSequentially("New York, Paris");
     await expect(cities).toHaveValue("New York, Paris");
+    await expect(page.locator(".save-status")).toHaveText("Unsaved changes");
     expect(
       params(await (await page.request.get(url)).json()),
     ).not.toHaveProperty("cities");
@@ -167,6 +169,41 @@ for (const [node, defaultAmount] of [
     ).toEqual([[defaultAmount, ["New York", "Paris"]]]);
   });
 }
+
+test("navigation keeps an incomplete numeric Inspector draft until it is corrected", async ({
+  page,
+}) => {
+  const url = await prepare(page);
+  await page.locator('.react-flow__node[data-id="template"]').click();
+  const amount = page
+    .locator(".inspector")
+    .getByRole("textbox", { name: /amount/ });
+  const before: Snapshot = await (await page.request.get(url)).json();
+  await amount.fill("-");
+  await expect(page.locator(".save-status")).toHaveText("Unsaved changes");
+  await page.getByRole("link", { name: "Code", exact: true }).click();
+  const guard = page.getByRole("dialog", {
+    name: "Unsaved changes",
+    exact: true,
+  });
+  await expect(guard).toContainText("Enter a finite number.");
+  await guard
+    .getByRole("button", { name: "Stay on this page", exact: true })
+    .click();
+  await expect(amount).toHaveValue("-");
+  expect((await (await page.request.get(url)).json()).revision).toBe(
+    before.revision,
+  );
+  await amount.fill("12.5");
+  await page.getByRole("link", { name: "Code", exact: true }).click();
+  await expect(page).toHaveURL(/\/code(\?|$)/);
+  await expect(page.locator(".save-status")).toHaveText("All changes saved");
+  const saved: Snapshot = await (await page.request.get(url)).json();
+  expect(
+    saved.bundle!.flow.nodes.find((node) => node.id === "template")!.params
+      .amount,
+  ).toBe(12.5);
+});
 
 test("clearing a required number does not save zero and invalid drafts stay editable", async ({
   page,

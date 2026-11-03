@@ -241,6 +241,12 @@ test("review and resolve a field conflict with base evidence, reject stale heads
   await expect(
     dialog.getByRole("button", { name: "Apply reviewed merge" }),
   ).toBeDisabled();
+  await expect(dialog.locator(".conflict-title")).toContainText(
+    "Regional revenue · minimum",
+  );
+  await expect(
+    dialog.locator(".git-conflict-values mark").first(),
+  ).toBeVisible();
   await expect(dialog.locator(".git-conflict-values")).toContainText("10");
   await expect(dialog.locator(".git-conflict-values")).toContainText("20");
   await dialog.getByLabel("Incoming", { exact: false }).check();

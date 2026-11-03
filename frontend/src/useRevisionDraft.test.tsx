@@ -436,17 +436,77 @@ function Editor({
   handle,
   scope,
   save,
+  autosave = false,
 }: {
   handle: Ref<Draft>;
   scope: DraftScope;
   save: Save;
+  autosave?: boolean;
 }) {
-  const draft = useRevisionDraft<string, number>("v1", 1, save, { scope });
+  const draft = useRevisionDraft<string, number>("v1", 1, save, {
+    scope,
+    autosave,
+  });
   useImperativeHandle(handle, () => draft);
   return null;
 }
 
 describe("useDraftRegistry", () => {
+  it("autosaves only the automatic drafts that navigation will close", async () => {
+    const automatic = createRef<Draft>();
+    const manual = createRef<Draft>();
+    const branch = createRef<Draft>();
+    const save = vi.fn(async () => 2);
+    render(
+      <Registry>
+        <Editor handle={automatic} scope="page" save={save} autosave />
+        <Editor handle={manual} scope="page" save={save} />
+        <Editor handle={branch} scope="worktree" save={save} autosave />
+      </Registry>,
+    );
+    act(() => automatic.current!.update(() => "inspector edit"));
+    expect(registry.current!.requiresConfirmation("page")).toBe(false);
+    act(() => {
+      manual.current!.update(() => "documentation edit");
+      branch.current!.update(() => "branch edit");
+    });
+    expect(registry.current!.requiresConfirmation("page")).toBe(true);
+
+    await act(() => registry.current!.autosave("page"));
+    expect(save.mock.calls).toEqual([["inspector edit", 1]]);
+    expect(manual.current!.dirty).toBe(true);
+    expect(branch.current!.dirty).toBe(true);
+    await act(() => registry.current!.autosave());
+    expect(save.mock.calls).toEqual([
+      ["inspector edit", 1],
+      ["branch edit", 1],
+    ]);
+    expect(manual.current!.dirty).toBe(true);
+  });
+
+  it("keeps a rejected autosave available to stay or discard before unmount", async () => {
+    const automatic = createRef<Draft>();
+    const save = vi.fn(async () => {
+      throw new Error("Save failed");
+    });
+    const { unmount } = render(
+      <Registry>
+        <Editor handle={automatic} scope="page" save={save} autosave />
+      </Registry>,
+    );
+    act(() => automatic.current!.update(() => "unsaved"));
+    await act(async () => {
+      await expect(registry.current!.autosave("page")).rejects.toThrow(
+        "Save failed",
+      );
+    });
+    expect(automatic.current!.draft).toBe("unsaved");
+    expect(registry.current!.dirty("page")).toBe(true);
+    act(() => registry.current!.discard("page"));
+    unmount();
+    expect(save).toHaveBeenCalledTimes(1);
+  });
+
   it("saves pending page and worktree drafts before continuing", async () => {
     const page = createRef<Draft>();
     const branch = createRef<Draft>();

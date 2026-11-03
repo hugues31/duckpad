@@ -52,6 +52,11 @@ snapshots, status, and generations) are logged at DEBUG. The default INFO level
 still shows other requests, including failed polling requests. Use
 `duckpad start --log-level debug` to include polling in the server logs.
 
+Debug also logs complete tracebacks of assistant provider failures. Credentials
+are masked, but these traces can contain prompts, responses and project data:
+keep them private and use debug temporarily. See
+[assistant troubleshooting](ASSISTANT.md#troubleshoot-provider-failures).
+
 ## Reverse proxy
 
 Behind an HTTPS reverse proxy, set `DUCKPAD_SECURE_COOKIES=1` so the session cookie is only sent over HTTPS.

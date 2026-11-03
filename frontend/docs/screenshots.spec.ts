@@ -19,6 +19,64 @@ test.beforeEach(async ({ page }) => {
   await signIn(page);
 });
 
+test("concurrent file conflict", async ({ page }) => {
+  const tree = await (
+    await page.request.post("/api/projects", {
+      data: { name: "Revenue report" },
+    })
+  ).json();
+  const initial = await (
+    await page.request.get(`/api/worktrees/${tree.id}`)
+  ).json();
+  const path = "nodes/revenue.sql";
+  const code =
+    "-- @label Revenue report\n-- @output result\nSELECT region, SUM(revenue) AS total\nFROM sales\nGROUP BY region;\n";
+  initial.bundle.flow.nodes = [
+    {
+      id: "revenue",
+      label: "Revenue report",
+      params: {},
+      position: { x: 80, y: 80 },
+    },
+  ];
+  initial.bundle.node_sql = { [path]: code };
+  const base = await (
+    await page.request.put(`/api/worktrees/${tree.id}`, {
+      data: { revision: initial.revision, bundle: initial.bundle },
+    })
+  ).json();
+  const saved = {
+    ...base.files,
+    [path]: code.replace("SUM(revenue)", "ROUND(SUM(revenue), 2)"),
+  };
+  expect(
+    (
+      await page.request.put(`/api/worktrees/${tree.id}`, {
+        data: { revision: base.revision, files: saved },
+      })
+    ).ok(),
+  ).toBeTruthy();
+  const proposed = {
+    ...base.files,
+    [path]: code.replace("FROM sales", "FROM sales\nWHERE status = 'paid'"),
+  };
+  expect(
+    (
+      await page.request.put(`/api/worktrees/${tree.id}`, {
+        data: { revision: base.revision, files: proposed },
+      })
+    ).status(),
+  ).toBe(409);
+  await page.goto(`/worktrees/${tree.id}/code`);
+  await page
+    .getByRole("button", { name: "Save resolution", exact: true })
+    .click();
+  const dialog = page.getByRole("dialog", { name: "Concurrent edit conflict" });
+  await expect(dialog.locator(".line-insert").first()).toBeVisible();
+  await expect(dialog.locator(".line-delete").first()).toBeVisible();
+  await capture(page, "conflict-resolution", dialog);
+});
+
 async function capture(
   page: Page,
   name: string,
