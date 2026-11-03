@@ -73,20 +73,28 @@ export async function verifyMessages(page: Page) {
   await edit(original + warning);
   const success = await launch();
   expect(success.status).toBe("success");
-  expect(success.warning_count).toBe(1);
+  // Northstar's large_order_review test already reports a warning.
+  expect(success.warning_count).toBe(2);
   await expect(
-    node("validated").getByLabel("Warnings: 1", { exact: true }),
+    node("validated").getByLabel("Warnings: 2", { exact: true }),
   ).toBeVisible();
-  // The inspector only counts warnings; its badge opens the Log.
+  // The inspector only counts warning messages; its badge opens the Log.
   await summary.getByRole("button", { name: "1 message", exact: true }).click();
-  const message = results.locator(".log-entry.warning");
-  await expect(message).toContainText("paid orders checked");
+  const message = results
+    .locator(".log-entry.warning")
+    .filter({ hasText: "paid orders checked" });
   await expect(message).toContainText("Warning");
-  await expect(message).toContainText("Message block 1 · orders");
+  // The example's own message block comes first.
+  await expect(message).toContainText("Message block 2 · orders");
+  await expect(
+    results
+      .locator(".log-entry.info")
+      .filter({ hasText: "107 paid orders kept, 13 excluded" }),
+  ).toContainText("Message block 1 · orders");
   await page.getByRole("link", { name: "History", exact: true }).click();
   const history = page.locator(".history-row").first();
   await expect(
-    history.getByLabel("Warnings: 1", { exact: true }),
+    history.getByLabel("Warnings: 2", { exact: true }),
   ).toBeVisible();
   await history.click();
   const details = page.getByRole("dialog");

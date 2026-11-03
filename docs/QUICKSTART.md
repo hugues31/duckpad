@@ -162,7 +162,8 @@ and **History** records the executions. Before a larger experiment, create a
 - [Reuse a group of nodes](COMPONENTS.md) and configure it with
   [project variables](VARIABLES.md).
 - [Create a Job](JOBS.md) and [launch it from a scheduler](AUTOMATION.md).
-- [Explore Northstar](EXAMPLE.md) for joins, nested components and environments.
+- [Explore Northstar](EXAMPLE.md) for joins, nested components, data tests,
+  variables and environments.
 - [Ask the assistant](ASSISTANT.md) to explain code or make changes you can inspect and undo.
 
 ## If something gets in the way

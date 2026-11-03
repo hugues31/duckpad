@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { signIn } from "./helpers";
+import { signIn, withoutExampleVariables } from "./helpers";
 import type { Snapshot } from "../src/types";
 import { resolve } from "node:path";
 
@@ -144,7 +144,7 @@ test("calculate a control value, retain it for a targeted launch and show its pr
     .click();
 });
 
-/** The Northstar example, optionally changed through the API before it opens. */
+/** The Northstar example without variables, optionally changed through the API before it opens. */
 async function example(
   page: Page,
   change?: (bundle: NonNullable<Snapshot["bundle"]>) => void,
@@ -156,7 +156,10 @@ async function example(
   expect(response.ok()).toBeTruthy();
   const worktree = await response.json();
   const url = `/api/worktrees/${worktree.id}`;
-  if (change) await update(page, url, change);
+  await update(page, url, (bundle) => {
+    withoutExampleVariables(bundle);
+    change?.(bundle);
+  });
   return { id: worktree.id as string, url };
 }
 

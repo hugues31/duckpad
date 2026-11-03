@@ -75,14 +75,17 @@ export async function verifyDataTests(page: Page) {
   await edit("warning", "true");
   const warning = await launch();
   expect(warning.status).toBe("success");
-  expect(warning.warning_count).toBe(1);
-  const count = warning.nodes.validated.results![0].observed;
+  // Northstar's large_order_review test already reports a warning.
+  expect(warning.warning_count).toBe(2);
+  const count = warning.nodes.validated.results!.find(
+    (item) => item.origin.name === "orders_checked",
+  )!.observed;
   expect(Number(count)).toBeGreaterThan(0);
   await expect(
-    node("validated").getByLabel("Warnings: 1", { exact: true }),
+    node("validated").getByLabel("Warnings: 2", { exact: true }),
   ).toBeVisible();
   // The inspector only summarizes the outcome; its badge opens the Tests tab.
-  await summary.getByRole("button", { name: "1 test", exact: true }).click();
+  await summary.getByRole("button", { name: "2 tests", exact: true }).click();
   await expect(tab("Tests")).toHaveAttribute("aria-selected", "true");
   await expect(test.locator(".test-status")).toHaveText("Warning");
   await expect(test).toContainText("orders");
@@ -115,13 +118,14 @@ export async function verifyDataTests(page: Page) {
   await edit("error", "false");
   const passed = await launch();
   expect(passed.status).toBe("success");
-  expect(passed.warning_count).toBe(0);
+  // Only the example's own review warning remains.
+  expect(passed.warning_count).toBe(1);
   await expect(test.locator(".test-status")).toHaveText("OK");
   await expect(test.locator("td.number")).toHaveText("0");
   await expect(
     node("validated").getByLabel("Warnings: 1", { exact: true }),
-  ).toHaveCount(0);
-  await expect(summary.locator(".warning-badge")).toHaveCount(0);
+  ).toBeVisible();
+  await expect(summary.locator(".warning-badge")).toHaveText("1 test");
   // The strip shows the previous executions, oldest first.
   const strip = test.locator(".test-strip .dot:not(.none)");
   await expect(strip).toHaveCount(3);
@@ -140,8 +144,10 @@ export async function verifyDataTests(page: Page) {
       .locator(".run-step summary")
       .filter({ hasText: "Paid orders" })
       .click();
-    const results = details.getByRole("region", { name: "Execution messages" });
-    await expect(results).toContainText("orders_checked");
+    const results = details
+      .getByRole("region", { name: "Execution messages" })
+      .locator(".execution-message")
+      .filter({ hasText: "orders_checked" });
     await expect(results).toContainText(status);
     await expect(results).toContainText(`Failing rows: ${observed}`);
     await details.getByRole("button", { name: "Close", exact: true }).click();
