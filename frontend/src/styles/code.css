@@ -1,0 +1,121 @@
+/* Code tab: file tree, editor column and conflict comparison. */
+.code-workspace {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--surface);
+}
+.code-workspace[hidden] {
+  display: none;
+}
+.code-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--border);
+}
+.code-toolbar strong {
+  font-size: 12px;
+}
+.code-toolbar p {
+  margin: 5px 0 0;
+  font-size: 11px;
+  max-width: 560px;
+}
+.code-toolbar .row {
+  flex-wrap: wrap;
+}
+.code-layout {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+.code-files {
+  width: clamp(150px, 23vw, 280px);
+  flex-shrink: 0;
+  overflow: auto;
+  background: var(--surface-alt);
+  border-right: 1px solid var(--border);
+  padding: 10px 6px;
+}
+.file-tree-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+.file-tree-row > span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.project-file-tree svg,
+.file-tree-indent {
+  flex-shrink: 0;
+}
+.file-tree-indent {
+  width: 13px;
+}
+.file-tree-row:hover {
+  background: var(--surface);
+}
+.project-file-tree [aria-selected="true"] > .file-tree-row {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+.project-file-tree [role="treeitem"]:focus-visible {
+  outline: none;
+}
+.project-file-tree [role="treeitem"]:focus-visible > .file-tree-row {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.code-editor-column {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+.code-file-heading {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-height: 40px;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.code-editor-body {
+  flex: 1;
+  min-height: 0;
+}
+.code-workspace > .notice {
+  margin: 10px 20px;
+}
+.conflict-comparison {
+  display: flex;
+  gap: 20px;
+}
+.conflict-comparison > div {
+  width: 50%;
+  min-width: 0;
+}
+.conflict-comparison pre {
+  background: var(--surface-alt);
+  padding: 15px;
+  font-size: 10px;
+  overflow: auto;
+  max-height: 300px;
+}

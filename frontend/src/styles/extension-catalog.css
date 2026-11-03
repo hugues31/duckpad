@@ -1,0 +1,73 @@
+/* The extension picker shared by the project Extensions tab and instance imports. */
+.extension-catalog {
+  margin: 0 0 18px;
+  font-size: 12px;
+}
+.extension-catalog-header {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+}
+.extension-catalog-header strong {
+  margin-right: auto;
+  font-weight: 550;
+}
+.extension-catalog-header a {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.extension-catalog > p {
+  margin: 6px 0 8px;
+}
+.extension-catalog-list {
+  max-height: 232px;
+  margin: 0;
+  padding: 4px;
+  overflow-y: auto;
+  list-style: none;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+.extension-catalog-list button {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: baseline;
+  gap: 2px 10px;
+  width: 100%;
+  padding: 6px 8px;
+  border-radius: 6px;
+  text-align: left;
+}
+.extension-catalog-list button:not(:disabled):hover,
+.extension-catalog-list button[aria-current] {
+  background: var(--surface-alt);
+}
+.extension-catalog-list button[aria-current] code {
+  color: var(--accent);
+}
+.extension-catalog-source {
+  font-size: 11px;
+  color: var(--muted);
+}
+/* One line per description; the tooltip shows the rest. */
+.extension-catalog-description {
+  grid-column: 1 / -1;
+  overflow: hidden;
+  color: var(--muted);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.extension-availability {
+  margin: 0 0 12px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.extension-availability:empty {
+  margin: 0;
+}
+.extension-availability.missing {
+  color: light-dark(#a33e36, #f4ada4);
+}
