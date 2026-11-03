@@ -1,0 +1,58 @@
+/* Modal dialogs. */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: #10233270;
+  backdrop-filter: blur(4px);
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 30px;
+}
+.modal {
+  width: 490px;
+  max-width: 95vw;
+  max-height: 90vh;
+  overflow: auto;
+  border-radius: 24px;
+  display: flex;
+  flex-direction: column;
+}
+.modal.wide {
+  width: 1000px;
+}
+.modal > header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 21px 25px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.modal h2 {
+  font-size: 18px;
+  margin: 0;
+}
+.modal-content {
+  padding: 25px;
+  overflow: auto;
+}
+.modal-description {
+  font-size: 12px;
+  color: var(--muted);
+  padding: 16px 25px;
+  margin: 0;
+  flex-shrink: 0;
+}
+.modal footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 17px 25px;
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.modal > .notice {
+  margin: 12px 25px;
+}
