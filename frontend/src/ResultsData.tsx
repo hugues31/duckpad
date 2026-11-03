@@ -175,6 +175,11 @@ export default function ResultsData({
   const staleVariables = useStaleVariables(snapshot, environment, page);
   const columns = (page || rows)?.columns || dataset?.columns || [];
   const total = (page || rows)?.filtered_count ?? 0;
+  // A rerun can remove the current page. Wait for its response before resetting:
+  // while loading, data still describes the previous page or result.
+  if (!pending && data && offset > 0 && offset >= total) {
+    setOffset(0);
+  }
   const order = sample.order || [];
   const sortBy = (column: string) => {
     const current =
