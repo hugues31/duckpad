@@ -8,6 +8,13 @@ run for your explicit approval. It cannot execute arbitrary SQL or change
 instance settings. Responses can be mistaken; inspect the cited
 nodes and tool results before relying on an explanation.
 
+The assistant stays on topic: Duckpad, your projects and their data, and data or
+software development questions such as SQL, DuckDB, data modeling, Python or
+Git. It briefly declines unrelated requests, such as a cooking recipe, and
+suggests a related question instead. Questions about your project's data are in
+scope whatever that data describes. The rule is part of the model's
+instructions, not a filter: a model can still misjudge a borderline request.
+
 ## Configure a provider
 
 An instance administrator opens **Instance settings → AI assistant**. The
@@ -86,8 +93,8 @@ those of the top bar; the title names the environment only when it differs, for
 example after **Ask the assistant** on a prod run. Before sending a message,
 Duckpad saves pending editor changes. A failed save stops the message so you can
 resolve it first. The server validates the context and reads saved content. On
-pages without an open working branch, the assistant can answer general questions
-but has no project-reading tools.
+pages without an open working branch, the assistant can answer general Duckpad,
+data and development questions but has no project-reading tools.
 
 For Northstar, try “How do paid orders reach the regional report?” or, after
 running the flow yourself, “Why does this region have this revenue?” Data tools
