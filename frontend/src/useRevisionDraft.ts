@@ -15,6 +15,7 @@ export type DraftScope = "page" | "worktree";
 
 interface Draft {
   scope: DraftScope;
+  autosave: boolean;
   discard: () => void;
   persist: () => Promise<void>;
 }
@@ -45,6 +46,14 @@ export function useDraftRegistry() {
       register,
       /** Whether an editor holds unsaved changes, optionally only of one scope. */
       dirty: (scope?: DraftScope) => matching(scope).length > 0,
+      /** Whether navigation needs a choice about edits that are saved explicitly. */
+      requiresConfirmation: (scope?: DraftScope) =>
+        matching(scope).some((draft) => !draft.autosave),
+      /** Finish autosaving the editors that navigation will close. */
+      autosave: async (scope?: DraftScope) => {
+        for (const draft of matching(scope))
+          if (draft.autosave) await draft.persist();
+      },
       /** Discard unsaved changes, optionally only those of one scope. */
       discard: (scope?: DraftScope) =>
         matching(scope).forEach((draft) => draft.discard()),
@@ -173,10 +182,11 @@ export function useRevisionDraft<T, Revision>(
     if (!dirty || !register) return;
     return register({
       scope,
+      autosave,
       discard: () => actions.current.discard(),
       persist: () => actions.current.flush(),
     });
-  }, [dirty, register, scope]);
+  }, [dirty, register, scope, autosave]);
   useEffect(() => () => actions.current.close(), []);
 
   return {

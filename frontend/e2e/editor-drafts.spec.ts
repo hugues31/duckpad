@@ -75,6 +75,138 @@ const failSaves = (page: Page, endpoint: string) =>
       : route.continue(),
   );
 
+for (const field of ["Display name", "condition"] as const) {
+  test(`navigation waits for the Inspector ${field} autosave without offering discard`, async ({
+    page,
+  }) => {
+    const { endpoint, read, saved } = await prepare(page);
+    await select(page, "filtered");
+    const before = await read();
+    const input = page.locator(".inspector").getByRole("textbox", {
+      name: field,
+      exact: true,
+    });
+    const value =
+      field === "Display name" ? "Saved on navigation" : "amount > 123456";
+    let release!: () => void;
+    const released = new Promise<void>((resolve) => (release = resolve));
+    const writes: unknown[] = [];
+    await page.route(`**${endpoint}`, async (route) => {
+      if (route.request().method() !== "PUT") return route.continue();
+      writes.push(route.request().postDataJSON());
+      await released;
+      await route.continue();
+    });
+    const guard = page.getByRole("dialog", {
+      name: "Unsaved changes",
+      exact: true,
+    });
+    try {
+      await input.fill(value);
+      await expect(page.locator(".save-status")).toHaveText("Unsaved changes");
+      expect((await read()).revision).toBe(before.revision);
+      await page.getByRole("link", { name: "Code", exact: true }).click();
+      await expect(page.locator(".save-status")).toHaveText("Saving…");
+      await expect(page).toHaveURL(/\/flow(\?|$)/);
+      await expect(guard).toHaveCount(0);
+      expect((await read()).revision).toBe(before.revision);
+      // Typing while navigation waits must be included in the save before leaving.
+      await input.fill(
+        value + (field === "Display name" ? " completely" : " AND true"),
+      );
+      release();
+      await expect(page).toHaveURL(/\/code(\?|$)/);
+      await expect(page.locator(".save-status")).toHaveText(
+        "All changes saved",
+      );
+      await expect(guard).toHaveCount(0);
+      const node = await saved("filtered");
+      expect(
+        field === "Display name" ? node?.label : node?.params.condition,
+      ).toBe(value + (field === "Display name" ? " completely" : " AND true"));
+      expect(writes).toHaveLength(2);
+      expect((await read()).revision).not.toBe(before.revision);
+    } finally {
+      release();
+      await page.unrouteAll({ behavior: "wait" });
+    }
+  });
+}
+
+for (const choice of ["Stay on this page", "Discard and leave"] as const) {
+  test(`a failed navigation autosave allows ${choice} without committing the draft`, async ({
+    page,
+  }) => {
+    const { endpoint, read } = await prepare(page);
+    if (choice === "Discard and leave") {
+      await page.getByRole("link", { name: "Code", exact: true }).click();
+      await page.getByRole("link", { name: "Flow", exact: true }).click();
+    }
+    await select(page, "filtered");
+    const before = await read();
+    const input = page.locator(".inspector").getByRole("textbox", {
+      name: "Display name",
+      exact: true,
+    });
+    await failSaves(page, endpoint);
+    await input.fill("Keep this draft only if I stay");
+    if (choice === "Discard and leave") await page.goBack();
+    else await page.getByRole("link", { name: "Code", exact: true }).click();
+    const guard = page.getByRole("dialog", {
+      name: "Unsaved changes",
+      exact: true,
+    });
+    await expect(guard).toContainText("Temporary save failure");
+    await expect(page.locator(".save-status")).toHaveText("Unsaved changes");
+    // A discard must not retry the failed edit when the Inspector unmounts.
+    await page.unrouteAll({ behavior: "wait" });
+    const writes: string[] = [];
+    page.on("request", (request) => {
+      if (request.url().endsWith(endpoint) && request.method() === "PUT")
+        writes.push(request.url());
+    });
+    await guard.getByRole("button", { name: choice, exact: true }).click();
+    if (choice === "Stay on this page") {
+      await expect(page).toHaveURL(/\/flow(\?|$)/);
+      await expect(input).toHaveValue("Keep this draft only if I stay");
+      await expect(page.locator(".save-status")).toHaveText("Unsaved changes");
+    } else {
+      await expect(page).toHaveURL(/\/code(\?|$)/);
+      await page.getByRole("link", { name: "Flow", exact: true }).click();
+      await select(page, "filtered");
+      await expect(input).toHaveValue("");
+      await expect(page.locator(".save-status")).toHaveText(
+        "All changes saved",
+      );
+    }
+    expect(writes).toEqual([]);
+    expect((await read()).revision).toBe(before.revision);
+    expect((await read()).bundle).toEqual(before.bundle);
+  });
+}
+
+test("browser Back autosaves an Inspector draft that has not blurred", async ({
+  page,
+}) => {
+  const { saved } = await prepare(page);
+  await page.getByRole("link", { name: "Code", exact: true }).click();
+  await page.getByRole("link", { name: "Flow", exact: true }).click();
+  await select(page, "filtered");
+  await page
+    .locator(".inspector")
+    .getByRole("textbox", {
+      name: "Display name",
+      exact: true,
+    })
+    .fill("Saved by Back");
+  await page.goBack();
+  await expect(page).toHaveURL(/\/code(\?|$)/);
+  expect((await saved("filtered"))?.label).toBe("Saved by Back");
+  await expect(
+    page.getByRole("dialog", { name: "Unsaved changes", exact: true }),
+  ).toHaveCount(0);
+});
+
 test("Inspector saves guided expressions and uploads before another node opens", async ({
   page,
 }) => {

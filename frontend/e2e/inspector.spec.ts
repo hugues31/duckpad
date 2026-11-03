@@ -187,7 +187,7 @@ test("Inspector does not queue later edits for a duplicate blur and click save",
   await expect(inspector.locator(".inspector-title")).toContainText(
     "Saved before more typing",
   );
-  await expect(page.locator(".save-status")).toHaveText("All changes saved");
+  await expect(page.locator(".save-status")).toHaveText("Unsaved changes");
   await expect(status).toHaveValue("refunded");
   expect(pending.requests).toHaveLength(1);
   await status.blur();
