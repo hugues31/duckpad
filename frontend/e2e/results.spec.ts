@@ -199,6 +199,12 @@ test("views are shared in views.json and samples become Filter nodes or tests", 
   ).json();
   expect(JSON.parse(snapshot.files["views.json"])).toEqual({
     "validated:orders": [
+      {
+        name: "Orders to review",
+        method: "first",
+        filter: "amount > {{ var.review_threshold }}",
+        order: [["amount", "desc"]],
+      },
       { name: "Large orders", method: "first", filter: "amount > 450" },
     ],
   });

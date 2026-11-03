@@ -5,6 +5,7 @@ import type {
   PartitionDescription,
 } from "./partitions";
 import type { ProjectExtension } from "./extensions";
+import type { MergeConflict } from "./gitTypes";
 /** A value that JSON can represent, such as a parameter set by a user. */
 export type Json =
   string | number | boolean | null | Json[] | { [key: string]: Json };
@@ -151,9 +152,14 @@ export interface Worktree {
 export interface Conflict {
   node_names?: NodeNames;
   id: string;
+  revision: string;
   paths: string[];
   current: Record<string, string>;
   proposal: Record<string, string>;
+  base: Record<string, string>;
+  fields: MergeConflict[];
+  /** Three-way merge with incoming conflict values and independent edits from both sides. */
+  merged: Record<string, string>;
 }
 export interface Diagnostic {
   file: string;

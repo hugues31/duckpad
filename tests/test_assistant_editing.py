@@ -118,6 +118,8 @@ def change(app, worktree, callback):
         ),
         ("edit_variable", {"operation": "update", "name": "region", "definition": {"default": "South"}}),
         ("edit_variable", {"operation": "rename", "name": "region", "new_name": "area"}),
+        ("edit_variable", {"operation": "delete", "name": "region"}),
+        ("edit_variable", {"operation": "update", "name": "region", "remove_fields": ["default"]}),
         ("group_nodes", {"nodes": ["first", "second"], "name": "Together"}),
     ],
 )
@@ -146,6 +148,139 @@ def test_each_write_is_one_attributed_commit_and_can_be_undone(instance, name, a
     head = projects.snapshot(worktree["id"])["commit"]
     undo(client, identity, resumed, context)
     assert projects.snapshot(worktree["id"])["commit"] == head
+
+
+@pytest.mark.parametrize("reference", ["binding", "expression", "path", "view"])
+def test_deleting_a_used_variable_is_refused_without_a_commit(instance, reference):
+    from duckpad.assistant.tools import read_variables
+
+    app, client = instance
+    worktree, context = seed(app, client)
+
+    def use(bundle):
+        if reference == "view":
+            bundle["views"] = {"first:result": [{"name": "North", "filter": "value = {{ var.region }}"}]}
+            return
+        parameter_type, value = {
+            "binding": ("text", {"$var": "region"}),
+            "expression": ("expression", "{{ var.region }} = 'North'"),
+            "path": ("file", "orders/{{ var.region }}.csv"),
+        }[reference]
+        bundle["node_sql"]["nodes/first.sql"] = f"-- @param location: {parameter_type}\n" + SQL
+        bundle["flow"]["nodes"][0]["params"]["location"] = value
+
+    before = change(app, worktree, use)
+    ctx = dependencies(app, client, context)
+    usages = read_variables(ctx, "region", "usages")
+    assert usages["total"] == 1
+    if reference == "view":
+        assert usages["items"][0]["view"] == "North"
+    else:
+        assert usages["items"][0]["node"] == "first"
+    assert read_variables(ctx, "region")["items"][0]["usage_count"] == 1
+    _, result = write_turn(
+        app, client, context, [("edit_variable", {"operation": "delete", "name": "region"})]
+    )
+    card = result["tools"][0]
+    assert card["status"] == "error"
+    assert "still in use" in card["summary"]
+    assert "action" not in card
+    after = app.state.services.projects.snapshot(worktree["id"])
+    assert after["commit"] == before["commit"]
+    assert after["files"] == before["files"]
+
+
+def test_variable_environment_updates_preserve_other_values_and_can_restore_inheritance(instance):
+    app, client = instance
+    worktree, context = seed(app, client)
+    change(
+        app, worktree, lambda b: b["variables"]["region"].update(environments={"dev": "West", "prod": "East"})
+    )
+    calls = [
+        (
+            "edit_variable",
+            {"operation": "update", "name": "region", "definition": {"environments": {"dev": "South"}}},
+        ),
+        ("edit_variable", {"operation": "update", "name": "region", "remove_environments": ["dev"]}),
+    ]
+    identity, result = write_turn(app, client, context, calls)
+    projects = app.state.services.projects
+    assert all(t["status"] == "complete" for t in result["tools"])
+    assert projects.snapshot(worktree["id"])["bundle"]["variables"]["region"] == {
+        "type": "text",
+        "default": "North",
+        "environments": {"prod": "East"},
+    }
+    undo(client, identity, result, context, result["tools"][1]["id"])
+    assert projects.snapshot(worktree["id"])["bundle"]["variables"]["region"]["environments"] == {
+        "dev": "South",
+        "prod": "East",
+    }
+
+
+def test_variable_can_switch_to_computed_and_back_without_running_its_source(instance):
+    app, client = instance
+    worktree, context = seed(app, client)
+    calls = [
+        (
+            "edit_variable",
+            {
+                "operation": "update",
+                "name": "region",
+                "remove_fields": ["default", "environments"],
+                "definition": {
+                    "type": "number",
+                    "from": {"node": "first", "port": "result", "column": "value"},
+                },
+            },
+        ),
+    ]
+    _, result = write_turn(app, client, context, calls)
+    assert result["tools"][0]["status"] == "complete", result
+    projects = app.state.services.projects
+    assert projects.snapshot(worktree["id"])["bundle"]["variables"]["region"] == calls[0][1]["definition"]
+    assert app.state.services.engine.pool.find(worktree["id"], "dev") is None
+    _, result = write_turn(
+        app,
+        client,
+        context,
+        [
+            (
+                "edit_variable",
+                {
+                    "operation": "update",
+                    "name": "region",
+                    "remove_fields": ["from"],
+                    "definition": {"default": 2},
+                },
+            )
+        ],
+    )
+    assert result["tools"][0]["status"] == "complete", result
+    assert projects.snapshot(worktree["id"])["bundle"]["variables"]["region"] == {
+        "type": "number",
+        "default": 2,
+    }
+
+
+@pytest.mark.parametrize(
+    ("args", "message"),
+    [
+        ({"operation": "delete", "name": "missing"}, "not found"),
+        ({"operation": "delete", "name": "region", "definition": {"default": "South"}}, "do not accept"),
+        ({"operation": "create", "name": "new", "remove_fields": ["default"]}, "require an update"),
+        ({"operation": "update", "name": "region", "new_name": "area"}, "Only rename"),
+        ({"operation": "update", "name": "region", "definition": {"environments": {"dev": 42}}}, "invalid"),
+    ],
+)
+def test_invalid_variable_edits_preserve_saved_files(instance, args, message):
+    app, client = instance
+    worktree, context = seed(app, client)
+    before = app.state.services.projects.snapshot(worktree["id"])
+    _, result = write_turn(app, client, context, [("edit_variable", args)])
+    assert result["tools"][0]["status"] == "error", result
+    assert message in result["tools"][0]["summary"]
+    assert app.state.services.projects.snapshot(worktree["id"])["files"] == before["files"]
 
 
 def test_reader_has_no_write_tools_and_forced_write_or_undo_is_denied(instance):

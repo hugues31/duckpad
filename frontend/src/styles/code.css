@@ -104,18 +104,110 @@
 .code-workspace > .notice {
   margin: 10px 20px;
 }
-.conflict-comparison {
-  display: flex;
-  gap: 20px;
+.conflict-summary {
+  font-weight: 600;
 }
-.conflict-comparison > div {
-  width: 50%;
+.conflict-card {
+  margin: 20px 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.conflict-card h3 {
+  margin: 0;
+  padding: 12px 16px;
+  background: var(--surface-alt);
+  font-size: 14px;
+}
+.conflict-title {
+  display: block;
+}
+.conflict-path {
+  display: block;
+  font-size: 11px;
+  font-weight: normal;
+  margin-top: 5px;
+  overflow-wrap: anywhere;
+}
+.conflict-card .git-conflict-values {
+  padding: 16px;
+}
+.conflict-value {
   min-width: 0;
 }
-.conflict-comparison pre {
-  background: var(--surface-alt);
-  padding: 15px;
-  font-size: 10px;
-  overflow: auto;
-  max-height: 300px;
+.conflict-value pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.conflict-value mark {
+  color: inherit;
+  border-radius: 2px;
+}
+.conflict-added {
+  background: #1c9e5230;
+  text-decoration: underline;
+  text-decoration-color: #23864b;
+}
+.conflict-removed {
+  background: #d5394930;
+  text-decoration: line-through;
+  text-decoration-color: #be3944;
+}
+[data-theme="dark"] .conflict-added {
+  background: #2fc26a40;
+}
+[data-theme="dark"] .conflict-removed {
+  background: #f25d6b40;
+}
+.conflict-diff-labels {
+  display: flex;
+  gap: 12px;
+  padding: 10px 16px;
+  background: var(--surface);
+  font-weight: 600;
+  font-size: 12px;
+}
+.conflict-diff-labels span {
+  flex: 1;
+}
+.conflict-base,
+.conflict-file-choices,
+.conflict-presence {
+  display: block;
+  padding: 12px 16px;
+}
+.conflict-file-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+}
+.conflict-base summary {
+  cursor: pointer;
+}
+.conflict-result {
+  display: block;
+  padding: 0 16px 16px;
+  font-weight: 600;
+}
+.conflict-result textarea {
+  display: block;
+  width: 100%;
+  min-height: 90px;
+  margin-top: 8px;
+  font-family: monospace;
+  resize: vertical;
+}
+.modal:has(.conflict-content) footer {
+  flex-wrap: wrap;
+}
+@media (max-width: 700px) {
+  .conflict-content {
+    padding: 16px;
+  }
+  .conflict-content .git-conflict-values {
+    grid-template-columns: 1fr;
+  }
+  .conflict-diff-labels {
+    flex-wrap: wrap;
+  }
 }

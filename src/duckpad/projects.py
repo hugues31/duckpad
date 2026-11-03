@@ -24,7 +24,7 @@ from .git.command import GitError, GitOptions
 from .git.identity import SYSTEM_IDENTITY, current_identity
 from .git.remote import Remotes
 from .git.workspace import GitWorkspace, diagnose, require_valid
-from .merge import merge_files
+from .merge import conflict_details, merge_files
 from .node_code import owned_paths
 from .node_names import node_names
 from .store import Store
@@ -547,7 +547,7 @@ class Projects:
         if not conflict:
             raise Problem("Conflict not found", 404)
         return {
-            **cast(Record, conflict),
+            **conflict_details(cast(Record, conflict)),
             "node_names": file_node_names(
                 conflict.get("base", {}), conflict["proposal"], conflict["current"]
             ),

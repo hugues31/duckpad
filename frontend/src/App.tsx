@@ -1,4 +1,10 @@
-import { useCallback, useEffect, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useEffectEvent,
+  useRef,
+  useState,
+} from "react";
 import {
   Outlet,
   useBeforeUnload,
@@ -261,9 +267,8 @@ function SignedIn({
   );
 }
 
-/** Confirm before a navigation discards unsaved drafts or an ongoing save. */
+/** Finish autosaves before navigation; confirm only edits that can still be discarded. */
 function NavigationGuard({ drafts }: { drafts: DraftRegistry }) {
-  const t = useT();
   const { area } = usePageRoute();
   const { id: worktree, saving } = useWorktree();
   const blocker = useBlocker(({ currentLocation, nextLocation }) => {
@@ -288,13 +293,93 @@ function NavigationGuard({ drafts }: { drafts: DraftRegistry }) {
   );
   if (blocker.state !== "blocked") return null;
   return (
-    <Modal title={t("unsavedChanges")} onClose={() => blocker.reset()}>
+    <PendingNavigation
+      key={blocker.location.key}
+      blocker={blocker}
+      drafts={drafts}
+    />
+  );
+}
+
+function PendingNavigation({
+  blocker,
+  drafts,
+}: {
+  blocker: Extract<ReturnType<typeof useBlocker>, { state: "blocked" }>;
+  drafts: DraftRegistry;
+}) {
+  const t = useT();
+  const { id: worktree, flush, saving } = useWorktree();
+  const scope = isWorktreePage(blocker.location.pathname, worktree)
+    ? "page"
+    : undefined;
+  const [pending, setPending] = useState(true);
+  const [error, setError] = useState("");
+  const finished = useRef(false);
+  const finish = useCallback(
+    (leave: boolean) => {
+      // Discard updates the registry before the route unmounts. Resolve each
+      // blocked navigation only once, even if that update reruns the effect.
+      if (finished.current) return;
+      finished.current = true;
+      if (leave) blocker.proceed();
+      else blocker.reset();
+    },
+    [blocker],
+  );
+  const settle = useEffectEvent(async () => {
+    // Back can leave a field focused. Finish its blur now, so focusing an
+    // error dialog cannot start another save after the failure was reported.
+    const blur = () => {
+      if (document.activeElement instanceof HTMLElement)
+        document.activeElement.blur();
+    };
+    blur();
+    // A tab click can blur a field before the router blocks it. That request
+    // cannot be discarded: wait for it, then save any remaining automatic drafts.
+    try {
+      await flush();
+      await drafts.autosave(scope);
+      await flush();
+    } catch (error) {
+      // The user may have resumed typing while the save was pending. Settle
+      // that field's blur too, before offering a choice about what remains.
+      blur();
+      await Promise.resolve();
+      await flush().catch(() => undefined);
+      throw error;
+    }
+  });
+  useEffect(() => {
+    let live = true;
+    settle()
+      .catch((error: Error) => {
+        if (live) setError(error.message);
+      })
+      .finally(() => {
+        if (live) setPending(false);
+      });
+    return () => {
+      live = false;
+    };
+  }, []);
+  const confirm =
+    drafts.requiresConfirmation(scope) || (!!error && drafts.dirty(scope));
+  useEffect(() => {
+    if (!pending && !saving && !confirm) finish(true);
+  }, [pending, saving, confirm, finish]);
+  // The toolbar shows Saving while the original page remains mounted.
+  // Do not offer to discard a write that has already reached the server.
+  if (pending || saving || !confirm) return null;
+  return (
+    <Modal title={t("unsavedChanges")} onClose={() => finish(false)}>
+      {error && <p className="notice error">{error}</p>}
       <p>{t("leavePageHint")}</p>
       <footer>
         <button
           className="button secondary"
           autoFocus
-          onClick={() => blocker.reset()}
+          onClick={() => finish(false)}
         >
           {t("stayOnPage")}
         </button>
@@ -302,12 +387,8 @@ function NavigationGuard({ drafts }: { drafts: DraftRegistry }) {
           className="button primary"
           onClick={() => {
             // Discard explicitly even if Back interrupts the route render.
-            drafts.discard(
-              isWorktreePage(blocker.location.pathname, worktree)
-                ? "page"
-                : undefined,
-            );
-            blocker.proceed();
+            drafts.discard(scope);
+            finish(true);
           }}
         >
           {t("leavePage")}

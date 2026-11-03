@@ -82,7 +82,7 @@ test("record a real pipeline, source lineage and SQL workspace", async ({
   try {
     caption("Northstar: a complete pipeline with local CSV and Parquet data.");
     await page.goto(setup.url());
-    await expect(page.locator(".react-flow__node")).toHaveCount(9);
+    await expect(page.locator(".react-flow__node")).toHaveCount(10);
     await page.waitForTimeout(1200);
     caption("Run the pipeline. DuckDB computes each step and its outputs.");
     const response = page.waitForResponse(

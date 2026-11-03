@@ -136,6 +136,7 @@ export default function ParameterField({
           value={value}
           onChange={onChange}
           onBlur={onBlur}
+          commitOnChange
         />
       ) : ["expressions", "expression", "file", "destination"].includes(base) &&
         expressionVariables &&

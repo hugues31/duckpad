@@ -137,7 +137,14 @@ test("display names follow SQL and templates through messages, lineage, usages a
   const conflict = page.getByRole("dialog", {
     name: "Concurrent edit conflict",
   });
-  await expect(conflict.locator("pre.expression")).toHaveText(
+  await expect(conflict.locator(".conflict-title")).toHaveText(
     "Filter · condition",
   );
+  await conflict.getByRole("button", { name: "Combined files" }).click();
+  await expect(
+    page.getByRole("textbox", {
+      name: "Filter · condition · Combined value",
+      exact: true,
+    }),
+  ).toHaveValue("amount > 20");
 });
