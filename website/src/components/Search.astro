@@ -123,17 +123,20 @@ import { url } from "../lib/docs";
       dialog.close();
       return;
     }
-    if (
-      event.isComposing ||
-      event.altKey ||
-      event.ctrlKey ||
-      event.metaKey ||
-      (event.key !== "ArrowDown" && event.key !== "ArrowUp")
-    )
+    if (event.isComposing || event.altKey || event.ctrlKey || event.metaKey)
       return;
 
     const links = [...results.querySelectorAll<HTMLAnchorElement>("a")];
     const current = links.findIndex((link) => link === document.activeElement);
+    if (
+      current !== -1 &&
+      (event.key.length === 1 || event.key === "Backspace")
+    ) {
+      // Typing on a result keeps refining the query.
+      input.focus();
+      return;
+    }
+    if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
     const fromInput = document.activeElement === input;
     if (!links.length || (!fromInput && current === -1)) return;
 

@@ -430,7 +430,10 @@ test("search results support arrows, query changes and Enter from the homepage",
   await page.keyboard.press("ArrowUp");
   await expect(input).toBeFocused();
 
-  await input.fill("no-such-guide-123");
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.type(" no-such-guide");
+  await expect(input).toBeFocused();
+  await expect(input).toHaveValue("lineage no-such-guide");
   await expect(links).toHaveCount(0);
   for (const key of ["ArrowDown", "ArrowUp", "Enter"]) {
     await page.keyboard.press(key);
@@ -452,7 +455,7 @@ test("search results support arrows, query changes and Enter from the homepage",
   await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
 });
 
-for (const width of [1440, 390]) {
+for (const width of [1440, 768, 320]) {
   test(`the shared header opens search on every page at ${width}px`, async ({
     page,
   }) => {
@@ -486,7 +489,7 @@ for (const width of [1440, 390]) {
 }
 
 for (const width of [1440, 1024, 768, 390, 320]) {
-  test(`sticky header keeps search and anchor targets accessible at ${width}px`, async ({
+  test(`sticky header keeps anchor targets and feature cards readable at ${width}px`, async ({
     page,
   }) => {
     await page.setViewportSize({ width, height: 900 });
@@ -502,25 +505,6 @@ for (const width of [1440, 1024, 768, 390, 320]) {
     await expect
       .poll(async () => (await heading.boundingBox())!.y)
       .toBeGreaterThanOrEqual((await header.boundingBox())!.height);
-
-    const search = header.getByRole("button", {
-      name: "Search documentation",
-    });
-    await search.click();
-    const input = page.getByRole("searchbox", { name: "Search documentation" });
-    await expect(input).toBeFocused();
-    await input.fill("lineage");
-    await expect(page.locator(".search-results")).toContainText(
-      "Explain a value",
-    );
-    await page.keyboard.press("Escape");
-    await expect(search).toBeFocused();
-
-    await page.goto("docs/");
-    await search.click();
-    await expect(input).toBeFocused();
-    await page.getByRole("button", { name: "Close search" }).click();
-    await expect(search).toBeFocused();
 
     await page.goto("./#features");
     await expect.poll(async () => (await header.boundingBox())!.y).toBe(0);

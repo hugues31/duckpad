@@ -189,11 +189,6 @@ h2 {
     transform: translateY(-2px);
   }
 }
-.button.small {
-  font-size: 12px;
-  padding: 12px 16px;
-  gap: 22px;
-}
 .button.light {
   background: white;
   color: #174cc5;
@@ -975,9 +970,6 @@ pre {
   }
   .header-actions {
     gap: 10px;
-  }
-  .header-actions > .button {
-    display: none;
   }
   .mobile-nav {
     display: block;
