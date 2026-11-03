@@ -229,8 +229,9 @@ Use `{}` for the default full run. For example, to retry failed partition keys:
 
 Partition modes are `all`, `failed`, `missing` and `selected`. `selected` requires
 a `keys` array of typed values; other modes omit it. `parallelism` is a positive
-integer and `on_error` is `stop` or `continue`. See [partitions](PARTITIONS.md#jobs-api-and-cli)
-for CLI flags and retention behavior.
+integer and `on_error` is `stop` or `continue`. These fields require a partitioned
+flow; otherwise the launch returns 422 with `invalid_project`. See
+[partitions](PARTITIONS.md#jobs-api-and-cli) for CLI flags and partition evidence.
 
 `source` is required when a trigger is supplied (1–128 characters); `reference`
 is optional (up to 2048 characters). The trigger is caller-declared metadata, while

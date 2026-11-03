@@ -4,29 +4,26 @@ Set a value once and reuse it across node parameters, with separate values for
 each environment.
 
 Declare variables in `variables.json`, next to `flow.json`, and bind them to
-node parameters or reference them in expressions. Changes are versioned.
-
-Variables can also take their value from a node output, and scalar variables can
-appear in file and export paths. The declaration is versioned; calculated values
-are recorded with executions and never written back to `variables.json`.
+node parameters, reference them in expressions, or use scalar ones in file and
+export paths. A variable can also take its value from a node output; calculated
+values are recorded with executions and never written back to `variables.json`.
 
 ![The Variables tab lists each value per environment; the editor names the nodes that a change makes stale](images/variables.png)
 
 ## Create and edit values
 
 The **Variables** tab lists each variable with its type, default, value in every
-environment and the number of
-nodes using it. The selected environment's column is highlighted, and *default*
-marks an environment that inherits the default. Select a variable to edit its
-type, description, default and environment values: turn off **Default** for an
-environment to give it its own value. Before you save, a note names the nodes
-that the change makes stale and in which environments; nothing runs
-automatically. **Used by** lists the bound parameters and the expressions that
-reference the variable, and opens each node in the flow. **Rename…** changes the
-declaration and every reference in one commit, including `{{ var.name }}` in
-expressions, and **Delete** stays disabled while a parameter or an expression
-uses the variable. Readers can browse the tab; editors and project
-administrators change it.
+environment and the number of nodes using it. The selected environment's column
+is highlighted, and *default* marks an environment that inherits the default.
+Select a variable to edit its type, description, default and environment values:
+turn off **Default** for an environment to give it its own value. Before you
+save, a note names the nodes that the change makes stale and in which
+environments; nothing runs automatically. **Used by** lists the bound parameters
+and the expressions that reference the variable, and opens each node in the
+flow. **Rename…** changes the declaration and every reference in one commit,
+including `{{ var.name }}` in expressions, and **Delete** stays disabled while a
+parameter or an expression uses the variable. Readers can browse the tab;
+editors and project administrators change it.
 
 ![The variable button of the status parameter lists compatible variables and creates one from the current value](images/variable-binding.png)
 

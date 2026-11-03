@@ -37,11 +37,11 @@ and never enter personal keys.
 
 A saved key is write-only: the browser receives only its presence, shown as
 **Key saved** on the provider, and the empty field keeps it. Typing a new key
-replaces it when you save. Changing the API base URL clears the old key; enter it
-again if the new endpoint needs authentication. Model discovery and the test
-reuse a saved key under the same rule. Removing a provider removes its saved key.
-Keys and conversations stay in
-instance storage, outside project Git and ZIPs.
+replaces it when you save. Changing the API base URL clears the old key; enter
+it again if the new endpoint needs authentication. Model discovery and the test
+reuse a saved key under the same rule. Removing a provider removes its saved
+key. Keys and conversations stay in instance storage, outside project Git and
+ZIPs.
 
 ![Instance assistant configuration with a saved provider key](images/assistant-settings.png)
 
@@ -63,8 +63,8 @@ pages without an open working branch, the assistant can answer general questions
 but has no project-reading tools.
 
 For Northstar, try “How do paid orders reach the regional report?” or, after
-running the flow yourself, “Why does this region have this revenue?” Data tools inspect retained results;
-missing or stale data may require a run.
+running the flow yourself, “Why does this region have this revenue?” Data tools
+inspect retained results; missing or stale data may require a run.
 
 Choose a model, type a message and press Enter to send; Shift+Enter adds a line
 break. **Stop** cancels the provider request. Closing and reopening the chat
@@ -77,8 +77,9 @@ Each turn is limited to 12 provider requests, 30 tool calls and two minutes.
 ## Request a change
 
 For example, ask “Add a normal SQL node that returns the number 1”, “Rename this
-node to Paid orders”, or “Document the regional revenue output”. It can edit the flow, node/template SQL, documentation and variables. Shared
-template edits report how many linked instances they affect.
+node to Paid orders”, or “Document the regional revenue output”. It can edit the
+flow, node/template SQL, documentation and variables. Shared template edits
+report how many linked instances they affect.
 
 Each successful writing tool call is one commit on the open branch, authored by
 your Git identity. History adds **via the assistant** to the author. Its chat
@@ -118,10 +119,9 @@ review its new confirmation. Runs require the same project editing rights as
 running from the workspace; Readers cannot launch or cancel them.
 
 The card follows execution status and offers **Cancel run** while it is active.
-**Stop**
-stops the assistant response, while **Cancel run** stops execution. Neither action
-reverses completed external writes. History records the entry point as
-`assistant`, together with the requesting user.
+**Stop** stops the assistant response, while **Cancel run** stops execution.
+Neither action reverses completed external writes. History records the entry
+point as `assistant`, together with the requesting user.
 
 ## Debug an execution
 

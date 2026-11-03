@@ -31,10 +31,10 @@ own keyboard shortcuts.
 
 ## Save and run
 
-**Run pipeline** saves pending editor changes and waits for saves already in
-progress before launching. A failed save stops the launch. Use **Run with
-ancestors** on a node for a smaller scope. **Stop** requests cancellation of active
-SQL. A protected environment asks for confirmation.
+Every run first saves pending editor changes and waits for saves already in
+progress; a failed save stops the launch. **Run pipeline** runs the whole flow;
+a node's **Run with ancestors** runs a smaller scope. **Stop execution** requests
+cancellation of active SQL. A protected environment asks for confirmation.
 
 Results belong to a branch and environment. A change can mark previous results
 **Stale**, and a failed run retains the previous successful data. After a backend

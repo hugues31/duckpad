@@ -7,8 +7,12 @@ the same logic across a project or import an independent copy elsewhere.
 
 Connect ports on the canvas or select an upstream output in the inspector. Each
 input has one source; an output can feed many inputs. `flow.json` stores nodes
-and edges by stable IDs. See [code ownership](AUTHORING.md#editing-node-code)
-for normal and linked nodes.
+and edges by stable IDs. A normal node owns `nodes/<node-id>.sql`; a linked node
+names a local `template` and a component instance a local `component`. An
+optional `origin` records where normal code came from without linking it; an
+optional `preset` keeps the palette icon and guided form but never selects
+executable code. Edges use `source`, `sourceHandle`, `target` and `targetHandle`.
+See [code ownership](AUTHORING.md#editing-node-code) for normal and linked nodes.
 
 Drag a port onto empty canvas space to **Add a connected node**. Choose a
 compatible template/component and port to create and connect it in one save.

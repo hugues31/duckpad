@@ -18,8 +18,7 @@ New projects include **Select columns** and **Clean values** templates. Connect 
   uses the resulting column type, so parsed dates take `YYYY-MM-DD` replacements.
   Empty replacement text is an empty string, and `NULL` is literal text.
 
-Save changes before running. The forms store structured `columns` parameters in
-`flow.json`, so selections and operations survive reloads and replacement input
+The forms store structured `columns` parameters in `flow.json`, so selections and operations survive reloads and replacement input
 files. A missing source column fails with a message asking you to update the
 selection. Conversion failures retain previous results as stale and block
 dependent nodes; they do not substitute nulls for invalid data.

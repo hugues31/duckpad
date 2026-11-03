@@ -4,7 +4,8 @@ Open **Jobs** from the project toolbar to run a reviewed version in a chosen
 environment, independently of your working branch.
 
 ## Run a Job
- Readers can inspect Jobs, their logs, results and version history.
+
+Readers can inspect Jobs, their logs, results and version history.
 Operators and higher roles can **Run Job**, cancel an active run, or run it again.
 A protected environment asks for confirmation before launch. Each Job accepts one
 run at a time: a busy launch is refused with the active run ID, without queuing or
