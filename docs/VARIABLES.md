@@ -3,34 +3,27 @@
 Set a value once and reuse it across node parameters, with separate values for
 each environment.
 
-A project variable is a named, typed and documented value declared once, bound
-to node parameters or referenced inside SQL expressions, with an optional value
-per environment. Variables are declared in `variables.json` at the project root,
-next to `flow.json`, and change through the usual save and commit cycle. The
-[design proposal](../docs/design/PROJECT_VARIABLES.md) explains the choices
-behind them.
-
-Variables can also take their value from a node output, and scalar variables can
-appear in file and export paths. The declaration is versioned; calculated values
-are recorded with executions and never written back to `variables.json`.
+Declare variables in `variables.json`, next to `flow.json`, and bind them to
+node parameters, reference them in expressions, or use scalar ones in file and
+export paths. A variable can also take its value from a node output; calculated
+values are recorded with executions and never written back to `variables.json`.
 
 ![The Variables tab lists each value per environment; the editor names the nodes that a change makes stale](images/variables.png)
 
 ## Create and edit values
 
-The **Variables** tab, between **Documentation** and **History**, lists each
-variable with its type, default, value in every environment and the number of
-nodes using it. The selected environment's column is highlighted, and *default*
-marks an environment that inherits the default. Select a variable to edit its
-type, description, default and environment values: turn off **Default** for an
-environment to give it its own value. Before you save, a note names the nodes
-that the change makes stale and in which environments; nothing runs
-automatically. **Used by** lists the bound parameters and the expressions that
-reference the variable, and opens each node in the flow. **Rename…** changes the
-declaration and every reference in one commit, including `{{ var.name }}` in
-expressions, and **Delete** stays disabled while a parameter or an expression
-uses the variable. Readers can browse the tab; editors and project
-administrators change it.
+The **Variables** tab lists each variable with its type, default, value in every
+environment and the number of nodes using it. The selected environment's column
+is highlighted, and *default* marks an environment that inherits the default.
+Select a variable to edit its type, description, default and environment values:
+turn off **Default** for an environment to give it its own value. Before you
+save, a note names the nodes that the change makes stale and in which
+environments; nothing runs automatically. **Used by** lists the bound parameters
+and the expressions that reference the variable, and opens each node in the
+flow. **Rename…** changes the declaration and every reference in one commit,
+including `{{ var.name }}` in expressions, and **Delete** stays disabled while a
+parameter or an expression uses the variable. Readers can browse the tab;
+editors and project administrators change it.
 
 ![The variable button of the status parameter lists compatible variables and creates one from the current value](images/variable-binding.png)
 
@@ -72,10 +65,11 @@ batching, validation and conflict rules.
 }
 ```
 
-Names use lowercase letters, digits and underscores, starting with a letter. A
-declaration accepts `type`, `description`, `default` and `environments`, and
-nothing else. In an environment, a variable takes its value for that
-environment if set, otherwise its default.
+Names use lowercase letters, digits and underscores, starting with a letter.
+An ordinary declaration accepts `type`, `description`, `default` and `environments`.
+[Computed declarations](#calculate-a-value-from-a-node) use `from` instead of
+`default` and `environments`. An ordinary value uses the selected environment
+override when set, otherwise its default.
 
 | Variable type | JSON value | Binds to parameters of type | Inside an expression |
 | --- | --- | --- | --- |
@@ -120,7 +114,7 @@ Problems never block more than the nodes concerned:
 | Malformed `variables.json`, invalid name, unknown type or field | File diagnostic; nodes that reference variables are blocked |
 | Default or environment value not matching the type | Diagnostic on the variable; nodes using it are blocked where that value applies |
 | Reference to an undeclared variable, or to an incompatible type | Diagnostic on the node, which is blocked with its descendants |
-| `identifier` or list variable inside an expression, reference inside a parameter that is not an expression | Diagnostic on the node, which is blocked with its descendants |
+| `identifier` or list variable inside an expression, reference inside an unsupported parameter type | Diagnostic on the node, which is blocked with its descendants |
 | Reference inside quotes or a comment of an expression | Compilation error on the node |
 | No value in the selected environment | The nodes using it are blocked in that environment only |
 | Value for an environment this instance lacks, name suggesting a credential | Warning only |
@@ -195,8 +189,9 @@ become `VARCHAR` values, numbers numeric values, booleans `BOOLEAN` values, and
 dates `DATE` values. `identifier` and list variables cannot be used inside an
 expression: bind a whole `column`, `identifier` or list parameter instead. Write
 a reference as a value, outside quotes and comments; `'{{ var.name }}'` is an
-error rather than a text containing the value. Other parameter types cannot
-contain references: bind the whole parameter instead.
+error rather than a text containing the value. File and destination parameters
+also support [path references](#use-variables-in-paths).
+For other parameter types, bind the whole parameter instead.
 
 A variable referenced in an expression counts like a bound parameter: the run
 records it, fingerprints include its type and value in each environment, and a
@@ -324,6 +319,6 @@ descriptor merges as one unit, so competing source edits require a choice.
 
 ## Process several values
 
-A computed variable supplies one scalar value. To execute a data zone once per
-row of a control output, declare a [data partition dimension](PARTITIONS.md).
+A computed variable supplies one typed value, which can be a scalar or list cell.
+To execute a data zone once per row of a control output, declare a [data partition dimension](PARTITIONS.md).
 Both editors use the same source node, output and column selector.

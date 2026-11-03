@@ -28,10 +28,6 @@ Duckpad decompresses the file, checks its version, platform and signature, and
 installs it locally. **The server needs no Internet connection or restart.**
 The browser must be able to reach Duckpad to upload the file.
 
-For example, a Windows browser connected to a Linux x86-64 server running DuckDB
-2.0.0 receives a link containing `v2.0.0/linux_amd64`, even though the browser runs
-on Windows. Use this same process for each extension your connectors need.
-
 ## Find an extension name
 
 **Available extensions** lists the core extensions known to the server's DuckDB,
@@ -55,11 +51,6 @@ extensions**, or enter a name and select **DuckDB core**, **DuckDB community** o
 **Custom / unsigned builds**, then enable an already installed binary. A reader can inspect the requirements. Only an
 instance administrator can import binaries or change the signature policy.
 
-Each extension fits on one row: the **Activate for this project** checkbox, its
-name, origin and status, then icon buttons whose tooltips name them: **Check
-loading** (flask), **Download server binary** (down arrow), **Open instance
-import** (up arrow, administrators) and **Remove** (bin).
-
 ![Project extensions distinguish an active core capability from a community binary that needs importing](images/project-extensions.png)
 
 - **Import required**: use **Download server binary** and ask an administrator
@@ -74,11 +65,8 @@ import** (up arrow, administrators) and **Remove** (bin).
   retain the requirement, and ask an administrator to resolve it. Activation
   never enables unsigned extensions on its own.
 
-Activation and subsequent execution load local binaries; they do not contact a
-repository or catalog. With an online server, binaries already installed through
-a connector are also available. Browser download followed by import works in
-both connected and airgapped installations; the browser's requests to duckdb.org
-only help find names and are not required.
+Project activation and execution use local binaries. Online connector setup can
+install its declared extensions; project activation never installs on demand.
 
 For example, add **duckfn_statrs** with origin **DuckDB community**, import its
 server binary, and activate it. Create this SQL model without a connection
@@ -113,11 +101,8 @@ never exported with the project. On another instance, the requirement is retaine
 even when its binary is missing. The import dialog lists required extensions;
 open **Extensions** to check availability before running.
 
-Every new execution session loads the enabled requirements, including isolated
-workers and runs started by an external scheduler through the execution API.
-Duckpad does not add a scheduling service: the same execution entry point applies
-to UI, API and externally scheduled runs. Reopening the project or restarting the
-server does not require Internet access once compatible binaries are installed.
+New execution sessions load enabled requirements, including Jobs and isolated
+workers. Compatible imported binaries remain available after a restart.
 
 Unticking **Activate for this project** keeps the declaration with
 `enabled: false`.

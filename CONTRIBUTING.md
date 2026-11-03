@@ -1,6 +1,6 @@
 # Contributing to Duckpad
 
-Thank you for helping improve Duckpad. Bug reports, documentation fixes and pull requests are welcome.
+Bug reports, documentation fixes and pull requests are welcome.
 
 ## Set up a development environment
 
@@ -15,7 +15,7 @@ uv run duckpad start --home .duckpad-dev --no-browser
 
 ## Code layout
 
-- `src/duckpad` is the Python service. [The architecture guide](docs/ARCHITECTURE.md) describes each module, when modules form a sub-package, and the execution invariants.
+- `src/duckpad` is the Python service. [The architecture guide](docs/ARCHITECTURE.md) maps its modules and execution invariants. Modules stay flat by default. A sub-package groups a family of implementations (`trace/`, `migrations/`) or a subsystem reached through a few entry points (`git/`); a shared file name prefix such as `git_` signals a missing sub-package. A package's `__init__.py` documents it and re-exports at most a small entry point.
 - [Instance persistence](docs/PERSISTENCE.md) describes the SQLModel schema, transaction boundaries and Alembic migration workflow.
 - `frontend/src` is the React interface. `api.ts` is the only HTTP client, `routes.tsx` renders the components of `pages/`, and `shell.ts` and `worktree.tsx` hold the session and working branch state they share.
 - `frontend/src/styles` holds the global stylesheets, one file per zone of the interface. `styles/index.css` imports them in cascade order, and only `main.tsx` imports it. Add a new style to the file of its zone; add a new file to `styles/index.css`, never as an import from a component.
@@ -34,6 +34,8 @@ Run the same checks as CI before opening a pull request:
 ```sh
 uv run ruff check src tests scripts
 uv run ruff format --check src tests scripts
+uv run ty check
+uv run python scripts/check_typing_policy.py
 uv run pytest -q
 npm run check --prefix frontend
 npm run lint --prefix frontend

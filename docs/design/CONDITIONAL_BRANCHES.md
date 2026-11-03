@@ -8,19 +8,13 @@ Give a node or component instance an optional `enabled` condition. Resolve it on
 
 For example, `source = 'warehouse'` selects a Parquet source while an unconfigured legacy database branch stays untouched. Both branches remain in the same versioned flow. A downstream export writes the selected result, and run history explains which branch was inactive and why.
 
-## Problems and inspirations
+## Problem
 
 A false SQL `WHERE` predicate can still bind a missing table or open a file. An ordinary union includes both inputs, and separate projects or Job scopes duplicate the shared graph. Conditions must therefore change execution planning, rather than filtering rows after sources have been prepared.
 
-| Approach | Inspiration and behavior | Choice for Duckpad |
-| --- | --- | --- |
-| Enable a resource declaratively | [dbt `enabled`](https://docs.getdbt.com/reference/resource-configs/enabled) excludes disabled resources from the project; references can then fail compilation | Keep a small node property, but preserve inactive nodes and their reasons in the run |
-| Propagate inactive branches and reconnect them explicitly | [KNIME IF/CASE Switches](https://docs.knime.com/build/if-case-switches) activate selected branches; End IF collects active output | Adopt inactivity propagation and an explicit junction; an N-output Switch is deferred |
-| Route around optional work | [Alteryx Detour](https://help.alteryx.com/current/en/designer/tools/developer/detour-tool.html) selects a path; [Detour End](https://help.alteryx.com/current/en/designer/tools/developer/detour-end-tool.html) reconnects the stream | Keep both alternatives visible, including an explicit bypass for an optional transformation |
-| A junction with a different trigger rule | [Airflow branching and trigger rules](https://airflow.apache.org/docs/apache-airflow/2.10.3/core-concepts/dags.html#trigger-rules) distinguish skipped dependencies from failed ones | Ignore inactive inputs only; an active input failure still blocks the junction |
-| A nested conditional activity | [Azure Data Factory If Condition](https://learn.microsoft.com/en-us/azure/data-factory/control-flow-if-condition-activity) executes one of two activity lists | A component instance can disable its whole subgraph without introducing a second workflow language |
-
-These are design inspirations, not compatibility claims. Duckpad keeps its typed variables, SQL engine, explicit runs, component boundaries and immutable result evidence. A generic “ignore missing inputs” setting is unsuitable: an inner join, an export and arbitrary SQL have no common meaning when one input disappears.
+A generic setting to ignore missing inputs cannot define meaningful behavior for
+every join, export or SQL node. Inactivity propagation and the explicit junction
+follow KNIME's IF/CASE switches.
 
 ## Decisions
 
@@ -120,7 +114,7 @@ The current runner already separates computed-value sources from consumers. Exte
 
 Launch scope does not change: whole-flow and targeted launches select nodes as today, then run the active ones. Inactivity only propagates downstream, as in KNIME, so a condition on a transformation does not stop its upstream source from running; place the gate on the source or on a component containing that branch. Targeting an inactive node never overrides its gate.
 
-Future [partitions](PARTITIONS.md) consume this frozen plan: one activation decision per run, shared by every partition. No per-partition reevaluation or references. Partition enumeration needed by active work follows the same source dependency rules; an inactive partitioned branch cannot trigger its data reads or exports.
+[Partitions](PARTITIONS.md) consume this frozen plan: one activation decision per run, shared by every partition. No per-partition reevaluation or references. Partition enumeration needed by active work follows the same source dependency rules; an inactive partitioned branch cannot trigger its data reads or exports.
 
 ### Propagation and failures
 

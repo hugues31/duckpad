@@ -82,7 +82,6 @@ named options such as `header = true` or `delim = ';'` afterward.
 For Parquet use `read_parquet({{ path }})`. A format provided by an extension,
 such as XLSX, may need that extension enabled in the project's **Extensions** tab;
 S3 and databases need a connection. Follow [Connections](CONNECTORS.md#file-formats-and-extensions).
-Every block follows this contract, including queries that also read input ports.
 
 ## Read a database table
 

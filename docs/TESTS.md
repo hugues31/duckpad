@@ -54,8 +54,7 @@ test's status, name, associated output (when the query references exactly one),
 and observed count in run details. The canvas warning badge includes failed
 warning tests. Every test result is retained, independently of the 100-message
 limit. Server logs emit one structured `node_result` line for each failed test,
-with the same context and secret redaction as messages. UI labels are available
-in English, French and Portuguese.
+with the same context and secret redaction as messages.
 
 See [SQL syntax](SQL.md) for the complete contract and
 [results and failing rows](RESULTS.md#tests) to investigate an outcome.

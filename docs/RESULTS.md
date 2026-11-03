@@ -1,13 +1,9 @@
 # Results, samples and logs
 
-Inspect what actually ran, explore its data, and keep the run context alongside
-the numbers.
-
 Selecting a node opens two panels. The **inspector** on the right describes the
-node: its parameters, compiled SQL, documentation and change history, the same
-in every environment. The **results panel** under the canvas shows what the node
-produced in the environment selected in the top bar: whatever changes when you
-switch environment or run again is there.
+node: its parameters, compiled SQL, documentation and change history. Resolved
+variables and compiled SQL follow the selected environment. The **results panel**
+under the canvas shows the data, tests and logs for that environment.
 
 ![The results panel of Paid orders on a sample of partner orders above 300, sorted by amount](images/results-data.png)
 
@@ -19,13 +15,8 @@ inputs: showing an input keeps the current sample when its columns allow it, to
 check an operation before and after. An export node has no rows: its panel opens
 on **Log**, with **Tests**. A component instance shows its exposed outputs.
 
-Under the node kind, the inspector keeps a one-line **result summary**: the
-**Valid** or **Stale** badge, the number of outputs, warning badges for
-messages and failing tests, **Last run failed** after a failure, the time of the
-run and a **Results** link. Each part opens the results panel on the matching
-tab: the badge and the outputs open **Data**, messages, the failure and the run
-time open **Log**, failing tests open **Tests**. Like both panels, the summary
-follows the environment selected in the top bar without repeating it.
+The inspector's result summary links to Data, Log and Tests, showing validity,
+warnings and the latest failure for the selected environment.
 
 ## Data and samples
 
@@ -133,7 +124,7 @@ the run: they are paged like a sample and never stored. It needs a valid result.
 
 ![The Log tab: run summary, timeline and executed SQL](images/results-log.png)
 
-The **Log** tab tells the story of the latest run of the node: its status, start
+The **Log** tab shows the latest run of the node: its status, start
 and end, duration, commit and whether it matches the current configuration, who
 launched it, its scope and warnings. The timeline lists the inputs, each output
 with its row count and computing time, each `-- @message` result, the tests and
@@ -144,7 +135,9 @@ the statements, bound values and variables of that run, with secrets masked.
 
 ## API
 
-- `GET /api/worktrees/{worktree}/preview/{node}` accepts `search` (all columns),
+These internal UI routes require an explicit `environment` query parameter.
+
+- `GET /api/worktrees/{worktree}/preview/{node}?environment=dev` accepts `search` (all columns),
   `filter` (a SQL condition), `order` (a JSON list of `[column, direction]`),
   `method` (`first` or `random`), `rows` and `seed` besides `port`, `limit` and
   `offset`. `matched_count` counts the rows matching the filter and search;

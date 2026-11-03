@@ -109,9 +109,10 @@ results; switching environment never starts a run.
 | Oracle | Read attached tables; export to an existing table with OraDuck | DuckDB 2.0.0, signed community OraDuck 0.4.0, Oracle 19.3, Oracle Instant Client 19.32, Linux x86_64 |
 | MySQL and SQLite examples | Load table and Export table through [published definitions](#published-examples-mysql-and-sqlite) | DuckDB 2.0.0 with matching `mysql` and `sqlite` extensions, MySQL 8.4, Linux x86_64 (CI) |
 
-The table records connector validation of the embedded engine, and of the isolated worker where stated. File formats are not connectors; XLSX has its own [validation record](#xlsx-workbooks). The isolated HTTP worker additionally requires Linux Landlock; local CSV/Parquet execution, exports and lineage are covered by the account/permission tests. Remote S3/Oracle deployments need validation with their extension and network policy in this execution mode.
-
-These are the tested combinations, not claims that every newer DuckDB or operating-system build has been validated. A matching extension build is required for the installed DuckDB version. Other platforms and live AWS deployments need validation in their own environment. Raw results are in `docs/validation/`.
+These are recorded combinations, not validation of every newer build or provider.
+Use an extension matching the installed DuckDB version. Isolated execution also
+requires Linux Landlock; validate remote deployments with their network policy.
+See [XLSX limits](#xlsx-workbooks) and the raw reports in `docs/validation/`.
 
 ## Project files and storage locations
 
@@ -186,16 +187,9 @@ default: no connection or administrator is needed.
 To read or write workbooks in a server folder, select a granted Server folder
 connection as the Location, as for CSV and Parquet.
 
-New projects include both templates. Existing projects retain their versioned
-templates; create equivalent source/export templates through **New SQL template**
-or copy `load_xlsx` and `export_xlsx` from a new project's Code workspace.
-No Python spreadsheet dependency is needed. Duckpad's container image builds
-DuckDB with `excel`. Other DuckDB builds, such as the PyPI wheel installed by
-`pip install duckpad`, need it enabled in the project's **Extensions** tab once an
-instance administrator has imported its binary (see
-[File formats and extensions](#file-formats-and-extensions)); for disconnected
-deployments, follow the [offline extension guide](OFFLINE_EXTENSIONS.md).
-CSV/Parquet-only projects do not load it.
+New projects include both templates. For other projects, copy them from a new
+project or write equivalent SQL. See [File formats and extensions](#file-formats-and-extensions)
+for enabling `excel` when it is not linked into the runtime.
 
 Imports use native DuckDB inference: numbers generally become `DOUBLE`, while
 formatted dates, times and booleans retain their inferred types. Inconsistent cells
@@ -226,7 +220,8 @@ for native format behavior and limits.
 
 Configure a root, access key ID, secret access key, region and endpoint per environment. The preset loads `httpfs` and creates a temporary S3 secret. Set `root` to a bucket prefix such as `s3://landing/raw/` and select the connection as a file node's Location: relative paths are appended to it. Full `s3://bucket/key.csv` URIs also work, with or without a root. `use_ssl` defaults to true and `url_style` to `vhost`; a local S3-compatible endpoint can use false and `path` respectively.
 
-The local integration test reads CSV and Parquet by relative path under a root without a trailing slash, joins them, exports CSV under the same root, and reads through an administrator-declared storage type with its own URI root. It also checks connection reuse, lineage and replacement of the same destination. CI runs it on every pull request. It does not validate real AWS credentials, IAM policies, TLS configuration or every provider's object-storage behavior.
+S3 checks use a local Moto emulator; live AWS credentials, IAM policies and
+provider-specific behavior require separate validation. Reproduce the check with:
 
 ```sh
 uv sync --group integration
@@ -258,7 +253,9 @@ Configure a host, port, database, user and password per environment. The built-i
 
 Duckpad's container image links `postgres` statically, built for x86-64 processors without AVX2 or BMI2, so nothing is downloaded. Other DuckDB builds, such as the PyPI wheel of `pip install duckpad`, install the extension from DuckDB's core repository on first use; air-gapped instances [import it](OFFLINE_EXTENSIONS.md) like any other extension.
 
-The acceptance test creates a uniquely named schema in a dev and a prod database, then runs Load table, an aggregate and Export table in both environments, in embedded and isolated execution. It checks repeated appends without truncation, cell lineage, Test connection, the inspector's listing, including a table created after a run, Additional options (`application_name` and TLS on the server side), and the errors for a wrong password, an unreachable host and a refused certificate. It drops only its own schema. CI runs it on every pull request against a PostgreSQL service.
+The integration script uses disposable schemas in dev and prod, checking reads,
+appends, lineage, listing, authentication and TLS failures. It drops only its
+own schemas:
 
 ```sh
 # Credentials of a disposable test server, never a production one.
@@ -324,7 +321,7 @@ Every definition declares its `family`, `database` or `storage`; definitions wit
 }
 ```
 
-Create a named connection pointing to different database files in `dev` and `prod`, grant it, and read and write it with [Load table and Export table](#database-tables), schema `main`: no template or code change is needed. Custom source and export templates can also read `{{ connection }}.{{ resource }}` or explicitly `INSERT INTO` a declared attached destination. `tests/test_database_connections.py` and `tests/test_catalog.py` cover this extension-free scenario, including reuse and historical project code using current catalog settings.
+Create a named connection pointing to different database files in `dev` and `prod`, grant it, and read and write it with [Load table and Export table](#database-tables), schema `main`: no template or code change is needed. Custom source and export templates can also read `{{ connection }}.{{ resource }}` or explicitly `INSERT INTO` a declared attached destination.
 
 Database files work in isolated execution, including attached DuckDB files and SQLite. For each granted database connection, the worker opens the parent directory of every local parameter declared with `"type": "file"` in the selected environment. The directory is readable, and writable when the connector declares the `write` capability: DuckDB WAL files and SQLite journals are created beside the database.
 

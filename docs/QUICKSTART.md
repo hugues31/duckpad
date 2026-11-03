@@ -154,9 +154,6 @@ and **History** records the executions. Before a larger experiment, create a
 **New working branch**, then [compare and merge](GIT.md) the changes. Use
 **Documentation** to explain the project to the next person.
 
-You now have a source, a parameterized transformation, two outputs, a data test
-and a message, with results you can explain.
-
 ## Where next?
 
 - [Prepare columns and values](DATA_PREPARATION.md) with guided forms.

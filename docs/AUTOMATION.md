@@ -37,8 +37,7 @@ and the [access matrix](INSTALLATION.md#accounts-and-project-access).
 
 `duckpad run` launches a Job, prints its progress, waits for the outcome and exits
 with a code your scheduler can act on. It ships with the `duckpad` package and uses
-only the Python standard library: it loads neither DuckDB nor the server and starts
-in about a tenth of a second.
+only the Python standard library, without loading DuckDB or the server.
 
 ```bash
 export DUCKPAD_SERVER=https://duckpad.example.com
@@ -158,46 +157,6 @@ Invoke-RestMethod -Uri "$env:DUCKPAD_SERVER/api/v1/runs/$($run.id)/log" -Headers
 if ($run.status -ne "success") { exit 1 }
 ```
 
-With Airflow's HTTP provider, put the server in an HTTP connection and the token in
-its Extra field as `{"Authorization": "Bearer dpk_…"}`. `HttpOperator` succeeds as
-soon as the run is accepted, so always follow it with a sensor:
-
-```python
-from airflow.exceptions import AirflowFailException
-from airflow.providers.http.operators.http import HttpOperator
-from airflow.providers.http.sensors.http import HttpSensor
-
-
-def finished(response):
-    status = response.json()["status"]
-    if status in ("failed", "partial_failure", "canceled", "interrupted"):
-        raise AirflowFailException(f"Duckpad run {status}")
-    return status == "success"
-
-
-launch = HttpOperator(
-    task_id="launch_sales_daily",
-    http_conn_id="duckpad_prod",
-    method="POST",
-    endpoint="api/v1/jobs/sales-daily-prod/runs",
-    headers={"Content-Type": "application/json", "Idempotency-Key": "{{ run_id }}:{{ ti.try_number }}"},
-    data='{"trigger": {"source": "airflow", "reference": "{{ run_id }}"}}',
-    response_filter=lambda response: response.json()["id"],
-)
-wait = HttpSensor(
-    task_id="wait_sales_daily",
-    http_conn_id="duckpad_prod",
-    endpoint="api/v1/runs/{{ ti.xcom_pull(task_ids='launch_sales_daily') }}",
-    response_check=finished,
-    poke_interval=30,
-    mode="reschedule",
-)
-launch >> wait
-```
-
-Neither operator cancels the run when Airflow kills the task, and a busy Job fails
-the launch task like any other refusal.
-
 ## Launch and follow a run
 
 These examples use `curl` and `jq`. Load `DUCKPAD_TOKEN` from your secret store;
@@ -228,7 +187,8 @@ duckpad_api "$DUCKPAD_SERVER/api/v1/runs/$id/log"
 
 A launch returns **202 Accepted**, including when a retry retrieves an existing
 run. A run may already be finished when the response arrives. Its representation
-contains no captured SQL, connection settings or variable values:
+includes resolved variables and partition metadata, but excludes captured SQL
+and connection settings:
 
 ```json
 {
@@ -244,6 +204,8 @@ contains no captured SQL, connection settings or variable values:
     "total": 12, "success": 0, "failed": 0, "running": 0,
     "pending": 12, "blocked": 0, "canceled": 0, "interrupted": 0
   },
+  "variables": {},
+  "partitions": null,
   "trigger": {"source": "airflow", "reference": "sales_daily/scheduled-2026-10-31"},
   "requester": {"id": "user_example", "username": "scheduler", "token_name": "Airflow"},
   "links": {
@@ -254,7 +216,23 @@ contains no captured SQL, connection settings or variable values:
 }
 ```
 
-The optional launch body is `{}` or `{"trigger":{"source":"…","reference":"…"}}`.
+The optional launch body accepts `trigger`, `partitions` and `partition_execution`.
+Use `{}` for the default full run. For example, to retry failed partition keys:
+
+```json
+{
+  "trigger": {"source": "airflow", "reference": "sales_daily/retry-2"},
+  "partitions": {"mode": "failed"},
+  "partition_execution": {"parallelism": 2, "on_error": "continue"}
+}
+```
+
+Partition modes are `all`, `failed`, `missing` and `selected`. `selected` requires
+a `keys` array of typed values; other modes omit it. `parallelism` is a positive
+integer and `on_error` is `stop` or `continue`. These fields require a partitioned
+flow; otherwise the launch returns 422 with `invalid_project`. See
+[partitions](PARTITIONS.md#jobs-api-and-cli) for CLI flags and partition evidence.
+
 `source` is required when a trigger is supplied (1–128 characters); `reference`
 is optional (up to 2048 characters). The trigger is caller-declared metadata, while
 `requester` records the authenticated account and token name. Unknown fields are

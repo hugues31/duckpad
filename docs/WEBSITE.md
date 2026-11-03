@@ -1,17 +1,8 @@
 # Website and documentation
 
-The site in `website/` uses **Astro 7** to emit static HTML. Its small browser
-scripts handle theme choice, code copying and documentation search. Fonts are
-self-hosted; videos load only on request. Navigation, content and links work
-without JavaScript. Motion respects `prefers-reduced-motion` and native page
-transitions progressively enhance supported browsers.
-
-The header's GitHub badge reads the repository's star count once per static
-build, using `GITHUB_TOKEN` when available. If GitHub is unreachable or rate
-limited, it keeps a working "Star" link without inventing a count. The badge
-needs no browser request. Homepage entrances and scroll reveals are progressive
-enhancements; reduced motion disables them, and content stays visible without
-JavaScript.
+The site in `website/` uses Astro to build static HTML from the guides in `docs/`.
+Navigation works without JavaScript; search, theme selection and code copying use
+small browser scripts. Fonts are self-hosted and videos load on request.
 
 ## Work on the site
 
@@ -22,12 +13,11 @@ npm ci --prefix website
 npm run dev --prefix website
 ```
 
-Astro loads the public guides directly from `docs/`. Edit those Markdown files
-instead of maintaining a second copy. Register new guides in
-`website/src/content.config.ts` and `website/src/lib/docs.ts` so navigation,
-search and page generation stay in sync. Relative Markdown links are rewritten
-at build time; the same source remains readable on GitHub. Internal operator
-documentation is excluded from the public site's collection.
+Edit the Markdown in `docs/`. Register a new public guide in both
+`website/src/content.config.ts` and `website/src/lib/docs.ts`. The build rewrites
+relative guide links and copies `docs/images/` into the site's media directory.
+For repository-only documents, use `../docs/<FILE>.md` so the site links to GitHub
+instead of generating a nonexistent documentation route.
 
 ```sh
 npm run check --prefix website
@@ -35,66 +25,33 @@ npm run build --prefix website
 npm run preview --prefix website
 ```
 
-`WEBSITE_BASE_PATH` controls the deployment prefix (default `/`). `SITE_ORIGIN`
-optionally supplies the public canonical origin; leave it unset for private
-previews. The built site is in `website/dist/`. The application image also serves
-a separately built copy under `/site/` so a ticket preview includes the website.
+`WEBSITE_BASE_PATH` sets the deployment prefix (default `/`). `SITE_ORIGIN` sets
+an optional public canonical origin; leave it unset for private previews.
+Output goes to `website/dist/`. The application image serves a separate build
+under `/site/`.
 
 ## Release notes
 
-The `/releases/` page and static `/releases.json` feed retrieve published versions
-from the GitHub Releases API during the build. Notes are rendered as sanitized
-Markdown, ordered by publication date, with pre-releases labeled separately.
-Drafts and API metadata are excluded. Browsers receive only static content;
-no GitHub credential or client-side API request is needed.
-
-CI uses its read-only `GITHUB_TOKEN` to read releases while the repository is
-private. An authenticated API failure fails the build. Without a token, an API
-failure uses the bundled `website/src/data/releases.json` snapshot so local and
-container builds remain usable offline or while the repository is private.
-Refresh that snapshot before shipping a preview with new release notes:
+`/releases/` and `/releases.json` are built from published GitHub releases.
+The build uses `GITHUB_TOKEN` when supplied; authenticated API failures fail it.
+Without a token, an API failure falls back to `website/src/data/releases.json`.
+Refresh that snapshot with:
 
 ```sh
 npm run releases:update --prefix website
 ```
 
-For a private repository, supply `GITHUB_TOKEN` through your shell's secret
-manager. Never commit it or pass it to browser code. The website workflow also
-runs after a successful **Release Duckpad** workflow, since releases created by
-`GITHUB_TOKEN` do not themselves trigger other release workflows. This rebuilds
-the site from `main` after publication completes. After manually editing or
-deleting release notes, run the website workflow with `workflow_dispatch`.
+Keep tokens in the build environment. The browser receives static content only.
+The GitHub star count is also read at build time; if unavailable, the header keeps
+a working Star link without a count.
 
 ## Regenerate the demonstrations
 
-The homepage's one-minute product film is a separately edited HyperFrames
-production with real application footage, a composited dimensional cursor,
-American English narration and music generated with ElevenLabs. It lives at
-`website/public/demos/duckpad-overview.mp4`, with English WebVTT captions beside
-it and a poster in `docs/images/duckpad-overview.jpg`. The player loads media
-only when requested. Its custom controls provide keyboard-accessible playback,
-seeking, volume, English captions and
-fullscreen, with touch-sized buttons on mobile. Without JavaScript, native video
-controls remain available. The README links its poster to the homepage player.
-
-The film alternates real light and dark theme recordings. Its narration stays in
-one continuous take, with shots and captions aligned to the voice. The captured
-palette item and recorded drag events restore the browser's drag preview in the
-composite; the node itself is created by the application on drop.
-
-The editable production project, source recordings and repeatable capture
-scripts are maintained privately outside this repository. For a product-film
-update, regenerate the affected shots there, review the complete render and
-replace the MP4, captions and poster together. Keep media free of credentials
-and private infrastructure. The automated recorder below updates
-the Northstar tutorial on the example guide; it does not overwrite the edited
-homepage film.
-
-The recorder drives the **real Duckpad application**, using the built-in Northstar
-fixtures and a disposable local instance. It checks the pipeline result and
-lineage before saving media. A visible pointer follows mouse movement and clicks.
-Captions explain each step, and the written Northstar tour provides a transcript.
-Sign-in is completed before the recording begins; credentials are never recorded.
+The homepage film is an edited production at
+`website/public/demos/duckpad-overview.mp4`, with WebVTT captions and the poster
+`docs/images/duckpad-overview.jpg`. Its source project is maintained separately.
+For a film update, replace and review the video, captions and poster together.
+The automated recorder below updates the Northstar tutorial, not that film.
 
 ```sh
 bash scripts/setup.sh
@@ -104,79 +61,47 @@ npm run build --prefix website
 npm run docs:test --prefix frontend
 ```
 
-`docs:capture` runs both the tutorial recorder (`frontend/docs/capture.spec.ts`)
-and the guide screenshots (`frontend/docs/screenshots.spec.ts`). To refresh only
-the screenshots without recording the video:
+`docs:capture` runs `frontend/docs/capture.spec.ts` for the Northstar video and
+`screenshots.spec.ts` for guide images. To update only screenshots:
 
 ```sh
 npm run docs:screenshots --prefix frontend
 ```
 
-The screenshot suite signs in to a disposable local instance, creates synthetic
-Northstar projects, and exercises the real interface. It waits for successful
-runs, populated editors and comparison results before capturing. English, light
-theme, UTC and a fixed viewport keep the scenes consistent. Transient toast
-notifications, live CPU/RAM meters and variable Git revision metadata are hidden
-during capture.
-No live instance, external connection credentials or private paths are needed.
-Administrative scenes use synthetic accounts. The SSO form shows placeholder
-origins and a masked sample secret; the sign-in scene uses the disposable OIDC
-provider and verifies a complete signed login. Extension screenshots show the
-real server runtime and download link without downloading or importing a binary.
+Captures use a disposable authenticated instance and synthetic fixtures. The
+suite verifies runs and lineage before capturing. Keep English, light theme,
+UTC and the fixed viewport for consistent images. Sign-in happens before recording;
+never include credentials or private infrastructure in media.
 
-| Images in `docs/images/` | Guides |
-| --- | --- |
-| `quickstart-results.png`, `quickstart-lineage.png` | The 15-minute quickstart; captured by executing its SQL snippets |
-| `new-project.png`, `workspace.png`, `parameters.png` | Northstar and authoring |
-| `lineage.png` | Example tour and lineage |
-| `code.png`, `component.png`, `node-documentation.png` | Authoring and example tour |
-| `variables.png`, `variable-binding.png`, `variable-expression.png`, `run-variables.png` | Authoring |
-| `connection.png`, `environments.png` | Connections |
-| `new-branch.png`, `git-comparison.png` | Version control |
-| `sso-settings.png`, `sso-sign-in.png` | Single sign-on |
-| `users.png`, `project-access.png`, `preferences.png` | Installation and accounts |
-| `extensions.png` | Offline extensions and extension import details |
+The recorder writes `website/public/demos/northstar.webm` and its captions.
+Screenshots belong in `docs/images/`; do not edit generated copies under
+`website/public/demos/`. Commit updated source media when changing a demonstrated
+workflow so GitHub and container previews show the same instructions.
 
-The tutorial recorder updates `website/public/demos/northstar.webm` and its
-WebVTT captions. The static build copies screenshots from `docs/images/`; do not
-edit the generated copies in `website/public/demos/`. Commit source screenshots
-when changing a demonstrated workflow so GitHub's Markdown and container previews
-also display the updated images. The published website regenerates them during
-every CI build; it does not depend on these committed copies being refreshed
-manually. Keep fixtures synthetic and assertions meaningful.
-
-Set `DUCKPAD_E2E_PORT` to isolate the recorder's backend port. The website tests
-use `DUCKPAD_SITE_PORT` and `WEBSITE_BASE_PATH`, so both root and subpath hosting
-can be checked. Browser executable and library overrides are shared with the
-existing frontend test configuration.
+Set `DUCKPAD_E2E_PORT` for the capture backend and `DUCKPAD_SITE_PORT` for website
+tests. Test subpath hosting with matching `WEBSITE_BASE_PATH` values at build and
+test time. Browser executable and library overrides follow the frontend's
+Playwright configuration.
 
 ## Automatic publishing
 
-`.github/workflows/website.yml` runs on pull requests, pushes to `main`, completed
-release workflows and manual dispatch. It builds the application, regenerates
-the media from that revision,
-checks and builds the site, and tests its links, search, mobile navigation,
-reduced motion and video. A failed demonstration prevents publication. This
-keeps the published screenshots and walkthrough tied to the code being shipped
-without a bot committing generated media back to the repository.
+`.github/workflows/website.yml` runs on pull requests, `main` pushes, completed
+release workflows and manual dispatch. It builds the app, regenerates tutorial
+media and screenshots, builds the site, and checks links, search, mobile
+navigation, accessibility and video. Pull requests upload a review artifact.
 
-To enable public hosting, a repository administrator selects **GitHub Actions**
-under **Settings → Pages → Build and deployment**, and sets the repository Actions
-variable **`PUBLISH_WEBSITE`** to **`true`**. The workflow uses GitHub's returned
-origin and base path, so project Pages and a configured public custom domain use
-the correct links. Only `main` can publish; pull requests upload a review artifact.
-Until hosting is enabled, CI validates a `/duckpad/` subpath build and leaves
-publication disabled. No private preview address is included in that artifact.
+To publish, select **GitHub Actions** under **Settings → Pages → Build and
+deployment** and set the Actions variable **`PUBLISH_WEBSITE=true`**. Only `main`
+publishes. The workflow uses the Pages origin and base path; without publishing
+enabled, it validates a `/duckpad/` build. Pages hosts the guides and presentation,
+not the Python application.
 
-Publishing is static-only: GitHub Pages hosts the presentation and guides, not the
-Python application. The quickstart explains how to run your own Duckpad instance.
+The workflow rebuilds after **Release Duckpad** completes. After manually editing
+or deleting release notes, run it with `workflow_dispatch`.
 
 ## Changing a product workflow
 
-1. Update the relevant guide and the recording selectors in
-   `frontend/docs/screenshots.spec.ts` or `frontend/docs/capture.spec.ts` alongside
-   the application change. Add screenshots next to the relevant instructions,
-   with descriptive alt text and relative `images/` links.
-2. Run the capture, inspect the screenshots/video and commit the updated media.
-3. Run the site checks and browser tests, including a subpath build when changing
-   navigation or assets. CI repeats the recording before publishing from `main`.
+1. Update its guide and the relevant selectors in the capture or screenshot suite.
+2. Run the capture, inspect the output and commit the updated media.
+3. Run the website checks and browser tests. Test a subpath build when changing
+  navigation or assets.

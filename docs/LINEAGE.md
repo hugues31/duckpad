@@ -35,7 +35,8 @@ An output whose query reads an external resource, or no flow data at all, is a l
 | Ordered outputs and nested component compositions | Supported | Each step links to the actual earlier output from the same execution |
 | Nonrecursive CTEs and derived tables | Supported with the duplicate-occurrence limitation below | Deterministic intermediate steps are materialized on demand from retained data |
 
-The native-equivalence suite separately checks values, types and multiplicities for projections, decimal calculations, joins, grouping, windows, CTEs and set operations. The example combines the required baseline across reusable pipeline steps. The coverage target beyond that baseline remains incremental.
+Native-equivalence tests compare values, types and multiplicities with
+uninstrumented DuckDB. The matrix describes verified coverage, not all SQL.
 
 ## Explicit limitations
 

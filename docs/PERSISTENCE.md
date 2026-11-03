@@ -2,7 +2,7 @@
 
 Duckpad stores instance metadata in SQLite through SQLModel. Alembic applies the
 packaged revisions in `src/duckpad/migrations/versions/` before the application
-starts serving requests. The single `0001_baseline` revision creates all 29
+starts serving requests. The `0001_baseline` revision creates the
 business tables, including assistant conversations, API tokens, Jobs,
 idempotency keys and partitions. It seeds the `dev` and `prod` environments,
 but no connector or connection.

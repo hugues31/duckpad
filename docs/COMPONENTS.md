@@ -5,9 +5,18 @@ the same logic across a project or import an independent copy elsewhere.
 
 ## Nodes and connections
 
-`flow.json` holds `nodes` and `edges`. Normal nodes own `nodes/<node-id>.sql` and have no `template` field. Linked nodes reference a local `template`; component instances reference a local `component`. All own their parameters and position. An optional `origin` records where normal code came from without linking it. An optional `preset` retains the palette icon and guided form after conversions or imports; it never selects executable code. Edges use stable `source`, `sourceHandle`, `target` and `targetHandle` IDs. Selecting an input in the inspector edits the same edge as dragging a port connection. An input has at most one source; an output can feed many inputs.
+Connect ports on the canvas or select an upstream output in the inspector. Each
+input has one source; an output can feed many inputs. `flow.json` stores nodes
+and edges by stable IDs. A normal node owns `nodes/<node-id>.sql`; a linked node
+names a local `template` and a component instance a local `component`. An
+optional `origin` records where normal code came from without linking it; an
+optional `preset` keeps the palette icon and guided form but never selects
+executable code. Edges use `source`, `sourceHandle`, `target` and `targetHandle`.
+See [code ownership](AUTHORING.md#editing-node-code) for normal and linked nodes.
 
-Drag an input or output connection onto empty canvas space to open **Add a connected node**. Search the local templates and components, then choose a port to create the node at the drop position and connect it in one save. The list only offers nodes with ports in the required direction. Use the arrow keys and Enter, or click a result; Escape or a click outside cancels without changing the graph. Starting from an occupied input replaces its previous connection when the new node is added.
+Drag a port onto empty canvas space to **Add a connected node**. Choose a
+compatible template/component and port to create and connect it in one save.
+Starting from an occupied input replaces its previous connection.
 
 ## Group and open components
 

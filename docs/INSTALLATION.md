@@ -39,9 +39,9 @@ duckpad start --home /path/to/new-instance
 ```
 
 The new instance creates a new administrator password. Reconfigure accounts and
-connections and import your project Git repositories in the current
-[file format](AUTHORING.md); the old instance's execution history remains in its
-original database.
+connections, then import each project as a ZIP downloaded from the previous
+version; its files must follow the current [file format](AUTHORING.md).
+The old instance's execution history remains in its original database.
 
 For air-gapped deployments, [download extensions on any connected computer and
 import them into Duckpad](OFFLINE_EXTENSIONS.md) before running connectors that
@@ -289,11 +289,11 @@ for deployment requirements and file access boundaries.
 
 ## Preferences and result lifetime
 
-Instance admins can monitor server CPU and RAM in the workspace toolbar. Click
-either indicator for two minutes of history; samples refresh every two seconds.
-Measurements include the API process and its active SQL workers, with visible CPU
-affinity and Linux cgroup limits taken into account. Missing measurements appear
-as unavailable. History resets on reload or sign-out.
+Instance admins can monitor server CPU and RAM in the top bar. Click either
+indicator for two minutes of history; samples refresh every two seconds. Values
+are machine-wide and include other applications. In a container they follow what
+its runtime exposes, usually the host rather than the container's limits. Missing
+measurements appear as unavailable. History resets on reload or sign-out.
 
 Language defaults to the first supported language in your browser preferences
 (English, French or Portuguese, with English as the fallback), and the theme defaults to your
