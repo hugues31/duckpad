@@ -559,12 +559,11 @@ function ProviderCard({
               aria-label={t("assistantAuthentication")}
               value={provider.auth ?? "api_key"}
               onChange={(e) =>
+                // Saved credentials stay until a save with the other method clears them.
                 onChange({
                   auth: e.target.value as "api_key" | "oauth2",
                   api_key: "",
-                  has_key: false,
                   client_secret: "",
-                  has_secret: false,
                 })
               }
             >

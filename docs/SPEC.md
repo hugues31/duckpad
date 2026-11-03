@@ -114,13 +114,13 @@ context, conversation history and requested tool results:
 The data-reading switch governs result access, not secrets embedded in
 user-authored text. Questions, code, variables and commit messages can contain
 sensitive values even when data reading is disabled. Turning it off prevents
-resuming conversations that previously allowed data, so old values are not resent.
-Provider discovery uses the configured API key or OAuth2 credentials; a connection
-test sends only a short verification prompt. Provider and token endpoint redirects
-are disabled. OAuth2 client secrets are write-only, encrypted in instance storage,
-and never included in project exports.
-Tokens are cached only in memory; changing the provider or credential identity
-prevents reusing the saved secret or token.
+resuming conversations that previously allowed data, so old values are not
+resent. Provider discovery uses the configured API key or OAuth2 credentials; a
+connection test sends only a short verification prompt. Provider and token
+endpoint redirects are disabled. OAuth2 client secrets are write-only, encrypted
+in instance storage, and never included in project exports. Tokens are cached
+only in memory; changing the provider or credential identity prevents reusing
+the saved secret or token.
 
 Tools cannot execute arbitrary SQL, access arbitrary files or change instance
 settings. Each writing action produces a commit; Undo creates an inverse change

@@ -303,6 +303,7 @@ class Assistant:
             if resume is not None
             else None
         )
+        hold = max(map(len, self.configuration.secrets()), default=0)
 
         def event(kind, **content):
             return json.dumps(deps.safe({"type": kind, **content}), ensure_ascii=False) + "\n"
@@ -310,7 +311,6 @@ class Assistant:
         def text_delta(text, final=False):
             nonlocal buffer
             buffer = deps.safe(buffer + text)
-            hold = max(map(len, self.configuration.secrets()), default=0)
             end = len(buffer) if final else max(0, len(buffer) - hold)
             chunk, buffer = buffer[:end], buffer[end:]
             turn["text"] += chunk

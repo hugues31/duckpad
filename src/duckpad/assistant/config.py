@@ -134,9 +134,8 @@ class Configuration:
         self.tokens: dict[tuple, TokenState] = {}
 
     def secrets(self):
-        return [
-            p.get(field, "") for p in self.get()["providers"] for field in ("api_key", "client_secret")
-        ] + [state.token for state in self.tokens.values()]
+        # Tokens are never offered to the model; holding back JWT-sized text would stall streaming.
+        return [p.get(field, "") for p in self.get()["providers"] for field in ("api_key", "client_secret")]
 
     def get(self):
         return {**Settings().model_dump(), "revision": "", **self.store.get("settings", "assistant", {})}
@@ -352,9 +351,6 @@ class Configuration:
                     sdk = OpenAIProvider(
                         base_url=provider["base_url"] or BASE_URLS[kind], api_key=key, http_client=client
                     )
-                    if auth is not None:
-                        # The auth flow owns the single retry; do not retry token failures in the SDK.
-                        sdk.client.max_retries = 0
                 model = OpenAIChatModel(name, provider=sdk)
             if custom and provider.get("streaming") is False:
                 model = NonStreamingModel(model)

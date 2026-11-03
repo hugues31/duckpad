@@ -74,6 +74,13 @@ test("configure an OAuth2 gateway without exposing its saved secret", async ({
       exact: true,
     }),
   ).toBeVisible();
+  // Switching methods without saving keeps the saved secret.
+  const authentication = provider.getByLabel("Authentication", { exact: true });
+  await authentication.selectOption("api_key");
+  await authentication.selectOption("oauth2");
+  await expect(
+    provider.getByText("Secret saved", { exact: true }),
+  ).toBeVisible();
   await provider
     .getByLabel("Client ID", { exact: true })
     .fill("different-client");
@@ -82,9 +89,7 @@ test("configure an OAuth2 gateway without exposing its saved secret", async ({
   );
   await expect(secret).toHaveValue("");
   await expect(secret).toHaveAttribute("required", "");
-  await provider
-    .getByLabel("Authentication", { exact: true })
-    .selectOption("api_key");
+  await authentication.selectOption("api_key");
   await expect(provider.getByLabel("API key", { exact: true })).toBeVisible();
   await expect(secret).toHaveCount(0);
 });

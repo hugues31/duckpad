@@ -204,10 +204,10 @@ reading enabled cannot resume while the option is disabled: start a new one so
 its previous values are not resent.
 
 Even with data reading disabled, your questions, saved code and its literal
-values, documentation, variable declarations and values, flow parameters,
-output schemas, status metadata and branch commit metadata can reach the
-selected provider. This is a data-result policy, not a secret scanner for
-user-authored project text. Keep credentials in instance connections. Provider
-keys, OAuth2 client secrets and resolved connection secrets are never offered to
-the model. See the
-[provider data contract](../docs/SPEC.md#ai-assistant) for the full list.
+values, documentation, variable declarations and values, flow parameters, output
+schemas, status metadata and branch commit metadata can reach the selected
+provider. This is a data-result policy, not a secret scanner for user-authored
+project text. Keep credentials in instance connections. Provider keys, OAuth2
+client secrets and resolved connection secrets are never offered to the model.
+See the [provider data contract](../docs/SPEC.md#ai-assistant) for the full
+list.
