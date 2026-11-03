@@ -47,11 +47,7 @@ npm run test:e2e --prefix frontend
 
 Use `uv run ruff format src tests scripts` and `npm run format --prefix frontend` to fix formatting. Add a regression test with every bug fix: a Python test for service behavior, a Vitest unit test for a frontend helper or shared hook, a Playwright scenario for interface behavior.
 
-CI also builds the release artifacts and runs the Python suite from the extracted
-source archive in a separate job, so packaging failures do not wait for browser
-tests. When adding a script or fixture used by tests, include it in the source
-distribution in `pyproject.toml`. After building the frontend, reproduce this
-check from the repository root:
+CI also runs the Python suite from the extracted source archive. A script or file read by a test must be listed in the sdist `include` of `pyproject.toml`. To reproduce that check after building the frontend:
 
 ```sh
 uv build

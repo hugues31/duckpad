@@ -7,7 +7,8 @@ permissions:
   contents: read
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  # Every commit merged into main gets a result; a new push only supersedes a pull request run.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   python:
     name: Python ${{ matrix.python }}
@@ -216,17 +217,3 @@ jobs:
           uv venv /tmp/duckpad-smoke --python 3.12
           uv pip install --python /tmp/duckpad-smoke/bin/python dist/*.whl
           uv run python scripts/smoke_wheel.py --python /tmp/duckpad-smoke/bin/python
-
-  browser-package:
-    # Preserve the existing required check and fail it if either independent job fails or is skipped.
-    name: Frontend, browser tests and package
-    needs: [browser, package]
-    if: always()
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - name: Require browser and package validation
-        env:
-          BROWSER_RESULT: ${{ needs.browser.result }}
-          PACKAGE_RESULT: ${{ needs.package.result }}
-        run: test "$BROWSER_RESULT" = success && test "$PACKAGE_RESULT" = success
