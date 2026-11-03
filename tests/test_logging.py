@@ -173,3 +173,11 @@ def test_other_access_logs_retain_their_level(caplog, method, path, status):
 @pytest.mark.parametrize(("level", "expected"), [("debug", "DEBUG"), ("info", "INFO"), ("error", "ERROR")])
 def test_node_result_logs_follow_the_server_level(level, expected):
     assert server_log_config(level)["loggers"]["duckpad.execution"]["level"] == expected
+
+
+@pytest.mark.parametrize("level", ["debug", "info", "warning", "error"])
+def test_assistant_logs_follow_the_server_level(level):
+    config = server_log_config(level)
+    logger = config["loggers"]["duckpad.assistant"]
+    assert logger == {"handlers": ["default"], "level": level.upper(), "propagate": False}
+    assert config["handlers"]["default"]["stream"] == "ext://sys.stderr"

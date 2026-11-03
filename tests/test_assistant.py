@@ -1,5 +1,6 @@
 """Assistant boundaries: credentials, ownership, current permissions and streaming."""
 
+import asyncio
 import json
 
 import pytest
@@ -11,6 +12,26 @@ from pydantic_ai.models.test import TestModel
 from duckpad.app import create_app
 from duckpad.assistant.tools import Dependencies, PageContext
 from duckpad.util import Problem
+
+
+@pytest.mark.parametrize("kind", ["custom", "openai", "deepseek", "ollama"])
+def test_only_custom_providers_normalize_split_choices(instance, kind):
+    from pydantic_ai.models.openai import OpenAIChatModel
+
+    from duckpad.assistant.gateway import GatewayChatModel
+
+    app, _ = instance
+    config = app.state.assistant.configuration
+    config.model_override = None
+
+    async def check():
+        async with config.model(
+            {"id": "test", "kind": kind, "api_key": "test-key", "base_url": "https://example.invalid/v1"},
+            "test",
+        ) as model:
+            assert type(model) is (GatewayChatModel if kind == "custom" else OpenAIChatModel)
+
+    asyncio.run(check())
 
 
 @pytest.fixture

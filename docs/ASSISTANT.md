@@ -79,6 +79,29 @@ Custom gateway reads can wait up to 120 seconds, including buffered SSE; the
 whole turn and connection test are still limited to 120 seconds. A server error
 is reported separately from an unreachable provider, without exposing its body.
 
+Some gateways split one answer across several `choices`: text in one choice and
+tool calls in the others. With Streaming disabled, Duckpad combines these choices
+in index order, joins text paragraphs and keeps every tool call, including run
+requests that need approval. This compatibility behavior applies only to custom
+providers and complete JSON responses; split choices in streamed responses are
+not supported.
+
+## Troubleshoot provider failures
+
+An unreadable provider response displays **The provider returned a response the
+assistant could not read. Check the server logs.**
+
+The `duckpad.assistant` logger writes a WARNING for failed turns, connection tests
+and model discovery. It includes the provider identifier, model (when applicable)
+and exception class chain, without exception messages or response bodies.
+
+Start Duckpad with `duckpad start --log-level debug` to also log the complete
+exception traceback and messages. Configured API keys, OAuth2 client secrets,
+credentials from unsaved connection settings and cached OAuth2 tokens are masked.
+Debug logs can still contain excerpts of prompts, responses and project data.
+Keep them private, review them before sharing and return to the default log level
+after troubleshooting.
+
 ## Ask about the current page
 
 Open a project branch and choose the **AI assistant** bubble at the bottom right.
