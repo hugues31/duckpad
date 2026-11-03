@@ -8,6 +8,19 @@ from .util import dumps
 MISSING = object()
 
 
+def conflict_details(conflict):
+    """Review evidence and an editable merge, without changing the retained conflict."""
+    evidence = []
+    merged, _ = merge_files(
+        conflict["base"],
+        conflict["current"],
+        conflict["proposal"],
+        choices=dict.fromkeys(conflict["paths"], "incoming"),
+        evidence=evidence,
+    )
+    return {**conflict, "fields": evidence, "merged": merged}
+
+
 def by_identity(value):
     """Index a list of objects by their unique string ids, or None when it cannot merge by identity."""
     if not isinstance(value, list) or not all(

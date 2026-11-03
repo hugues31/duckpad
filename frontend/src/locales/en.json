@@ -1283,5 +1283,19 @@
   "assistantErrorTokenResponse": "The OAuth2 token endpoint returned an invalid response. Check its configuration.",
   "assistantErrorStreaming": "The provider did not return a supported stream. Disable Streaming in its settings and try again.",
   "assistantErrorServer": "The provider returned a server error. Try again or ask an administrator to check the provider.",
-  "assistantErrorTokenAccess": "The provider refused the renewed OAuth2 token. Check the client permissions and scope."
+  "assistantErrorTokenAccess": "The provider refused the renewed OAuth2 token. Check the client permissions and scope.",
+  "fileConflictOne": "{count} file conflict",
+  "fileConflictMany": "{count} file conflicts",
+  "fieldConflictOne": "{count} field conflict",
+  "fieldConflictMany": "{count} field conflicts",
+  "conflictAnd": "and",
+  "conflictEmpty": "Empty value",
+  "combinedConflictHint": "Edit only the conflicting content below. The result starts from your proposal and preserves independent changes from both versions. Expand Base to compare with the original.",
+  "combinedValue": "Combined value",
+  "conflictKeepContent": "Keep this content (uncheck to delete)",
+  "conflictInvalidValue": "Enter valid JSON for object, number, boolean or null values. Text fields accept plain text.",
+  "conflictRefreshed": "The saved files changed again. Review the refreshed conflict before editing a new combined result.",
+  "reviewChanges": "Review changes",
+  "fileVersion": "File version",
+  "myProposal": "My proposal"
 }

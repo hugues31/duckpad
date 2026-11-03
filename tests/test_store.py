@@ -425,7 +425,11 @@ def test_scoped_queries_and_bulk_deletes_leave_other_projects_untouched(store):
     credentials = GitCredentials(store)
     for tree in (first, second):
         key = tree["id"]
-        store.put("conflict", key, {"worktree": key, "proposal": {"flow.json": "{}"}})
+        store.put(
+            "conflict",
+            key,
+            {"worktree": key, "base": {}, "current": {}, "proposal": {"flow.json": "{}"}, "paths": []},
+        )
         store.put(
             "run",
             key,
