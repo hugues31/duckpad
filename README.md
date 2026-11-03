@@ -58,6 +58,7 @@ See [installation](docs/INSTALLATION.md) for platform requirements and setup opt
 | [Project files](docs/AUTHORING.md) | [AI assistant](docs/ASSISTANT.md) | [Environments](docs/ENVIRONMENTS.md) |
 
 [Installation & accounts](docs/INSTALLATION.md) · [Single sign-on](docs/SSO.md) ·
+[Python nodes](docs/PYTHON.md) ·
 [Offline extensions](docs/OFFLINE_EXTENSIONS.md) · [Project documentation](docs/DOCUMENTATION.md) ·
 [Architecture](docs/ARCHITECTURE.md) · [Validation](docs/VALIDATION.md) ·
 [Releases](docs/RELEASING.md) · [Security](SECURITY.md)

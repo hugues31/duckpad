@@ -290,11 +290,13 @@ function WorktreeDialog({
         <RevisionEditor
           snapshot={snapshot}
           title={t(node.template ? "viewNodeCode" : "editNodeCode")}
+          language={node.language || "sql"}
           readOnly={!canEdit || !!node.template}
           read={(bundle) => nodeCode(bundle, node, modal.parent)}
           write={(bundle, text) => {
-            (bundle.node_sql ||= {})[nodeCodePath(node.id, modal.parent)] =
-              text;
+            (bundle.node_sql ||= {})[
+              nodeCodePath(node.id, modal.parent, node.language)
+            ] = text;
           }}
           onClose={onClose}
         />
@@ -305,6 +307,7 @@ function WorktreeDialog({
         <RevisionEditor
           snapshot={snapshot}
           title={t(modal.create ? "newTemplate" : "editTemplate")}
+          language={modal.template.endsWith(".py") ? "python" : "sql"}
           description={modal.create ? undefined : t("sharedTemplateHint")}
           readOnly={!canEdit}
           read={(bundle) =>

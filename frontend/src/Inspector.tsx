@@ -191,7 +191,7 @@ export default function Inspector({
       },
     ).data || {};
   const compilation = useApiResource<Statement[]>(
-    tab === "sql"
+    tab === "sql" && node.language !== "python"
       ? withQuery(
           `/worktrees/${worktree}/compile/${encodeURIComponent(fullNode)}`,
           { environment, ...partition },
@@ -199,7 +199,10 @@ export default function Inspector({
       : null,
     { refresh: snapshot.revision },
   );
-  const error = saveError || compilation.error;
+  const error =
+    saveError ||
+    compilation.error ||
+    (signature.kind !== "component" && signature.definition?.error);
   const schemas = Object.fromEntries(
     Object.entries(inputColumns).map(([port, columns]) => [
       port,
@@ -342,11 +345,15 @@ export default function Inspector({
             key={key}
             className={tab === key ? "active" : ""}
             aria-pressed={tab === key}
-            title={t(key)}
+            title={t(
+              key === "sql" && node.language === "python" ? "code" : key,
+            )}
             onClick={() => setTab(key)}
           >
             <Icon size={14} />
-            <span>{t(key)}</span>
+            <span>
+              {t(key === "sql" && node.language === "python" ? "code" : key)}
+            </span>
           </button>
         ))}
       </div>
@@ -578,6 +585,21 @@ export default function Inspector({
               </button>
             </div>
           </fieldset>
+        ) : tab === "sql" && node.language === "python" ? (
+          <Suspense fallback={<p>{t("loading")}</p>}>
+            <CodeEditor
+              value={
+                node.template
+                  ? snapshot.bundle?.templates[node.template] || ""
+                  : snapshot.bundle?.node_sql?.[
+                      nodeCodePath(node.id, parent, "python")
+                    ] || ""
+              }
+              language="python"
+              readOnly
+              height="330px"
+            />
+          </Suspense>
         ) : tab === "sql" ? (
           <>
             <p className="muted small">{t("compileHint")}</p>
@@ -618,8 +640,8 @@ export default function Inspector({
               node.component
                 ? `components/${node.component}.json`
                 : node.template
-                  ? `templates/${node.template}.sql`
-                  : nodeCodePath(node.id, parent)
+                  ? `templates/${node.template}${node.template.endsWith(".py") ? "" : ".sql"}`
+                  : nodeCodePath(node.id, parent, node.language)
             }
             onHistory={onHistory}
           />

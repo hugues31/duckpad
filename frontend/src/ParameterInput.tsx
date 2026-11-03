@@ -14,6 +14,7 @@ export default function ParameterInput({
   onChange,
   onBlur,
   commitOnChange = false,
+  integer = false,
 }: {
   kind: "number" | "list";
   id?: string;
@@ -28,6 +29,7 @@ export default function ParameterInput({
   onBlur?: () => void;
   /** Let form validation see incomplete values while preserving their input text. */
   commitOnChange?: boolean;
+  integer?: boolean;
 }) {
   const t = useT();
   const [draft, setDraft] = useState<string | null>(null);
@@ -46,7 +48,9 @@ export default function ParameterInput({
       placeholder={placeholder}
       disabled={disabled}
       type={secret ? "password" : "text"}
-      inputMode={kind === "number" ? "decimal" : undefined}
+      inputMode={
+        kind === "number" ? (integer ? "numeric" : "decimal") : undefined
+      }
       value={
         draft ?? (Array.isArray(value) ? value.join(", ") : String(value ?? ""))
       }
@@ -58,7 +62,13 @@ export default function ParameterInput({
       onBlur={(e) => {
         if (draft !== null) {
           const parsed = parse(draft);
-          if (kind === "number" && typeof parsed === "string") {
+          if (
+            kind === "number" &&
+            (typeof parsed === "string" ||
+              (integer &&
+                typeof parsed === "number" &&
+                !Number.isInteger(parsed)))
+          ) {
             e.currentTarget.setCustomValidity(t("invalidNumber"));
             e.currentTarget.reportValidity();
             return;

@@ -78,10 +78,14 @@ export default function ParameterField({
         <label htmlFor={id}>
           {location && name === "connection"
             ? t("location")
-            : name.replaceAll("_", " ")}
+            : parameter.label || name.replaceAll("_", " ")}
         </label>
         {variable?.control}
-        <small>{base}</small>
+        <small>
+          {parameter.python_type === "int" || parameter.python_type === "float"
+            ? parameter.python_type
+            : base}
+        </small>
       </span>
       {variable?.bound ? (
         variable.bound
@@ -133,6 +137,7 @@ export default function ParameterField({
         <ParameterInput
           id={id}
           kind={base}
+          integer={parameter.python_type === "int"}
           value={value}
           onChange={onChange}
           onBlur={onBlur}
@@ -227,6 +232,9 @@ export default function ParameterField({
           <ExpressionValues value={text} variables={expressionVariables} />
         )}
       {uploadError && <span className="notice error">{uploadError}</span>}
+      {parameter.description && (
+        <small className="muted">{parameter.description}</small>
+      )}
       {base === "column" && schemas && (
         <datalist id={columnList}>
           {schemas.map((s) => (

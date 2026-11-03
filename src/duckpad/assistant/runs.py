@@ -36,7 +36,15 @@ def proposal(deps, environment="", node=""):
     # without storing those secrets in the conversation or sending them to the provider.
     configuration, _ = services.catalog.capture(references, environment)
     signature = hashlib.sha256(
-        json.dumps([snapshot["files"], settings, configuration], sort_keys=True).encode()
+        json.dumps(
+            [
+                snapshot["files"],
+                settings,
+                configuration,
+                services.store.get("settings", "python:" + deps.context["project"], {}),
+            ],
+            sort_keys=True,
+        ).encode()
     ).hexdigest()
     return deps.safe(
         {
@@ -47,6 +55,11 @@ def proposal(deps, environment="", node=""):
             "confirm_before_run": settings["confirm_before_run"],
             "variables": variables.used(snapshot["bundle"], nodes, scope, environment),
             "exports": exports,
+            "python_nodes": [
+                {"node": key, "label": nodes[key].get("label", key)}
+                for key in sorted(scope)
+                if nodes[key].get("language") == "python"
+            ],
             "signature": signature,
             "decision": None,
         }

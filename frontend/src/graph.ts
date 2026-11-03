@@ -126,11 +126,18 @@ export function nodeInterface(
   const outputs = definition?.outputs || [];
   return {
     definition,
-    kind: definition?.writes_external
-      ? "export"
-      : !inputs.length && outputs.length
-        ? "source"
-        : "transform",
+    kind:
+      definition?.language === "python"
+        ? !outputs.length
+          ? "export"
+          : !inputs.length
+            ? "source"
+            : "transform"
+        : definition?.writes_external
+          ? "export"
+          : !inputs.length && outputs.length
+            ? "source"
+            : "transform",
     inputs,
     outputs,
     parameters: definition?.parameters || [],

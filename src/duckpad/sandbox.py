@@ -5,10 +5,13 @@ from __future__ import annotations
 import json
 import os
 import queue
-import socket
 import subprocess
 import sys
+import sysconfig
 import threading
+from collections import deque
+from contextlib import suppress
+from pathlib import Path
 from typing import Any
 
 import duckdb
@@ -19,24 +22,32 @@ from .util import Problem, clean
 
 class Database:
     def __init__(self, policy: Record) -> None:
-        parent, child = socket.socketpair()
         environment = {
             key: value
             for key, value in os.environ.items()
-            if key in ("PATH", "LANG", "LC_ALL", "LD_LIBRARY_PATH", "PYTHONPATH")
+            if key in ("PATH", "LANG", "LC_ALL", "LD_LIBRARY_PATH", "SYSTEMROOT", "WINDIR")
         }
         environment["PYTHONUNBUFFERED"] = "1"
         self.process = subprocess.Popen(
-            [sys.executable, "-m", "duckpad.sql_worker", str(child.fileno())],
-            pass_fds=(child.fileno(),),
+            [
+                policy.pop("interpreter", sys.executable),
+                "-I",
+                "-S",
+                policy.pop("worker", str(Path(__file__).with_name("worker_bootstrap.py"))),
+                policy.pop("site_packages", sysconfig.get_path("purelib")),
+            ],
             env=environment,
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
         )
-        child.close()
-        self.socket = parent
-        self.stream = parent.makefile("rb")
+        self.socket = Pipe(self.process.stdin)
+        assert self.process.stdout is not None
+        assert self.process.stderr is not None
+        self.stream = self.process.stdout
+        self._diagnostics = deque(maxlen=64)
+        self.drain = threading.Thread(target=self._drain, daemon=True)
+        self.drain.start()
         self.lock = threading.Lock()
         self.pending: dict[int, queue.Queue[Record]] = {}
         self.serial = 0
@@ -49,14 +60,19 @@ class Database:
             self.close()
             diagnostics = self.diagnostics
             raise Problem(
-                "Cannot initialize isolated SQL execution: "
-                + (
-                    str(error)
-                    if not diagnostics
-                    else "Worker initialization failed; check Linux Landlock support"
-                ),
+                "Cannot initialize isolated SQL execution: " + (diagnostics or str(error)),
                 503,
             ) from None
+
+    def _drain(self) -> None:
+        assert self.process.stderr is not None
+        stream = self.process.stderr
+        for chunk in iter(lambda: stream.read(1024), b""):
+            self._diagnostics.append(chunk.decode(errors="replace"))
+
+    @property
+    def diagnostics(self) -> str:
+        return "".join(self._diagnostics)
 
     def _read(self) -> None:
         try:
@@ -70,13 +86,23 @@ class Database:
             # Termination can reset the transport instead of producing a clean EOF.
             pass
         finally:
+            with suppress(subprocess.TimeoutExpired, AttributeError):
+                self.process.wait(timeout=1)
             self._stopped()
 
     def _stopped(self) -> None:
         with self.lock:
             self.closed = True
             for target in self.pending.values():
-                target.put({"error": "The isolated SQL worker stopped", "type": "Error"})
+                message = "The isolated SQL worker stopped"
+                process = getattr(self, "process", None)
+                if process is not None:
+                    code = process.poll()
+                    if code == -4 or code == 0xC000001D:
+                        message += ": a native dependency is incompatible with the server CPU; use a compatible wheel (for Polars, polars[rtcompat])"
+                    elif code is not None:
+                        message += f" (exit {code}); the worker may have crashed, exhausted memory or been canceled. Run again to recompute this context."
+                target.put({"error": message, "type": "Error"})
 
     def call(self, operation: str, **arguments: Any) -> Any:
         target: queue.Queue[Record] = queue.Queue()
@@ -91,7 +117,18 @@ class Database:
                 self.socket.sendall(
                     (json.dumps(clean({"id": identity, "operation": operation, **arguments})) + "\n").encode()
                 )
-            result = target.get()
+            try:
+                result = target.get(
+                    timeout=float(os.environ.get("DUCKPAD_PYTHON_TIMEOUT_SECONDS", "300"))
+                    if operation == "python"
+                    else None
+                )
+            except queue.Empty:
+                self.stop_worker()
+                raise Problem(
+                    "Python execution timed out; external writes may have completed. The next run will recompute this context.",
+                    503,
+                ) from None
             if "error" in result:
                 error_type = getattr(duckdb, result.get("type", "Error"), duckdb.Error)
                 if not isinstance(error_type, type) or not issubclass(error_type, duckdb.Error):
@@ -106,6 +143,22 @@ class Database:
             if identity is not None:
                 with self.lock:
                     self.pending.pop(identity, None)
+
+    def execute(self, query, parameters=None):
+        if self.closed:
+            raise duckdb.ConnectionException("Connection already closed")
+        if not hasattr(self, "default_cursor"):
+            self.default_cursor = self.cursor()
+        return self.default_cursor.execute(query, parameters)
+
+    def stop_worker(self) -> None:
+        if self.process.poll() is None:
+            self.process.terminate()
+            try:
+                self.process.wait(timeout=1)
+            except subprocess.TimeoutExpired:
+                self.process.kill()
+                self.process.wait()
 
     def cursor(self) -> Cursor:
         return Cursor(self, self.call("cursor"))
@@ -122,10 +175,25 @@ class Database:
             self.process.kill()
             self.process.wait()
         assert self.process.stderr is not None
-        self.diagnostics = self.process.stderr.read().decode(errors="replace")
+        self.drain.join(timeout=5)
         self.process.stderr.close()
         self.socket.close()
         self.reader.join(timeout=5)
+        self.stream.close()
+
+
+class Pipe:
+    def __init__(self, stream):
+        self.stream = stream
+
+    def sendall(self, data):
+        self.stream.write(data)
+        self.stream.flush()
+
+    def fileno(self):
+        return -1 if self.stream.closed else self.stream.fileno()
+
+    def close(self):
         self.stream.close()
 
 
@@ -133,6 +201,7 @@ class Cursor:
     def __init__(self, database: Database, identity: str) -> None:
         self.database, self.identity = database, identity
         self.description = None
+        self.python_active = threading.Event()
 
     def execute(self, query: str, parameters: Any = None) -> Cursor:
         self.description = self.database.call(
@@ -147,7 +216,26 @@ class Cursor:
         row = self.database.call("fetchone", cursor=self.identity)
         return tuple(row) if row is not None else None
 
+    def python(self, payload):
+        self.python_active.set()
+        try:
+            return self.database.call("python", cursor=self.identity, payload=payload)
+        finally:
+            self.python_active.clear()
+
+    def setup(self, captured, offline):
+        self.database.call("setup", cursor=self.identity, captured=captured, offline=offline)
+
     def interrupt(self) -> None:
+        if self.python_active.is_set():
+            # DuckDB may stop cooperatively; arbitrary Python has a short grace period.
+            def terminate() -> None:
+                if self.python_active.is_set():
+                    self.database.stop_worker()
+
+            timer = threading.Timer(0.5, terminate)
+            timer.daemon = True
+            timer.start()
         if not self.database.closed:
             try:
                 self.database.call("interrupt", cursor=self.identity)

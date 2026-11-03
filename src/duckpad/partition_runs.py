@@ -13,7 +13,6 @@ from .components import expand_for
 from .datasets import Dataset
 from .graph import reachable
 from .materialize import drop_dataset
-from .native import Cursor as NativeCursor
 from .partition_storage import PartitionStorage
 from .templates import compile_template
 from .types import Record
@@ -322,7 +321,7 @@ class PartitionRun:
         owns_cursor = self.root["partitions"]["effective_parallelism"] > 1
         if owns_cursor:
             cursor = execution.context.db.cursor()
-            execution.cursor = cursor if self.runner.isolated else NativeCursor(cursor)
+            execution.cursor = cursor
             with self.runner.lock:
                 execution.token.setdefault("cursors", []).append(execution.cursor)
         with self.lock:
@@ -586,6 +585,11 @@ class PartitionRun:
         try:
             for key in unit:
                 node = execution.nodes[key]
+                if node.get("language") == "python":
+                    raise Problem(
+                        "Python does not support schema-only or empty-manifest execution; no user code was run",
+                        422,
+                    )
                 if node["parsed"]["writes_external"]:
                     self.root["nodes"][key].update(
                         status="success", skipped=True, reason="Empty partition manifest"

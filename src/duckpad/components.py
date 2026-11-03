@@ -76,7 +76,24 @@ def expand(bundle, tolerant=False):
                     boundaries[key] = ports
                 else:
                     text = node_sql(bundle, node, stack[-1] if stack else None)
-                    add_leaf(node, key, parse_template(text), text, local_ports)
+                    template = parse_template(text, node.get("language", "sql"))
+                    if node.get("language") == "python" and node.get("python_contract"):
+                        previous = node["python_contract"]
+                        if any(
+                            (e["source"] == node["id"] and e["sourceHandle"] not in template["outputs"])
+                            or (e["target"] == node["id"] and e["targetHandle"] not in template["inputs"])
+                            for e in graph.get("edges", [])
+                        ):
+                            add_leaf(
+                                node,
+                                key,
+                                previous,
+                                text,
+                                local_ports,
+                                "Python ports changed; reconnect the saved edges before running",
+                            )
+                            continue
+                    add_leaf(node, key, template, text, local_ports)
             except (Problem, KeyError, TypeError) as error:
                 if not tolerant:
                     raise
@@ -108,6 +125,8 @@ def expand(bundle, tolerant=False):
                     "outputs": sorted(outputs),
                     "parameters": [],
                 }
+                if node.get("language") == "python" and node.get("python_contract"):
+                    template = node["python_contract"]
                 add_leaf(node, key, template, text, local_ports, str(error))
         for edge in graph.get("edges", []):
             try:
@@ -235,7 +254,7 @@ def group(bundle, selection, label, exposed=None, parent=None):
         outputs = (
             bundle["components"][node["component"]].get("outputs", {})
             if node.get("component")
-            else parse_template(node_sql(bundle, node, parent))["outputs"]
+            else parse_template(node_sql(bundle, node, parent), node.get("language", "sql"))["outputs"]
         )
         for output in outputs:
             key = (node["id"], output)
@@ -290,7 +309,9 @@ def group(bundle, selection, label, exposed=None, parent=None):
         node.pop("partitions", None)
         if not node.get("template") and not node.get("component"):
             code = bundle.setdefault("node_sql", {})
-            code[code_path(node["id"], component_id)] = code.pop(code_path(node["id"], parent))
+            code[code_path(node["id"], component_id, node.get("language", "sql"))] = code.pop(
+                code_path(node["id"], parent, node.get("language", "sql"))
+            )
     bundle["components"][component_id] = definition
     graph["nodes"] = [n for n in graph["nodes"] if n["id"] not in selected] + [
         {
@@ -345,7 +366,10 @@ def parameter_types(bundle, node, parent=None):
         parameters = bundle["components"].get(node["component"], {}).get("parameters", {})
         return {name: p["type"] for name, p in parameters.items() if isinstance(p, dict) and p.get("type")}
     try:
-        return {p["name"]: p["type"] for p in parse_template(node_sql(bundle, node, parent))["parameters"]}
+        return {
+            p["name"]: p["type"]
+            for p in parse_template(node_sql(bundle, node, parent), node.get("language", "sql"))["parameters"]
+        }
     except (Problem, KeyError):
         return {}
 
@@ -353,13 +377,18 @@ def parameter_types(bundle, node, parent=None):
 def import_definition(destination, source, kind, identity, origin):
     result = copy.deepcopy(destination)
     remap = {}
+    python_imported = False
 
     def transfer(category, key):
+        nonlocal python_imported
         if (category, key) in remap:
             return remap[(category, key)]
         if key not in source[category]:
             raise Problem(f"Missing imported definition: {key}")
         new_id = uid("template_" if category == "templates" else "component_")
+        if category == "templates" and key.endswith(".py"):
+            new_id += ".py"
+            python_imported = True
         remap[(category, key)] = new_id
         value = copy.deepcopy(source[category][key])
         if category == "components":
@@ -374,14 +403,15 @@ def import_definition(destination, source, kind, identity, origin):
                                 path[len(prefix) :]
                             ] = copy.deepcopy(text)
             for node in value["nodes"]:
+                python_imported |= node.get("language") == "python"
                 if not node.get("component") and (
                     preset := node.get("preset") or node.get("template") or node.get("origin")
                 ):
                     node["preset"] = preset
                 if not node.get("component") and not node.get("template"):
-                    result.setdefault("node_sql", {})[code_path(node["id"], new_id)] = node_sql(
-                        source, node, key
-                    )
+                    result.setdefault("node_sql", {})[
+                        code_path(node["id"], new_id, node.get("language", "sql"))
+                    ] = node_sql(source, node, key)
                     # An imported copy never points at an unrelated template with the same ID.
                     node.pop("origin", None)
                 else:
@@ -391,6 +421,26 @@ def import_definition(destination, source, kind, identity, origin):
         return new_id
 
     imported = transfer(kind, identity)
+    if python_imported:
+        import tomllib
+
+        required = tomllib.loads(source.get("pyproject") or "").get("project", {}).get("dependencies", [])
+        available = (
+            tomllib.loads(destination.get("pyproject") or "").get("project", {}).get("dependencies", [])
+        )
+        missing = [item for item in required if item not in available and not item.startswith("duckdb==")]
+        if missing:
+            raise Problem(
+                "The imported Python component requires project dependencies: "
+                + ", ".join(missing)
+                + ". Add them to this project's pyproject.toml before importing.",
+                422,
+            )
+        for name, text in source.get("python_helpers", {}).items():
+            helpers = result.setdefault("python_helpers", {})
+            if name in helpers and helpers[name] != text:
+                raise Problem(f"The imported Python helper conflicts with modules/{name}", 422)
+            helpers[name] = text
     return result, imported
 
 

@@ -6,7 +6,7 @@ from . import project_extensions, variables, views
 from .bundle import files_to_bundle
 from .components import expand
 from .graph import reachable
-from .node_code import code_path
+from .node_code import code_path, template_path
 from .templates import DESCRIPTIVE, directives, executable_sql
 from .util import Problem
 
@@ -39,13 +39,17 @@ def entities(bundle):
                 else bundle["templates"].get(node["template"], "")
                 if node.get("template")
                 else bundle.get("node_sql", {}).get(
-                    code_path(key, scope.removeprefix("component/") or None), ""
+                    code_path(key, scope.removeprefix("component/") or None, node.get("language", "sql")), ""
                 )
             )
             name = label(node, label(definition, key))
             if not node.get("template") and not node.get("component"):
                 node = {**node, "sql": definition}
-            node_file = code_path(key, scope.removeprefix("component/") or None) if "sql" in node else file
+            node_file = (
+                code_path(key, scope.removeprefix("component/") or None, node.get("language", "sql"))
+                if "sql" in node
+                else file
+            )
             add(f"{scope + '/' if scope else ''}node/{key}", "node", name, node, node_file, scope)
         for edge in value.get("edges", []):
             name = f"{label(nodes.get(edge['source'], {}), edge['source'])} → {label(nodes.get(edge['target'], {}), edge['target'])}"
@@ -55,7 +59,7 @@ def entities(bundle):
     for key, value in sorted(bundle["components"].items()):
         graph(value, f"components/{key}.json", f"component/{key}")
     for key, value in sorted(bundle["templates"].items()):
-        add(f"template/{key}", "template", label(value, key), value, f"templates/{key}.sql")
+        add(f"template/{key}", "template", label(value, key), value, template_path(key))
     if bundle.get("extensions") is not None:
         add(
             "file/" + project_extensions.FILE,

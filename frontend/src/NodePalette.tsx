@@ -27,7 +27,7 @@ export default function NodePalette({
   hidden: boolean;
   onClose: () => void;
   onAdd: (kind: NodeKind, id: string, linked?: boolean) => void;
-  onNewNode: () => void;
+  onNewNode: (language: "sql" | "python") => void;
   onNewTemplate: () => void;
   onLibrary: () => void;
 }) {
@@ -126,9 +126,13 @@ export default function NodePalette({
         ))}
       </div>
       <fieldset className="palette-bottom" disabled={readOnly}>
-        <button className="text-button" onClick={onNewNode}>
+        <button className="text-button" onClick={() => onNewNode("sql")}>
           <Code2 size={14} />
           {t("newSqlNode")}
+        </button>
+        <button className="text-button" onClick={() => onNewNode("python")}>
+          <Code2 size={14} />
+          {t("newPythonNode")}
         </button>
         <button className="text-button" onClick={onNewTemplate}>
           <Code2 size={14} />

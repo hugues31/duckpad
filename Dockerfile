@@ -33,6 +33,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends git openssh-cli
     && useradd --uid 10001 --gid duckpad --home-dir /data --create-home duckpad
 WORKDIR /app
 COPY --from=backend /app/.venv/ /app/.venv/
+COPY --from=backend /usr/local/bin/uv /usr/local/bin/uv
 # Public previews use HTTPS even though the private proxy hop uses HTTP.
 ENV PATH="/app/.venv/bin:$PATH" PYTHONUNBUFFERED=1 DUCKPAD_SECURE_COOKIES=1
 USER duckpad

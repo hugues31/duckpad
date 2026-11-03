@@ -26,6 +26,8 @@ class Dataset:
     value_stale: bool = False
     source_columns: list[dict[str, str]] = field(default_factory=list)
     source: bool = False
+    opaque_python: bool = False
+    historical: bool = False
     status: str = "valid"
     created: str = field(default_factory=now)
     column_map: dict[str, str] = field(default_factory=dict)
@@ -89,6 +91,7 @@ class Context:
     value_attempts: Record = field(default_factory=dict)
     partition_cache: dict[str, str] = field(default_factory=dict)
     partition_artifacts: bool = False
+    python_signature: str = ""
     lineage: dict[str, LineageRequest] = field(default_factory=dict)
     lock: threading.RLock = field(default_factory=threading.RLock)
     trace_lock: threading.RLock = field(default_factory=threading.RLock)

@@ -143,6 +143,7 @@ ROUTE_ACCESS = {
         "POST /api/users/{identity}/api-tokens",
         "DELETE /api/users/{identity}/api-tokens/{token}",
         "PUT /api/projects/{project}/connections",
+        "PUT /api/projects/{project}/python",
         "GET /api/git-hosts",
         "PUT /api/git-hosts",
     ],

@@ -18,6 +18,7 @@ interface Member {
 }
 
 interface Settings {
+  python: { enabled: boolean; expose_secrets: boolean; allow_builds: boolean };
   project: { name: string };
   /** The role of the signed-in user. */
   role: ProjectRole;
@@ -116,6 +117,42 @@ export default function ProjectSettings({
           <div className="notice error" role="alert">
             {error}
           </div>
+        )}
+        {settings && (
+          <fieldset disabled={workspace.user.role !== "admin" || pending}>
+            <legend>{t("pythonExecution")}</legend>
+            <p className="muted">{t("pythonTrustHint")}</p>
+            {(["enabled", "expose_secrets", "allow_builds"] as const).map(
+              (key) => (
+                <label key={key} className="row gap">
+                  <input
+                    type="checkbox"
+                    checked={settings.python[key]}
+                    onChange={(event) =>
+                      act(() =>
+                        api(
+                          `/projects/${project}/python`,
+                          send(
+                            { ...settings.python, [key]: event.target.checked },
+                            "PUT",
+                          ),
+                        ),
+                      )
+                    }
+                  />
+                  {t(
+                    (
+                      {
+                        enabled: "pythonPolicy_enabled",
+                        expose_secrets: "pythonPolicy_expose_secrets",
+                        allow_builds: "pythonPolicy_allow_builds",
+                      } as const
+                    )[key],
+                  )}
+                </label>
+              ),
+            )}
+          </fieldset>
         )}
         <div className="role-guide">
           {PROJECT_ROLES.map((role) => (

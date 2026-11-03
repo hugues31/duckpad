@@ -25,6 +25,15 @@ export type Query = Cell & {
   context?: boolean;
 };
 export type Explanation = Input & {
+  parents?: {
+    dataset: string;
+    node: string;
+    port: string;
+    run: string;
+    count: number;
+    columns: { name: string; type: string }[];
+    rows: { row: number; values: unknown[] }[];
+  }[];
   partition_groups?: { partition: PartitionEntry; run: string; rows: number }[];
   replay?: {
     node: string;

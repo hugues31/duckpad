@@ -43,6 +43,7 @@ export default function CodePanel({
     scope: "worktree",
     equal: sameFiles,
   });
+  const [moduleName, setModuleName] = useState("");
   const [selected, setSelected] = useState("flow.json");
   const [downloading, setDownloading] = useState(false);
   const [error, setError] = useState("");
@@ -138,6 +139,38 @@ export default function CodePanel({
             selected={path}
             onSelect={setSelected}
           />
+          {!readOnly && (
+            <div className="field">
+              <label htmlFor="python-module-name">
+                {t("pythonHelperModule")}
+              </label>
+              <input
+                id="python-module-name"
+                value={moduleName}
+                onChange={(event) => setModuleName(event.target.value)}
+                placeholder="helpers"
+              />
+              <button
+                className="button secondary small"
+                disabled={
+                  pending ||
+                  !/^[A-Za-z_]\w*$/.test(moduleName) ||
+                  `modules/${moduleName}.py` in files
+                }
+                onClick={() => {
+                  const name = `modules/${moduleName}.py`;
+                  update((current) => ({
+                    ...current,
+                    [name]: "# Project helper module.\n",
+                  }));
+                  setSelected(name);
+                  setModuleName("");
+                }}
+              >
+                {t("pythonAddModule")}
+              </button>
+            </div>
+          )}
           {!readOnly && !(VARIABLES_FILE in files) && (
             <button
               className="button secondary small"

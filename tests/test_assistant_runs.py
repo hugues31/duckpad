@@ -148,6 +148,27 @@ def test_protected_environment_and_changed_configuration(instance):
     assert client.get("/api/runs").json() == []
 
 
+def test_python_run_approval_lists_code_and_rechecks_secret_policy(instance):
+    app, client = instance
+    configure(client)
+    _, context = project(client)
+    services = app.state.services
+    snapshot = services.projects.snapshot(context["worktree"])
+    bundle = snapshot["bundle"]
+    bundle["flow"]["nodes"] = [{"id": "python", "language": "python", "params": {}}]
+    bundle["node_sql"] = {
+        "nodes/python.py": "import duckpad as dp\nclass Source(dp.Node):\n    def run(self) -> dp.Relation:\n        return self.db.sql('select 1 value')\n"
+    }
+    services.projects.write(context["worktree"], snapshot["revision"], bundle_to_files(bundle))
+    identity, requested = request_run(app, client, context)
+    plan = requested["tools"][0]["approval"]
+    assert plan["python_nodes"] == [{"node": "python", "label": "python"}]
+    services.store.put("settings", "python:" + context["project"], {"enabled": True, "expose_secrets": True})
+    result = final(decide(client, identity, requested))
+    assert "configuration changed" in result["text"]
+    assert client.get("/api/runs").json() == []
+
+
 def test_approval_is_owned_and_permissions_are_rechecked(instance):
     app, admin = instance
     configure(admin)

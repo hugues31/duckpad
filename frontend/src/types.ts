@@ -9,6 +9,7 @@ export type Json =
   string | number | boolean | null | Json[] | { [key: string]: Json };
 export type Theme = "light" | "dark";
 export interface FlowNode {
+  language?: "sql" | "python";
   partitions?: "all";
   outputs?: Record<string, { partition?: { by: string; column: string } }>;
   id: string;
@@ -36,12 +37,18 @@ export interface Graph {
 export type TemplateKind = "source" | "transform" | "export";
 /** A parameter declared by a template or exposed by a component. */
 export interface Parameter {
+  label?: string;
+  description?: string;
+  python_type?: string;
+  ge?: number;
+  le?: number;
   name: string;
   type: string;
   default?: Json;
 }
 /** A template's interface, or only the error that prevents parsing it. */
 export interface ParsedTemplate {
+  language?: "sql" | "python";
   error?: string;
   label?: string;
   description?: string;

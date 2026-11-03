@@ -75,7 +75,11 @@ def directives(sql):
     return [found for found in map(directive, (sql or "").splitlines()) if found]
 
 
-def parse_template(sql):
+def parse_template(sql, language="sql"):
+    if language == "python":
+        from .python_contract import parse_python
+
+        return parse_python(sql)
     template = {
         "label": "SQL template",
         "description": "",
@@ -207,7 +211,7 @@ def parse_templates(templates):
     parsed = {}
     for name, sql in templates.items():
         try:
-            parsed[name] = parse_template(sql)
+            parsed[name] = parse_template(sql, "python" if name.endswith(".py") else "sql")
         except Problem as error:
             parsed[name] = {"error": str(error)}
     return parsed

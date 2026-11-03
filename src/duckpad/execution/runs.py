@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import copy
+import shutil
 import threading
 import time
+import zipfile
 from contextlib import suppress
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, cast
 
 import duckdb
@@ -25,7 +28,6 @@ from ..materialize import (
     plan_materialization,
     publish_view,
 )
-from ..native import Cursor as NativeCursor
 from ..partition_runs import PartitionRun
 from ..partition_storage import PartitionStorage
 from ..projects import Projects
@@ -225,12 +227,34 @@ class Runner:
     ) -> Execution:
         """Capture the committed definitions and connection settings the run will use."""
         snapshot = self.projects.flush(worktree)
+        settings = self.store.get("settings", "python:" + snapshot["worktree"]["project"], {})
+        if settings.get("enabled") and any(name.endswith(".py") for name in snapshot["files"]):
+            from ..python_environment import lock_files
+
+            files = snapshot["files"]
+            locked = lock_files(
+                files,
+                self.store.home,
+                read_only=bool(snapshot["worktree"].get("read_only")),
+                allow_builds=settings.get("allow_builds", False),
+            )
+            if locked != files.get("uv.lock"):
+                snapshot = self.projects.write(
+                    worktree,
+                    snapshot["revision"],
+                    {**files, "uv.lock": locked},
+                    "build(project): lock Python dependencies",
+                )
         bundle = copy.deepcopy(snapshot["bundle"])
         if bundle is None:
             raise Problem(
                 "Project files are invalid; correct them before execution", 422, snapshot["diagnostics"]
             )
         structural, edges, boundaries = expand(bundle, tolerant=True)
+        if not settings.get("enabled") and any(
+            structural[key].get("language") == "python" for key in launch_scope(structural, edges, target)
+        ):
+            raise Problem("Python execution is disabled; ask an instance administrator to enable it", 403)
         sources = value_sources.sources(bundle, structural, boundaries)
         phase, validation_errors = value_sources.dependencies(structural, edges, sources)
         partition_plan = partitions.plan(bundle, structural, edges, boundaries)
@@ -478,8 +502,6 @@ class Runner:
         try:
             assert context.db is not None
             execution.cursor = context.db.cursor()
-            if not self.isolated:
-                execution.cursor = NativeCursor(execution.cursor)
             execution.token["cursor"] = execution.cursor
             run["status"] = "running"
             self._persist(run, secrets)
@@ -666,6 +688,10 @@ class Runner:
             except Exception as error:
                 state["documentation_error"] = str(error)
         except Exception as error:
+            if state.get("artifact"):
+                artifact = state.pop("artifact")
+                self.store.delete("artifact", artifact)
+                self.exports.discard([artifact])
             self._drop_staged(context, created_tables)
             types = {base_type(p["type"]) for p in node["parsed"]["parameters"]}
             message = project_extensions.explain_missing(redact(str(error), secrets)) + failure_hint(types)
@@ -743,6 +769,10 @@ class Runner:
         physical = {port: uid("data_") for port in node["parsed"]["outputs"]}
         project_files = self.store.paths.project_files(run["project"], context.worktree, context.environment)
         project_files["destination"].mkdir(parents=True, exist_ok=True)
+        if node.get("language") == "python":
+            return self._compute_python(
+                execution, key, input_datasets, physical, project_files, created_tables
+            )
         statements = compile_template(
             node["parsed"],
             node.get("params", {}),
@@ -859,6 +889,166 @@ class Runner:
             raise Problem(check_failure or "An execution check reported an error")
         return staged
 
+    def _compute_python(
+        self,
+        execution: Execution,
+        key: str,
+        inputs: dict[str, Dataset],
+        physical: dict[str, str],
+        project_files: dict[str, Path],
+        created_tables: list[tuple[str, str]],
+    ) -> dict[str, Dataset]:
+        from ..python_nodes import parameters
+        from .messages import record_result
+
+        if execution.schema_only:
+            raise Problem(
+                "Python does not support schema-only or empty-manifest execution; no user code was run", 422
+            )
+        node = execution.nodes[key]
+        state = execution.run["nodes"][key]
+        values = parameters(
+            node, {p: d.columns for p, d in inputs.items()}, execution.captured, project_files
+        )
+        state["parameters"] = values
+        workspace = (
+            self.store.paths.exports(execution.context.worktree, execution.context.environment)
+            / ".temporary"
+            / uid("python_")
+        )
+        workspace.mkdir(parents=True)
+        policy = self.store.get("settings", "python:" + execution.run["project"], {})
+        if not policy.get("enabled"):
+            raise Problem("Python execution is disabled", 403)
+        staged = {}
+        try:
+            state["external_started"] = True
+            self._persist(execution.run, execution.secrets)
+            cursor = execution.cursor
+            from ..sandbox import Cursor as WorkerCursor
+
+            assert isinstance(cursor, WorkerCursor)
+            response = cursor.python(
+                {
+                    "code": node["template_sql"],
+                    "parameters": values,
+                    "inputs": {p: inputs[p].table for p in node["parsed"]["inputs"]},
+                    "outputs": {p: name + "_storage" for p, name in physical.items()},
+                    "workspace": str(workspace),
+                    "partition": execution.partition,
+                    "helpers": execution.bundle.get("python_helpers", {}),
+                    "connections": {
+                        r: {
+                            name: value
+                            for name, value in execution.captured[r]["values"].items()
+                            if policy.get("expose_secrets")
+                            or name
+                            not in {
+                                p["name"]
+                                for p in execution.captured[r]["definition"].get("parameters", [])
+                                if p.get("secret")
+                            }
+                        }
+                        for r in connection_references(node)
+                    },
+                }
+            )
+            for result in response.get("messages", []):
+                record_result(
+                    execution.run,
+                    key,
+                    {
+                        **result,
+                        "message": redact(result["message"], execution.secrets),
+                        "origin": {"kind": "message", "block": "Python"},
+                        "output": None,
+                    },
+                )
+            if response.get("log"):
+                record_result(
+                    execution.run,
+                    key,
+                    {
+                        "level": "info",
+                        "message": redact(response["log"], execution.secrets),
+                        "origin": {"kind": "message", "block": "Python stdout/stderr"},
+                        "output": None,
+                    },
+                )
+            for check in response.get("checks", []):
+                record_result(
+                    execution.run,
+                    key,
+                    {
+                        "level": check["severity"] if check["count"] else "info",
+                        "message": f"{check['name']}: {check['count']} failing rows",
+                        "origin": {"kind": "test", "name": check["name"], "block": "Python"},
+                        "output": None,
+                        "observed": check["count"],
+                    },
+                )
+            if response.get("error"):
+                raise Problem(response["error"], 422)
+            created_tables.extend((table, table + "_storage") for table in physical.values())
+            for port, table in physical.items():
+                storage = table + "_storage"
+                # Partition filters operate after Python. The node also receives the requested key.
+                if execution.partition is not None:
+                    statement = {"output": port, "query": f"SELECT * FROM {qi(storage)}", "bindings": {}}
+                    partitions.filter_statements([statement], node, execution.partition, cursor)
+                    filtered = storage + "_filtered"
+                    cursor.execute(
+                        f"CREATE TABLE {qi(filtered)} AS {statement['query']}", statement["bindings"]
+                    )
+                    cursor.execute(f"DROP TABLE {qi(storage)}")
+                    cursor.execute(f"ALTER TABLE {qi(filtered)} RENAME TO {qi(storage)}")
+                columns, mapping, _ = publish_view(cursor, table, {"storage": storage, "columns": None})
+                count_row = cursor.execute(f"SELECT count(*) FROM {qi(table)}").fetchone()
+                assert count_row is not None
+                staged[port] = Dataset(
+                    id=table,
+                    node=key,
+                    port=port,
+                    columns=columns,
+                    count=count_row[0],
+                    run=execution.run["id"],
+                    query="",
+                    bindings={},
+                    dependencies={d.table: d.id for d in inputs.values()},
+                    fingerprint=execution.fingerprints[key],
+                    storage=storage,
+                    source_columns=columns,
+                    column_map=mapping,
+                    opaque_python=True,
+                    bound_values=copy.deepcopy(execution.values),
+                )
+            artifacts = response.get("artifacts", {})
+            if artifacts:
+                # One download per node: several managed files are bundled without loading them into memory.
+                for name, path in artifacts.items():
+                    if Path(path) != workspace / "artifacts" / name or Path(name).name != name:
+                        raise Problem("Invalid managed artifact path", 422)
+                if len(artifacts) == 1:
+                    path = Path(next(iter(artifacts.values())))
+                else:
+                    path = workspace / "artifacts.zip"
+                    with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as archive:
+                        from ..artifacts import open_regular
+
+                        for name, source in artifacts.items():
+                            with open_regular(Path(source)) as reader, archive.open(name, "w") as writer:
+                                shutil.copyfileobj(reader, writer, 65536)
+                state["artifact"] = self.exports.artifacts.capture(
+                    {"path": str(path), "format": path.suffix.lstrip(".") or "bin"},
+                    execution.run,
+                    key,
+                    [workspace],
+                )
+            state["external_outcome"] = "completed"
+            return staged
+        finally:
+            shutil.rmtree(workspace, ignore_errors=True)
+
     def _export(self, execution: Execution, key: str, statement: Record) -> None:
         """Run an export statement, then keep a private copy of the file it wrote for download."""
         state = execution.run["nodes"][key]
@@ -899,7 +1089,33 @@ class Runner:
     def _retire(self, execution: Execution, key: str, previous: dict[str, Dataset]) -> None:
         """Drop replaced outputs and their lineage tables once no lineage reader uses them."""
         context = execution.context
-        for dataset in previous.values():
+        protected = set()
+
+        def retain(identity: str) -> None:
+            if identity in protected or identity not in context.datasets:
+                return
+            protected.add(identity)
+            for parent in context.datasets[identity].dependencies.values():
+                retain(parent)
+
+        for outputs in context.outputs.values():
+            for current in outputs.values():
+                if current.opaque_python:
+                    retain(current.id)
+        for identity in protected:
+            context.datasets[identity].historical = True
+        current_ids = {data.id for outputs in context.outputs.values() for data in outputs.values()}
+        retired = {data.id: data for data in previous.values()}
+        retired.update(
+            {
+                identity: data
+                for identity, data in context.datasets.items()
+                if data.historical and identity not in protected | current_ids
+            }
+        )
+        for dataset in retired.values():
+            if dataset.id in protected:
+                continue
             with context.lock:
                 cancel_lineage(context, {dataset.node}, dropping=True)
             wait_for_readers(context, {dataset.node})
@@ -907,7 +1123,7 @@ class Runner:
                 traces = [
                     d
                     for d in context.datasets.values()
-                    if d.id.startswith("trace_") and d.node == key and d.run != execution.run["id"]
+                    if d.id.startswith("trace_") and d.node == dataset.node and d.run != execution.run["id"]
                 ]
                 assert context.db is not None
                 cleanup = context.db.cursor()

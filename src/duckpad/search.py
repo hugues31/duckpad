@@ -27,7 +27,7 @@ def node_entries(bundle):
             parsed = (
                 templates.get(template, {})
                 if isinstance(template, str)
-                else local.get(code_path(node["id"], parent), {})
+                else local.get(code_path(node["id"], parent, node.get("language", "sql")), {})
             )
             label = node.get("label") or definition.get("name") or parsed.get("label") or node["id"]
             label = label if isinstance(label, str) else node["id"]

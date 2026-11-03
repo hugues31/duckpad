@@ -170,6 +170,13 @@ class ContextPool:
         elif opening and requirements is None and existing:
             requirements = existing.extensions
         resources = self.sql_resources() if opening else {}
+        python_signature = ""
+        if opening:
+            record = self.projects.get(worktree)
+            files = self.projects.read_files(record)
+            policy = self.store.get("settings", "python:" + record["project"], {})
+            if policy.get("enabled") and any(name.endswith(".py") for name in files):
+                python_signature = digest([files.get("pyproject.toml"), files.get("uv.lock")])
         while True:
             self.projects.get(worktree)
             if environment not in self.catalog.environment_names():
@@ -185,6 +192,7 @@ class ContextPool:
                             context.extensions != requirements
                             or context.resources != resources
                             or context.partition_artifacts != partition_artifacts
+                            or context.python_signature != python_signature
                         )
                     )
                 ):
@@ -198,6 +206,7 @@ class ContextPool:
                         extensions=requirements or [],
                         resources=resources,
                         partition_artifacts=partition_artifacts,
+                        python_signature=python_signature,
                     )
             if stopped:
                 # Reap the replaced worker's process and release its descriptors.
@@ -357,26 +366,20 @@ class ContextPool:
         extensions.mkdir(exist_ok=True)
         config = {**database_config(extensions), **self.extension_settings()}
         imports = self.store.get("settings", "offline_extensions", {})
-        if not self.isolated:
-            # Check native loading in a child first, even in trusted-local mode.
-            if requirements:
-                project_extensions.check(config, requirements, imports)
-            db = duckdb.connect(
-                ":memory:",
-                config={**config, **project_extensions.EXPLICIT_LOADING, **resource_config(resources)},
-            )
-            try:
-                project_extensions.load(db, requirements, imports, config["allow_unsigned_extensions"])
-                return db, {}, []
-            except Exception:
-                db.close()
-                raise
         from ..sandbox import Database
 
         project = self.projects.get(worktree)["project"]
-        captured, secrets = connections or self._configured_connections(project, environment)
-        assert self.access is not None
-        roots, writable = self.access.local_roots(project, captured)
+        captured, secrets = (
+            (connections or self._configured_connections(project, environment)) if self.isolated else ({}, [])
+        )
+        roots, writable = self.access.local_roots(project, captured) if self.access else ([], [])
+        files = self.projects.read_files(self.projects.get(worktree))
+        runtime = {}
+        policy = self.store.get("settings", "python:" + project, {})
+        if policy.get("enabled") and any(name.endswith(".py") for name in files):
+            from ..python_environment import prepare
+
+            runtime = prepare(files, self.store.home, project, allow_builds=policy.get("allow_builds", False))
         directory = self.store.paths.exports(worktree, environment)
         directory.mkdir(parents=True, exist_ok=True)
         temporary = directory / ".temporary"
@@ -393,6 +396,8 @@ class ContextPool:
         try:
             database = Database(
                 {
+                    "isolated": self.isolated,
+                    **runtime,
                     "captured": captured,
                     "extensions": str(extensions),
                     "allow_unsigned_extensions": config["allow_unsigned_extensions"],

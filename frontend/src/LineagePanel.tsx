@@ -64,6 +64,7 @@ type CardData = {
   select: (id: string) => void;
   page: (id: string, values: Partial<Query>) => void;
   expand: () => void;
+  parent: (cell: Cell) => void;
   replay?: (value: NonNullable<Explanation["replay"]>) => void;
 };
 type CardNode = Node<CardData, "lineage">;
@@ -184,6 +185,76 @@ function CalculationCard({ data }: NodeProps<CardNode>) {
             </button>
           )}
           <p>{t("partitionReplayHint")}</p>
+        </div>
+      )}
+      {result.kind === "python" && (
+        <div
+          className="nodrag nowheel"
+          style={{ maxHeight: 300, overflow: "auto" }}
+        >
+          <strong>{t("pythonOpaque")}</strong>
+          <p>{t("pythonParentHint")}</p>
+          {result.parents?.map((parent) => (
+            <details key={parent.dataset} open>
+              <summary>
+                {parent.node} · {parent.port} · {parent.run}
+              </summary>
+              <table>
+                <thead>
+                  <tr>
+                    {parent.columns.map((column) => (
+                      <th key={column.name}>{column.name}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {parent.rows.map((row) => (
+                    <tr key={row.row}>
+                      {row.values.map((value, index) => (
+                        <td key={parent.columns[index].name}>
+                          <button
+                            disabled={disabled}
+                            onClick={() =>
+                              data.parent({
+                                dataset: parent.dataset,
+                                row: row.row,
+                                column: parent.columns[index].name,
+                              })
+                            }
+                          >
+                            {formatValue(value)}
+                          </button>
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </details>
+          ))}
+          <button
+            disabled={disabled || offset === 0}
+            onClick={() =>
+              data.page(entry.id, {
+                offset: Math.max(0, offset - result.page_size),
+              })
+            }
+          >
+            {t("previous")}
+          </button>
+          <button
+            disabled={
+              disabled ||
+              !(result.parents || []).some(
+                (p) => p.count > offset + result.page_size,
+              )
+            }
+            onClick={() =>
+              data.page(entry.id, { offset: offset + result.page_size })
+            }
+          >
+            {t("next")}
+          </button>
         </div>
       )}
       {source ? (
@@ -329,7 +400,7 @@ function FitGraph({ version }: { version: Graph }) {
 
 export default function LineagePanel(props: Props) {
   return (
-    <LineageDialog
+    <LineageExplorer
       key={JSON.stringify([
         props.worktree,
         props.environment,
@@ -340,7 +411,35 @@ export default function LineagePanel(props: Props) {
   );
 }
 
-function LineageDialog({ worktree, environment, cell, onClose }: Props) {
+function LineageExplorer(props: Props) {
+  const [parents, setParents] = useState<Cell[]>([]);
+  const cell = parents.at(-1) || props.cell;
+  const onParent = useCallback(
+    (parent: Cell) => setParents((current) => [...current, parent]),
+    [],
+  );
+  return (
+    <LineageDialog
+      {...props}
+      key={cellId(cell)}
+      cell={cell}
+      onParent={onParent}
+      onClose={() =>
+        parents.length
+          ? setParents((current) => current.slice(0, -1))
+          : props.onClose()
+      }
+    />
+  );
+}
+
+function LineageDialog({
+  worktree,
+  environment,
+  cell,
+  onClose,
+  onParent,
+}: Props & { onParent: (cell: Cell) => void }) {
   const t = useT();
   const currentWorktree = useOptionalWorktree();
   const navigate = useNavigate();
@@ -486,15 +585,17 @@ function LineageDialog({ worktree, environment, cell, onClose }: Props) {
           width: 330,
           style: { pointerEvents: "auto" },
           height:
-            entry.result.kind === "source" || entry.group || entry.deferred
-              ? entry.result.origin
-                ? 210
-                : 132
-              : entry.result.replay
-                ? 410
-                : entry.result.origin || entry.result.partition_groups?.length
-                  ? 330
-                  : 260,
+            entry.result.kind === "python"
+              ? 580
+              : entry.result.kind === "source" || entry.group || entry.deferred
+                ? entry.result.origin
+                  ? 210
+                  : 132
+                : entry.result.replay
+                  ? 410
+                  : entry.result.origin || entry.result.partition_groups?.length
+                    ? 330
+                    : 260,
           data: {
             entry,
             root: graph?.root === entry.id,
@@ -508,6 +609,7 @@ function LineageDialog({ worktree, environment, cell, onClose }: Props) {
               }));
             },
             expand: () => setBudget((value) => value + 60),
+            parent: onParent,
             replay:
               currentWorktree?.canEdit &&
               !currentWorktree.statuses.active &&
@@ -518,7 +620,7 @@ function LineageDialog({ worktree, environment, cell, onClose }: Props) {
         })),
         graph?.edges || [],
       ),
-    [graph, pending, currentWorktree, replay],
+    [graph, pending, currentWorktree, replay, onParent],
   );
   const active = graph?.entries.find((entry) => entry.id === selected);
 

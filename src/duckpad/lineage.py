@@ -45,7 +45,7 @@ class Lineage:
         page_size = max(1, min(PAGE_SIZE, page_size))
         context = self.engine.context(worktree, environment)
         dataset = context.datasets.get(dataset_id)
-        if not dataset or dataset.status != "valid":
+        if not dataset or (dataset.status != "valid" and not (dataset.historical or dataset.opaque_python)):
             raise Problem(
                 "This result generation is unavailable or stale. Recompute and select a new cell.", 409
             )
@@ -68,7 +68,7 @@ class Lineage:
                 return
             visited.add(data.id)
             dependencies.add(data.node)
-            if data.status != "valid":
+            if data.status != "valid" and not (data.historical or data.opaque_python):
                 raise Problem("A lineage dependency is stale", 409)
             if data.origins:
                 return
@@ -84,7 +84,9 @@ class Lineage:
         request_id = uid("lineage_")
         canceled = threading.Event()
         with context.lock:
-            if dataset.status != "valid" or context.db is not database:
+            if (
+                dataset.status != "valid" and not (dataset.historical or dataset.opaque_python)
+            ) or context.db is not database:
                 cursor.close()
                 raise Problem("Lineage interrupted by recalculation", 409)
             context.lineage[request_id] = {"cursor": cursor, "canceled": canceled, "nodes": dependencies}
@@ -124,6 +126,40 @@ class Lineage:
             origin = self.partitions.origin_response(context, cursor, dataset, row, column, response)
             if origin is not None:
                 return origin
+            if dataset.opaque_python:
+                parents = []
+                for identity in dataset.dependencies.values():
+                    parent = context.datasets[identity]
+                    projection = ", ".join(qi(parent.stored(c["name"])) for c in parent.columns)
+                    rows = cursor.execute(
+                        f"SELECT rowid, {projection} FROM {qi(parent.relation)} ORDER BY rowid LIMIT ? OFFSET ?",
+                        [page_size, offset],
+                    ).fetchall()
+                    parents.append(
+                        {
+                            "dataset": parent.id,
+                            "node": parent.node,
+                            "port": parent.port,
+                            "run": parent.run,
+                            "count": parent.count,
+                            "columns": parent.columns,
+                            "rows": [{"row": record[0], "values": clean(record[1:])} for record in rows],
+                        }
+                    )
+                response.update(
+                    kind="python",
+                    expression="Opaque Python operation",
+                    complete=False,
+                    warnings=[
+                        "Python does not provide an input-cell mapping. Select a cell from the captured parent results to resume SQL lineage."
+                    ],
+                    parents=parents,
+                    total=0,
+                    contributions=[],
+                    context_total=0,
+                    context=[],
+                )
+                return response
             if dataset.source:
                 response.update(
                     kind="source",
@@ -194,13 +230,15 @@ class Lineage:
             self.partitions.annotate(context, response)
             if (
                 canceled.is_set()
-                or dataset.status != "valid"
+                or (dataset.status != "valid" and not (dataset.historical or dataset.opaque_python))
                 or context.datasets.get(dataset_id) is not dataset
             ):
                 raise Problem(INTERRUPTED, 409)
             return response
         except Coverage as error:
-            if canceled.is_set() or dataset.status != "valid":
+            if canceled.is_set() or (
+                dataset.status != "valid" and not (dataset.historical or dataset.opaque_python)
+            ):
                 raise Problem(INTERRUPTED, 409) from error
             return incomplete(response, str(error))
         except Exception as error:

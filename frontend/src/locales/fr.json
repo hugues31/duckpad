@@ -1283,5 +1283,15 @@
   "assistantErrorTokenResponse": "Le point de jeton OAuth2 a renvoyé une réponse invalide. Vérifiez sa configuration.",
   "assistantErrorStreaming": "Le fournisseur n’a pas renvoyé un flux pris en charge. Désactivez Streaming dans ses réglages et réessayez.",
   "assistantErrorServer": "Le fournisseur a renvoyé une erreur serveur. Réessayez ou demandez à un administrateur de vérifier le fournisseur.",
-  "assistantErrorTokenAccess": "Le fournisseur a refusé le jeton OAuth2 renouvelé. Vérifiez les permissions du client et le scope."
+  "assistantErrorTokenAccess": "Le fournisseur a refusé le jeton OAuth2 renouvelé. Vérifiez les permissions du client et le scope.",
+  "newPythonNode": "Nouveau nœud Python",
+  "pythonExecution": "Exécution Python",
+  "pythonTrustHint": "Python utilise les restrictions de fichiers du worker SQL. Ce n’est pas un bac à sable pour du code hostile : le réseau et les signaux ne sont pas restreints. Le mode local de confiance utilise vos permissions système.",
+  "pythonPolicy_enabled": "Activer Python dans ce projet",
+  "pythonPolicy_expose_secrets": "Autoriser Python à lire les secrets des connexions autorisées",
+  "pythonPolicy_allow_builds": "Autoriser la compilation des dépendances depuis les sources",
+  "pythonOpaque": "Opération Python opaque",
+  "pythonParentHint": "Aucune correspondance entre cellules n’est déduite. Sélectionnez une cellule des résultats parents capturés pour poursuivre son lineage.",
+  "pythonHelperModule": "Module utilitaire Python",
+  "pythonAddModule": "Ajouter le module"
 }

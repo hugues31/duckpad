@@ -38,14 +38,18 @@ export default function ConvertNodeDialog({
               throw new Error(t("searchTargetMissing"));
             linkNode(bundle, target, target.origin, parent);
           } else {
-            const id = identifier("template");
+            const id =
+              identifier("template") +
+              (target.language === "python" ? ".py" : "");
             // Labels are descriptive directives; changing one leaves execution fingerprints intact.
             const sql = nodeCode(bundle, target, parent).replace(
               /^[\t ]*--[\t ]*@label\b[^\n]*(?:\n|$)/gm,
               "",
             );
             bundle.templates[id] =
-              `-- @label ${name.trim().replace(/[\r\n]/g, " ")}\n${sql}`;
+              target.language === "python"
+                ? sql
+                : `-- @label ${name.trim().replace(/[\r\n]/g, " ")}\n${sql}`;
             linkNode(bundle, target, id, parent);
           }
         });

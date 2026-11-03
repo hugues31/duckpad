@@ -77,6 +77,11 @@ class Fingerprints:
                 except (Problem, KeyError) as error:
                     connections[reference] = "invalid:" + str(error)
         extensions = project_extensions.enabled(bundle.get("extensions"))
+        from ..python_environment import runtime_signature
+
+        python_runtime = (
+            runtime_signature() if any(n.get("language") == "python" for n in nodes.values()) else None
+        )
 
         def fingerprint(key: str, node: Record, inputs: dict[str, str], entry: Record | None = None) -> str:
             params = {
@@ -88,7 +93,17 @@ class Fingerprints:
             collected = node.get("partition_collect_inputs", [])
             return digest(
                 {
-                    "sql": executable_sql(node["template_sql"]),
+                    "sql": node["template_sql"]
+                    if node.get("language") == "python"
+                    else executable_sql(node["template_sql"]),
+                    "python": [
+                        python_runtime,
+                        bundle.get("python_lock"),
+                        bundle.get("python_helpers"),
+                        bundle.get("pyproject"),
+                    ]
+                    if node.get("language") == "python"
+                    else None,
                     "error": node.get("error"),
                     "params": variables.fingerprinted(node, params),
                     "connections": {r: connections[r] for r in connection_references(node)},

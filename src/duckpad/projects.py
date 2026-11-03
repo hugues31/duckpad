@@ -270,7 +270,11 @@ class Projects:
             p.relative_to(path).as_posix()
             for folder, pattern in [
                 ("templates", "*.sql"),
+                ("templates", "*.py"),
                 ("nodes", "*.sql"),
+                ("nodes", "*.py"),
+                ("modules", "**/*.py"),
+                ("components", "*/*.py"),
                 ("components", "*.json"),
                 ("components", "*/*.sql"),
             ]
@@ -472,6 +476,26 @@ class Projects:
                 }
                 self.store.put("conflict", conflict["id"], conflict)
                 raise Problem("Concurrent edits conflict. Both versions have been retained.", 409, conflict)
+            if any(name.endswith(".py") for name in merged) and self.store.get(
+                "settings", "python:" + worktree["project"], {}
+            ).get("enabled"):
+                from .python_environment import lock_files
+
+                if (
+                    merged.get("pyproject.toml") != current.get("pyproject.toml")
+                    or not merged.get("uv.lock")
+                    or "<<<<<<<" in merged.get("uv.lock", "")
+                ):
+                    merged["uv.lock"] = lock_files(
+                        merged,
+                        self.store.home,
+                        allow_builds=self.store.get("settings", "python:" + worktree["project"], {}).get(
+                            "allow_builds", False
+                        ),
+                    )
+            from .python_nodes import remember_contracts
+
+            merged = remember_contracts(merged)
             if validate:
                 # Problems already saved, such as an input not connected yet, do not block the change.
                 require_valid(merged, "The proposed changes are invalid", baseline=current)
@@ -675,7 +699,9 @@ class Projects:
                 for identity, value in bundle[kind].items():
                     if kind == "templates":
                         try:
-                            name = parse_template(value)["label"]
+                            name = parse_template(value, "python" if identity.endswith(".py") else "sql")[
+                                "label"
+                            ]
                         except Problem:
                             continue
                     else:

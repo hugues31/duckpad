@@ -1283,5 +1283,15 @@
   "assistantErrorTokenResponse": "The OAuth2 token endpoint returned an invalid response. Check its configuration.",
   "assistantErrorStreaming": "The provider did not return a supported stream. Disable Streaming in its settings and try again.",
   "assistantErrorServer": "The provider returned a server error. Try again or ask an administrator to check the provider.",
-  "assistantErrorTokenAccess": "The provider refused the renewed OAuth2 token. Check the client permissions and scope."
+  "assistantErrorTokenAccess": "The provider refused the renewed OAuth2 token. Check the client permissions and scope.",
+  "newPythonNode": "New Python node",
+  "pythonExecution": "Python execution",
+  "pythonTrustHint": "Python runs with the SQL worker’s filesystem policy. It is not a hostile-code sandbox: network access and process signals are not restricted. Trusted local mode uses your OS permissions.",
+  "pythonPolicy_enabled": "Enable Python in this project",
+  "pythonPolicy_expose_secrets": "Allow Python to read authorized connection secrets",
+  "pythonPolicy_allow_builds": "Allow dependency source builds",
+  "pythonOpaque": "Opaque Python operation",
+  "pythonParentHint": "No cell mapping is inferred. Select a cell from these captured parent results to continue its lineage.",
+  "pythonHelperModule": "Python helper module",
+  "pythonAddModule": "Add module"
 }
