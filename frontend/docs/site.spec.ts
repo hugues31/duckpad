@@ -16,12 +16,12 @@ test("scroll reveals stagger cards and respect live motion preferences", async (
   await expect(cards.first()).not.toHaveAttribute("data-reveal-pending");
   const delays = await cards.evaluateAll((elements) =>
     elements
-      .slice(0, 3)
+      .slice(0, 2)
       .map(
         (element) => getComputedStyle(element).transitionDelay.split(",")[0],
       ),
   );
-  expect(delays).toEqual(["0s", "0.09s", "0.18s"]);
+  expect(delays).toEqual(["0s", "0.09s"]);
   await expect
     .poll(() =>
       cards.first().evaluate((element) => element.getAnimations().length),
@@ -411,6 +411,60 @@ test("search uses guide content, handles no results and supports the keyboard", 
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog")).not.toBeVisible();
 });
+
+for (const width of [1440, 1024, 768, 390, 320]) {
+  test(`sticky header keeps search and anchor targets accessible at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.goto("docs/quickstart/");
+    const heading = page.locator(".prose > h2").nth(2);
+    const id = await heading.getAttribute("id");
+    await page.evaluate((id) => {
+      location.hash = id!;
+    }, id);
+    const header = page.locator(".site-header");
+    await expect.poll(async () => (await header.boundingBox())!.y).toBe(0);
+    await expect
+      .poll(async () => (await heading.boundingBox())!.y)
+      .toBeGreaterThanOrEqual((await header.boundingBox())!.height);
+
+    const search = header.getByRole("button", {
+      name: "Search documentation",
+    });
+    await search.click();
+    const input = page.getByRole("searchbox", { name: "Search documentation" });
+    await expect(input).toBeFocused();
+    await input.fill("lineage");
+    await expect(page.locator(".search-results")).toContainText(
+      "Explain a value",
+    );
+    await page.keyboard.press("Escape");
+    await expect(search).toBeFocused();
+
+    await page.goto("docs/");
+    await search.click();
+    await expect(input).toBeFocused();
+    await page.getByRole("button", { name: "Close search" }).click();
+    await expect(search).toBeFocused();
+
+    await page.goto("./#features");
+    await expect.poll(async () => (await header.boundingBox())!.y).toBe(0);
+    const card = page.locator(".feature-card").first();
+    const icon = (await card.locator("svg").boundingBox())!;
+    const copy = (await card.locator("h3").boundingBox())!;
+    expect(icon.width).toBeGreaterThanOrEqual(40);
+    expect(icon.x + icon.width).toBeLessThan(copy.x);
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
+    await card.click();
+    await expect(page).toHaveURL(/\/docs\/sql\/$/);
+  });
+}
 
 for (const reducedMotion of ["no-preference", "reduce"] as const) {
   test(`mobile menu links receive taps with ${reducedMotion} motion`, async ({

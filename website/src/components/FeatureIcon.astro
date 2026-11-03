@@ -1,0 +1,100 @@
+---
+interface Props {
+  name: string;
+}
+const { name } = Astro.props;
+---
+
+<svg
+  width="48"
+  height="48"
+  viewBox="0 0 48 48"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+  aria-hidden="true"
+>
+  {name === "sql" && (
+    <>
+      <rect x="5" y="8" width="38" height="32" rx="5" />
+      <path d="M5 16h38M12 12h.01M17 12h.01M18 23l-6 5 6 5m12-10 6 5-6 5m-4-12-4 14" />
+    </>
+  )}
+  {name === "data_preparation" && (
+    <>
+      <rect x="5" y="8" width="26" height="32" rx="4" />
+      <path d="M5 18h26M5 28h16M16 8v32m9-3 14-14 4 4-14 14h-4v-4Zm10-10 4 4m1-23v8m-4-4h8" />
+    </>
+  )}
+  {name === "results" && (
+    <>
+      <path d="M7 8v32h34M14 32V22m8 10V14m8 10V10" />
+      <circle cx="33" cy="30" r="8" />
+      <path d="m39 36 5 5" />
+    </>
+  )}
+  {name === "lineage" && (
+    <>
+      <rect x="4" y="7" width="12" height="10" rx="3" />
+      <rect x="4" y="31" width="12" height="10" rx="3" />
+      <rect x="32" y="19" width="12" height="10" rx="3" />
+      <path d="M16 12h5a3 3 0 0 1 3 3v18a3 3 0 0 1-3 3h-5m8-12h8m-4-4-4 4 4 4" />
+    </>
+  )}
+  {name === "tests" && (
+    <>
+      <path d="M24 5 8 11v12c0 10 9 16 16 20 7-4 16-10 16-20V11L24 5Z" />
+      <path d="m16 23 6 6 11-12" stroke-width="3" />
+    </>
+  )}
+  {name === "messages" && (
+    <>
+      <path d="M39 7H9a4 4 0 0 0-4 4v23a4 4 0 0 0 4 4h6v6l9-6h15a4 4 0 0 0 4-4V11a4 4 0 0 0-4-4Z" />
+      <path d="m12 17 5 5-5 5m11 0h7M5 13h38" />
+    </>
+  )}
+  {name === "components" && (
+    <>
+      <rect x="6" y="6" width="14" height="14" rx="3" />
+      <rect x="28" y="6" width="14" height="14" rx="3" />
+      <rect x="17" y="30" width="14" height="14" rx="3" />
+      <path d="M13 20v5h22v-5M24 25v5" />
+    </>
+  )}
+  {name === "variables" && (
+    <>
+      <path d="M7 12h8m8 0h18M7 24h18m8 0h8M7 36h4m8 0h22" />
+      <circle cx="19" cy="12" r="4" />
+      <circle cx="29" cy="24" r="4" />
+      <circle cx="15" cy="36" r="4" />
+    </>
+  )}
+  {name === "git" && (
+    <>
+      <circle cx="13" cy="10" r="5" />
+      <circle cx="13" cy="38" r="5" />
+      <circle cx="36" cy="13" r="5" />
+      <path d="M13 15v18m23-15v3a8 8 0 0 1-8 8h-7a8 8 0 0 0-8 8" />
+    </>
+  )}
+  {name === "jobs" && (
+    <>
+      <rect x="5" y="9" width="38" height="34" rx="5" />
+      <path d="M14 5v8m20-8v8M5 19h38m-23 5 11 7-11 7V24Z" />
+    </>
+  )}
+  {name === "assistant" && (
+    <>
+      <path d="M25 9H9a4 4 0 0 0-4 4v21a4 4 0 0 0 4 4h5v6l9-6h14a4 4 0 0 0 4-4V24M13 23h12m-12 7h18M35 4l3 8 8 3-8 3-3 8-3-8-8-3 8-3 3-8Z" />
+    </>
+  )}
+  {name === "connectors" && (
+    <>
+      <ellipse cx="15" cy="11" rx="10" ry="5" />
+      <path d="M5 11v20c0 3 4 5 10 5h3M25 11v10M5 21c0 3 4 5 10 5h3" />
+      <path d="M28 25v8m10-8v8m-14 0h18m-16 0v3a7 7 0 0 0 14 0v-3m-7 10v3" />
+    </>
+  )}
+</svg>

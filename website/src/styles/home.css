@@ -18,12 +18,15 @@
 }
 .feature-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
 }
 .feature-card {
   position: relative;
-  padding: 26px;
+  display: flex;
+  align-items: flex-start;
+  gap: 24px;
+  padding: 28px;
   border: 1px solid var(--line);
   border-radius: 12px;
   background: var(--surface);
@@ -37,19 +40,19 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 42px;
-  height: 38px;
-  padding-inline: 8px;
-  margin-bottom: 24px;
+  flex: 0 0 80px;
+  height: 80px;
   background: var(--soft);
-  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--blue) 12%, transparent);
+  border-radius: 18px;
   color: var(--blue);
-  font:
-    600 16px ui-monospace,
-    monospace;
+}
+.feature-copy {
+  min-width: 0;
 }
 .feature-card h3 {
   font-size: 19px;
+  padding-right: 18px;
   letter-spacing: -0.03em;
   margin-bottom: 12px;
 }
@@ -60,7 +63,7 @@
 .feature-arrow {
   position: absolute;
   top: 28px;
-  right: 26px;
+  right: 24px;
   color: var(--blue);
 }
 .features-more {
@@ -76,8 +79,22 @@
   text-underline-offset: 3px;
 }
 @media (max-width: 1000px) {
-  .feature-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .feature-card {
+    padding: 22px;
+    gap: 18px;
+  }
+  .feature-mark {
+    flex-basis: 64px;
+    height: 64px;
+    border-radius: 14px;
+  }
+  .feature-mark svg {
+    width: 40px;
+    height: 40px;
+  }
+  .feature-arrow {
+    top: 22px;
+    right: 20px;
   }
   .features-heading {
     display: block;
@@ -87,7 +104,7 @@
     max-width: 100%;
   }
 }
-@media (max-width: 600px) {
+@media (max-width: 760px) {
   .feature-grid {
     grid-template-columns: minmax(0, 1fr);
   }

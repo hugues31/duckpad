@@ -3,6 +3,7 @@ import { url } from "../lib/docs";
 ---
 
 <dialog
+  id="documentation-search"
   class="search-dialog"
   aria-labelledby="search-title"
   data-index={url("search.json")}
@@ -104,11 +105,20 @@ import { url } from "../lib/docs";
     render();
   }
   document
-    .querySelectorAll(".search-trigger")
-    .forEach((button) => button.addEventListener("click", openSearch));
+    .querySelectorAll<HTMLButtonElement>(".search-trigger")
+    .forEach((button) => {
+      button.hidden = false;
+      button.addEventListener("click", openSearch);
+    });
   dialog
     .querySelector("[data-close]")!
     .addEventListener("click", () => dialog.close());
+  dialog.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      dialog.close();
+    }
+  });
   input.addEventListener("input", () => {
     if (entries) render();
   });

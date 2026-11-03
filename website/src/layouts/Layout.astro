@@ -5,6 +5,7 @@ import "../styles/motion.css";
 import Mark from "../components/Mark.astro";
 import ThemeToggle from "../components/ThemeToggle.astro";
 import GitHubStars from "../components/GitHubStars.astro";
+import Search from "../components/Search.astro";
 import { url } from "../lib/docs";
 interface Props {
   title: string;
@@ -55,41 +56,75 @@ const canonical = Astro.site
       Skip to content
     </a>
     <header class="site-header">
-      <a class="brand" href={url()} aria-label="Duckpad home">
-        <Mark />
-        duckpad<span class="brand-dot">.</span>
-      </a>
-      <nav class="desktop-nav" aria-label="Main navigation">
-        <a href={url("#features")}>Why Duckpad</a>
-        <a
-          href={url("docs/quickstart/")}
-          aria-current={docs ? "true" : undefined}
-        >
-          Documentation
+      <div class="header-inner">
+        <a class="brand" href={url()} aria-label="Duckpad home">
+          <Mark />
+          duckpad<span class="brand-dot">.</span>
         </a>
-        <a href={url("releases/")} aria-current={releases ? "page" : undefined}>
-          Releases
-        </a>
-        <GitHubStars />
-      </nav>
-      <div class="header-actions">
-        <ThemeToggle />
-        <a class="button small" href={url("docs/quickstart/")}>
-          Get started <span aria-hidden="true">↗</span>
-        </a>
-        <details class="mobile-nav">
-          <summary aria-label="Navigation menu">
-            <span aria-hidden="true">☰</span>
-          </summary>
-          <nav aria-label="Mobile navigation">
-            <a href={url("#features")}>Why Duckpad</a>
-            <a href={url("docs/quickstart/")}>Documentation</a>
-            <a href={url("releases/")}>Releases</a>
-            <GitHubStars />
-          </nav>
-        </details>
+        <nav class="desktop-nav" aria-label="Main navigation">
+          <a href={url("#features")}>Why Duckpad</a>
+          <a
+            href={url("docs/quickstart/")}
+            aria-current={docs ? "true" : undefined}
+          >
+            Documentation
+          </a>
+          <a
+            href={url("releases/")}
+            aria-current={releases ? "page" : undefined}
+          >
+            Releases
+          </a>
+          <GitHubStars />
+        </nav>
+        <div class="header-actions">
+          {docs && (
+            <button
+              class="search-trigger"
+              type="button"
+              aria-label="Search documentation"
+              aria-haspopup="dialog"
+              aria-controls="documentation-search"
+              hidden
+            >
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.75"
+                stroke-linecap="round"
+                aria-hidden="true"
+              >
+                <circle cx="10.5" cy="10.5" r="6.5" />
+                <path d="m16 16 4.5 4.5" />
+              </svg>
+              <span>Search docs</span>
+              <kbd aria-hidden="true">⌘ / Ctrl K</kbd>
+            </button>
+          )}
+          <ThemeToggle />
+          {!docs && (
+            <a class="button small" href={url("docs/quickstart/")}>
+              Get started <span aria-hidden="true">↗</span>
+            </a>
+          )}
+          <details class="mobile-nav">
+            <summary aria-label="Navigation menu">
+              <span aria-hidden="true">☰</span>
+            </summary>
+            <nav aria-label="Mobile navigation">
+              <a href={url("#features")}>Why Duckpad</a>
+              <a href={url("docs/quickstart/")}>Documentation</a>
+              <a href={url("releases/")}>Releases</a>
+              <GitHubStars />
+            </nav>
+          </details>
+        </div>
       </div>
     </header>
+    {docs && <Search />}
     <slot />
     <footer class="site-footer">
       <div>
