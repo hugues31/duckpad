@@ -21,9 +21,12 @@ import { useResource } from "./useApiResource";
 import { useAsyncAction } from "./useAsyncAction";
 import { useShell } from "./shell";
 
-/** A provider as the server accepts it: with a key only when one was typed. */
-const payload = ({ has_key: _hasKey, ...provider }: AssistantProvider) =>
-  provider;
+/** Credentials are sent only when typed; saved values stay on the server. */
+const payload = ({
+  has_key: _hasKey,
+  has_secret: _hasSecret,
+  ...provider
+}: AssistantProvider) => provider;
 
 /** Keep the default model allowed, falling back to the first allowed model. */
 function withDefault(config: Configuration): Configuration {
@@ -444,14 +447,21 @@ function ProviderCard({
   const [manual, setManual] = useState("");
   const id = `assistant-provider-${provider.id}`;
   const own = selfHosted(provider.kind);
-  const typed = !!provider.api_key?.trim();
+  const oauth = provider.kind === "custom" && provider.auth === "oauth2";
+  const typed = oauth ? !!provider.client_secret : !!provider.api_key?.trim();
+  const hasCredential = oauth ? provider.has_secret : provider.has_key;
   const keyPage = keyPages[provider.kind];
   const missing =
-    !own && !typed && !provider.has_key
+    !own && !typed && !hasCredential
       ? "assistantDiscoverNeedsKey"
       : provider.kind === "custom" && !provider.base_url.trim()
         ? "assistantDiscoverNeedsUrl"
-        : null;
+        : oauth &&
+            (!provider.token_url?.trim() ||
+              !provider.client_id?.trim() ||
+              (!typed && !hasCredential))
+          ? "assistantOAuthRequired"
+          : null;
   const select = (model: string, on: boolean) =>
     onChange({
       models: on
@@ -488,11 +498,13 @@ function ProviderCard({
         </span>
         <h4 id={`${id}-name`}>{providerName(provider.kind)}</h4>
         {typed ? (
-          <span className="badge pending">{t("assistantKeyUnsaved")}</span>
-        ) : provider.has_key ? (
+          <span className="badge pending">
+            {t(oauth ? "assistantSecretUnsaved" : "assistantKeyUnsaved")}
+          </span>
+        ) : hasCredential ? (
           <span className="badge success">
             <Check size={11} aria-hidden="true" />
-            {t("assistantKeySavedBadge")}
+            {t(oauth ? "assistantSecretSavedBadge" : "assistantKeySavedBadge")}
           </span>
         ) : (
           !own && (
@@ -530,6 +542,8 @@ function ProviderCard({
                   base_url: e.target.value,
                   api_key: "",
                   has_key: false,
+                  client_secret: "",
+                  has_secret: false,
                 })
               }
             />
@@ -538,39 +552,142 @@ function ProviderCard({
             </small>
           </label>
         )}
-        <label className="field">
-          <span>{t("assistantApiKey")}</span>
-          <input
-            type="password"
-            aria-label={t("assistantApiKey")}
-            aria-describedby={`${id}-key-hint`}
-            autoComplete="new-password"
-            autoFocus={autoFocus && !own}
-            placeholder={
-              provider.has_key ? t("assistantKeyPlaceholderSaved") : undefined
-            }
-            value={provider.api_key || ""}
-            onChange={(e) => onChange({ api_key: e.target.value })}
-          />
-          <small className="muted" id={`${id}-key-hint`}>
-            {t(
-              provider.has_key
-                ? "assistantKeySaved"
-                : own
-                  ? "assistantKeyHint"
-                  : "assistantKeyRequired",
-            )}
-            {keyPage && (
-              <>
-                {" "}
-                <a href={keyPage} target="_blank" rel="noreferrer">
-                  {t("assistantCreateKey")}
-                  <ExternalLink size={11} aria-hidden="true" />
-                </a>
-              </>
-            )}
-          </small>
-        </label>
+        {provider.kind === "custom" && (
+          <label className="field">
+            <span>{t("assistantAuthentication")}</span>
+            <select
+              aria-label={t("assistantAuthentication")}
+              value={provider.auth ?? "api_key"}
+              onChange={(e) =>
+                // Saved credentials stay until a save with the other method clears them.
+                onChange({
+                  auth: e.target.value as "api_key" | "oauth2",
+                  api_key: "",
+                  client_secret: "",
+                })
+              }
+            >
+              <option value="api_key">{t("assistantApiKey")}</option>
+              <option value="oauth2">{t("assistantOAuth")}</option>
+            </select>
+          </label>
+        )}
+        {oauth ? (
+          <>
+            <label className="field">
+              <span>{t("assistantTokenUrl")}</span>
+              <input
+                type="url"
+                aria-label={t("assistantTokenUrl")}
+                required
+                value={provider.token_url ?? ""}
+                placeholder="https://auth.example.com/oauth/token"
+                onChange={(e) =>
+                  onChange({
+                    token_url: e.target.value,
+                    client_secret: "",
+                    has_secret: false,
+                  })
+                }
+              />
+            </label>
+            <label className="field">
+              <span>{t("assistantClientId")}</span>
+              <input
+                aria-label={t("assistantClientId")}
+                required
+                autoComplete="off"
+                value={provider.client_id ?? ""}
+                onChange={(e) =>
+                  onChange({
+                    client_id: e.target.value,
+                    client_secret: "",
+                    has_secret: false,
+                  })
+                }
+              />
+            </label>
+            <label className="field">
+              <span>{t("assistantClientSecret")}</span>
+              <input
+                type="password"
+                aria-label={t("assistantClientSecret")}
+                aria-describedby={`${id}-secret-hint`}
+                autoComplete="new-password"
+                required={!provider.has_secret}
+                placeholder={
+                  provider.has_secret
+                    ? t("assistantKeyPlaceholderSaved")
+                    : undefined
+                }
+                value={provider.client_secret ?? ""}
+                onChange={(e) => onChange({ client_secret: e.target.value })}
+              />
+              <small className="muted" id={`${id}-secret-hint`}>
+                {t("assistantSecretHint")}
+              </small>
+            </label>
+            <label className="field">
+              <span>{t("assistantScope")}</span>
+              <input
+                aria-label={t("assistantScope")}
+                value={provider.scope ?? ""}
+                onChange={(e) => onChange({ scope: e.target.value })}
+              />
+            </label>
+          </>
+        ) : (
+          <label className="field">
+            <span>{t("assistantApiKey")}</span>
+            <input
+              type="password"
+              aria-label={t("assistantApiKey")}
+              aria-describedby={`${id}-key-hint`}
+              autoComplete="new-password"
+              autoFocus={autoFocus && !own}
+              placeholder={
+                provider.has_key ? t("assistantKeyPlaceholderSaved") : undefined
+              }
+              value={provider.api_key || ""}
+              onChange={(e) => onChange({ api_key: e.target.value })}
+            />
+            <small className="muted" id={`${id}-key-hint`}>
+              {t(
+                provider.has_key
+                  ? "assistantKeySaved"
+                  : own
+                    ? "assistantKeyHint"
+                    : "assistantKeyRequired",
+              )}
+              {keyPage && (
+                <>
+                  {" "}
+                  <a href={keyPage} target="_blank" rel="noreferrer">
+                    {t("assistantCreateKey")}
+                    <ExternalLink size={11} aria-hidden="true" />
+                  </a>
+                </>
+              )}
+            </small>
+          </label>
+        )}
+        {provider.kind === "custom" && (
+          <div>
+            <label className="check-row">
+              <input
+                type="checkbox"
+                aria-label={t("assistantStreaming")}
+                aria-describedby={`${id}-streaming-hint`}
+                checked={provider.streaming !== false}
+                onChange={(e) => onChange({ streaming: e.target.checked })}
+              />
+              <span>{t("assistantStreaming")}</span>
+            </label>
+            <small className="muted" id={`${id}-streaming-hint`}>
+              {t("assistantStreamingHint")}
+            </small>
+          </div>
+        )}
       </div>
       <div
         className="assistant-models"
