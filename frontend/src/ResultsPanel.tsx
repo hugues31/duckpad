@@ -15,8 +15,9 @@ import {
   X,
 } from "lucide-react";
 import { WarningBadge, warningCount } from "./ExecutionMessages";
-import { outputSource, type NodeInterface } from "./graph";
-import { useT } from "./i18n";
+import { nodeInterface, outputSource, type NodeInterface } from "./graph";
+import { nodeLabel, useT } from "./i18n";
+import { localDefinitions } from "./nodeCode";
 import type { Cell } from "./lineageGraph";
 import ResultsColumns from "./ResultsColumns";
 import ResultsData, { type FailingRows } from "./ResultsData";
@@ -224,6 +225,7 @@ export default function ResultsPanel({
   );
   const run = generation.data?.id === dataset?.run ? generation.data : null;
   const state = run?.nodes?.[stored(target).node];
+  const local = localDefinitions(snapshot, parent);
   const inputs = graphEdges
     .filter((edge) => edge.target === node.id)
     .map((edge) => {
@@ -232,7 +234,19 @@ export default function ResultsPanel({
         node: prefix + edge.source,
         port: edge.sourceHandle,
         input: edge.targetHandle,
-        label: source?.label || edge.source,
+        // The name shown on the canvas, as in the Inspector's input choices.
+        label: source
+          ? nodeLabel(
+              source,
+              nodeInterface(
+                source,
+                snapshot.parsed_templates,
+                snapshot.bundle?.components,
+                local,
+              ),
+              t,
+            )
+          : edge.source,
       };
     });
   const tests = declaredTests(signature);

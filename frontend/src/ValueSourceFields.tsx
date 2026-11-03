@@ -2,7 +2,7 @@ import { withQuery } from "./api";
 import { useApiResource } from "./useApiResource";
 import { nodeInterface, outputSource } from "./graph";
 import { localDefinitions } from "./nodeCode";
-import { templateLabel, useT } from "./i18n";
+import { nodeLabel, useT } from "./i18n";
 import Select from "./Select";
 import type { PreviewPage, Snapshot } from "./types";
 import { useOptionalWorktree } from "./worktree";
@@ -21,13 +21,14 @@ export function ValueSourceFields({
 }) {
   const t = useT();
   const nodes = snapshot.bundle?.flow.nodes || [];
-  const outputs = (node: (typeof nodes)[number]) =>
+  const signature = (node: (typeof nodes)[number]) =>
     nodeInterface(
       node,
       snapshot.parsed_templates,
       snapshot.bundle?.components,
       localDefinitions(snapshot),
-    ).outputs;
+    );
+  const outputs = (node: (typeof nodes)[number]) => signature(node).outputs;
   const sources = nodes.filter((node) => outputs(node).length);
   const source = nodes.find((node) => node.id === value.node);
   const ports = source ? outputs(source) : [];
@@ -54,7 +55,7 @@ export function ValueSourceFields({
           )}
           {sources.map((node) => (
             <option key={node.id} value={node.id}>
-              {templateLabel(node.template || node.id, node.label, t)}
+              {nodeLabel(node, signature(node), t)}
             </option>
           ))}
         </Select>
