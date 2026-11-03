@@ -114,6 +114,11 @@ never retried automatically. Prefer writes in `write` after checks.
 a partition. Python uses the same partition scheduling and output filtering as
 SQL. Schema-only / empty-manifest execution explicitly fails before running
 project code; Duckpad cannot safely infer arbitrary Python output schemas.
+Python calls within one context worker are serialized; different worktrees and
+environments can execute concurrently. Duckpad cannot infer arbitrary Python
+file paths or HTTP write targets, guarantee distinct partition destinations, or
+serialize remote writes across contexts. Authors must derive distinct targets
+from the partition key or provide coordination in the destination system.
 
 ## Data types, memory and lineage
 

@@ -16,6 +16,7 @@ from duckpad import cli
 from duckpad.app import create_app
 from duckpad.execution import runs as runs_module
 from duckpad.native import Cursor as NativeCursor
+from duckpad.sandbox import Database as WorkerDatabase
 from duckpad.util import Problem
 
 
@@ -25,8 +26,12 @@ def unavailable_sandbox(*args, **kwargs):
 
 @pytest.fixture
 def local(tmp_path, monkeypatch):
-    # Trusted execution must work even when the platform cannot start a sandbox.
-    monkeypatch.setattr("duckpad.sandbox.Database", unavailable_sandbox)
+    # The shared worker must start without requesting unavailable filesystem isolation.
+    def trusted_worker(policy):
+        assert policy["isolated"] is False
+        return WorkerDatabase(policy)
+
+    monkeypatch.setattr("duckpad.sandbox.Database", trusted_worker)
     app = create_app(tmp_path / "instance", watch=False, trusted_local=True)
     with TestClient(app) as client:
         assert client.get("/api/workspace").status_code == 401
