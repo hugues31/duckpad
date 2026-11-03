@@ -96,6 +96,9 @@ async function expectPending(page: Page) {
   await expect(previousName).not.toBeFocused();
   await page.keyboard.type("Name typed during creation");
   await page.keyboard.press("Tab");
+  // Canvas delete keys listen on the document, outside the inert panels.
+  await page.keyboard.press("Backspace");
+  await page.keyboard.press("Delete");
   await expect(previousName).toHaveValue("Existing node");
 }
 
@@ -105,6 +108,12 @@ const additions = [
   { name: "linked node", button: "Add linked: Filter" },
   { name: "component", button: "Reusable branch" },
   { name: "dropped template", button: "Filter", drop: true },
+  {
+    name: "duplicated node",
+    button: "Duplicate node",
+    panel: "#node-inspector",
+    label: "Existing node",
+  },
 ];
 
 for (const addition of additions) {
@@ -113,10 +122,12 @@ for (const addition of additions) {
   }) => {
     const { endpoint, existing } = await prepare(page);
     const { writes, release } = await delaySave(page, endpoint);
-    const button = page.locator(".palette").getByRole("button", {
-      name: addition.button,
-      exact: true,
-    });
+    const button = page
+      .locator(addition.panel ?? ".palette")
+      .getByRole("button", {
+        name: addition.button,
+        exact: true,
+      });
     if (addition.drop)
       await button.dragTo(page.locator(".react-flow__pane"), {
         targetPosition: { x: 650, y: 350 },
@@ -130,7 +141,7 @@ for (const addition of additions) {
     await expect(adding(page)).toHaveCount(0);
     await expect(page.locator(".react-flow__node")).toHaveCount(2);
     await expect(displayName(page)).toBeEditable();
-    await expect(displayName(page)).toHaveValue("");
+    await expect(displayName(page)).toHaveValue(addition.label ?? "");
     expect(writes).toHaveLength(1);
     const created = writes[0]!.flow.nodes.find(
       (node) => node.id !== existing.id,

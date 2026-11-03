@@ -376,9 +376,17 @@ fieldset.palette-bottom {
   border-radius: 7px;
   background: var(--surface);
   font-size: 12px;
+  /* Most saves end sooner: show the wait only when it lasts. */
+  animation: node-add-status-in 150ms ease 300ms both;
+}
+@keyframes node-add-status-in {
+  from {
+    opacity: 0;
+  }
 }
 .inspector-layer[inert] .inspector {
   opacity: 0.5;
+  transition: opacity 150ms ease 300ms;
 }
 .canvas-breadcrumb {
   position: absolute;

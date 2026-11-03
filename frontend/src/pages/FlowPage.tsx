@@ -245,6 +245,23 @@ export default function FlowPage() {
     if (!canEdit) return;
     await save(snapshot, (value) => change(graphAt(value, path)));
   }
+  /**
+   * Save a new node, then select it. Editors stay inert meanwhile, so an edit
+   * cannot land on the node the inspector still shows.
+   */
+  async function insertNode(id: string, change: (value: Bundle) => void) {
+    if (!canEdit || additionPending.current) return false;
+    additionPending.current = true;
+    setAddingNode(true);
+    try {
+      await save(snapshot, change);
+      select(id);
+      return true;
+    } finally {
+      additionPending.current = false;
+      setAddingNode(false);
+    }
+  }
   async function addNode(
     kind: NodeKind,
     id: string,
@@ -255,7 +272,6 @@ export default function FlowPage() {
     connection?: NodeConnection,
     linked = false,
   ) {
-    if (!canEdit || additionPending.current) return;
     if (connection && !graph?.nodes.some((n) => n.id === connection.nodeId))
       return;
     const created: FlowNode = {
@@ -264,43 +280,35 @@ export default function FlowPage() {
       params: {},
       position,
     };
-    additionPending.current = true;
-    setAddingNode(true);
-    try {
-      await save(snapshot, (value) => {
-        const g = graphAt(value, path);
-        if (kind === "template" && !linked) {
-          if (id) detachNode(value, created, parent);
-          else {
-            delete created.template;
-            (value.node_sql ||= {})[nodeCodePath(created.id, parent)] =
-              NEW_NODE_SQL;
-          }
+    await insertNode(created.id, (value) => {
+      const g = graphAt(value, path);
+      if (kind === "template" && !linked) {
+        if (id) detachNode(value, created, parent);
+        else {
+          delete created.template;
+          (value.node_sql ||= {})[nodeCodePath(created.id, parent)] =
+            NEW_NODE_SQL;
         }
-        g.nodes.push(created);
-        if (connection)
-          connectInput(
-            g,
-            connection.handleType === "source"
-              ? {
-                  source: connection.nodeId,
-                  sourceHandle: connection.handleId,
-                  target: created.id,
-                  targetHandle: connection.port,
-                }
-              : {
-                  source: created.id,
-                  sourceHandle: connection.port,
-                  target: connection.nodeId,
-                  targetHandle: connection.handleId,
-                },
-          );
-      });
-      select(created.id);
-    } finally {
-      additionPending.current = false;
-      setAddingNode(false);
-    }
+      }
+      g.nodes.push(created);
+      if (connection)
+        connectInput(
+          g,
+          connection.handleType === "source"
+            ? {
+                source: connection.nodeId,
+                sourceHandle: connection.handleId,
+                target: created.id,
+                targetHandle: connection.port,
+              }
+            : {
+                source: created.id,
+                sourceHandle: connection.port,
+                target: connection.nodeId,
+                targetHandle: connection.handleId,
+              },
+        );
+    });
   }
   async function removeNodes(ids: string[], edges: string[] = []) {
     await save(snapshot, (value) => {
@@ -329,7 +337,7 @@ export default function FlowPage() {
       bundle?.templates.filter !== undefined &&
       filter?.inputs?.length === 1 &&
       filter.parameters?.some((p) => p.name === "condition");
-    await save(snapshot, (value) => {
+    const added = await insertNode(created.id, (value) => {
       const g = graphAt(value, path);
       if (reusable) {
         created.template = "filter";
@@ -346,8 +354,7 @@ export default function FlowPage() {
         targetHandle: reusable ? filter!.inputs![0] : "source",
       });
     });
-    notify(t("filterNodeAdded"));
-    select(created.id);
+    if (added) notify(t("filterNodeAdded"));
   }
   function openComponent(id: string) {
     const instance = graph?.nodes.find((n) => n.id === id);
@@ -456,7 +463,8 @@ export default function FlowPage() {
         <div className="canvas">
           <Canvas
             valueProducers={valueProducers}
-            readOnly={!canEdit}
+            // Its delete keys listen on the document, which inert does not cover.
+            readOnly={!canEdit || addingNode}
             nodes={graph.nodes}
             edges={graph.edges}
             parsed={snapshot.parsed_templates}
@@ -627,7 +635,7 @@ export default function FlowPage() {
               openModal({ kind: "relinkNode", worktree, node: node.id, parent })
             }
             onDuplicate={() =>
-              safe(async () => {
+              safe(() => {
                 const duplicate = {
                   ...structuredClone(node),
                   id: identifier(),
@@ -636,7 +644,7 @@ export default function FlowPage() {
                     y: node.position.y + 40,
                   },
                 };
-                await save(snapshot, (value) => {
+                return insertNode(duplicate.id, (value) => {
                   if (!duplicate.component) {
                     const sql = nodeCode(value, node, parent);
                     duplicate.origin = node.template || node.origin;
@@ -647,7 +655,6 @@ export default function FlowPage() {
                   }
                   nodeGraph(value, parent).nodes.push(duplicate);
                 });
-                select(duplicate.id);
               })
             }
             onHistory={() =>
