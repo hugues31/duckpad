@@ -259,6 +259,84 @@ test("drag a filter, configure it without SQL, and group it into a reusable comp
   await run(page);
 });
 
+test("guided filters format fixed values from the input column type", async ({
+  page,
+}) => {
+  await signIn(page);
+  const worktree = await (
+    await page.request.post("/api/projects", {
+      data: { name: "Guided codes" },
+    })
+  ).json();
+  await page.goto(`/worktrees/${worktree.id}/flow`);
+  const inspector = page.locator(".inspector");
+  const nodes = page.locator(".react-flow__node");
+  const save = async () => {
+    await inspector
+      .getByRole("button", { name: "Save changes", exact: true })
+      .click();
+    await expect(page.locator(".save-status")).toHaveText("All changes saved");
+  };
+  await page.getByRole("button", { name: "Load CSV", exact: true }).click();
+  const source = await nodes.getAttribute("data-id");
+  await inspector.getByLabel("Upload file", { exact: true }).setInputFiles({
+    name: "codes.csv",
+    mimeType: "text/csv",
+    buffer: Buffer.from(
+      "code,mixed,amount,active\n001,001,10,true\n1,1,1,false\n002,ABC,3,false\n",
+    ),
+  });
+  await expect(inspector.getByRole("textbox", { name: /file/ })).toHaveValue(
+    /codes\.csv$/,
+  );
+  // Without a declared type, CSV detection reads these codes as numbers.
+  await inspector
+    .getByRole("textbox", { name: /types/ })
+    .fill('{"code":"VARCHAR"}');
+  await save();
+  await run(page);
+
+  await page.getByRole("button", { name: "Filter", exact: true }).click();
+  const filter = await nodes
+    .filter({ has: page.getByText("Filter", { exact: true }) })
+    .getAttribute("data-id");
+  await inspector
+    .getByLabel("source", { exact: true })
+    .selectOption(`${source}:result`);
+  const column = inspector.getByLabel("Column", { exact: true });
+  await expect(column).toContainText("active");
+  const condition = inspector.getByRole("textbox", { name: /condition/ });
+  const apply = async (name: string, operator: string, value: string) => {
+    await column.selectOption(name);
+    await inspector
+      .getByLabel("Operator", { exact: true })
+      .selectOption(operator);
+    await inspector.getByLabel("Value", { exact: true }).fill(value);
+    await inspector
+      .getByRole("button", { name: "Apply to parameters", exact: true })
+      .click();
+  };
+  // An unquoted 001 also matched 1, and failed to cast ABC in mixed codes.
+  for (const name of ["code", "mixed"]) {
+    await apply(name, "=", "001");
+    await expect(condition).toHaveValue(`"${name}" = '001'`);
+    await save();
+    await run(page);
+    const preview = await (
+      await page.request.get(
+        `/api/worktrees/${worktree.id}/preview/${filter}?environment=dev&port=result`,
+      )
+    ).json();
+    expect(
+      preview.rows.map((row: { values: unknown[] }) => row.values[0]),
+    ).toEqual(["001"]);
+  }
+  await apply("amount", "<", "2");
+  await expect(condition).toHaveValue('"amount" < 2');
+  await apply("active", "=", "true");
+  await expect(condition).toHaveValue('"active" = TRUE');
+});
+
 test("conflicting parameter edits survive reload and can be resolved explicitly", async ({
   page,
 }) => {
