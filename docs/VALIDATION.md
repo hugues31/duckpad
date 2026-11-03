@@ -14,6 +14,10 @@ The installed-wheel smoke test (`scripts/smoke_wheel.py`, run by CI and the rele
 
 ## Performance reference
 
+For the current 10K–10M scaling matrix, PostgreSQL comparison, cell-lineage
+pagination and profiling instructions, see [Scaling benchmarks](BENCHMARKS.md).
+The single-run reference below is historical and uses a wider dataset.
+
 Run:
 
 ```sh

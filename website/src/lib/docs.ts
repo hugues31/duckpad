@@ -179,6 +179,12 @@ export const sections = [
         description: "Measured results, reproducible checks and their scope.",
       },
       {
+        slug: "benchmarks",
+        title: "Scaling benchmarks",
+        description:
+          "Measure 10K–10M rows, PostgreSQL reads and cell-lineage hot paths.",
+      },
+      {
         slug: "website",
         title: "Contribute to the docs",
         description:
