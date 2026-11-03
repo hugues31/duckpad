@@ -107,4 +107,17 @@
   :global([data-theme="dark"]) .theme-sun {
     transform: rotate(45deg);
   }
+  @media (max-width: 400px) {
+    .theme-toggle {
+      width: 44px;
+      height: 44px;
+    }
+    .theme-toggle::before {
+      display: none;
+    }
+    :global([data-theme="light"]) .theme-moon,
+    :global([data-theme="dark"]) .theme-sun {
+      display: none;
+    }
+  }
 </style>
