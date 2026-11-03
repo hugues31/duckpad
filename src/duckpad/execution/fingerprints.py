@@ -69,7 +69,10 @@ class Fingerprints:
                 if reference in connections:
                     continue
                 try:
-                    captured_values = captured or self.catalog.capture([reference], environment)[0]
+                    # Server secrets authenticate: a missing one must not make results stale.
+                    captured_values = (
+                        captured or self.catalog.capture([reference], environment, resolve=False)[0]
+                    )
                     connections[reference] = captured_values[reference]["fingerprint"]
                 except (Problem, KeyError) as error:
                     connections[reference] = "invalid:" + str(error)

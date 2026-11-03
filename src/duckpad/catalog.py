@@ -8,7 +8,9 @@ from pathlib import Path
 
 import duckdb
 
+from . import secret_references
 from .builtin_connectors import BUILTIN_CONNECTORS
+from .secret_references import is_reference
 from .templates import IDENTIFIER, REFERENCE, URI
 from .types import Connections, Record
 from .util import Problem, digest, literal, qi
@@ -98,7 +100,8 @@ class Catalog:
             hidden = set(connection.pop("secret_fields")) | secret_names(definition)
             for values in connection["environments"].values():
                 for name in hidden:
-                    if values.get(name):
+                    # A reference names where the secret is, not the secret.
+                    if values.get(name) and not is_reference(values[name]):
                         values[name] = MASK
         return {
             "connectors": self.connectors(),
@@ -148,11 +151,15 @@ class Catalog:
         self.check(kind, data, create=create)
         if before_change is not None:
             before_change()
-        if kind == "connector" and data == BUILTIN_CONNECTORS.get(data["id"]):
-            # Saving a built-in unchanged keeps it following the release.
-            self.store.delete("connector", data["id"])
-        else:
-            self.store.put(kind, data["id"], data)
+        with self.store.transaction():
+            if kind == "connector" and data == BUILTIN_CONNECTORS.get(data["id"]):
+                # Saving a built-in unchanged keeps it following the release.
+                self.store.delete("connector", data["id"])
+            else:
+                self.store.put(kind, data["id"], data)
+            sealed = kind == "connector" and self.track_secret_fields(data["id"])
+        if sealed:
+            self.store.compact()
         self.on_change()
 
     def reset(self, identity, *, before_change=None):
@@ -163,8 +170,30 @@ class Catalog:
             return
         if before_change is not None:
             before_change()
-        self.store.delete("connector", identity)
+        with self.store.transaction():
+            self.store.delete("connector", identity)
+            sealed = self.track_secret_fields(identity)
+        if sealed:
+            self.store.compact()
         self.on_change()
+
+    def track_secret_fields(self, connector=None):
+        """Record parameters a definition made secret on its connections, so the store seals them.
+
+        A parameter stays sealed after its definition stops marking it secret. Returns whether
+        a connection changed; `Store.compact` then drops the pages that held the plain values.
+        """
+        changed = False
+        for connection in self.store.all("connection"):
+            if connector is not None and connection["connector"] != connector:
+                continue
+            fields = sorted(
+                set(connection["secret_fields"]) | secret_names(self.connector(connection["connector"]) or {})
+            )
+            if fields != connection["secret_fields"]:
+                self.store.put("connection", connection["id"], {**connection, "secret_fields": fields})
+                changed = True
+        return changed
 
     def check(self, kind, data: Record, *, create=False):
         """Validate a connector or connection and complete it for storage, without writing it."""
@@ -201,6 +230,11 @@ class Catalog:
                 for key in secret_names(definition):
                     if values.get(key) == MASK:
                         values[key] = previous["environments"].get(env, {}).get(key, "")
+                for key, value in values.items():
+                    if is_reference(value):
+                        if key not in secret_names(definition):
+                            raise Problem(f"Only secret parameters can name a server secret, not {key}")
+                        secret_references.validate(value)
         else:
             # Listings add the origin; it is not part of the definition.
             data.pop("origin", None)
@@ -284,13 +318,18 @@ class Catalog:
             raise Problem(f"Invalid connector initialization SQL: {error}") from error
         self._validated.add(fingerprint)
 
-    def capture(self, references: list[str], environment: str) -> tuple[Connections, list[str]]:
+    def capture(
+        self, references: list[str], environment: str, *, resolve: bool = True
+    ) -> tuple[Connections, list[str]]:
+        """Without `resolve`, server secrets stay references: enough for fingerprints, never for a worker."""
         captured, secrets = {}, []
         for reference in set(references):
             connection = self.store.get("connection", reference)
             if not connection:
                 raise Problem(f"Missing connection: {reference}")
-            captured[reference], hidden = self.capture_connection(reference, connection, environment)
+            captured[reference], hidden = self.capture_connection(
+                reference, connection, environment, resolve=resolve
+            )
             secrets += hidden
         return captured, secrets
 
@@ -308,7 +347,7 @@ class Catalog:
         return {data["id"]: captured}, secrets
 
     def capture_connection(
-        self, reference: str, connection: Record, environment: str
+        self, reference: str, connection: Record, environment: str, *, resolve: bool = True
     ) -> tuple[Record, list[str]]:
         """The definition, values and runtime names of one connection in an environment, with its secrets."""
         secrets = []
@@ -319,12 +358,25 @@ class Catalog:
         if environment not in connection["environments"]:
             raise Problem(f"Connection {reference} has no configuration for {environment}")
         values = copy.deepcopy(connection["environments"][environment])
+        hidden = secret_names(definition)
+        for name, value in values.items():
+            if not is_reference(value):
+                continue
+            if name not in hidden:
+                raise Problem(f"Connection {reference}: {name} is no longer secret; enter its value")
+            if resolve:
+                try:
+                    values[name] = secret_references.resolve(value)
+                except Problem as error:
+                    raise Problem(f"Connection {reference}: {error} ({environment})") from None
         for p in definition.get("parameters", []):
             name = p["name"]
             if name not in values:
                 if "default" not in p:
                     raise Problem(f"Connection {reference} requires {name} in {environment}")
                 values[name] = p["default"]
+            if is_reference(values[name]):
+                continue
             if p.get("secret"):
                 secrets.append(values[name])
             kind = p.get("type", "text")
@@ -342,17 +394,18 @@ class Catalog:
         # home expansion and symlinks. The sandbox grants its resolved parent.
         for name, path in database_files(definition, values).items():
             resolved = str(path)
-            if name in secret_names(definition) and resolved != values[name]:
+            if name in hidden and resolved != values[name]:
                 secrets.append(resolved)
             values[name] = resolved
-        hidden = secret_names(definition)
         public_values = {k: v for k, v in values.items() if k not in hidden}
         captured = {
             "definition": definition,
             "values": values,
             "settings": public_values,
             "name": connection["name"],
-            "fingerprint": digest([executable(definition), values]),
+            # Secret parameters authenticate; the settings that select data are not secret. Rotating
+            # a credential therefore never makes results stale.
+            "fingerprint": digest([executable(definition), public_values]),
             "alias": "conn_" + digest(reference)[:12],
             "secret_name": "secret_" + digest(reference)[:12],
         }

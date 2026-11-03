@@ -133,7 +133,10 @@ are deleted.
 
 JSON columns hold variable connector definitions, connection parameters,
 revision files, conflict/run snapshots, Git mappings, provider metadata and
-settings. Secrets remain private instance configuration. Public responses are
+settings. Secrets remain private instance configuration. `Store` encrypts them on
+write and decrypts them on read: secret connection parameters, the `oidc` client
+secret, `assistant` provider API keys and `ssh_key.private_key`. A sealed value
+reads `dpenc:1:<key id>:<data>`. Public responses are
 assembled and redacted by the existing service/API schemas, never by returning
 database models containing credentials.
 

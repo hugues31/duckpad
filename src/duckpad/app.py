@@ -390,14 +390,20 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
 
     @app.put("/api/catalog/{kind}", response_model=None)
     def save_catalog(kind: str, data: dict[str, Any], create: bool = False) -> Record:
+        # Results stay: each SQL session takes new settings and credentials at its next run.
         with engine.exclusive():
-            catalog.save(kind, data, create=create, before_change=engine.reset_catalog)
+            catalog.save(kind, data, create=create)
         return catalog.public()
 
     @app.delete("/api/catalog/{kind}/{identity}", response_model=None)
     def delete_catalog(kind: str, identity: str) -> Record:
         with engine.exclusive():
-            catalog.delete(kind, identity, before_change=engine.reset_catalog)
+            catalog.delete(
+                kind,
+                identity,
+                # Connectors in use cannot be deleted; a deleted connection is detached at once.
+                before_change=(lambda: engine.reset_connection(identity)) if kind == "connection" else None,
+            )
         return catalog.public()
 
     @app.post("/api/catalog/connection/test", response_model=None)
@@ -407,7 +413,7 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
     @app.post("/api/catalog/connector/{identity}/reset", response_model=None)
     def reset_connector(identity: str) -> Record:
         with engine.exclusive():
-            catalog.reset(identity, before_change=engine.reset_catalog)
+            catalog.reset(identity)
         return catalog.public()
 
     @app.post("/api/environments", response_model=None)
@@ -607,8 +613,12 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
     @app.put("/api/projects/{project}/connections", response_model=None)
     def project_connections(project: str, data: schemas.ConnectionGrants) -> Record:
         with engine.exclusive(project):
+            # A revoked connection is detached at once; new grants are attached at the next run.
+            revoked = set(access.record(project)["connections"]) - set(data.connections)
             access.grant_connections(
-                project, data.connections, before_change=lambda: engine.reset_project(project)
+                project,
+                data.connections,
+                before_change=(lambda: engine.reset_project(project)) if revoked else None,
             )
         return {"ok": True}
 

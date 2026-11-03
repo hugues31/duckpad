@@ -26,7 +26,8 @@ INVALID_BRANCH_NAME = (
 )
 # Inherited Git variables can redirect a command to another repository or inject configuration;
 # SSH and credential-manager variables can authenticate network Git as the server account.
-ISOLATED_VARIABLES = ("GIT_", "SSH_", "GCM_")
+# Server secrets that connections reference never reach Git or its hooks either.
+ISOLATED_VARIABLES = ("GIT_", "SSH_", "GCM_", "DUCKPAD_SECRET_")
 
 
 class GitError(Problem):

@@ -3,17 +3,19 @@
 from __future__ import annotations
 
 import copy
+import logging
 import re
 import threading
 import time
 from collections.abc import Mapping
 from contextlib import suppress
+from pathlib import Path
 
 import duckdb
 
 from .. import connection_probe, project_extensions, value_sources
 from ..access import Access
-from ..catalog import Catalog, redact
+from ..catalog import Catalog, database_files, executable, redact
 from ..components import expand
 from ..datasets import Context
 from ..extensions import database_config
@@ -22,7 +24,9 @@ from ..projects import Projects
 from ..store import Store
 from ..templates import URI
 from ..types import Connections, Record, SQLCursor, SQLDatabase
-from ..util import Problem
+from ..util import Problem, digest, literal, qi, uid
+
+logger = logging.getLogger(__name__)
 
 # How often a writer waits for lineage readers to release results it drops.
 READER_POLL_INTERVAL = 0.005
@@ -91,6 +95,31 @@ def cancel_lineage(context: Context, affected: set[str] | None = None, *, droppi
         if affected is None or request["nodes"] & affected:
             request["canceled"].set()
             interrupt(request["cursor"])
+
+
+def transfer(database: SQLDatabase, path: Path, *, save: bool) -> None:
+    """Copy every table and view of a worker's database to a DuckDB file in its sandbox, or back.
+
+    Results are immutable, so their row identifiers, which lineage and samples use, stay unchanged.
+    """
+    cursor = database.cursor()
+    try:
+        cursor.execute(f"ATTACH {literal(str(path))} AS handoff{'' if save else ' (READ_ONLY)'}")
+        try:
+            cursor.execute(
+                "COPY FROM DATABASE memory TO handoff" if save else "COPY FROM DATABASE handoff TO memory"
+            )
+        finally:
+            cursor.execute("DETACH handoff")
+    finally:
+        cursor.close()
+
+
+def attached(connections: Connections) -> str:
+    """What the setup of a worker's connections depends on, without names and descriptions."""
+    return digest(
+        {reference: [executable(c["definition"]), c["values"]] for reference, c in connections.items()}
+    )
 
 
 def wait_for_readers(context: Context, nodes: set[str]) -> None:
@@ -175,10 +204,12 @@ class ContextPool:
                 stopped.close()
             if context.db is not None or (self.access and not create):
                 return context
-            database = self._open(worktree, environment, requirements or [], resources, partition_artifacts)
+            database, connections, secrets = self._open(
+                worktree, environment, requirements or [], resources, partition_artifacts
+            )
             with self.lock:
                 if self.contexts.get(key) is context and context.db is None:
-                    context.db = database
+                    context.db, context.connections, context.secrets = database, connections, secrets
                     return context
             # Another request published its database first, or the context was discarded meanwhile.
             database.close()
@@ -242,6 +273,76 @@ class ContextPool:
         """DuckDB threads and memory limit of new SQL sessions; None leaves DuckDB's automatic sizing."""
         return {**SQL_RESOURCES, **self.store.get("settings", "sql_resources", {})}
 
+    def renew(self, context: Context) -> None:
+        """Move a context's results to a new isolated worker when its project's connections changed.
+
+        A worker attaches its connections once, then locks its configuration: new settings or
+        credentials need a new worker. The old worker keeps serving its results until the new one
+        has started, so a connection that fails to start, such as a wrong password, leaves them
+        untouched. Only the run that owns the worktree may call this.
+        """
+        previous = context.db
+        if not self.isolated or previous is None or getattr(previous, "closed", False):
+            return
+        project = self.projects.get(context.worktree)["project"]
+        connections, secrets = self._configured_connections(project, context.environment)
+        # Secret values only reach this in-memory comparison, never a stored fingerprint.
+        if attached(connections) == attached(context.connections):
+            # A new name or description changes no setup: runs only report it.
+            context.connections, context.secrets = connections, secrets
+            return
+        files = {r for r, c in context.connections.items() if database_files(c["definition"], c["values"])}
+        if files:
+            # DuckDB locks an attached database file: the old worker releases it for the new one.
+            cursor = previous.cursor()
+            try:
+                for reference in files:
+                    cursor.execute(f"DETACH DATABASE IF EXISTS {qi(context.connections[reference]['alias'])}")
+            finally:
+                cursor.close()
+            context.connections = {r: c for r, c in context.connections.items() if r not in files}
+        candidate, _, _ = self._open(
+            context.worktree,
+            context.environment,
+            context.extensions,
+            context.resources,
+            context.partition_artifacts,
+            (connections, secrets),
+        )
+        handoff = self.store.paths.exports(context.worktree, context.environment) / ".temporary"
+        handoff = handoff / f"handoff-{uid()}.duckdb"
+        try:
+            try:
+                # Readers keep reading the old worker meanwhile; only the owning run writes.
+                transfer(previous, handoff, save=True)
+            except (duckdb.Error, Problem) as error:
+                candidate.close()
+                raise Problem(
+                    "Cannot move the results to a SQL session with the new connection settings: "
+                    f"{redact(str(error), context.secrets)}. Check the free disk space of the Duckpad server.",
+                    503,
+                ) from None
+            with context.lock:
+                cancel_lineage(context)
+                context.db, context.connections, context.secrets = candidate, connections, secrets
+                # Release the old worker's memory before the new one loads the results.
+                previous.close()
+                try:
+                    transfer(candidate, handoff, save=False)
+                except (duckdb.Error, Problem):
+                    logger.warning(
+                        "Cannot load the results of worktree %s in %s into its new SQL session; "
+                        "they will be recalculated",
+                        context.worktree,
+                        context.environment,
+                        exc_info=True,
+                    )
+                    # A closed database makes the next request start the context without results.
+                    candidate.close()
+        finally:
+            for path in (handoff, handoff.with_name(handoff.name + ".wal")):
+                path.unlink(missing_ok=True)
+
     def _open(
         self,
         worktree: str,
@@ -249,7 +350,9 @@ class ContextPool:
         requirements: list[Record],
         resources: Record,
         partition_artifacts: bool,
-    ) -> SQLDatabase:
+        connections: tuple[Connections, list[str]] | None = None,
+    ) -> tuple[SQLDatabase, Connections, list[str]]:
+        """Start a context's database, with the connections an isolated worker attached."""
         extensions = self.store.paths.extensions
         extensions.mkdir(exist_ok=True)
         config = {**database_config(extensions), **self.extension_settings()}
@@ -264,27 +367,31 @@ class ContextPool:
             )
             try:
                 project_extensions.load(db, requirements, imports, config["allow_unsigned_extensions"])
-                return db
+                return db, {}, []
             except Exception:
                 db.close()
                 raise
         from ..sandbox import Database
 
         project = self.projects.get(worktree)["project"]
-        captured, secrets = self._configured_connections(project, environment)
+        captured, secrets = connections or self._configured_connections(project, environment)
         assert self.access is not None
         roots, writable = self.access.local_roots(project, captured)
         directory = self.store.paths.exports(worktree, environment)
         directory.mkdir(parents=True, exist_ok=True)
         temporary = directory / ".temporary"
         temporary.mkdir(exist_ok=True)
+        if connections is None:
+            # Results that a stopped server was moving between workers are gone with their context.
+            for leftover in temporary.glob("handoff-*"):
+                leftover.unlink(missing_ok=True)
         if partition_artifacts:
             partition_data = self.store.paths.partition_artifacts(worktree, environment)
             partition_data.mkdir(parents=True, exist_ok=True, mode=0o700)
             roots = [*roots, partition_data]
         self._install_extensions(captured, config, secrets)
         try:
-            return Database(
+            database = Database(
                 {
                     "captured": captured,
                     "extensions": str(extensions),
@@ -298,6 +405,7 @@ class ContextPool:
                     "resources": resource_config(resources),
                 }
             )
+            return database, captured, secrets
         except Problem as error:
             message = redact(str(error), secrets)
             if requirements:

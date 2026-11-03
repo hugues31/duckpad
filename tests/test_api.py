@@ -531,40 +531,88 @@ def test_invalid_connection_grants_preserve_results(app, client, executed_projec
     [
         ("PUT", "/api/catalog/connector", {"id": "custom", "name": "Updated", "family": "database"}),
         ("POST", "/api/catalog/connector/folder/reset", None),
-        ("DELETE", "/api/catalog/connection/files", None),
+        ("PUT", "/api/catalog/connection", {**FILES, "name": "Renamed files"}),
         ("PUT", "/api/projects/{project}/connections", {"connections": ["files"]}),
     ],
 )
 @pytest.mark.parametrize("active", [False, True])
-def test_admin_edits_reset_results_only_when_idle(app, client, executed_projects, method, path, body, active):
-    worktree = executed_projects[0]
+def test_catalog_edits_and_new_grants_keep_results_even_during_runs(
+    app, client, executed_projects, method, path, body, active
+):
+    """Sessions take new settings, credentials and grants at their next run."""
     engine = app.state.services.engine
-    path = path.format(project=worktree["project"])
+    path = path.format(project=executed_projects[0]["project"])
     if path.endswith("/reset"):
         # Store an override directly, so that results from before it stay current.
         services = app.state.services
         services.store.put("connector", "folder", {**services.catalog.connector("folder"), "name": "Shared"})
+    before = admin_state(app, client, executed_projects)
     if active:
-        engine.active[worktree["id"]] = {"id": "active"}
+        engine.active[executed_projects[0]["id"]] = {"id": "active"}
+    try:
+        response = client.request(method, path, json=body)
+    finally:
+        engine.active.clear()
+    assert response.status_code == 200, response.text
+    after = admin_records(app)
+    assert any(after[kind] != before[kind] for kind in after)
+    for key, value in admin_state(app, client, executed_projects).items():
+        if key.startswith("/api/worktrees/"):
+            assert value == before[key], key
+
+
+@pytest.mark.parametrize(
+    ("method", "path", "body"),
+    [
+        ("DELETE", "/api/catalog/connection/files", None),
+        ("PUT", "/api/projects/{project}/connections", {"connections": []}),
+    ],
+)
+@pytest.mark.parametrize("active", [False, True])
+def test_revocations_close_the_sessions_of_granted_projects_only_when_idle(
+    app, client, executed_projects, method, path, body, active
+):
+    granted, other = executed_projects
+    access = app.state.access
+    access.grant_connections(granted["project"], ["files"])
+    engine = app.state.services.engine
+    path = path.format(project=granted["project"])
+    if active:
+        engine.active[granted["id"]] = {"id": "active"}
         try:
             assert_rejected_admin_edit(app, client, executed_projects, method, path, body, 409)
         finally:
             engine.active.clear()
-    else:
-        before = admin_state(app, client, executed_projects)
+        return
+    before = admin_state(app, client, executed_projects)
+    # A run elsewhere does not delay the revocation.
+    engine.active[other["id"]] = {"id": "active"}
+    try:
         response = client.request(method, path, json=body)
-        assert response.status_code == 200, response.text
-        after = admin_records(app)
-        assert any(after[kind] != before[kind] for kind in after)
-        affected = executed_projects[:1] if path.startswith("/api/projects/") else executed_projects
-        for item in affected:
-            base = f"/api/worktrees/{item['id']}"
-            assert client.get(base + "/status?environment=dev").json()["nodes"] == {}
-            assert client.get(base + "/preview/double?environment=dev").status_code == 404
-        if len(affected) == 1:
-            for suffix in ("status", "preview/source", "preview/double"):
-                path = f"/api/worktrees/{executed_projects[1]['id']}/{suffix}"
-                assert client.get(path, params={"environment": "dev"}).json() == before[path]
+    finally:
+        engine.active.clear()
+    assert response.status_code == 200, response.text
+    assert access.record(granted["project"])["connections"] == []
+    base = f"/api/worktrees/{granted['id']}"
+    assert client.get(base + "/status?environment=dev").json()["nodes"] == {}
+    assert client.get(base + "/preview/double?environment=dev").status_code == 404
+    for suffix in ("status", "preview/source", "preview/double"):
+        key = f"/api/worktrees/{other['id']}/{suffix}"
+        assert client.get(key, params={"environment": "dev"}).json() == before[key]
+
+
+def test_a_refused_connection_deletion_closes_no_session(app, client, executed_projects):
+    """A run in one granted project refuses the deletion before any other project loses its results."""
+    for item in executed_projects:
+        app.state.access.grant_connections(item["project"], ["files"])
+    engine = app.state.services.engine
+    engine.active[executed_projects[-1]["id"]] = {"id": "active"}
+    try:
+        assert_rejected_admin_edit(
+            app, client, executed_projects, "DELETE", "/api/catalog/connection/files", None, 409
+        )
+    finally:
+        engine.active.clear()
 
 
 def test_environment_metadata_preserves_connections_and_survives_catalog_reload(app, client, worktree):
