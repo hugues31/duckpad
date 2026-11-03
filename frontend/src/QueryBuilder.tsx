@@ -9,14 +9,12 @@ import {
 } from "./variables";
 
 const quote = (name: string) => '"' + name.replaceAll('"', '""') + '"';
-const literal = (value: string, type?: string) => {
-  const numeric =
-    /^(U?(TINYINT|SMALLINT|INTEGER|BIGINT|HUGEINT)|BIGNUM|FLOAT|DOUBLE|DECIMAL(?:\(\d+,\s*\d+\))?)$/i;
-  if (
-    numeric.test(type || "") &&
-    /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i.test(value)
-  )
-    return value;
+const numericType =
+  /^(U?(TINYINT|SMALLINT|INTEGER|BIGINT|HUGEINT)|BIGNUM|FLOAT|DOUBLE|DECIMAL(?:\(\d+,\s*\d+\))?)$/i;
+const number = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i;
+/** Formats a fixed value from the input column's type, not from its spelling. */
+const literal = (value: string, type = "") => {
+  if (numericType.test(type) && number.test(value)) return value;
   if (type === "BOOLEAN" && /^(true|false)$/i.test(value))
     return value.toUpperCase();
   // Text, other types and unknown schemas keep the user's value as a string.
@@ -56,8 +54,9 @@ export default function QueryBuilder({
   const [measures, setMeasures] = useState([
     { function: "SUM", column: "", alias: "total" },
   ]);
+  const names = (columns: Column[] = []) => columns.map(({ name }) => name);
   const inputColumns = schemas.source || schemas.left || [];
-  const columns = inputColumns.map((column) => column.name);
+  const columns = names(inputColumns);
   const choose = (
     label: string,
     selected: string,
@@ -178,18 +177,8 @@ export default function QueryBuilder({
       )}
       {kind === "join" && (
         <>
-          {choose(
-            t("leftKey"),
-            column,
-            setColumn,
-            (schemas.left || []).map((column) => column.name),
-          )}
-          {choose(
-            t("rightKey"),
-            right,
-            setRight,
-            (schemas.right || []).map((column) => column.name),
-          )}
+          {choose(t("leftKey"), column, setColumn, names(schemas.left))}
+          {choose(t("rightKey"), right, setRight, names(schemas.right))}
           <button
             className="button secondary full"
             disabled={!column || !right}
