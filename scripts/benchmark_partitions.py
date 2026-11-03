@@ -47,8 +47,8 @@ def measure(keys, rows, home):
                 ],
             },
             "templates": {
-                "keys": f"-- @kind source\n-- @output result\nSELECT i::VARCHAR batch FROM range({keys}) t(i) ORDER BY i;",
-                "source": f"-- @kind source\n-- @output result\nSELECT p::VARCHAR batch, i, repeat(printf('%064d', i), 2) payload FROM range({keys}) p(p), range({rows}) r(i) ORDER BY i;",
+                "keys": f"-- @output result\nSELECT i::VARCHAR batch FROM range({keys}) t(i) ORDER BY i;",
+                "source": f"-- @output result\nSELECT p::VARCHAR batch, i, repeat(printf('%064d', i), 2) payload FROM range({keys}) p(p), range({rows}) r(i) ORDER BY i;",
                 "collect": "-- @input data\n-- @output result\nSELECT * FROM {{ data }};",
             },
             "components": {},

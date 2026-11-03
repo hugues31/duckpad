@@ -26,8 +26,10 @@ See [authoring](AUTHORING.md), [SQL](SQL.md), [components](COMPONENTS.md) and
 ## SQL semantics and execution
 
 - DuckDB and its extensions define SQL values, types, multiplicities and external
-  effects. Lineage instrumentation must preserve those semantics. Exports use
-  explicit SQL; Duckpad adds no hidden truncation, append or filename changes.
+  effects. Lineage instrumentation must preserve those semantics. Every query reads
+  only declared inputs, earlier outputs, resources and connections. Only a node
+  without outputs writes externally, with explicit `COPY TO` or `INSERT`; Duckpad
+  adds no hidden truncation, append or filename changes.
 - A launch captures committed definitions, environment, parameters, variables and
   connection settings. Later edits do not change that run. Publication compares
   current fingerprints so outdated results remain stale.

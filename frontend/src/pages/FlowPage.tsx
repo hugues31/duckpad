@@ -360,11 +360,10 @@ export default function FlowPage() {
         signature.kind === "export" ? "write" : "read",
       ),
   );
-  const hasResults = ports.length > 0 || signature?.kind === "export";
   const shown = {
     palette: panels.open.palette,
     inspector: panels.open.inspector && !!node,
-    preview: panels.open.preview && !!node && hasResults,
+    preview: panels.open.preview && !!node,
   };
   const editCode = () =>
     node &&
@@ -478,7 +477,7 @@ export default function FlowPage() {
             onWarnings={() => showResults("log")}
           />
         </div>
-        {node && signature && hasResults ? (
+        {node && signature ? (
           <ResultsPanel
             readOnly={!canEdit}
             key={[worktree, fullNode, ...ports].join(":")}

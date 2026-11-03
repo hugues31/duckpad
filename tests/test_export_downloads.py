@@ -51,7 +51,7 @@ def create(instance, format_name="csv", **params):
         },
         "templates": {
             **BUILTINS,
-            "rows": "-- @kind source\n-- @output result\nSELECT range AS id, 'item;' || range AS label FROM range(1003);",
+            "rows": "-- @output result\nSELECT range AS id, 'item;' || range AS label FROM range(1003);",
         },
         "components": {},
         "documentation": {},
@@ -188,9 +188,7 @@ def test_stale_failed_running_and_replaced_results(instance, monkeypatch):
     edit(
         services,
         worktree,
-        lambda b: b["templates"].update(
-            rows="-- @kind source\n-- @output result\nSELECT error('failed source');"
-        ),
+        lambda b: b["templates"].update(rows="-- @output result\nSELECT error('failed source');"),
     )
     failed = join_run(services.store, services.engine.launch(worktree["id"], "dev")["id"], 30)
     assert failed["status"] == "failed"
@@ -199,7 +197,7 @@ def test_stale_failed_running_and_replaced_results(instance, monkeypatch):
     edit(
         services,
         worktree,
-        lambda b: b["templates"].update(rows="-- @kind source\n-- @output result\nSELECT 42 AS id;"),
+        lambda b: b["templates"].update(rows="-- @output result\nSELECT 42 AS id;"),
     )
     entered, release = threading.Event(), threading.Event()
     original = services.engine.runs._compute
@@ -235,7 +233,7 @@ def test_a_new_export_run_purges_the_copy_it_replaces(instance):
     edit(
         services,
         worktree,
-        lambda b: b["templates"].update(rows="-- @kind source\n-- @output result\nSELECT error('failed');"),
+        lambda b: b["templates"].update(rows="-- @output result\nSELECT error('failed');"),
     )
     assert join_run(services.store, services.engine.launch(worktree["id"], "dev")["id"])["status"] == "failed"
     assert not services.store.all("artifact")
@@ -349,7 +347,7 @@ def test_imported_and_custom_file_exports_offer_downloads(instance):
 
     def custom(bundle, body):
         bundle["templates"]["custom"] = (
-            '-- @kind export\n-- @input rows\n-- @param connection: connection = ""\n'
+            '-- @input rows\n-- @param connection: connection = ""\n'
             '-- @param target: destination(connection) = "custom.csv"\n' + body
         )
         bundle["flow"]["nodes"][1].update(template="custom", params={})
@@ -379,7 +377,7 @@ def test_streams_in_bounded_chunks_and_closes_the_file(instance, monkeypatch):
         services,
         worktree,
         lambda b: b["templates"].update(
-            rows="-- @kind source\n-- @output result\nSELECT range AS id, repeat('x', 200) AS label FROM range(1003);"
+            rows="-- @output result\nSELECT range AS id, repeat('x', 200) AS label FROM range(1003);"
         ),
     )
     run = execute(services, worktree)
@@ -435,7 +433,7 @@ def test_two_nodes_sharing_a_destination_keep_their_own_export(instance):
     worktree, endpoint = create(instance)
 
     def add_second(bundle):
-        bundle["templates"]["other"] = "-- @kind source\n-- @output result\nSELECT 42 AS other_value;"
+        bundle["templates"]["other"] = "-- @output result\nSELECT 42 AS other_value;"
         bundle["flow"]["nodes"] += [
             {"id": "other", "template": "other", "params": {}},
             {"id": "second", "template": "export_csv", "params": {}},

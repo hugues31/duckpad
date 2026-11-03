@@ -3,7 +3,6 @@
 BUILTINS = {
     "load_csv": """-- @label Load CSV
 -- @description Read a CSV resource using native DuckDB options.
--- @kind source
 -- @param connection: connection = ""
 -- @param file: file(connection) = "orders.csv"
 -- @param delimiter: text = ","
@@ -13,7 +12,6 @@ BUILTINS = {
 SELECT * FROM read_csv({{ file }}, delim={{ delimiter }}, header={{ header }}, types={{ types }});
 """,
     "load_parquet": """-- @label Load Parquet
--- @kind source
 -- @param connection: connection = ""
 -- @param file: file(connection) = "customers.parquet"
 -- @output result
@@ -21,7 +19,6 @@ SELECT * FROM read_parquet({{ file }});
 """,
     "load_xlsx": """-- @label Load XLSX
 -- @description Read an XLSX worksheet. Leave sheet blank to use the first sheet; all_varchar preserves mixed columns as text.
--- @kind source
 -- @param connection: connection = ""
 -- @param file: file(connection) = "workbook.xlsx"
 -- @param sheet: text = ""
@@ -32,7 +29,6 @@ SELECT * FROM read_xlsx({{ file }}, sheet={{ sheet }}, header={{ header }}, all_
 """,
     "load_table": """-- @label Load table
 -- @description Read a table or view of a database connection.
--- @kind source
 -- @param connection: connection = ""
 -- @param schema: schema_name(connection) = "public"
 -- @param table: table_name(schema) = ""
@@ -76,7 +72,6 @@ SELECT {{ columns }} FROM {{ source }};
 SELECT {{ groups }}, {{ measures }} FROM {{ source }} GROUP BY {{ groups }};
 """,
     "export_csv": """-- @label Export CSV
--- @kind export
 -- @input source
 -- @param connection: connection = ""
 -- @param destination: destination(connection) = "export.csv"
@@ -86,7 +81,6 @@ COPY {{ source }} TO {{ destination }} (FORMAT CSV, HEADER {{ header }}, DELIMIT
 """,
     "export_xlsx": """-- @label Export XLSX
 -- @description Write a single-sheet XLSX workbook, replacing the destination on each run.
--- @kind export
 -- @input source
 -- @param connection: connection = ""
 -- @param destination: destination(connection) = "export.xlsx"
@@ -96,7 +90,6 @@ COPY {{ source }} TO {{ destination }} (FORMAT XLSX, SHEET {{ sheet }}, HEADER {
 """,
     "export_table": """-- @label Export table
 -- @description Insert the rows into an existing table of a database connection, matching columns by name. Nothing is truncated or created.
--- @kind export
 -- @input source
 -- @param connection: connection = ""
 -- @param schema: schema_name(connection) = "public"
@@ -104,7 +97,6 @@ COPY {{ source }} TO {{ destination }} (FORMAT XLSX, SHEET {{ sheet }}, HEADER {
 INSERT INTO {{ connection }}.{{ schema }}.{{ table }} BY NAME SELECT * FROM {{ source }};
 """,
     "export_oracle": """-- @label Export Oracle
--- @kind export
 -- @input source
 -- @param connection: connection = "oracle"
 -- @param secret: secret(connection) = ""

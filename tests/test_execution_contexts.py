@@ -14,7 +14,7 @@ from duckpad.bundle import bundle_to_files
 from duckpad.services import Services
 from duckpad.util import Problem
 
-SLOW = "-- @kind source\n-- @output result\nSELECT SUM(random()) AS value FROM range(10000000000);"
+SLOW = "-- @output result\nSELECT SUM(random()) AS value FROM range(10000000000);"
 # A request that must not wait for another worktree's worker startup.
 PROMPT = 10
 
@@ -75,7 +75,7 @@ def test_blocked_worker_startup_blocks_neither_statuses_nor_other_cancellations(
         isolated,
         "Starting",
         nodes=[{"id": "value", "template": "value", "params": {}}],
-        templates={"value": "-- @kind source\n-- @output result\nSELECT 42 AS value;"},
+        templates={"value": "-- @output result\nSELECT 42 AS value;"},
     )
     with ThreadPoolExecutor(4) as pool:
         launch = pool.submit(engine.launch, starting["id"], "dev")
@@ -110,9 +110,7 @@ def test_isolated_csv_pipeline_ignores_an_authorized_unconfigured_connection(iso
         "CSV only",
         ["warehouse"],
         [oracle],
-        {
-            "oracle": '-- @kind source\n-- @param db: connection = "warehouse"\n-- @output result\nSELECT 1 AS value;'
-        },
+        {"oracle": '-- @param db: connection = "warehouse"\n-- @output result\nSELECT 1 AS value;'},
     )
     run = wait_run(store, engine.launch(worktree["id"], "staging"), timeout=30)
     assert run["status"] == "partial_failure", run

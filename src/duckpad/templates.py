@@ -22,7 +22,6 @@ DIRECTIVE = re.compile(r"^\s*--\s*@([\w]+)\s*(.*?)\s*$")
 PARAMETER = re.compile(r"(\w+)\s*:\s*([^=]+?)(?:\s*=\s*(.*))?")
 URI = re.compile(r"[a-zA-Z][a-zA-Z0-9+.-]*://")
 ISO_DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
-KINDS = ("source", "transform", "export")
 PARAMETER_TYPES = {
     "text",
     "number",
@@ -80,7 +79,6 @@ def parse_template(sql):
     template = {
         "label": "SQL template",
         "description": "",
-        "kind": "transform",
         "inputs": [],
         "parameters": [],
         "outputs": [],
@@ -112,7 +110,7 @@ def parse_template(sql):
             buffer.append(line)
             continue
         key, value = found
-        if key in ("label", "description", "kind"):
+        if key in DESCRIPTIVE:
             template[key] = value
         elif key == "input":
             template["inputs"].append(value)
@@ -148,6 +146,7 @@ def parse_template(sql):
         else:
             raise Problem(f"Unknown template directive: @{key}")
     flush()
+    template["writes_external"] = any(not b["output"] and not is_check(b) for b in template["blocks"])
     validate_interface(template)
     template["download"] = downloadable_export(template)
     return template
@@ -197,14 +196,10 @@ def validate_interface(template):
             raise Problem("Undeclared, self or forward reference: " + ", ".join(sorted(missing)))
         if block["output"]:
             available.add(block["output"])
-        elif not is_check(block) and template["kind"] != "export":
-            raise Problem("A tabular query needs an @output declaration")
     if not template["blocks"]:
         raise Problem("Template has no SQL statements")
-    if template["kind"] not in KINDS:
-        raise Problem("Template kind must be source, transform or export")
-    if template["kind"] == "export" and template["outputs"]:
-        raise Problem("An export cannot declare a tabular output")
+    if template["writes_external"] and template["outputs"]:
+        raise Problem("Queries need an @output; external writes go in a node without outputs")
 
 
 def parse_templates(templates):
@@ -245,8 +240,8 @@ def downloadable_export(template):
 
     Decided from the template text, so copies imported under another identifier keep it.
     """
-    blocks = [block for block in template["blocks"] if not is_check(block)]
-    if template["kind"] != "export" or len(blocks) != 1:
+    blocks = [block for block in template["blocks"] if not block["output"] and not is_check(block)]
+    if len(blocks) != 1:
         return None
     # Inputs become tables, resources a literal of their own name, every other parameter a placeholder.
     names = [p["name"] for p in template["parameters"] if base_type(p["type"]) in RESOURCE_TYPES]
@@ -477,7 +472,7 @@ def render_parameter(
                 raise Problem(f"Choose a connection for {name}")
             return ""
         connection = connection_for(connections, value)
-        capability = "write" if template["kind"] == "export" else "read"
+        capability = "write" if template["writes_external"] else "read"
         if capability not in connection["definition"].get("capabilities", []):
             raise Problem(f"Connection {value} does not support {capability}")
         return qi(connection["alias"])
@@ -597,47 +592,43 @@ def parse_block(sql):
     return trees[0]
 
 
-def check_access(template, tree, allowed, connections, resources):
-    """Reject data access that the template's kind and declared interface do not permit."""
+def check_access(block, tree, allowed, connections, resources):
+    """Reject data access outside the node's declared inputs, earlier outputs, resources and connections.
+
+    Return whether the query's result is a lineage source: it reads external data, or
+    no flow data at all. Later outputs can trace through that snapshot normally.
+    """
+    if block["output"] or is_check(block):
+        if not isinstance(tree, exp.Query):
+            raise Problem("Outputs, tests and messages must be read-only tabular queries")
+    elif not isinstance(tree, (exp.Copy, exp.Insert)):
+        raise Problem("A tabular query needs an @output declaration; writes must use COPY TO or INSERT")
     local_names = {x.strip('"') for x in allowed} | {cte.alias for cte in tree.find_all(exp.CTE)}
     aliases = {c["alias"] for c in connections.values()}
-    kind = template["kind"]
-    if kind == "transform":
-        if not isinstance(tree, exp.Query):
-            raise Problem("Transformations must be read-only tabular queries")
-        # Subqueries, CTEs and ordinary scalar functions are permitted. Table
-        # functions are rejected here, including readers and query() access.
-        for table in tree.find_all(exp.Table):
-            if not is_local_table(table, local_names):
-                raise Problem(f"Undeclared data access: {table.sql(dialect='duckdb')}")
-    elif kind == "source":
-        if not isinstance(tree, exp.Query):
-            raise Problem("Sources must return a tabular query")
-        for table in tree.find_all(exp.Table):
-            if isinstance(table.this, exp.Identifier):
-                if table.name not in local_names and table.catalog not in aliases and table.db not in aliases:
-                    raise Problem(
-                        f"Source table requires a declared connection: {table.sql(dialect='duckdb')}"
-                    )
-            elif not isinstance(table.this, (exp.GenerateSeries, exp.ExplodingGenerateSeries)):
-                check_reader(table.this, resources)
-    else:
-        if not isinstance(tree, (exp.Copy, exp.Insert)):
-            raise Problem("Exports must use an explicit COPY TO or INSERT statement")
-        destination = tree.this if isinstance(tree, exp.Insert) else None
-        if isinstance(destination, exp.Schema):
-            destination = destination.this
-        for table in tree.find_all(exp.Table):
-            if table is destination and (table.catalog in aliases or table.db in aliases):
-                continue
-            if not is_local_table(table, local_names):
-                raise Problem(f"Undeclared export input or destination: {table.sql(dialect='duckdb')}")
-        if isinstance(tree, exp.Copy) and tree.args.get("kind"):
-            raise Problem("Export COPY must write TO its declared destination")
+    destination = tree.this if isinstance(tree, exp.Insert) else None
+    if isinstance(destination, exp.Schema):
+        destination = destination.this
+    reads_local = reads_external = False
+    for table in tree.find_all(exp.Table):
+        if table is not destination and is_local_table(table, local_names):
+            reads_local = True
+            continue
+        if isinstance(table.this, exp.Identifier):
+            if table.catalog not in aliases and table.db not in aliases:
+                raise Problem(f"Undeclared data access or destination: {table.sql(dialect='duckdb')}")
+        elif table is destination:
+            raise Problem("INSERT requires a declared connection destination")
+        elif not isinstance(table.this, (exp.GenerateSeries, exp.ExplodingGenerateSeries)):
+            # Readers name declared resources; query() and other table functions are rejected.
+            check_reader(table.this, resources)
+        reads_external = reads_external or table is not destination
+    if isinstance(tree, exp.Copy) and tree.args.get("kind"):
+        raise Problem("Export COPY must write TO its declared destination")
+    return reads_external or not reads_local
 
 
 def check_reader(function, resources):
-    """A source reader's only positional argument names declared resources; the rest are named options."""
+    """A reader's only positional argument names declared resources; the rest are named options."""
     arguments = [
         value
         for values in function.args.values()
@@ -647,7 +638,7 @@ def check_reader(function, resources):
     positional = [argument for argument in arguments if not is_option(argument)]
     files = positional[0].expressions if positional and isinstance(positional[0], exp.Array) else positional
     if len(positional) != 1 or not files or any(f.sql(dialect="duckdb") not in resources for f in files):
-        raise Problem("Source readers must read only declared file resource parameters")
+        raise Problem("Readers must read only declared file resource parameters")
 
 
 def is_option(argument):
@@ -687,6 +678,9 @@ def compile_template(
     """
     values, bindings = dict(inputs), {}
     parameters = {p["name"]: params.get(p["name"], p.get("default")) for p in template["parameters"]}
+    # Captured connections span the run; a block may only access this node's declarations.
+    references = {parameters[p["name"]] for p in template["parameters"] if p["type"] == "connection"}
+    connections = {reference: c for reference, c in connections.items() if reference in references}
     variables = variables or {}
     placeholders = variable_placeholders(variables, parameters)
     bindings.update({placeholders[name]: variable["value"] for name, variable in variables.items()})
@@ -722,12 +716,7 @@ def compile_template(
     for block in execution_blocks(template):
         tree = parse_block(REFERENCE.sub(lambda m: values[m[1]], block["sql"]))
         message_block = block.get("message_block")
-        access = (
-            {**template, "kind": "transform"}
-            if is_check(block) and template["kind"] == "export"
-            else template
-        )
-        check_access(access, tree, allowed, connections, resources)
+        source = check_access(block, tree, allowed, connections, resources)
         query = tree.sql(dialect="duckdb")
         used = {
             name: value
@@ -743,6 +732,7 @@ def compile_template(
                 "output": output,
                 "table": physical,
                 "query": query,
+                "source": source,
                 # Runs materialize outputs from this query and record the statements they execute.
                 "sql": query,
                 "bindings": used,

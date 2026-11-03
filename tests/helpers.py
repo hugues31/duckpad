@@ -94,7 +94,7 @@ def example_bundle(path):
             ],
         },
         "templates": {
-            "source": '-- @kind source\n-- @param connection: connection = ""\n-- @param file: file(connection)\n-- @output result\nSELECT * FROM read_csv({{ file }});',
+            "source": '-- @param connection: connection = ""\n-- @param file: file(connection)\n-- @output result\nSELECT * FROM read_csv({{ file }});',
             "filter": "-- @input source\n-- @param threshold: number = 0\n-- @output result\nSELECT * FROM {{ source }} WHERE amount > {{ threshold }};",
             "total": "-- @input source\n-- @output result\nSELECT region, SUM(amount) AS total, COUNT(*) AS count FROM {{ source }} GROUP BY region ORDER BY region;",
         },
@@ -126,7 +126,7 @@ def pipeline(services, tmp_path, query):
             ],
         },
         "templates": {
-            "source": "-- @kind source\n-- @param file: file\n-- @output result\nSELECT * FROM read_csv({{ file }});",
+            "source": "-- @param file: file\n-- @output result\nSELECT * FROM read_csv({{ file }});",
             "query": "-- @input source\n-- @output result\n" + query,
         },
         "components": {},

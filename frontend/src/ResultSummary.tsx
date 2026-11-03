@@ -10,14 +10,13 @@ import type { Dataset, Snapshot, Statuses } from "./types";
 
 /**
  * One line on what the node produced in the selected environment, under the
- * inspector's node kind. The details live in the results panel: each part
+ * inspector's node heading. The details live in the results panel: each part
  * opens its matching tab.
  */
 export default function ResultSummary({
   bundle,
   fullNode,
   ports,
-  exportNode,
   statuses,
   onOpen,
 }: {
@@ -25,7 +24,6 @@ export default function ResultSummary({
   fullNode: string;
   /** The output ports the node declares. */
   ports: string[];
-  exportNode: boolean;
   statuses: Statuses;
   onOpen: (tab: ResultsTab) => void;
 }) {
@@ -33,7 +31,7 @@ export default function ResultSummary({
   const worktree = useOptionalWorktree();
   const partition = usePartitionQuery(fullNode, ports[0]);
   const preview = useApiResource<Dataset>(
-    worktree && partition.manifest && !exportNode
+    worktree && partition.manifest && ports.length > 0
       ? withQuery(
           `/worktrees/${worktree.id}/preview/${encodeURIComponent(fullNode)}`,
           {
@@ -67,9 +65,7 @@ export default function ResultSummary({
       : datasets.every((dataset) => dataset.status === "valid")
         ? "valid"
         : "stale"
-    : exportNode
-      ? result?.execution_status
-      : null;
+    : result?.execution_status;
   const messages = warningCount(
     result?.results?.filter((item) => item.origin.kind !== "test"),
   );
@@ -97,14 +93,14 @@ export default function ResultSummary({
         status && (
           <button
             className={`badge ${status}`}
-            title={tabTitle(exportNode ? "log" : "data")}
-            onClick={() => onOpen(exportNode ? "log" : "data")}
+            title={tabTitle(ports.length ? "data" : "log")}
+            onClick={() => onOpen(ports.length ? "data" : "log")}
           >
             {t(status)}
           </button>
         )
       )}
-      {!exportNode && ports.length > 0 && (
+      {ports.length > 0 && (
         <button
           className="summary-link"
           title={tabTitle("data")}
@@ -157,7 +153,7 @@ export default function ResultSummary({
       )}
       <button
         className="summary-link results-link"
-        onClick={() => onOpen(exportNode ? "log" : "data")}
+        onClick={() => onOpen(ports.length ? "data" : "log")}
       >
         {t("results")}
         <ChevronRight size={13} aria-hidden="true" />

@@ -78,7 +78,7 @@ def keyed_project(services, tmp_path):
         "templates": {
             "load_table": BUILTINS["load_table"],
             "double": "-- @input source\n-- @output result\nSELECT id, amount * 2 AS doubled FROM {{ source }};",
-            "other": "-- @kind source\n-- @output result\nSELECT 17 AS value;",
+            "other": "-- @output result\nSELECT 17 AS value;",
         },
         "components": {},
         "documentation": {},

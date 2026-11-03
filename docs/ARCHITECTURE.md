@@ -127,6 +127,10 @@ error checks pass. Failure or cancellation retains its previous successful set a
 stale; descendants cannot consume it as a fallback. Publication rechecks current
 fingerprints, so an edit during execution cannot make outdated results valid.
 
+The compiler checks each query or write against the node's declared inputs,
+resources and connections. A node without outputs can write externally; run
+records mark it with `writes_external` to track the write outcome.
+
 ### Connection changes
 
 Saving connection settings or granting a connection preserves results. At the

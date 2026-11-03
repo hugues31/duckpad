@@ -26,7 +26,7 @@ export async function jobsFlow(page: Page) {
     ];
     bundle.flow.edges = [];
     bundle.templates.job_source =
-      "-- @kind source\n-- @param amount: number = 1\n-- @output result\nSELECT {{ amount }} AS value;";
+      "-- @param amount: number = 1\n-- @output result\nSELECT {{ amount }} AS value;";
     bundle.variables = {
       batch_size: {
         type: "number",

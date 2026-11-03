@@ -25,9 +25,6 @@ Write each directive on its own line, starting with `-- @`:
 | --- | --- |
 | `-- @label Paid orders` | Display label for the definition |
 | `-- @description Keep paid orders.` | Short explanation |
-| `-- @kind source` | Read external resources, or produce initial data |
-| `-- @kind transform` | Transform declared inputs; the default if omitted |
-| `-- @kind export` | Write to a declared destination; no tabular output |
 | `-- @input source` | Declare an input port to connect on the canvas |
 | `-- @param status: text = "paid"` | Typed parameter and optional default |
 | `-- @output orders` | Name the query's output port |
@@ -37,7 +34,9 @@ Write each directive on its own line, starting with `-- @`:
 Inputs, parameters and outputs share one namespace: use unique identifiers made
 of letters, digits and underscores, starting with a letter or underscore.
 Unknown directives are errors. Each output block contains exactly one query,
-ending with a semicolon. A transform cannot write data or read undeclared tables.
+ending with a semicolon. Every query reads only declared inputs, earlier outputs,
+resources and connections. A node with outputs cannot write; a node without
+outputs can write data, or only run tests and messages.
 
 ## Reference inputs and earlier outputs
 
@@ -66,7 +65,6 @@ Use a **Load CSV** palette node, or put this complete definition in a new node:
 
 ```sql
 -- @label Read orders
--- @kind source
 -- @param connection: connection = ""
 -- @param path: file(connection)
 -- @output orders
@@ -84,7 +82,7 @@ named options such as `header = true` or `delim = ';'` afterward.
 For Parquet use `read_parquet({{ path }})`. A format provided by an extension,
 such as XLSX, may need that extension enabled in the project's **Extensions** tab;
 S3 and databases need a connection. Follow [Connections](CONNECTORS.md#file-formats-and-extensions).
-Ordinary transformations cannot bypass this contract with undeclared file reads.
+Every block follows this contract, including queries that also read input ports.
 
 ## Read a database table
 
@@ -93,7 +91,6 @@ attachment of a granted database connection:
 
 ```sql
 -- @label Load table
--- @kind source
 -- @param connection: connection = ""
 -- @param schema: schema_name(connection) = "public"
 -- @param table: table_name(schema) = ""
@@ -111,7 +108,6 @@ declared connection. **Export table** writes with an explicit
 
 ```sql
 -- @label Export report
--- @kind export
 -- @input source
 -- @param connection: connection = ""
 -- @param destination: destination(connection) = "report.csv"
@@ -120,7 +116,8 @@ TO {{ destination }} (FORMAT CSV, HEADER TRUE);
 ```
 
 Connect `source` to the table you want to export. Exports write with an
-explicit `COPY ... TO` or `INSERT` statement and have no `@output`.
+explicit `COPY ... TO` or `INSERT` statement and have no `@output`. Their
+connections need the `write` capability; other nodes' connections need `read`.
 With project files, the relative destination resolves inside the branch and
 environment's export directory. Run the node and open **Log →
 Download exported data** to retrieve its CSV. See [project exports](AUTHORING.md)

@@ -79,8 +79,8 @@ def test_declarative_attached_connector_native_insert_and_environment_capture(se
             ],
         },
         "templates": {
-            "source": '-- @kind source\n-- @param connection: connection = "warehouse"\n-- @param resource: identifier = "orders"\n-- @output result\nSELECT * FROM {{ connection }}.{{ resource }};',
-            "export": '-- @kind export\n-- @input source\n-- @param connection: connection = "warehouse"\n-- @param resource: identifier = "totals"\nINSERT INTO {{ connection }}.{{ resource }} SELECT amount * 2 FROM {{ source }};',
+            "source": '-- @param connection: connection = "warehouse"\n-- @param resource: identifier = "orders"\n-- @output result\nSELECT * FROM {{ connection }}.{{ resource }};',
+            "export": '-- @input source\n-- @param connection: connection = "warehouse"\n-- @param resource: identifier = "totals"\nINSERT INTO {{ connection }}.{{ resource }} SELECT amount * 2 FROM {{ source }};',
         },
         "components": {},
         "documentation": {},

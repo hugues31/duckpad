@@ -14,8 +14,7 @@ test("calculate a control value, retain it for a targeted launch and show its pr
 }) => {
   test.setTimeout(60000);
   const { id, url } = await example(page, (bundle) => {
-    bundle.templates.control =
-      "-- @kind source\n-- @output result\nSELECT 'paid' AS status;";
+    bundle.templates.control = "-- @output result\nSELECT 'paid' AS status;";
     bundle.flow.nodes.push({
       id: "control",
       template: "control",
@@ -724,7 +723,6 @@ test("promoting a choice preserves spaces in its options and the current result"
 }) => {
   const { id, url } = await example(page, (bundle) => {
     bundle.templates.spaced = `-- @label Spaced choices
--- @kind source
 -- @param status: choice(paid in full|refunded) = "paid in full"
 -- @output result
 SELECT {{ status }} AS status;`;

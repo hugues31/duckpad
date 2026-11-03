@@ -63,7 +63,7 @@ def test_directives_inside_sql_lines_are_not_directives():
 
 def source(body):
     return parse_template(
-        "-- @kind source\n"
+        ""
         '-- @param connection: connection = "local"\n'
         '-- @param file: file(connection) = "a.csv"\n'
         '-- @param other: file(connection) = "b.csv"\n'
@@ -240,7 +240,7 @@ def test_file_locations_need_a_storage_connection_with_a_root_for_relative_paths
 
 def test_a_connection_without_a_value_selects_project_files():
     template = parse_template(
-        "-- @kind source\n-- @param connection: connection\n-- @param file: file(connection)\n"
+        "-- @param connection: connection\n-- @param file: file(connection)\n"
         "-- @output result\nSELECT * FROM read_csv({{ file }});"
     )
     [statement] = compile_template(template, {"file": "a.csv"}, {}, {"result": "out"}, {}, PROJECT_FILES)
@@ -269,9 +269,7 @@ def test_sql_using_an_empty_connection_asks_for_one():
 
 
 def export(body, parameters='-- @param target: destination(connection) = "out.csv"\n'):
-    return parse_template(
-        '-- @kind export\n-- @input rows\n-- @param connection: connection = "local"\n' + parameters + body
-    )
+    return parse_template('-- @input rows\n-- @param connection: connection = "local"\n' + parameters + body)
 
 
 def test_downloadable_exports_are_recognized_by_their_sql():
@@ -307,10 +305,10 @@ def test_exports_without_a_single_local_csv_or_xlsx_file_are_not_downloadable(bo
 
 def test_schema_and_table_names_are_chosen_from_their_connection():
     with pytest.raises(Problem, match="schema must reference a declared connection parameter"):
-        parse_template("-- @kind source\n-- @param schema: schema_name\n-- @output result\nSELECT 1;")
+        parse_template("-- @param schema: schema_name\n-- @output result\nSELECT 1;")
     with pytest.raises(Problem, match="table must reference a declared schema_name parameter"):
         parse_template(
-            "-- @kind source\n-- @param connection: connection\n-- @param table: table_name(connection)\n"
+            "-- @param connection: connection\n-- @param table: table_name(connection)\n"
             "-- @output result\nSELECT 1;"
         )
     template = parse_template(BUILTINS["load_table"])

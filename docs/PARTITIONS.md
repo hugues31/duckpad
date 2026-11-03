@@ -58,7 +58,6 @@ each key. The final node reads the complete ordered union.
 For example, `templates/batches.sql` declares the list:
 
 ```sql
--- @kind source
 -- @output result
 SELECT 'batch-011' AS batch, 'Previous day' AS task
 UNION ALL SELECT 'batch-012', 'Current day';

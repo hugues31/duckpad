@@ -34,8 +34,7 @@ test("selects a surviving environment before requesting results when dev is abse
   ).json();
   const endpoint = `/api/worktrees/${created.id}`;
   const snapshot = await (await page.request.get(endpoint)).json();
-  snapshot.bundle.templates.constant =
-    "-- @kind source\n-- @output result\nSELECT 42 AS value;";
+  snapshot.bundle.templates.constant = "-- @output result\nSELECT 42 AS value;";
   snapshot.bundle.flow.nodes = [
     {
       id: "constant",

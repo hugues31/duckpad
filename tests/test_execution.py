@@ -196,8 +196,8 @@ def test_startup_loads_only_unfinished_runs(services, monkeypatch):
                 "started": "2026-01-01",
                 "commit": "commit",
                 "nodes": {
-                    "export": {"kind": "export", "status": "running"},
-                    "later": {"kind": "export", "status": "pending"},
+                    "export": {"writes_external": True, "status": "running"},
+                    "later": {"writes_external": True, "status": "pending"},
                 },
             },
         )

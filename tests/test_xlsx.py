@@ -225,7 +225,7 @@ def test_xlsx_api_upload_needs_no_connection_and_blocks_outside_files(tmp_path, 
             "id": "workbooks",
             "name": "Workbooks",
             "connector": "readonly_folder",
-            "environments": {"dev": {}},
+            "environments": {"dev": {"root": str(tmp_path)}},
         }
         instance.catalog.save("connection", connection, create=True)
         with pytest.raises(Problem, match="does not support write"):

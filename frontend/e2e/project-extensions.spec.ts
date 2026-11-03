@@ -219,7 +219,7 @@ test("a downloaded community binary is imported and activated without a connecti
     { id: "statistics", template: "statistics", params: {} },
   ];
   snapshot.bundle.templates.statistics =
-    "-- @label Statistical functions\n-- @kind source\n-- @output result\nSELECT sr_normal_cdf(0.0, 0.0, 1.0) AS cdf_0, sr_normal_cdf(1.96, 0.0, 1.0) AS cdf_196, sr_normal_pdf(0.0, 0.0, 1.0) AS pdf_0, sr_normal_quantile(0.975, 0.0, 1.0) AS quantile_975;";
+    "-- @label Statistical functions\n-- @output result\nSELECT sr_normal_cdf(0.0, 0.0, 1.0) AS cdf_0, sr_normal_cdf(1.96, 0.0, 1.0) AS cdf_196, sr_normal_pdf(0.0, 0.0, 1.0) AS pdf_0, sr_normal_quantile(0.975, 0.0, 1.0) AS quantile_975;";
   expect(
     (
       await page.request.put(url, {

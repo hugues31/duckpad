@@ -40,7 +40,7 @@ def instance(tmp_path):
                     "edges": [],
                 }
             ),
-            "templates/source.sql": "-- @kind source\n-- @output result\nSELECT 1 AS value;",
+            "templates/source.sql": "-- @output result\nSELECT 1 AS value;",
         }
         snapshot = projects.write(tree["id"], snapshot["revision"], files)
         projects.versioning.create_tag(tree["id"], "v1", snapshot["commit"], "Accepted")
@@ -77,7 +77,7 @@ def advance(instance, tag="v2"):
         snapshot["revision"],
         {
             **snapshot["files"],
-            "templates/source.sql": "-- @kind source\n-- @output result\nSELECT 2 AS value;",
+            "templates/source.sql": "-- @output result\nSELECT 2 AS value;",
             "variables.json": json.dumps({"batch_size": {"type": "number", "default": 20}}),
         },
     )

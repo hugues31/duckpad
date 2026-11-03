@@ -32,7 +32,7 @@ export interface Graph {
   nodes: FlowNode[];
   edges: FlowEdge[];
 }
-/** What a template does with data. */
+/** How a template node is shown, from its ports and writes. */
 export type TemplateKind = "source" | "transform" | "export";
 /** A parameter declared by a template or exposed by a component. */
 export interface Parameter {
@@ -45,7 +45,7 @@ export interface ParsedTemplate {
   error?: string;
   label?: string;
   description?: string;
-  kind?: TemplateKind;
+  writes_external?: boolean;
   inputs?: string[];
   outputs?: string[];
   parameters?: Parameter[];
@@ -370,7 +370,7 @@ export interface NodeRun {
   results?: ExecutionResult[];
   status: NodeRunStatus;
   label: string;
-  kind: TemplateKind;
+  writes_external: boolean;
   /** Each output with the seconds its statement took. */
   outputs?: Record<string, Dataset & { duration: number }>;
   error?: string;

@@ -52,14 +52,12 @@ const component = (...children: string[]): ComponentDefinition => ({
 const parsed: Record<string, ParsedTemplate> = {
   load_csv: {
     label: "Load CSV",
-    kind: "source",
     inputs: [],
     outputs: ["output"],
     parameters: [{ name: "path", type: "file" }],
   },
   join: {
     label: "Join",
-    kind: "transform",
     inputs: ["left", "right"],
     outputs: ["output"],
     parameters: [{ name: "on", type: "string" }],
@@ -206,6 +204,8 @@ describe("nodeInterface", () => {
       parameters: [{ name: "on", type: "string" }],
     });
     expect(nodeInterface({ template: "load_csv" }, parsed).kind).toBe("source");
+    const write = { inputs: ["source"], outputs: [], writes_external: true };
+    expect(nodeInterface({ template: "write" }, { write }).kind).toBe("export");
   });
 
   it("describes a node whose template was removed as an empty transform", () => {

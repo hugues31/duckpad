@@ -79,9 +79,7 @@ def verify_duckpad(home, cache, isolated, allow_unsigned=False, import_file=None
             {
                 "flow": {"nodes": [{"id": "source", "template": "source", "params": {}}], "edges": []},
                 "templates": {
-                    "source": '-- @kind source\n-- @param connection: connection = "h3"\n-- @output result\n'
-                    + QUERY
-                    + ";"
+                    "source": '-- @param connection: connection = "h3"\n-- @output result\n' + QUERY + ";"
                 },
                 "components": {},
                 "documentation": {},

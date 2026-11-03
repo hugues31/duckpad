@@ -59,7 +59,7 @@ def verify(binary):
             instance = Services.open(home, enforce_access=isolated)
             bundle = {
                 "flow": {"nodes": [{"id": "source", "template": "statistics", "params": {}}], "edges": []},
-                "templates": {"statistics": "-- @kind source\n-- @output result\n" + QUERY + ";"},
+                "templates": {"statistics": "-- @output result\n" + QUERY + ";"},
                 "documentation": {},
                 "components": {},
                 "extensions": copy.deepcopy(REQUIREMENTS),

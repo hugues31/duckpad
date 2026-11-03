@@ -13,7 +13,6 @@ async function prepare(page: Page) {
   const snapshot: Snapshot = await (await page.request.get(url)).json();
   const bundle = snapshot.bundle!;
   bundle.templates.parameters = `-- @label Parameter values
--- @kind source
 -- @param amount: number = 42
 -- @param cities: list<text> = ["London"]
 -- @output result

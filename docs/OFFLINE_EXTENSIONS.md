@@ -74,7 +74,6 @@ parameter:
 
 ```sql
 -- @label Statistical functions
--- @kind source
 -- @output result
 SELECT
   sr_normal_cdf(0.0, 0.0, 1.0) AS cdf_0,

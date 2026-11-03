@@ -30,7 +30,7 @@ def proposal(deps, environment="", node=""):
     exports = [
         {"node": key, "label": nodes[key].get("label", key), "connections": connection_references(nodes[key])}
         for key in sorted(scope)
-        if nodes[key]["parsed"]["kind"] == "export"
+        if nodes[key]["parsed"]["writes_external"]
     ]
     # Bind approval to definitions and effective configuration, including secret changes,
     # without storing those secrets in the conversation or sending them to the provider.

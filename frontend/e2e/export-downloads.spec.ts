@@ -16,7 +16,7 @@ test("download a full CSV export and keep project ZIP separate", async ({
   try {
     const snapshot = await (await page.request.get(endpoint)).json();
     snapshot.bundle.templates.rows =
-      "-- @kind source\n-- @output result\nSELECT range AS id, 'item;' || range AS label FROM range(1003);";
+      "-- @output result\nSELECT range AS id, 'item;' || range AS label FROM range(1003);";
     snapshot.bundle.flow.nodes = [
       {
         id: "source",
