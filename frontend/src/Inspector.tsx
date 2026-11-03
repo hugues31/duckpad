@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 import { api, withQuery } from "./api";
 import { nodeInterface, type NodeInterface } from "./graph";
-import { templateLabel, useT } from "./i18n";
+import { nodeLabel, templateLabel, useT } from "./i18n";
 import NodeDocumentation from "./NodeDocumentation";
 import NodeInfo from "./NodeInfo";
 import ParameterField from "./ParameterField";
@@ -394,21 +394,22 @@ export default function Inspector({
                         <option value="">{t("notConnected")}</option>
                         {graphNodes
                           .filter((n) => n.id !== node.id)
-                          .flatMap((n) =>
-                            nodeInterface(
+                          .flatMap((n) => {
+                            const source = nodeInterface(
                               n,
                               snapshot.parsed_templates,
                               snapshot.bundle?.components,
                               local,
-                            ).outputs.map((p) => (
+                            );
+                            return source.outputs.map((p) => (
                               <option
                                 key={n.id + ":" + p}
                                 value={n.id + ":" + p}
                               >
-                                {n.label || n.id} · {p}
+                                {nodeLabel(n, source, t)} · {p}
                               </option>
-                            )),
-                          )}
+                            ));
+                          })}
                       </Select>
                     </label>
                   );

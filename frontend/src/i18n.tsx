@@ -1,4 +1,6 @@
 import { createContext, useCallback, useContext } from "react";
+import type { NodeInterface } from "./graph";
+import type { FlowNode } from "./types";
 import en from "./locales/en.json";
 import fr from "./locales/fr.json";
 import pt from "./locales/pt.json";
@@ -81,4 +83,21 @@ export function templateLabel(
   t: Translate,
 ) {
   return isBuiltin(id) && label === builtinLabels[id] ? t(id) : label || id;
+}
+
+/** The effective canvas label, also used when choosing a node's output. */
+export function nodeLabel(
+  node: FlowNode,
+  signature: NodeInterface,
+  t: Translate,
+) {
+  return (
+    node.label ||
+    (signature.kind === "component" ? signature.definition?.name : undefined) ||
+    templateLabel(
+      node.preset || node.template || node.origin || "sql",
+      signature.kind === "component" ? undefined : signature.definition?.label,
+      t,
+    )
+  );
 }
