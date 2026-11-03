@@ -83,9 +83,10 @@ Worktree IDs avoid putting branch names or paths in URLs. The optional
 not-found screen; inaccessible resources show an unavailable screen.
 
 Sign-in preserves a validated internal destination, including across OIDC.
-Code drafts survive tab changes within a worktree. Leaving with unsaved drafts
-requires confirmation; reloads use `beforeunload`. Responses from an old worktree
-cannot replace the current snapshot.
+Code drafts survive tab changes within a worktree. Navigation waits for autosaved
+editors (Inspector, node documentation) to save. Leaving with drafts that need an
+explicit save, or after a failed autosave, requires confirmation; reloads use
+`beforeunload`. Responses from an old worktree cannot replace the current snapshot.
 
 FastAPI's final route serves the application shell for direct navigation. API
 routes, `/assets` and the optional `/site` documentation mount precede it.
