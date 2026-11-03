@@ -673,18 +673,21 @@ function ProviderCard({
           </label>
         )}
         {provider.kind === "custom" && (
-          <label className="field">
-            <span>
+          <div>
+            <label className="check-row">
               <input
                 type="checkbox"
                 aria-label={t("assistantStreaming")}
+                aria-describedby={`${id}-streaming-hint`}
                 checked={provider.streaming !== false}
                 onChange={(e) => onChange({ streaming: e.target.checked })}
               />
-              {t("assistantStreaming")}
-            </span>
-            <small className="muted">{t("assistantStreamingHint")}</small>
-          </label>
+              <span>{t("assistantStreaming")}</span>
+            </label>
+            <small className="muted" id={`${id}-streaming-hint`}>
+              {t("assistantStreamingHint")}
+            </small>
+          </div>
         )}
       </div>
       <div
