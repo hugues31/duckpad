@@ -1,12 +1,37 @@
 import { expect, test } from "@playwright/test";
 import { openInstanceSettings, signIn } from "./helpers";
 import { verifyAssistantEditing } from "./assistant-editing-flow";
+import { verifyAssistantKnowledge } from "./assistant-knowledge-flow";
 
 // Later specs share the server: an enabled assistant adds buttons to their screens.
 test.afterEach(async ({ page }) => {
   await page.request.put("/api/assistant/settings", {
     data: { enabled: false, providers: [] },
   });
+});
+
+test("consult Duckpad syntax and manage variable deletion and inheritance", async ({
+  page,
+}) => {
+  test.setTimeout(90000);
+  await signIn(page);
+  const configured = await page.request.put("/api/assistant/settings", {
+    data: {
+      enabled: true,
+      providers: [
+        {
+          id: "primary",
+          kind: "deepseek",
+          api_key: "browser-test-key",
+          models: ["test"],
+        },
+      ],
+      default_provider: "primary",
+      default_model: "test",
+    },
+  });
+  expect(configured.ok()).toBeTruthy();
+  await verifyAssistantKnowledge(page);
 });
 
 test("configure an OAuth2 gateway without exposing its saved secret", async ({

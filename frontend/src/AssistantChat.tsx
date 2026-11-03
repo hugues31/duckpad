@@ -52,6 +52,8 @@ const toolLabels: Record<string, TranslationKey> = {
   read_file: "assistantReadFile",
   read_sql: "assistantReadSql",
   read_documentation: "assistantReadDocs",
+  read_guide: "assistantReadGuide",
+  read_variables: "assistantReadVariables",
   read_schemas: "assistantReadSchemas",
   read_runs: "assistantReadRuns",
   search_project: "assistantSearch",

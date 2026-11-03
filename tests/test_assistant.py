@@ -171,7 +171,7 @@ def test_scope_instructions_reach_project_and_general_turns(instance):
         events = turn(client, conversation(client, page), page, "How do I bake an apple pie?")
         assert events[-1]["turn"]["status"] == "complete", events
     (project_instructions, project_tools), (general_instructions, general_tools) = seen
-    assert project_tools and not general_tools
+    assert len(project_tools) > 1 and general_tools == ["read_guide"]
     for instructions in (project_instructions, general_instructions):
         assert instructions.startswith("You are Duckpad's project assistant.")
         assert "Scope: help only with Duckpad itself" in instructions

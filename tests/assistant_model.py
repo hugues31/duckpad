@@ -39,10 +39,24 @@ async def stream(messages, info):
         )
     elif isinstance(prompt, str) and "editable_source to SELECT 2" in prompt:
         edit = ("write_sql", {"node": "editable_source", "sql": "-- @output result\nSELECT 2 AS value;\n"})
+    elif isinstance(prompt, str) and "Explain Duckpad's @param" in prompt:
+        edit = ("read_guide", {"topic": "sql"})
+    elif isinstance(prompt, str) and "Delete the project variable obsolete" in prompt:
+        edit = ("edit_variable", {"operation": "delete", "name": "obsolete"})
+    elif isinstance(prompt, str) and "Delete the project variable minimum" in prompt:
+        edit = ("edit_variable", {"operation": "delete", "name": "minimum"})
+    elif isinstance(prompt, str) and "Remove only the dev environment override" in prompt:
+        edit = ("edit_variable", {"operation": "update", "name": "minimum", "remove_environments": ["dev"]})
     if info.function_tools and not any(isinstance(p, ToolReturnPart) for p in messages[-1].parts):
-        name, args = edit or ("read_flow", {"section": "nodes"})
+        name, args = edit or (
+            ("read_flow", {"section": "nodes"})
+            if any(t.name == "read_flow" for t in info.function_tools)
+            else ("read_guide", {"topic": "assistant"})
+        )
         yield {0: DeltaToolCall(name=name, json_args=json.dumps(args), tool_call_id="tool-call")}
-    elif edit and edit[0] in ("launch_run", "inspect_run"):
+    elif edit and edit[0] == "read_guide":
+        yield "Use -- @param minimum: number = 0, then SELECT {{ minimum }} AS value in an output block."
+    elif edit and edit[0] in ("launch_run", "inspect_run", "edit_variable"):
         yield json.dumps([p.content for p in messages[-1].parts if isinstance(p, ToolReturnPart)])
     elif edit:
         yield "The requested change is saved."
