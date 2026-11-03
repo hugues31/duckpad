@@ -291,15 +291,15 @@ def read_documentation(
     return ctx.deps.safe(page(items, offset, limit))
 
 
-def variable_usages(bundle, name):
-    """Include saved filters as well as whole-parameter, expression and resource-path bindings."""
-    found = variables.usages(bundle).get(name, [])
+def variable_usages(bundle):
+    """Variable name -> its node bindings (whole parameters, expressions, paths) and saved view filters."""
+    found = variables.usages(bundle)
     for output, saved in views.declarations(bundle).items():
-        found.extend(
-            {"output": output, "view": view["name"], "file": "views.json"}
-            for view in saved
-            if name in variables.expression_references(view.get("filter", ""))
-        )
+        for view in saved:
+            for name in variables.expression_references(view.get("filter", "")):
+                found.setdefault(name, []).append(
+                    {"output": output, "view": view["name"], "file": "views.json"}
+                )
     return found
 
 
@@ -322,16 +322,17 @@ def read_variables(
     if section == "usages":
         if not name:
             raise Problem("Choose a variable to inspect its usages", 422)
-        return ctx.deps.safe(page(variable_usages(bundle, name), offset, limit))
+        return ctx.deps.safe(page(variable_usages(bundle).get(name, []), offset, limit))
     summary = variables.summary(bundle, ctx.deps.services.catalog.environment_names())
     if name and name not in summary["declarations"]:
         raise Problem("Variable not found", 404)
+    used = variable_usages(bundle)
     items = [
         {
             "name": key,
             "definition": bundle["variables"][key],
             **{k: definition[k] for k in ("values", "errors", "warnings")},
-            "usage_count": len(variable_usages(bundle, key)),
+            "usage_count": len(used.get(key, [])),
         }
         for key, definition in summary["declarations"].items()
         if not name or key == name

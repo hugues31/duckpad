@@ -120,11 +120,11 @@ pages without an open working branch, the assistant can answer general Duckpad,
 data and development questions but has no project-reading tools.
 
 The assistant receives Duckpad's SQL and parameter rules, including the difference
-between `-- @param` declarations and project variables. It can consult the bundled
-SQL, authoring, variables, components, connectors, partitions, tests, messages,
-results and assistant guides, even without an open project. These guides match
-the installed version and are separate from your project's README and descriptions.
-Try “How does @param work?” or “How do I bind a project variable to a node?”.
+between `-- @param` declarations and project variables. It can consult every
+Duckpad guide of this documentation, even without an open project. These guides
+match the installed version and are separate from your project's README and
+descriptions. Try “How does @param work?” or “How do I bind a project variable to
+a node?”.
 
 For Northstar, try “How do paid orders reach the regional report?” or, after
 running the flow yourself, “Why does this region have this revenue?” Data tools

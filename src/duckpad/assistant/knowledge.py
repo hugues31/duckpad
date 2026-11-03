@@ -1,33 +1,34 @@
 """Versioned product guidance, independent of user-authored project documentation."""
 
 from importlib.resources import files
+from importlib.resources.abc import Traversable
 from pathlib import Path
-from typing import Literal, get_args
 
 from pydantic_ai import RunContext
 
 from ..util import Problem
 from .tools import Dependencies
 
-Guide = Literal[
-    "sql",
-    "authoring",
-    "variables",
-    "components",
-    "connectors",
-    "partitions",
-    "tests",
-    "messages",
-    "results",
-    "assistant",
-]
 
-AUTHORING_INSTRUCTIONS = """
+def guide_files() -> dict[str, Traversable]:
+    """Topic -> guide: every docs/*.md, bundled by the build hook, or read in place by editable installs."""
+    packaged = files("duckpad.assistant").joinpath("guides")
+    root = packaged if packaged.is_dir() else Path(__file__).resolve().parents[3] / "docs"
+    if not root.is_dir():
+        return {}
+    return {f.name.removesuffix(".md").lower(): f for f in root.iterdir() if f.name.endswith(".md")}
+
+
+# Only release-owned files are readable: never a path, nor the project's README.
+GUIDES = guide_files()
+
+AUTHORING_INSTRUCTIONS = (
+    """
 Duckpad is a versioned visual SQL pipeline using DuckDB, not a general SQL console.
 Use read_guide for the bundled product reference before writing unfamiliar syntax or explaining
-features. It is available on every page, including outside a project. Topics include sql,
-authoring, variables, components, connectors, partitions, tests, messages, results and assistant.
-read_documentation reads the user's project documentation; it is not the Duckpad reference.
+features. It is available on every page, including outside a project; its topics are listed at
+the end of these instructions. read_documentation reads the user's project documentation; it is
+not the Duckpad reference.
 
 SQL definitions and parameters:
 - A normal node owns nodes/<id>.sql; a linked node uses templates/<id>.sql shared by all linked
@@ -75,30 +76,24 @@ Project variables:
   Delete refuses variables still used by nodes or saved result views. Report the usages and
   replace/remove only the bindings the user requested before deleting. Do not silently break them.
 """
+    + f"read_guide topics: {', '.join(sorted(GUIDES))}.\n"
+)
 
 
-def guide_text(topic: Guide) -> str:
-    # Only release-owned files are readable: never accept a path or use the project's README.
-    if topic not in get_args(Guide):
-        raise Problem("Unknown Duckpad guide", 404)
-    name = topic.upper() + ".md"
-    packaged = files("duckpad.assistant").joinpath("guides", name)
-    if packaged.is_file():
-        return packaged.read_text(encoding="utf-8")
-    # Editable installs read the same source documents that the wheel bundles.
-    source = Path(__file__).resolve().parents[3] / "docs" / name
-    if source.is_file():
-        return source.read_text(encoding="utf-8")
-    raise Problem("The Duckpad guide is unavailable in this installation", 404)
+def guide_text(topic: str) -> str:
+    if topic not in GUIDES:
+        raise Problem(f"Unknown Duckpad guide. Choose one of: {', '.join(sorted(GUIDES))}", 404)
+    return GUIDES[topic].read_text(encoding="utf-8")
 
 
-def read_guide(ctx: RunContext[Dependencies], topic: Guide, offset: int = 0) -> dict:
+def read_guide(ctx: RunContext[Dependencies], topic: str, offset: int = 0) -> dict:
     """Read the bundled Duckpad manual, not project documentation; no project needs to be open.
 
     Choose sql for @param/types, inputs, outputs and DuckDB SQL examples; variables for bindings,
     environments and computed values; authoring/components for code ownership and reuse;
-    connectors for sources/exports; tests/messages/results/partitions for execution behavior;
-    assistant for capabilities. Follow next_offset to read the remaining characters.
+    connectors for sources/exports; environments, git, jobs or automation for those features;
+    tests/messages/results/partitions for execution behavior; assistant for capabilities.
+    Follow next_offset to read the remaining characters.
     """
     ctx.deps.check()
     text = guide_text(topic)
@@ -106,7 +101,7 @@ def read_guide(ctx: RunContext[Dependencies], topic: Guide, offset: int = 0) -> 
     end = offset + 12000
     return {
         "topic": topic,
-        "source": f"docs/{topic.upper()}.md",
+        "source": f"docs/{GUIDES[topic].name}",
         "text": text[offset:end],
         "next_offset": end if end < len(text) else None,
     }

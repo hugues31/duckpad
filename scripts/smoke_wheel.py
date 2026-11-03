@@ -15,6 +15,9 @@ import httpx
 def smoke(python):
     with tempfile.TemporaryDirectory(prefix="duckpad-wheel-") as temporary:
         folder = Path(temporary)
+        # The assistant's guides ship inside the wheel; the checkout's docs/ is out of reach here.
+        guides = "from duckpad.assistant.knowledge import guide_text; assert '-- @param' in guide_text('sql')"
+        subprocess.run([python, "-I", "-c", guides], cwd=folder, check=True, timeout=60)
         with socket.socket() as reservation:
             reservation.bind(("127.0.0.1", 0))
             port = reservation.getsockname()[1]

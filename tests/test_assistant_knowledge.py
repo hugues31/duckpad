@@ -2,7 +2,6 @@
 
 import json
 from pathlib import Path
-from typing import get_args
 
 import pytest
 from fastapi.testclient import TestClient
@@ -13,7 +12,7 @@ from test_assistant import instance as instance
 from test_assistant_editing import change, seed
 
 from duckpad.assistant.editing import edit_variable
-from duckpad.assistant.knowledge import Guide, guide_text, read_guide
+from duckpad.assistant.knowledge import GUIDES, guide_text, read_guide
 from duckpad.assistant.tools import read_variables
 from duckpad.util import Problem
 
@@ -45,20 +44,22 @@ def test_manual_is_available_without_a_project_and_instructions_reach_each_turn(
     assert all('"$var":"minimum"' in instructions for instructions in received)
 
 
-@pytest.mark.parametrize("topic", get_args(Guide))
-def test_guides_are_complete_paginated_product_documents(instance, topic):
+def test_every_docs_guide_is_a_complete_paginated_topic(instance):
     app, client = instance
     configure(client)
     _, context = project(client)
     ctx = dependencies(app, client, context)
-    content, offset = "", 0
-    while offset is not None:
-        result = read_guide(ctx, topic, offset)
-        assert len(result["text"]) <= 12000
-        content += result["text"]
-        offset = result["next_offset"]
-    expected = Path(__file__).parents[1] / "docs" / (topic.upper() + ".md")
-    assert content == expected.read_text(encoding="utf-8")
+    docs = Path(__file__).parents[1] / "docs"
+    assert set(GUIDES) == {path.stem.lower() for path in docs.glob("*.md")}
+    assert {"sql", "variables", "data_preparation", "jobs"} <= set(GUIDES)
+    for topic in GUIDES:
+        content, offset = "", 0
+        while offset is not None:
+            result = read_guide(ctx, topic, offset)
+            assert len(result["text"]) <= 12000
+            content += result["text"]
+            offset = result["next_offset"]
+        assert content == (docs / result["source"].removeprefix("docs/")).read_text(encoding="utf-8")
 
 
 def test_guides_cannot_read_arbitrary_paths_or_be_replaced_by_project_text(instance):

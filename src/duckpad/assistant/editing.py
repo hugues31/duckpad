@@ -242,7 +242,7 @@ def edit_variable(
     elif operation == "delete":
         if name not in declarations:
             raise Problem("Variable not found", 404)
-        if variable_usages(bundle, name):
+        if name in variable_usages(bundle):
             raise Problem(
                 "Variable is still in use. Read its usages with read_variables before deleting.", 422
             )

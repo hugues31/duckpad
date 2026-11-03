@@ -22,7 +22,7 @@ RUN uv sync --locked --no-dev --no-install-project --no-build-package duckdb \
     && .venv/bin/python -c "import duckdb; assert duckdb.__version__ == '2.0.0'"
 COPY scripts/build_hook.py scripts/build_hook.py
 COPY src/ src/
-COPY docs/ docs/
+COPY docs/*.md docs/
 COPY --from=frontend /build/src/duckpad/static/ src/duckpad/static/
 COPY --from=website /build/website/dist/ src/duckpad/static/site/
 RUN uv sync --locked --no-dev --no-editable --no-build-package duckdb
