@@ -82,11 +82,12 @@ flow, node/template SQL, documentation and variables. Shared template edits
 report how many linked instances they affect.
 
 Each successful writing tool call is one commit on the open branch, authored by
-your Git identity. History adds **via the assistant** to the author. Its chat
-card lists the changes, includes a SQL diff when relevant, and opens **Compare
-versions** for the commit. The canvas and open editors update without a page
-reload; unsaved edits retain their original revision for normal merging.
-Readers have no writing tools and see a read-only notice.
+your Git identity, with a `Duckpad-Assistant: <conversation>` trailer that
+pushes keep. History shows it as **via the assistant**. Its chat card lists the
+changes, includes a SQL diff when relevant, and opens **Compare versions** for
+the commit. The canvas and open editors update without a page reload; unsaved
+edits retain their original revision for normal merging. Readers have no writing
+tools and see a read-only notice.
 
 Choose **Undo** on an action, or **Undo these N changes** to reverse the remaining
 actions of a turn from newest to oldest. Undo makes new commits and preserves

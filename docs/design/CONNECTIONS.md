@@ -21,9 +21,10 @@ choices accepted on 1 November 2026; the original proposal is in Git history.
   Custom types declare the same database/storage family as built-ins.
 - Built-ins follow the release until customized. An override survives upgrades;
   resetting removes only the override, while duplication creates a custom type.
-- Format capabilities load through the project's Extensions tab. Connector
-  extensions load as connection requirements. Runtime-linked extensions need
-  neither import nor activation; other binaries must be available on the server.
+- Format capabilities load through the project's Extensions tab and must already
+  be installed by an administrator. Connector extensions install on first use
+  from their declared repository or an offline import, in a child process.
+  Runtime-linked extensions need neither.
 - Test connection runs in a separate process so a native extension failure does
   not stop Duckpad.
 
@@ -34,6 +35,6 @@ project's own files. Separate connectors per format would multiply configuration
 for each storage location. Template-level extension declarations would spread
 project requirements across SQL files instead of keeping them in `extensions.json`.
 
-A form-based connector-definition editor was deferred; typed connection forms
-are generated from JSON definitions. Systems without a compatible DuckDB
+Connector definitions stay JSON, without a form-based editor; typed connection
+forms are generated from them. Systems without a compatible DuckDB
 extension still need one rather than application-specific connector code.

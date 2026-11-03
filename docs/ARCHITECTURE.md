@@ -210,20 +210,24 @@ The API checks the account and project role on every request. Invisible projects
 worktrees and runs return 404. Imports also require access to the source project.
 Job result worktrees reject edits even by administrators.
 
-An isolated SQL worker receives only authorized connections and enabled extension
-requirements over JSON RPC. It inherits neither the API's environment credentials
-nor SQLite descriptors. Before DuckDB starts threads, Linux Landlock limits files
-to project resources/exports, granted storage roots, granted database directories
-and read-only runtime libraries. Database journals require directory access, so
-each database and environment should have a dedicated directory. Instance metadata,
-project Git metadata and other projects stay outside the allowlist.
+An isolated SQL worker receives only authorized connections and enabled
+extension requirements over JSON RPC. It inherits neither the API's environment
+credentials nor SQLite descriptors. Before DuckDB starts threads, Linux Landlock
+limits files to project resources/exports, granted storage roots, granted
+database directories and read-only runtime libraries. Roots and database
+directories are writable only when their connector declares `write`; read-only
+roots stay read-only at the OS layer even if SQL names another connection.
+Database journals require directory access, so each database and environment
+should have a dedicated directory. Instance metadata, project Git metadata and
+other projects stay outside the allowlist.
 
-DuckDB then locks its configuration: external access is limited to allowed paths,
-automatic extension loading/installing is disabled, and secrets are temporary.
-Missing Landlock ABI 2+ causes an execution error with no unrestricted fallback.
-Extensions remain trusted administrator-installed native code. Remote connections
-retain their service account's privileges; this is not a tenant resource quota or
-a complete hostile-code hosting boundary.
+DuckDB then locks its configuration: external access is limited to allowed
+paths, automatic extension loading/installing is disabled, and secrets are
+temporary. Missing Landlock ABI 2+ causes an execution error with no
+unrestricted fallback. Extensions remain trusted administrator-installed native
+code. Remote connections act with their configured credentials; scope those
+credentials and network egress accordingly. This is not a tenant resource quota
+or a complete hostile-code hosting boundary.
 
 The explicit [trusted local mode](INSTALLATION.md#trusted-local-mode) runs DuckDB
 in-process with the user's OS permissions. It retains HTTP authorization but has

@@ -37,5 +37,5 @@ multi-row manifests and per-key state rather than mutating scalar variables in a
 Instance-wide business variables and interpolation in arbitrary text remain
 unimplemented. Connections already hold environment-specific infrastructure
 configuration. Caller-supplied values need separate precedence and authorization
-rules; they remain part of the [automation proposal](JOB_AUTOMATION.md#delivery-plan),
-not a fallback for computed declarations.
+rules; they remain part of the [automation proposal](JOB_AUTOMATION.md#delivery-plan)
+and never override a computed declaration.

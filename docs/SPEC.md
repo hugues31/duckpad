@@ -36,9 +36,10 @@ See [authoring](AUTHORING.md), [SQL](SQL.md), [components](COMPONENTS.md) and
 - A worktree admits one run through preparation, execution, cancellation and
   cleanup, across all environments. Busy requests are refused without queuing.
   Requested ancestors run once per launch, including sources with valid results.
-- Outputs publish together after queries, tests and messages pass. A failed node
-  retains its previous successful set as stale, but descendants cannot use it as
-  fallback input. Independent branches continue unless the run is canceled.
+- Outputs publish together once queries succeed and no error-level test or
+  message fails. A failed node retains its previous successful set as stale, but
+  descendants cannot use it as fallback input. Independent branches continue
+  unless the run is canceled.
 - Cancellation stops future work and interrupts active SQL. It does not reverse
   completed writes or promise that an interrupted external write had no effect.
 - History persists; unfinished runs become interrupted on restart. Restart never
@@ -109,7 +110,6 @@ context, conversation history and requested tool results:
 | Current-branch Git commit metadata (including authors, messages and hashes) | Yes | Yes |
 | Requested write arguments and resulting change summaries, SQL diffs and commit IDs | For project editors/admins | For project editors/admins |
 | Provider keys, resolved connection secrets, instance users, sessions, other projects and unsaved editor drafts | Never | Never |
-
 
 The data-reading switch governs result access, not secrets embedded in
 user-authored text. Questions, code, variables and commit messages can contain

@@ -15,10 +15,24 @@ and [Git](../GIT.md) for those features.
   are limited to Reader and Operator roles.
 - A Job owns a read-only worktree. Running an editable worktree would collide
   with development runs and execute whichever edits were saved last.
-- Busy launches return 409 without queuing. Restart marks unfinished runs
-  interrupted and does not retry exports.
+- Busy launches return 409 without queuing. Duckpad never retries or resumes a
+  run; restart marks unfinished runs interrupted and the orchestrator decides.
 - External orchestrators control timing. A headless `duckpad run ./project` mode
   would bypass instance connections, authorization, history and lineage.
+- No run-as account per Job: connections are granted per project, so the
+  requesting account is recorded but does not change what a run can access.
+
+## Constraints for schedules and webhooks
+
+A completed comparison preferred APScheduler 3.x over SqliteHuey as a future
+adapter; neither is a dependency. A schedule or webhook must launch through the
+same execution service and worktree admission as manual runs: a scheduler's
+per-job concurrency setting is not enough. It records its trigger identity and
+occurrence or delivery ID, captures fresh configuration, carries no SQL,
+connection settings or credentials, and is refused on a busy worktree, never
+queued, retried or replayed. Schedules must survive restarts. Time zones and DST,
+missed occurrences, webhook authentication, duplicate deliveries and the outcome
+of rejected triggers must be specified first.
 
 ## Proposed deployment between instances
 
@@ -49,9 +63,11 @@ sequenceDiagram
 
 **What travels with a tag**: the flow, SQL, templates, components, documentation, the list of required extensions and `variables.json` with every environment's values, so changed `prod` values appear in the comparison before promotion.
 
-**What does not travel**: connections and their secrets, environments, members, Jobs, extension binaries (install them on B, or import them offline) and uploaded files. `data/` is not versioned, so production sources must be connections rather than uploaded files.
+**What does not travel**: connections and their secrets, environments, members, Jobs, extension binaries (install them on B, or import them offline) and uploaded files. Uploads live in instance storage outside Git, so production sources must be connections rather than uploaded files.
 
 **Why not project export and import.** An archive contains only the current files of one worktree, without history or tags, and importing always creates a new project with a single commit. Every delivery would create another project on B, with its Jobs, members, connection grants and run history to recreate; the commit running in production would have no relation to the tagged commit; and the imported history is unrelated to A's, so connecting it to the origin later is refused. Export and import remain useful for one-off copies.
+
+Deploy keys are per project and read-only on the Git host; fetching with them needs no personal key or consent. A fetched tag never replaces a same-named local tag: Duckpad reports the difference. Signed version bundles, for an execution instance without Git access, can come later if needed.
 
 Two instances add machine isolation (a large preview on A cannot slow down or block production), production secrets absent from A, network segmentation and strict separation of roles. A single instance remains a supported setup.
 

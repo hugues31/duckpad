@@ -4,6 +4,10 @@ Implemented. See [Results, samples and logs](../RESULTS.md) for the current
 interface and file format. These choices were accepted on 31 October 2026;
 the original proposal and mockups remain in Git history.
 
+The inspector describes the node: what changes only when the project changes.
+The results panel shows what it produced: what changes with the environment or a
+new run. Neither panel repeats the environment selected in the top bar.
+
 ## Alternatives considered
 
 - **Keep run outcomes in the inspector and add tabs there.** Rejected: the inspector is narrow (260 to 560 px), rows and logs need width, and it would keep mixing definition and outcome.

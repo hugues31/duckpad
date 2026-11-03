@@ -8,12 +8,13 @@ Give a node or component instance an optional `enabled` condition. Resolve it on
 
 For example, `source = 'warehouse'` selects a Parquet source while an unconfigured legacy database branch stays untouched. Both branches remain in the same versioned flow. A downstream export writes the selected result, and run history explains which branch was inactive and why.
 
-## Problems and inspirations
+## Problem
 
 A false SQL `WHERE` predicate can still bind a missing table or open a file. An ordinary union includes both inputs, and separate projects or Job scopes duplicate the shared graph. Conditions must therefore change execution planning, rather than filtering rows after sources have been prepared.
 
-Conditions affect execution planning. A generic setting to ignore missing inputs
-cannot define meaningful behavior for every join, export or SQL node.
+A generic setting to ignore missing inputs cannot define meaningful behavior for
+every join, export or SQL node. Inactivity propagation and the explicit junction
+follow KNIME's IF/CASE switches.
 
 ## Decisions
 
@@ -113,7 +114,7 @@ The current runner already separates computed-value sources from consumers. Exte
 
 Launch scope does not change: whole-flow and targeted launches select nodes as today, then run the active ones. Inactivity only propagates downstream, as in KNIME, so a condition on a transformation does not stop its upstream source from running; place the gate on the source or on a component containing that branch. Targeting an inactive node never overrides its gate.
 
-Future [partitions](PARTITIONS.md) consume this frozen plan: one activation decision per run, shared by every partition. No per-partition reevaluation or references. Partition enumeration needed by active work follows the same source dependency rules; an inactive partitioned branch cannot trigger its data reads or exports.
+[Partitions](PARTITIONS.md) consume this frozen plan: one activation decision per run, shared by every partition. No per-partition reevaluation or references. Partition enumeration needed by active work follows the same source dependency rules; an inactive partitioned branch cannot trigger its data reads or exports.
 
 ### Propagation and failures
 
