@@ -89,9 +89,9 @@ caller-supplied variable overrides remain unimplemented. See [Jobs](JOBS.md),
 The assistant is disabled until an instance administrator configures it. Tools
 recheck access, edits use normal versioned saves with Undo, and runs require
 explicit approval bound to the proposed configuration. Conversations are private
-to their author, including against other instance administrators. Its
-instructions limit it to Duckpad, project content and data or software
-development topics; it declines unrelated requests.
+to their author, including against other instance administrators. The
+assistant's instructions limit it to Duckpad, project content and data or
+software development topics; it declines unrelated requests.
 
 The provider receives instructions, tool schemas, the question, validated page
 context, conversation history and requested tool results:
