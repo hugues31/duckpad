@@ -1,6 +1,11 @@
 import { expect, test } from "@playwright/test";
-import { openInstanceSettings, signIn } from "./helpers";
+import {
+  openInstanceSettings,
+  signIn,
+  withoutExampleVariables,
+} from "./helpers";
 import { verifyAssistantEditing } from "./assistant-editing-flow";
+import type { Snapshot } from "../src/types";
 
 // Later specs share the server: an enabled assistant adds buttons to their screens.
 test.afterEach(async ({ page }) => {
@@ -252,6 +257,17 @@ test("a pending Code file is saved before the assistant turn", async ({
   const example = await (
     await page.request.post("/api/example", { data: {} })
   ).json();
+  // Without Northstar's variables, Code offers to create variables.json as a draft.
+  const endpoint = `/api/worktrees/${example.id}`;
+  const snapshot: Snapshot = await (await page.request.get(endpoint)).json();
+  withoutExampleVariables(snapshot.bundle!);
+  expect(
+    (
+      await page.request.put(endpoint, {
+        data: { revision: snapshot.revision, bundle: snapshot.bundle },
+      })
+    ).ok(),
+  ).toBeTruthy();
   await page.goto(`/worktrees/${example.id}/code`);
   await page
     .getByRole("button", { name: "Create variables.json", exact: true })

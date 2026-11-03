@@ -179,6 +179,14 @@ test("views are shared in views.json and samples become Filter nodes or tests", 
   page,
 }) => {
   const { worktree, panel } = await openPaidOrders(page);
+  // Northstar shares a view whose filter uses the review_threshold variable.
+  await panel
+    .getByRole("button", { name: "Orders to review", exact: true })
+    .click();
+  await expect(panel.locator(".preview-footer")).toContainText(
+    "10 of 107 rows match",
+  );
+  await panel.getByRole("button", { name: "All rows", exact: true }).click();
   await panel.getByRole("button", { name: /^Sample: all rows/ }).click();
   const popover = page.getByRole("dialog", { name: "Sample", exact: true });
   await popover
@@ -199,6 +207,12 @@ test("views are shared in views.json and samples become Filter nodes or tests", 
   ).json();
   expect(JSON.parse(snapshot.files["views.json"])).toEqual({
     "validated:orders": [
+      {
+        name: "Orders to review",
+        method: "first",
+        filter: "amount > {{ var.review_threshold }}",
+        order: [["amount", "desc"]],
+      },
       { name: "Large orders", method: "first", filter: "amount > 450" },
     ],
   });

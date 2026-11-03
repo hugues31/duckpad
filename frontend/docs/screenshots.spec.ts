@@ -52,7 +52,7 @@ async function example(page: Page) {
   expect(response.ok()).toBeTruthy();
   const worktree = await response.json();
   await page.goto(`/worktrees/${worktree.id}/flow`);
-  await expect(page.locator(".react-flow__node")).toHaveCount(9);
+  await expect(page.locator(".react-flow__node")).toHaveCount(10);
   return worktree;
 }
 
@@ -84,7 +84,7 @@ test("capture project creation, results, lineage and SQL", async ({ page }) => {
   ).toBeEnabled();
   await capture(page, "new-project", dialog);
   await dialog.getByRole("button", { name: "Create", exact: true }).click();
-  await expect(page.locator(".react-flow__node")).toHaveCount(9);
+  await expect(page.locator(".react-flow__node")).toHaveCount(10);
   await run(page);
   await node(page, "Regional revenue").click();
   await page.getByLabel("Output", { exact: true }).selectOption("report");
@@ -225,26 +225,15 @@ test("capture the results panel: samples, columns, tests and log", async ({
   page,
 }) => {
   const worktree = await example(page);
-  // Paid orders reports two messages and three tests, one of them failing as a warning.
+  // Paid orders reports a message and three tests, one of them failing as a warning.
   const url = `/api/worktrees/${worktree.id}`;
   const snapshot = await (await page.request.get(url)).json();
-  snapshot.bundle.templates.validated_orders += [
-    "-- @message",
-    "SELECT 'info' AS level, COUNT(*) || ' paid orders kept, ' || (SELECT COUNT(*) FROM {{ source }} WHERE status <> 'paid') || ' refunds excluded' AS message FROM {{ orders }};",
-    "-- @message",
-    "SELECT 'warning' AS level, 'Largest order is ' || MAX(amount) || ' EUR, above the 450 EUR review threshold' AS message FROM {{ orders }} HAVING MAX(amount) > 450;",
-    "-- @test order_id_unique",
-    "SELECT order_id FROM {{ orders }} GROUP BY order_id HAVING COUNT(*) > 1;",
-    "-- @test amount_present",
-    "SELECT * FROM {{ orders }} WHERE amount IS NULL;",
-    "-- @test amount_in_range: warning",
-    "SELECT * FROM {{ orders }} WHERE amount > 450;",
-    "",
-  ].join("\n");
   snapshot.bundle.documentation.datasets = {
+    ...snapshot.bundle.documentation.datasets,
     "validated:orders": "Paid orders only; each row is one order.",
   };
   snapshot.bundle.documentation.columns = {
+    ...snapshot.bundle.documentation.columns,
     "validated:orders": {
       order_id: "Unique order identifier.",
       amount: "Gross order amount in EUR before refunds.",
@@ -287,11 +276,11 @@ test("capture the results panel: samples, columns, tests and log", async ({
   await panel.getByRole("tab", { name: /^Tests/ }).click();
   await panel
     .locator(".test-row")
-    .filter({ hasText: "amount_in_range" })
+    .filter({ hasText: "large_order_review" })
     .locator(".test-status")
     .click();
   await expect(panel.locator(".test-details")).toContainText(
-    "SELECT * FROM {{ orders }} WHERE amount > 450;",
+    "SELECT * FROM {{ orders }} WHERE amount > {{ review_threshold }};",
   );
   await capture(page, "results-tests", panel);
   await panel
@@ -346,13 +335,9 @@ test("capture project variables, a parameter binding and a run confirmation", as
   const worktree = await example(page);
   const url = `/api/worktrees/${worktree.id}`;
   const snapshot = await (await page.request.get(url)).json();
+  // Northstar already declares high_value_threshold, review_threshold and report_month.
   snapshot.bundle.variables = {
-    high_value_threshold: {
-      type: "number",
-      description: "Minimum order amount kept by the high-value report.",
-      default: 300,
-      environments: { prod: 900 },
-    },
+    ...snapshot.bundle.variables,
     order_status: {
       type: "choice(paid|refunded|pending)",
       description: "Order status counted as revenue.",
@@ -375,6 +360,17 @@ test("capture project variables, a parameter binding and a run confirmation", as
     data: { revision: snapshot.revision, bundle: snapshot.bundle },
   });
   expect(saved.ok()).toBeTruthy();
+  // A prod run retains report_month, so the table shows it in both environments.
+  const prod = await (
+    await page.request.post(`${url}/runs`, { data: { environment: "prod" } })
+  ).json();
+  await expect
+    .poll(
+      async () =>
+        (await (await page.request.get(`/api/runs/${prod.id}`)).json()).status,
+      { timeout: 30000 },
+    )
+    .toBe("success");
   await run(page);
   await node(page, "Paid orders").click();
   await page.getByLabel("Output", { exact: true }).selectOption("orders");
