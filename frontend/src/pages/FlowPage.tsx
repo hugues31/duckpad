@@ -37,7 +37,7 @@ import NodePalette, { type NodeKind } from "../NodePalette";
 import ResultsPanel, { type ResultsTab } from "../ResultsPanel";
 import { useShell, useWorkspace } from "../shell";
 import type { Bundle, FlowNode, Graph } from "../types";
-import { templateLabel, useT } from "../i18n";
+import { nodeLabel, useT } from "../i18n";
 import {
   isWideLayout,
   PanelResizeHandles,
@@ -489,15 +489,7 @@ export default function FlowPage() {
             parent={parent}
             prefix={prefix}
             signature={signature}
-            label={
-              node.label ||
-              (signature.kind === "component"
-                ? signature.definition?.name
-                : node.template
-                  ? templateLabel(node.template, signature.definition?.label, t)
-                  : signature.definition?.label) ||
-              node.id
-            }
+            label={nodeLabel(node, signature, t)}
             graphNodes={graph.nodes}
             graphEdges={graph.edges}
             statuses={statuses}

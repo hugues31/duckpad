@@ -41,7 +41,7 @@ import {
   Workflow,
   type LucideProps,
 } from "lucide-react";
-import { useT, templateLabel } from "./i18n";
+import { useT, templateLabel, nodeLabel } from "./i18n";
 import { DRAG_TYPE, nodeInterface, type NodeConnection } from "./graph";
 import ConnectionPalette from "./ConnectionPalette";
 import { WarningBadge, warningCount } from "./ExecutionMessages";
@@ -361,18 +361,7 @@ function CanvasInner(props: CanvasProps) {
             valueProducer: props.valueProducers?.includes(
               props.prefix + node.id,
             ),
-            label:
-              node.label ||
-              (signature.kind === "component"
-                ? signature.definition?.name
-                : undefined) ||
-              templateLabel(
-                node.preset || node.template || node.origin || "sql",
-                signature.kind === "component"
-                  ? undefined
-                  : signature.definition?.label,
-                t,
-              ),
+            label: nodeLabel(node, signature, t),
             kind,
             inputs,
             outputs,
