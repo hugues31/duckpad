@@ -112,8 +112,11 @@ page preselects it. **Enter a Git reference (advanced)** also accepts an existin
 branch name, tag, or commit.
 
 Choose an explicit source and destination, compare them, then select **Review
-merge**. The review displays the common base and exact heads. For every conflicting
-field, inspect base/current/incoming values and choose one. A conflict in
+merge**. The review displays the common base and exact heads. Conflicts use node
+or component names with the file path underneath. For every conflicting field,
+inspect base/current/incoming values and choose one. Changed characters are
+highlighted: additions are underlined and removed base characters are struck
+through. File conflicts use a syntax-highlighted diff. A conflict in
 `variables.json` names its variable and field, such as **Variable order_status ·
 prod value**, so each variable is resolved on its own. Each choice recomputes
 the proposed changes and validates the combined definitions, references, ports and
@@ -131,6 +134,24 @@ After integration, an optional cleanup action removes an integrated source branc
 and its worktree. Main, the currently open worktree, the destination, dirty work,
 untracked files, active executions and unmerged commits are protected. Cleanup
 is explicit; no branch is deleted automatically.
+
+### Concurrent saves
+
+If another tab or user saves incompatible edits, select **Save resolution**.
+The dialog summarizes the conflicts and shows only the affected files and fields.
+File diffs compare **Current** (the saved file) with **Incoming** (your proposal),
+side by side or inline in a narrow window. Expand **Base** to see the original
+content. Field conflicts use the same character highlighting as merge reviews.
+
+![A concurrent SQL edit shown as a file diff](images/conflict-resolution.png)
+
+Choose **Keep file version**, **Use my proposal**, or **Combined files**. In
+**Combined files**, edit the right side of each file diff or the **Combined
+value** for an individual field. The initial result uses your proposal for
+conflicts and retains independent edits from both versions. Strings accept plain
+text; other field values accept JSON. A deletion conflict also offers a checkbox
+to keep or remove that content. **Save changes** saves the combined result.
+If the saved files changed again, review the refreshed evidence before retrying.
 
 ## Origin, fetch, pull and push
 
