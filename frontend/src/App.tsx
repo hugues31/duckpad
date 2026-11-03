@@ -328,6 +328,10 @@ function PendingNavigation({
     [blocker],
   );
   const settle = useEffectEvent(async () => {
+    // Back can leave a field focused. Finish its blur now, so focusing an
+    // error dialog cannot start another save after the failure was reported.
+    if (document.activeElement instanceof HTMLElement)
+      document.activeElement.blur();
     // A tab click can blur a field before the router blocks it. That request
     // cannot be discarded: wait for it, then save any remaining automatic drafts.
     await flush();
