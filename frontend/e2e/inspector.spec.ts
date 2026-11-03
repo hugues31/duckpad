@@ -1,6 +1,7 @@
 import { test, expect, type Page } from "@playwright/test";
 import { signIn } from "./helpers";
 import type { Snapshot } from "../src/types";
+import fr from "../src/locales/fr.json" with { type: "json" };
 
 async function openInspector(page: Page) {
   await signIn(page);
@@ -309,4 +310,74 @@ test("the result summary opens the matching tab of the results panel", async ({
   await expect(results.locator(".results-header .badge")).toHaveText("Valid");
   await summary.getByRole("button", { name: /^Run at / }).click();
   await expect(results.locator(".log-timeline")).toContainText("Published");
+});
+
+test("input choices use the names shown on the canvas", async ({ page }) => {
+  await signIn(page);
+  const worktree = await (
+    await page.request.post("/api/projects", {
+      data: { name: "Source names" },
+    })
+  ).json();
+  await page.goto(`/worktrees/${worktree.id}/flow`);
+  const nodes = page.locator(".react-flow__node");
+  const add = async (label: string) => {
+    await page.getByRole("button", { name: label, exact: true }).click();
+    return nodes
+      .filter({ has: page.getByText(label, { exact: true }) })
+      .getAttribute("data-id");
+  };
+  const csv = await add("Load CSV");
+  const parquet = await add("Load Parquet");
+  const filter = await add("Filter");
+  const input = page.locator(".inspector").getByLabel("source", {
+    exact: true,
+  });
+  const choices = input.locator('option:not([value=""])');
+  await expect(choices).toHaveText([
+    "Load CSV · result",
+    "Load Parquet · result",
+  ]);
+  // Option values keep the node and port identifiers.
+  await input.selectOption({ label: "Load Parquet · result" });
+  await expect(input).toHaveValue(`${parquet}:result`);
+  await expect
+    .poll(async () => {
+      const snapshot: Snapshot = await (
+        await page.request.get(`/api/worktrees/${worktree.id}`)
+      ).json();
+      return snapshot.bundle!.flow.edges.find((e) => e.target === filter);
+    })
+    .toMatchObject({ source: parquet, sourceHandle: "result" });
+  // The results panel offers the same name among the inputs to compare.
+  const compared = page.locator('.dataset-select option[value="input:source"]');
+  await expect(compared).toContainText("source ← Load Parquet · result");
+
+  // A display name takes priority over the translated default.
+  await page.getByRole("button", { name: "Fit view", exact: true }).click();
+  await page.locator(`.react-flow__node[data-id="${csv}"] .node-shape`).click();
+  const label = page
+    .locator(".inspector")
+    .getByRole("textbox", { name: "Display name", exact: true });
+  await label.fill("Order codes");
+  await label.blur();
+  await expect(page.locator(".save-status")).toHaveText("All changes saved");
+  await page
+    .locator(`.react-flow__node[data-id="${filter}"] .node-shape`)
+    .click();
+  await expect(choices).toHaveText([
+    "Order codes · result",
+    "Load Parquet · result",
+  ]);
+
+  await page.locator(".account .avatar").click();
+  await page
+    .getByRole("menuitemradio", { name: "French", exact: true })
+    .click();
+  await expect(choices).toHaveText([
+    "Order codes · result",
+    `${fr.load_parquet} · result`,
+  ]);
+  await expect(nodes.filter({ hasText: fr.load_parquet })).toHaveCount(1);
+  await expect(compared).toContainText(`source ← ${fr.load_parquet} · result`);
 });
