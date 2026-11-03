@@ -899,8 +899,12 @@ pre {
   border-bottom: 1px solid var(--line);
   font-size: 13px;
 }
-.search-results a:hover {
+.search-results a:hover,
+.search-results a:focus-visible {
   background: var(--soft);
+}
+.search-results a:focus-visible {
+  outline-offset: -3px;
 }
 .search-results small {
   display: block;
@@ -908,10 +912,14 @@ pre {
   font-size: 11px;
   margin-top: 3px;
 }
-.search-status {
+.search-status,
+.search-hint {
   color: var(--muted);
   font-size: 11px;
   margin: 12px 22px 0;
+}
+.search-hint {
+  margin-top: 6px;
 }
 @media (min-width: 1440px) {
   .hero {

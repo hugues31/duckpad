@@ -22,9 +22,13 @@ import { url } from "../lib/docs";
     type="search"
     placeholder="Try lineage, CSV, or branches…"
     autocomplete="off"
+    aria-describedby="search-hint"
   />
   <p class="search-status" role="status">
     Type to search the guides.
+  </p>
+  <p class="search-hint" id="search-hint">
+    ↑ ↓ to browse · Enter to open · Esc to close
   </p>
   <ul class="search-results"></ul>
 </dialog>
@@ -117,7 +121,37 @@ import { url } from "../lib/docs";
     if (event.key === "Escape") {
       event.preventDefault();
       dialog.close();
+      return;
     }
+    if (
+      event.isComposing ||
+      event.altKey ||
+      event.ctrlKey ||
+      event.metaKey ||
+      (event.key !== "ArrowDown" && event.key !== "ArrowUp")
+    )
+      return;
+
+    const links = [...results.querySelectorAll<HTMLAnchorElement>("a")];
+    const current = links.findIndex((link) => link === document.activeElement);
+    const fromInput = document.activeElement === input;
+    if (!links.length || (!fromInput && current === -1)) return;
+
+    event.preventDefault();
+    if (event.key === "ArrowUp" && current === 0) {
+      input.focus();
+      return;
+    }
+    const next = fromInput
+      ? event.key === "ArrowDown"
+        ? 0
+        : links.length - 1
+      : Math.min(
+          current + (event.key === "ArrowDown" ? 1 : -1),
+          links.length - 1,
+        );
+    links[next].focus({ preventScroll: true });
+    links[next].scrollIntoView({ block: "nearest" });
   });
   input.addEventListener("input", () => {
     if (entries) render();

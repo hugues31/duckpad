@@ -18,15 +18,15 @@
 }
 .feature-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 14px;
 }
 .feature-card {
   position: relative;
   display: flex;
   align-items: flex-start;
-  gap: 24px;
-  padding: 28px;
+  gap: 18px;
+  padding: 22px;
   border: 1px solid var(--line);
   border-radius: 12px;
   background: var(--surface);
@@ -62,8 +62,8 @@
 }
 .feature-arrow {
   position: absolute;
-  top: 28px;
-  right: 24px;
+  top: 22px;
+  right: 20px;
   color: var(--blue);
 }
 .features-more {
@@ -78,11 +78,12 @@
   text-decoration: underline;
   text-underline-offset: 3px;
 }
-@media (max-width: 1000px) {
-  .feature-card {
-    padding: 22px;
-    gap: 18px;
+@media (max-width: 1100px) {
+  .feature-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+}
+@media (max-width: 1000px) {
   .feature-mark {
     flex-basis: 64px;
     height: 64px;
@@ -91,10 +92,6 @@
   .feature-mark svg {
     width: 40px;
     height: 40px;
-  }
-  .feature-arrow {
-    top: 22px;
-    right: 20px;
   }
   .features-heading {
     display: block;

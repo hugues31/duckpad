@@ -16,12 +16,12 @@ test("scroll reveals stagger cards and respect live motion preferences", async (
   await expect(cards.first()).not.toHaveAttribute("data-reveal-pending");
   const delays = await cards.evaluateAll((elements) =>
     elements
-      .slice(0, 2)
+      .slice(0, 3)
       .map(
         (element) => getComputedStyle(element).transitionDelay.split(",")[0],
       ),
   );
-  expect(delays).toEqual(["0s", "0.09s"]);
+  expect(delays).toEqual(["0s", "0.09s", "0.18s"]);
   await expect
     .poll(() =>
       cards.first().evaluate((element) => element.getAnimations().length),
@@ -412,6 +412,79 @@ test("search uses guide content, handles no results and supports the keyboard", 
   await expect(page.getByRole("dialog")).not.toBeVisible();
 });
 
+test("search results support arrows, query changes and Enter from the homepage", async ({
+  page,
+}) => {
+  await page.goto("./");
+  await page.keyboard.press("ControlOrMeta+k");
+  const input = page.getByRole("searchbox", { name: "Search documentation" });
+  const links = page.locator(".search-results a");
+  await input.fill("lineage");
+  await expect(links.nth(1)).toBeVisible();
+  await page.keyboard.press("ArrowDown");
+  await expect(links.first()).toBeFocused();
+  await page.keyboard.press("ArrowDown");
+  await expect(links.nth(1)).toBeFocused();
+  await page.keyboard.press("ArrowUp");
+  await expect(links.first()).toBeFocused();
+  await page.keyboard.press("ArrowUp");
+  await expect(input).toBeFocused();
+
+  await input.fill("no-such-guide-123");
+  await expect(links).toHaveCount(0);
+  for (const key of ["ArrowDown", "ArrowUp", "Enter"]) {
+    await page.keyboard.press(key);
+    await expect(input).toBeFocused();
+  }
+  await input.fill("lineage");
+  await expect(links.nth(1)).toBeVisible();
+  await page.keyboard.press("ArrowUp");
+  await expect(links.last()).toBeFocused();
+  const list = (await page.locator(".search-results").boundingBox())!;
+  const last = (await links.last().boundingBox())!;
+  expect(last.y).toBeGreaterThanOrEqual(list.y);
+  expect(last.y + last.height).toBeLessThanOrEqual(list.y + list.height);
+  await page.keyboard.press("ArrowDown");
+  await expect(links.last()).toBeFocused();
+  const destination = await links.last().getAttribute("href");
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(new URL(destination!, page.url()).href);
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+});
+
+for (const width of [1440, 390]) {
+  test(`the shared header opens search on every page at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    for (const route of [
+      "./",
+      "docs/",
+      "docs/quickstart/",
+      "releases/",
+      "404.html",
+    ]) {
+      await page.goto(route);
+      const search = page
+        .locator(".site-header")
+        .getByRole("button", { name: "Search documentation" });
+      await search.click();
+      await expect(page.getByRole("searchbox")).toBeFocused();
+      await page.keyboard.press("Escape");
+      await expect(search).toBeFocused();
+      await page.keyboard.press("ControlOrMeta+k");
+      await expect(page.getByRole("searchbox")).toBeFocused();
+      await page.getByRole("button", { name: "Close search" }).click();
+      expect(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth <= innerWidth,
+        ),
+      ).toBe(true);
+    }
+  });
+}
+
 for (const width of [1440, 1024, 768, 390, 320]) {
   test(`sticky header keeps search and anchor targets accessible at ${width}px`, async ({
     page,
@@ -456,6 +529,16 @@ for (const width of [1440, 1024, 768, 390, 320]) {
     const copy = (await card.locator("h3").boundingBox())!;
     expect(icon.width).toBeGreaterThanOrEqual(40);
     expect(icon.x + icon.width).toBeLessThan(copy.x);
+    if (width === 1440) {
+      const first = (await card.boundingBox())!;
+      const third = (await page.locator(".feature-card").nth(2).boundingBox())!;
+      const fourth = (await page
+        .locator(".feature-card")
+        .nth(3)
+        .boundingBox())!;
+      expect(third.y).toBe(first.y);
+      expect(fourth.y).toBeGreaterThan(first.y + first.height);
+    }
     expect(
       await page.evaluate(
         () => document.documentElement.scrollWidth <= innerWidth,
