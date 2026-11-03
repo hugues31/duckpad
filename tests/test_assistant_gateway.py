@@ -47,15 +47,16 @@ def test_split_text_choices_keep_order_and_finish_reason(finish):
             {
                 "index": 1,
                 "message": {"role": "assistant", "content": [{"type": "text", "text": "Second."}]},
-                "finish_reason": finish,
+                "finish_reason": None,
             },
             {"index": 0, "message": {"role": "assistant", "content": "First."}, "finish_reason": None},
+            # Pydantic AI defaults only the first listed choice to "stop" before validation.
+            {"index": 2, "message": {"role": "assistant", "content": "Third."}, "finish_reason": finish},
         ],
     }
-    response = model._validate_completion(ChatCompletion.model_construct(**data))
-    assert len(response.choices) == 1
-    assert response.choices[0].message.content == "First.\n\nSecond."
-    assert response.choices[0].finish_reason == (finish or "stop")
+    response = model._process_response(ChatCompletion.model_construct(**data))
+    assert [part.content for part in response.parts] == ["First.\n\nSecond.\n\nThird."]
+    assert response.finish_reason == (finish or "stop")
 
 
 def test_single_choice_validation_matches_the_standard_model():

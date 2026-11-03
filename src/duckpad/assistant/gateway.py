@@ -40,10 +40,15 @@ class GatewayChatModel(OpenAIChatModel):
                 if isinstance(content, str) and content:
                     texts.append(content)
                 calls.extend(message.get("tool_calls") or [])
+            # Pydantic AI has already set a missing first finish reason to "stop": a truncated
+            # or filtered fragment must still mark the whole answer.
             finish = (
                 "tool_calls"
                 if calls
-                else next((c["finish_reason"] for c in choices if c.get("finish_reason")), "stop")
+                else next(
+                    (c["finish_reason"] for c in choices if c.get("finish_reason") not in (None, "stop")),
+                    "stop",
+                )
             )
             data["choices"] = [
                 {

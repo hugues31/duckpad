@@ -82,8 +82,7 @@ not supported.
 ## Troubleshoot provider failures
 
 An unreadable provider response displays **The provider returned a response the
-assistant could not read. Check the server logs.** Streaming failures still
-suggest disabling Streaming when appropriate.
+assistant could not read. Check the server logs.**
 
 The `duckpad.assistant` logger writes a WARNING for failed turns, connection tests
 and model discovery. It includes the provider identifier, model (when applicable)
