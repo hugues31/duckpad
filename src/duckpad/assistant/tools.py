@@ -124,7 +124,7 @@ class Dependencies:
     def safe(self, value):
         """Redact configured credentials even if user-authored content happens to repeat one."""
         text = json.dumps(clean(value), ensure_ascii=False)
-        keys = [p.get("api_key", "") for p in self.configuration.get()["providers"]]
+        keys = self.configuration.secrets()
         for key in keys:
             if key:
                 text = text.replace(json.dumps(key, ensure_ascii=False)[1:-1], "[redacted]")

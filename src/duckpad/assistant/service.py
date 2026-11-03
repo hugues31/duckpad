@@ -36,6 +36,7 @@ from .actions import Actions
 from .approvals import Approvals
 from .config import Configuration, provider_error
 from .editing import WRITE_TOOLS
+from .gateway import TURN_TIMEOUT
 from .runs import DEBUG_TOOLS, RUN_TOOLS, read_run_sql, run_record
 from .tools import DATA_TOOLS, READ_TOOLS, Dependencies, PageContext, validate_context
 
@@ -62,7 +63,6 @@ When data tools are unavailable, do not invent values or ask the user to bypass 
 Page context contains only identifiers and names; read saved content through tools.
 """
 MAX_TURNS = 100
-TURN_TIMEOUT = 120
 
 
 class TurnRequest(BaseModel):
@@ -303,7 +303,7 @@ class Assistant:
             if resume is not None
             else None
         )
-        hold = max((len(p.get("api_key", "")) for p in config["providers"]), default=0)
+        hold = max(map(len, self.configuration.secrets()), default=0)
 
         def event(kind, **content):
             return json.dumps(deps.safe({"type": kind, **content}), ensure_ascii=False) + "\n"

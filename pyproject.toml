@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "duckpad"
-version = "0.11.0"
+version = "0.12.0"
 description = "A local SQL canvas with reproducible execution and cell lineage"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -73,7 +73,7 @@ include = [
     "/src",
     "/tests",
     "/scripts/build_hook.py",
-    "/scripts/benchmark_partitions.py",
+    "/scripts/benchmark*.py",
     "/scripts/release.py",
     "/scripts/check_typing_policy.py",
     "/cliff.toml",

@@ -164,6 +164,8 @@ test("selects a surviving environment before requesting results when dev is abse
     expect(new Set(selected)).toEqual(new Set(["prod"]));
   } finally {
     releaseCatalog();
+    // Finish intercepted workspace refreshes before deleting the project or closing the context.
+    await page.unrouteAll({ behavior: "wait" });
     await page.request.delete(`/api/projects/${created.project}`);
   }
 });

@@ -1,7 +1,6 @@
 ---
 import { getCollection, render } from "astro:content";
 import Layout from "../../layouts/Layout.astro";
-import Search from "../../components/Search.astro";
 import Demo from "../../components/Demo.astro";
 import { sections, pages, url } from "../../lib/docs";
 export async function getStaticPaths() {
@@ -26,9 +25,6 @@ const next = pages[index + 1];
   <div class="docs-shell">
     <aside class="docs-sidebar">
       <nav aria-label="Documentation">
-        <button class="search-trigger">
-          Search docs <kbd>⌘ / Ctrl K</kbd>
-        </button>
         {sections.map((section) => (
           <>
             <strong>{section.label}</strong>
@@ -48,9 +44,6 @@ const next = pages[index + 1];
       <details class="docs-mobile-menu">
         <summary>Browse documentation</summary>
         <nav aria-label="Documentation on mobile">
-          <button class="search-trigger">
-            Search docs <span aria-hidden="true">⌕</span>
-          </button>
           {sections.map((section) => (
             <>
               <strong>{section.label}</strong>
@@ -96,5 +89,4 @@ const next = pages[index + 1];
       </nav>
     </aside>
   </div>
-  <Search />
 </Layout>

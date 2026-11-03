@@ -462,7 +462,10 @@ def test_discovery_and_connection_test_are_sanitized(instance, monkeypatch):
     def refused(messages, info):
         raise ModelHTTPError(401, "test", "private-test-key")
 
-    app.state.assistant.configuration.model_override = FunctionModel(refused)
+    async def refused_stream(messages, info):
+        yield refused(messages, info)
+
+    app.state.assistant.configuration.model_override = FunctionModel(stream_function=refused_stream)
     response = client.post("/api/assistant/test")
     assert response.status_code == 502
     assert "refused the API key" in response.text and "private-test-key" not in response.text
