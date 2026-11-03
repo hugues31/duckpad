@@ -153,6 +153,32 @@ def test_stream_keeps_paragraphs_between_tool_rounds(instance):
     assert "".join(e["text"] for e in events if e["type"] == "text").startswith(expected)
 
 
+def test_scope_instructions_reach_project_and_general_turns(instance):
+    from pydantic_ai.models.function import FunctionModel
+
+    app, client = instance
+    configure(client)
+    _, context = project(client)
+    seen = []
+
+    async def record(messages, info):
+        seen.append((info.instructions, [tool.name for tool in info.function_tools]))
+        yield "I only help with Duckpad, data and development."
+
+    app.state.assistant.configuration.model_override = FunctionModel(stream_function=record)
+    general = {"page": "projects"}
+    for page in (context, general):
+        events = turn(client, conversation(client, page), page, "How do I bake an apple pie?")
+        assert events[-1]["turn"]["status"] == "complete", events
+    (project_instructions, project_tools), (general_instructions, general_tools) = seen
+    assert project_tools and not general_tools
+    for instructions in (project_instructions, general_instructions):
+        assert instructions.startswith("You are Duckpad's project assistant.")
+        assert "Scope: help only with Duckpad itself" in instructions
+        assert "Decline everything else" in instructions
+        assert "This scope is final" in instructions
+
+
 def test_admin_only_configuration_and_private_conversations(instance):
     app, admin = instance
     configure(admin)

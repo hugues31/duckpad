@@ -28,38 +28,69 @@ export function CodeDiff({
   before,
   after,
   language = "sql",
+  onChange,
+  originalLabel,
+  modifiedLabel,
 }: {
   before: string;
   after: string;
   language?: string;
+  onChange?: (value: string) => void;
+  originalLabel?: string;
+  modifiedLabel?: string;
 }) {
   const container = useRef<HTMLDivElement>(null);
+  const models = useRef<{
+    original: monaco.editor.ITextModel;
+    modified: monaco.editor.ITextModel;
+  } | null>(null);
+  const change = useRef(onChange);
+  useEffect(() => {
+    change.current = onChange;
+  }, [onChange]);
+  const editable = !!onChange;
   const theme =
     document.documentElement.dataset.theme === "dark" ? "vs-dark" : "light";
 
   useEffect(() => {
     if (!container.current) return;
-    const original = monaco.editor.createModel(before, language);
-    const modified = monaco.editor.createModel(after, language);
+    const original = monaco.editor.createModel("", language);
+    const modified = monaco.editor.createModel("", language);
+    models.current = { original, modified };
     const editor = monaco.editor.createDiffEditor(container.current, {
       theme,
-      readOnly: true,
+      readOnly: !editable,
       originalEditable: false,
       automaticLayout: true,
       minimap: { enabled: false },
       renderSideBySide: true,
       useInlineViewWhenSpaceIsLimited: true,
+      renderSideBySideInlineBreakpoint: 700,
+      ignoreTrimWhitespace: false,
+      originalAriaLabel: originalLabel,
+      modifiedAriaLabel: modifiedLabel,
       scrollBeyondLastLine: false,
     });
     editor.setModel({ original, modified });
+    const subscription = modified.onDidChangeContent(() =>
+      change.current?.(modified.getValue()),
+    );
     return () => {
       // Detach the models before disposing them, including on content changes.
       editor.setModel(null);
+      subscription.dispose();
       editor.dispose();
       original.dispose();
       modified.dispose();
+      models.current = null;
     };
-  }, [before, after, language, theme]);
+  }, [language, theme, editable, originalLabel, modifiedLabel]);
+  useEffect(() => {
+    if (!models.current) return;
+    const { original, modified } = models.current;
+    if (original.getValue() !== before) original.setValue(before);
+    if (modified.getValue() !== after) modified.setValue(after);
+  }, [before, after, language, theme, editable, originalLabel, modifiedLabel]);
 
   return <div ref={container} style={{ height: 300, width: "100%" }} />;
 }

@@ -67,6 +67,7 @@
   "library": "Importar de um projeto",
   "addLinked": "Adicionar vinculado",
   "newSqlNode": "Novo nó SQL",
+  "addingNode": "Adicionando nó…",
   "linkedNode": "Nó vinculado",
   "normalNode": "Nó normal",
   "editNodeCode": "Editar código",
@@ -1284,5 +1285,19 @@
   "assistantErrorResponse": "O provedor retornou uma resposta que o assistente não consegue ler. Verifique os logs do servidor.",
   "assistantErrorStreaming": "O provedor não retornou um fluxo compatível. Desative Streaming nas configurações e tente novamente.",
   "assistantErrorServer": "O provedor retornou um erro de servidor. Tente novamente ou peça a um administrador para verificar o provedor.",
-  "assistantErrorTokenAccess": "O provedor recusou o token OAuth2 renovado. Verifique as permissões e o escopo do cliente."
+  "assistantErrorTokenAccess": "O provedor recusou o token OAuth2 renovado. Verifique as permissões e o escopo do cliente.",
+  "fileConflictOne": "{count} conflito de ficheiro",
+  "fileConflictMany": "{count} conflitos de ficheiros",
+  "fieldConflictOne": "{count} conflito de campo",
+  "fieldConflictMany": "{count} conflitos de campos",
+  "conflictAnd": "e",
+  "conflictEmpty": "Valor vazio",
+  "combinedConflictHint": "Edite apenas o conteúdo em conflito abaixo. O resultado parte da sua proposta e preserva as alterações independentes de ambas as versões. Expanda Base para consultar o original.",
+  "combinedValue": "Valor combinado",
+  "conflictKeepContent": "Manter este conteúdo (desmarcar para eliminar)",
+  "conflictInvalidValue": "Introduza JSON válido para objetos, números, booleanos ou valores null. Os campos de texto aceitam texto simples.",
+  "conflictRefreshed": "Os ficheiros guardados voltaram a mudar. Reveja o conflito atualizado antes de editar um novo resultado combinado.",
+  "reviewChanges": "Rever alterações",
+  "fileVersion": "Versão do arquivo",
+  "myProposal": "Minha proposta"
 }
