@@ -3,6 +3,7 @@ import { url } from "../lib/docs";
 ---
 
 <dialog
+  id="documentation-search"
   class="search-dialog"
   aria-labelledby="search-title"
   data-index={url("search.json")}
@@ -21,9 +22,13 @@ import { url } from "../lib/docs";
     type="search"
     placeholder="Try lineage, CSV, or branches…"
     autocomplete="off"
+    aria-describedby="search-hint"
   />
   <p class="search-status" role="status">
     Type to search the guides.
+  </p>
+  <p class="search-hint" id="search-hint">
+    ↑ ↓ to browse · Enter to open · Esc to close
   </p>
   <ul class="search-results"></ul>
 </dialog>
@@ -104,11 +109,53 @@ import { url } from "../lib/docs";
     render();
   }
   document
-    .querySelectorAll(".search-trigger")
-    .forEach((button) => button.addEventListener("click", openSearch));
+    .querySelectorAll<HTMLButtonElement>(".search-trigger")
+    .forEach((button) => {
+      button.hidden = false;
+      button.addEventListener("click", openSearch);
+    });
   dialog
     .querySelector("[data-close]")!
     .addEventListener("click", () => dialog.close());
+  dialog.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      dialog.close();
+      return;
+    }
+    if (event.isComposing || event.altKey || event.ctrlKey || event.metaKey)
+      return;
+
+    const links = [...results.querySelectorAll<HTMLAnchorElement>("a")];
+    const current = links.findIndex((link) => link === document.activeElement);
+    if (
+      current !== -1 &&
+      (event.key.length === 1 || event.key === "Backspace")
+    ) {
+      // Typing on a result keeps refining the query.
+      input.focus();
+      return;
+    }
+    if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+    const fromInput = document.activeElement === input;
+    if (!links.length || (!fromInput && current === -1)) return;
+
+    event.preventDefault();
+    if (event.key === "ArrowUp" && current === 0) {
+      input.focus();
+      return;
+    }
+    const next = fromInput
+      ? event.key === "ArrowDown"
+        ? 0
+        : links.length - 1
+      : Math.min(
+          current + (event.key === "ArrowDown" ? 1 : -1),
+          links.length - 1,
+        );
+    links[next].focus({ preventScroll: true });
+    links[next].scrollIntoView({ block: "nearest" });
+  });
   input.addEventListener("input", () => {
     if (entries) render();
   });
