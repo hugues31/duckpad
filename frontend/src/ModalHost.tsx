@@ -16,7 +16,6 @@ import { usePageRoute } from "./navigation";
 import { useShell } from "./shell";
 import type {
   Bundle,
-  Conflict,
   ConnectorEditor,
   Environment,
   Snapshot,
@@ -25,7 +24,7 @@ import type {
 import { useApiResource } from "./useApiResource";
 import { useAsyncAction } from "./useAsyncAction";
 import { ScopeVariables } from "./VariableFields";
-import { conflictLabel } from "./variables";
+import { ConflictDialog, CombinedResolutionDialog } from "./ConflictDialog";
 import { useWorktree } from "./worktree";
 
 const NEW_TEMPLATE = `-- @label Custom transform
@@ -403,105 +402,6 @@ function RevisionEditor({
       onSave={async (text) => {
         await save(base, (bundle) => write(bundle, text));
       }}
-    />
-  );
-}
-
-function ConflictDialog({
-  conflict,
-  onClose,
-}: {
-  conflict: Conflict;
-  onClose: () => void;
-}) {
-  const t = useT();
-  const { openModal } = useShell();
-  const { id, refresh } = useWorktree();
-  const { pending, error, run } = useAsyncAction();
-  const choose = async (choice: "current" | "proposal") => {
-    const resolved = await run(async () => {
-      await api(`/conflicts/${conflict.id}/resolve`, send({ choice }));
-      await refresh();
-    });
-    if (resolved) onClose();
-  };
-  return (
-    <Modal title={t("conflict")} onClose={onClose} wide>
-      <div className="modal-content">
-        <p>{t("conflictHint")}</p>
-        <pre className="expression">
-          {conflict.paths
-            .map((path: string) => conflictLabel(path, t) || path)
-            .join("\n")}
-        </pre>
-        <div className="conflict-comparison">
-          <div>
-            <h4>{t("keepCurrent")}</h4>
-            <pre>{JSON.stringify(conflict.current, null, 2)}</pre>
-          </div>
-          <div>
-            <h4>{t("keepProposal")}</h4>
-            <pre>{JSON.stringify(conflict.proposal, null, 2)}</pre>
-          </div>
-        </div>
-        {error && (
-          <div className="notice error" role="alert">
-            {error}
-          </div>
-        )}
-      </div>
-      <footer>
-        <button
-          className="button secondary"
-          disabled={pending}
-          onClick={() =>
-            openModal({
-              kind: "combinedResolution",
-              worktree: id,
-              conflict: conflict.id,
-            })
-          }
-        >
-          {t("combined")}
-        </button>
-        {(["current", "proposal"] as const).map((choice) => (
-          <button
-            key={choice}
-            className={`button ${choice === "proposal" ? "primary" : "secondary"}`}
-            disabled={pending}
-            onClick={() => choose(choice)}
-          >
-            {t(choice === "current" ? "keepCurrent" : "keepProposal")}
-          </button>
-        ))}
-      </footer>
-    </Modal>
-  );
-}
-
-function CombinedResolutionDialog({
-  conflict,
-  onClose,
-}: {
-  conflict: Conflict;
-  onClose: () => void;
-}) {
-  const t = useT();
-  const { refresh } = useWorktree();
-  const resolve = async (text: string) => {
-    await api(
-      `/conflicts/${conflict.id}/resolve`,
-      send({ choice: "combined", files: JSON.parse(text) }),
-    );
-    await refresh();
-  };
-  return (
-    <EditorModal
-      title={t("combined")}
-      language="json"
-      value={JSON.stringify(conflict.proposal, null, 2)}
-      onClose={onClose}
-      onSave={resolve}
     />
   );
 }

@@ -189,7 +189,7 @@ export interface RemoteStatus {
 
 export type MergeChoice = "base" | "current" | "incoming";
 
-interface ConflictValue {
+export interface ConflictValue {
   /** False when the field does not exist in this version. */
   present: boolean;
   /** The field's value, or null when absent. */

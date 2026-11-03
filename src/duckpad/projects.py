@@ -24,7 +24,7 @@ from .git.command import GitError, GitOptions
 from .git.identity import SYSTEM_IDENTITY, current_identity
 from .git.remote import Remotes
 from .git.workspace import GitWorkspace, diagnose, require_valid
-from .merge import merge_files
+from .merge import conflict_details, merge_files
 from .node_code import owned_paths
 from .store import Store
 from .templates import parse_template
@@ -405,7 +405,7 @@ class Projects:
             "bundle": bundle,
             "files": files,
             "diagnostics": errors,
-            "conflicts": self.store.conflicts(worktree_id),
+            "conflicts": [conflict_details(c) for c in self.store.conflicts(worktree_id)],
         }
 
     def base(self, worktree: Record, revision: str, current: Files) -> Files | None:

@@ -4,7 +4,14 @@ import ComparisonView from "./ComparisonView";
 import { TabStatus, useTabAction } from "./gitTabs";
 import type { MergeChoice, MergeReview } from "./gitTypes";
 import { useT } from "./i18n";
-import { conflictLabel } from "./variables";
+import {
+  ConflictHeading,
+  ConflictSummary,
+  FieldConflictDiff,
+  FileConflictDiff,
+} from "./ConflictDiff";
+import { conflictPath, conflictTitle } from "./conflicts";
+import { useWorktree } from "./worktree";
 
 export default function GitReviewTab({
   review: proposal,
@@ -24,6 +31,7 @@ export default function GitReviewTab({
   onChanged: () => Promise<void>;
 }) {
   const t = useT();
+  const { snapshot } = useWorktree();
   const { pending, error, run, retry } = useTabAction();
   const [review, setReview] = useState(proposal);
   const [integrated, setIntegrated] = useState<MergeReview | null>(null);
@@ -70,37 +78,50 @@ export default function GitReviewTab({
           <h3>
             {t("fieldConflicts")} · {review.unresolved.length} {t("unresolved")}
           </h3>
+          <ConflictSummary conflicts={review.conflicts} />
           {review.conflicts.map((conflict) => (
             <fieldset className="git-conflict" key={conflict.path}>
               <legend>
-                {conflictLabel(conflict.path, t) ?? conflict.path}
-                {conflictLabel(conflict.path, t) && (
-                  <code className="muted">{conflict.path}</code>
-                )}
+                <ConflictHeading
+                  path={conflict.path}
+                  title={conflictTitle(
+                    conflict.path,
+                    t,
+                    [snapshot?.files || {}],
+                    review.comparison.entities,
+                  )}
+                />
               </legend>
-              <div className="git-conflict-values">
-                {(["base", "current", "incoming"] as const).map((choice) => (
-                  <label key={choice}>
-                    <span>
-                      <input
-                        type="radio"
-                        name={conflict.path}
-                        checked={conflict.choice === choice}
-                        disabled={pending || !!integrated}
-                        onChange={() => choose(conflict.path, choice)}
-                      />{" "}
-                      {t(choice)}
-                    </span>
-                    <pre>
-                      {conflict[choice].present
-                        ? typeof conflict[choice].value === "string"
-                          ? conflict[choice].value
-                          : JSON.stringify(conflict[choice].value, null, 2)
-                        : t("absent")}
-                    </pre>
-                  </label>
-                ))}
-              </div>
+              {conflictPath(conflict.path).parts.length ? (
+                <FieldConflictDiff
+                  conflict={conflict}
+                  disabled={pending || !!integrated}
+                  onChoose={(choice) => choose(conflict.path, choice)}
+                />
+              ) : (
+                <>
+                  <FileConflictDiff
+                    conflict={conflict}
+                    file={conflictPath(conflict.path).file}
+                  />
+                  <div className="conflict-file-choices">
+                    {(["base", "current", "incoming"] as const).map(
+                      (choice) => (
+                        <label key={choice}>
+                          <input
+                            type="radio"
+                            name={conflict.path}
+                            checked={conflict.choice === choice}
+                            disabled={pending || !!integrated}
+                            onChange={() => choose(conflict.path, choice)}
+                          />{" "}
+                          {t(choice)}
+                        </label>
+                      ),
+                    )}
+                  </div>
+                </>
+              )}
             </fieldset>
           ))}
         </section>
