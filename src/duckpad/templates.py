@@ -379,8 +379,13 @@ def render_path(name, text, values):
     return VARIABLE_REFERENCE.sub(replace, text)
 
 
-def authorize_path(template, path, root):
+def authorize_path(template, path, root, kind, connections, reference):
     """Check the resolved resource against its captured root, including glob matches."""
+    if reference:
+        connection = connection_for(connections, reference)
+        capability = "write" if kind == "destination" else "read"
+        if capability not in connection["definition"].get("capabilities", []):
+            raise Problem(f"Connection {reference} does not support {capability}")
     if URI.match(path):
         # An interpolated authority cannot select a different credential scope.
         baseline = str(root) if URI.match(str(root)) else template
@@ -467,6 +472,9 @@ def render_parameter(
                 raise Problem(f"Choose a connection for {name}")
             return ""
         connection = connection_for(connections, value)
+        capability = "write" if template["writes_external"] else "read"
+        if capability not in connection["definition"].get("capabilities", []):
+            raise Problem(f"Connection {value} does not support {capability}")
         return qi(connection["alias"])
     if kind == "secret":
         if is_project_files(parameters[argument]):
@@ -498,7 +506,9 @@ def render_parameter(
             return literal(under_root(root, path) if relative else path)
         if relative and URI.match(root):
             path = under_root(root, path)
-        return literal(authorize_path(template, path, root or str(project_files[kind])))
+        return literal(
+            authorize_path(template, path, root or str(project_files[kind]), kind, connections, reference)
+        )
     if kind in ("column", "identifier"):
         return ".".join(qi(part) for part in str(value).split("."))
     if kind in OBJECT_NAMES:
@@ -582,26 +592,19 @@ def parse_block(sql):
     return trees[0]
 
 
-def require_capability(connections, reference, capability):
-    if capability not in connections[reference]["definition"].get("capabilities", []):
-        raise Problem(f"Connection {reference} does not support {capability}")
-
-
-def check_access(block, tree, allowed, connections, resources, destinations, secrets):
-    """Validate each SQL operation against declared inputs, resources and connections.
+def check_access(block, tree, allowed, connections, resources):
+    """Reject data access outside the node's declared inputs, earlier outputs, resources and connections.
 
     Return whether the query's result is a lineage source: it reads external data, or
     no flow data at all. Later outputs can trace through that snapshot normally.
     """
-    query = bool(block["output"] or is_check(block))
-    if query and not isinstance(tree, exp.Query):
-        raise Problem("Outputs, tests and messages must be read-only tabular queries")
-    if not query and not isinstance(tree, (exp.Copy, exp.Insert)):
+    if block["output"] or is_check(block):
+        if not isinstance(tree, exp.Query):
+            raise Problem("Outputs, tests and messages must be read-only tabular queries")
+    elif not isinstance(tree, (exp.Copy, exp.Insert)):
         raise Problem("A tabular query needs an @output declaration; writes must use COPY TO or INSERT")
-    if tree.find(exp.Into):
-        raise Problem("Outputs, tests and messages must be read-only tabular queries")
     local_names = {x.strip('"') for x in allowed} | {cte.alias for cte in tree.find_all(exp.CTE)}
-    aliases = {c["alias"]: reference for reference, c in connections.items()}
+    aliases = {c["alias"] for c in connections.values()}
     destination = tree.this if isinstance(tree, exp.Insert) else None
     if isinstance(destination, exp.Schema):
         destination = destination.this
@@ -611,36 +614,16 @@ def check_access(block, tree, allowed, connections, resources, destinations, sec
             reads_local = True
             continue
         if isinstance(table.this, exp.Identifier):
-            reference = aliases.get(table.catalog or table.db)
-            if reference is None:
+            if table.catalog not in aliases and table.db not in aliases:
                 raise Problem(f"Undeclared data access or destination: {table.sql(dialect='duckdb')}")
-            require_capability(connections, reference, "write" if table is destination else "read")
         elif table is destination:
             raise Problem("INSERT requires a declared connection destination")
         elif not isinstance(table.this, (exp.GenerateSeries, exp.ExplodingGenerateSeries)):
+            # Readers name declared resources; query() and other table functions are rejected.
             check_reader(table.this, resources)
-            for resource in table.this.find_all(exp.Literal):
-                reference = resources.get(resource.sql(dialect="duckdb"))
-                if reference is not None:
-                    require_capability(connections, reference, "read")
-        if table is not destination:
-            reads_external = True
-    if isinstance(tree, exp.Copy):
-        if tree.args.get("kind"):
-            raise Problem("COPY must write TO its declared destination")
-        options = {p.name.upper(): p.args.get("expression") for p in tree.args.get("params", [])}
-        connector = options.get("CONNECTION")
-        reference = secrets.get(connector.sql(dialect="duckdb")) if connector is not None else None
-        if reference is not None:
-            require_capability(connections, reference, "write")
-        else:
-            files = tree.args.get("files", [])
-            if not files or any(f.sql(dialect="duckdb") not in destinations for f in files):
-                raise Problem("COPY must write to a declared destination parameter")
-            for file in files:
-                reference = destinations[file.sql(dialect="duckdb")]
-                if reference is not None:
-                    require_capability(connections, reference, "write")
+        reads_external = reads_external or table is not destination
+    if isinstance(tree, exp.Copy) and tree.args.get("kind"):
+        raise Problem("Export COPY must write TO its declared destination")
     return reads_external or not reads_local
 
 
@@ -727,23 +710,13 @@ def compile_template(
             values[name] = f"CAST(${name} AS DATE)" if base_type(parameter["type"]) == "date" else "$" + name
         else:
             values[name] = rendered
-
-    def resource_connections(types):
-        return {
-            values[p["name"]]: parameters.get(type_argument(p["type"])) or None
-            for p in template["parameters"]
-            if base_type(p["type"]) in types
-        }
-
-    resources = resource_connections(RESOURCE_TYPES)
-    destinations = resource_connections({"destination"})
-    secrets = resource_connections({"secret"})
+    resources = [values[p["name"]] for p in template["parameters"] if base_type(p["type"]) in RESOURCE_TYPES]
     allowed = set(inputs.values())
     statements = []
     for block in execution_blocks(template):
         tree = parse_block(REFERENCE.sub(lambda m: values[m[1]], block["sql"]))
         message_block = block.get("message_block")
-        source = check_access(block, tree, allowed, connections, resources, destinations, secrets)
+        source = check_access(block, tree, allowed, connections, resources)
         query = tree.sql(dialect="duckdb")
         used = {
             name: value

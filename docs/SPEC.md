@@ -16,7 +16,7 @@ The single `admin` account receives a generated password on the first launch of 
 
 - Each project is a local Git repository with a `main` branch. It stores the DAG, graphical layout, node instances, their parameters, and references to connections and resources. Project definitions, templates, components, and documentation are saved separately from DuckDB results.
 
-- Nodes connect directly: SQL nodes with no inputs and at least one output are square; other nodes are round. No intermediate square nodes are created automatically.
+- Nodes connect directly: source nodes, with outputs and no inputs, are square; transformations and exports are round. No intermediate square nodes are created automatically.
 
 - Each node has 0 to N named tabular inputs and 0 to N named tabular outputs. An input receives one output; an output can feed multiple inputs across multiple nodes.
 
@@ -150,7 +150,7 @@ The compiled SQL lists each block's query in execution order. Duckpad assigns ph
 
 Newly computed outputs are available to later blocks inside the same node execution but are published to previews and downstream nodes only after all output blocks succeed. If any block fails, none of the new outputs is published and the node's previous successful output set is retained as stale. Lineage records and traverses dependencies between these output datasets within the same execution.
 
-A query reads only its node's declared inputs, earlier outputs, resources and connections. Local CTEs and subqueries remain allowed. Outputs and checks are read-only queries; external writes use explicit `COPY TO` or `INSERT` statements with declared destinations. Each connection must support the operation performed on it. Undeclared access and unsupported side effects are rejected before execution. Duckpad prepares declared connections using their SQL connector definitions and manages the required extension installation and loading.
+A query reads only its node's declared inputs, earlier outputs, resources and connections. Local CTEs and subqueries remain allowed. Outputs and checks are read-only queries; external writes use explicit `COPY TO` or `INSERT` statements in a node without outputs. The connections of a writing node must support writes; those of other nodes, reads. Undeclared access and unsupported side effects are rejected before execution. Duckpad prepares declared connections using their SQL connector definitions and manages the required extension installation and loading.
 
 ## Execution messages
 

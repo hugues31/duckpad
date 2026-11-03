@@ -116,8 +116,8 @@ TO {{ destination }} (FORMAT CSV, HEADER TRUE);
 ```
 
 Connect `source` to the table you want to export. Exports write with an
-explicit `COPY ... TO` or `INSERT` statement and have no `@output`. Its
-connection needs the `write` capability; reads need `read`.
+explicit `COPY ... TO` or `INSERT` statement and have no `@output`. Their
+connections need the `write` capability; other nodes' connections need `read`.
 With project files, the relative destination resolves inside the branch and
 environment's export directory. Run the node and open **Log →
 Download exported data** to retrieve its CSV. See [project exports](AUTHORING.md)

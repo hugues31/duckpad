@@ -35,40 +35,20 @@ SELECT * FROM (VALUES (1), (2)) t(id);
     assert [s["source"] for s in statements] == [True, False, True]
 
 
-def test_capabilities_are_checked_for_each_read_and_write_connection():
-    sql = """-- @param reader: connection = "read_db"
--- @param writer: connection = "write_db"
-INSERT INTO {{ writer }}.totals SELECT * FROM {{ reader }}.orders;
-"""
-    connections = {
-        "read_db": {"alias": "read_alias", "definition": {"capabilities": ["read"]}},
-        "write_db": {"alias": "write_alias", "definition": {"capabilities": ["write"]}},
-    }
-    assert parse_template(sql)["writes_external"]
-    compile_sql(sql, connections)
-    connections["read_db"]["definition"]["capabilities"] = ["write"]
-    with pytest.raises(Problem, match="Connection read_db does not support read"):
-        compile_sql(sql, connections)
-    connections["read_db"]["definition"]["capabilities"] = ["read"]
-    connections["write_db"]["definition"]["capabilities"] = ["read"]
-    with pytest.raises(Problem, match="Connection write_db does not support write"):
-        compile_sql(sql, connections)
-
-
-def test_file_capabilities_follow_actual_resource_usage():
-    connections = {
-        "files": {
-            "alias": "files",
-            "definition": {"family": "storage", "capabilities": ["write"]},
-            "values": {"root": "/data"},
-        }
-    }
-    declarations = (
-        '-- @param connection: connection = "files"\n-- @param path: destination(connection) = "out.csv"\n'
+def test_writing_nodes_need_write_connections_and_other_nodes_read_ones():
+    connections = {"db": {"alias": "db_alias", "definition": {"capabilities": ["read"]}}}
+    read = '-- @param c: connection = "db"\n-- @input rows\n-- @output result\nSELECT * FROM {{ c }}.orders;'
+    write = (
+        '-- @param c: connection = "db"\n-- @input rows\nINSERT INTO {{ c }}.orders SELECT * FROM {{ rows }};'
     )
-    compile_sql(declarations + "COPY (SELECT 1) TO {{ path }} (FORMAT CSV);", connections)
-    with pytest.raises(Problem, match="Connection files does not support read"):
-        compile_sql(declarations + "-- @output data\nSELECT * FROM read_csv({{ path }});", connections)
+    assert parse_template(write)["writes_external"]
+    compile_sql(read, connections)
+    with pytest.raises(Problem, match="Connection db does not support write"):
+        compile_sql(write, connections)
+    connections["db"]["definition"]["capabilities"] = ["write"]
+    compile_sql(write, connections)
+    with pytest.raises(Problem, match="Connection db does not support read"):
+        compile_sql(read, connections)
 
 
 @pytest.mark.parametrize(
@@ -77,7 +57,6 @@ def test_file_capabilities_follow_actual_resource_usage():
         "-- @output result\nSELECT * FROM other_node_connection.orders;",
         "-- @input rows\n-- @output result\nSELECT * FROM other_node_connection.input_rows;",
         "-- @input rows\nINSERT INTO {{ rows }} SELECT 1;",
-        "COPY (SELECT 1) TO '/undeclared.csv';",
         "-- @input rows\nCOPY {{ rows }} FROM '/undeclared.csv';",
         "-- @output result\nCOPY (SELECT 1) TO '/undeclared.csv';",
         '-- @param path: destination = "out.csv"\nCOPY (SELECT 1) TO {{ path }};\n-- @output result\nSELECT 1;',

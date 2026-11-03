@@ -492,23 +492,24 @@ def test_path_symlinks_globs_and_uri_authority_are_checked(tmp_path):
         if path.startswith("*"):
             (outside / "file.csv").write_text("a\n1\n")
         with pytest.raises(Problem):
-            authorize_path(path, path, root)
+            authorize_path(path, path, root, "file", {}, None)
     (root / "safe.csv").write_text("a\n1\n")
-    assert authorize_path("*.csv", "*.csv", root) == str(root / "*.csv")
+    assert authorize_path("*.csv", "*.csv", root, "file", {}, None) == str(root / "*.csv")
     assert (
-        authorize_path("s3://bucket/{{ var.name }}", "s3://bucket/file.csv", root) == "s3://bucket/file.csv"
+        authorize_path("s3://bucket/{{ var.name }}", "s3://bucket/file.csv", root, "file", {}, None)
+        == "s3://bucket/file.csv"
     )
     with pytest.raises(Problem, match="authority"):
-        authorize_path("s3://bucket/{{ var.name }}", "s3://other/file.csv", root)
+        authorize_path("s3://bucket/{{ var.name }}", "s3://other/file.csv", root, "file", {}, None)
     # DuckDB reads settings such as s3_endpoint from the URL query.
     for template, path in (
         ("{{ var.name }}", "s3://bucket/prefix/x.csv?s3_endpoint=evil.example"),
         ("data/{{ var.name }}", "s3://bucket/prefix/data/x#/../../other.csv"),
     ):
         with pytest.raises(Problem, match="query or fragment"):
-            authorize_path(template, path, "s3://bucket/prefix")
+            authorize_path(template, path, "s3://bucket/prefix", "file", {}, None)
     assert (
-        authorize_path("s3://bucket/{{ var.name }}?v=1", "s3://bucket/a.csv?v=1", root)
+        authorize_path("s3://bucket/{{ var.name }}?v=1", "s3://bucket/a.csv?v=1", root, "file", {}, None)
         == "s3://bucket/a.csv?v=1"
     )
 
