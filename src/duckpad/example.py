@@ -408,7 +408,7 @@ SELECT 'The report has no rows' AS problem FROM {{ source }} HAVING COUNT(*) = 0
         owned["origin"] = owned.pop("template")
         bundle.setdefault("node_sql", {})[code_path(identity, parent)] = templates[owned["origin"]]
     # Node code can add checks to the definition it was copied from.
-    bundle["node_sql"]["nodes/enriched.sql"] += """-- @test every_order_matched
+    bundle["node_sql"][code_path("enriched")] += """-- @test every_order_matched
 SELECT l.* FROM {{ left }} AS l ANTI JOIN {{ right }} AS r ON {{ condition }};
 """
 
