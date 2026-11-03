@@ -9,6 +9,86 @@ test.afterEach(async ({ page }) => {
   });
 });
 
+test("configure an OAuth2 gateway without exposing its saved secret", async ({
+  page,
+}) => {
+  await signIn(page);
+  await openInstanceSettings(page, "AI assistant");
+  await page
+    .getByRole("button", { name: "OpenAI-compatible", exact: true })
+    .click();
+  const provider = page.getByRole("group", {
+    name: "OpenAI-compatible",
+    exact: true,
+  });
+  await provider
+    .getByLabel("Base URL", { exact: true })
+    .fill("https://gateway.example.invalid/v1");
+  await provider
+    .getByLabel("Authentication", { exact: true })
+    .selectOption("oauth2");
+  await expect(provider.getByLabel("API key", { exact: true })).toHaveCount(0);
+  await provider
+    .getByLabel("Token URL", { exact: true })
+    .fill("https://auth.example.invalid/token");
+  await provider
+    .getByLabel("Client ID", { exact: true })
+    .fill("gateway-client");
+  const secret = provider.getByLabel("Client secret", { exact: true });
+  await secret.fill("browser-client-secret");
+  await provider.getByLabel("Scope (optional)", { exact: true }).fill("chat");
+  await provider.getByLabel("Streaming", { exact: true }).uncheck();
+  await provider.getByLabel("Model identifier", { exact: true }).fill("test");
+  await provider.getByLabel("Model identifier", { exact: true }).press("Enter");
+  await page.getByRole("button", { name: "Save changes", exact: true }).click();
+  await expect(
+    provider.getByText("Secret saved", { exact: true }),
+  ).toBeVisible();
+  await expect(secret).toHaveValue("");
+  await page.reload();
+  await expect(
+    provider.getByLabel("Streaming", { exact: true }),
+  ).not.toBeChecked();
+  const settings = await (
+    await page.request.get("/api/assistant/settings")
+  ).json();
+  expect(settings.providers[0]).toMatchObject({
+    auth: "oauth2",
+    has_secret: true,
+    streaming: false,
+  });
+  expect(JSON.stringify(settings)).not.toContain("browser-client-secret");
+  expect(settings.providers[0]).not.toHaveProperty("client_secret");
+  // Unsaved tests reuse a saved secret without sending it to the browser.
+  const request = page.waitForRequest((r) =>
+    r.url().endsWith("/api/assistant/test"),
+  );
+  await page
+    .getByRole("button", { name: "Test connection", exact: true })
+    .click();
+  expect((await request).postDataJSON().provider).not.toHaveProperty(
+    "has_secret",
+  );
+  await expect(
+    page.getByText("Connection verified with OpenAI-compatible · test.", {
+      exact: true,
+    }),
+  ).toBeVisible();
+  await provider
+    .getByLabel("Client ID", { exact: true })
+    .fill("different-client");
+  await expect(provider.getByText("Secret saved", { exact: true })).toHaveCount(
+    0,
+  );
+  await expect(secret).toHaveValue("");
+  await expect(secret).toHaveAttribute("required", "");
+  await provider
+    .getByLabel("Authentication", { exact: true })
+    .selectOption("api_key");
+  await expect(provider.getByLabel("API key", { exact: true })).toBeVisible();
+  await expect(secret).toHaveCount(0);
+});
+
 test("configure the assistant, inspect a flow and resume a private conversation", async ({
   page,
 }) => {

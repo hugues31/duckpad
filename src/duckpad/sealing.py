@@ -61,8 +61,9 @@ def sealed_fields(kind: str, key: str, record: Any) -> Iterator[tuple[dict, str,
         yield record, "client_secret", "settings/oidc/client_secret"
     elif kind == "settings" and key == "assistant":
         for provider in record.get("providers", []):
-            if "api_key" in provider:
-                yield provider, "api_key", f"settings/assistant/{provider['id']}/api_key"
+            for field in ("api_key", "client_secret"):
+                if field in provider:
+                    yield provider, field, f"settings/assistant/{provider['id']}/{field}"
     elif kind == "ssh_key":
         yield record, "private_key", f"ssh_key/{key}/private_key"
 
