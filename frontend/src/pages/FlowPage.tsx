@@ -9,6 +9,7 @@ import {
   type CSSProperties,
 } from "react";
 import { useLocation, useOutletContext } from "react-router";
+import { Loader2 } from "lucide-react";
 import Canvas from "../Canvas";
 import CanvasHeader from "../CanvasHeader";
 import { noticeCount } from "../FlowToolbar";
@@ -128,6 +129,8 @@ export default function FlowPage() {
   const location = useLocation();
   const sizes = usePanelSizes();
   const [selection, setSelection] = useState<string[]>([]);
+  const [addingNode, setAddingNode] = useState(false);
+  const additionPending = useRef(false);
   const [resultsTab, setResultsTab] = useState<ResultsTab>("data");
   // Badges and summary links open their results tab, even when the panel is hidden.
   const showResults = (tab: ResultsTab) => {
@@ -252,6 +255,7 @@ export default function FlowPage() {
     connection?: NodeConnection,
     linked = false,
   ) {
+    if (!canEdit || additionPending.current) return;
     if (connection && !graph?.nodes.some((n) => n.id === connection.nodeId))
       return;
     const created: FlowNode = {
@@ -260,36 +264,43 @@ export default function FlowPage() {
       params: {},
       position,
     };
-    await save(snapshot, (value) => {
-      const g = graphAt(value, path);
-      if (kind === "template" && !linked) {
-        if (id) detachNode(value, created, parent);
-        else {
-          delete created.template;
-          (value.node_sql ||= {})[nodeCodePath(created.id, parent)] =
-            NEW_NODE_SQL;
+    additionPending.current = true;
+    setAddingNode(true);
+    try {
+      await save(snapshot, (value) => {
+        const g = graphAt(value, path);
+        if (kind === "template" && !linked) {
+          if (id) detachNode(value, created, parent);
+          else {
+            delete created.template;
+            (value.node_sql ||= {})[nodeCodePath(created.id, parent)] =
+              NEW_NODE_SQL;
+          }
         }
-      }
-      g.nodes.push(created);
-      if (connection)
-        connectInput(
-          g,
-          connection.handleType === "source"
-            ? {
-                source: connection.nodeId,
-                sourceHandle: connection.handleId,
-                target: created.id,
-                targetHandle: connection.port,
-              }
-            : {
-                source: created.id,
-                sourceHandle: connection.port,
-                target: connection.nodeId,
-                targetHandle: connection.handleId,
-              },
-        );
-    });
-    select(created.id);
+        g.nodes.push(created);
+        if (connection)
+          connectInput(
+            g,
+            connection.handleType === "source"
+              ? {
+                  source: connection.nodeId,
+                  sourceHandle: connection.handleId,
+                  target: created.id,
+                  targetHandle: connection.port,
+                }
+              : {
+                  source: created.id,
+                  sourceHandle: connection.port,
+                  target: connection.nodeId,
+                  targetHandle: connection.handleId,
+                },
+          );
+      });
+      select(created.id);
+    } finally {
+      additionPending.current = false;
+      setAddingNode(false);
+    }
   }
   async function removeNodes(ids: string[], edges: string[] = []) {
     await save(snapshot, (value) => {
@@ -385,7 +396,7 @@ export default function FlowPage() {
       }
     >
       <NodePalette
-        readOnly={!canEdit}
+        readOnly={!canEdit || addingNode}
         snapshot={snapshot}
         excludedComponents={path.map((part) => part.definition)}
         hidden={!panels.open.palette}
@@ -404,7 +415,13 @@ export default function FlowPage() {
         }
         onLibrary={() => openModal({ kind: "library", worktree })}
       />
-      <main className="canvas-column">
+      {addingNode && (
+        <div className="node-add-status" role="status">
+          <Loader2 size={16} className="spin" aria-hidden="true" />
+          {t("addingNode")}
+        </div>
+      )}
+      <main className="canvas-column" inert={addingNode}>
         <CanvasHeader
           projectName={project?.name || bundle.flow.name}
           path={path}
@@ -520,6 +537,7 @@ export default function FlowPage() {
         className="inspector-layer"
         id="node-inspector"
         hidden={!panels.open.inspector}
+        inert={addingNode}
       >
         {node && definition ? (
           <Inspector
