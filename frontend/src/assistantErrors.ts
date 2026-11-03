@@ -1,6 +1,8 @@
 import { useT, type TranslationKey } from "./i18n";
 
 const errors: Record<string, TranslationKey> = {
+  "The provider returned a response the assistant could not read. Check the server logs.":
+    "assistantErrorResponse",
   "The provider refused the renewed OAuth2 token. Check the client permissions and scope.":
     "assistantErrorTokenAccess",
   "The provider returned a server error. Try again or ask an administrator to check the provider.":

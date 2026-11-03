@@ -141,6 +141,18 @@ export default function Inspector({
     node,
     snapshot,
     async (value: FlowNode, base: Snapshot) => {
+      // Incomplete numeric text is a dirty draft, but navigation must not save it.
+      if (
+        signature.parameters.some((parameter) => {
+          const current = value.params[parameter.name];
+          return (
+            parameter.type === "number" &&
+            typeof current === "string" &&
+            !Number.isFinite(Number(current))
+          );
+        })
+      )
+        throw new Error(t("invalidNumber"));
       const variables = { ...declared.current };
       const saved = await onSave(value, base, variables);
       for (const name of Object.keys(variables)) delete declared.current[name];

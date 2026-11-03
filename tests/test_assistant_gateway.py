@@ -32,6 +32,62 @@ PROVIDER = {
 }
 
 
+@pytest.mark.parametrize("finish", [None, "length", "content_filter"])
+def test_split_text_choices_keep_order_and_finish_reason(finish):
+    from openai.types.chat import ChatCompletion
+    from pydantic_ai.providers.openai import OpenAIProvider
+
+    model = gateway.GatewayChatModel("test", provider=OpenAIProvider(api_key="test-key"))
+    data = {
+        "id": "response-text",
+        "object": "chat.completion",
+        "created": 1700000000,
+        "model": "test",
+        "choices": [
+            {
+                "index": 1,
+                "message": {"role": "assistant", "content": [{"type": "text", "text": "Second."}]},
+                "finish_reason": None,
+            },
+            {"index": 0, "message": {"role": "assistant", "content": "First."}, "finish_reason": None},
+            # Pydantic AI defaults only the first listed choice to "stop" before validation.
+            {"index": 2, "message": {"role": "assistant", "content": "Third."}, "finish_reason": finish},
+        ],
+    }
+    response = model._process_response(ChatCompletion.model_construct(**data))
+    assert [part.content for part in response.parts] == ["First.\n\nSecond.\n\nThird."]
+    assert response.finish_reason == (finish or "stop")
+
+
+def test_single_choice_validation_matches_the_standard_model():
+    from openai.types.chat import ChatCompletion
+    from pydantic_ai.models.openai import OpenAIChatModel
+    from pydantic_ai.providers.openai import OpenAIProvider
+
+    provider = OpenAIProvider(api_key="test-key")
+    response = ChatCompletion.model_validate(
+        {
+            "id": "response-single",
+            "object": "chat.completion",
+            "created": 1700000000,
+            "model": "test",
+            "choices": [
+                {
+                    "index": 0,
+                    "finish_reason": "length",
+                    "message": {"role": "assistant", "content": "Unchanged.", "refusal": "metadata"},
+                }
+            ],
+            "usage": {"prompt_tokens": 8, "completion_tokens": 4, "total_tokens": 12},
+        }
+    )
+    original = response.model_dump()
+    standard = OpenAIChatModel("test", provider=provider)._validate_completion(response)
+    custom = gateway.GatewayChatModel("test", provider=provider)._validate_completion(response)
+    assert custom == standard
+    assert response.model_dump() == original
+
+
 class Gateway:
     def __init__(self):
         self.requests = []
@@ -40,6 +96,8 @@ class Gateway:
         self.token_status = 200
         self.reject = 0
         self.status = 200
+        self.split = False
+        self.invalid = False
         self.expected = dict(PROVIDER)
 
     async def handle(self, request):
@@ -107,6 +165,27 @@ class Gateway:
             "choices": [{"index": 0, "message": message}],
             "usage": {"prompt_tokens": 8, "completion_tokens": 4, "total_tokens": 12},
         }
+        assert "n" not in body
+        if self.split and calls:
+            response["choices"] = [
+                {
+                    "index": 0,
+                    "message": {"role": "assistant", "content": "I will inspect the flow."},
+                    "finish_reason": "stop",
+                },
+                *reversed(
+                    [
+                        {
+                            "index": i + 1,
+                            "message": {"role": "assistant", "content": None, "tool_calls": [call]},
+                            "finish_reason": None,
+                        }
+                        for i, call in enumerate(message["tool_calls"])
+                    ]
+                ),
+            ]
+        if self.invalid:
+            response["choices"][0]["finish_reason"] = {"invalid": "response"}
         # This gateway ignores stream:true unless Accept requests SSE.
         if self.sse and request.headers.get("accept") == "text/event-stream":
             delta = dict(message)
@@ -148,16 +227,19 @@ def remote(instance, monkeypatch):
     return fake
 
 
-@pytest.mark.parametrize("streaming", [False, True])
-def test_gateway_tools_approval_and_token_reuse_across_turns(instance, remote, streaming):
+@pytest.mark.parametrize(("streaming", "split"), [(False, False), (True, False), (False, True)])
+def test_gateway_tools_approval_and_token_reuse_across_turns(instance, remote, streaming, split):
     app, client = instance
+    remote.split = split
     assert configure(client, providers=[{**PROVIDER, "streaming": streaming}]).status_code == 200
     _, context = project(client)
     identity = conversation(client, context)
     result = turn(client, identity, context)[-1]["turn"]
     assert result["status"] == "complete", result
-    assert result["text"] == "Gateway response complete."
+    preamble = "I will inspect the flow.\n\n" if split else ""
+    assert result["text"] == preamble + "Gateway response complete."
     assert len(result["tools"]) == 2
+    assert [t["name"] for t in result["tools"]] == ["read_flow", "read_documentation"]
     assert all(t["status"] == "complete" for t in result["tools"]), result
     history = app.state.services.store.get("assistant_conversation", identity)["messages"]
     responses = [m for m in history if m["kind"] == "response"]
@@ -165,6 +247,8 @@ def test_gateway_tools_approval_and_token_reuse_across_turns(instance, remote, s
     assert responses[-1]["usage"]["output_tokens"] == 4
     requested = turn(client, identity, context, "Run the flow")[-1]["turn"]
     assert requested["status"] == "awaiting_approval", requested
+    if split:
+        assert requested["text"] == "I will inspect the flow."
     assert client.get("/api/runs").json() == []
     result = final(decide(client, identity, requested, tool="call-0"))
     assert result["status"] == "complete", result
@@ -177,6 +261,23 @@ def test_gateway_tools_approval_and_token_reuse_across_turns(instance, remote, s
         if request.url.path.endswith("/chat/completions"):
             assert json.loads(request.content)["stream"] is streaming
             assert (request.headers["accept"] == "text/event-stream") is streaming
+
+
+def test_unreadable_gateway_reply_has_its_own_error_and_warning(instance, remote, caplog):
+    _, client = instance
+    remote.invalid = True
+    _, context = project(client)
+    result = turn(client, conversation(client, context), context)[-1]["turn"]
+    assert result["status"] == "error"
+    assert result["error"] == (
+        "The provider returned a response the assistant could not read. Check the server logs."
+    )
+    warnings = [r for r in caplog.records if r.name == "duckpad.assistant"]
+    assert len(warnings) == 1
+    assert warnings[0].getMessage() == (
+        "Assistant turn failed: provider=primary model=test error=UnexpectedModelBehavior <- ValidationError"
+    )
+    assert warnings[0].exc_info is None
 
 
 def test_connection_test_detects_json_and_empty_stream_then_works_without_streaming(instance, remote):

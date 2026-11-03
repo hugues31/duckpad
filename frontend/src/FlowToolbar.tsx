@@ -53,7 +53,7 @@ export function FlowToolbar({ tab }: { tab: WorkspaceTab }) {
     run,
     stop,
   } = useLoadedWorktree();
-  const dirty = drafts.dirty("worktree");
+  const dirty = drafts.dirty();
   const saveState = t(saving ? "saving" : dirty ? "unsavedChanges" : "saved");
   return (
     <div className="flow-toolbar">

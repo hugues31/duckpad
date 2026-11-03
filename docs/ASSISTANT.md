@@ -8,6 +8,13 @@ run for your explicit approval. It cannot execute arbitrary SQL or change
 instance settings. Responses can be mistaken; inspect the cited
 nodes and tool results before relying on an explanation.
 
+The assistant stays on topic: Duckpad, your projects and their data, and data or
+software development questions such as SQL, DuckDB, data modeling, Python or
+Git. It briefly declines unrelated requests, such as a cooking recipe, and
+suggests a related question instead. Questions about your project's data are in
+scope whatever that data describes. The rule is part of the model's
+instructions, not a filter: a model can still misjudge a borderline request.
+
 ## Configure a provider
 
 An instance administrator opens **Instance settings → AI assistant**. The
@@ -72,6 +79,29 @@ Custom gateway reads can wait up to 120 seconds, including buffered SSE; the
 whole turn and connection test are still limited to 120 seconds. A server error
 is reported separately from an unreachable provider, without exposing its body.
 
+Some gateways split one answer across several `choices`: text in one choice and
+tool calls in the others. With Streaming disabled, Duckpad combines these choices
+in index order, joins text paragraphs and keeps every tool call, including run
+requests that need approval. This compatibility behavior applies only to custom
+providers and complete JSON responses; split choices in streamed responses are
+not supported.
+
+## Troubleshoot provider failures
+
+An unreadable provider response displays **The provider returned a response the
+assistant could not read. Check the server logs.**
+
+The `duckpad.assistant` logger writes a WARNING for failed turns, connection tests
+and model discovery. It includes the provider identifier, model (when applicable)
+and exception class chain, without exception messages or response bodies.
+
+Start Duckpad with `duckpad start --log-level debug` to also log the complete
+exception traceback and messages. Configured API keys, OAuth2 client secrets,
+credentials from unsaved connection settings and cached OAuth2 tokens are masked.
+Debug logs can still contain excerpts of prompts, responses and project data.
+Keep them private, review them before sharing and return to the default log level
+after troubleshooting.
+
 ## Ask about the current page
 
 Open a project branch and choose the **AI assistant** bubble at the bottom right.
@@ -86,8 +116,8 @@ those of the top bar; the title names the environment only when it differs, for
 example after **Ask the assistant** on a prod run. Before sending a message,
 Duckpad saves pending editor changes. A failed save stops the message so you can
 resolve it first. The server validates the context and reads saved content. On
-pages without an open working branch, the assistant can answer general questions
-but has no project-reading tools.
+pages without an open working branch, the assistant can answer general Duckpad,
+data and development questions but has no project-reading tools.
 
 The assistant receives Duckpad's SQL and parameter rules, including the difference
 between `-- @param` declarations and project variables. It can consult the bundled

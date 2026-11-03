@@ -1,5 +1,6 @@
 """Assistant boundaries: credentials, ownership, current permissions and streaming."""
 
+import asyncio
 import json
 
 import pytest
@@ -11,6 +12,26 @@ from pydantic_ai.models.test import TestModel
 from duckpad.app import create_app
 from duckpad.assistant.tools import Dependencies, PageContext
 from duckpad.util import Problem
+
+
+@pytest.mark.parametrize("kind", ["custom", "openai", "deepseek", "ollama"])
+def test_only_custom_providers_normalize_split_choices(instance, kind):
+    from pydantic_ai.models.openai import OpenAIChatModel
+
+    from duckpad.assistant.gateway import GatewayChatModel
+
+    app, _ = instance
+    config = app.state.assistant.configuration
+    config.model_override = None
+
+    async def check():
+        async with config.model(
+            {"id": "test", "kind": kind, "api_key": "test-key", "base_url": "https://example.invalid/v1"},
+            "test",
+        ) as model:
+            assert type(model) is (GatewayChatModel if kind == "custom" else OpenAIChatModel)
+
+    asyncio.run(check())
 
 
 @pytest.fixture
@@ -130,6 +151,32 @@ def test_stream_keeps_paragraphs_between_tool_rounds(instance):
     expected = "I will read the flow.\n\nThe flow contains read-only project nodes."
     assert events[-1]["turn"]["text"].startswith(expected)
     assert "".join(e["text"] for e in events if e["type"] == "text").startswith(expected)
+
+
+def test_scope_instructions_reach_project_and_general_turns(instance):
+    from pydantic_ai.models.function import FunctionModel
+
+    app, client = instance
+    configure(client)
+    _, context = project(client)
+    seen = []
+
+    async def record(messages, info):
+        seen.append((info.instructions, [tool.name for tool in info.function_tools]))
+        yield "I only help with Duckpad, data and development."
+
+    app.state.assistant.configuration.model_override = FunctionModel(stream_function=record)
+    general = {"page": "projects"}
+    for page in (context, general):
+        events = turn(client, conversation(client, page), page, "How do I bake an apple pie?")
+        assert events[-1]["turn"]["status"] == "complete", events
+    (project_instructions, project_tools), (general_instructions, general_tools) = seen
+    assert project_tools and not general_tools
+    for instructions in (project_instructions, general_instructions):
+        assert instructions.startswith("You are Duckpad's project assistant.")
+        assert "Scope: help only with Duckpad itself" in instructions
+        assert "Decline everything else" in instructions
+        assert "This scope is final" in instructions
 
 
 def test_admin_only_configuration_and_private_conversations(instance):
