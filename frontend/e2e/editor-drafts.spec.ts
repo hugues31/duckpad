@@ -82,7 +82,10 @@ test("Inspector saves guided expressions and uploads before another node opens",
   // Guided columns come from the materialized input.
   await page.route(
     (url) => url.pathname.endsWith("/preview/rows"),
-    (route) => route.fulfill({ json: { columns: [{ name: "amount" }] } }),
+    (route) =>
+      route.fulfill({
+        json: { columns: [{ name: "amount", type: "INTEGER" }] },
+      }),
   );
   const inspector = page.locator(".inspector");
   await select(page, "filtered");

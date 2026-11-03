@@ -1,7 +1,7 @@
 import Select from "./Select";
 import { useState } from "react";
 import { useT } from "./i18n";
-import type { Json, VariablesSummary } from "./types";
+import type { Column, Json, VariablesSummary } from "./types";
 import {
   expressionReference,
   formatVariableValue,
@@ -9,9 +9,16 @@ import {
 } from "./variables";
 
 const quote = (name: string) => '"' + name.replaceAll('"', '""') + '"';
-const literal = (value: string) => {
-  if (/^-?\d+(\.\d+)?$/.test(value)) return value;
-  if (/^(true|false|null)$/i.test(value)) return value.toUpperCase();
+const numericType =
+  /^(U?(TINYINT|SMALLINT|INTEGER|BIGINT|HUGEINT)|BIGNUM|FLOAT|DOUBLE|DECIMAL(?:\(\d+,\s*\d+\))?)$/i;
+const number = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i;
+/** Formats a fixed value from the input column's type, not from its spelling. */
+const literal = (value: string, type = "") => {
+  if (numericType.test(type) && number.test(value)) return value;
+  if (type === "BOOLEAN" && /^(true|false)$/i.test(value))
+    return value.toUpperCase();
+  // Text, other types and unknown schemas keep the user's value as a string.
+  // Null checks use the explicit IS NULL / IS NOT NULL operators.
   return "'" + value.replaceAll("'", "''") + "'";
 };
 
@@ -26,7 +33,7 @@ export default function QueryBuilder({
 }: {
   kind: string;
   parameters?: string[];
-  schemas: Record<string, string[]>;
+  schemas: Record<string, Column[]>;
   /** The variables a filter value can reference; only root flow nodes can. */
   variables?: VariablesSummary | null;
   environment?: string;
@@ -47,7 +54,9 @@ export default function QueryBuilder({
   const [measures, setMeasures] = useState([
     { function: "SUM", column: "", alias: "total" },
   ]);
-  const columns = schemas.source || schemas.left || [];
+  const names = (columns: Column[] = []) => columns.map(({ name }) => name);
+  const inputColumns = schemas.source || schemas.left || [];
+  const columns = names(inputColumns);
   const choose = (
     label: string,
     selected: string,
@@ -153,7 +162,11 @@ export default function QueryBuilder({
                     : " " +
                       (variable
                         ? expressionReference(variable)
-                        : literal(value))
+                        : literal(
+                            value,
+                            inputColumns.find((input) => input.name === column)
+                              ?.type,
+                          ))
                 }`,
               })
             }
@@ -164,8 +177,8 @@ export default function QueryBuilder({
       )}
       {kind === "join" && (
         <>
-          {choose(t("leftKey"), column, setColumn, schemas.left || [])}
-          {choose(t("rightKey"), right, setRight, schemas.right || [])}
+          {choose(t("leftKey"), column, setColumn, names(schemas.left))}
+          {choose(t("rightKey"), right, setRight, names(schemas.right))}
           <button
             className="button secondary full"
             disabled={!column || !right}
