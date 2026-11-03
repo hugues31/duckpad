@@ -426,7 +426,7 @@ export default function Inspector({
             <QueryBuilder
               kind={node.preset || node.template || node.origin || ""}
               parameters={parameters.map((p) => p.name)}
-              schemas={schemas}
+              schemas={inputColumns}
               variables={bindable ? snapshot.variables : null}
               environment={environment}
               onApply={(values) => {
