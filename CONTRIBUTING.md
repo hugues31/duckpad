@@ -1,6 +1,6 @@
 # Contributing to Duckpad
 
-Thank you for helping improve Duckpad. Bug reports, documentation fixes and pull requests are welcome.
+Bug reports, documentation fixes and pull requests are welcome.
 
 ## Set up a development environment
 
@@ -34,6 +34,8 @@ Run the same checks as CI before opening a pull request:
 ```sh
 uv run ruff check src tests scripts
 uv run ruff format --check src tests scripts
+uv run ty check
+uv run python scripts/check_typing_policy.py
 uv run pytest -q
 npm run check --prefix frontend
 npm run lint --prefix frontend

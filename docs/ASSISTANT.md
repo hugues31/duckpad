@@ -12,7 +12,6 @@ nodes and tool results before relying on an explanation.
 
 An instance administrator opens **Instance settings → AI assistant**. The
 assistant starts disabled; the badge next to the title shows the saved state.
-The page follows the setup order in numbered steps.
 
 1. **Connect a provider**: choose OpenAI, Anthropic, Google, Mistral, DeepSeek,
    Ollama or an OpenAI-compatible server, then enter its API key. Hosted
@@ -41,8 +40,8 @@ A saved key is write-only: the browser receives only its presence, shown as
 replaces it when you save. Changing the API base URL clears the old key; enter it
 again if the new endpoint needs authentication. Model discovery and the test
 reuse a saved key under the same rule. Removing a provider removes its saved key.
-Configuration and conversations live in the private instance database and never
-enter project Git history or ZIP exports.
+Keys and conversations stay in
+instance storage, outside project Git and ZIPs.
 
 ![Instance assistant configuration with a saved provider key](images/assistant-settings.png)
 
@@ -64,33 +63,22 @@ pages without an open working branch, the assistant can answer general questions
 but has no project-reading tools.
 
 For Northstar, try “How do paid orders reach the regional report?” or, after
-running the flow yourself, “Why does this region have this revenue?” The
-assistant reads bounded pages of project content as needed. Expand a tool card
-to inspect what was read. Data tools inspect existing materialized results;
-missing or stale results may require a run, which you can request in the chat.
+running the flow yourself, “Why does this region have this revenue?” Data tools inspect retained results;
+missing or stale data may require a run.
 
-Choose a model in the composer, type a message and press Enter or the **Send**
-arrow. Shift+Enter inserts a line break. While the assistant works, an animated
-indicator and a glowing composer show that an answer is coming, and **Stop**
-cancels the current provider request. You can close the chat meanwhile: the
-bubble keeps glowing, then shows a dot when the answer is ready. Reopening the
-chat returns to where you left the conversation, and **Jump to the latest
-message** appears when you have scrolled up.
-Responses stream into the chat as safe Markdown, with formatted code blocks.
-Raw HTML and remote images are not rendered. Each turn is limited to 12 provider
-requests, 30 tool calls and two minutes.
+Choose a model, type a message and press Enter to send; Shift+Enter adds a line
+break. **Stop** cancels the provider request. Closing and reopening the chat
+preserves the conversation. Expand tool cards to inspect results.
+
+Each turn is limited to 12 provider requests, 30 tool calls and two minutes.
 
 ![The compact assistant and the selected Northstar node](images/assistant-chat.png)
 
 ## Request a change
 
 For example, ask “Add a normal SQL node that returns the number 1”, “Rename this
-node to Paid orders”, or “Document the regional revenue output”. The assistant
-can add, remove, move, rename, connect and configure nodes, group them into a
-component, edit normal node SQL or project templates, update README and
-node/output/column descriptions, and create, update or rename variables. Variable
-renames update their references. A shared template edit reports how many linked
-node instances it affects.
+node to Paid orders”, or “Document the regional revenue output”. It can edit the flow, node/template SQL, documentation and variables. Shared
+template edits report how many linked instances they affect.
 
 Each successful writing tool call is one commit on the open branch, authored by
 your Git identity. History adds **via the assistant** to the author. Its chat
@@ -130,8 +118,7 @@ review its new confirmation. Runs require the same project editing rights as
 running from the workspace; Readers cannot launch or cancel them.
 
 The card follows execution status and offers **Cancel run** while it is active.
-The assistant can wait up to 15 seconds per tool call and then inspect the result;
-it reports a still-running execution honestly when that wait expires. **Stop**
+**Stop**
 stops the assistant response, while **Cancel run** stops execution. Neither action
 reverses completed external writes. History records the entry point as
 `assistant`, together with the requesting user.
@@ -167,15 +154,13 @@ list hides the buttons. These settings are not stored in project Git files.
 ## Conversations
 
 **Maximize assistant** opens a larger view with your conversations on the left,
-ordered by recent activity. Select one to reopen its original branch and resume
-with its Pydantic AI message history, including tool exchanges. Use the title
+ordered by recent activity. Select one to reopen its original branch and resume.
+Use the title
 field to rename it, **Delete conversation** to remove it, or **New conversation**
 to begin another. Escape closes the panel and returns focus to its launcher.
-The expanded panel supports keyboard focus cycling, light and dark themes,
-and English, French and Portuguese interface labels.
 
 Conversations are private to their author, including against other instance
-administrators. They belong to the project and branch where they began. Sending
+administrators. Sending
 a message after navigating to another project or branch starts a new
 conversation. Losing project access prevents further project-reading turns.
 Deleting the author or the project removes its conversations from SQLite.
@@ -196,4 +181,4 @@ output schemas, status metadata and branch commit metadata can reach the
 selected provider. This is a data-result policy, not a secret scanner for
 user-authored project text. Keep credentials in instance connections. Provider
 keys and resolved connection secrets are never offered to the model. See the
-[exact provider data contract](https://github.com/hugues31/duckpad/blob/main/docs/SPEC.md#ai-assistant) for the full list.
+[provider data contract](../docs/SPEC.md#ai-assistant) for the full list.

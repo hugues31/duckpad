@@ -17,7 +17,7 @@ removes its connection values and clears cached results, but preserves execution
 history. Active runs must finish or be stopped first. At least one environment
 must remain.
 
-The confirmation option applies to workspace pipeline and node launches. The
+The confirmation option applies to workspace pipeline/node and browser Job launches. The
 dialog identifies the environment, project, branch and execution target;
 canceling it starts nothing. The server also checks the current option on every
 `entry_point: "ui"` launch and requires `confirmed: true` when enabled.

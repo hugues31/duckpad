@@ -65,20 +65,11 @@ and a full comparison link. Empty sections are omitted. Scopes are emphasized an
 `BREAKING CHANGE:` / `BREAKING-CHANGE:` descriptions are shown as migration notes.
 Use meaningful commit descriptions and explain breaking changes in the footer.
 
-Routine `chore` commits, non-conventional messages, and merge commits are omitted.
-The original commits from merged branches remain visible, avoiding duplicate
-entries for a change and its PR merge summary. Squashed PR commits are retained
-because they have a single parent. Breaking changes take precedence over these
-filters, including those in `chore!` or merge commits, so migration notes are never
-hidden. A breaking merge summary is omitted only when its merged branch already
-lists a breaking change in the same release. Breaking headers without a footer are
-listed without repeating their summary as a migration note. All other Conventional
-Commit types are retained. Both stable releases and release candidates describe
-changes since the previous stable tag, so promoting a candidate does not lose its
-feature notes. The previous stable tag is the highest stable version below the
-released one among the tag's ancestors. Versions are compared numerically, so
-`v0.10.0` follows `v0.9.0`, however Git stores the tags. The first release includes
-the full history.
+Routine chores, non-conventional messages and merge summaries are omitted;
+original branch commits and breaking changes remain. A breaking merge summary
+is omitted when its branch already records a breaking change in that release.
+Stable and prerelease notes compare against the highest earlier stable version
+among the tag's ancestors; the first release includes the full history.
 
 Preview notes for work not yet tagged, without publishing. The preview starts from
 the most recent stable tag reachable from `HEAD`, by commit date:

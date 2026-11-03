@@ -1,193 +1,191 @@
 # Architecture
 
-Duckpad has a Python API process serving a compiled React application and isolated SQL worker processes. FastAPI exposes authenticated management endpoints; React Flow handles graph interaction; Monaco handles SQL and JSON editing. DuckDB executes SQL and retains live materialized data. Git owns project code history. SQLite owns instance metadata. These stores have separate lifecycles.
+FastAPI serves the React application and authenticated API. SQL runs in isolated
+DuckDB workers by default. Git stores project definitions, SQLite stores instance
+metadata, and execution contexts retain result data.
 
 ## Modules
 
-| Module | Responsibility |
+Paths below are relative to `src/duckpad/`.
+
+| Modules | Responsibility |
 | --- | --- |
-| `app.py`, `schemas.py`, `auth.py`, `access.py`, `cli.py` | HTTP API and request bodies, individual accounts, salted password hashes, owned sessions and instance/project authorization, localhost startup, process lease |
-| `assistant/` (`config.py`, `service.py`, `tools.py`, `editing.py`, `actions.py`, `runs.py`, `approvals.py`, `api.py`) | Write-only instance provider keys; author-owned SQLite conversations; one bounded Pydantic AI agent per turn; validated page context, permission-scoped reading/editing, persisted run approval, debugging, quick prompts and cancellable NDJSON streaming |
-| `services.py` | Wiring of the instance services shared by the API, tests and scripts |
-| `models.py`, `store.py`, `sealing.py`, `paths.py`, `migrations/`, `catalog.py` | SQLModel tables, Alembic migrations, transactions, secret encryption at rest, the instance directory layout, environments, reusable connections and secret redaction |
-| `projects.py`, `bundle.py`, `archive.py`, `merge.py` | Git worktrees, revision capture, external-save batching and durable conflict proposals; declarative file layout and validation; bounded project ZIP export and import; three-way merge |
-| `git/` (`command.py`, `workspace.py`, `remote.py`, `credentials.py`, `identity.py`) | The only Git process runner: time-limited, without hooks or server Git configuration, logging Git output and returning readable errors; branches and reviewed merges; bounded fetch and leased push in an isolated Git and SSH environment; per-account SSH keys, trusted Git hosts and URL-bound consent; commit attribution of the current request |
-| `templates.py`, `builtin_templates.py`, `components.py`, `graph.py` | Typed SQL compilation, read/write contracts, built-in templates, recursive expansion, parameter exposure, independent imports, dependency and connection queries over expanded flows |
-| `extensions.py`, `project_extensions.py` | Instance binary imports and trust roots; portable extension requirements, local availability and loading checks |
-| `variables.py` | Project variables: `variables.json` validation, parameter binding and expression references per environment, usages, renames and comparison values |
-| `engine.py`, `execution/`, `datasets.py`, `materialize.py` | The engine facade over its services: run admission, immutable execution configuration, cancellation and output publication; the pool of DuckDB contexts and SQL workers; export results and their download copies; previews and compiled SQL; computation fingerprints and invalidation |
-| `lineage.py`, `trace/`, `sqlast.py` | Lineage requests and their cancellation; SQLGlot normalization and targeted provenance queries over materialized dependencies, built as SQLGlot expressions by one visitor per SQL construct |
-| `sandbox.py`, `sql_worker.py` | JSON RPC, separate SQL processes, kernel filesystem restrictions and locked DuckDB configuration |
-| `resources.py` | Portable machine-wide CPU and physical memory counters |
-| `example.py` | Reproducible local sample data and documented Northstar project |
+| `app.py`, `schemas.py`, `auth.py`, `access.py`, `cli.py` | HTTP routes, accounts, authorization, startup and instance process lease |
+| `services.py` | Service wiring shared by the API, tests and scripts |
+| `models.py`, `store.py`, `migrations/`, `paths.py` | Instance schema, transactions and directory layout |
+| `catalog.py`, `sealing.py`, `secret_references.py` | Connections, environments, secret encryption and server references |
+| `projects.py`, `bundle.py`, `archive.py`, `merge.py` | Project files, snapshots, save conflicts, ZIPs and semantic merges |
+| `git/` | Git commands, worktrees, remote synchronization and account credentials |
+| `templates.py`, `builtin_templates.py`, `components.py`, `graph.py` | SQL compilation, node contracts and graph expansion |
+| `variables.py`, `partitions.py`, `partition_runs.py`, `partition_storage.py` | Value resolution, partition planning, attempts and retained artifacts |
+| `engine.py`, `execution/`, `datasets.py`, `materialize.py` | Admission, workers, cancellation, publication, previews and invalidation |
+| `lineage.py`, `trace/`, `sqlast.py`, `partition_lineage.py` | SQL analysis and provenance over retained execution data |
+| `sandbox.py`, `sql_worker.py` | JSON RPC, worker processes and filesystem restrictions |
+| `extensions.py`, `project_extensions.py` | Instance imports and versioned project requirements |
+| `jobs.py`, `automation.py` | Reviewed execution targets and the versioned automation API |
+| `assistant/` | Provider configuration, private conversations, tools and run approvals |
+| `resources.py`, `example.py` | Machine resource counters and the Northstar fixtures |
 
-Modules stay flat in `src/duckpad` by default. A sub-package groups either a family
-of implementations of one construct, such as the `trace/` visitors and the
-`migrations/` revisions, or a subsystem of several modules with its own vocabulary
-that the rest of the code reaches through a few entry points, such as `git/`. A
-shared file name prefix such as `git_` signals a missing sub-package, while modules
-used throughout the code, such as `templates.py` or `util.py`, stay at the top
-level. A package's `__init__.py` documents it and re-exports at most a small entry
-point, as `trace/` does; callers otherwise import the module that defines a name.
-
-The frontend in `frontend/src` mirrors this split: `api.ts` is the only HTTP client, `App.tsx` is the signed-in layout, `shell.ts` and `worktree.tsx` share the session and the open working branch with its pages, and each page, panel and dialog has its own module.
+The frontend's `api.ts` owns HTTP access. `routes.tsx` selects components in
+`pages/`; `App.tsx` provides the signed-in layout. `shell.ts` and `worktree.tsx`
+share session and working-branch state. See [Contributing](../CONTRIBUTING.md)
+for source layout and checks.
 
 ## Files and data
 
-An instance contains `instance.sqlite`, the generated `duckpad-master.key` unless the master key comes from the environment, a private extension cache, `projects/`, separate `worktrees/`, uploads, example source files and `exports/<worktree>/<environment>/`. The database file is created with mode 0600 and the instance directory with mode 0700. Secrets are instance configuration; no project file contains resolved credentials. A secret parameter can instead reference a `DUCKPAD_SECRET_*` variable or a file in `DUCKPAD_SECRETS_DIR` (`secret_references.py`); the server resolves it at each capture, and only the value reaches workers. `Store` encrypts secret connection parameters, the SSO client secret, assistant API keys and SSH private keys with AES-256-GCM when it writes them and decrypts them when it reads them, so services handle plaintext and none can forget to encrypt. The field location is authenticated data. A connector that makes a parameter secret seals its connections' values in the same transaction, then `VACUUM` drops the pages that held them; they stay sealed if the parameter later stops being secret. At startup, values in plaintext or sealed with a previous key are sealed again with the first master key, then `VACUUM` rewrites the file. SQLite user records contain scrypt hashes and salts, never plaintext passwords. Sessions are stored by token hash, identify their owner and expire after seven days. A session also records the credential and revocation version; resetting a password or deactivating an account invalidates its sessions, including after reactivation. Account SSH private keys, trusted Git host keys and origin consents are records of the same database; deactivating an account deletes its key. Network Git copies a key to a 0600 file under `git-network/` only for the duration of one operation; copies left by a crash are removed at startup.
+The instance directory holds `instance.sqlite`, projects, worktrees, uploads,
+extensions and exports. Its default master key is `duckpad-master.key`; operators
+can supply it separately. The directory uses mode 0700 and SQLite uses 0600.
 
-Each project repository versions `flow.json`, `README.md`, `pyproject.toml`, `documentation.json`, `variables.json`, `extensions.json`, `templates/*.sql`, and `components/*.json`; `flow.json` and `documentation.json` are required. Project prose lives in `README.md`; node, output and column descriptions stay in `documentation.json`. The API combines them in `bundle.documentation` for UI editing and carries the manifest as raw `bundle.pyproject` text to preserve comments and custom settings. Results, source data, virtual environments and export files are outside that versioned definition set. Connector definitions and environment settings have no configuration-version history. Historical project code always uses the current instance catalog when explicitly run.
+Project repositories contain the [declarative files](AUTHORING.md#project-layout-and-python-dependencies).
+They exclude source data, results, virtual environments and instance settings.
+Running an old project commit still uses the current connection catalog.
+
+SQLite stores accounts, access grants, configuration, Jobs, conversations, save
+conflicts and execution history. `Store` encrypts connection secrets, provider
+keys, the SSO client secret and SSH private keys on write; services decrypt them
+on read. Passwords, sessions and API tokens are hashed. See
+[persistence](../docs/PERSISTENCE.md) for transactions and migrations, and
+[installation](INSTALLATION.md#secrets-and-the-master-key) for key management.
+
+Ordinary result tables live in a worktree/environment DuckDB context and disappear
+on backend shutdown. Partitions also retain immutable disk artifacts for
+collection and bounded previews. History persists independently.
+Export downloads use separate saved copies of the latest successful exported
+bytes. See [results](RESULTS.md) and [partitions](PARTITIONS.md).
 
 ## Settings scopes
 
-Settings follow the same instance, project and user boundaries as authorization:
-
-| Scope | Entry point | Settings and permissions |
+| Scope | Entry point | Contents |
 | --- | --- | --- |
-| Instance | **Instance settings** in the main navigation | User accounts and instance roles (member/admin), OIDC single sign-on, AI assistant providers/models and data policy, trusted Git hosts and origin prefixes, environment names, connections and connector definitions, DuckDB extension imports and unsigned policy, and SQL session threads and memory limits. Only instance administrators can configure these. |
-| Project | **Project settings** in the open project's toolbar | Participants and project roles (reader/operator/editor/admin), authorized connections, and project deletion. Project administrators manage participants; only instance administrators grant access to instance connections. Readers, operators and editors can inspect their project's access without changing it. |
-| Project definition | **Variables** and **Extensions** in the working branch | Versioned values and extension requirements; editors change them and readers inspect them. Extension installation and trust remain instance settings. |
-| User | **Account menu → User settings** | Language, theme, the signed-in account's password and its SSH key for Git. SSO accounts manage their password with the identity provider. |
+| Instance | Instance settings | Accounts, SSO, assistant, Git hosts, environments, connections, extension imports and SQL resources; instance admins configure them |
+| Project | Project settings | Membership, connection grants and deletion; project admins manage membership, instance admins grant connections |
+| Project definition | Workspace tabs | Flow, SQL, documentation, variables, views and extension requirements; versioned with the branch |
+| User | Account menu → User settings | Password, API tokens, SSH key, language and theme |
 
-Instance configuration applies across projects. Selecting a branch or run
-environment belongs to the pipeline workspace and does not edit that configuration.
-Project membership assigns existing accounts; creating or deactivating an account
-is an instance operation. Language and theme remain browser-local preferences,
-shared by accounts using that browser, and are not synchronized between devices.
-The account menu retains shortcuts for changing those preferences.
+Language and theme are browser-local, shared by accounts using that browser.
+Project roles and permissions are listed in the
+[access matrix](INSTALLATION.md#accounts-and-project-access).
 
 ## Browser navigation
-
-The browser URL selects the page, settings section, worktree, and workspace tab.
-`routes.tsx` maps each route to a page component of `pages/`; `main.tsx` installs
-React Router's `createBrowserRouter` and `RouterProvider`. `App.tsx` is the
-persistent layout around the pages, with the top bar, dialogs and navigation guard.
-Dialog state is plain data; each dialog builds its actions from the current state.
-Page links use `Link` or `NavLink`, with browser history, keyboard navigation,
-active states, and opening in another tab. Titles and focus follow page changes.
 
 | URL | Destination |
 | --- | --- |
 | `/projects` | Project dashboard |
-| `/instance-settings` | Instance general settings, for instance administrators |
-| `/instance-settings/:section` | `users`, `sso`, `assistant`, `git-hosts`, `environments`, `connections` or `extensions` |
-| `/user-settings` | Preferences and password for the signed-in account |
-| `/projects/:projectId/jobs` | Jobs, version comparison, execution controls and result access |
-| `/projects/:projectId/settings` | Project settings with role-specific controls |
-| `/worktrees/:worktreeId/:tab` | Pipeline workspace: `flow`, `code`, `documentation`, `variables`, `extensions` or `history` |
+| `/instance-settings/:section` | Instance configuration |
+| `/user-settings` | Account settings |
+| `/projects/:projectId/jobs` | Jobs |
+| `/projects/:projectId/settings` | Project settings |
+| `/worktrees/:worktreeId/:tab` | Flow, Code, Documentation, Variables, Extensions or History |
 
-After authentication, `/` redirects to `/projects`, except when completing a
-validated SSO return. There is no worktree restoration from local storage. Unknown paths, sections, and tabs show a not-found
-screen. Deleted or inaccessible resources show an unavailable screen with a link
-to Projects. Backend authorization remains authoritative, including when access
-changes during a session.
+Worktree IDs avoid putting branch names or paths in URLs. The optional
+`?environment=dev` selects a configured environment. Unknown routes show a
+not-found screen; inaccessible resources show an unavailable screen.
 
-Worktree IDs identify branches without embedding branch names or filesystem
-paths. The optional `?environment=dev` selects a configured run environment;
-invalid names are replaced with the first configured environment. Changing the
-environment participates in browser history. Navigation never starts, cancels,
-or replays a pipeline run. Graph selection, panel sizes, modals, SQL drafts,
-credentials, and result data stay out of URLs. Theme and language remain browser
-preferences, and URL segments remain stable across translations.
+Sign-in preserves a validated internal destination, including across OIDC.
+Code drafts survive tab changes within a worktree. Leaving with unsaved drafts
+requires confirmation; reloads use `beforeunload`. Responses from an old worktree
+cannot replace the current snapshot.
 
-Local sign-in and session expiry preserve the requested URL. OIDC still uses
-its existing API callback and returns to `/`; the login page stores the validated
-internal destination in tab-scoped session storage for that round trip. Only
-known application paths and the environment selection are retained. External
-return destinations are rejected, and existing SSO error handling is preserved.
-
-Code drafts remain mounted across tabs within a worktree. `useBlocker` asks
-before navigation that would discard code or documentation drafts, including
-browser Back/Forward. Canceling keeps the edits; confirming discards them.
-`beforeunload` protects reloads and document exits. Pending responses from an old
-worktree cannot overwrite the current worktree's snapshot.
-
-FastAPI serves the frontend shell for direct application requests through its
-final fallback route. `/api` and `/api/*` retain authentication and API errors;
-`/assets` and the optional `/site` website are mounted before the fallback.
-Playwright covers navigation, authentication returns, history, draft protection,
-permissions, and translations. HTTP tests verify direct-entry fallback and the
-API, asset, and documentation boundaries.
-
-## Assistant boundary
-
-The assistant uses `pydantic-ai-slim` with only the OpenAI, Anthropic, Google and
-Mistral extras (DeepSeek, Ollama and custom endpoints use the OpenAI transport).
-Keys follow the OIDC write-only pattern and are retained only for the same
-provider type and base URL. Each request owns its HTTP client and cancellation
-token. Tool calls revalidate the session, project membership and configuration
-revision; result tools also recheck connection grants. Editing tools reuse project
-saves and inverse merges. Run tools require durable Pydantic AI deferred approval
-and call the shared engine with current editor permissions. There is no arbitrary
-SQL or network tool. `api.ts` owns the streaming HTTP client.
-
-The `assistant_conversation` table has cascading foreign keys to the author and
-optional project. Its messages use Pydantic AI’s
-`ModelMessagesTypeAdapter`; UI turns hold safe text and compact tool cards.
-Ownership checks do not grant an instance-admin override. Concurrent turns in
-one conversation return 409. Provider errors never echo SDK exception bodies.
-Tests globally disable model requests and inject `TestModel` or `FunctionModel`;
-only the disposable browser-test server injects a deterministic model.
+FastAPI's final route serves the application shell for direct navigation. API
+routes, `/assets` and the optional `/site` documentation mount precede it.
 
 ## Save and capture
 
-A UI save carries a content revision. Three-way comparison uses that base, the current files (including pending external edits), and the proposal. Stable-ID objects and disjoint JSON fields merge; incompatible SQL/file changes become recoverable conflicts. Conflicts retain all three versions in SQLite. Resolution rechecks the current files before writing. A metadata-only conflict does not block computation; a computation conflict blocks dependent scopes, conservatively the whole graph if unreadable.
+A UI save includes its base revision. The writer compares that revision, current
+files and the proposal. Disjoint fields merge; conflicting edits retain all three
+versions in SQLite for resolution. Invalid saves are still committed and diagnosed.
+Computation conflicts block affected execution scopes; metadata-only conflicts do
+not. Resolution rechecks current files before writing.
 
-A worktree watcher samples relevant files and closes a batch after 500 ms of inactivity. Two saves 300 ms apart form one save unit. Invalid final files are committed and diagnosed; an intermediate invalid write corrected within the batch is not separately committed. UI commits suppress duplicate watcher commits. A manual launch finalizes pending changes and reads the committed files through `git archive`, so its commit and captured definitions agree.
+The watcher batches external edits after 500 ms of inactivity. UI saves suppress
+duplicate watcher commits. Workspace launches first save pending editor drafts;
+the backend finalizes external batches and captures committed files through
+`git archive`. A failed save prevents launch.
 
-Display metadata, layout and documentation are excluded from computation fingerprints. A change in SQL, parameters, input edges or connection setup invalidates the dependent scope in the affected environment. Secret connection parameters are excluded: they authenticate, while the settings that select data, such as a host, a database or a root, are not secret. Rotating a credential therefore leaves results valid. Fingerprints never resolve a secret that a parameter reads from a server variable or file, so a missing one blocks the nodes that use it without making results stale. Variable references are replaced by their value in each environment before fingerprinting, so a variable's value changes only the fingerprints of that environment, and its name and description never count. References inside expressions count by their type and value; compilation binds them as named DuckDB parameters, and lineage labels those values with the variable names. No edit executes SQL automatically.
+Computation fingerprints include SQL, parameters, input edges, enabled extensions
+and non-secret connection settings. Layout, labels and documentation do not count.
+Variables count by their resolved type and value in the selected environment.
+Credential rotation preserves validity; missing secret references block connection
+use without marking its existing results stale. Edits never start a run.
 
 ## Execution service
 
-`Engine.launch(worktree, environment, target, entry_point)` is the shared service. HTTP callers record `manual` origin and `ui`, `api` or explicitly approved `assistant` entry point. A lock reserves a worktree before preparation. Busy requests receive 409; no task is queued. Reservation spans preparation, execution, cancellation and cleanup, across all environments in that worktree. Other worktrees can run independently.
+The engine reserves the worktree before preparation and keeps it reserved through
+execution, cancellation and cleanup. A second launch, including in another
+environment, receives 409; it is not queued. Other worktrees can run concurrently.
+Jobs own separate read-only worktrees and use the same execution machinery.
 
-Accepted runs capture project code, parameters, graph, environment, the resolved variables of their scope and resolved connection settings. A coordinator thread owns a cursor proxy in the isolated SQL worker. Every requested ancestor runs once in topological order, including valid sources. Independent branches continue after a node failure; failed descendants are blocked. HTTP execution initializes only project-authorized connections that are fully configured for the environment before locking the worker configuration; nodes using an incomplete connection are blocked. The worker starts outside the engine lock, so status and stop requests do not wait for connection setup. Remote object storage prefixes follow each connection's secret type, not its identifier. Saving a connection or a connector, or granting a connection, keeps results, even during a run. A worker attaches its connections once and then locks its configuration, so each run compares the setup of the project's configured connections, secrets included, with the one its worker attached; the comparison stays in memory, and a new name or description does not count. When they differ, the run starts a new worker before anything else. If it fails, for example on a wrong password, the launch is refused with the masked driver error and the old worker keeps its results. Otherwise the old worker copies its tables and views into a DuckDB file under the session's temporary directory with `COPY FROM DATABASE`, then stops before the new worker loads that file, so memory is never doubled; readers are interrupted and asked to reload. DuckDB locks an attached database file, so a worker that attached one stops right after writing the file, before its replacement starts; if the replacement fails, the results wait in a session without connections until the next run tries again. A failure to write the file refuses the launch and keeps the old worker. A failure to load it, after the old worker stopped, restarts the session without results, as before this handoff existed. Results are immutable, so row identifiers, and with them lineage and samples, survive the copy. The run then uses the settings its worker attached. Deleting a connection or revoking a grant closes the workers of the affected projects at once and requires them to be idle; extension and environment changes still close every session. Trusted in-process service clients without an `Access` policy retain lazy connection preparation; the HTTP application always supplies the policy.
+Accepted runs capture the commit, graph, parameters, variables, environment and
+connection settings. Requested ancestors run once in dependency order, including
+sources with valid prior results. Computed variables and partition manifests have
+a value phase before their consumers. Independent branches continue after failure;
+descendants of a failed node are blocked.
 
-Outputs are staged under fresh physical names and published together only after all blocks succeed. A run first drops the results of nodes removed from its definitions. A failed or canceled node keeps its previous successful output set as stale. No downstream node uses that set as a fallback. Publication rechecks computation fingerprints, so an edit during a run cannot make outdated results appear valid.
+Each node stages its outputs and publishes them together after all queries and
+error checks pass. Failure or cancellation retains its previous successful set as
+stale; descendants cannot consume it as a fallback. Publication rechecks current
+fingerprints, so an edit during execution cannot make outdated results valid.
 
-A stop request sets a cancellation token and calls `interrupt()` on the active cursor. No later node starts. The worktree stays reserved until the operation and cleanup finish. External effects obey DuckDB and the extension: completed writes remain completed, and interrupted writes can have unknown or partial effects. Shutdown requests cancellation and waits for workers before closing their databases.
+### Connection changes
 
-Run records are persisted at admission and at each node/status transition, including SQL, timings, sanitized connection snapshots, code definitions and observed write outcomes. On restart, unfinished records and their running or pending nodes become interrupted; no computation or export is replayed. In-memory result tables are not persisted.
+Saving connection settings or granting a connection preserves results. At the
+next run, the engine compares the worker's attached setup with current settings,
+including resolved secrets. A changed setup requires a replacement worker.
+Tables and views transfer through a temporary DuckDB file, preserving row IDs.
+Readers interrupted by the transfer must reload.
+
+If replacement setup fails, the launch is refused and the prior results remain.
+Attached database files require releasing their locks first; results then wait
+without connections until setup succeeds. A failure while loading transferred
+tables can reset the context without results. Deleting a connection or revoking a
+grant closes affected workers and requires idle projects. Extension imports and
+environment changes can also clear contexts.
+
+### Cancellation and recovery
+
+Stop sets a cancellation token and interrupts the active cursor. No later node
+starts; admission remains locked until cleanup finishes. Completed external writes
+remain completed, and interrupted writes can have partial or unknown outcomes.
+
+Run records persist at admission and node/status transitions with SQL, timings,
+redacted configuration and write outcomes. Startup marks unfinished records
+interrupted; it never resumes computations or repeats exports automatically.
 
 ### Scheduling decision
 
-The MVP uses the embedded execution service without a scheduler or persistent task queue. A completed comparison with SqliteHuey selected APScheduler 3.x as the preferred future scheduling adapter. Queue persistence does not replace worktree admission, live result contexts or durable run history, and consuming queued work after a restart would require an explicit policy for replaying external writes. Neither scheduling library is a current dependency; the prototype and its report remain in Git history.
-
-Future schedule and webhook handlers must submit worktree, environment, scope and trigger identity through the same execution service. They must capture fresh configuration, keep connections and credentials out of trigger payloads, and reject occupied worktrees without deferring the request. Before enabling automation, define time zones and DST, missed occurrences, rejected-trigger outcomes, webhook authentication and idempotency, and retention policies. Schedules, webhooks, retries and missed-run replay are not enabled in the MVP.
+[Jobs and the automation API](AUTOMATION.md) support external schedulers. Duckpad
+has no built-in calendar scheduler, webhook trigger or persistent execution queue.
+Unimplemented automation proposals are tracked separately in the
+[design record](../docs/design/JOB_AUTOMATION.md#delivery-plan).
 
 ## Lineage concurrency
 
-Public views contain exactly the query's original columns. Private tables hold stable row identities and, where safe, hidden input witnesses or grouping keys. Deterministic native-equivalence tests compare values, types and multiplicities against DuckDB without instrumentation. Uncovered SQL remains executable; exploration reports limitations explicitly.
+Public views expose the original query columns. Private tables retain stable row
+identities, input witnesses and grouping keys where supported. Native-equivalence
+tests compare values, types and multiplicities with uninstrumented DuckDB.
+Unsupported lineage never changes query results; the
+[coverage matrix](LINEAGE.md) lists the limits.
 
-A lineage request registers its result generation and dependency nodes. Recalculation marks affected generations stale, interrupts their lineage cursors, rejects new requests and waits for canceled readers to relinquish the old tables before retiring them. Unrelated requests remain active. The browser validates the selected generation and discards late responses; it never automatically follows an old row into a new result.
+Each lineage request registers its generation and dependencies. Recalculation
+interrupts affected readers and waits for them before retiring tables. The browser
+discards late responses and requires selecting a new result explicitly. Unrelated
+lineage requests remain active.
 
 ## HTTP surface
 
-The stable `/api/v1` automation contract covers Job discovery, launch, asynchronous waiting, cancellation and text logs. Its separate OpenAPI schema is available at `/api/v1/openapi.json`; other routes remain internal to the interface. `duckpad run` is a standard-library client of this contract: the CLI dispatches it before importing the server, so it loads neither DuckDB nor the application. See [Automate Jobs](AUTOMATION.md) for authentication, idempotency, error codes, exit codes and examples.
+The stable `/api/v1` contract covers Job discovery, launch, waiting, cancellation,
+partitions and text logs. Its schema is `/api/v1/openapi.json`.
+`duckpad run` uses this contract without importing the server or DuckDB.
+Other `/api` routes are internal UI contracts; request shapes live in `app.py`
+and the subsystem routers.
 
-Protected `/api` routes require a session cookie, a bearer session token, or an API token sent as `Authorization: Bearer dpk_…`. API tokens authenticate as their owning account with its current permissions; only their SHA-256 hashes and lifecycle metadata are stored. They are never accepted from cookies and cannot authorize SSH key management or network Git. Service accounts authenticate only with API tokens. Public login and OIDC callback routes remain unauthenticated. Mutation requests reject a mismatched browser Origin. The static login shell is public; project content is authenticated.
+Protected routes accept session authentication or a bearer API token. API tokens
+use their owner's current permissions and cannot manage SSH keys or perform
+network Git. Browser mutations reject a mismatched Origin. Login and OIDC
+handshake routes are public.
 
-The administrator-only resource widget samples machine-wide counters every two
-seconds and retains two minutes of history in the browser. CPU is the change in
-busy time divided by the change in total time across all cores; Linux guest time
-is counted once and I/O wait is excluded from busy time. RAM is physical memory
-minus available memory, so reclaimable caches count as available. Measurements
-cover all applications on the server OS (the guest OS for a VM), independent of
-Duckpad's workers, CPU affinity or container quotas. In containers, the operating
-system counters exposed by the runtime determine visibility. Missing metrics are
-shown as unavailable, and CPU sampling resumes after two valid snapshots.
-
-The main endpoint groups are `/session`, `/workspace`, `/projects`, `/example`, `/worktrees`, `/catalog`, `/environments`, `/runs`, `/conflicts`, `/library`, `/users`, `/api-tokens`, `/password`, `/ssh-key`, `/git-hosts` and `/resources`. `/assistant` exposes settings, provider discovery/testing, allowed models and private conversations; `/assistant/conversations/{id}/messages` streams NDJSON, `/approvals` resumes a deferred run proposal after an owner decision, and `/stop` cancels the request. Uploads use `/worktrees/{id}/uploads` and are stored under `resources/<project>/`. `/projects/import` creates a project from the declarative files of an uploaded ZIP and reports referenced connections and absolute input files that the archive cannot carry. Request bodies are validated; invalid requests receive a 422 response in the same `{"error", "detail"}` format as other failures. A worktree exposes definition snapshots and saves, variable summaries, renames and launch scopes, branch/merge history, compiled SQL, status, previews, lineage and manual run launch. See the route definitions in `src/duckpad/app.py` for request shapes. APIs use the same services as the interface; there is no second runner or separate editor state.
-
-Execution and result operations require an explicit configured environment. Under
-`/api/worktrees/{worktree}`, GET `status`, `compile/{node}`, `preview/{node}`,
-`exports/{node}`, `exports/{node}/download`, and `generations/{identity}` require
-the `environment` query parameter. POST `runs` and `lineage` require
-`environment` in their JSON body. Omitting it returns 422 before the operation
-runs; an unknown or deleted environment returns 404. No operation defaults to
-`dev`. The interface selects from the current catalog and sends that selection.
-
-For example, with a configured `prod` environment:
+Worktree execution and result operations require an explicit environment:
 
 ```http
 POST /api/worktrees/{worktree}/runs
@@ -196,94 +194,50 @@ Content-Type: application/json
 {"environment": "prod"}
 ```
 
-Read its results with `GET /api/worktrees/{worktree}/preview/{node}?environment=prod`.
-Downloads also require the export run ID:
-`GET /api/worktrees/{worktree}/exports/{node}/download?environment=prod&run={run}`.
-The initial `dev` and `prod` catalog entries are editable configuration, not API defaults.
+Read results with
+`GET /api/worktrees/{worktree}/preview/{node}?environment=prod`.
+Export downloads also require `run={run}`. Missing environments return 422;
+unknown ones return 404. The initial `dev` and `prod` entries are editable catalog
+values, not API defaults.
 
 ## Authorization and execution isolation
 
-The server rechecks the account, instance role and project membership on every
-request. Invisible projects and their worktrees, runs and conflicts return 404.
-Readers may inspect existing results and lineage, but cannot launch computation,
-change files, create branches, import definitions, cancel runs or upload files.
-Operators add permission to launch, cancel and rerun Jobs, while ad hoc execution
-and editing require Editor access. Job administration requires Project Admin.
-The `job` table stores stable instance-wide slugs, target references, tag commits,
-environments, scopes and an append-only version audit. Jobs are outside project Git.
-Internal Git refs retain promoted and executed commits against tag movement and
-garbage collection; they are neither branches nor published remote refs.
-Each Job owns a detached `read_only` worktree. The file watcher skips it; route
-permissions reject all writes even by instance admins, and execution never commits
-or prunes its documentation. Under the repository lock, a launch checks admission,
-resolves a branch or uses the pinned tag commit, checks out that commit, then calls
-the existing Runner. Separate Job worktrees can execute concurrently. A busy Job
-returns 409 with its active run ID. Run snapshots retain the Job, tag, commit and
-requester. Deletion retains the worktree record so cascading foreign keys cannot
-erase run history or artifacts; project deletion still removes them.
+The API checks the account and project role on every request. Invisible projects,
+worktrees and runs return 404. Imports also require access to the source project.
+Job result worktrees reject edits even by administrators.
 
-Imports also require read access to their source project. Workspace, library and
-execution lists filter private resources before returning them. Last-admin checks
-and membership/account writes share a lock, including concurrent demotions.
+An isolated SQL worker receives only authorized connections and enabled extension
+requirements over JSON RPC. It inherits neither the API's environment credentials
+nor SQLite descriptors. Before DuckDB starts threads, Linux Landlock limits files
+to project resources/exports, granted storage roots, granted database directories
+and read-only runtime libraries. Database journals require directory access, so
+each database and environment should have a dedicated directory. Instance metadata,
+project Git metadata and other projects stay outside the allowlist.
 
-Network Git acts as the requesting account. Fetch and push over SSH use that
-account's key, only for an origin allowed by the instance's trusted Git hosts and
-confirmed by that account for the project's current URL; HTTPS runs without
-credentials. The server account's SSH keys, agent and Git credentials are never
-used. See [Git synchronization](GIT.md#network-credentials).
+DuckDB then locks its configuration: external access is limited to allowed paths,
+automatic extension loading/installing is disabled, and secrets are temporary.
+Missing Landlock ABI 2+ causes an execution error with no unrestricted fallback.
+Extensions remain trusted administrator-installed native code. Remote connections
+retain their service account's privileges; this is not a tenant resource quota or
+a complete hostile-code hosting boundary.
 
-SQL runs in a separate process per worktree/environment. The worker receives only
-the project's authorized connection configuration and enabled extension requirements, and communicates through a
-JSON-only protocol. It does not inherit the API's environment credentials or
-SQLite descriptors. Before DuckDB creates threads, Linux Landlock restricts file
-access to project resources/exports, administrator-authorized local storage roots,
-the parent directories of local `file` parameters in granted database connections,
-and read-only runtime libraries. Only the selected environment's values apply.
-Database directories are readable and become writable with the connector's `write`
-capability, allowing DuckDB WAL files and SQLite journals beside the database.
-The whole directory and its descendants are exposed: administrators should keep
-each database and environment in a separate directory. Resolved directories must
-exist and pass the same guards as Server folder roots. Test connection validates
-database directories without a project scope; object listings and worker startup
-validate them for the requesting project. Project Git metadata, other projects and
-instance SQLite remain outside the data allowlist. Traversal and symlink escapes
-are denied by the kernel. DuckDB external access is then disabled with explicit allowed paths;
-auto-installation/loading of extensions and unredacted/persistent secrets are
-disabled, and its configuration is locked before user SQL executes.
+The explicit [trusted local mode](INSTALLATION.md#trusted-local-mode) runs DuckDB
+in-process with the user's OS permissions. It retains HTTP authorization but has
+no SQL filesystem isolation and must remain a single-user loopback installation.
 
-This default mode requires Landlock ABI 2+ on Linux x86-64 or arm64, including
-inside containers. A missing or blocked sandbox causes an explicit execution
-error; there is no automatic unrestricted fallback. Workers use the instance's
-[SQL resources](INSTALLATION.md#sql-resources), which default to DuckDB's automatic
-thread count and memory limit.
-Project and connection extensions remain trusted administrator-installed code. Project
-requirements load before configuration is locked, using local binaries from the declared
-origin. They never install on demand. A changed requirement recreates the session at
-the next execution and participates in result fingerprints. Approved remote
-connections carry the privileges of their configured service credentials; operators
-must scope those credentials and any network egress policy accordingly. This does
-not provide tenant resource quotas or a complete hostile-code hosting boundary.
-See the [DuckDB security guidance](https://duckdb.org/docs/current/operations_manual/securing_duckdb/overview)
-and [Linux Landlock API](https://docs.kernel.org/userspace-api/landlock.html).
+Network Git uses the requesting account's key, trusted host configuration and
+URL-bound consent. It never borrows the server account's credentials; see
+[network credentials](GIT.md#network-credentials).
 
-The explicit `--trusted-local` startup option selects in-process DuckDB execution
-for a single trusted user, including on Windows. It retains HTTP authentication,
-API authorization, connection grants and template validation, but skips the SQL
-worker and its OS and DuckDB sandbox configuration. Connections are prepared
-lazily in the native cursor for each run, as for trusted service clients. As in the
-worker, sessions load only built-in, project and connection extensions and never
-load or install one on demand, so a project behaves the same in both modes. SQL and
-extensions have the application's OS permissions; this mode provides no SQL
-isolation between projects or from instance metadata. The CLI requires a loopback
-bind and prints a startup notice. It is not suitable for shared deployments or
-access through a proxy or tunnel. The option is not persisted or inferred from
-the operating system.
+## Assistant boundary
 
-Project files, each project's resources and its worktrees' exports, need no
-connection: the isolated worker always grants them, and an empty connection
-parameter selects them. Local roots of granted connections must exist and exclude
-the instance directory, its ancestors and other projects. Existing results are not
-recomputed during read requests. Sample projects receive their own input
-directories and connection grants. Users may
-upload source files from the node inspector. Read-only roots stay read-only at the
-OS layer even if SQL uses a different declared connection.
+Assistant tools recheck session, project access and configuration revision;
+result tools also check connection grants. Writes use the project writer and
+inverse merges for Undo. Runs require persisted approval bound to the proposed
+configuration. There is no arbitrary SQL or network tool.
+
+Conversations belong to their author, without an administrator read override.
+They store Pydantic AI message history in SQLite; simultaneous turns return 409.
+Provider errors omit SDK response bodies. Tests disable real model requests.
+See the [assistant guide](ASSISTANT.md) and its
+[provider data contract](../docs/SPEC.md#ai-assistant).

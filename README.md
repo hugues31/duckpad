@@ -21,8 +21,8 @@ source.
   column statistics, and keep data tests and execution messages next to your SQL.
 - **Explain a number.** Follow a result cell back to its contributing source
   values, with [explicit lineage coverage](docs/LINEAGE.md).
-- **Iterate with confidence.** Save to Git, branch independently, compare changes
-  visually and review a merge before applying it.
+- **Review changes.** Saves create Git commits. Work on separate branches, compare
+  changes visually and review a merge before applying it.
 - **Run repeatable work.** Share typed variables across nodes and environments,
   then launch Jobs against reviewed versions from the interface, CLI or a scheduler.
 - **Ask for help in context.** Use the AI assistant to explain a flow, inspect
@@ -63,5 +63,3 @@ See [installation](docs/INSTALLATION.md) for platform requirements and setup opt
 [Releases](docs/RELEASING.md) · [Security](SECURITY.md)
 
 Want to contribute? Start with [CONTRIBUTING.md](CONTRIBUTING.md).
-
-**MIT licensed.** Built for the open-source community.

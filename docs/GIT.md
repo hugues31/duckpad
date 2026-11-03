@@ -7,9 +7,7 @@ credentials, exports and databases remain outside its declarative repository.
 ## Commit authors
 
 Project creation, saves, imports, conflict resolutions and reviewed merges record
-both the Git author and committer from the authenticated account. Concurrent
-sessions keep separate identities. The shared author setting and `/api/identity`
-endpoint have been removed; existing commits keep their original attribution.
+both the Git author and committer from the authenticated account.
 
 Local accounts use their username and a stable technical address,
 `<account-id>@users.duckpad.invalid`. SSO accounts use the name (or preferred
@@ -195,17 +193,9 @@ reactivated account must generate a new one. Duckpad does not import personal
 private keys. Without a key, fetching or publishing over SSH reports an error that
 links to User settings.
 
-**Isolated execution.** For each operation, Duckpad writes the key to a temporary
-file with mode 0600 in a private directory of the instance and runs SSH with
-`-F /dev/null -i <key> -o IdentitiesOnly=yes -o IdentityAgent=none
--o UserKnownHostsFile=<instance known_hosts> -o GlobalKnownHostsFile=/dev/null
--o StrictHostKeyChecking=yes -o BatchMode=yes`. There is no fallback to `~/.ssh`,
-an SSH agent, Kerberos or the server's SSH configuration. Git itself runs without
-system or global configuration, with an empty credential helper, a private `HOME`
-(so no `~/.gitconfig`, `~/.git-credentials` or `~/.netrc`), no Kerberos ticket
-cache or keytab, no empty-user HTTPS authentication retry and exactly one allowed
-transport. The temporary directory is deleted when the operation ends, and copies
-left by a crash are removed when Duckpad starts.
+Git and SSH run in an isolated environment, without the server account's keys,
+agent, credential helpers or global configuration. Temporary private-key copies
+use mode 0600 and are removed after use or at startup following a crash.
 
 **Trusted Git hosts.** In **Instance settings → Git hosts**, instance administrators
 list trusted SSH host keys in `known_hosts` format, one `host key-type key` line per
@@ -250,17 +240,3 @@ saves report accurate counts and include a bounded body of affected elements,
 fields and categories. Parameter values and SQL statements are omitted. Existing
 history is not rewritten, no-op saves add no commit, and ordinary edits still
 require no commit dialog.
-
-## Verification
-
-Backend tests exercise semantic categories, nested scopes, immutable comparisons,
-commit subjects, actual merge parents, pagination, stale reviews, role enforcement,
-dirty work, divergence, concurrent remote advancement, remote deletion/recreation,
-invalid imports, unsafe ancestry and sanitized network failures. Git integration
-tests use disposable bare repositories. An end-to-end test runs real SSH against a
-disposable OpenSSH server while a server key, an SSH agent, global Git settings and
-a credential helper are present, and checks that only the account key reaches the
-server. Browser tests cover comparison, field conflict resolution, synchronization,
-account keys, trusted hosts, origin consent, stale responses and narrow layouts.
-Their disposable server replaces only the network transport with local bare
-repositories; URL validation, trusted hosts, account keys and consent stay active.

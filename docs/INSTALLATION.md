@@ -39,9 +39,8 @@ duckpad start --home /path/to/new-instance
 ```
 
 The new instance creates a new administrator password. Reconfigure accounts and
-connections and import your project Git repositories in the current
-[file format](AUTHORING.md); the old instance's execution history remains in its
-original database.
+connections and import project ZIPs in the current [file format](AUTHORING.md).
+The old instance's execution history remains in its original database.
 
 For air-gapped deployments, [download extensions on any connected computer and
 import them into Duckpad](OFFLINE_EXTENSIONS.md) before running connectors that
@@ -291,8 +290,9 @@ for deployment requirements and file access boundaries.
 
 Instance admins can monitor server CPU and RAM in the workspace toolbar. Click
 either indicator for two minutes of history; samples refresh every two seconds.
-Measurements include the API process and its active SQL workers, with visible CPU
-affinity and Linux cgroup limits taken into account. Missing measurements appear
+Measurements cover the server OS, including other applications; they are not
+Duckpad-only usage or per-session limits. Container visibility follows the
+operating-system counters exposed by its runtime. Missing measurements appear
 as unavailable. History resets on reload or sign-out.
 
 Language defaults to the first supported language in your browser preferences

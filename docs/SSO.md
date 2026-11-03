@@ -22,9 +22,6 @@ credentials for recovery if the provider becomes unavailable.
    discovery and supported protocol features. This does not verify the client
    credentials; complete a sign-in in a separate browser session to test them.
 
-The example below uses placeholder URLs. Replace them with your provider and
-application origins before saving.
-
 ![OIDC settings with the issuer, client ID, masked client secret, application URL and redirect URI](images/sso-settings.png)
 
 The sign-in page offers both SSO and local password authentication. Duckpad
@@ -46,9 +43,8 @@ Settings and the client secret live in the protected instance database, outside
 project Git repositories. The API never returns the secret. Leave its field
 blank to retain it; changing the issuer or client ID requires a new secret.
 The database stores it encrypted with the instance's
-[master key](INSTALLATION.md#secrets-and-the-master-key). Protect the instance
-directory and its backups: they contain that key unless you provide it from
-outside. No provider access, refresh or ID tokens are retained after sign-in.
+[master key](INSTALLATION.md#secrets-and-the-master-key). No provider access,
+refresh or ID tokens are retained after sign-in.
 
 Every settings save invalidates pending sign-ins and existing SSO sessions.
 Disabling SSO hides the login button and prevents new SSO authentication. Account

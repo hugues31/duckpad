@@ -1,8 +1,9 @@
 # Python typing validation
 
-GENERAL-411 uses ty 0.0.95 with Ruff signature checks. The comparison below uses
+This historical comparison measured ty 0.0.95 with Ruff signature checks against
 mypy 2.4.1 (compiled), Ruff 0.17.2, Python 3.12.12, and the same 67 backend files
-on Linux x86_64 with eight available CPUs. Both configurations pass on this tree.
+on Linux x86_64 with eight available CPUs. Both configurations passed on the
+measured revision.
 The old configuration comes from commit `89750158fea5938ae149dade35cbe12a597781ca`.
 
 ## Performance
@@ -67,8 +68,7 @@ uv sync --locked
 - Deliberate errors verify binary/text Git results, preview argument types, project
   lock identifiers, cancellation tokens, and missing function annotations.
 - Runtime interfaces are explicit where ty needs them: native cursor forwarding,
-  generator context managers, and Git overload keywords. The variable APIs added
-  on `main` are retained and annotated when resolving the PR's merge conflicts.
+  generator context managers, and Git overload keywords.
 
 The rules are not identical to mypy's strict mode. In particular, ty has no direct
 equivalent to `no-untyped-call`, and some implicit re-export checks differ. The

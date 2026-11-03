@@ -26,7 +26,8 @@ Select Regional revenue and its `report` output. Click a revenue cell. The calcu
 
 For a distinct customer count, value-group cards show the count of original rows. Open a group to see its source cells. Repeated purchases remain separate cells. For a maximum, all tied extrema are shown; calculation details expose the full examined group as row-selection context.
 
-Documentation is available on the project tab and the selected node's Documentation tab, including dataset and column descriptions.
+Write project and node descriptions in their **Documentation** tabs; edit
+dataset and column descriptions in **Results → Columns**.
 
 ## Inspect the SQL
 

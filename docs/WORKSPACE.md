@@ -23,8 +23,7 @@ it. Inside a component, this searches that component's nodes.
 **Search instance** in the top bar finds projects, open branches and placed
 nodes across projects you can read, including nested components. Results show
 their project, branch and component path; selecting one opens that location.
-Search uses saved project metadata, never SQL, parameter values, connection
-secrets or result rows. It does not run a pipeline or change the project.
+Search uses saved project metadata, excluding SQL, parameter values and result rows.
 
 Press **Ctrl+F** (**⌘F** on macOS) for canvas search or **Ctrl+K** (**⌘K**) for
 instance search. Text editors, other form fields and open dialogs retain their
@@ -32,10 +31,10 @@ own keyboard shortcuts.
 
 ## Save and run
 
-Save parameter or code edits before choosing **Run pipeline**. Completed saves
-are versioned automatically, but execution is always explicit. Use a node's run
-action for a smaller scope; Duckpad includes its upstream dependencies. **Stop**
-requests cancellation of active SQL. A protected environment asks for confirmation.
+**Run pipeline** saves pending editor changes and waits for saves already in
+progress before launching. A failed save stops the launch. Use **Run with
+ancestors** on a node for a smaller scope. **Stop** requests cancellation of active
+SQL. A protected environment asks for confirmation.
 
 Results belong to a branch and environment. A change can mark previous results
 **Stale**, and a failed run retains the previous successful data. After a backend

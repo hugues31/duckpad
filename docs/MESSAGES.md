@@ -5,9 +5,8 @@ For persistent quality checks with pass/fail counts, use [data tests](TESTS.md).
 
 ## Write a message
 
-Add `-- @message` in a normal node's code to report information about that node,
-or in a template to apply it to every linked node. There is no separate Message
-node or inspector field. Each block contains one read-only query:
+Add `-- @message` in node code, or in a shared template to apply it to every
+linked node. Each block contains one read-only query:
 
 ```sql
 -- @input source
@@ -57,8 +56,7 @@ more”. All additional rows are still validated and counted: an error beyond th
 limit still fails the node. Server logs emit one JSON line per actual message,
 including run, project, branch, environment, node, level, message and origin.
 Multiline text is escaped within that line. Connection secrets are redacted in
-messages, errors, saved history and logs. User-authored message text is displayed
-as written; interface labels are translated into English, French and Portuguese.
+messages, errors, saved history and logs.
 
 See [SQL syntax](SQL.md) for declarations and [results and logs](RESULTS.md#log)
 for the execution timeline.

@@ -1,7 +1,6 @@
 # Extension downloads and import details
 
 The [short guide](OFFLINE_EXTENSIONS.md) covers browser downloads and imports.
-This works across operating systems: only the binary must match the server.
 
 ## Download without a matching local runtime
 
@@ -130,8 +129,3 @@ core/community imports with networking disabled, invalid-file rejection,
 unsigned opt-in, and H3 execution after reopening both execution modes. The core
 binary is installed but not executed on the older test CPU. External service
 connectivity is outside this validation.
-
-The earlier [cache verification report](../docs/validation/offline-extensions.json)
-also covers transferring installed caches with their `.info` files. Such a cache
-remains usable, but preparing one on a matching computer is no longer necessary
-for the import workflow.

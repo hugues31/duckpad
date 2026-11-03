@@ -1,6 +1,6 @@
 # Validation and performance
 
-The recorded benchmark and connector checks were run on Linux x86_64 with Python 3.13.12 and DuckDB 2.0.0 against the embedded engine. Machine-readable reports in `validation/` are historical measurements, not the current CI status or validation of the isolated HTTP worker. The repository contains deterministic acceptance tests, browser scenarios and reproducible integration/performance scripts; see the [README](../README.md#develop-and-verify) for current check commands.
+The recorded benchmark and connector checks were run on Linux x86_64 with Python 3.13.12 and DuckDB 2.0.0 against the embedded engine. Machine-readable reports in `validation/` are historical measurements, not the current CI status or validation of the isolated HTTP worker. The repository contains deterministic acceptance tests, browser scenarios and reproducible integration/performance scripts; see [Contributing](../CONTRIBUTING.md#run-the-checks) for current check commands.
 
 ## Acceptance coverage
 
@@ -34,11 +34,11 @@ Recorded hardware: Intel Core i5-1340P, 16 logical CPUs, approximately 15.3 GiB 
 | First five lineage contributions plus exact count | 0.066 s |
 | Next five contributions | 0.063 s |
 
-The selected aggregate has **150,000 contributing cells**. Peak worker-process resident memory was **1,482,492 KiB (about 1.41 GiB)**. This peak includes materialization, lineage and independent native comparison in the worker; source-fixture generation occurs separately. Results are a local measurement, not a latency guarantee. Filesystem caches, CPU contention, data distributions, query shape and extension behavior can change timings. There is no application-enforced dataset-size limit or implicit query timeout.
+The selected aggregate has **150,000 contributing cells**. Peak worker-process resident memory was **1,482,492 KiB (about 1.41 GiB)**. This peak includes materialization, lineage and independent native comparison in the worker; source-fixture generation occurs separately. Results are a local measurement, not a latency guarantee. Filesystem caches, CPU contention, data distributions, query shape and extension behavior can change timings. There is no application-enforced dataset-size limit. Sample and statistics requests have their own time limits; these timings do not describe those limits.
 
 ## Connector reports
 
 - `validation/oracle.json`: live Oracle 19.3, OraDuck 0.4.0, exact DuckDB 2.0.0; read, transform, native export equivalence, repeated append, schema/data refresh, materialized-source lineage and secret redaction.
 - `validation/s3.json`: Moto S3 endpoint on localhost, recorded by the CI job that runs `scripts/integration.py s3`; CSV/Parquet reads by relative path under a URI root, a custom storage type, join, CSV writes, repeated native replacement, connection reuse and lineage. Live AWS has not been claimed as tested.
 
-See [connector prerequisites](CONNECTORS.md) and [the explicit SQL coverage matrix](LINEAGE.md) for the scope and limits of these checks. The completed scheduling comparison is summarized in the [architecture guide](ARCHITECTURE.md#scheduling-decision).
+See [connector prerequisites](CONNECTORS.md) and [the explicit SQL coverage matrix](LINEAGE.md) for the scope and limits of these checks.

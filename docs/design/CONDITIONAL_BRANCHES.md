@@ -12,15 +12,8 @@ For example, `source = 'warehouse'` selects a Parquet source while an unconfigur
 
 A false SQL `WHERE` predicate can still bind a missing table or open a file. An ordinary union includes both inputs, and separate projects or Job scopes duplicate the shared graph. Conditions must therefore change execution planning, rather than filtering rows after sources have been prepared.
 
-| Approach | Inspiration and behavior | Choice for Duckpad |
-| --- | --- | --- |
-| Enable a resource declaratively | [dbt `enabled`](https://docs.getdbt.com/reference/resource-configs/enabled) excludes disabled resources from the project; references can then fail compilation | Keep a small node property, but preserve inactive nodes and their reasons in the run |
-| Propagate inactive branches and reconnect them explicitly | [KNIME IF/CASE Switches](https://docs.knime.com/build/if-case-switches) activate selected branches; End IF collects active output | Adopt inactivity propagation and an explicit junction; an N-output Switch is deferred |
-| Route around optional work | [Alteryx Detour](https://help.alteryx.com/current/en/designer/tools/developer/detour-tool.html) selects a path; [Detour End](https://help.alteryx.com/current/en/designer/tools/developer/detour-end-tool.html) reconnects the stream | Keep both alternatives visible, including an explicit bypass for an optional transformation |
-| A junction with a different trigger rule | [Airflow branching and trigger rules](https://airflow.apache.org/docs/apache-airflow/2.10.3/core-concepts/dags.html#trigger-rules) distinguish skipped dependencies from failed ones | Ignore inactive inputs only; an active input failure still blocks the junction |
-| A nested conditional activity | [Azure Data Factory If Condition](https://learn.microsoft.com/en-us/azure/data-factory/control-flow-if-condition-activity) executes one of two activity lists | A component instance can disable its whole subgraph without introducing a second workflow language |
-
-These are design inspirations, not compatibility claims. Duckpad keeps its typed variables, SQL engine, explicit runs, component boundaries and immutable result evidence. A generic “ignore missing inputs” setting is unsuitable: an inner join, an export and arbitrary SQL have no common meaning when one input disappears.
+Conditions affect execution planning. A generic setting to ignore missing inputs
+cannot define meaningful behavior for every join, export or SQL node.
 
 ## Decisions
 

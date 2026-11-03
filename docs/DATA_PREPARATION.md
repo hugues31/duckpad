@@ -1,9 +1,6 @@
 # Prepare columns and values
 
-Select, rename, reorder and cast columns, then clean text, dates and missing
-values with guided forms.
-
-New projects include two form-driven transformation templates. Connect their
+New projects include **Select columns** and **Clean values** templates. Connect their
 `source` input and run the upstream node to load column choices and types.
 
 - **Select columns** keeps only the listed columns, in their displayed order.
