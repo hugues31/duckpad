@@ -16,7 +16,7 @@ from duckpad.services import Services
 from duckpad.store import Store
 from duckpad.util import Problem
 
-SECRETS = ("pg-secret-1", "oidc-secret-2", "provider-key-3", "PRIVATE KEY 4")
+SECRETS = ("pg-secret-1", "oidc-secret-2", "provider-key-3", "PRIVATE KEY 4", "oauth-client-secret-5")
 CONNECTOR = {
     "id": "vault",
     "family": "database",
@@ -59,6 +59,7 @@ def fill(store):
             "providers": [
                 {"id": "main", "kind": "openai", "api_key": SECRETS[2]},
                 {"id": "local", "api_key": ""},
+                {"id": "gateway", "kind": "custom", "client_secret": SECRETS[4]},
             ]
         },
     )
@@ -102,11 +103,13 @@ def test_secrets_are_sealed_at_rest_and_read_in_plain(tmp_path):
         assert oidc["client_id"] == "duckpad" and oidc["client_secret"].startswith("dpenc:1:")
         providers = json.loads(stored(store, "SELECT value FROM setting WHERE id = 'assistant'"))["providers"]
         assert providers[0]["api_key"].startswith("dpenc:1:") and providers[1]["api_key"] == ""
+        assert providers[2]["client_secret"].startswith("dpenc:1:")
         assert stored(store, "SELECT private_key FROM ssh_key").startswith("dpenc:1:")
 
         assert store.get("connection", "pg")["environments"]["dev"]["password"] == SECRETS[0]
         assert store.get("settings", "oidc")["client_secret"] == SECRETS[1]
         assert store.get("settings", "assistant")["providers"][0]["api_key"] == SECRETS[2]
+        assert store.get("settings", "assistant")["providers"][2]["client_secret"] == SECRETS[4]
         assert store.get("ssh_key", "u1")["private_key"] == SECRETS[3]
         assert next(value for _, value in store.items("ssh_key"))["private_key"] == SECRETS[3]
     finally:
@@ -201,6 +204,7 @@ def test_rotation_reseals_with_the_first_key(tmp_path, monkeypatch):
     store = Store(tmp_path / "instance")
     try:
         assert store.get("settings", "assistant")["providers"][0]["api_key"] == SECRETS[2]
+        assert store.get("settings", "assistant")["providers"][2]["client_secret"] == SECRETS[4]
     finally:
         store.close()
 

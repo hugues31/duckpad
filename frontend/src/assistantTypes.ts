@@ -15,6 +15,13 @@ export interface AssistantProvider {
   models: string[];
   has_key?: boolean;
   api_key?: string;
+  auth?: "api_key" | "oauth2";
+  token_url?: string;
+  client_id?: string;
+  client_secret?: string;
+  has_secret?: boolean;
+  scope?: string;
+  streaming?: boolean;
 }
 export interface QuickPrompt {
   label: string;

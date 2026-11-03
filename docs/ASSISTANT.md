@@ -45,6 +45,33 @@ ZIPs.
 
 ![Instance assistant configuration with a saved provider key](images/assistant-settings.png)
 
+## OpenAI-compatible gateways
+
+For a gateway that requires OAuth2, choose **OAuth2 client credentials** under
+**Authentication**. Enter its **Token URL**, **Client ID**, **Client secret** and,
+if required, **Scope**. Duckpad obtains a bearer token using HTTP Basic client
+authentication ([RFC 6749 section 2.3.1](https://www.rfc-editor.org/rfc/rfc6749#section-2.3.1)).
+Token requests have a ten-second timeout and never follow redirects. Tokens stay
+in memory, are shared across requests and turns, and renew 30 seconds before
+expiry. A rejected token is renewed once before the request fails. If the token
+endpoint omits `expires_in`, Duckpad obtains a fresh token for each request.
+
+The client secret is encrypted in instance storage and is write-only, like API
+keys. The browser receives only **Secret saved**. A blank field keeps the saved
+secret only while the provider, base URL, token URL and client ID stay the same.
+Changing any of these requires re-entering it. Switching authentication methods
+clears the inactive credential. Discovery and connection tests use these same
+rules. If the gateway has no compatible model catalog, enter model IDs manually.
+
+**Streaming** is enabled by default. Streaming requests to custom providers send
+`Accept: text/event-stream`. Disable the option if a gateway returns complete
+JSON responses: text appears when generation finishes, while tools and run
+confirmations still work. **Test connection** exercises the same response mode
+as chat and suggests disabling Streaming if the gateway does not support it.
+Custom gateway reads can wait up to 120 seconds, including buffered SSE; the
+whole turn and connection test are still limited to 120 seconds. A server error
+is reported separately from an unreachable provider, without exposing its body.
+
 ## Ask about the current page
 
 Open a project branch and choose the **AI assistant** bubble at the bottom right.
@@ -177,9 +204,10 @@ reading enabled cannot resume while the option is disabled: start a new one so
 its previous values are not resent.
 
 Even with data reading disabled, your questions, saved code and its literal
-values, documentation, variable declarations and values, flow parameters,
-output schemas, status metadata and branch commit metadata can reach the
-selected provider. This is a data-result policy, not a secret scanner for
-user-authored project text. Keep credentials in instance connections. Provider
-keys and resolved connection secrets are never offered to the model. See the
-[provider data contract](../docs/SPEC.md#ai-assistant) for the full list.
+values, documentation, variable declarations and values, flow parameters, output
+schemas, status metadata and branch commit metadata can reach the selected
+provider. This is a data-result policy, not a secret scanner for user-authored
+project text. Keep credentials in instance connections. Provider keys, OAuth2
+client secrets and resolved connection secrets are never offered to the model.
+See the [provider data contract](../docs/SPEC.md#ai-assistant) for the full
+list.
