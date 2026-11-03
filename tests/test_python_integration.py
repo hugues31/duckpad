@@ -6,6 +6,7 @@ import zipfile
 from pathlib import Path
 
 import _duckdb
+import duckdb
 import pytest
 from helpers import wait_run
 from test_python_nodes import SPLIT, flow, single
@@ -89,6 +90,20 @@ def test_disabled_python_does_not_block_independent_sql(services):
     result = wait_run(store, engine.launch(tree["id"], "dev", "source"), timeout=30)
     assert result["status"] == "success"
     assert engine.preview(tree["id"], "dev", "source")["count"] == 5
+
+
+def test_canceled_cursor_rejects_python_before_reading_its_payload(services):
+    _, projects, _, engine = services
+    tree = projects.create("Canceled Python")
+    context = engine.context(tree["id"], "dev")
+    cursor = context.db.cursor()
+    cursor.interrupt()
+    try:
+        with pytest.raises(duckdb.InterruptException, match="Execution canceled"):
+            cursor.python({})
+        assert context.db.execute("select 1").fetchone() == (1,)
+    finally:
+        cursor.close()
 
 
 def test_operator_wheel_cannot_replace_installed_native_binary(tmp_path, monkeypatch):

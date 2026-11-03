@@ -44,7 +44,15 @@ def serve(stream, channel, message):
                 )
             elif operation == "python":
                 with python_lock:
-                    result = execute_python(cursor, message["payload"])
+                    finished = threading.Event()
+                    with cursor.lock:
+                        if cursor.canceled:
+                            raise duckdb.InterruptException("Execution canceled")
+                        cursor.finished = finished
+                    try:
+                        result = execute_python(cursor, message["payload"])
+                    finally:
+                        finished.set()
             elif operation == "setup":
                 setup_connections(cursor, message["captured"], message["offline"])
                 result = None
