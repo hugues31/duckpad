@@ -353,12 +353,17 @@ export default function FlowPage() {
   }
 
   if (!bundle || !graph) return <InvalidProject />;
-  const connections = snapshot.connections;
-  const hasResults = !!node;
+  const connections = snapshot.connections.filter(
+    (connection) =>
+      (signature?.kind !== "source" && signature?.kind !== "export") ||
+      connection.capabilities.includes(
+        signature.kind === "export" ? "write" : "read",
+      ),
+  );
   const shown = {
     palette: panels.open.palette,
     inspector: panels.open.inspector && !!node,
-    preview: panels.open.preview && !!node && hasResults,
+    preview: panels.open.preview && !!node,
   };
   const editCode = () =>
     node &&
@@ -472,7 +477,7 @@ export default function FlowPage() {
             onWarnings={() => showResults("log")}
           />
         </div>
-        {node && signature && hasResults ? (
+        {node && signature ? (
           <ResultsPanel
             readOnly={!canEdit}
             key={[worktree, fullNode, ...ports].join(":")}

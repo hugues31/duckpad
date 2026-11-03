@@ -198,18 +198,20 @@ describe("nodeInterface", () => {
   it("describes a template node from its parsed template", () => {
     expect(nodeInterface({ template: "join" }, parsed)).toEqual({
       definition: parsed.join,
-      kind: "sql",
+      kind: "transform",
       inputs: ["left", "right"],
       outputs: ["output"],
       parameters: [{ name: "on", type: "string" }],
     });
-    expect(nodeInterface({ template: "load_csv" }, parsed).kind).toBe("sql");
+    expect(nodeInterface({ template: "load_csv" }, parsed).kind).toBe("source");
+    const write = { inputs: ["source"], outputs: [], writes_external: true };
+    expect(nodeInterface({ template: "write" }, { write }).kind).toBe("export");
   });
 
-  it("describes a node whose template was removed as an empty SQL interface", () => {
+  it("describes a node whose template was removed as an empty transform", () => {
     expect(nodeInterface({ template: "missing" }, parsed)).toEqual({
       definition: undefined,
-      kind: "sql",
+      kind: "transform",
       inputs: [],
       outputs: [],
       parameters: [],

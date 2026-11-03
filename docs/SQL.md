@@ -34,10 +34,9 @@ Write each directive on its own line, starting with `-- @`:
 Inputs, parameters and outputs share one namespace: use unique identifiers made
 of letters, digits and underscores, starting with a letter or underscore.
 Unknown directives are errors. Each output block contains exactly one query,
-ending with a semicolon. There is no node category: `@kind` is an unknown directive
-and old definitions must remove it. Inputs and outputs declare the graph ports;
-SQL operations determine which resource and connection capabilities are required.
-A terminal node can contain only tests or messages, without writing anything.
+ending with a semicolon. Every query reads only declared inputs, earlier outputs,
+resources and connections. A node with outputs cannot write; a node without
+outputs can write data, or only run tests and messages.
 
 ## Reference inputs and earlier outputs
 
@@ -117,7 +116,8 @@ TO {{ destination }} (FORMAT CSV, HEADER TRUE);
 ```
 
 Connect `source` to the table you want to export. Exports write with an
-explicit `COPY ... TO` or `INSERT` statement outside an `@output` block.
+explicit `COPY ... TO` or `INSERT` statement and have no `@output`. Its
+connection needs the `write` capability; reads need `read`.
 With project files, the relative destination resolves inside the branch and
 environment's export directory. Run the node and open **Log →
 Download exported data** to retrieve its CSV. See [project exports](AUTHORING.md)
@@ -125,40 +125,6 @@ for download lifetime, XLSX and destination limits.
 
 An export can also declare tests and messages. They run **before the external
 write**, even when declared below `COPY`. A failing error check prevents it.
-
-## Combine operations in one node
-
-A node can read external resources, transform inputs, publish outputs, run checks
-and write a destination. There is no exclusive source/transform/export category.
-Each connection is checked where it is used: reading needs `read`, writing needs
-`write`. A read-only connection can supply an `INSERT` into a different write-only
-connection. Undeclared connections and resources remain rejected.
-
-Put an external write before the first output or check directive. It can reference
-any declared output because execution always computes outputs in declaration order,
-runs tests and messages, then performs the external write:
-
-```sql
--- @param file: file = "orders.csv"
--- @param destination: destination = "totals.csv"
-COPY {{ total }} TO {{ destination }} (FORMAT CSV, HEADER);
--- @output orders
-SELECT * FROM read_csv({{ file }});
--- @output total
-SELECT sum(amount) AS amount FROM {{ orders }};
--- @test positive
-SELECT * FROM {{ total }} WHERE amount < 0;
-```
-
-A failed output or error check prevents the write. An external write failure keeps
-the previous outputs stale; side effects already made by the destination cannot
-be rolled back by Duckpad. A supported CSV/XLSX write still offers a download when
-the same node also has output ports. Results remain available for control-only nodes
-through **Tests** and **Log**.
-
-A failed-key partition retry can recompute a mixed node's outputs while retaining
-evidence of its already successful external write for the same key and fingerprint.
-An explicit run of all keys executes the writes again.
 
 ## Parameter values
 

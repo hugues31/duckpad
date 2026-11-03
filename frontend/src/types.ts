@@ -32,6 +32,8 @@ export interface Graph {
   nodes: FlowNode[];
   edges: FlowEdge[];
 }
+/** How a template node is shown, from its ports and writes. */
+export type TemplateKind = "source" | "transform" | "export";
 /** A parameter declared by a template or exposed by a component. */
 export interface Parameter {
   name: string;

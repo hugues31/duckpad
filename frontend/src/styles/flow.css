@@ -318,11 +318,14 @@
   border-radius: 9px;
   flex-shrink: 0;
 }
-.palette-icon.template {
+.palette-icon.sources {
   color: var(--accent);
 }
 .palette-icon.components {
   color: light-dark(#6b589c, #d0bcff);
+}
+.palette-icon.exports {
+  color: light-dark(#886025, #f0cf92);
 }
 .palette-plus {
   opacity: 0;
@@ -537,6 +540,11 @@ fieldset.palette-bottom {
 .pipeline-node.component .node-shape {
   border-color: #9481c4;
   color: light-dark(#6b589c, #d0bcff);
+  background: var(--surface);
+}
+.pipeline-node.export .node-shape {
+  border-color: var(--accent);
+  color: var(--accent);
   background: var(--surface);
 }
 .pipeline-node.is-selected .node-shape {

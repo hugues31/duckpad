@@ -129,8 +129,7 @@ export default function ResultsPanel({
 }) {
   const t = useT();
   const ports = signature.outputs;
-  const exportNode =
-    signature.kind === "sql" && !!signature.definition?.writes_external;
+  const exportNode = signature.kind === "export";
   const tabs = RESULT_TABS.filter(
     (key) => ports.length > 0 || key === "tests" || key === "log",
   );
@@ -284,7 +283,7 @@ export default function ResultsPanel({
               onSelect={showDataset}
             />
           )}
-          {ports.length > 0 && ports.length === 1 && !inputs.length && (
+          {ports.length === 1 && !inputs.length && (
             <span className="results-port">{ports[0]}</span>
           )}
           {running ? (

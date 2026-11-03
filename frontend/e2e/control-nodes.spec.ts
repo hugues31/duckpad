@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { signIn } from "./helpers";
 
-test("SQL nodes expose outputs, writes and terminal checks independently", async ({
+test("a node with only tests and messages shows them in its results", async ({
   page,
 }) => {
   await signIn(page);
@@ -15,20 +15,11 @@ test("SQL nodes expose outputs, writes and terminal checks independently", async
     const snapshot = await (await page.request.get(endpoint)).json();
     snapshot.bundle.flow = {
       nodes: [
-        { id: "mixed", label: "Mixed operations", position: { x: 0, y: 0 } },
-        { id: "control", label: "Terminal checks", position: { x: 300, y: 0 } },
+        { id: "control", label: "Terminal checks", position: { x: 0, y: 0 } },
       ],
       edges: [],
     };
     snapshot.bundle.node_sql = {
-      "nodes/mixed.sql": `-- @param destination: destination = "summary.csv"
-COPY {{ total }} TO {{ destination }} (FORMAT CSV, HEADER);
--- @output rows
-SELECT range AS amount FROM range(4);
--- @output total
-SELECT sum(amount) AS amount FROM {{ rows }};
--- @test positive
-SELECT * FROM {{ total }} WHERE amount < 0;`,
       "nodes/control.sql": `-- @test valid
 SELECT 1 WHERE false;
 -- @message
@@ -42,30 +33,14 @@ SELECT 'info' AS level, 'Control completed' AS message;`,
       ).ok(),
     ).toBeTruthy();
     await page.goto(`/worktrees/${worktree.id}/flow`);
-    await page.locator('.react-flow__node[data-id="mixed"]').click();
-    await expect(page.locator(".inspector-kind strong")).toHaveText("SQL");
+    await page.locator('.react-flow__node[data-id="control"]').click();
     await page
       .getByRole("button", { name: "Run pipeline", exact: true })
       .click();
-    await expect
-      .poll(async () => {
-        const statuses = await (
-          await page.request.get(`${endpoint}/status?environment=dev`)
-        ).json();
-        return statuses.nodes.mixed?.execution_status;
-      })
-      .toBe("success");
-    await page.getByRole("tab", { name: "Log", exact: true }).click();
-    await expect(
-      page.getByRole("button", { name: "Download exported data", exact: true }),
-    ).toBeEnabled();
-    await page.getByRole("tab", { name: "Data", exact: true }).click();
-    await expect(page.getByRole("tab", { name: /^Columns/ })).toBeVisible();
-    await page.locator('.react-flow__node[data-id="control"]').click();
     await page.getByRole("tab", { name: "Log", exact: true }).click();
     await expect(
       page.getByText("Control completed", { exact: true }),
-    ).toBeVisible();
+    ).toBeVisible({ timeout: 30000 });
     await expect(
       page.getByRole("button", { name: "Download exported data", exact: true }),
     ).toHaveCount(0);

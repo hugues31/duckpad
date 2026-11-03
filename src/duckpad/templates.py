@@ -146,8 +146,8 @@ def parse_template(sql):
         else:
             raise Problem(f"Unknown template directive: @{key}")
     flush()
-    validate_interface(template)
     template["writes_external"] = any(not b["output"] and not is_check(b) for b in template["blocks"])
+    validate_interface(template)
     template["download"] = downloadable_export(template)
     return template
 
@@ -198,6 +198,8 @@ def validate_interface(template):
             available.add(block["output"])
     if not template["blocks"]:
         raise Problem("Template has no SQL statements")
+    if template["writes_external"] and template["outputs"]:
+        raise Problem("Queries need an @output; external writes go in a node without outputs")
 
 
 def parse_templates(templates):
@@ -243,9 +245,7 @@ def downloadable_export(template):
         return None
     # Inputs become tables, resources a literal of their own name, every other parameter a placeholder.
     names = [p["name"] for p in template["parameters"] if base_type(p["type"]) in RESOURCE_TYPES]
-    values = {name: qi(name) for name in template["inputs"] + template["outputs"]} | {
-        name: literal(name) for name in names
-    }
+    values = {name: qi(name) for name in template["inputs"]} | {name: literal(name) for name in names}
     sql = REFERENCE.sub(lambda m: values.get(m[1], "$" + m[1]), blocks[0]["sql"])
     try:
         tree = parse_block(sql)
@@ -379,13 +379,8 @@ def render_path(name, text, values):
     return VARIABLE_REFERENCE.sub(replace, text)
 
 
-def authorize_path(template, path, root, kind, connections, reference):
+def authorize_path(template, path, root):
     """Check the resolved resource against its captured root, including glob matches."""
-    if reference:
-        connection = connection_for(connections, reference)
-        capability = "write" if kind == "destination" else "read"
-        if capability not in connection["definition"].get("capabilities", []):
-            raise Problem(f"Connection {reference} does not support {capability}")
     if URI.match(path):
         # An interpolated authority cannot select a different credential scope.
         baseline = str(root) if URI.match(str(root)) else template
@@ -503,9 +498,7 @@ def render_parameter(
             return literal(under_root(root, path) if relative else path)
         if relative and URI.match(root):
             path = under_root(root, path)
-        return literal(
-            authorize_path(template, path, root or str(project_files[kind]), kind, connections, reference)
-        )
+        return literal(authorize_path(template, path, root or str(project_files[kind])))
     if kind in ("column", "identifier"):
         return ".".join(qi(part) for part in str(value).split("."))
     if kind in OBJECT_NAMES:
@@ -597,8 +590,8 @@ def require_capability(connections, reference, capability):
 def check_access(block, tree, allowed, connections, resources, destinations, secrets):
     """Validate each SQL operation against declared inputs, resources and connections.
 
-    Return whether the query reads external data, so its materialized output is a
-    lineage boundary. Later outputs can trace through that snapshot normally.
+    Return whether the query's result is a lineage source: it reads external data, or
+    no flow data at all. Later outputs can trace through that snapshot normally.
     """
     query = bool(block["output"] or is_check(block))
     if query and not isinstance(tree, exp.Query):
@@ -612,9 +605,10 @@ def check_access(block, tree, allowed, connections, resources, destinations, sec
     destination = tree.this if isinstance(tree, exp.Insert) else None
     if isinstance(destination, exp.Schema):
         destination = destination.this
-    reads_external = False
+    reads_local = reads_external = False
     for table in tree.find_all(exp.Table):
         if table is not destination and is_local_table(table, local_names):
+            reads_local = True
             continue
         if isinstance(table.this, exp.Identifier):
             reference = aliases.get(table.catalog or table.db)
@@ -647,7 +641,7 @@ def check_access(block, tree, allowed, connections, resources, destinations, sec
                 reference = destinations[file.sql(dialect="duckdb")]
                 if reference is not None:
                     require_capability(connections, reference, "write")
-    return reads_external
+    return reads_external or not reads_local
 
 
 def check_reader(function, resources):
@@ -749,7 +743,7 @@ def compile_template(
     for block in execution_blocks(template):
         tree = parse_block(REFERENCE.sub(lambda m: values[m[1]], block["sql"]))
         message_block = block.get("message_block")
-        reads_external = check_access(block, tree, allowed, connections, resources, destinations, secrets)
+        source = check_access(block, tree, allowed, connections, resources, destinations, secrets)
         query = tree.sql(dialect="duckdb")
         used = {
             name: value
@@ -765,8 +759,7 @@ def compile_template(
                 "output": output,
                 "table": physical,
                 "query": query,
-                "reads_external": reads_external,
-                "writes_external": isinstance(tree, (exp.Copy, exp.Insert)),
+                "source": source,
                 # Runs materialize outputs from this query and record the statements they execute.
                 "sql": query,
                 "bindings": used,

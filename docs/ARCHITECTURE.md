@@ -147,7 +147,7 @@ Outputs are staged under fresh physical names and published together only after 
 
 A stop request sets a cancellation token and calls `interrupt()` on the active cursor. No later node starts. The worktree stays reserved until the operation and cleanup finish. External effects obey DuckDB and the extension: completed writes remain completed, and interrupted writes can have unknown or partial effects. Shutdown requests cancellation and waits for workers before closing their databases.
 
-SQL nodes have no execution category. The compiler validates each query or write against its declared resources and the capabilities of the connections it actually uses. Run records carry `writes_external` for write tracking; output statements carry `reads_external` to identify captured lineage boundaries. A node can expose outputs and perform a checked external write, or contain only tests and messages.
+The compiler validates each query or write against its declared resources and the capabilities of the connections it uses. A node without outputs can write externally; run records mark it with `writes_external` to track the write outcome.
 
 Run records are persisted at admission and at each node/status transition, including SQL, timings, sanitized connection snapshots, code definitions and observed write outcomes. On restart, unfinished records and their running or pending nodes become interrupted; no computation or export is replayed. In-memory result tables are not persisted.
 

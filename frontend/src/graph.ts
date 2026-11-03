@@ -6,6 +6,7 @@ import type {
   Graph,
   Parameter,
   ParsedTemplate,
+  TemplateKind,
 } from "./types";
 
 /** MIME type of palette items dragged onto the canvas. */
@@ -94,7 +95,7 @@ export type NodeInterface = {
   parameters: Parameter[];
 } & (
   | { kind: "component"; definition: ComponentDefinition | undefined }
-  | { kind: "sql"; definition: ParsedTemplate | undefined }
+  | { kind: TemplateKind; definition: ParsedTemplate | undefined }
 );
 
 /** Component definitions key their ports and parameters by name; parsed
@@ -121,11 +122,17 @@ export function nodeInterface(
   const definition = node.template
     ? parsed[node.template]
     : local[node.id || ""];
+  const inputs = definition?.inputs || [];
+  const outputs = definition?.outputs || [];
   return {
     definition,
-    kind: "sql",
-    inputs: definition?.inputs || [],
-    outputs: definition?.outputs || [],
+    kind: definition?.writes_external
+      ? "export"
+      : !inputs.length && outputs.length
+        ? "source"
+        : "transform",
+    inputs,
+    outputs,
     parameters: definition?.parameters || [],
   };
 }
