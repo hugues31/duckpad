@@ -10,7 +10,8 @@ import {
 } from "react";
 import { useLocation, useOutletContext } from "react-router";
 import { Loader2 } from "lucide-react";
-import Canvas from "../Canvas";
+import Canvas, { type CanvasHandle, type FocusRequest } from "../Canvas";
+import { findNodePosition } from "../graphLayout";
 import CanvasHeader from "../CanvasHeader";
 import { noticeCount } from "../FlowToolbar";
 import {
@@ -128,6 +129,7 @@ export default function FlowPage() {
   const { path, selected, cell } = view;
   const location = useLocation();
   const sizes = usePanelSizes();
+  const canvas = useRef<CanvasHandle>(null);
   const [selection, setSelection] = useState<string[]>([]);
   const [addingNode, setAddingNode] = useState(false);
   const additionPending = useRef(false);
@@ -137,10 +139,7 @@ export default function FlowPage() {
     setResultsTab(tab);
     panels.set({ preview: true });
   };
-  const [focusRequest, setFocusRequest] = useState<{
-    id: string;
-    key: string;
-  } | null>(null);
+  const [focusRequest, setFocusRequest] = useState<FocusRequest | null>(null);
   const bundle = snapshot.bundle;
   const declared = snapshot.variables?.declarations;
   const valueProducers = useMemo(
@@ -265,10 +264,7 @@ export default function FlowPage() {
   async function addNode(
     kind: NodeKind,
     id: string,
-    position = {
-      x: 160 + ((graph?.nodes.length || 0) % 4) * 240,
-      y: 120 + Math.floor((graph?.nodes.length || 0) / 4) * 210,
-    },
+    position?: FlowNode["position"],
     connection?: NodeConnection,
     linked = false,
   ) {
@@ -278,9 +274,12 @@ export default function FlowPage() {
       id: identifier(),
       ...(kind === "component" ? { component: id } : { template: id }),
       params: {},
-      position,
+      position:
+        position ??
+        canvas.current?.newNodePosition(graph?.nodes || []) ??
+        findNodePosition(graph?.nodes || []),
     };
-    await insertNode(created.id, (value) => {
+    const added = await insertNode(created.id, (value) => {
       const g = graphAt(value, path);
       if (kind === "template" && !linked) {
         if (id) detachNode(value, created, parent);
@@ -309,6 +308,8 @@ export default function FlowPage() {
               },
         );
     });
+    if (added && !position)
+      setFocusRequest({ id: created.id, key: created.id, reveal: true });
   }
   async function removeNodes(ids: string[], edges: string[] = []) {
     await save(snapshot, (value) => {
@@ -462,6 +463,7 @@ export default function FlowPage() {
         />
         <div className="canvas">
           <Canvas
+            ref={canvas}
             valueProducers={valueProducers}
             // Its delete keys listen on the document, which inert does not cover.
             readOnly={!canEdit || addingNode}
