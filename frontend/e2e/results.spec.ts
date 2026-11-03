@@ -126,6 +126,55 @@ test("a sample filters, sorts and limits displayed rows without changing the res
   await expect(panel.locator(".preview-footer")).toContainText("1–100 / 107");
 });
 
+test("a rerun that shrinks the result returns to a page that exists", async ({
+  page,
+}) => {
+  test.slow(); // Four pipeline runs.
+  const { worktree, panel } = await openPaidOrders(page);
+  const range = panel.locator(".preview-footer .row > span");
+  const rows = panel.locator(".data-table tbody tr");
+  const previous = panel.getByRole("button", { name: "Previous", exact: true });
+  const next = panel.getByRole("button", { name: "Next", exact: true });
+  const rerunWithStatus = async (status: string) => {
+    const inspector = page.locator(".inspector");
+    await inspector.getByRole("textbox", { name: /status/ }).fill(status);
+    await inspector
+      .getByRole("button", { name: "Save changes", exact: true })
+      .click();
+    await expect(page.locator(".save-status")).toHaveText("All changes saved");
+    await runProject(page, worktree);
+  };
+  await expect(range).toHaveText("1–100 / 107");
+  await expect(previous).toBeDisabled();
+  await next.click();
+  await expect(range).toHaveText("101–107 / 107");
+  await expect(rows).toHaveCount(7);
+  await expect(next).toBeDisabled();
+  await previous.click();
+  await expect(range).toHaveText("1–100 / 107");
+  await next.click();
+  await expect(range).toHaveText("101–107 / 107");
+
+  await rerunWithStatus("refunded");
+  await expect(range).toHaveText("1–13 / 13");
+  await expect(rows).toHaveCount(13);
+  await expect(rows.first().locator(".row-number")).toHaveText("1");
+  await expect(panel.getByText("No rows match these filters")).toHaveCount(0);
+  await expect(previous).toBeDisabled();
+  await expect(next).toBeDisabled();
+
+  // Growing again keeps the first page; an empty result has no page at all.
+  await rerunWithStatus("paid");
+  await expect(range).toHaveText("1–100 / 107");
+  await next.click();
+  await expect(range).toHaveText("101–107 / 107");
+  await rerunWithStatus("unknown");
+  await expect(range).toHaveText("0 / 0");
+  await expect(panel.getByText("No rows match these filters")).toBeVisible();
+  await expect(previous).toBeDisabled();
+  await expect(next).toBeDisabled();
+});
+
 test("views are shared in views.json and samples become Filter nodes or tests", async ({
   page,
 }) => {

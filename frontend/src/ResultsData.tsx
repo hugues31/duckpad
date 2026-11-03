@@ -454,7 +454,8 @@ export default function ResultsData({
             ))}
           </tbody>
         </table>
-        {data && !data.rows.length && (
+        {/* While loading, data is the previous page, such as one past a shrunk result. */}
+        {data && !data.rows.length && !pending && (
           <p className="empty-small">{t("noMatches")}</p>
         )}
       </div>
