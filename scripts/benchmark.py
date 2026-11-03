@@ -8,6 +8,7 @@ import resource
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 from pathlib import Path
 
@@ -92,7 +93,11 @@ def worker(folder):
     try:
         start = time.perf_counter()
         run = engine.launch(worktree, "dev")
-        result = engine.wait(run["id"], RUN_TIMEOUT)
+        for thread in threading.enumerate():
+            if thread.name == run["id"]:
+                thread.join(RUN_TIMEOUT)
+                assert not thread.is_alive(), "Performance reference timed out"
+        result = instance.store.get("run", run["id"])
         pipeline_seconds = time.perf_counter() - start
         assert result["status"] == "success", {
             k: v.get("error") for k, v in result["nodes"].items() if v.get("error")
