@@ -361,13 +361,50 @@ A community contribution follows the same shape: a definition plus a validation 
 
 ### MySQL
 
-Paste the [MySQL definition](../docs/connectors/mysql.json) into the connector editor.
+```json
+{
+  "id": "mysql",
+  "name": "MySQL",
+  "family": "database",
+  "description": "A MySQL database, with its server and credentials for each environment.",
+  "parameters": [
+    {"name": "host", "type": "text"},
+    {"name": "port", "type": "number", "default": 3306},
+    {"name": "database", "type": "text"},
+    {"name": "user", "type": "text"},
+    {"name": "password", "type": "text", "secret": true},
+    {
+      "name": "options",
+      "type": "text",
+      "default": "",
+      "label": "Additional options",
+      "description": "Connection settings passed to the driver as is, such as ssl_mode=required."
+    }
+  ],
+  "extensions": [{"name": "mysql"}],
+  "capabilities": ["read", "write"],
+  "init_sql": "CREATE OR REPLACE TEMPORARY SECRET {{ secret_name }} (TYPE mysql, HOST {{ host }}, PORT {{ port }}, DATABASE {{ database }}, USER {{ user }}, PASSWORD {{ password }}); ATTACH {{ options }} AS {{ alias }} (TYPE mysql, SECRET {{ secret_name }});",
+  "compatibility": "Validated on DuckDB 2.0.0 with its matching mysql extension, MySQL 8.4, Linux x86_64. Other versions require validation."
+}
+```
 
 A MySQL schema is a database: Load table's schema is the database name. Keep the same database name in every environment, on a dev and a prod server, so that the project's schema does not change between environments. Validated in CI with two MySQL 8.4 servers, in embedded and isolated execution (`docs/validation/mysql.json`).
 
 ### SQLite
 
-Paste the [SQLite definition](../docs/connectors/sqlite.json) into the connector editor.
+```json
+{
+  "id": "sqlite",
+  "name": "SQLite",
+  "family": "database",
+  "description": "A SQLite database file on the Duckpad server, for each environment.",
+  "parameters": [{"name": "path", "type": "file"}],
+  "extensions": [{"name": "sqlite"}],
+  "capabilities": ["read", "write"],
+  "init_sql": "ATTACH {{ path }} AS {{ alias }} (TYPE sqlite);",
+  "compatibility": "Validated on DuckDB 2.0.0 with its matching sqlite extension, Linux x86_64, in embedded and isolated execution. Other versions require validation."
+}
+```
 
 Set `path` to a SQLite file per environment, in a dedicated directory as described
 above, and use the schema `main`. CI runs `scripts/integration.py sqlite` in embedded
