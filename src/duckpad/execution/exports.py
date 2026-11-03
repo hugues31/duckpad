@@ -66,7 +66,7 @@ class Exports:
         """
         replaced: list[str] = []
         for key, state in run["nodes"].items():
-            if state.get("kind") != "export" or state.get("partitioned"):
+            if not state.get("writes_external") or state.get("partitioned"):
                 continue
             identity = digest([run["worktree"], run["environment"], key])
             previous = self.store.get("export_result", identity)

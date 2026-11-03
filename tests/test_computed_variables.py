@@ -30,9 +30,9 @@ def bundle(sql="SELECT 4 AS amount, '2026-06-30' AS day"):
             "edges": [],
         },
         "templates": {
-            "control": "-- @kind source\n-- @output result\n" + sql + ";",
-            "consumer": "-- @kind source\n-- @param amount: number\n-- @output result\nSELECT {{ amount }} AS amount;",
-            "independent": "-- @kind source\n-- @output result\nSELECT 1 AS independent;",
+            "control": "-- @output result\n" + sql + ";",
+            "consumer": "-- @param amount: number\n-- @output result\nSELECT {{ amount }} AS amount;",
+            "independent": "-- @output result\nSELECT 1 AS independent;",
         },
         "components": {},
         "documentation": {},
@@ -125,7 +125,7 @@ def test_targeted_run_retains_values_and_refresh_failure_does_not_fall_back(serv
     change(
         projects,
         worktree,
-        lambda b: b["templates"].update(control="-- @kind source\n-- @output result\nSELECT missing;"),
+        lambda b: b["templates"].update(control="-- @output result\nSELECT missing;"),
     )
     retained = wait_run(store, engine.launch(worktree, "dev", "consumer"))
     assert retained["status"] == "success"
@@ -182,7 +182,7 @@ def test_targeted_launch_still_rejects_other_binding_errors_of_a_computed_consum
     store, projects, _, engine = services
     project = bundle()
     project["templates"]["consumer"] = (
-        "-- @kind source\n-- @param amount: number\n-- @param label: text\n-- @output result\n"
+        "-- @param amount: number\n-- @param label: text\n-- @output result\n"
         "SELECT {{ amount }} AS amount, {{ label }} AS label;"
     )
     project["flow"]["nodes"][1]["params"]["label"] = {"$var": "label"}
@@ -197,7 +197,7 @@ def test_value_cycle_is_localized(services):
     store, projects, _, engine = services
     project = bundle()
     project["templates"]["control"] = (
-        "-- @kind source\n-- @param amount: number\n-- @output result\nSELECT {{ amount }} AS amount;"
+        "-- @param amount: number\n-- @output result\nSELECT {{ amount }} AS amount;"
     )
     project["flow"]["nodes"][0]["params"] = {"amount": {"$var": "amount"}}
     worktree = projects.create("Cycle", project)["id"]
@@ -234,9 +234,7 @@ def test_switching_variable_mode_merges_description_but_conflicts_with_old_value
 
 
 def test_path_fragments_are_escaped_and_authorized_after_resolution(tmp_path):
-    template = parse_template(
-        "-- @kind source\n-- @param file: file\n-- @output result\nSELECT * FROM read_csv({{ file }});"
-    )
+    template = parse_template("-- @param file: file\n-- @output result\nSELECT * FROM read_csv({{ file }});")
     values = {"folder": {"type": "text", "value": "O'Brien"}, "day": {"type": "date", "value": "2026-06-30"}}
     compiled = compile_template(
         template,
@@ -517,9 +515,7 @@ def test_path_symlinks_globs_and_uri_authority_are_checked(tmp_path):
 
 
 def test_whole_path_bindings_are_not_rendered_again_and_computed_ones_are_authorized(tmp_path):
-    template = parse_template(
-        "-- @kind source\n-- @param file: file\n-- @output result\nSELECT * FROM read_csv({{ file }});"
-    )
+    template = parse_template("-- @param file: file\n-- @output result\nSELECT * FROM read_csv({{ file }});")
 
     def compiled(value, bound=None, values=None):
         statements = compile_template(
@@ -555,10 +551,10 @@ def test_control_csv_binds_parquet_scan_predicate_and_path_without_a_join(servic
         "with_adjustments": {"type": "boolean", "from": {"node": "control", "column": "with_adjustments"}},
     }
     project["templates"]["control"] = (
-        "-- @kind source\n-- @param file: file\n-- @output result\nSELECT * FROM read_csv({{ file }});"
+        "-- @param file: file\n-- @output result\nSELECT * FROM read_csv({{ file }});"
     )
     project["templates"]["consumer"] = (
-        "-- @kind source\n-- @param file: file\n-- @param condition: expression\n-- @output result\nSELECT * FROM read_parquet({{ file }}) WHERE {{ condition }};"
+        "-- @param file: file\n-- @param condition: expression\n-- @output result\nSELECT * FROM read_parquet({{ file }}) WHERE {{ condition }};"
     )
     project["flow"]["nodes"][0]["params"] = {"file": "run_control.csv"}
     project["flow"]["nodes"][1]["params"] = {
@@ -613,7 +609,7 @@ def test_computed_export_path_is_captured_and_traversal_is_rejected(services):
     store, projects, _, engine = services
     project = bundle()
     project["templates"]["export"] = (
-        "-- @kind export\n-- @input source\n-- @param destination: destination\nCOPY (SELECT * FROM {{ source }}) TO {{ destination }} (HEADER, FORMAT CSV);"
+        "-- @input source\n-- @param destination: destination\nCOPY (SELECT * FROM {{ source }}) TO {{ destination }} (HEADER, FORMAT CSV);"
     )
     project["flow"]["nodes"].append(
         {"id": "export", "template": "export", "params": {"destination": "report_{{ var.report_date }}.csv"}}
@@ -649,7 +645,7 @@ def test_computed_export_path_is_captured_and_traversal_is_rejected(services):
 def test_path_references_follow_rename_grouping_and_declaration_only_merge():
     project = bundle()
     project["templates"]["consumer"] = (
-        "-- @kind source\n-- @param file: file\n-- @output result\nSELECT * FROM read_csv({{ file }});"
+        "-- @param file: file\n-- @output result\nSELECT * FROM read_csv({{ file }});"
     )
     project["flow"]["nodes"][1]["params"] = {"file": "{{ var.report_date }}.csv"}
     renamed = variables.rename(project, "report_date", "day")

@@ -50,7 +50,7 @@ def bundle(path, code=CODE, variables=None):
             ],
         },
         "templates": {
-            "source": "-- @kind source\n-- @param file: file\n-- @output result\nSELECT * FROM read_csv({{ file }});",
+            "source": "-- @param file: file\n-- @output result\nSELECT * FROM read_csv({{ file }});",
         },
         "node_sql": {"nodes/checked.sql": code},
         "components": {},
@@ -235,7 +235,7 @@ def test_statistics_check_unique_values_exactly_and_skip_unbounded_histograms(tm
     try:
         # SUMMARIZE estimates 106 distinct values for these 107 identifiers.
         code = (
-            "-- @kind source\n-- @output result\n"
+            "-- @output result\n"
             "SELECT n AS id, CASE WHEN n = 1 THEN 2 ELSE n END AS almost,"
             " CASE WHEN n = 2 THEN 'nan'::DOUBLE ELSE n END AS ratio,"
             " CASE WHEN n = 4 THEN DATE 'infinity' ELSE DATE '2026-01-01' + n::INTEGER END AS until"

@@ -205,7 +205,7 @@ def environment_pipeline(client, worktree):
     path = f"/api/worktrees/{worktree}"
     snapshot = client.get(path).json()
     bundle = snapshot["bundle"]
-    bundle["templates"]["source"] = "-- @kind source\n-- @output result\nSELECT 42 AS value;"
+    bundle["templates"]["source"] = "-- @output result\nSELECT 42 AS value;"
     bundle["templates"]["export_csv"] = BUILTINS["export_csv"]
     bundle["flow"]["nodes"] = [
         {"id": "source", "template": "source", "params": {}},
@@ -394,7 +394,7 @@ def executed_projects(app, client):
         path = f"/api/worktrees/{worktree['id']}"
         snapshot = client.get(path).json()
         bundle = snapshot["bundle"]
-        bundle["templates"]["source"] = "-- @kind source\n-- @output result\nSELECT 42 AS value;"
+        bundle["templates"]["source"] = "-- @output result\nSELECT 42 AS value;"
         bundle["templates"]["double"] = (
             "-- @input source\n-- @output result\nSELECT value * 2 AS value FROM {{ source }};"
         )

@@ -59,9 +59,9 @@ def bundle():
             ],
         },
         "templates": {
-            "keys": "-- @kind source\n-- @output result\nSELECT 'a' AS batch, 'one' AS task UNION ALL SELECT 'b', 'two';",
-            "source": "-- @kind source\n-- @output result\nSELECT * FROM (VALUES ('a', 1), ('a', 1), ('b', 2)) t(batch, amount);",
-            "lookup": "-- @kind source\n-- @output result\nSELECT 10 AS rate;",
+            "keys": "-- @output result\nSELECT 'a' AS batch, 'one' AS task UNION ALL SELECT 'b', 'two';",
+            "source": "-- @output result\nSELECT * FROM (VALUES ('a', 1), ('a', 1), ('b', 2)) t(batch, amount);",
+            "lookup": "-- @output result\nSELECT 10 AS rate;",
             "transform": "-- @input data\n-- @input lookup\n-- @param value: expression\n-- @output result\nSELECT d.amount * l.rate AS amount, {{ value }} AS task FROM {{ data }} d CROSS JOIN {{ lookup }} l;",
             "collect": "-- @input data\n-- @output result\nSELECT * FROM {{ data }};",
         },

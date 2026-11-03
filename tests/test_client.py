@@ -89,7 +89,7 @@ def flow(project, *nodes):
 
 
 def source(sql):
-    return f"-- @kind source\n-- @output result\n{sql}"
+    return f"-- @output result\n{sql}"
 
 
 def only_run(app):

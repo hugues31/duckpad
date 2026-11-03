@@ -13,7 +13,7 @@ from duckpad.services import Services
 def bundle(query="SELECT current_setting('threads') AS threads, current_setting('memory_limit') AS memory"):
     return {
         "flow": {"nodes": [{"id": "source", "template": "source", "params": {}}], "edges": []},
-        "templates": {"source": "-- @kind source\n-- @output result\n" + query + ";"},
+        "templates": {"source": "-- @output result\n" + query + ";"},
         "components": {},
         "documentation": {},
     }

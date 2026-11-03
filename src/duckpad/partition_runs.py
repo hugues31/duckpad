@@ -151,7 +151,7 @@ class PartitionRun:
         """Resolve all file destinations against the whole manifest before any export."""
         execution = self.execution
         destinations = {}
-        if not any(execution.nodes[k]["parsed"]["kind"] == "export" for k in self.partitioned):
+        if not any(execution.nodes[k]["parsed"]["writes_external"] for k in self.partitioned):
             return
         for entry in self.entries:
             nodes, _, _ = expand_for(
@@ -159,7 +159,7 @@ class PartitionRun:
             )
             for key in self.partitioned:
                 node = nodes[key]
-                if node["parsed"]["kind"] != "export" or node.get("error"):
+                if not node["parsed"]["writes_external"] or node.get("error"):
                     continue
                 statements = compile_template(
                     node["parsed"],
@@ -310,7 +310,7 @@ class PartitionRun:
             for key in unit:
                 state = {
                     "status": "canceled" if self.execution.canceled else "not_started",
-                    "kind": self.execution.nodes[key]["parsed"]["kind"],
+                    "writes_external": self.execution.nodes[key]["parsed"]["writes_external"],
                     "run": self.root["id"],
                 }
                 self.attempt_states.setdefault(entry["partition_id"], {})[key] = state["status"]
@@ -342,7 +342,7 @@ class PartitionRun:
                     old = result.get("success", {})
                     if (
                         self.selection["mode"] != "all"
-                        and execution.nodes[key]["parsed"]["kind"] == "export"
+                        and execution.nodes[key]["parsed"]["writes_external"]
                         and result.get("attempt", {}).get("status") == "success"
                         and old.get("fingerprint") == execution.fingerprints[key]
                     ):
@@ -415,7 +415,7 @@ class PartitionRun:
             **{
                 key: {
                     "status": "pending",
-                    "kind": nodes[key]["parsed"]["kind"],
+                    "writes_external": nodes[key]["parsed"]["writes_external"],
                     "label": nodes[key].get("label", key),
                     "fingerprint": fingerprints[key],
                     "results": [],
@@ -586,7 +586,7 @@ class PartitionRun:
         try:
             for key in unit:
                 node = execution.nodes[key]
-                if node["parsed"]["kind"] == "export":
+                if node["parsed"]["writes_external"]:
                     self.root["nodes"][key].update(
                         status="success", skipped=True, reason="Empty partition manifest"
                     )

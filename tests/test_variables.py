@@ -26,7 +26,7 @@ ORDERS = (
     "(3, 'refunded', 1000, DATE '2026-11-01')) AS orders(id, status, amount, day);"
 )
 TEMPLATES = {
-    "orders": "-- @kind source\n-- @output result\n" + ORDERS,
+    "orders": "-- @output result\n" + ORDERS,
     "minimum": "-- @input source\n-- @param threshold: number = 0\n-- @output result\n"
     "SELECT * FROM {{ source }} WHERE amount >= {{ threshold }};",
     "status": '-- @input source\n-- @param status: text = "paid"\n-- @output result\n'
@@ -509,9 +509,7 @@ def test_renames_descriptions_and_promoted_literals_keep_results_valid(services,
 def test_a_launch_uses_the_values_of_its_captured_commit(services):
     store, projects, catalog, engine = services
     bundle = project_bundle()
-    bundle["templates"]["orders"] = (
-        '-- @kind source\n-- @param connection: connection = "files"\n-- @output result\n' + ORDERS
-    )
+    bundle["templates"]["orders"] = '-- @param connection: connection = "files"\n-- @output result\n' + ORDERS
     catalog.save(
         "connection",
         {"id": "files", "name": "Files", "connector": "folder", "environments": {"prod": {"root": ""}}},

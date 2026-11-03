@@ -187,8 +187,7 @@ SELECT * FROM {{{{ result }}}} WHERE amount IS NULL;
 
 def test_normal_node_retains_every_test_beyond_message_limit(services):
     store, projects, _, _ = services
-    sql = """-- @kind source
--- @output result
+    sql = """-- @output result
 SELECT range AS id, 'row-contents-must-not-be-retained' AS private_value FROM range(105);
 -- @message
 SELECT 'warning' AS level, 'Warning' AS message FROM {{ result }};
@@ -247,9 +246,8 @@ def test_isolated_export_cancel_and_persisted_history_api(tmp_path):
             "components": {},
             "documentation": {},
             "node_sql": {
-                "nodes/source.sql": "-- @kind source\n-- @output result\nSELECT 1 AS id;",
-                "nodes/export.sql": """-- @kind export
--- @input source
+                "nodes/source.sql": "-- @output result\nSELECT 1 AS id;",
+                "nodes/export.sql": """-- @input source
 -- @param destination: destination = "tested.csv"
 COPY {{ source }} TO {{ destination }} (FORMAT CSV, HEADER true);
 -- @test valid

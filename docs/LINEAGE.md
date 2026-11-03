@@ -12,6 +12,8 @@ Pan and zoom to explore the graph. Automatic tracing has a request budget; an un
 
 ![Five source amounts and the sum they contribute to, with pagination for all 27 values](images/lineage.png)
 
+An output whose query reads an external resource, or no flow data at all, is a lineage source: explanations stop at its rows and never reread the resource. To trace a calculation through external rows joined with an input, load them into an earlier output first.
+
 ## Validated baseline
 
 | Construct | Status | Behavior |

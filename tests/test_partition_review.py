@@ -133,7 +133,7 @@ def test_graph_expansions_grow_linearly_for_run_and_validity_reads(services, mon
     for size in (10, 30):
         project = bundle()
         project["templates"]["keys"] = (
-            f"-- @kind source\n-- @output result\nSELECT i::VARCHAR batch, 'task' task FROM range({size}) t(i);"
+            f"-- @output result\nSELECT i::VARCHAR batch, 'task' task FROM range({size}) t(i);"
         )
         worktree = projects.create("Linear fingerprints", project)["id"]
         calls = []

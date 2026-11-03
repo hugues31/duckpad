@@ -131,7 +131,7 @@ export default function ResultsPanel({
   const ports = signature.outputs;
   const exportNode = signature.kind === "export";
   const tabs = RESULT_TABS.filter(
-    (key) => !exportNode || key === "tests" || key === "log",
+    (key) => ports.length > 0 || key === "tests" || key === "log",
   );
   const shown = tabs.includes(tab) ? tab : tabs[tabs.length - 1];
   const [target, setTarget] = useState<ResultsTarget>({
@@ -268,7 +268,7 @@ export default function ResultsPanel({
         <div className="results-identity">
           <Table2 size={15} aria-hidden="true" />
           <strong title={label}>{label}</strong>
-          {!exportNode && (ports.length > 1 || inputs.length > 0) && (
+          {ports.length > 0 && (ports.length > 1 || inputs.length > 0) && (
             <DatasetPicker
               target={target}
               ports={ports.map((port) => ({
@@ -283,7 +283,7 @@ export default function ResultsPanel({
               onSelect={showDataset}
             />
           )}
-          {!exportNode && ports.length === 1 && !inputs.length && (
+          {ports.length === 1 && !inputs.length && (
             <span className="results-port">{ports[0]}</span>
           )}
           {running ? (

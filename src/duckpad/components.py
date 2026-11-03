@@ -103,7 +103,7 @@ def expand(bundle, tolerant=False):
                     )
                 # Keep the node and its known ports so its error is shown in place.
                 template = {
-                    "kind": "transform",
+                    "writes_external": False,
                     "inputs": sorted(inputs),
                     "outputs": sorted(outputs),
                     "parameters": [],
