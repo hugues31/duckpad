@@ -7,6 +7,7 @@ from .bundle import files_to_bundle
 from .components import expand
 from .graph import reachable
 from .node_code import code_path
+from .node_names import node_name
 from .templates import DESCRIPTIVE, directives, executable_sql
 from .util import Problem
 
@@ -42,13 +43,16 @@ def entities(bundle):
                     code_path(key, scope.removeprefix("component/") or None), ""
                 )
             )
-            name = label(node, label(definition, key))
+            name = node_name(bundle, key, scope.removeprefix("component/") or None)
             if not node.get("template") and not node.get("component"):
                 node = {**node, "sql": definition}
             node_file = code_path(key, scope.removeprefix("component/") or None) if "sql" in node else file
             add(f"{scope + '/' if scope else ''}node/{key}", "node", name, node, node_file, scope)
         for edge in value.get("edges", []):
-            name = f"{label(nodes.get(edge['source'], {}), edge['source'])} → {label(nodes.get(edge['target'], {}), edge['target'])}"
+            parent = scope.removeprefix("component/") or None
+            name = (
+                f"{node_name(bundle, edge['source'], parent)} → {node_name(bundle, edge['target'], parent)}"
+            )
             add(f"{scope + '/' if scope else ''}edge/{edge['id']}", "edge", name, edge, file, scope)
 
     graph(bundle["flow"], "flow.json")
@@ -82,13 +86,7 @@ def entities(bundle):
         add(f"file/{views.FILE}", "file", views.FILE, shared, views.FILE)
 
     def instance_name(identity):
-        graph = bundle["flow"]
-        names = []
-        for part in identity.split("::"):
-            node = next((n for n in graph.get("nodes", []) if n["id"] == part), {})
-            names.append(label(node, part))
-            graph = bundle["components"].get(node.get("component"), {})
-        return " / ".join(names)
+        return node_name(bundle, identity)
 
     for section, values in sorted(bundle["documentation"].items()):
         if isinstance(values, dict):
@@ -199,6 +197,7 @@ def potential_impact(before, after):
                 not in (
                     "position",
                     "label",
+                    "display_name",
                     "name",
                     "description",
                     "documentation",

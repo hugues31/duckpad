@@ -1,3 +1,4 @@
+import { displayNodeName, type NodeNames } from "./nodeNames";
 import { useOptionalWorktree } from "./worktree";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -205,6 +206,7 @@ function PipelineNode({ id, data, selected }: NodeProps<PipelineNode>) {
 }
 const nodeTypes = { pipeline: PipelineNode };
 interface CanvasProps {
+  names?: NodeNames;
   readOnly?: boolean;
   nodes: FlowNode[];
   edges: FlowEdge[];
@@ -361,7 +363,11 @@ function CanvasInner(props: CanvasProps) {
             valueProducer: props.valueProducers?.includes(
               props.prefix + node.id,
             ),
-            label: nodeLabel(node, signature, t),
+            label: displayNodeName(
+              props.names?.[props.prefix + node.id]?.slice(-1),
+              nodeLabel(node, signature, t),
+              t,
+            ),
             kind,
             inputs,
             outputs,
@@ -387,6 +393,7 @@ function CanvasInner(props: CanvasProps) {
       props.nodes,
       props.valueProducers,
       props.parsed,
+      props.names,
       props.local,
       props.components,
       props.statuses,

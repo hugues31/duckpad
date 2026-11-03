@@ -1,3 +1,4 @@
+import { nodeConflictLabel, type NodeNames } from "./nodeNames";
 import type { Translate } from "./i18n";
 import type {
   Bundle,
@@ -240,7 +241,13 @@ export const fill = (text: string, values: Record<string, string | number>) =>
   );
 
 /** A merge path inside variables.json, named after its variable and field, else null. */
-export function conflictLabel(path: string, t: Translate) {
+export function conflictLabel(
+  path: string,
+  t: Translate,
+  names: NodeNames = {},
+) {
+  const node = nodeConflictLabel(path, names, t);
+  if (node) return node;
   const prefix = VARIABLES_FILE + "/";
   if (!path.startsWith(prefix)) return null;
   const [name, field, environment] = path

@@ -73,8 +73,9 @@ export default function GitReviewTab({
           {review.conflicts.map((conflict) => (
             <fieldset className="git-conflict" key={conflict.path}>
               <legend>
-                {conflictLabel(conflict.path, t) ?? conflict.path}
-                {conflictLabel(conflict.path, t) && (
+                {conflictLabel(conflict.path, t, review.node_names) ??
+                  conflict.path}
+                {conflictLabel(conflict.path, t, review.node_names) && (
                   <code className="muted">{conflict.path}</code>
                 )}
               </legend>

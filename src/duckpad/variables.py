@@ -17,6 +17,7 @@ import math
 import re
 from collections.abc import Iterable
 
+from .node_names import node_name, node_name_parts
 from .templates import VARIABLE_REFERENCE, base_type, directives, is_date, parse_parameter, type_argument
 from .types import Record
 from .util import Problem, dumps
@@ -674,7 +675,11 @@ def usages(bundle):
     """Variable name -> the root flow node parameters bound to it or referencing it in their text."""
     result: dict[str, list[Record]] = {}
     for node in bundle["flow"].get("nodes", []):
-        usage = {"node": node["id"], "label": node.get("label") or node["id"]}
+        usage = {
+            "node": node["id"],
+            "label": node_name(bundle, node["id"]),
+            "name": node_name_parts(bundle, node["id"]),
+        }
         for param, name in sorted(references(node.get("params")).items()):
             result.setdefault(name, []).append({**usage, "param": param})
         for param, names in sorted(referenced(node.get("params")).items()):

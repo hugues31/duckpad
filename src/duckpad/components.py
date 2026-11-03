@@ -4,6 +4,7 @@ import copy
 
 from . import partitions, variables, views
 from .node_code import code_path, node_sql
+from .node_names import node_name
 from .templates import IDENTIFIER, directives, parse_template
 from .util import Problem, uid
 
@@ -32,6 +33,7 @@ def expand(bundle, tolerant=False):
             **copy.deepcopy(node),
             "id": key,
             "root": key.split("::")[0],
+            "display_name": node_name(bundle, key),
             "parsed": template,
             "template_sql": text,
             **({"error": error} if error else {}),
@@ -139,12 +141,14 @@ def expand(bundle, tolerant=False):
         for edge in edges:
             port = (edge["target"], edge["targetHandle"])
             if port in occupied:
-                nodes[edge["target"]]["error"] = f"Input {port} has more than one source"
+                nodes[edge["target"]]["error"] = (
+                    f"Input {nodes[edge['target']]['display_name']}.{port[1]} has more than one source"
+                )
             occupied.add(port)
         for key, node in nodes.items():
             for port in node["parsed"]["inputs"]:
                 if (key, port) not in occupied:
-                    node["error"] = f"Connect input {port} on {node.get('label', key)}"
+                    node["error"] = f"Connect input {port} on {node['display_name']}"
     return nodes, edges, boundaries
 
 

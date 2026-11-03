@@ -431,7 +431,10 @@ function ConflictDialog({
         <p>{t("conflictHint")}</p>
         <pre className="expression">
           {conflict.paths
-            .map((path: string) => conflictLabel(path, t) || path)
+            .map(
+              (path: string) =>
+                conflictLabel(path, t, conflict.node_names) || path,
+            )
             .join("\n")}
         </pre>
         <div className="conflict-comparison">

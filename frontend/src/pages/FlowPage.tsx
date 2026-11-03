@@ -443,6 +443,7 @@ export default function FlowPage() {
             nodes={graph.nodes}
             edges={graph.edges}
             parsed={snapshot.parsed_templates}
+            names={snapshot.node_names}
             local={local}
             components={bundle.components}
             excludedComponents={path.map((part) => part.definition)}

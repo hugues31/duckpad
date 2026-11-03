@@ -238,6 +238,9 @@ test("review and resolve a field conflict with base evidence, reject stale heads
   await expect(
     dialog.getByText("flow.json/nodes/revenue/params/minimum", { exact: true }),
   ).toBeVisible();
+  await expect(dialog.locator(".git-conflict legend")).toContainText(
+    "Regional revenue · minimum",
+  );
   await expect(
     dialog.getByRole("button", { name: "Apply reviewed merge" }),
   ).toBeDisabled();

@@ -16,7 +16,7 @@ from typing import Literal, Unpack, cast, overload
 
 from . import views
 from .builtin_templates import BUILTINS
-from .bundle import ROOT_FILES, bundle_to_files, files_to_bundle, is_declarative
+from .bundle import ROOT_FILES, bundle_to_files, file_node_names, files_to_bundle, is_declarative
 from .comparison import commit_message
 from .components import expand, reconcile_documentation
 from .git import command
@@ -26,6 +26,7 @@ from .git.remote import Remotes
 from .git.workspace import GitWorkspace, diagnose, require_valid
 from .merge import merge_files
 from .node_code import owned_paths
+from .node_names import node_names
 from .store import Store
 from .templates import parse_template
 from .types import Files, Record
@@ -403,9 +404,10 @@ class Projects:
             "revision": revision,
             "commit": commit,
             "bundle": bundle,
+            "node_names": node_names(bundle),
             "files": files,
             "diagnostics": errors,
-            "conflicts": self.store.conflicts(worktree_id),
+            "conflicts": [self.conflict(item["id"]) for item in self.store.conflicts(worktree_id)],
         }
 
     def base(self, worktree: Record, revision: str, current: Files) -> Files | None:
@@ -471,7 +473,11 @@ class Projects:
                     "assistant": assistant,
                 }
                 self.store.put("conflict", conflict["id"], conflict)
-                raise Problem("Concurrent edits conflict. Both versions have been retained.", 409, conflict)
+                raise Problem(
+                    "Concurrent edits conflict. Both versions have been retained.",
+                    409,
+                    self.conflict(conflict["id"]),
+                )
             if validate:
                 # Problems already saved, such as an input not connected yet, do not block the change.
                 require_valid(merged, "The proposed changes are invalid", baseline=current)
@@ -540,7 +546,12 @@ class Projects:
         conflict = self.store.get("conflict", conflict_id)
         if not conflict:
             raise Problem("Conflict not found", 404)
-        return cast(Record, conflict)
+        return {
+            **cast(Record, conflict),
+            "node_names": file_node_names(
+                conflict.get("base", {}), conflict["proposal"], conflict["current"]
+            ),
+        }
 
     def resolve(self, conflict_id: str, choice: str, files: Files | None = None) -> Record:
         with self.locked(self.conflict(conflict_id)["worktree"]):
