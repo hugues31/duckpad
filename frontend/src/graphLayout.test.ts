@@ -45,6 +45,14 @@ describe("findNodePosition", () => {
     expectFree(findNodePosition(nodes), nodes);
   });
 
+  it("uses the measured size of nodes smaller than a new node", () => {
+    expect(
+      findNodePosition([node("small", 0, 0, 100, 100)], {
+        visible: { x: 0, y: 0, width: 320, height: 200 },
+      }),
+    ).toEqual({ x: 140, y: 0 });
+  });
+
   it("reserves room for nodes that have not been measured yet", () => {
     const existing = { id: "pending", position: { x: 160, y: 120 } };
     expectFree(findNodePosition([existing]), [node("pending", 160, 120)]);

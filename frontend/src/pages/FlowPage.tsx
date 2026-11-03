@@ -9,7 +9,7 @@ import {
   type CSSProperties,
 } from "react";
 import { useLocation, useOutletContext } from "react-router";
-import Canvas, { type CanvasHandle } from "../Canvas";
+import Canvas, { type CanvasHandle, type FocusRequest } from "../Canvas";
 import { findNodePosition } from "../graphLayout";
 import CanvasHeader from "../CanvasHeader";
 import { noticeCount } from "../FlowToolbar";
@@ -136,10 +136,7 @@ export default function FlowPage() {
     setResultsTab(tab);
     panels.set({ preview: true });
   };
-  const [focusRequest, setFocusRequest] = useState<{
-    id: string;
-    key: string;
-  } | null>(null);
+  const [focusRequest, setFocusRequest] = useState<FocusRequest | null>(null);
   const bundle = snapshot.bundle;
   const declared = snapshot.variables?.declarations;
   const valueProducers = useMemo(
@@ -292,7 +289,8 @@ export default function FlowPage() {
         );
     });
     select(created.id);
-    if (!position) setFocusRequest({ id: created.id, key: created.id });
+    if (!position)
+      setFocusRequest({ id: created.id, key: created.id, reveal: true });
   }
   async function removeNodes(ids: string[], edges: string[] = []) {
     await save(snapshot, (value) => {

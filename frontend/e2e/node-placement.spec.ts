@@ -104,6 +104,14 @@ test("repeated Northstar palette additions avoid existing bounds after pan and z
   );
   await page.mouse.up();
   await page.getByRole("button", { name: "Zoom in", exact: true }).click();
+  const zoom = () =>
+    page
+      .locator(".react-flow__viewport")
+      .evaluate(
+        (element) => new DOMMatrix(getComputedStyle(element).transform).a,
+      );
+  await expect.poll(zoom).not.toBeCloseTo(1, 2);
+  const chosen = await zoom();
   for (const label of [
     "New SQL node",
     "Filter",
@@ -114,5 +122,7 @@ test("repeated Northstar palette additions avoid existing bounds after pan and z
   ]) {
     await addNode(page, label);
     await expectNoOverlap(page);
+    // Revealing a new node pans the canvas but keeps the user's zoom.
+    expect(await zoom()).toBeCloseTo(chosen, 3);
   }
 });

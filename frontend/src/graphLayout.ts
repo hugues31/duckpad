@@ -16,8 +16,8 @@ export function findNodePosition(
   const bounds = nodes.map((node) => ({
     id: node.id,
     ...node.position,
-    width: Math.max(width, node.measured?.width ?? 0),
-    height: Math.max(height, node.measured?.height ?? 0),
+    width: node.measured?.width ?? width,
+    height: node.measured?.height ?? height,
   }));
   const anchor = bounds.find((node) => node.id === selected);
   const preferred = anchor
