@@ -79,12 +79,15 @@ def process_limits():
 
 def restore_limits(limits):
     """Whether every limit is back; a lowered hard limit cannot be raised again."""
+    module = resource
+    if module is None:
+        return True
     restored = True
     for name, value in limits.items():
-        limit = getattr(resource, name)
-        if resource.getrlimit(limit) != value:
+        limit = getattr(module, name)
+        if module.getrlimit(limit) != value:
             try:
-                resource.setrlimit(limit, value)
+                module.setrlimit(limit, value)
             except (OSError, ValueError):
                 restored = False
     return restored
@@ -185,10 +188,10 @@ def execute(cursor, payload):
                 )
             output["messages"] = instance._messages
             output["artifacts"] = instance._artifacts
-    except BaseException:
+    except BaseException as error:
         for table in created:
             db.execute(f"DROP TABLE IF EXISTS {qi(table)}")
-        _, error, frames = sys.exc_info()
+        frames = error.__traceback__
         if isinstance(error, MemoryError):
             output["restart"] = True
         # Start at the user's code: the worker's own calling frames are not actionable.
