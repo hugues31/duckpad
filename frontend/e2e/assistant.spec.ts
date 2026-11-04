@@ -15,6 +15,95 @@ test.afterEach(async ({ page }) => {
   });
 });
 
+test("search shortcuts work with the floating assistant and respect its modal and input states", async ({
+  page,
+}) => {
+  await signIn(page);
+  const configured = await page.request.put("/api/assistant/settings", {
+    data: {
+      enabled: true,
+      providers: [
+        {
+          id: "primary",
+          kind: "deepseek",
+          api_key: "browser-test-key",
+          models: ["test"],
+        },
+      ],
+      default_provider: "primary",
+      default_model: "test",
+    },
+  });
+  expect(configured.ok()).toBeTruthy();
+  const response = await page.request.post("/api/example", { data: {} });
+  expect(response.ok()).toBeTruthy();
+  const { id } = await response.json();
+  await page.goto(`/worktrees/${id}/flow`);
+  await page
+    .getByRole("button", { name: "Open AI assistant", exact: true })
+    .click();
+  const chat = page.getByRole("dialog", { name: "AI assistant", exact: true });
+  const search = page.getByRole("combobox", { name: "Find a node…" });
+  const global = page.getByRole("button", {
+    name: "Search instance",
+    exact: true,
+  });
+  const message = chat.getByRole("textbox", { name: "Message", exact: true });
+  await message.fill("Keep this draft");
+  await expect(chat).toHaveAttribute("aria-modal", "false");
+
+  for (const modifier of ["Control", "Meta"]) {
+    await page.getByRole("link", { name: "Flow", exact: true }).focus();
+    await page.keyboard.press(`${modifier}+f`);
+    await expect(search).toBeFocused();
+    await search.fill("premium");
+    await search.press("Enter");
+    await expect(
+      page.locator('.react-flow__node[data-id="premium"]'),
+    ).toHaveClass(/selected/);
+    await expect(chat).toBeVisible();
+
+    await global.focus();
+    await page.keyboard.press(`${modifier}+k`);
+    const dialog = page.getByRole("dialog", {
+      name: "Search instance",
+      exact: true,
+    });
+    await expect(dialog.getByRole("combobox")).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(
+      dialog.getByRole("button", { name: "Close", exact: true }),
+    ).toBeFocused();
+    await page.keyboard.press("Shift+Tab");
+    await expect(dialog.getByRole("combobox")).toBeFocused();
+    await page.keyboard.press(`${modifier}+f`);
+    await expect(search).not.toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(dialog).toHaveCount(0);
+
+    await message.focus();
+    await page.keyboard.press(`${modifier}+f`);
+    await page.keyboard.press(`${modifier}+k`);
+    await expect(message).toBeFocused();
+    await expect(message).toHaveValue("Keep this draft");
+    await expect(dialog).toHaveCount(0);
+
+    await chat.getByRole("button", { name: "Maximize assistant" }).click();
+    await expect(chat).toHaveAttribute("aria-modal", "true");
+    const minimize = chat.getByRole("button", { name: "Minimize assistant" });
+    await minimize.focus();
+    await page.keyboard.press(`${modifier}+f`);
+    await page.keyboard.press(`${modifier}+k`);
+    await expect(minimize).toBeFocused();
+    await expect(dialog).toHaveCount(0);
+    await minimize.click();
+    await expect(chat).toHaveAttribute("aria-modal", "false");
+    await page.getByRole("link", { name: "Flow", exact: true }).focus();
+    await page.keyboard.press(`${modifier}+f`);
+    await expect(search).toBeFocused();
+  }
+});
+
 test("consult Duckpad syntax and manage variable deletion and inheritance", async ({
   page,
 }) => {

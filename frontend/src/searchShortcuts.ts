@@ -3,7 +3,7 @@ import { useEffect } from "react";
 export const searchShortcutLabel = (key: string) =>
   `${/Mac|iPhone|iPad/.test(navigator.platform) ? "⌘" : "Ctrl+"}${key.toUpperCase()}`;
 
-/** Search shortcuts yield to editors, form fields and open dialogs. */
+/** Search shortcuts yield to editors, form fields and blocking dialogs. */
 export function useSearchShortcut(
   key: "f" | "k" | undefined,
   onShortcut: () => void,
@@ -20,7 +20,9 @@ export function useSearchShortcut(
         !(event.ctrlKey || event.metaKey) ||
         event.key.toLowerCase() !== key ||
         Array.from(
-          document.querySelectorAll('[role="dialog"], [role="alertdialog"]'),
+          document.querySelectorAll(
+            '[role="dialog"]:not([aria-modal="false"]), [role="alertdialog"]',
+          ),
         ).some((dialog) => dialog.getClientRects().length > 0)
       )
         return;
