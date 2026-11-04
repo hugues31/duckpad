@@ -569,13 +569,25 @@ class Projects:
                         evidence=[],
                     )
                 conflict.update(current=snapshot["files"], revision=snapshot["revision"])
+                _, conflict["paths"] = merge_files(
+                    conflict["base"], conflict["current"], conflict["proposal"]
+                )
                 self.store.put("conflict", conflict_id, conflict)
                 raise Problem(
                     "Files changed again. Review the refreshed conflict before resolving.", 409, conflict
                 )
-            proposal = {"current": conflict["current"], "proposal": conflict["proposal"]}.get(choice, files)
-            if proposal is None:
+            if choice not in ("current", "proposal", "combined"):
+                raise Problem("Choose current, proposal or combined")
+            if choice == "combined" and files is None:
                 raise Problem("Combined file contents are required")
+            proposal, _ = merge_files(
+                conflict["base"],
+                conflict["current"],
+                conflict["proposal"],
+                choices=dict.fromkeys(conflict["paths"], "incoming" if choice == "proposal" else choice),
+                evidence=[],
+                resolutions=files if choice == "combined" else None,
+            )
             result = self.write(
                 conflict["worktree"],
                 snapshot["revision"],

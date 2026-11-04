@@ -157,6 +157,98 @@ def test_conflict_survives_service_restart_and_refreshes_on_new_external_edit(se
     assert resolved["bundle"]["flow"]["nodes"][1]["params"]["threshold"] == 20
 
 
+@pytest.mark.parametrize("choice", ["current", "proposal", "combined"])
+@pytest.mark.parametrize("conflicting_file", ["nodes/report.sql", "flow.json"])
+@pytest.mark.parametrize("refresh", [False, True])
+def test_ui_resolution_preserves_independent_edits(services, choice, conflicting_file, refresh):
+    store, projects, _, _ = services
+    sql = '-- @param status: text = "paid"\n-- @output result\nSELECT {{ status }} AS status;\n'
+    worktree = projects.create(
+        "Resolution",
+        {
+            "flow": {"nodes": [{"id": "report", "params": {"status": "paid"}}], "edges": []},
+            "node_sql": {"nodes/report.sql": sql},
+            "templates": {"obsolete": "SELECT 1;"},
+        },
+    )["id"]
+    initial = projects.snapshot(worktree)
+    incoming, current = copy.deepcopy(initial["bundle"]), copy.deepcopy(initial["bundle"])
+
+    def edit(bundle, version):
+        if conflicting_file.endswith(".sql"):
+            bundle["node_sql"][conflicting_file] = sql + f"-- {version}\n"
+        else:
+            bundle["flow"]["nodes"][0]["label"] = version
+
+    edit(incoming, "proposal")
+    incoming["flow"]["description"] = "Independent proposal field"
+    incoming["templates"]["incoming"] = "SELECT 2;"
+    edit(current, "current")
+    current["flow"]["nodes"][0]["params"]["status"] = "changed in tab B"
+    current["templates"].pop("obsolete")
+    current["templates"]["current"] = "SELECT 3;"
+    projects.write(worktree, initial["revision"], bundle_to_files(current))
+    with pytest.raises(Problem, match="Concurrent edits conflict"):
+        projects.write(worktree, initial["revision"], bundle_to_files(incoming))
+    conflict = projects.snapshot(worktree)["conflicts"][0]
+    expected_path = conflicting_file if conflicting_file.endswith(".sql") else "flow.json/nodes/report/label"
+    assert conflict["paths"] == [expected_path]
+    assert not conflict["assistant"]
+    combined = copy.deepcopy(incoming)
+    edit(combined, "combined")
+    # The combined editor contains a stale project, including unrelated edits or omissions.
+    combined["flow"]["description"] = "Must not replace the independent proposal"
+    combined["templates"] = {}
+    combined_files = bundle_to_files(combined)
+    if refresh:
+        snapshot = projects.snapshot(worktree)
+        latest = snapshot["bundle"]
+        edit(latest, "refreshed")
+        latest["flow"]["nodes"][0]["params"]["status"] = "changed again in tab B"
+        latest["documentation"]["project"] = "Later documentation"
+        projects.write(worktree, snapshot["revision"], bundle_to_files(latest))
+        with pytest.raises(Problem, match="Files changed again"):
+            projects.resolve(conflict["id"], choice, combined_files)
+        assert projects.snapshot(worktree)["files"] == bundle_to_files(latest)
+    # Resolution must also work after the in-memory revision caches are lost.
+    result = Projects(store).resolve(conflict["id"], choice, combined_files)
+    node = result["bundle"]["flow"]["nodes"][0]
+    version = "refreshed" if refresh and choice == "current" else choice
+    if conflicting_file.endswith(".sql"):
+        assert result["files"][conflicting_file] == sql + f"-- {version}\n"
+    else:
+        assert node["label"] == version
+    assert node["params"]["status"] == ("changed again in tab B" if refresh else "changed in tab B")
+    assert result["bundle"]["flow"]["description"] == "Independent proposal field"
+    assert result["bundle"]["templates"] == {"incoming": "SELECT 2;", "current": "SELECT 3;"}
+    if refresh:
+        assert result["files"]["README.md"] == "Later documentation"
+    assert result["conflicts"] == []
+
+
+def test_refreshed_ui_conflict_includes_new_conflicting_fields(services):
+    _, projects, _, _ = services
+    worktree = projects.create("Refresh")["id"]
+    initial = projects.snapshot(worktree)
+    incoming = copy.deepcopy(initial["bundle"])
+    incoming["flow"].update(name="Proposal", description="Proposal description")
+    current = initial["bundle"]
+    current["flow"]["name"] = "Current"
+    saved = projects.write(worktree, initial["revision"], bundle_to_files(current))
+    with pytest.raises(Problem, match="Concurrent edits conflict"):
+        projects.write(worktree, initial["revision"], bundle_to_files(incoming))
+    conflict = projects.snapshot(worktree)["conflicts"][0]
+    assert conflict["paths"] == ["flow.json/name"]
+    current["flow"]["description"] = "Later description"
+    projects.write(worktree, saved["revision"], bundle_to_files(current))
+    with pytest.raises(Problem, match="Files changed again"):
+        projects.resolve(conflict["id"], "proposal")
+    assert projects.conflict(conflict["id"])["paths"] == ["flow.json/description", "flow.json/name"]
+    result = projects.resolve(conflict["id"], "proposal")
+    assert result["bundle"]["flow"]["name"] == "Proposal"
+    assert result["bundle"]["flow"]["description"] == "Proposal description"
+
+
 def test_snapshots_record_no_revision_and_a_restarted_save_finds_its_base(services, tmp_path):
     store, projects, _, _ = services
     worktree = projects.create("Revisions", example_bundle(tmp_path / "input.csv"))
@@ -366,3 +458,39 @@ def test_lists_without_unique_string_ids_merge_as_whole_values(ids):
     merged, conflicts = merge_files(note_files(ids), current, note_files(ids, 1))
     assert conflicts == ["flow.json/notes"]
     assert merged == current
+
+
+@pytest.mark.parametrize("delete", [False, True])
+@pytest.mark.parametrize("name", ["README.md", "documentation.json", "flow.json", "views.json"])
+def test_combined_resolution_preserves_deletions_and_logical_paths(name, delete):
+    def content(value):
+        if name == "README.md":
+            return value
+        if name == "documentation.json":
+            return dumps({"nodes": {"nested/report~1": value}})
+        if name == "flow.json":
+            return dumps({"notes": [{"id": "second", "text": value}, {"id": "first", "text": "kept"}]})
+        return dumps({"report:result": [{"name": "My/view", "filter": value}]})
+
+    base, current, proposal = ({name: content(value)} for value in ("base", "current", "proposal"))
+    current["templates/current.sql"] = "SELECT 1;"
+    proposal["templates/proposal.sql"] = "SELECT 2;"
+    _, paths = merge_files(base, current, proposal)
+    combined = {} if delete else {name: content("combined")}
+    merged, conflicts = merge_files(base, current, proposal, dict.fromkeys(paths, "combined"), [], combined)
+    assert not conflicts
+    assert merged["templates/current.sql"] == "SELECT 1;"
+    assert merged["templates/proposal.sql"] == "SELECT 2;"
+    if not delete:
+        assert merged[name] == content("combined")
+    elif name == "README.md":
+        assert name not in merged
+    elif name == "documentation.json":
+        assert json.loads(merged[name]) == {"nodes": {}}
+    elif name == "flow.json":
+        assert json.loads(merged[name])["notes"] == [
+            {"id": "second"},
+            {"id": "first", "text": "kept"},
+        ]
+    else:
+        assert json.loads(merged[name]) == {"report:result": [{"name": "My/view"}]}
