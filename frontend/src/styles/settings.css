@@ -140,6 +140,10 @@
   margin-bottom: 24px;
 }
 
+.project-settings .settings-content > .settings-card + .settings-card {
+  margin-top: 24px;
+}
+
 .project-settings-grid {
   display: grid;
   grid-template-columns: minmax(0, 2fr) minmax(300px, 1fr);

@@ -11,10 +11,24 @@ export async function verifyPython(page: Page) {
   const endpoint = `/api/worktrees/${worktree.id}`;
   const read = async (): Promise<Snapshot> =>
     (await page.request.get(endpoint)).json();
-  await page.goto(`/projects/${worktree.project}/settings`);
+  await page.goto(`/worktrees/${worktree.id}/flow`);
+  await expect(
+    page.getByRole("button", { name: "New Python node", exact: true }),
+  ).toBeDisabled();
+  await page.goto(`/projects/${worktree.project}/settings/python`);
+  await expect(
+    page.getByRole("checkbox", { name: /Allow dependency source builds/ }),
+  ).toBeDisabled();
+  await expect(
+    page.getByText(/access to the secrets of all authorized/),
+  ).toBeVisible();
   await page
     .getByLabel("Enable Python in this project", { exact: true })
     .click();
+  await expect(
+    page.getByRole("button", { name: "Save changes", exact: true }),
+  ).toBeEnabled();
+  await page.getByRole("button", { name: "Save changes", exact: true }).click();
   await expect
     .poll(
       async () =>
@@ -129,16 +143,31 @@ class Filter(dp.Node):
     "captured parent results",
   );
   const parent = page.locator(".lineage-dialog details").first();
-  await parent.getByRole("button", { name: "0", exact: true }).click();
+  await parent
+    .getByRole("button", { name: "Trace x, row 1", exact: true })
+    .click();
   await expect(page.locator(".lineage-dialog .is-source")).toBeVisible();
   await page
     .locator(".lineage-dialog")
-    .getByTitle("Close", { exact: true })
+    .getByRole("button", { name: "Previous", exact: true })
     .click();
+  await expect(page.locator(".lineage-dialog")).toContainText(
+    "Opaque Python operation",
+  );
   await page
     .locator(".lineage-dialog")
     .getByTitle("Close", { exact: true })
     .click();
+  await page.getByRole("tab", { name: "Log", exact: true }).click();
+  await expect(page.locator(".log-timeline")).toContainText(
+    "Python acceptance ran",
+  );
+  await expect(
+    page
+      .getByRole("button", { name: /Download/ })
+      .or(page.getByRole("link", { name: /Download/ }))
+      .last(),
+  ).toBeVisible();
   const exportResult = await (
     await page.request.get(`${endpoint}/exports/${node.id}?environment=dev`)
   ).json();

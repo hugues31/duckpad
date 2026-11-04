@@ -111,6 +111,7 @@ function CalculationCard({ data }: NodeProps<CardNode>) {
       .join(" + ");
     formula = operation === "sum" ? values : `(${values}) / ${result.total}`;
   }
+  if (result.kind === "python") formula = t("pythonOpaque");
   const offset = query.offset || 0;
   return (
     <article
@@ -196,10 +197,12 @@ function CalculationCard({ data }: NodeProps<CardNode>) {
         >
           <strong>{t("pythonOpaque")}</strong>
           <p>{t("pythonParentHint")}</p>
+          <p className="muted small">{t("pythonCapturedParents")}</p>
           {result.parents?.map((parent) => (
             <details key={parent.dataset} open>
               <summary>
-                {parent.node} · {parent.port} · {parent.run}
+                {displayNodeName(names?.[parent.node], parent.node, t)} ·{" "}
+                {parent.port}
               </summary>
               <table>
                 <thead>
@@ -215,6 +218,10 @@ function CalculationCard({ data }: NodeProps<CardNode>) {
                       {row.values.map((value, index) => (
                         <td key={parent.columns[index].name}>
                           <button
+                            className="button secondary small"
+                            aria-label={t("pythonParentCell")
+                              .replace("{column}", parent.columns[index].name)
+                              .replace("{row}", String(row.row + 1))}
                             disabled={disabled}
                             onClick={() =>
                               data.parent({
@@ -301,11 +308,17 @@ function CalculationCard({ data }: NodeProps<CardNode>) {
           {!result.complete ? (
             <p className="lineage-card-warning">
               <AlertTriangle size={14} />
-              {t("lineageLimitedHint")}
+              {t(
+                result.kind === "python"
+                  ? "pythonParentHint"
+                  : "lineageLimitedHint",
+              )}
             </p>
           ) : (
             <p className="lineage-card-reason">
-              {query.group !== undefined ? (
+              {result.kind === "python" ? (
+                t("pythonParentHint")
+              ) : query.group !== undefined ? (
                 <>
                   {t("lineageRowsFor")}{" "}
                   <strong>{formatValue(result.group)}</strong>
@@ -427,11 +440,12 @@ function LineageExplorer(props: Props) {
       key={cellId(cell)}
       cell={cell}
       onParent={onParent}
-      onClose={() =>
+      onBack={
         parents.length
-          ? setParents((current) => current.slice(0, -1))
-          : props.onClose()
+          ? () => setParents((current) => current.slice(0, -1))
+          : undefined
       }
+      onClose={props.onClose}
     />
   );
 }
@@ -442,7 +456,8 @@ function LineageDialog({
   cell,
   onClose,
   onParent,
-}: Props & { onParent: (cell: Cell) => void }) {
+  onBack,
+}: Props & { onParent: (cell: Cell) => void; onBack?: () => void }) {
   const t = useT();
   const currentWorktree = useOptionalWorktree();
   const navigate = useNavigate();
@@ -650,6 +665,11 @@ function LineageDialog({
       }}
     >
       <header className="lineage-header">
+        {onBack && (
+          <button className="button secondary" onClick={onBack}>
+            {t("previous")}
+          </button>
+        )}
         <div>
           <h2 id={titleId}>{t("lineageDialogTitle")}</h2>
           <div className="lineage-selected">

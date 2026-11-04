@@ -116,7 +116,7 @@ export default function ResultsLog({
         <Info size={18} aria-hidden="true" />
         <div>
           <strong>{t("notRunHere")}</strong>
-          {exportNode && download ? (
+          {download ? (
             <ExportDownload
               key={`${worktree}:${environment}:${fullNode}`}
               worktree={worktree}
@@ -174,7 +174,7 @@ export default function ResultsLog({
         </>
       ),
       detail: `${output.count.toLocaleString()} ${t(output.count === 1 ? "row" : "rows")} · ${countLabel(t, output.columns.length, "logColumnsOne", "logColumns")}`,
-      aside: seconds(output.duration),
+      aside: output.duration == null ? undefined : seconds(output.duration),
     });
   for (const item of messages)
     entries.push({
@@ -377,7 +377,7 @@ export default function ResultsLog({
             );
           })}
         </ol>
-        {exportNode && (
+        {(exportNode || state.artifact) && (
           <section className="log-export">
             <h4>
               <Upload size={13} aria-hidden="true" /> {t("exportOutcome")}

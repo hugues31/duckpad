@@ -85,6 +85,15 @@ export default function ParameterField({
           {parameter.python_type === "int" || parameter.python_type === "float"
             ? parameter.python_type
             : base}
+          {[
+            ["≥", parameter.ge],
+            [">", parameter.gt],
+            ["≤", parameter.le],
+            ["<", parameter.lt],
+          ]
+            .filter(([, n]) => n !== undefined)
+            .map(([op, n]) => ` · ${op} ${n}`)
+            .join("")}
         </small>
       </span>
       {variable?.bound ? (
@@ -138,6 +147,12 @@ export default function ParameterField({
           id={id}
           kind={base}
           integer={parameter.python_type === "int"}
+          bounds={{
+            ge: parameter.ge,
+            le: parameter.le,
+            gt: parameter.gt,
+            lt: parameter.lt,
+          }}
           value={value}
           onChange={onChange}
           onBlur={onBlur}

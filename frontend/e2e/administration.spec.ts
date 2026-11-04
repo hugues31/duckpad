@@ -122,7 +122,7 @@ test("project settings keep unsaved connection grants until they are saved or di
   });
   expect(created.ok()).toBe(true);
   const { project } = await created.json();
-  await page.goto(`/projects/${project}/settings`);
+  await page.goto(`/projects/${project}/settings/connections`);
   const grant = page.getByRole("checkbox", {
     name: connectionName,
     exact: true,
@@ -138,18 +138,10 @@ test("project settings keep unsaved connection grants until they are saved or di
   await expect(save).toBeEnabled();
   await expect(unsaved).toBeVisible();
 
-  // Other changes reload the settings without resetting the selection.
-  await page.getByLabel(en.user, { exact: true }).selectOption(user.id);
-  await page
-    .getByRole("button", { name: en.addParticipant, exact: true })
-    .click();
-  const role = page.getByLabel(`${en.projectRole} · ${username}`, {
-    exact: true,
+  // Independent participant updates must not commit the unsaved connection selection.
+  await page.request.put(`/api/projects/${project}/members/${user.id}`, {
+    data: { role: "editor" },
   });
-  await expect(role).toHaveValue("reader");
-  await expect(grant).toBeChecked();
-  await role.selectOption("editor");
-  await expect(role).toHaveValue("editor");
   await expect(grant).toBeChecked();
   expect(await grantedConnections(page, project)).toEqual([]);
 
@@ -174,7 +166,9 @@ test("project settings keep unsaved connection grants until they are saved or di
   await confirmation
     .getByRole("button", { name: en.stayOnPage, exact: true })
     .click();
-  await expect(page).toHaveURL(new RegExp(`/projects/${project}/settings$`));
+  await expect(page).toHaveURL(
+    new RegExp(`/projects/${project}/settings/connections$`),
+  );
   await expect(grant).toBeChecked();
 
   await save.click();
@@ -194,11 +188,16 @@ test("project settings keep unsaved connection grants until they are saved or di
     .getByRole("button", { name: en.leavePage, exact: true })
     .click();
   await expect(page).toHaveURL(/\/projects$/);
-  await page.goto(`/projects/${project}/settings`);
+  await page.goto(`/projects/${project}/settings/connections`);
   await expect(grant).toBeChecked();
 
-  // Deleting the project drops its unsaved grants without asking.
+  // Section navigation guards unsaved grants before opening the general settings.
   await grant.uncheck();
+  await page.getByRole("link", { name: "General", exact: true }).click();
+  await expect(confirmation).toContainText(en.leavePageHint);
+  await confirmation
+    .getByRole("button", { name: en.leavePage, exact: true })
+    .click();
   await page
     .getByRole("button", { name: en.deleteProject, exact: true })
     .click();

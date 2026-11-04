@@ -48,7 +48,7 @@ export default function ConvertNodeDialog({
             );
             bundle.templates[id] =
               target.language === "python"
-                ? sql
+                ? `# @label ${name.trim().replace(/[\r\n]/g, " ")}\n${sql.replace(/^[\t ]*#[\t ]*@label\b[^\n]*(?:\n|$)/gm, "")}`
                 : `-- @label ${name.trim().replace(/[\r\n]/g, " ")}\n${sql}`;
             linkNode(bundle, target, id, parent);
           }

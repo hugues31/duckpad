@@ -43,6 +43,8 @@ export interface Parameter {
   description?: string;
   python_type?: string;
   ge?: number;
+  gt?: number;
+  lt?: number;
   le?: number;
   name: string;
   type: string;
@@ -178,6 +180,7 @@ export type Capability = "read" | "write";
 /** Databases are read as tables; file storage is a location for file nodes. */
 export type ConnectorFamily = "database" | "storage";
 export interface Snapshot {
+  python_enabled?: boolean;
   node_names?: NodeNames;
   partitions?: Record<string, PartitionDescription>;
   role: ProjectRole;
@@ -383,6 +386,7 @@ export interface TestExecution {
 }
 /** What a run did with one node. */
 export interface NodeRun {
+  artifact?: { name?: string };
   partitioned?: boolean;
   results?: ExecutionResult[];
   status: NodeRunStatus;

@@ -145,16 +145,19 @@ export default function CodePanel({
                 {t("pythonHelperModule")}
               </label>
               <input
+                pattern="[A-Za-z_][A-Za-z0-9_]*(/[A-Za-z_][A-Za-z0-9_]*)*"
+                title={t("pythonModuleNameHint")}
                 id="python-module-name"
                 value={moduleName}
                 onChange={(event) => setModuleName(event.target.value)}
                 placeholder="helpers"
               />
+              <p className="muted small">{t("pythonModuleNameHint")}</p>
               <button
                 className="button secondary small"
                 disabled={
                   pending ||
-                  !/^[A-Za-z_]\w*$/.test(moduleName) ||
+                  !/^[A-Za-z_]\w*(?:\/[A-Za-z_]\w*)*$/.test(moduleName) ||
                   `modules/${moduleName}.py` in files
                 }
                 onClick={() => {

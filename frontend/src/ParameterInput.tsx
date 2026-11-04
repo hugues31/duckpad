@@ -15,6 +15,7 @@ export default function ParameterInput({
   onBlur,
   commitOnChange = false,
   integer = false,
+  bounds = {},
 }: {
   kind: "number" | "list";
   id?: string;
@@ -30,6 +31,7 @@ export default function ParameterInput({
   /** Let form validation see incomplete values while preserving their input text. */
   commitOnChange?: boolean;
   integer?: boolean;
+  bounds?: { ge?: number; le?: number; gt?: number; lt?: number };
 }) {
   const t = useT();
   const [draft, setDraft] = useState<string | null>(null);
@@ -69,7 +71,37 @@ export default function ParameterInput({
                 typeof parsed === "number" &&
                 !Number.isInteger(parsed)))
           ) {
-            e.currentTarget.setCustomValidity(t("invalidNumber"));
+            e.currentTarget.setCustomValidity(
+              t(
+                integer && typeof parsed === "number"
+                  ? "invalidInteger"
+                  : "invalidNumber",
+              ),
+            );
+            e.currentTarget.reportValidity();
+            return;
+          }
+          const limits = Object.entries(bounds).filter(
+            ([, limit]) => limit !== undefined,
+          ) as [string, number][];
+          if (
+            typeof parsed === "number" &&
+            limits.some(([op, limit]) =>
+              op === "ge"
+                ? parsed < limit
+                : op === "le"
+                  ? parsed > limit
+                  : op === "gt"
+                    ? parsed <= limit
+                    : parsed >= limit,
+            )
+          ) {
+            e.currentTarget.setCustomValidity(
+              t("invalidNumberBounds").replace(
+                "{bounds}",
+                limits.map(([op, limit]) => `${op} ${limit}`).join(", "),
+              ),
+            );
             e.currentTarget.reportValidity();
             return;
           }

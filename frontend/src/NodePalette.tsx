@@ -130,7 +130,12 @@ export default function NodePalette({
           <Code2 size={14} />
           {t("newSqlNode")}
         </button>
-        <button className="text-button" onClick={() => onNewNode("python")}>
+        <button
+          className="text-button"
+          disabled={!snapshot.python_enabled}
+          title={!snapshot.python_enabled ? t("pythonDisabledHint") : undefined}
+          onClick={() => onNewNode("python")}
+        >
           <Code2 size={14} />
           {t("newPythonNode")}
         </button>
