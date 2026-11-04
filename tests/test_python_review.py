@@ -56,6 +56,19 @@ def test_environment_resolution_preserves_windows_bytes(tmp_path, monkeypatch):
     assert environment.resolve_lock({"pyproject.toml": source, "uv.lock": lock}, tmp_path) == lock
 
 
+@pytest.mark.parametrize("newline", ["\n", "\r\n"])
+def test_project_manifest_writes_preserve_existing_newlines(tmp_path, newline):
+    from duckpad.util import atomic_write
+
+    path = tmp_path / "pyproject.toml"
+    source = default_pyproject("Review").replace("\n", newline)
+    for _ in range(3):
+        atomic_write(path, source)
+        assert path.read_bytes() == source.encode("utf-8")
+        source = path.read_bytes().decode("utf-8")
+        validate_manifest(source)
+
+
 def test_resolver_uses_only_operator_configuration_and_wheels(tmp_path, monkeypatch):
     from duckpad import python_environment as environment
 

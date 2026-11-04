@@ -46,7 +46,8 @@ export const sections = [
       {
         slug: "python",
         title: "Python nodes",
-        description: "Use typed Python nodes, locked environments and managed files alongside SQL.",
+        description:
+          "Use typed Python nodes, locked environments and managed files alongside SQL.",
       },
       {
         slug: "data_preparation",
