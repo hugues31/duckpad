@@ -67,6 +67,8 @@ def test_cli_polling_logs(tmp_path, level):
                 polling = [
                     "/api/workspace",
                     "/api/resources",
+                    "/api/monitoring",
+                    "/api/monitoring/logs",
                     f"/api/worktrees/{worktree}",
                     f"/api/worktrees/{worktree}/status?environment=dev",
                     f"/api/worktrees/{worktree}/generations/data_missing?environment=dev",
@@ -99,6 +101,10 @@ def test_cli_polling_logs(tmp_path, level):
                 )
                 execution = client.post(f"/api/worktrees/{worktree}/runs", json={"environment": "dev"}).json()
                 wait_until(lambda: client.get(f"/api/runs/{execution['id']}").json()["status"] == "success")
+                logs = client.get("/api/monitoring/logs?limit=200").json()["entries"]
+                assert any("Application startup complete" in entry["message"] for entry in logs)
+                assert any('"event": "node_result"' in entry["message"] for entry in logs)
+                assert not any("GET /api/monitoring" in entry["message"] for entry in logs)
         finally:
             process.terminate()
             try:
