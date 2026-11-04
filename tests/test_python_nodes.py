@@ -647,3 +647,24 @@ def test_generated_lock_merge_is_regenerated_from_manifest():
 
     files, conflicts = merge_files({"uv.lock": "base"}, {"uv.lock": "first"}, {"uv.lock": "second"})
     assert "uv.lock" not in files and conflicts == []
+
+
+def test_float_defaults_are_normalized_for_direct_calls():
+    import duckpad as dp
+
+    class Numeric(dp.Node):
+        minimum: float = 1
+
+    assert type(Numeric().minimum) is float
+    assert Numeric(minimum=2).minimum == 2.0
+
+
+def test_helper_modules_cannot_shadow_the_sdk(services):
+    _, projects, _, _ = services
+    worktree = flow(services)
+    snapshot = projects.snapshot(worktree["id"])
+    files = {**snapshot["files"], "modules/duckpad.py": "x = 1\n", "modules/2024/report.py": "x = 2\n"}
+    projects.write(worktree["id"], snapshot["revision"], files)
+    problems = {d["file"]: d["message"] for d in projects.snapshot(worktree["id"])["diagnostics"]}
+    assert "replace the Duckpad SDK" in problems["modules/duckpad.py"]
+    assert "Python identifiers" in problems["modules/2024/report.py"]
