@@ -233,6 +233,14 @@ def operator_sources():
     return sources
 
 
+def served(registry, item):
+    """Whether a locked file comes from its registry: same host, or inside a find-links directory."""
+    if "://" in registry:
+        # PyPI's file host also serves mirrors that keep upstream links.
+        return urlsplit(item.get("url", "")).netloc in (urlsplit(registry).netloc, PYPI_FILES)
+    return "path" in item and Path(registry, item["path"]).resolve().is_relative_to(Path(registry).resolve())
+
+
 def check_lock_sources(text):
     """Reject a uv.lock whose packages come from outside the runtime wheel and operator indexes."""
     try:
@@ -246,15 +254,8 @@ def check_lock_sources(text):
         if source in ({"virtual": "."}, {"path": runtime}):
             continue
         registry = str(source.get("registry", "")).rstrip("/")
-        files = [package.get("sdist", {}), *package.get("wheels", [])]
-        if registry in allowed and all(
-            # PyPI's file host also serves mirrors that keep upstream links.
-            urlsplit(item["url"]).netloc in (urlsplit(registry).netloc, PYPI_FILES)
-            if "url" in item
-            else Path(registry, item.get("path", "")).resolve().is_relative_to(Path(registry).resolve())
-            for item in files
-            if item
-        ):
+        files = [item for item in [package.get("sdist"), *package.get("wheels", [])] if item]
+        if registry in allowed and all(served(registry, item) for item in files):
             continue
         raise Problem(
             f"uv.lock takes {name} from a source the server does not use; "

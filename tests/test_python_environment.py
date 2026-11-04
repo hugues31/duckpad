@@ -206,21 +206,21 @@ revision = 3
 [[package]]
 name = "pytz"
 version = "2024.1"
-source = {{ registry = "{registry}" }}
+source = {{ registry = '{registry}' }}
 wheels = [{{ {file}, hash = "sha256:00" }}]
 """
 
 
-def lock(registry="https://pypi.org/simple", file='url = "https://files.pythonhosted.org/packages/pytz.whl"'):
+def lock(registry="https://pypi.org/simple", file="url = 'https://files.pythonhosted.org/packages/pytz.whl'"):
     return LOCK.format(registry=registry, file=file)
 
 
 @pytest.mark.parametrize(
     "foreign",
     [
-        lock("http://127.0.0.1:9/simple", 'url = "http://127.0.0.1:9/pytz.whl"'),
-        lock(file='url = "http://127.0.0.1:9/pytz.whl"'),
-        lock(file='path = "/srv/elsewhere/pytz.whl"'),
+        lock("http://127.0.0.1:9/simple", "url = 'http://127.0.0.1:9/pytz.whl'"),
+        lock(file="url = 'http://127.0.0.1:9/pytz.whl'"),
+        lock(file="path = '/srv/elsewhere/pytz.whl'"),
     ],
 )
 def test_locks_only_take_packages_from_operator_sources(tmp_path, monkeypatch, foreign):
@@ -253,9 +253,10 @@ def test_operator_indexes_replace_pypi_in_locks(tmp_path, monkeypatch):
     monkeypatch.setenv("UV_FIND_LINKS", f"{tmp_path},https://wheels.example/")
     with pytest.raises(Problem):
         check_lock_sources(lock())
-    check_lock_sources(lock("https://mirror.example/simple", 'url = "https://mirror.example/files/pytz.whl"'))
-    check_lock_sources(lock(str(tmp_path), f'path = "{tmp_path / "pytz.whl"}"'))
-    check_lock_sources(lock("https://wheels.example", 'url = "https://wheels.example/pytz.whl"'))
+    # Literal TOML strings keep Windows paths intact.
+    check_lock_sources(lock("https://mirror.example/simple", "url = 'https://mirror.example/files/pytz.whl'"))
+    check_lock_sources(lock(str(tmp_path), f"path = '{tmp_path / 'pytz.whl'}'"))
+    check_lock_sources(lock("https://wheels.example", "url = 'https://wheels.example/pytz.whl'"))
 
 
 def test_manifest_from_another_runtime_blocks_runs_but_not_unrelated_saves(services):
@@ -266,10 +267,10 @@ def test_manifest_from_another_runtime_blocks_runs_but_not_unrelated_saves(servi
     tree = flow(services)
     project = tree["project"]
     snapshot = projects.snapshot(tree["id"])
-    windows = runtime_tag().rsplit("-", 3)[0] + "-cp312-abi3-win_amd64.whl"
+    other = runtime_tag().rsplit("-", 3)[0] + "-cp312-abi3-other_platform.whl"
     # A pull from another platform's Duckpad, or a server upgrade, leaves another runtime's manifest.
     store.put("settings", "python:" + project, {"enabled": False})
-    foreign = snapshot["files"]["pyproject.toml"].replace(runtime_tag(), windows)
+    foreign = snapshot["files"]["pyproject.toml"].replace(runtime_tag(), other)
     snapshot = projects.write(
         tree["id"], snapshot["revision"], {**snapshot["files"], "pyproject.toml": foreign}
     )

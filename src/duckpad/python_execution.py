@@ -194,10 +194,6 @@ def execute(cursor, payload):
             output["messages"] = instance._messages
             output["artifacts"] = instance._artifacts
     except BaseException as error:
-        with contextlib.suppress(Exception):
-            db.execute(scope).complete()
-        for table in created:
-            db.execute(f"DROP TABLE IF EXISTS {qi(table)}")
         frames = error.__traceback__
         if isinstance(error, MemoryError):
             output["restart"] = True
@@ -209,10 +205,16 @@ def execute(cursor, payload):
         detail = detail.replace(str(Path(__file__).parent), "<duckpad>")
         output["error"] = detail
     finally:
-        with contextlib.suppress(Exception):
-            db.execute(scope).complete()
+        # Limits first: DuckDB can crash under limits that Python lowered.
         if not restore_limits(limits):
             output["restart"] = True
+        if not output.get("restart"):
+            # The worker stays in use: restore the cursor and discard a failed node's tables.
+            with contextlib.suppress(Exception):
+                db.execute(scope).complete()
+            if "error" in output:
+                for table in created:
+                    db.execute(f"DROP TABLE IF EXISTS {qi(table)}")
         if output.get("restart"):
             # Memory exhaustion or changed limits leave the worker unreliable for later queries.
             output["error"] = (output.get("error") or "Python changed the worker's resource limits") + (
