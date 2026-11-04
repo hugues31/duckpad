@@ -96,11 +96,15 @@ def test_nested_names_and_removed_conflict_nodes(named_bundle):
     bundle, instance = group(named_bundle, ["node_source"], "Reporting")
     bundle, outer = group(bundle, [instance], "Finance")
     identity = f"{outer}::{instance}::node_source"
+    parent = next(key for key, value in bundle["components"].items() if value["name"] == "Reporting")
+    # Exposed parameters are applied while expanding and must not alter the names.
+    bundle["components"][parent]["parameters"] = {
+        "limit": {"type": "number", "default": 1, "targets": [{"node": "node_source", "param": "limit"}]}
+    }
     assert node_name(bundle, identity) == "Finance / Reporting / Revenue report"
     assert expand(bundle)[0][identity]["display_name"] == "Finance / Reporting / Revenue report"
     names = node_names(bundle)
     assert [part["label"] for part in names[identity]] == ["Finance", "Reporting", "Revenue report"]
-    parent = next(key for key, value in bundle["components"].items() if value["name"] == "Reporting")
     assert node_name(bundle, "node_source", parent) == "Reporting / Revenue report"
     current = copy.deepcopy(named_bundle)
     current["flow"]["nodes"] = []

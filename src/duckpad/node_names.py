@@ -25,6 +25,13 @@ def node_caption(bundle: Record, node: Record, parent: str | None = None) -> dic
     return {"label": labels[-1] if labels and labels[-1] else "SQL template", "template": preset}
 
 
+def graph_names(bundle: Record, parent: str | None = None) -> dict[str, Name]:
+    """Names of the nodes in the root flow, or in one component definition under its name."""
+    graph = bundle.get("components", {}).get(parent, {}) if parent else bundle.get("flow", {})
+    prefix = [{"label": graph.get("name") or parent}] if parent else []
+    return {node["id"]: [*prefix, node_caption(bundle, node, parent)] for node in graph.get("nodes", [])}
+
+
 def node_name_parts(bundle: Record, identity: str, parent: str | None = None) -> Name:
     """Resolve an instance path, or a node in an uninstantiated component definition."""
     graph = bundle.get("components", {}).get(parent, {}) if parent else bundle.get("flow", {})
@@ -37,8 +44,12 @@ def node_name_parts(bundle: Record, identity: str, parent: str | None = None) ->
     return names
 
 
+def name_text(name: Name) -> str:
+    return " / ".join(part["label"] for part in name)
+
+
 def node_name(bundle: Record, identity: str, parent: str | None = None) -> str:
-    return " / ".join(part["label"] for part in node_name_parts(bundle, identity, parent))
+    return name_text(node_name_parts(bundle, identity, parent))
 
 
 def node_names(bundle: Record | None) -> dict[str, Name]:
@@ -58,9 +69,9 @@ def node_names(bundle: Record | None) -> dict[str, Name]:
 
     try:
         visit(bundle.get("flow", {}), "", [], ())
-        for parent, graph in bundle.get("components", {}).items():
-            for node in graph.get("nodes", []):
-                result[f"components/{parent}/{node['id']}"] = node_name_parts(bundle, node["id"], parent)
+        for parent in bundle.get("components", {}):
+            for key, name in graph_names(bundle, parent).items():
+                result[f"components/{parent}/{key}"] = name
     except (AttributeError, KeyError, TypeError):
         # A malformed file must remain editable, with names for any readable nodes.
         pass

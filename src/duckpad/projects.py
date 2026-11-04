@@ -51,6 +51,14 @@ def decode(name: str, content: bytes) -> str:
         raise Problem(f"{name} is not valid UTF-8 text", 422) from error
 
 
+def conflict_view(conflict: Record) -> Record:
+    """A retained conflict with its review evidence and the names of nodes in any of its versions."""
+    return {
+        **conflict_details(conflict),
+        "node_names": file_node_names(conflict["base"], conflict["proposal"], conflict["current"]),
+    }
+
+
 class Projects:
     def __init__(self, store: Store) -> None:
         self.store = store
@@ -407,7 +415,7 @@ class Projects:
             "node_names": node_names(bundle),
             "files": files,
             "diagnostics": errors,
-            "conflicts": [self.conflict(item["id"]) for item in self.store.conflicts(worktree_id)],
+            "conflicts": [conflict_view(c) for c in self.store.conflicts(worktree_id)],
         }
 
     def base(self, worktree: Record, revision: str, current: Files) -> Files | None:
@@ -473,11 +481,7 @@ class Projects:
                     "assistant": assistant,
                 }
                 self.store.put("conflict", conflict["id"], conflict)
-                raise Problem(
-                    "Concurrent edits conflict. Both versions have been retained.",
-                    409,
-                    self.conflict(conflict["id"]),
-                )
+                raise Problem("Concurrent edits conflict. Both versions have been retained.", 409, conflict)
             if validate:
                 # Problems already saved, such as an input not connected yet, do not block the change.
                 require_valid(merged, "The proposed changes are invalid", baseline=current)
@@ -546,12 +550,7 @@ class Projects:
         conflict = self.store.get("conflict", conflict_id)
         if not conflict:
             raise Problem("Conflict not found", 404)
-        return {
-            **conflict_details(cast(Record, conflict)),
-            "node_names": file_node_names(
-                conflict.get("base", {}), conflict["proposal"], conflict["current"]
-            ),
-        }
+        return cast(Record, conflict)
 
     def resolve(self, conflict_id: str, choice: str, files: Files | None = None) -> Record:
         with self.locked(self.conflict(conflict_id)["worktree"]):

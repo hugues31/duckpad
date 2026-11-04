@@ -7,7 +7,7 @@ from .bundle import files_to_bundle
 from .components import expand
 from .graph import reachable
 from .node_code import code_path
-from .node_names import node_name
+from .node_names import graph_names, name_text, node_name
 from .templates import DESCRIPTIVE, directives, executable_sql
 from .util import Problem
 
@@ -33,25 +33,23 @@ def entities(bundle):
         metadata = {k: v for k, v in value.items() if k not in ("nodes", "edges")}
         add(scope or "flow", kind, label(value, scope or "Project"), metadata, file, scope)
         nodes = {n["id"]: n for n in value.get("nodes", [])}
+        parent = scope.removeprefix("component/") or None
+        names = {key: name_text(name) for key, name in graph_names(bundle, parent).items()}
         for key, node in nodes.items():
             definition = (
                 bundle["components"].get(node.get("component"), {})
                 if node.get("component")
                 else bundle["templates"].get(node["template"], "")
                 if node.get("template")
-                else bundle.get("node_sql", {}).get(
-                    code_path(key, scope.removeprefix("component/") or None), ""
-                )
+                else bundle.get("node_sql", {}).get(code_path(key, parent), "")
             )
-            name = node_name(bundle, key, scope.removeprefix("component/") or None)
             if not node.get("template") and not node.get("component"):
                 node = {**node, "sql": definition}
-            node_file = code_path(key, scope.removeprefix("component/") or None) if "sql" in node else file
-            add(f"{scope + '/' if scope else ''}node/{key}", "node", name, node, node_file, scope)
+            node_file = code_path(key, parent) if "sql" in node else file
+            add(f"{scope + '/' if scope else ''}node/{key}", "node", names[key], node, node_file, scope)
         for edge in value.get("edges", []):
-            parent = scope.removeprefix("component/") or None
             name = (
-                f"{node_name(bundle, edge['source'], parent)} → {node_name(bundle, edge['target'], parent)}"
+                f"{names.get(edge['source'], edge['source'])} → {names.get(edge['target'], edge['target'])}"
             )
             add(f"{scope + '/' if scope else ''}edge/{edge['id']}", "edge", name, edge, file, scope)
 
