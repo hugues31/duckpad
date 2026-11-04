@@ -93,6 +93,11 @@ test("download a full CSV export and keep project ZIP separate", async ({
     expect(rows).toHaveLength(1003);
     expect(rows[0]).toBe('0;"item;0"');
     expect(rows.at(-1)).toBe('1002;"item;1002"');
+    // The completed run replaces the initial panel. Inject the separate download failure only
+    // once that replacement has arrived, so it cannot discard the error being asserted.
+    await expect(page.locator(".results-log .log-export")).toContainText(
+      run.id,
+    );
     await page.route("**/exports/export/download?*", (route) =>
       route.fulfill({
         status: 404,
