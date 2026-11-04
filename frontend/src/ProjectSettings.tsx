@@ -380,19 +380,24 @@ export default function ProjectSettings({
                   <small>{t("pythonBuildsHint")}</small>
                 </span>
               </label>
-              <p className="notice">{t("pythonResetHint")}</p>
-              <div className="row gap">
-                <button
-                  className="button primary"
-                  disabled={!instanceAdmin || pending || !python.dirty}
-                  onClick={() => act(python.persist)}
-                >
-                  {t("save")}
-                </button>
-                {python.dirty && (
-                  <span className="muted small">{t("unsavedChanges")}</span>
-                )}
-              </div>
+              {/* Others read the policy only: saving does not concern them. */}
+              {instanceAdmin && (
+                <>
+                  <p className="notice">{t("pythonResetHint")}</p>
+                  <div className="row gap">
+                    <button
+                      className="button primary"
+                      disabled={pending || !python.dirty}
+                      onClick={() => act(python.persist)}
+                    >
+                      {t("save")}
+                    </button>
+                    {python.dirty && (
+                      <span className="muted small">{t("unsavedChanges")}</span>
+                    )}
+                  </div>
+                </>
+              )}
             </div>
             <PythonEnvironmentStatus project={project} />
           </>

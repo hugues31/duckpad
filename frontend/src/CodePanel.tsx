@@ -43,7 +43,8 @@ export default function CodePanel({
     scope: "worktree",
     equal: sameFiles,
   });
-  const [moduleName, setModuleName] = useState("");
+  // The name of the helper module being created, if any.
+  const [moduleName, setModuleName] = useState<string | null>(null);
   const [selected, setSelected] = useState("flow.json");
   const [downloading, setDownloading] = useState(false);
   const [error, setError] = useState("");
@@ -145,70 +146,105 @@ export default function CodePanel({
       )}
       <div className="code-layout">
         <aside className="code-files">
+          {!readOnly &&
+            (!(VARIABLES_FILE in files) || snapshot.python_enabled) && (
+              <div className="code-file-actions">
+                {!(VARIABLES_FILE in files) && (
+                  <button
+                    className="button secondary small"
+                    disabled={pending}
+                    title={t("createVariablesFileHint")}
+                    onClick={() => {
+                      update((current) => ({
+                        ...current,
+                        [VARIABLES_FILE]: "{}\n",
+                      }));
+                      setSelected(VARIABLES_FILE);
+                    }}
+                  >
+                    <Plus size={13} />
+                    {t("createVariablesFile")}
+                  </button>
+                )}
+                {snapshot.python_enabled &&
+                  (moduleName === null ? (
+                    <button
+                      className="button secondary small"
+                      disabled={pending}
+                      onClick={() => setModuleName("")}
+                    >
+                      <Plus size={13} />
+                      {t("pythonCreateModule")}
+                    </button>
+                  ) : (
+                    <form
+                      className="field"
+                      onSubmit={(event) => {
+                        event.preventDefault();
+                        if (pending || !moduleName || moduleError) return;
+                        const name = `modules/${moduleName}.py`;
+                        update((current) => ({
+                          ...current,
+                          [name]: "# Project helper module.\n",
+                        }));
+                        setSelected(name);
+                        setModuleName(null);
+                      }}
+                    >
+                      <label htmlFor="python-module-name">
+                        {t("pythonHelperModule")}
+                      </label>
+                      <input
+                        pattern="[A-Za-z_][A-Za-z0-9_]*(/[A-Za-z_][A-Za-z0-9_]*)*"
+                        title={t("pythonModuleNameHint")}
+                        id="python-module-name"
+                        value={moduleName}
+                        aria-invalid={!!moduleError}
+                        aria-describedby="python-module-name-message"
+                        onChange={(event) => setModuleName(event.target.value)}
+                        placeholder="helpers"
+                        autoFocus
+                      />
+                      {moduleError ? (
+                        <p
+                          id="python-module-name-message"
+                          role="alert"
+                          className="notice error small"
+                        >
+                          {moduleError}
+                        </p>
+                      ) : (
+                        <p
+                          id="python-module-name-message"
+                          className="muted small"
+                        >
+                          {t("pythonModuleNameHint")}
+                        </p>
+                      )}
+                      <div className="row gap">
+                        <button
+                          className="button primary small"
+                          disabled={pending || !moduleName || !!moduleError}
+                        >
+                          {t("pythonAddModule")}
+                        </button>
+                        <button
+                          type="button"
+                          className="button secondary small"
+                          onClick={() => setModuleName(null)}
+                        >
+                          {t("cancel")}
+                        </button>
+                      </div>
+                    </form>
+                  ))}
+              </div>
+            )}
           <ProjectFileTree
             files={files}
             selected={path}
             onSelect={setSelected}
           />
-          {!readOnly && (
-            <div className="field">
-              <label htmlFor="python-module-name">
-                {t("pythonHelperModule")}
-              </label>
-              <input
-                pattern="[A-Za-z_][A-Za-z0-9_]*(/[A-Za-z_][A-Za-z0-9_]*)*"
-                title={t("pythonModuleNameHint")}
-                id="python-module-name"
-                value={moduleName}
-                aria-invalid={!!moduleError}
-                aria-describedby="python-module-name-message"
-                onChange={(event) => setModuleName(event.target.value)}
-                placeholder="helpers"
-              />
-              {moduleError ? (
-                <p
-                  id="python-module-name-message"
-                  role="alert"
-                  className="notice error small"
-                >
-                  {moduleError}
-                </p>
-              ) : (
-                <p id="python-module-name-message" className="muted small">
-                  {t("pythonModuleNameHint")}
-                </p>
-              )}
-              <button
-                className="button secondary small"
-                disabled={pending || !moduleName || !!moduleError}
-                onClick={() => {
-                  const name = `modules/${moduleName}.py`;
-                  update((current) => ({
-                    ...current,
-                    [name]: "# Project helper module.\n",
-                  }));
-                  setSelected(name);
-                  setModuleName("");
-                }}
-              >
-                {t("pythonAddModule")}
-              </button>
-            </div>
-          )}
-          {!readOnly && !(VARIABLES_FILE in files) && (
-            <button
-              className="button secondary small"
-              disabled={pending}
-              title={t("createVariablesFileHint")}
-              onClick={() => {
-                update((current) => ({ ...current, [VARIABLES_FILE]: "{}\n" }));
-                setSelected(VARIABLES_FILE);
-              }}
-            >
-              <Plus size={13} />
-              {t("createVariablesFile")}
-            </button>
-          )}
         </aside>
         <div className="code-editor-column">
           {path ? (

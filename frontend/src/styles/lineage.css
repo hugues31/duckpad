@@ -30,6 +30,11 @@
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
+/* The title keeps its place, left-aligned, when a back button precedes it. */
+.lineage-title {
+  flex: 1;
+  min-width: 0;
+}
 .lineage-header h2 {
   margin: 0 0 7px;
   font-size: 18px;
@@ -233,6 +238,21 @@
 .lineage-details select {
   font-size: 11px;
 }
+/* A Python card fills its estimated height: captured parent results scroll
+   within it, and their pagination stays below. */
+.lineage-card.python {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+.lineage-card.python .lineage-details-button {
+  align-self: flex-start;
+}
+.lineage-parents {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
 .lineage-details table,
 .lineage-parents table {
   width: 100%;
@@ -279,6 +299,11 @@
   }
   .lineage-header {
     padding: 16px;
+  }
+  /* The title keeps its place, left-aligned, when a back button precedes it. */
+  .lineage-title {
+    flex: 1;
+    min-width: 0;
   }
   .lineage-header h2 {
     font-size: 16px;

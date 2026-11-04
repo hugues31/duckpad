@@ -371,7 +371,8 @@ export type NodeRunStatus =
 export interface ExecutionResult {
   level: "info" | "warning" | "error";
   message: string;
-  origin: { kind: string; block?: number; name?: string };
+  /** SQL messages name their code block; Python sends "Python" or "Python stdout/stderr". */
+  origin: { kind: string; block?: number | string; name?: string };
   output?: string | null;
   observed?: Json;
   status?: "ok" | "warning" | "error";

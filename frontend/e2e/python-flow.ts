@@ -149,7 +149,7 @@ class Filter(dp.Node):
   await expect(page.locator(".lineage-dialog .is-source")).toBeVisible();
   await page
     .locator(".lineage-dialog")
-    .getByRole("button", { name: "Previous", exact: true })
+    .getByRole("button", { name: "Back to Python step", exact: true })
     .click();
   await expect(page.locator(".lineage-dialog")).toContainText(
     "Opaque Python operation",

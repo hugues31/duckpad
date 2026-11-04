@@ -85,3 +85,57 @@ it("saves Python activation explicitly and disables source builds until activati
     screen.queryByText("Allow Python to read authorized connection secrets"),
   ).toBeNull();
 });
+
+it("shows the Python policy read-only, without saving, to other users", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string) =>
+      json(
+        url.endsWith("/environment")
+          ? { state: "ready", python: "3.12", duckdb: "2.0.0" }
+          : {
+              python: { enabled: true, allow_builds: false },
+              project: { name: "Example" },
+              role: "admin",
+              users: [],
+              members: [],
+              connections: [],
+            },
+      ),
+    ),
+  );
+  render(
+    <MemoryRouter>
+      <ProjectSettings
+        project="example"
+        section="python"
+        workspace={
+          {
+            user: { role: "editor" },
+            catalog: { connections: [] },
+          } as unknown as Workspace
+        }
+        refresh={async () => {}}
+        onDeleted={() => {}}
+      />
+    </MemoryRouter>,
+  );
+  const enabled = await screen.findByRole("checkbox", {
+    name: "Enable Python in this project",
+  });
+  // The draft follows the loaded policy.
+  await waitFor(() => expect(enabled).toHaveProperty("checked", true));
+  expect(enabled).toHaveProperty("disabled", true);
+  expect(
+    screen.getByText(
+      "Only an instance administrator can change these settings.",
+    ),
+  ).toBeTruthy();
+  expect(screen.queryByRole("button", { name: "Save changes" })).toBeNull();
+  expect(screen.queryByText(/Stop this project/)).toBeNull();
+  expect(
+    await screen.findByText(
+      "Environment ready; DuckDB pinned to the server version",
+    ),
+  ).toBeTruthy();
+});

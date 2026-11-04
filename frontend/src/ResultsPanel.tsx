@@ -249,7 +249,7 @@ export default function ResultsPanel({
           : edge.source,
       };
     });
-  const tests = declaredTests(signature);
+  const tests = declaredTests(signature, result?.results);
   const testResults = (result?.results || []).filter(
     (item) => item.origin.kind === "test",
   );

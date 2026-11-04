@@ -1,7 +1,7 @@
 import { PartitionInspector } from "./PartitionControls";
 import { useOptionalWorktree, usePartitionQuery } from "./worktree";
 import Select from "./Select";
-import { nodeCodePath, nodeEntity, templateUsage } from "./nodeCode";
+import { nodeCode, nodeCodePath, nodeEntity, templateUsage } from "./nodeCode";
 import { lazy, Suspense, useRef, useState } from "react";
 import { Link as RouterLink } from "react-router";
 import {
@@ -18,7 +18,7 @@ import {
   X,
 } from "lucide-react";
 import { api, withQuery } from "./api";
-import { nodeInterface, type NodeInterface } from "./graph";
+import { containsPython, nodeInterface, type NodeInterface } from "./graph";
 import { nodeLabel, templateLabel, useT } from "./i18n";
 import { projectSettingsUrl } from "./navigation";
 import NodeDocumentation from "./NodeDocumentation";
@@ -212,8 +212,13 @@ export default function Inspector({
         ]),
       },
     ).data || {};
+  // Python has no compiled SQL, so neither has a component containing it.
+  const python =
+    node.language === "python" ||
+    (!!node.component &&
+      containsPython(snapshot.bundle?.components || {}, node.component));
   const compilation = useApiResource<Statement[]>(
-    tab === "sql" && node.language !== "python"
+    tab === "sql" && !python
       ? withQuery(
           `/worktrees/${worktree}/compile/${encodeURIComponent(fullNode)}`,
           { environment, ...partition },
@@ -621,17 +626,15 @@ export default function Inspector({
           <Suspense fallback={<p>{t("loading")}</p>}>
             <CodeEditor
               value={
-                node.template
-                  ? snapshot.bundle?.templates[node.template] || ""
-                  : snapshot.bundle?.node_sql?.[
-                      nodeCodePath(node.id, parent, "python")
-                    ] || ""
+                snapshot.bundle ? nodeCode(snapshot.bundle, node, parent) : ""
               }
               language="python"
               readOnly
               height="330px"
             />
           </Suspense>
+        ) : tab === "sql" && python ? (
+          <p className="notice">{t("pythonComponentNoSql")}</p>
         ) : tab === "sql" ? (
           <>
             <p className="muted small">{t("compileHint")}</p>

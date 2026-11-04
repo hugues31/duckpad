@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import AskAssistant from "./AskAssistant";
 import ExportDownload from "./ExportDownload";
-import { WarningBadge } from "./ExecutionMessages";
+import { messageOrigin, WarningBadge } from "./ExecutionMessages";
 import { countLabel, useT } from "./i18n";
 import { worktreeUrl } from "./navigation";
 import { clock, seconds } from "./ResultsPanel";
@@ -186,11 +186,7 @@ export default function ResultsLog({
         : item.message,
       detail: item.omitted
         ? undefined
-        : [
-            item.origin.name ||
-              t("messageBlock").replace("{block}", String(item.origin.block)),
-            item.output,
-          ]
+        : [messageOrigin(item.origin, t), item.output]
             .filter(Boolean)
             .join(" · "),
       aside: levelLabel(item, t),

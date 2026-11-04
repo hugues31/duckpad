@@ -21,7 +21,9 @@ import {
 } from "@xyflow/react";
 import {
   AlertTriangle,
+  ArrowLeft,
   ArrowRight,
+  Braces,
   ChevronLeft,
   ChevronRight,
   Database,
@@ -39,6 +41,7 @@ import {
   arrangeLineage,
   buildLineageGraph,
   cellId,
+  pythonCardHeight,
   requestId,
   type Cell,
   type Entry,
@@ -66,6 +69,8 @@ type CardData = {
   page: (id: string, values: Partial<Query>) => void;
   expand: () => void;
   parent: (cell: Cell) => void;
+  /** Whether this card lists the captured parents of its Python result. */
+  parents: boolean;
   replay?: (value: NonNullable<Explanation["replay"]>) => void;
 };
 type CardNode = Node<CardData, "lineage">;
@@ -111,7 +116,9 @@ function CalculationCard({ data }: NodeProps<CardNode>) {
       .join(" + ");
     formula = operation === "sum" ? values : `(${values}) / ${result.total}`;
   }
-  if (result.kind === "python") formula = t("pythonOpaque");
+  // The card header names the opaque Python operation; it has no formula.
+  const python = result.kind === "python";
+  if (python) formula = undefined;
   const offset = query.offset || 0;
   // Parent results page together; the longest one sets the page count.
   const parentRows = Math.max(
@@ -120,7 +127,7 @@ function CalculationCard({ data }: NodeProps<CardNode>) {
   );
   return (
     <article
-      className={`lineage-card ${source ? "is-source" : "calculation"} ${data.root ? "root" : ""}`}
+      className={`lineage-card ${source ? "is-source" : "calculation"} ${python ? "python" : ""} ${data.root ? "root" : ""}`}
       aria-label={`${result.column}: ${formatValue(result.value)}`}
     >
       {!source && !group && (
@@ -134,6 +141,8 @@ function CalculationCard({ data }: NodeProps<CardNode>) {
           <Database size={14} />
         ) : group ? (
           <Layers size={14} />
+        ) : python ? (
+          <Braces size={14} />
         ) : (
           <GitBranch size={14} />
         )}
@@ -144,11 +153,13 @@ function CalculationCard({ data }: NodeProps<CardNode>) {
               ? "lineageSource"
               : group
                 ? "lineageValueGroup"
-                : !result.complete
-                  ? "partial"
-                  : isExplained(operation)
-                    ? operationKeys[operation]
-                    : "lineageCalculation",
+                : python
+                  ? "pythonOpaque"
+                  : !result.complete
+                    ? "partial"
+                    : isExplained(operation)
+                      ? operationKeys[operation]
+                      : "lineageCalculation",
         )}
         {data.root && <span>{t("lineageSelectedValue")}</span>}
       </div>
@@ -195,59 +206,63 @@ function CalculationCard({ data }: NodeProps<CardNode>) {
           <p>{t("partitionReplayHint")}</p>
         </div>
       )}
-      {result.kind === "python" && (
-        <div
-          className="lineage-parents nodrag nowheel"
-          style={{ maxHeight: 300, overflow: "auto" }}
-        >
-          <strong>{t("pythonOpaque")}</strong>
-          <p>{t("pythonParentHint")}</p>
-          <p className="muted small">{t("pythonCapturedParents")}</p>
-          {result.parents?.map((parent) => (
-            <details key={parent.dataset} open>
-              <summary>
-                {displayNodeName(names?.[parent.node], parent.node, t)} ·{" "}
-                {parent.port}
-              </summary>
-              <table>
-                <thead>
-                  <tr>
-                    {parent.columns.map((column) => (
-                      <th key={column.name}>{column.name}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {parent.rows.map((row) => (
-                    <tr key={row.row}>
-                      {row.values.map((value, index) => (
-                        <td key={parent.columns[index].name}>
-                          <button
-                            className="button secondary small"
-                            aria-label={t("pythonParentCell")
-                              .replace("{column}", parent.columns[index].name)
-                              .replace("{row}", String(row.row + 1))}
-                            disabled={disabled}
-                            onClick={() =>
-                              data.parent({
-                                dataset: parent.dataset,
-                                row: row.row,
-                                column: parent.columns[index].name,
-                              })
-                            }
-                          >
-                            {formatValue(value)}
-                          </button>
-                        </td>
+      {python && (
+        <p className="lineage-source-location">
+          {displayNodeName(names?.[result.node || ""], result.node || "", t)} ·{" "}
+          {t("lineageRow")} {result.row + 1}
+        </p>
+      )}
+      {python && data.parents && !!result.parents?.length && (
+        <>
+          <p className="lineage-card-reason">{t("pythonParentHint")}</p>
+          <div className="lineage-parents nodrag nowheel">
+            <p className="muted small">{t("pythonCapturedParents")}</p>
+            {result.parents?.map((parent) => (
+              <details key={parent.dataset} open>
+                <summary>
+                  {displayNodeName(names?.[parent.node], parent.node, t)} ·{" "}
+                  {parent.port}
+                </summary>
+                <table>
+                  <thead>
+                    <tr>
+                      {parent.columns.map((column) => (
+                        <th key={column.name}>{column.name}</th>
                       ))}
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </details>
-          ))}
+                  </thead>
+                  <tbody>
+                    {parent.rows.map((row) => (
+                      <tr key={row.row}>
+                        {row.values.map((value, index) => (
+                          <td key={parent.columns[index].name}>
+                            <button
+                              className="button secondary small"
+                              aria-label={t("pythonParentCell")
+                                .replace("{column}", parent.columns[index].name)
+                                .replace("{row}", String(row.row + 1))}
+                              disabled={disabled}
+                              onClick={() =>
+                                data.parent({
+                                  dataset: parent.dataset,
+                                  row: row.row,
+                                  column: parent.columns[index].name,
+                                })
+                              }
+                            >
+                              {formatValue(value)}
+                            </button>
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </details>
+            ))}
+          </div>
           {parentRows > result.page_size && (
-            <div className="lineage-page">
+            <div className="lineage-page nodrag">
               <button
                 className="icon"
                 aria-label={t("previous")}
@@ -276,7 +291,7 @@ function CalculationCard({ data }: NodeProps<CardNode>) {
               </button>
             </div>
           )}
-        </div>
+        </>
       )}
       {source ? (
         <div className="lineage-source-location" title={result.node}>
@@ -317,7 +332,7 @@ function CalculationCard({ data }: NodeProps<CardNode>) {
               {result.calculation.selection.join(" · ")}
             </p>
           )}
-          {result.kind === "python" ? null : !result.complete ? (
+          {python ? null : !result.complete ? (
             <p className="lineage-card-warning">
               <AlertTriangle size={14} />
               {t("lineageLimitedHint")}
@@ -599,10 +614,15 @@ function LineageDialog({
     return () => abort.abort();
   }, [worktree, environment, cell, pages, budget, revision, t]);
 
-  const nodes = useMemo(
-    () =>
-      arrangeLineage<CardNode>(
-        (graph?.entries || []).map((entry) => ({
+  const nodes = useMemo(() => {
+    // The cells of one Python result share its captured parents: its first card lists them.
+    const listed = new Set<string>();
+    return arrangeLineage<CardNode>(
+      (graph?.entries || []).map((entry) => {
+        const parents =
+          entry.result.kind === "python" && !listed.has(entry.result.dataset);
+        if (parents) listed.add(entry.result.dataset);
+        return {
           id: entry.id,
           type: "lineage",
           position: { x: 0, y: 0 },
@@ -610,7 +630,7 @@ function LineageDialog({
           style: { pointerEvents: "auto" },
           height:
             entry.result.kind === "python"
-              ? 580
+              ? pythonCardHeight(entry.result, parents)
               : entry.result.kind === "source" || entry.group || entry.deferred
                 ? entry.result.origin
                   ? 210
@@ -634,6 +654,7 @@ function LineageDialog({
             },
             expand: () => setBudget((value) => value + 60),
             parent: onParent,
+            parents,
             replay:
               currentWorktree?.canEdit &&
               !currentWorktree.statuses.active &&
@@ -641,11 +662,11 @@ function LineageDialog({
                 ? replay
                 : undefined,
           },
-        })),
-        graph?.edges || [],
-      ),
-    [graph, pending, currentWorktree, replay, onParent],
-  );
+        };
+      }),
+      graph?.edges || [],
+    );
+  }, [graph, pending, currentWorktree, replay, onParent]);
   const active = graph?.entries.find((entry) => entry.id === selected);
 
   return createPortal(
@@ -673,10 +694,11 @@ function LineageDialog({
       <header className="lineage-header">
         {onBack && (
           <button className="button secondary" onClick={onBack}>
-            {t("previous")}
+            <ArrowLeft size={14} />
+            {t("lineageBackToPython")}
           </button>
         )}
-        <div>
+        <div className="lineage-title">
           <h2 id={titleId}>{t("lineageDialogTitle")}</h2>
           <div className="lineage-selected">
             {cell.column}
@@ -863,7 +885,7 @@ function CalculationDetails({
             environment={entry.result.environment || ""}
           />
         )}
-      {entry.result.expression && (
+      {entry.result.expression && entry.result.kind !== "python" && (
         <pre className="expression">{entry.result.expression}</pre>
       )}
       {entry.result.warnings.map((warning) => (

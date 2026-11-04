@@ -138,3 +138,56 @@ it("shows a Python traceback once, in a code block, and its summary in the timel
     "Traceback",
   );
 });
+
+it("names Python messages and captured output instead of a message block", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () =>
+      json({
+        id: "run",
+        commit: "abc123456",
+        status: "success",
+        environment: "dev",
+        nodes: {
+          python: {
+            status: "success",
+            results: [
+              {
+                level: "info",
+                message: "split done",
+                origin: { kind: "message", block: "Python" },
+              },
+              {
+                level: "info",
+                message: "stdout line",
+                origin: { kind: "message", block: "Python stdout/stderr" },
+              },
+              {
+                level: "warning",
+                message: "Check the amounts",
+                origin: { kind: "message", block: 2 },
+                output: "result",
+              },
+            ],
+          },
+        },
+      }),
+    ),
+  );
+  const { container } = render(
+    <MemoryRouter>
+      <ResultsLog
+        {...logProps}
+        exportNode={false}
+        download={false}
+        result={{ result_run: "run" } as NodeResult}
+      />
+    </MemoryRouter>,
+  );
+  await screen.findByText("split done");
+  const timeline = container.querySelector(".log-timeline")?.textContent;
+  expect(timeline).toContain("Python message");
+  expect(timeline).toContain("Python output");
+  expect(timeline).toContain("Message block 2 · result");
+  expect(timeline).not.toContain("Message block Python");
+});

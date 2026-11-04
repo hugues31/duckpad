@@ -150,6 +150,21 @@ export type NodeChoice = { id: string; signature: NodeInterface } & (
   | { kind: "component"; definition: ComponentDefinition }
 );
 
+/** Whether a component definition contains a Python node, directly or in a nested component. */
+export function containsPython(
+  components: Record<string, ComponentDefinition>,
+  id: string,
+  visited = new Set<string>(),
+): boolean {
+  if (visited.has(id)) return false;
+  visited.add(id);
+  return (components[id]?.nodes || []).some(
+    (node) =>
+      node.language === "python" ||
+      (!!node.component && containsPython(components, node.component, visited)),
+  );
+}
+
 /** Templates and components that can be added inside the given opened
  * component definitions. A component cannot contain itself, even through
  * another definition.

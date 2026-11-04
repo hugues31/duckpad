@@ -1,6 +1,14 @@
 import { AlertTriangle } from "lucide-react";
-import { useT } from "./i18n";
+import { useT, type Translate } from "./i18n";
 import type { ExecutionResult } from "./types";
+
+/** Where a message comes from: its name, Python, or the numbered block of SQL code. */
+export function messageOrigin(origin: ExecutionResult["origin"], t: Translate) {
+  if (origin.name) return origin.name;
+  if (origin.block === "Python") return t("pythonMessage");
+  if (origin.block === "Python stdout/stderr") return t("pythonOutput");
+  return t("messageBlock").replace("{block}", String(origin.block));
+}
 
 export function warningCount(results: ExecutionResult[] = []) {
   return results.reduce(
@@ -69,11 +77,7 @@ export default function ExecutionMessages({
                 <small>
                   {result.origin.kind === "test"
                     ? t("dataTest")
-                    : result.origin.name ||
-                      t("messageBlock").replace(
-                        "{block}",
-                        String(result.origin.block),
-                      )}
+                    : messageOrigin(result.origin, t)}
                   {result.output && ` · ${result.output}`}
                 </small>
               </>

@@ -102,7 +102,13 @@ export default function NodePalette({
                   >
                     <span className={`palette-icon ${item.category}`}>
                       <NodeIcon
-                        kind={item.kind === "component" ? "component" : item.id}
+                        kind={
+                          item.kind === "component"
+                            ? "component"
+                            : item.id.endsWith(".py")
+                              ? "python"
+                              : item.id
+                        }
                         size={17}
                       />
                     </span>
