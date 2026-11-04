@@ -163,7 +163,7 @@ def test_python_run_approval_lists_code_and_rechecks_secret_policy(instance):
     identity, requested = request_run(app, client, context)
     plan = requested["tools"][0]["approval"]
     assert plan["python_nodes"] == [{"node": "python", "label": "python"}]
-    services.store.put("settings", "python:" + context["project"], {"enabled": True, "expose_secrets": True})
+    services.store.put("settings", "python:" + context["project"], {"enabled": True})
     result = final(decide(client, identity, requested))
     assert "configuration changed" in result["text"]
     assert client.get("/api/runs").json() == []

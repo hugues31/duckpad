@@ -6,6 +6,7 @@ import io
 import sys
 import traceback
 import types
+from collections import deque
 from pathlib import Path
 
 from .python_contract import parse_python
@@ -15,11 +16,27 @@ from .util import qi
 
 class BoundedLog(io.TextIOBase):
     def __init__(self):
-        self.text = ""
+        self.parts = deque()
+        self.length = 0
 
     def write(self, text):
-        self.text = (self.text + text)[-65536:]
-        return len(text)
+        size = len(text)
+        if text:
+            self.parts.append(text[-65536:])
+            self.length += min(size, 65536)
+        while self.length > 65536:
+            first = self.parts.popleft()
+            overflow = self.length - 65536
+            if len(first) > overflow:
+                self.parts.appendleft(first[overflow:])
+                self.length = 65536
+            else:
+                self.length -= len(first)
+        return size
+
+    @property
+    def text(self):
+        return "".join(self.parts)
 
 
 def relation(connection, value):
@@ -71,7 +88,7 @@ def execute(cursor, payload):
     previous_modules = set(sys.modules)
     module_name = "_duckpad_node"
     module = types.ModuleType(module_name)
-    module.__file__ = str(modules / "node.py")
+    module.__file__ = payload.get("filename", "nodes/python.py")
     sys.modules[module_name] = module
     sys.path.insert(0, str(modules))
     try:
@@ -121,6 +138,10 @@ def execute(cursor, payload):
                     failure = f"Python check {name} failed: {count} rows"
             if failure or any(m["level"] == "error" for m in instance._messages):
                 raise ValueError(failure or "A Python message reported an error")
+            # Validate partition boundaries before user-managed external writes.
+            from .python_partitions import validate_partitions
+
+            validate_partitions(db, payload)
             db.complete()
             instance.write()
             if any(m["level"] == "error" for m in instance._messages):
@@ -132,7 +153,10 @@ def execute(cursor, payload):
     except BaseException:
         for table in created:
             db.execute(f"DROP TABLE IF EXISTS {qi(table)}")
-        output["error"] = traceback.format_exc()
+        detail = traceback.format_exc()
+        detail = detail.replace(str(modules), "modules").replace(str(workspace), "<execution>")
+        detail = detail.replace(str(Path(__file__).parent), "<duckpad>")
+        output["error"] = detail
     finally:
         if instance is not None:
             output["messages"] = instance._messages

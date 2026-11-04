@@ -193,7 +193,14 @@ def parse_python(source):
     if len({p["name"] for p in parameters}) != len(parameters):
         fail(cls, "Parameter names must be unique")
     return {
-        "label": cls.name,
+        "label": next(
+            (
+                line.split("@label", 1)[1].strip()
+                for line in source.splitlines()
+                if line.strip().startswith("# @label ")
+            ),
+            cls.name,
+        ),
         "description": ast.get_docstring(cls) or "",
         "class": cls.name,
         "language": "python",

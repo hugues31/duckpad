@@ -71,7 +71,6 @@ class ProjectRole(BaseModel):
 class PythonPolicy(BaseModel):
     model_config = ConfigDict(extra="forbid")
     enabled: StrictBool = False
-    expose_secrets: StrictBool = False
     allow_builds: StrictBool = False
 
 

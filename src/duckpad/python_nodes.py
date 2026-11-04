@@ -7,6 +7,32 @@ from .templates import base_type, check_scalar, connection_for, render_parameter
 from .util import Problem
 
 
+def port_error(node, contract, edges):
+    missing = []
+    for edge in edges:
+        for end, direction in (("source", "outputs"), ("target", "inputs")):
+            if edge[end] == node["id"] and edge[end + "Handle"] not in contract.get(direction, []):
+                missing.append(f"{edge.get('id', '?')}: {direction[:-1]} {edge[end + 'Handle']}")
+    return "Python ports changed; reconnect saved edges (" + "; ".join(missing) + ")" if missing else None
+
+
+def retained_contract(node, parsed, edges):
+    """Keep wired ports visible alongside newly declared ports until the user reconnects them."""
+    error = parsed.get("error") or port_error(node, parsed, edges)
+    if not error or not node.get("python_contract"):
+        return parsed
+    previous = node["python_contract"]
+    return {
+        **previous,
+        **parsed,
+        **{
+            key: list(dict.fromkeys([*previous.get(key, []), *parsed.get(key, [])]))
+            for key in ("inputs", "outputs")
+        },
+        "error": error,
+    }
+
+
 def remember_contracts(files):
     """Persist the last usable signature without changing edges or parameter values."""
     from .node_code import code_path
@@ -32,12 +58,7 @@ def remember_contracts(files):
                     contract = parse_python(code)
                 except Problem:
                     continue
-                incompatible = any(
-                    (e["source"] == node["id"] and e["sourceHandle"] not in contract["outputs"])
-                    or (e["target"] == node["id"] and e["targetHandle"] not in contract["inputs"])
-                    for e in graph.get("edges", [])
-                )
-                if not incompatible:
+                if not port_error(node, contract, graph.get("edges", [])):
                     node["python_contract"] = contract
             if json.loads(source) != graph:
                 result[name] = json.dumps(graph, ensure_ascii=False, indent=2) + "\n"
@@ -46,7 +67,7 @@ def remember_contracts(files):
     return result
 
 
-def parameters(node, schemas, captured, project_files):
+def parameters(node, schemas, captured, project_files, variables=None):
     result = {p["name"]: p["default"] for p in node["parsed"]["parameters"] if "default" in p}
     result.update(node.get("params", {}))
     names = {p["name"] for p in node["parsed"]["parameters"]}
@@ -73,13 +94,17 @@ def parameters(node, schemas, captured, project_files):
         ):
             if bound in parameter and not compare(value, parameter[bound]):
                 raise Problem(f"Parameter {name} must satisfy {bound}={parameter[bound]}", 422)
+        if parameter["python_type"] == "float":
+            result[name] = float(value)
         if kind == "column" and value not in {c["name"] for c in schemas.get(argument, [])}:
             raise Problem(f"Unknown column {value!r} on input {argument}", 422)
         if kind == "connection":
             if value:
                 connection_for(captured, value)
             continue
-        rendered = render_parameter(node["parsed"], parameter, result, captured, project_files, schemas)
+        rendered = render_parameter(
+            node["parsed"], parameter, result, captured, project_files, schemas, variables
+        )
         if kind in ("file", "destination"):
             result[name] = rendered[1:-1].replace("''", "'")
     return result

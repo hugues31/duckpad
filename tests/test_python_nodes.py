@@ -4,6 +4,7 @@ import copy
 import io
 import subprocess
 import sys
+from pathlib import Path
 
 import pytest
 from helpers import wait_run, wait_until
@@ -222,7 +223,10 @@ def test_invalid_edits_keep_contract_edges_and_parameters(services):
         from duckpad.components import expand
 
         nodes, _, _ = expand(snapshot["bundle"], tolerant=True)
-        assert nodes["python"]["parsed"]["outputs"] == ["valid", "rejected"]
+        expected = ["valid", "rejected"] + (["accepted", "renamed"] if "accepted" in text else [])
+        assert nodes["python"]["parsed"]["outputs"] == expected
+        if "accepted" in text:
+            assert "b: output valid" in nodes["python"]["error"]
         assert nodes["python"].get("error")
 
 
@@ -272,6 +276,10 @@ def test_python_isolated_filesystem_and_environment(tmp_path, monkeypatch):
     instance = Services.open(tmp_path / "instance", enforce_access=True)
     try:
         services = instance.store, instance.projects, instance.catalog, instance.engine
+        other = instance.projects.create("Other project")
+        other_file = Path(other["path"]) / "pyproject.toml"
+        metadata = instance.store.home / "instance.sqlite"
+        protected = [str(forbidden), str(other_file), str(metadata)]
         code = f"""import duckpad as dp
 import os
 from pathlib import Path
@@ -279,12 +287,15 @@ from pathlib import Path
 class Probe(dp.Node):
     def run(self) -> None:
         assert "DUCKPAD_TEST_API_CREDENTIAL" not in os.environ
-        try:
-            Path({str(forbidden)!r}).read_text()
-        except PermissionError:
-            self.message("info", "private files denied")
-        else:
-            raise RuntimeError("private file was readable")
+        for forbidden in {protected!r}:
+            for operation in (lambda p: p.read_bytes(), lambda p: p.write_text("bad")):
+                try:
+                    operation(Path(forbidden))
+                except PermissionError:
+                    pass
+                else:
+                    raise RuntimeError("private path was accessible")
+        self.message("info", "private files denied")
 """
         worktree = single(services, code)
         result = wait_run(instance.store, instance.engine.launch(worktree["id"], "dev"), timeout=30)
@@ -316,7 +327,7 @@ def test_lock_environment_reuse_runtime_constraints_and_archive(services):
             first["interpreter"],
             "-I",
             "-c",
-            "import humanize; print(humanize.intcomma(1000)); import importlib.util; assert importlib.util.find_spec('fastapi') is None",
+            "import humanize; print(humanize.intcomma(1000)); import importlib.util; assert importlib.util.find_spec('fastapi') is None; import duckpad as dp; assert dp.Node",
         ],
         capture_output=True,
         text=True,
@@ -523,8 +534,7 @@ def test_tagged_python_job_uses_locked_environment(services):
     assert projects.snapshot(run["worktree"])["files"]["uv.lock"] == snapshot["files"]["uv.lock"]
 
 
-@pytest.mark.parametrize("enabled", [False, True])
-def test_connection_secret_opt_in_and_redaction(services, enabled):
+def test_python_activation_includes_authorized_secrets_and_redacts_logs(services):
     store, _, catalog, engine = services
     catalog.save(
         "connector",
@@ -553,19 +563,19 @@ def test_connection_secret_opt_in_and_redaction(services, enabled):
         },
         create=True,
     )
-    code = f"""import duckpad as dp
+    code = """import duckpad as dp
 import os
 class Probe(dp.Node):
     api: dp.Connection = "api"
     def run(self) -> None:
         values = self.connection(self.api)
         assert values["base_url"] == "https://api.example.invalid"
-        assert ("token" in values) is {enabled}
+        assert values["token"] == "synthetic-python-secret"
         assert "synthetic-python-secret" not in os.environ.values()
         self.message("info", str(values))
 """
     worktree = single(services, code)
-    store.put("settings", "python:" + worktree["project"], {"enabled": True, "expose_secrets": enabled})
+    store.put("settings", "python:" + worktree["project"], {"enabled": True})
     run = wait_run(store, engine.launch(worktree["id"], "dev"), timeout=30)
     assert run["status"] == "success", run["nodes"]
     assert "synthetic-python-secret" not in str(run)

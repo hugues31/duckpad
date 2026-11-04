@@ -31,6 +31,7 @@ from ..materialize import (
 from ..partition_runs import PartitionRun
 from ..partition_storage import PartitionStorage
 from ..projects import Projects
+from ..python_policy import get_policy
 from ..store import Store
 from ..templates import base_type, compile_template
 from ..types import Connections, Record, RunToken, SQLCursor
@@ -227,8 +228,28 @@ class Runner:
     ) -> Execution:
         """Capture the committed definitions and connection settings the run will use."""
         snapshot = self.projects.flush(worktree)
-        settings = self.store.get("settings", "python:" + snapshot["worktree"]["project"], {})
-        if settings.get("enabled") and any(name.endswith(".py") for name in snapshot["files"]):
+        settings = get_policy(self.store, snapshot["worktree"]["project"])
+        bundle = copy.deepcopy(snapshot["bundle"])
+        if bundle is None:
+            raise Problem(
+                "Project files are invalid; correct them before execution", 422, snapshot["diagnostics"]
+            )
+        structural, edges, boundaries = expand(bundle, tolerant=True)
+        sources = value_sources.sources(bundle, structural, boundaries)
+        phase, validation_errors = value_sources.dependencies(structural, edges, sources)
+        partition_plan = partitions.plan(bundle, structural, edges, boundaries)
+        # Refuse invalid options before marking any result stale.
+        selection, policy = partitions.launch_options(
+            partition_plan.get("dimension"), partition_selection, partition_execution
+        )
+        phase |= partition_plan["value_phase"]
+        selected_scope = self._partition_scope(
+            worktree, environment, structural, edges, launch_scope(structural, edges, target), partition_plan
+        )
+        needs_python = any(structural[key].get("language") == "python" for key in selected_scope)
+        if needs_python and not settings.get("enabled"):
+            raise Problem("Python execution is disabled; ask an instance administrator to enable it", 403)
+        if needs_python:
             from ..python_environment import lock_files
 
             files = snapshot["files"]
@@ -236,6 +257,7 @@ class Runner:
                 files,
                 self.store.home,
                 read_only=bool(snapshot["worktree"].get("read_only")),
+                project=snapshot["worktree"]["project"],
                 allow_builds=settings.get("allow_builds", False),
             )
             if locked != files.get("uv.lock"):
@@ -245,30 +267,18 @@ class Runner:
                     {**files, "uv.lock": locked},
                     "build(project): lock Python dependencies",
                 )
-        bundle = copy.deepcopy(snapshot["bundle"])
-        if bundle is None:
-            raise Problem(
-                "Project files are invalid; correct them before execution", 422, snapshot["diagnostics"]
-            )
-        structural, edges, boundaries = expand(bundle, tolerant=True)
-        if not settings.get("enabled") and any(
-            structural[key].get("language") == "python" for key in launch_scope(structural, edges, target)
-        ):
-            raise Problem("Python execution is disabled; ask an instance administrator to enable it", 403)
-        sources = value_sources.sources(bundle, structural, boundaries)
-        phase, validation_errors = value_sources.dependencies(structural, edges, sources)
-        partition_plan = partitions.plan(bundle, structural, edges, boundaries)
-        # Refuse invalid options before marking any result stale.
-        selection, policy = partitions.launch_options(
-            partition_plan.get("dimension"), partition_selection, partition_execution
-        )
-        phase |= partition_plan["value_phase"]
+        if needs_python:
+            bundle["python_lock"] = snapshot["files"].get("uv.lock")
         requirements = project_extensions.enabled(bundle.get("extensions"))
-        context = self.pool.get(worktree, environment, create=True, requirements=requirements)
+        context = self.pool.get(
+            worktree, environment, create=True, requirements=requirements, python=needs_python
+        )
         self.pool.renew(context)
         if getattr(context.db, "closed", False):
             # The results could not move to a worker with the new connection settings.
-            context = self.pool.get(worktree, environment, create=True, requirements=requirements)
+            context = self.pool.get(
+                worktree, environment, create=True, requirements=requirements, python=needs_python
+            )
         values = self.pool.computed(worktree, environment, bundle)
         nodes, edges, _ = expand_for(bundle, environment, computed=values)
         scope = self._partition_scope(
@@ -908,7 +918,11 @@ class Runner:
         node = execution.nodes[key]
         state = execution.run["nodes"][key]
         values = parameters(
-            node, {p: d.columns for p, d in inputs.items()}, execution.captured, project_files
+            node,
+            {p: d.columns for p, d in inputs.items()},
+            execution.captured,
+            project_files,
+            execution.values,
         )
         state["parameters"] = values
         workspace = (
@@ -917,7 +931,7 @@ class Runner:
             / uid("python_")
         )
         workspace.mkdir(parents=True)
-        policy = self.store.get("settings", "python:" + execution.run["project"], {})
+        policy = get_policy(self.store, execution.run["project"])
         if not policy.get("enabled"):
             raise Problem("Python execution is disabled", 403)
         staged = {}
@@ -928,6 +942,7 @@ class Runner:
             from ..sandbox import Cursor as WorkerCursor
 
             assert isinstance(cursor, WorkerCursor)
+            python_start = time.monotonic()
             response = cursor.python(
                 {
                     "code": node["template_sql"],
@@ -936,21 +951,10 @@ class Runner:
                     "outputs": {p: name + "_storage" for p, name in physical.items()},
                     "workspace": str(workspace),
                     "partition": execution.partition,
+                    "partition_filters": node.get("partition_filters", {}),
+                    "filename": "nodes/" + key.replace("::", "/") + ".py",
                     "helpers": execution.bundle.get("python_helpers", {}),
-                    "connections": {
-                        r: {
-                            name: value
-                            for name, value in execution.captured[r]["values"].items()
-                            if policy.get("expose_secrets")
-                            or name
-                            not in {
-                                p["name"]
-                                for p in execution.captured[r]["definition"].get("parameters", [])
-                                if p.get("secret")
-                            }
-                        }
-                        for r in connection_references(node)
-                    },
+                    "connections": {r: execution.captured[r]["values"] for r in connection_references(node)},
                 }
             )
             for result in response.get("messages", []):
@@ -988,7 +992,7 @@ class Runner:
                     },
                 )
             if response.get("error"):
-                raise Problem(response["error"], 422)
+                raise Problem(response["error"].replace(str(self.store.home), "<instance>"), 422)
             created_tables.extend((table, table + "_storage") for table in physical.values())
             for port, table in physical.items():
                 storage = table + "_storage"
@@ -1020,6 +1024,7 @@ class Runner:
                     source_columns=columns,
                     column_map=mapping,
                     opaque_python=True,
+                    duration=time.monotonic() - python_start,
                     bound_values=copy.deepcopy(execution.values),
                 )
             artifacts = response.get("artifacts", {})

@@ -35,6 +35,7 @@ from .execution.samples import Sample
 from .git.identity import commit_author
 from .jobs import Jobs
 from .oidc import CALLBACK_PATH, OIDC, TRANSACTION_LIFETIME, OIDCSettings
+from .python_policy import get_policy
 from .resources import resource_usage
 from .search import search_instance
 from .services import Services
@@ -598,12 +599,14 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
             if role == "admin"
             else [],
             "connections": record["connections"],
-            "python": store.get(
-                "settings",
-                "python:" + project,
-                {"enabled": False, "expose_secrets": False, "allow_builds": False},
-            ),
+            "python": get_policy(store, project),
         }
+
+    @app.get("/api/projects/{project}/python/environment", response_model=None)
+    def python_environment_status(project: str) -> Record:
+        from .python_environment import environment_status
+
+        return environment_status(store.home, project)
 
     @app.put("/api/projects/{project}/python", response_model=None)
     def python_policy(project: str, data: schemas.PythonPolicy) -> Record:
@@ -650,6 +653,7 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
         result = projects.snapshot(worktree, committed=True)
         project = result["worktree"]["project"]
         result["role"] = access.role(request.state.user, project)
+        result["python_enabled"] = get_policy(store, project)["enabled"]
         granted_connections = access.record(project)["connections"]
         result["connections"] = []
         for c in store.all("connection"):
@@ -678,18 +682,18 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
                         result["parsed_templates"] if node.get("template") else result["parsed_nodes"]
                     )
                     parsed = collection.get(path, {})
-                    incompatible = any(
-                        (e["source"] == node["id"] and e["sourceHandle"] not in parsed.get("outputs", []))
-                        or (e["target"] == node["id"] and e["targetHandle"] not in parsed.get("inputs", []))
-                        for e in graph.get("edges", [])
-                    )
-                    if parsed.get("error") or incompatible:
-                        collection[path] = {
-                            **node["python_contract"],
-                            "error": parsed.get(
-                                "error", "Python ports changed; reconnect the saved edges before running"
-                            ),
-                        }
+                    from .python_nodes import retained_contract
+
+                    collection[path] = retained_contract(node, parsed, graph.get("edges", []))
+                    if collection[path].get("error"):
+                        result["diagnostics"].append(
+                            {
+                                "file": path,
+                                "node": node["id"],
+                                "code": "python_contract",
+                                "message": collection[path]["error"],
+                            }
+                        )
         result["variables"] = (
             variables.summary(
                 result["bundle"],

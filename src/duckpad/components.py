@@ -81,22 +81,12 @@ def expand(bundle, tolerant=False):
                 else:
                     text = node_sql(bundle, node, stack[-1] if stack else None)
                     template = parse_template(text, node.get("language", "sql"))
-                    if node.get("language") == "python" and node.get("python_contract"):
-                        previous = node["python_contract"]
-                        if any(
-                            (e["source"] == node["id"] and e["sourceHandle"] not in template["outputs"])
-                            or (e["target"] == node["id"] and e["targetHandle"] not in template["inputs"])
-                            for e in graph.get("edges", [])
-                        ):
-                            add_leaf(
-                                node,
-                                key,
-                                path,
-                                previous,
-                                text,
-                                local_ports,
-                                "Python ports changed; reconnect the saved edges before running",
-                            )
+                    if node.get("language") == "python":
+                        from .python_nodes import retained_contract
+
+                        template = retained_contract(node, template, graph.get("edges", []))
+                        if template.get("error"):
+                            add_leaf(node, key, path, template, text, local_ports, template["error"])
                             continue
                     add_leaf(node, key, path, template, text, local_ports)
             except (Problem, KeyError, TypeError) as error:

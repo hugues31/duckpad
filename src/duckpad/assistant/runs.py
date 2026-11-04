@@ -10,6 +10,7 @@ from .. import variables
 from ..components import expand_for
 from ..execution.runs import UNFINISHED_RUN_STATUSES, launch_scope
 from ..graph import connection_references
+from ..python_policy import get_policy
 from ..util import Problem
 from .tools import Dependencies, page
 
@@ -41,7 +42,7 @@ def proposal(deps, environment="", node=""):
                 snapshot["files"],
                 settings,
                 configuration,
-                services.store.get("settings", "python:" + deps.context["project"], {}),
+                get_policy(services.store, deps.context["project"]),
             ],
             sort_keys=True,
         ).encode()

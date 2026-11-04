@@ -1,7 +1,6 @@
 """Start with -I -S: no project imports, .pth files or sitecustomize before confinement."""
 
 import importlib.util
-import io
 import json
 import os
 import runpy
@@ -12,9 +11,10 @@ from pathlib import Path
 def main():
     # Preserve a dedicated protocol pipe before redirecting all ordinary output to stderr.
     channel = os.fdopen(os.dup(sys.stdout.fileno()), "wb")
-    stream = sys.stdin.buffer
+    stream = os.fdopen(os.dup(sys.stdin.fileno()), "rb")
     os.dup2(sys.stderr.fileno(), sys.stdout.fileno())
-    sys.stdin = io.StringIO()
+    with Path(os.devnull).open("rb") as empty:
+        os.dup2(empty.fileno(), 0)
     message = json.loads(stream.readline())
     policy = message["policy"]
     for name in ("TMPDIR", "TMP", "TEMP"):
@@ -61,6 +61,10 @@ def main():
     package = importlib.util.module_from_spec(spec)
     sys.modules["duckpad"] = package
     spec.loader.exec_module(package)
+    # Process package path hooks only after confinement, with our SDK already selected.
+    import site as site_module
+
+    site_module.addsitedir(str(site))
     from duckpad.sql_worker import serve
 
     serve(stream, channel, message)

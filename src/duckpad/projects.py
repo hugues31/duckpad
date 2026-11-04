@@ -27,6 +27,7 @@ from .git.workspace import GitWorkspace, diagnose, require_valid
 from .merge import conflict_details, merge_files
 from .node_code import owned_paths
 from .node_names import node_names
+from .python_policy import get_policy
 from .store import Store
 from .templates import parse_template
 from .types import Files, Record
@@ -452,6 +453,19 @@ class Projects:
         # A rejected save writes nothing, not even part of the proposal.
         if not all(is_declarative(name) for name in proposal):
             raise Problem("Only declarative project files can be edited here")
+        proposal = dict(proposal)
+        record = self.get(worktree_id)
+        self.writable(record)
+        policy = get_policy(self.store, record["project"])
+        if policy.get("enabled") and any(name.endswith(".py") for name in proposal):
+            from .python_environment import lock_files
+
+            proposal["uv.lock"] = lock_files(
+                proposal,
+                self.store.home,
+                allow_builds=policy.get("allow_builds", False),
+                project=record["project"],
+            )
         with self.locked(worktree_id) as worktree:
             self.writable(worktree)
             current = self.read_files(worktree)
@@ -486,23 +500,13 @@ class Projects:
                 }
                 self.store.put("conflict", conflict["id"], conflict)
                 raise Problem("Concurrent edits conflict. Both versions have been retained.", 409, conflict)
-            if any(name.endswith(".py") for name in merged) and self.store.get(
-                "settings", "python:" + worktree["project"], {}
-            ).get("enabled"):
-                from .python_environment import lock_files
-
-                if (
-                    merged.get("pyproject.toml") != current.get("pyproject.toml")
-                    or not merged.get("uv.lock")
-                    or "<<<<<<<" in merged.get("uv.lock", "")
-                ):
-                    merged["uv.lock"] = lock_files(
-                        merged,
-                        self.store.home,
-                        allow_builds=self.store.get("settings", "python:" + worktree["project"], {}).get(
-                            "allow_builds", False
-                        ),
-                    )
+            if merged.get("pyproject.toml") != proposal.get("pyproject.toml") and any(
+                name.endswith(".py") for name in merged
+            ):
+                raise Problem(
+                    "Python dependencies changed concurrently. Reload and save to resolve the merged manifest.",
+                    409,
+                )
             from .python_nodes import remember_contracts
 
             merged = remember_contracts(merged)

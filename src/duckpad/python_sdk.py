@@ -95,7 +95,7 @@ def validate_value(name, annotation, value, metadata):
     ):
         if bound in metadata and not comparison(value, metadata[bound]):
             raise ValueError(f"Parameter {name} must satisfy {bound}={metadata[bound]}")
-    return value
+    return float(value) if annotation is float else value
 
 
 class Outputs:
@@ -164,7 +164,7 @@ class Node:
         return path
 
     def connection(self, reference):
-        """Authorized connection settings; secret fields require administrator opt-in."""
+        """Authorized connection settings, including secrets when Python is enabled."""
         if reference not in self._connections:
             raise PermissionError("Choose an authorized connection parameter before accessing its settings")
         return dict(self._connections[reference])

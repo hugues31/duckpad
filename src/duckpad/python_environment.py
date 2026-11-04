@@ -7,10 +7,12 @@ import importlib.metadata
 import io
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import tomllib
 import zipfile
 from functools import cache
@@ -36,6 +38,7 @@ MODULES = (
     "extensions.py",
     "project_extensions.py",
     "python_execution.py",
+    "python_partitions.py",
 )
 
 
@@ -127,32 +130,57 @@ def validate_manifest(text):
         raise Problem(
             f"This server requires Duckpad SDK contract {SDK_CONTRACT}; update the project manifest", 422
         )
-    dependencies = manifest.get("project", {}).get("dependencies", [])
+    project = manifest.get("project", {})
+    dependencies = project.get("dependencies", [])
     if f"duckdb=={duckdb.__version__}" not in dependencies:
         raise Problem(
             f"Project dependencies must pin duckdb=={duckdb.__version__}, matching the server runtime", 422
         )
-    if any(str(d).split("=")[0].strip().lower() == "duckpad" for d in dependencies):
-        raise Problem("Remove the Duckpad server dependency: the server supplies the lightweight SDK", 422)
-    sources = manifest.get("tool", {}).get("uv", {}).get("sources", {})
     uv = manifest.get("tool", {}).get("uv", {})
     if uv.get("package") is not False or "build-system" in manifest:
         raise Problem("Python flows must set tool.uv.package=false and must not declare a build system", 422)
-    if "override-dependencies" in uv or "workspace" in uv:
-        raise Problem("Dependency overrides and uv workspaces cannot replace the server runtime", 422)
-    if any("@" in str(dependency) for dependency in dependencies):
+    if set(uv) - {"package", "sources"}:
         raise Problem(
-            "Direct dependency URLs and local paths are unsupported; use the operator package index", 422
-        )
-    if sources.get("duckdb") != {"path": f".duckpad-runtime/{runtime_tag()}"}:
-        raise Problem(
-            "The project's DuckDB source does not match the operator runtime; recreate its runtime declaration",
+            "Only tool.uv.package and the server DuckDB source are allowed; indexes and cache settings belong to the operator",
             422,
         )
-    # Build scripts and arbitrary local paths are not dependency sources under the default policy.
-    for name, source in sources.items():
-        if name != "duckdb" and (not isinstance(source, dict) or set(source) - {"index"}):
-            raise Problem("Project dependencies must come from configured package indexes", 422)
+    if project.get("dynamic"):
+        raise Problem("Python project dependency declarations must be static", 422)
+    lists = [
+        dependencies,
+        *project.get("optional-dependencies", {}).values(),
+        *manifest.get("dependency-groups", {}).values(),
+    ]
+    for items in lists:
+        if not isinstance(items, list):
+            raise Problem("Python dependencies must be lists", 422)
+        for dependency in items:
+            if isinstance(dependency, dict) and set(dependency) == {"include-group"}:
+                continue
+            if (
+                not isinstance(dependency, str)
+                or "@" in dependency
+                or "://" in dependency
+                or "\\" in dependency
+            ):
+                raise Problem(
+                    "Direct dependency URLs and local paths are unsupported; use the operator package index",
+                    422,
+                )
+            match = re.match(r"^([A-Za-z0-9][A-Za-z0-9._-]*)\s*(?:\[|[<>=!~;]|$)", dependency)
+            if not match:
+                raise Problem("Dependencies must be named packages from the operator package index", 422)
+            name = re.sub(r"[-_.]+", "-", match[1]).lower()
+            if name == "duckpad":
+                raise Problem(
+                    "Remove the Duckpad server dependency: the server supplies the lightweight SDK", 422
+                )
+            if name == "duckdb" and dependency != f"duckdb=={duckdb.__version__}":
+                raise Problem("All DuckDB dependencies must match the server's exact version", 422)
+    if uv.get("sources") != {"duckdb": {"path": f".duckpad-runtime/{runtime_tag()}"}}:
+        raise Problem(
+            "The project's DuckDB source must match the operator runtime; other sources are unsupported", 422
+        )
     return manifest
 
 
@@ -186,7 +214,7 @@ def command(arguments, directory, *, allow_builds=False):
     options = [] if allow_builds else ["--no-build"]
     try:
         result = subprocess.run(
-            [executable, *arguments, *options],
+            [executable, "--no-config", *arguments, *options],
             cwd=directory,
             env=environment,
             capture_output=True,
@@ -197,12 +225,63 @@ def command(arguments, directory, *, allow_builds=False):
         raise Problem("Python environment preparation timed out", 503) from None
     if result.returncode:
         detail = result.stderr[-8000:].replace(str(directory), "<project>")
+        detail = re.sub(r"(https?://)[^/@\s]+@", r"\1<redacted>@", detail)
         raise Problem(
             "Python environment preparation failed (DuckDB is pinned to the server runtime):\n" + detail, 422
         )
 
 
-def lock_files(files, home, *, read_only=False, allow_builds=False):
+def environment_status(home, project):
+    path = Path(home) / "python" / "status" / (project + ".json")
+    status = json.loads(path.read_text()) if path.exists() else {"state": "unprepared"}
+    return {**status, "python": sys.version.split()[0], "duckdb": duckdb.__version__}
+
+
+def set_status(home, project, state, error=None):
+    if project:
+        atomic_write(
+            Path(home) / "python" / "status" / (project + ".json"),
+            json.dumps(
+                {
+                    "state": state,
+                    "error": str(error).replace(str(home), "<instance>") if error else None,
+                }
+            ),
+        )
+
+
+def lock_files(files, home, *, read_only=False, allow_builds=False, project=None):
+    try:
+        return cached_lock(files, home, read_only=read_only, allow_builds=allow_builds, project=project)
+    except Exception as error:
+        set_status(home, project, "error", error)
+        raise
+
+
+def cached_lock(files, home, *, read_only=False, allow_builds=False, project=None):
+    validate_manifest(files["pyproject.toml"])
+    root = Path(home) / "python" / "locks"
+    root.mkdir(parents=True, exist_ok=True)
+
+    def key(lock):
+        return digest([files["pyproject.toml"], lock, runtime_signature(), allow_builds])
+
+    cached = root / (key(files.get("uv.lock")) + ".json")
+    with FileLock(str(cached.with_suffix(".lock"))):
+        if cached.exists():
+            locked = json.loads(cached.read_text())["lock"]
+            if not read_only or locked == files.get("uv.lock"):
+                return locked
+        set_status(home, project, "resolving")
+        locked = resolve_lock(files, home, read_only=read_only, allow_builds=allow_builds)
+        set_status(home, project, "locked")
+        value = json.dumps({"lock": locked})
+        atomic_write(cached, value)
+        atomic_write(root / (key(locked) + ".json"), value)
+        return locked
+
+
+def resolve_lock(files, home, *, read_only=False, allow_builds=False):
     """Resolve in scratch space; tagged worktrees are never written."""
     validate_manifest(files["pyproject.toml"])
     root = Path(home) / "python"
@@ -211,12 +290,12 @@ def lock_files(files, home, *, read_only=False, allow_builds=False):
         wheel = runtime_wheel(root / "wheels")
     with tempfile.TemporaryDirectory(dir=root) as temporary:
         directory = Path(temporary)
-        (directory / "pyproject.toml").write_text(files["pyproject.toml"])
-        (directory / "README.md").write_text(files.get("README.md", ""))
+        (directory / "pyproject.toml").write_bytes(files["pyproject.toml"].encode("utf-8"))
+        (directory / "README.md").write_bytes(files.get("README.md", "").encode("utf-8"))
         (directory / ".duckpad-runtime").mkdir()
         shutil.copyfile(wheel, directory / ".duckpad-runtime" / wheel.name)
         if files.get("uv.lock") and "<<<<<<<" not in files["uv.lock"]:
-            (directory / "uv.lock").write_text(files["uv.lock"])
+            (directory / "uv.lock").write_bytes(files["uv.lock"].encode("utf-8"))
         elif read_only:
             raise Problem(
                 "This tagged Python project needs a valid uv.lock; update and tag its editable branch", 422
@@ -226,10 +305,44 @@ def lock_files(files, home, *, read_only=False, allow_builds=False):
             directory,
             allow_builds=allow_builds,
         )
-        return (directory / "uv.lock").read_text()
+        return (directory / "uv.lock").read_bytes().decode("utf-8")
 
 
 def prepare(files, home, project, *, allow_builds=False):
+    try:
+        result = prepare_environment(files, home, project, allow_builds=allow_builds)
+        set_status(home, project, "ready")
+        prune_environments(Path(home) / "python")
+        return result
+    except Exception as error:
+        set_status(home, project, "error", error)
+        raise
+
+
+def prune_environments(root):
+    """Keep active workers and recently used immutable environments."""
+    from filelock import Timeout
+
+    for marker in root.glob("*/ready.json"):
+        if time.time() - marker.stat().st_mtime < 7 * 86400:
+            continue
+        try:
+            with FileLock(str(marker.parent) + ".lock", timeout=0):
+                active = False
+                for path in root.glob(marker.parent.name + ".lease.*"):
+                    try:
+                        with FileLock(str(path), timeout=0):
+                            pass
+                        path.unlink(missing_ok=True)
+                    except Timeout:
+                        active = True
+                if not active and marker.exists() and time.time() - marker.stat().st_mtime >= 7 * 86400:
+                    shutil.rmtree(marker.parent)
+        except (Timeout, FileNotFoundError):
+            continue
+
+
+def prepare_environment(files, home, project, *, allow_builds=False):
     validate_manifest(files["pyproject.toml"])
     if not files.get("uv.lock"):
         raise Problem("Save the Python project to generate uv.lock before execution", 422)
@@ -239,12 +352,13 @@ def prepare(files, home, project, *, allow_builds=False):
     directory = root / signature
     with FileLock(str(root / (signature + ".lock"))):
         if not (directory / "ready.json").exists():
+            set_status(home, project, "installing")
             shutil.rmtree(directory, ignore_errors=True)
             directory.mkdir()
             try:
-                (directory / "pyproject.toml").write_text(files["pyproject.toml"])
-                (directory / "uv.lock").write_text(files["uv.lock"])
-                (directory / "README.md").write_text(files.get("README.md", ""))
+                (directory / "pyproject.toml").write_bytes(files["pyproject.toml"].encode("utf-8"))
+                (directory / "uv.lock").write_bytes(files["uv.lock"].encode("utf-8"))
+                (directory / "README.md").write_bytes(files.get("README.md", "").encode("utf-8"))
                 with FileLock(str(root / "runtime.lock")):
                     wheel = runtime_wheel(root / "wheels")
                 (directory / ".duckpad-runtime").mkdir()
@@ -259,10 +373,21 @@ def prepare(files, home, project, *, allow_builds=False):
                 for name in MODULES:
                     shutil.copyfile(Path(__file__).with_name(name), package / name)
                 (package / "__init__.py").write_text("from .python_sdk import *\n")
+                site = (
+                    directory
+                    / ".venv"
+                    / (
+                        "Lib/site-packages"
+                        if os.name == "nt"
+                        else f"lib/python{sys.version_info.major}.{sys.version_info.minor}/site-packages"
+                    )
+                )
+                shutil.copytree(package, site / "duckpad")
                 atomic_write(directory / "ready.json", json.dumps({"signature": signature}))
             except BaseException:
                 shutil.rmtree(directory, ignore_errors=True)
                 raise
+        (directory / "ready.json").touch()
     interpreter = directory / ".venv" / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
     site = (
         directory
@@ -274,6 +399,7 @@ def prepare(files, home, project, *, allow_builds=False):
         )
     )
     return {
+        "lease": str(directory) + ".lease",
         "interpreter": str(interpreter),
         "site_packages": str(site),
         "worker": str(directory / "sdk/duckpad/worker_bootstrap.py"),

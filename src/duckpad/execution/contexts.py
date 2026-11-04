@@ -21,6 +21,7 @@ from ..datasets import Context
 from ..extensions import database_config
 from ..materialize import drop_dataset
 from ..projects import Projects
+from ..python_policy import get_policy
 from ..store import Store
 from ..templates import URI
 from ..types import Connections, Record, SQLCursor, SQLDatabase
@@ -148,7 +149,12 @@ class ContextPool:
         self.contexts: dict[tuple[str, str], Context] = {}
 
     def get(
-        self, worktree: str, environment: str, create: bool = False, requirements: list[Record] | None = None
+        self,
+        worktree: str,
+        environment: str,
+        create: bool = False,
+        requirements: list[Record] | None = None,
+        python: bool = False,
     ) -> Context:
         """The live DuckDB context of an existing worktree in a configured environment.
 
@@ -174,9 +180,12 @@ class ContextPool:
         if opening:
             record = self.projects.get(worktree)
             files = self.projects.read_files(record)
-            policy = self.store.get("settings", "python:" + record["project"], {})
-            if policy.get("enabled") and any(name.endswith(".py") for name in files):
-                python_signature = digest([files.get("pyproject.toml"), files.get("uv.lock")])
+            policy = get_policy(self.store, record["project"])
+            if policy.get("enabled"):
+                if python:
+                    python_signature = digest([files.get("pyproject.toml"), files.get("uv.lock")])
+                elif existing and not getattr(existing.db, "closed", False):
+                    python_signature = existing.python_signature
         while True:
             self.projects.get(worktree)
             if environment not in self.catalog.environment_names():
@@ -214,7 +223,12 @@ class ContextPool:
             if context.db is not None or (self.access and not create):
                 return context
             database, connections, secrets = self._open(
-                worktree, environment, requirements or [], resources, partition_artifacts
+                worktree,
+                environment,
+                requirements or [],
+                resources,
+                partition_artifacts,
+                python=bool(python_signature),
             )
             with self.lock:
                 if self.contexts.get(key) is context and context.db is None:
@@ -317,6 +331,7 @@ class ContextPool:
             context.resources,
             context.partition_artifacts,
             (connections, secrets),
+            python=bool(context.python_signature),
         )
         handoff = self.store.paths.exports(context.worktree, context.environment) / ".temporary"
         handoff = handoff / f"handoff-{uid()}.duckdb"
@@ -360,6 +375,7 @@ class ContextPool:
         resources: Record,
         partition_artifacts: bool,
         connections: tuple[Connections, list[str]] | None = None,
+        python: bool = False,
     ) -> tuple[SQLDatabase, Connections, list[str]]:
         """Start a context's database, with the connections an isolated worker attached."""
         extensions = self.store.paths.extensions
@@ -375,8 +391,8 @@ class ContextPool:
         roots, writable = self.access.local_roots(project, captured) if self.access else ([], [])
         files = self.projects.read_files(self.projects.get(worktree))
         runtime = {}
-        policy = self.store.get("settings", "python:" + project, {})
-        if policy.get("enabled") and any(name.endswith(".py") for name in files):
+        policy = get_policy(self.store, project)
+        if policy.get("enabled") and python:
             from ..python_environment import prepare
 
             runtime = prepare(files, self.store.home, project, allow_builds=policy.get("allow_builds", False))

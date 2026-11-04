@@ -149,7 +149,7 @@ jobs:
           python-version: '3.12'
       - uses: astral-sh/setup-uv@v7
       - run: uv sync --locked --python 3.12
-      - run: uv run pytest -q tests/test_project_paths.py tests/test_trusted_local.py tests/test_python_nodes.py
+      - run: uv run pytest -q tests/test_project_paths.py tests/test_trusted_local.py tests/test_python_nodes.py tests/test_python_review.py
 
   browser:
     name: Frontend and browser tests

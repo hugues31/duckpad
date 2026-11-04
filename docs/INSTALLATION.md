@@ -309,3 +309,12 @@ language and theme.
 ![Language and theme choices in personal preferences](images/preferences.png)
 
 Results live in memory per worktree and environment. After a backend restart, history remains available but previews and lineage require another manual run. Editing or changing an external source does not launch a run automatically.
+
+## Python node environments
+
+Installing Duckpad also installs the `uv` executable used for project environments.
+An instance administrator enables Python in each project's **Python** settings.
+Activation gives Python access to the secrets of that project's authorized
+connections because SQL and Python share a worker. Source builds require a
+separate opt-in; wheels are the default. See [Python nodes](PYTHON.md) for
+operator indexes, offline wheel caches, runtime compatibility and memory limits.

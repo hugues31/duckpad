@@ -15,9 +15,10 @@ from pathlib import Path
 from typing import Any
 
 import duckdb
+from filelock import FileLock
 
 from .types import Record
-from .util import Problem, clean
+from .util import Problem, clean, uid
 
 
 class Database:
@@ -25,22 +26,43 @@ class Database:
         environment = {
             key: value
             for key, value in os.environ.items()
-            if key in ("PATH", "LANG", "LC_ALL", "LD_LIBRARY_PATH", "SYSTEMROOT", "WINDIR")
+            if key
+            in (
+                "PATH",
+                "LANG",
+                "LC_ALL",
+                "LD_LIBRARY_PATH",
+                "SYSTEMROOT",
+                "WINDIR",
+                "USERPROFILE",
+                "APPDATA",
+                "LOCALAPPDATA",
+            )
         }
         environment["PYTHONUNBUFFERED"] = "1"
-        self.process = subprocess.Popen(
-            [
-                policy.pop("interpreter", sys.executable),
-                "-I",
-                "-S",
-                policy.pop("worker", str(Path(__file__).with_name("worker_bootstrap.py"))),
-                policy.pop("site_packages", sysconfig.get_path("purelib")),
-            ],
-            env=environment,
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        )
+        lease = policy.pop("lease", None)
+        self.lease = FileLock(lease + "." + uid(), thread_local=False) if lease else None
+        if self.lease:
+            self.lease.acquire()
+
+        try:
+            self.process = subprocess.Popen(
+                [
+                    policy.pop("interpreter", sys.executable),
+                    "-I",
+                    "-S",
+                    policy.pop("worker", str(Path(__file__).with_name("worker_bootstrap.py"))),
+                    policy.pop("site_packages", sysconfig.get_path("purelib")),
+                ],
+                env=environment,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+        except BaseException:
+            if self.lease:
+                self.lease.release()
+            raise
         self.socket = Pipe(self.process.stdin)
         assert self.process.stdout is not None
         assert self.process.stderr is not None
@@ -60,7 +82,7 @@ class Database:
             self.close()
             diagnostics = self.diagnostics
             raise Problem(
-                "Cannot initialize isolated SQL execution: " + (diagnostics or str(error)),
+                "Cannot initialize execution worker: " + (diagnostics or str(error)),
                 503,
             ) from None
 
@@ -72,7 +94,7 @@ class Database:
 
     @property
     def diagnostics(self) -> str:
-        return "".join(self._diagnostics)
+        return "".join(getattr(self, "_diagnostics", []))
 
     def _read(self) -> None:
         try:
@@ -91,10 +113,13 @@ class Database:
             self._stopped()
 
     def _stopped(self) -> None:
+        drain = getattr(self, "drain", None)
+        if drain is not None and self.process.poll() is not None:
+            drain.join(timeout=1)
         with self.lock:
             self.closed = True
             for target in self.pending.values():
-                message = "The isolated SQL worker stopped"
+                message = "The execution worker stopped"
                 process = getattr(self, "process", None)
                 if process is not None:
                     code = process.poll()
@@ -102,6 +127,9 @@ class Database:
                         message += ": a native dependency is incompatible with the server CPU; use a compatible wheel (for Polars, polars[rtcompat])"
                     elif code is not None:
                         message += f" (exit {code}); the worker may have crashed, exhausted memory or been canceled. Run again to recompute this context."
+                diagnostics = self.diagnostics
+                if diagnostics:
+                    message += "\n" + diagnostics[-8000:]
                 target.put({"error": message, "type": "Error"})
 
     def call(self, operation: str, **arguments: Any) -> Any:
@@ -110,7 +138,7 @@ class Database:
         try:
             with self.lock:
                 if self.closed:
-                    raise Problem("The isolated SQL worker is unavailable", 503)
+                    raise Problem("The execution worker is unavailable", 503)
                 self.serial += 1
                 identity = self.serial
                 self.pending[identity] = target
@@ -138,7 +166,7 @@ class Database:
         except OSError:
             # A concurrent close may win before the reader marks the worker stopped.
             self._stopped()
-            raise Problem("The isolated SQL worker is unavailable", 503) from None
+            raise Problem("The execution worker is unavailable", 503) from None
         finally:
             if identity is not None:
                 with self.lock:
@@ -180,6 +208,9 @@ class Database:
         self.socket.close()
         self.reader.join(timeout=5)
         self.stream.close()
+        if self.lease:
+            self.lease.release()
+            Path(self.lease.lock_file).unlink(missing_ok=True)
 
 
 class Pipe:
@@ -202,6 +233,12 @@ class Cursor:
         self.database, self.identity = database, identity
         self.description = None
         self.python_active = threading.Event()
+
+    def __enter__(self) -> Cursor:
+        return self
+
+    def __exit__(self, *exc: Any) -> None:
+        self.close()
 
     def execute(self, query: str, parameters: Any = None) -> Cursor:
         self.description = self.database.call(

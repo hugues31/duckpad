@@ -54,6 +54,7 @@ ROUTE_ACCESS = {
         "GET /api/jobs/{slug}/version",
         "GET /api/jobs/{slug}/runs",
         "GET /api/projects/{project}/settings",
+        "GET /api/projects/{project}/python/environment",
         "GET /api/worktrees/{worktree}",
         "GET /api/worktrees/{worktree}/archive.zip",
         "GET /api/worktrees/{worktree}/git/history",

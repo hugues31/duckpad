@@ -79,27 +79,30 @@ Run again after a dependency change; existing contexts are recreated.
 Keep the generated `duckdb==...` pin, `.duckpad-runtime/...` source and
 `tool.duckpad.sdk-contract`. The runtime wheel is supplied from the server's
 installed DuckDB binary, including an operator's portable CPU build. It is not
-downloaded from PyPI. The injected SDK has no API-server dependencies. The
+downloaded from PyPI. The SDK is installed in the prepared environment and has no API-server dependencies. That environment’s interpreter can also import `duckpad` directly for local node calls. Package `.pth` hooks run only after the worker applies confinement. The
 generated `pytz` dependency supports DuckDB timestamp conversion. Tags and jobs
 use `uv --locked`: missing, conflicting, stale or incompatible locks fail without
 editing the tag. Regenerate a conflicted lock on an editable branch and tag the
 result. Moving a project to another Python ABI, OS or DuckDB runtime requires
 updating these declarations and its lock on an editable branch first.
 
-The operator must install `uv`. Wheels are required by default; source builds
+The server installation includes `uv`. Wheels are required by default; source builds
 need a separate administrator opt-in and run dependency build code with the
 server account's permissions. This opt-in requires trust in those dependencies.
 An offline installation can provide `UV_OFFLINE`, `UV_CACHE_DIR`, `UV_FIND_LINKS`
 or an operator index via `UV_INDEX` / `UV_DEFAULT_INDEX`. Cache the locked wheels
-in advance. A missing offline dependency produces a preparation error. The
+in advance. Project manifests cannot override the operator index, cache, or build policy, including through optional dependencies or dependency groups. Validated manifest/lock pairs are cached, so unchanged executions do not relock or contact the index. A missing offline dependency produces a preparation error. The
 operator can supply `DUCKPAD_RUNTIME_WHEEL` matching the installed runtime.
+The project’s Python settings show resolution, installation, readiness and the
+last preparation error. Environments unused for seven days are removed during
+later preparations; active workers hold a lease that prevents removal.
 
 ## Checks, writes and artifacts
 
 Execution creates a fresh instance, runs `run`, validates every output, evaluates
 `self.check("name", failing_rows, severity="error")`, then calls optional
 `write(self)`. Checks use a DuckDB relation of failing rows. Error messages and
-failed error checks prevent `write` and publication; warning checks are visible
+failed error checks and invalid partition columns prevent `write` and publication; warning checks are visible
 without failing the node. `self.message("info" | "warning" | "error", text)` and
 bounded stdout/stderr appear in node results.
 
@@ -170,12 +173,13 @@ existing isolated SQL requirements.
 
 This is **not a hostile-code sandbox**. Network access and same-user process
 signals are deliberately unconfined. Administrators must trust project editors
-and dependencies. `self.connection(self.api)` exposes only a selected authorized
-connection's public fields by default. Reading its secret fields requires the
-separate project opt-in. Secret values are passed explicitly for that execution,
-never placed in environment variables. Exact secret values are redacted from
-recorded messages; arbitrary encodings or external exfiltration cannot be prevented
-once code has the secrets. There is no HTTP credential proxy.
+and dependencies. Enabling Python grants its code access to the secrets of all
+connections authorized for this project: SQL and Python share worker memory.
+`self.connection(self.api)` returns the selected authorized connection's settings,
+including secret fields. It is a convenience API, not a boundary against memory
+inspection. Secrets are never injected into environment variables. Exact secret
+values are redacted from recorded messages; arbitrary encodings or external
+exfiltration cannot be prevented. There is no HTTP credential proxy.
 
 ## Examples and performance check
 
@@ -184,7 +188,7 @@ once code has the secrets. There is no HTTP credential proxy.
   with `family: "database"`, empty `init_sql`, public text parameter `base_url`
   set to `https://api.github.com`, and optional secret `token`. Grant its
   connection to the project and select it in the node's `api` parameter. Public
-  releases work without a token; authenticated requests need the secret opt-in.
+  releases work without a token; authenticated requests use a granted connection containing the token.
   See [GitHub's release API](https://docs.github.com/en/rest/releases/releases).
 - [Encoded ZIP](examples/python/encoded_zip.py): a SQL relation streamed to CSV,
   converted in 64 KiB character chunks to Windows-1252, then compressed into a
