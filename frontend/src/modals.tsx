@@ -69,9 +69,13 @@ export function ConfirmModal({
   );
 }
 
-/** The visible dialog opened last, which receives keyboard dismissal and focus cycling. */
+/** The last visible blocking dialog receives keyboard dismissal and focus cycling. */
 export function topDialog() {
-  return [...document.querySelectorAll<HTMLElement>('[role="dialog"]')]
+  return [
+    ...document.querySelectorAll<HTMLElement>(
+      '[role="dialog"]:not([aria-modal="false"])',
+    ),
+  ]
     .filter((dialog) => dialog.getClientRects().length > 0)
     .at(-1);
 }
