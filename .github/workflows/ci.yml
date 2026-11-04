@@ -33,6 +33,9 @@ jobs:
       - name: Run Python tests
         if: matrix.python != '3.12'
         run: uv run pytest -q -n 4 --dist worksteal --durations=30
+      - name: Check documentation examples omitted from the archive
+        if: matrix.python == '3.12'
+        run: uv run pytest -q tests/test_database_connections.py::test_published_examples_are_valid_definitions_shown_in_the_guide
       # Python 3.12 exercises the same suite from the archive instead of running it twice.
       - uses: ./.github/actions/setup-frontend
         if: matrix.python == '3.12'
