@@ -1,3 +1,4 @@
+import type { NodeNames } from "./nodeNames";
 import type { Diagnostic, FlowEdge, Json, VariableUsage } from "./types";
 
 export type ChangeStatus = "added" | "removed" | "modified" | "unchanged";
@@ -207,6 +208,7 @@ export interface MergeConflict {
 
 /** A merge proposed into a worktree, with the changes it would make there. */
 export interface MergeReview {
+  node_names?: NodeNames;
   id: string;
   /** The destination worktree. */
   worktree: string;

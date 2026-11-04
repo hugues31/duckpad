@@ -3,12 +3,15 @@
 import json
 import re
 import tomllib
+from contextlib import suppress
 from pathlib import Path
 
 from . import __version__, partitions, project_extensions, variables, views
 from .components import expand
 from .node_code import node_sql
+from .node_names import Name, node_names
 from .templates import parse_template
+from .types import Files
 from .util import Problem, dumps
 
 ROOT_FILES = (
@@ -199,13 +202,13 @@ def validate(bundle):
         for edge in edges:
             key = (edge["target"], edge["targetHandle"])
             if key in seen_inputs:
-                raise Problem(f"Input {key[0]}.{key[1]} has more than one source")
+                raise Problem(f"Input {nodes[key[0]]['display_name']}.{key[1]} has more than one source")
             seen_inputs.add(key)
         errors.extend(
             {
                 "file": "flow.json",
                 "node": node["id"],
-                "message": f"Connect input '{port}' on {node.get('label', node['id'])}",
+                "message": f"Connect input '{port}' on {node['display_name']}",
             }
             for node in nodes.values()
             for port in node["parsed"]["inputs"]
@@ -235,3 +238,12 @@ def topological(nodes, edges, tolerant=False):
         for values in dependencies.values():
             values.difference_update(ready)
     return ordered
+
+
+def file_node_names(*versions: Files) -> dict[str, Name]:
+    """Prefer the current version, retaining names of nodes removed in other versions."""
+    names = {}
+    for files in versions:
+        with suppress(Problem, AttributeError, KeyError, TypeError):
+            names.update(node_names(files_to_bundle(files)))
+    return names

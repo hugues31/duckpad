@@ -952,6 +952,7 @@ test("filter on a period with a variable, typed or chosen in the guided form (wo
     {
       node: "recent",
       label: "Recent orders",
+      name: [{ label: "Recent orders" }],
       param: "condition",
       expression: true,
     },

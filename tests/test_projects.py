@@ -227,7 +227,7 @@ def test_ui_resolution_preserves_independent_edits(services, choice, conflicting
 
 
 def test_refreshed_ui_conflict_includes_new_conflicting_fields(services):
-    _, projects, _, _ = services
+    store, projects, _, _ = services
     worktree = projects.create("Refresh")["id"]
     initial = projects.snapshot(worktree)
     incoming = copy.deepcopy(initial["bundle"])
@@ -244,6 +244,8 @@ def test_refreshed_ui_conflict_includes_new_conflicting_fields(services):
     with pytest.raises(Problem, match="Files changed again"):
         projects.resolve(conflict["id"], "proposal")
     assert projects.conflict(conflict["id"])["paths"] == ["flow.json/description", "flow.json/name"]
+    # Review evidence and node names are derived on read, never retained with the conflict.
+    assert not {"fields", "merged", "node_names"} & set(store.get("conflict", conflict["id"]))
     result = projects.resolve(conflict["id"], "proposal")
     assert result["bundle"]["flow"]["name"] == "Proposal"
     assert result["bundle"]["flow"]["description"] == "Proposal description"

@@ -1,3 +1,4 @@
+import { displayNodeName, type NodeNames } from "./nodeNames";
 import { useOptionalWorktree } from "./worktree";
 import {
   useCallback,
@@ -222,6 +223,7 @@ export interface FocusRequest {
   reveal?: boolean;
 }
 interface CanvasProps {
+  names?: NodeNames;
   ref?: Ref<CanvasHandle>;
   readOnly?: boolean;
   nodes: FlowNode[];
@@ -407,7 +409,11 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
             valueProducer: props.valueProducers?.includes(
               props.prefix + node.id,
             ),
-            label: nodeLabel(node, signature, t),
+            label: displayNodeName(
+              props.names?.[props.prefix + node.id]?.slice(-1),
+              nodeLabel(node, signature, t),
+              t,
+            ),
             kind,
             inputs,
             outputs,
@@ -433,6 +439,7 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
       props.nodes,
       props.valueProducers,
       props.parsed,
+      props.names,
       props.local,
       props.components,
       props.statuses,

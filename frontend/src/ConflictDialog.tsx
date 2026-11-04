@@ -62,11 +62,13 @@ export function ConflictDialog({
               <h3>
                 <ConflictHeading
                   path={field.path}
-                  title={conflictTitle(field.path, t, [
-                    conflict.current,
-                    conflict.proposal,
-                    conflict.base,
-                  ])}
+                  title={conflictTitle(
+                    field.path,
+                    t,
+                    [conflict.current, conflict.proposal, conflict.base],
+                    [],
+                    conflict.node_names,
+                  )}
                 />
               </h3>
               {parts.length ? (
@@ -162,11 +164,13 @@ export function CombinedResolutionDialog({
         {base.fields.map((field) => {
           const { file, parts } = conflictPath(field.path);
           const draft = drafts[field.path];
-          const title = conflictTitle(field.path, t, [
-            base.current,
-            base.proposal,
-            base.base,
-          ]);
+          const title = conflictTitle(
+            field.path,
+            t,
+            [base.current, base.proposal, base.base],
+            [],
+            base.node_names,
+          );
           const update = (change: Partial<typeof draft>) =>
             setDrafts((old) => ({
               ...old,

@@ -28,7 +28,7 @@ def proposal(deps, environment="", node=""):
     references = sorted({ref for key in scope for ref in connection_references(nodes[key])})
     services.engine.access.connections(deps.context["project"], references)
     exports = [
-        {"node": key, "label": nodes[key].get("label", key), "connections": connection_references(nodes[key])}
+        {"node": key, "label": nodes[key]["display_name"], "connections": connection_references(nodes[key])}
         for key in sorted(scope)
         if nodes[key]["parsed"]["writes_external"]
     ]

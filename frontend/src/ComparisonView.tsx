@@ -1,3 +1,4 @@
+import { displayNodeName } from "./nodeNames";
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import {
   Background,
@@ -427,7 +428,10 @@ export default function ComparisonView({
                   <strong>{t("affectedNodes")}</strong>:{" "}
                   {active.usages?.length
                     ? active.usages
-                        .map((usage) => `${usage.label} (${usage.param})`)
+                        .map(
+                          (usage) =>
+                            `${displayNodeName(usage.name, usage.label, t)} (${usage.param})`,
+                        )
                         .join(", ")
                     : t("notUsed")}
                 </p>

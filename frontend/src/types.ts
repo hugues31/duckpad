@@ -1,3 +1,4 @@
+import type { NodeName, NodeNames } from "./nodeNames";
 import type {
   PartitionContext,
   PartitionDefinition,
@@ -98,6 +99,7 @@ export interface Bundle {
 }
 /** A root flow node parameter bound to a project variable. */
 export interface VariableUsage {
+  name?: NodeName;
   node: string;
   label: string;
   param: string;
@@ -148,6 +150,7 @@ export interface Worktree {
 }
 /** A save that conflicted with concurrent edits, with both versions of the files. */
 export interface Conflict {
+  node_names?: NodeNames;
   id: string;
   revision: string;
   paths: string[];
@@ -168,6 +171,7 @@ export type Capability = "read" | "write";
 /** Databases are read as tables; file storage is a location for file nodes. */
 export type ConnectorFamily = "database" | "storage";
 export interface Snapshot {
+  node_names?: NodeNames;
   partitions?: Record<string, PartitionDescription>;
   role: ProjectRole;
   /** The connections granted to the project. */
