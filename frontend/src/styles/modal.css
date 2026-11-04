@@ -19,6 +19,27 @@
   display: flex;
   flex-direction: column;
 }
+/* Opaque light dialogs stay white over the dimmed workspace. */
+:root:not([data-theme="dark"]) .modal-backdrop {
+  background: #18181b33;
+}
+:root:not([data-theme="dark"]) .modal {
+  --surface: #fff;
+  --surface-alt: #f6f7f9;
+  --border: #e4e4e9;
+  background: var(--surface);
+  border-color: var(--border);
+  box-shadow:
+    0 24px 64px #18181b24,
+    0 4px 16px #18181b0d;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+@media (prefers-contrast: more) {
+  :root:not([data-theme="dark"]) .modal {
+    --border: var(--text);
+  }
+}
 .modal.wide {
   width: 1000px;
 }
