@@ -1,0 +1,64 @@
+/* Sign-in page. */
+.login-page {
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg);
+}
+.login-preferences {
+  position: absolute;
+  right: 35px;
+  top: 25px;
+  display: flex;
+  gap: 10px;
+}
+.login-brand {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  font-size: 28px;
+  font-family: inherit;
+  font-weight: 750;
+  letter-spacing: -0.055em;
+  margin-bottom: 35px;
+}
+.login-card {
+  width: 420px;
+  max-width: 90vw;
+  border-radius: 28px;
+  padding: 38px;
+}
+.login-card h1 {
+  font-size: 25px;
+  margin: 12px 0 9px;
+  line-height: 1.35;
+}
+.login-card > p {
+  font-size: 12px;
+  color: var(--muted);
+}
+.login-card form {
+  margin-top: 27px;
+}
+.login-card .field {
+  margin-bottom: 20px;
+}
+.login-card .login-hint {
+  margin: 22px 0 0;
+  font-size: 12px;
+  line-height: 1.7;
+}
+.login-footnote {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  color: var(--muted);
+  font-size: 12px;
+  margin-top: 27px;
+}
+.login-page .button,
+.login-page input {
+  border-radius: 12px;
+}
