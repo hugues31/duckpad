@@ -430,11 +430,17 @@ def import_definition(destination, source, kind, identity, origin):
     if python_imported:
         import tomllib
 
+        from .python_environment import requirement_name
+
         required = tomllib.loads(source.get("pyproject") or "").get("project", {}).get("dependencies", [])
-        available = (
-            tomllib.loads(destination.get("pyproject") or "").get("project", {}).get("dependencies", [])
-        )
-        missing = [item for item in required if item not in available and not item.startswith("duckdb==")]
+        available = {
+            requirement_name(item)
+            for item in tomllib.loads(destination.get("pyproject") or "")
+            .get("project", {})
+            .get("dependencies", [])
+        }
+        # Names only: versions are resolved by this project's lock.
+        missing = [item for item in required if requirement_name(item) not in {*available, "duckdb"}]
         if missing:
             raise Problem(
                 "The imported Python component requires project dependencies: "

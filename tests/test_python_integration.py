@@ -148,3 +148,28 @@ class NativeCrash(dp.Node):
     assert result["status"] == "failed"
     assert "compatible wheel" in result["nodes"]["python"]["error"]
     assert "polars[rtcompat]" in result["nodes"]["python"]["error"]
+
+
+@pytest.mark.parametrize(
+    ("required", "available"),
+    [
+        ('"requests>=2.31"', '"requests>=2.32"'),
+        ('"Requests"', '"requests"'),
+        ('"requests"', '"requests >= 2"'),
+    ],
+)
+def test_component_import_compares_dependency_names(required, available):
+    from duckpad.bundle import default_pyproject
+
+    code = "import duckpad as dp\n\nclass T(dp.Node):\n    def run(self) -> dp.Relation:\n        return self.db.sql('SELECT 1')\n"
+
+    def bundle(dependency):
+        manifest = default_pyproject("p").replace('"pytz>=2024.1"]', f'"pytz>=2024.1", {dependency}]')
+        return {
+            "flow": {"nodes": [], "edges": []},
+            "templates": {"t.py": code},
+            "components": {},
+            "pyproject": manifest,
+        }
+
+    import_definition(bundle(available), bundle(required), "templates", "t.py", {})

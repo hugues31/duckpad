@@ -248,7 +248,7 @@ def test_invalid_edits_keep_contract_edges_and_parameters(services):
         expected = ["valid", "rejected"] + (["accepted", "renamed"] if "accepted" in text else [])
         assert nodes["python"]["parsed"]["outputs"] == expected
         if "accepted" in text:
-            assert "b: output valid" in nodes["python"]["error"]
+            assert "connected output valid no longer declared" in nodes["python"]["error"]
         assert nodes["python"].get("error")
 
 
@@ -668,3 +668,13 @@ def test_helper_modules_cannot_shadow_the_sdk(services):
     problems = {d["file"]: d["message"] for d in projects.snapshot(worktree["id"])["diagnostics"]}
     assert "replace the Duckpad SDK" in problems["modules/duckpad.py"]
     assert "Python identifiers" in problems["modules/2024/report.py"]
+
+
+def test_remembered_contracts_keep_flow_json_canonical(services):
+    import json
+
+    from duckpad.util import dumps
+
+    _, projects, _, _ = services
+    text = projects.snapshot(flow(services)["id"])["files"]["flow.json"]
+    assert '"python_contract"' in text and text == dumps(json.loads(text))

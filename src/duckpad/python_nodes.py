@@ -4,16 +4,22 @@ import json
 import math
 
 from .templates import base_type, check_scalar, connection_for, render_parameter, type_argument
-from .util import Problem
+from .util import Problem, dumps
 
 
 def port_error(node, contract, edges):
     missing = []
     for edge in edges:
         for end, direction in (("source", "outputs"), ("target", "inputs")):
-            if edge[end] == node["id"] and edge[end + "Handle"] not in contract.get(direction, []):
-                missing.append(f"{edge.get('id', '?')}: {direction[:-1]} {edge[end + 'Handle']}")
-    return "Python ports changed; reconnect saved edges (" + "; ".join(missing) + ")" if missing else None
+            port = edge[end + "Handle"]
+            if edge[end] == node["id"] and port not in contract.get(direction, []):
+                missing.append(f"{direction[:-1]} {port}")
+    if not missing:
+        return None
+    ports = ", ".join(dict.fromkeys(missing))
+    return (
+        f"Python ports changed: connected {ports} no longer declared; restore them or reconnect their edges"
+    )
 
 
 def retained_contract(node, parsed, edges):
@@ -61,7 +67,7 @@ def remember_contracts(files):
                 if not port_error(node, contract, graph.get("edges", [])):
                     node["python_contract"] = contract
             if json.loads(source) != graph:
-                result[name] = json.dumps(graph, ensure_ascii=False, indent=2) + "\n"
+                result[name] = dumps(graph)
         except (ValueError, TypeError, KeyError):
             continue
     return result
