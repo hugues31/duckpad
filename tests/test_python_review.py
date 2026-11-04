@@ -313,6 +313,25 @@ def test_first_python_run_keeps_existing_sql_results(services):
     assert [row["values"] for row in engine.preview(worktree["id"], "dev", "other")["rows"]] == [[7]]
 
 
+def test_unrelated_save_merges_a_concurrent_dependency_change(services):
+    _, projects, _, _ = services
+    tree = flow(services)
+    base = projects.snapshot(tree["id"])
+    files = base["files"]
+    edited = files["pyproject.toml"].replace('version = "0.1.0"', 'version = "0.1.1"')
+    assert edited != files["pyproject.toml"]
+    changed = projects.write(tree["id"], base["revision"], {**files, "pyproject.toml": edited})
+    saved = projects.write(tree["id"], base["revision"], {**files, "README.md": "Unrelated edit\n"})
+    assert saved["files"]["README.md"] == "Unrelated edit\n"
+    assert saved["files"]["pyproject.toml"] == edited
+    assert saved["files"]["uv.lock"] == changed["files"]["uv.lock"]
+    both = files["pyproject.toml"].replace('version = "0.1.0"', 'version = "0.2.0"')
+    # Editing the manifest on both sides still needs a reviewed resolution.
+    with pytest.raises(Problem) as refused:
+        projects.write(tree["id"], base["revision"], {**files, "pyproject.toml": both})
+    assert refused.value.status == 409
+
+
 def test_float_defaults_are_normalized_for_direct_calls():
     import duckpad as dp
 
