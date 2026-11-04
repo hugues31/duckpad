@@ -146,16 +146,38 @@ def test_project_requires_administrator_activation(services):
         engine.launch(worktree["id"], "dev")
 
 
-def single(services, code, *, params=None):
+def single(services, code, *, params=None, variables=None):
     store, projects, _, _ = services
     worktree = projects.create("Python source")
     store.put("settings", "python:" + worktree["project"], {"enabled": True})
     snapshot = projects.snapshot(worktree["id"])
     bundle = snapshot["bundle"]
     bundle["flow"].update(nodes=[{"id": "python", "language": "python", "params": params or {}}], edges=[])
+    if variables:
+        bundle["variables"] = variables
     bundle["node_sql"] = {"nodes/python.py": code}
     projects.write(worktree["id"], snapshot["revision"], bundle_to_files(bundle))
     return worktree
+
+
+def test_python_file_parameters_resolve_project_variables(services):
+    store, _, _, engine = services
+    code = """import duckpad as dp
+class Report(dp.Node):
+    target: dp.Destination = "report.csv"
+    def run(self) -> None:
+        self.message("info", "target=" + self.target)
+"""
+    worktree = single(
+        services,
+        code,
+        params={"target": "report_{{ var.region }}.csv"},
+        variables={"region": {"type": "text", "default": "eu"}},
+    )
+    run = wait_run(store, engine.launch(worktree["id"], "dev"), timeout=60)
+    state = run["nodes"]["python"]
+    assert state["status"] == "success", state.get("error")
+    assert state["parameters"]["target"].endswith("report_eu.csv")
 
 
 def test_source_and_managed_zip_export(services):

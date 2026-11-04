@@ -67,7 +67,7 @@ def remember_contracts(files):
     return result
 
 
-def parameters(node, schemas, captured, project_files, variables=None):
+def parameters(node, schemas, captured, project_files, variables=None, bindings=None):
     result = {p["name"]: p["default"] for p in node["parsed"]["parameters"] if "default" in p}
     result.update(node.get("params", {}))
     names = {p["name"] for p in node["parsed"]["parameters"]}
@@ -103,7 +103,7 @@ def parameters(node, schemas, captured, project_files, variables=None):
                 connection_for(captured, value)
             continue
         rendered = render_parameter(
-            node["parsed"], parameter, result, captured, project_files, schemas, variables
+            node["parsed"], parameter, result, captured, project_files, schemas, variables, bound=bindings
         )
         if kind in ("file", "destination"):
             result[name] = rendered[1:-1].replace("''", "'")

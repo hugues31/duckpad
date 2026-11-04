@@ -922,7 +922,8 @@ class Runner:
             {p: d.columns for p, d in inputs.items()},
             execution.captured,
             project_files,
-            execution.values,
+            variables.expression_values(node),
+            bindings=node.get("variables"),
         )
         state["parameters"] = values
         workspace = (
