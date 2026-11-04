@@ -19,7 +19,7 @@
   display: flex;
   flex-direction: column;
 }
-/* Nearly white glass keeps a subtle hint of the workspace behind light dialogs. */
+/* White glass lets the workspace show through without a dark color cast. */
 :root:not([data-theme="dark"]) .modal-backdrop {
   background: #18181b33;
 }
@@ -27,13 +27,13 @@
   --surface: #fff;
   --surface-alt: #f6f7f9;
   --border: #e4e4e9;
-  background: #fffffff0;
+  background: #fffc;
   border-color: var(--border);
   box-shadow:
     0 24px 64px #18181b24,
     0 4px 16px #18181b0d;
-  -webkit-backdrop-filter: blur(12px);
-  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
 }
 @media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
   :root:not([data-theme="dark"]) .modal {
