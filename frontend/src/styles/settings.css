@@ -3,18 +3,11 @@
   margin-inline: auto;
 }
 
-.monitoring-toolbar,
-.monitoring-log-heading,
-.monitoring-log-meta {
+.monitoring-toolbar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   flex-wrap: wrap;
   gap: 12px;
-}
-
-.monitoring-toolbar {
-  justify-content: start;
   margin: 16px 0;
 }
 
@@ -47,16 +40,16 @@
   z-index: 1;
 }
 
-.monitoring-metric-heading {
+.monitoring-card-heading {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 8px;
   margin-bottom: 12px;
 }
 
-.monitoring-metric-heading h3 {
+.monitoring-card-heading h3 {
   margin: 0;
+  margin-inline-end: auto;
 }
 
 .monitoring-info::after {
@@ -94,14 +87,12 @@
   white-space: nowrap;
 }
 
-.monitoring-log-heading h3 {
-  margin: 0;
-}
-
 .monitoring-levels {
   display: flex;
   flex-wrap: wrap;
+  justify-content: end;
   gap: 6px;
+  min-width: 0;
 }
 
 .monitoring-filters {
@@ -110,31 +101,55 @@
   gap: 16px;
 }
 
+/* One row per entry; columns stay aligned across rows. */
 .monitoring-log-list {
+  display: grid;
+  grid-template-columns: max-content max-content max-content minmax(0, 1fr);
+  column-gap: 12px;
   list-style: none;
   padding: 0;
   margin: 0;
   max-height: 560px;
   overflow: auto;
+  font-size: 12px;
 }
 
 .monitoring-log-list li {
-  padding: 14px 0;
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
+  align-items: baseline;
+  padding: 6px 0;
   border-top: 1px solid var(--border);
 }
 
-.monitoring-log-meta {
-  justify-content: start;
+.monitoring-log-list time,
+.monitoring-logger {
   color: var(--muted);
-  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.monitoring-log-list .monitoring-level {
+  justify-self: start;
+}
+
+.monitoring-logger {
+  max-width: 20ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .monitoring-log-list pre {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-  margin: 8px 0 0;
+  margin: 0;
   font-size: 12px;
-  line-height: 1.6;
+  line-height: 1.5;
+}
+
+.monitoring-log-list small {
+  grid-column: 4;
 }
 
 .monitoring-level {
@@ -364,6 +379,15 @@
 }
 
 @media (max-width: 600px) {
+  .monitoring-log-list li {
+    grid-template-columns: auto auto minmax(0, 1fr);
+    gap: 4px 8px;
+  }
+
+  .monitoring-log-list :is(pre, small) {
+    grid-column: 1 / -1;
+  }
+
   .settings-heading {
     margin-bottom: 24px;
   }

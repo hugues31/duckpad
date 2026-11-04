@@ -1311,7 +1311,7 @@
   "monitoringUnavailable": "Indisponível",
   "monitoringDisk": "Disco de dados",
   "monitoringDiskFree": "Disponíveis de {total}",
-  "monitoringDiskUsed": "Espaço de disco indisponível",
+  "monitoringDiskUsed": "Espaço de disco utilizado",
   "monitoringDiskLow": "No máximo 10% do disco de dados está disponível.",
   "monitoringDiskHint": "Sistema de ficheiros dos dados da instância, partilhado com outras aplicações. As ligações externas e outros volumes não estão incluídos.",
   "monitoringMemory": "Memória do sistema",

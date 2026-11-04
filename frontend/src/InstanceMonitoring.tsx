@@ -1,9 +1,9 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Info, RefreshCw } from "lucide-react";
-import { withQuery } from "./api";
+import { api, withQuery } from "./api";
 import { useLanguage, useT } from "./i18n";
 import Select from "./Select";
-import { useApiResource } from "./useApiResource";
+import { useApiResource, useResource } from "./useApiResource";
 
 interface Summary {
   sampled_at: string;
@@ -39,10 +39,19 @@ function LogLevel({ level }: { level: string }) {
   );
 }
 
-function MetricHeading({ title, hint }: { title: string; hint: string }) {
+function CardHeading({
+  title,
+  hint,
+  children,
+}: {
+  title: string;
+  hint: string;
+  children?: ReactNode;
+}) {
   return (
-    <div className="monitoring-metric-heading">
+    <div className="monitoring-card-heading">
       <h3>{title}</h3>
+      {children}
       <button
         type="button"
         className="icon monitoring-info"
@@ -63,9 +72,12 @@ export default function InstanceMonitoring() {
   const [query, setQuery] = useState("");
   const interval = refreshSeconds ? refreshSeconds * 1000 : undefined;
   const summary = useApiResource<Summary>("/monitoring", { interval });
-  const logs = useApiResource<Logs>(
-    withQuery("/monitoring/logs", { level, q: query }),
-    { interval, delay: query ? 250 : 0 },
+  const logsPath = withQuery("/monitoring/logs", { level, q: query });
+  // The current entries stay visible while other filters load.
+  const logs = useResource<Logs>(
+    "/monitoring/logs",
+    (signal) => api<Logs>(logsPath, { signal }),
+    { refresh: logsPath, interval, delay: query ? 250 : 0 },
   );
   const data = summary.data;
   const disk = data?.disk;
@@ -140,7 +152,7 @@ export default function InstanceMonitoring() {
       {data && (
         <div className="monitoring-metrics">
           <section className="settings-card" aria-label={t("monitoringDisk")}>
-            <MetricHeading
+            <CardHeading
               title={t("monitoringDisk")}
               hint={t("monitoringDiskHint")}
             />
@@ -167,7 +179,7 @@ export default function InstanceMonitoring() {
             )}
           </section>
           <section className="settings-card" aria-label={t("monitoringMemory")}>
-            <MetricHeading
+            <CardHeading
               title={t("monitoringMemory")}
               hint={t("monitoringMemoryHint")}
             />
@@ -185,7 +197,7 @@ export default function InstanceMonitoring() {
             className="settings-card"
             aria-label={t("monitoringBackend")}
           >
-            <MetricHeading
+            <CardHeading
               title={t("monitoringBackend")}
               hint={t("monitoringProcessHint")}
             />
@@ -211,8 +223,7 @@ export default function InstanceMonitoring() {
         className="settings-card monitoring-logs"
         aria-label={t("monitoringLogs")}
       >
-        <div className="monitoring-log-heading">
-          <h3>{t("monitoringLogs")}</h3>
+        <CardHeading title={t("monitoringLogs")} hint={t("monitoringLogsHint")}>
           <div
             className="monitoring-levels"
             role="group"
@@ -222,8 +233,7 @@ export default function InstanceMonitoring() {
               <LogLevel key={level} level={level} />
             ))}
           </div>
-        </div>
-        <p className="muted">{t("monitoringLogsHint")}</p>
+        </CardHeading>
         <div className="monitoring-filters">
           <label className="field">
             <span>{t("monitoringLogLevel")}</span>
@@ -270,13 +280,13 @@ export default function InstanceMonitoring() {
             >
               {logs.data.entries.map((entry) => (
                 <li key={entry.id}>
-                  <div className="monitoring-log-meta">
-                    <time dateTime={entry.timestamp}>
-                      {time(entry.timestamp)}
-                    </time>
-                    <LogLevel level={entry.level} />
-                    <span>{entry.logger}</span>
-                  </div>
+                  <time dateTime={entry.timestamp}>
+                    {time(entry.timestamp)}
+                  </time>
+                  <LogLevel level={entry.level} />
+                  <span className="monitoring-logger" title={entry.logger}>
+                    {entry.logger}
+                  </span>
                   <pre>{entry.message}</pre>
                   {entry.truncated && (
                     <small className="muted">

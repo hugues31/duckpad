@@ -1311,7 +1311,7 @@
   "monitoringUnavailable": "Unavailable",
   "monitoringDisk": "Data disk",
   "monitoringDiskFree": "Available out of {total}",
-  "monitoringDiskUsed": "Unavailable disk space",
+  "monitoringDiskUsed": "Used disk space",
   "monitoringDiskLow": "At most 10% of the data disk is available.",
   "monitoringDiskHint": "Filesystem containing the instance data, shared with other applications. External connections and separate mounts are not included.",
   "monitoringMemory": "System memory",

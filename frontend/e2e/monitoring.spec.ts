@@ -119,8 +119,11 @@ test("administrators can inspect metrics and filter recent backend logs", async 
       truncated: false,
     },
   ];
-  await page.route("**/api/monitoring/logs?*", (route) => {
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => (release = resolve));
+  await page.route("**/api/monitoring/logs?*", async (route) => {
     const query = new URL(route.request().url()).searchParams;
+    if (query.get("q") === "STARTUP") await held;
     const filtered = entries.filter(
       (entry) =>
         (query.get("level") !== "error" || entry.level === "error") &&
@@ -155,9 +158,17 @@ test("administrators can inspect metrics and filter recent backend logs", async 
   await panel
     .getByRole("combobox", { name: en.monitoringLogLevel, exact: true })
     .selectOption("debug");
+  await expect(list.getByRole("listitem")).toHaveCount(2);
+  const search = page.waitForRequest(
+    (request) => new URL(request.url()).searchParams.get("q") === "STARTUP",
+  );
   await panel
     .getByRole("searchbox", { name: en.monitoringLogSearch })
     .fill("STARTUP");
+  await search;
+  // The previous entries stay visible until the filtered answer arrives.
+  await expect(list.getByRole("listitem")).toHaveCount(2);
+  release();
   await expect(list.getByRole("listitem")).toHaveCount(1);
   await expect(list).toContainText("Application startup complete.");
   await page.reload();
