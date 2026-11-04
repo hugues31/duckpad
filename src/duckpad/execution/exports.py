@@ -121,7 +121,11 @@ class Exports:
             if not download:
                 return {"status": "unsupported"}
             values = {p["name"]: p.get("default") for p in definition["parsed"]["parameters"]}
-            destination = (values | definition.get("params", {}))[download["parameter"]]
+            destination = (
+                (values | definition.get("params", {}))[download["parameter"]]
+                if definition["parsed"].get("language") != "python"
+                else ""
+            )
             if URI.match(str(destination)):
                 return {"status": "unsupported"}
             result = self.store.get("export_result", digest([worktree, environment, node]))

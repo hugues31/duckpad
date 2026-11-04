@@ -154,6 +154,10 @@ def merge_files(base, current, proposal, choices=None, evidence=None, resolution
                 content, errors = merge_values(*values, name, choices, evidence, resolution)
         except (ValueError, TypeError):
             content, errors = merge_values(*values, name, choices, evidence, resolution)
+        if name == "uv.lock" and errors:
+            # Generated dependency state is resolved again from the merged manifest.
+            # Editable saves/runs regenerate it; a tag must carry the resolved lock.
+            content, errors = MISSING, []
         if content is not MISSING:
             result[name] = content
         conflicts.extend(errors)

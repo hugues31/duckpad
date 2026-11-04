@@ -18,8 +18,16 @@ def node_caption(bundle: Record, node: Record, parent: str | None = None) -> dic
     sql = (
         bundle.get("templates", {}).get(template, "")
         if template
-        else bundle.get("node_sql", {}).get(code_path(node["id"], parent), "")
+        else bundle.get("node_sql", {}).get(code_path(node["id"], parent, node.get("language", "sql")), "")
     )
+    if node.get("language") == "python":
+        from .python_contract import parse_python
+        from .util import Problem
+
+        try:
+            return {"label": parse_python(sql)["label"]}
+        except Problem:
+            return {"label": node.get("python_contract", {}).get("label", "Python")}
     labels = [text for kind, text in directives(sql) if kind == "label"]
     preset = node.get("preset") or template or node.get("origin") or "sql"
     return {"label": labels[-1] if labels and labels[-1] else "SQL template", "template": preset}

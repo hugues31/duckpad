@@ -14,7 +14,7 @@ from ..auth import Auth
 from ..components import expand_for
 from ..execution.samples import Sample
 from ..graph import connection_references
-from ..node_code import code_path
+from ..node_code import code_path, template_path
 from ..search import node_entries
 from ..services import Services
 from ..util import Problem, clean
@@ -234,14 +234,14 @@ def read_file(ctx: RunContext[Dependencies], path: str, offset: int = 0) -> dict
 def read_sql(
     ctx: RunContext[Dependencies], node: str = "", template: str = "", compiled: bool = False, offset: int = 0
 ) -> dict:
-    """Read the SQL of a node or template, or a page of compiled statements without executing SQL."""
+    """Read saved SQL/Python code, or compiled SQL statements, without executing project code."""
     snapshot = ctx.deps.snapshot()
     bundle = snapshot["bundle"] or {}
     if compiled:
         worktree, environment = ctx.deps.results()
         return ctx.deps.safe(page(ctx.deps.services.engine.compile(worktree, environment, node), offset, 5))
     if template:
-        path = f"templates/{template}.sql"
+        path = template_path(template)
     else:
         parts = node.split("::")
         graph, parent = bundle.get("flow", {}), None
@@ -253,9 +253,9 @@ def read_sql(
         if found is None:
             raise Problem("Node not found", 404)
         path = (
-            "templates/" + found["template"] + ".sql"
+            template_path(found["template"])
             if found.get("template")
-            else code_path(found["id"], parent)
+            else code_path(found["id"], parent, found.get("language", "sql"))
         )
     return read_file(ctx, path, offset)
 

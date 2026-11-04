@@ -18,6 +18,7 @@ from .util import Problem, uid
 CHUNK_SIZE = 64 * 1024
 MEDIA_TYPES = {
     "csv": "text/csv",
+    "zip": "application/zip",
     "parquet": "application/vnd.apache.parquet",
     "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 }
@@ -98,7 +99,7 @@ class Artifacts:
                 "environment": run["environment"],
                 "node": node,
                 "filename": filename,
-                "media_type": MEDIA_TYPES[spec["format"]],
+                "media_type": MEDIA_TYPES.get(spec["format"], "application/octet-stream"),
                 "size": before[2],
                 "signature": captured_signature,
             }

@@ -32,7 +32,7 @@ def test_reader_disconnect_releases_all_waiting_calls(transport, failure):
 
     assert transport.closed
     for response in waiting:
-        assert response.get_nowait()["error"] == "The isolated SQL worker stopped"
+        assert response.get_nowait()["error"] == "The execution worker stopped"
     with pytest.raises(Problem, match="worker is unavailable") as error:
         transport.call("cursor")
     assert error.value.status == 503
@@ -50,7 +50,7 @@ def test_send_disconnect_releases_pending_calls_and_reports_unavailable(transpor
     assert error.value.status == 503
     assert transport.closed
     assert set(transport.pending) == {0}
-    assert waiting.get_nowait()["error"] == "The isolated SQL worker stopped"
+    assert waiting.get_nowait()["error"] == "The execution worker stopped"
     with pytest.raises(Problem, match="worker is unavailable"):
         transport.call("cursor")
     transport.socket.sendall.assert_called_once()

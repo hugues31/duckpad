@@ -128,7 +128,7 @@ def test_concurrent_startup_closes_unpublished_database(isolated, monkeypatch, d
     unused, published = Mock(closed=False), Mock(closed=False)
     databases = iter([unused, published])
 
-    def open_database(*_args):
+    def open_database(*_args, **_kwargs):
         database = next(databases)
         if database is unused:
             entered.set()

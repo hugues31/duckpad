@@ -141,6 +141,30 @@ describe("conflict content", () => {
     });
   });
 
+  it("names Python nodes by their label comment or class", () => {
+    const files = {
+      "flow.json": JSON.stringify({
+        nodes: [
+          { id: "split", language: "python" },
+          { id: "labeled", language: "python" },
+        ],
+      }),
+      "nodes/split.py":
+        "import duckpad as dp\n\n\nclass Split(dp.Node):\n    pass\n",
+      "nodes/labeled.py":
+        "# @label Revenue split\nimport duckpad as dp\n\n\nclass Split(dp.Node):\n    pass\n",
+      "modules/helpers.py": "class Helper(Base):\n    pass\n",
+    };
+    expect(conflictTitle("nodes/split.py", t, [files])).toBe("Split · Code");
+    expect(conflictTitle("nodes/labeled.py", t, [files])).toBe(
+      "Revenue split · Code",
+    );
+    expect(
+      conflictTitle("flow.json/nodes/labeled/params/minimum", t, [files]),
+    ).toBe("Revenue split · minimum");
+    expect(conflictTitle("modules/helpers.py", t, [files])).toBe("helpers.py");
+  });
+
   it("uses shared names and component paths in conflict headings", () => {
     const names = {
       report: [{ label: "Revenue report", template: "sql" }],

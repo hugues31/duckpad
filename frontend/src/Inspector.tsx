@@ -1,8 +1,9 @@
 import { PartitionInspector } from "./PartitionControls";
 import { useOptionalWorktree, usePartitionQuery } from "./worktree";
 import Select from "./Select";
-import { nodeCodePath, nodeEntity, templateUsage } from "./nodeCode";
+import { nodeCode, nodeCodePath, nodeEntity, templateUsage } from "./nodeCode";
 import { lazy, Suspense, useRef, useState } from "react";
+import { Link as RouterLink } from "react-router";
 import {
   ArrowRight,
   BookOpen,
@@ -17,10 +18,12 @@ import {
   X,
 } from "lucide-react";
 import { api, withQuery } from "./api";
-import { nodeInterface, type NodeInterface } from "./graph";
+import { containsPython, nodeInterface, type NodeInterface } from "./graph";
 import { nodeLabel, templateLabel, useT } from "./i18n";
+import { projectSettingsUrl } from "./navigation";
 import NodeDocumentation from "./NodeDocumentation";
 import NodeInfo from "./NodeInfo";
+import { numberBoundsError } from "./numberBounds";
 import ParameterField from "./ParameterField";
 import QueryBuilder from "./QueryBuilder";
 import type { ResultsTab } from "./ResultsPanel";
@@ -153,6 +156,13 @@ export default function Inspector({
         })
       )
         throw new Error(t("invalidNumber"));
+      for (const parameter of signature.parameters) {
+        const current = value.params[parameter.name] ?? parameter.default;
+        const invalid =
+          typeof current === "number" &&
+          numberBoundsError(current, parameter, t);
+        if (invalid) throw new Error(invalid);
+      }
       const variables = { ...declared.current };
       const saved = await onSave(value, base, variables);
       for (const name of Object.keys(variables)) delete declared.current[name];
@@ -202,8 +212,13 @@ export default function Inspector({
         ]),
       },
     ).data || {};
+  // Python has no compiled SQL, so neither has a component containing it.
+  const python =
+    node.language === "python" ||
+    (!!node.component &&
+      containsPython(snapshot.bundle?.components || {}, node.component));
   const compilation = useApiResource<Statement[]>(
-    tab === "sql"
+    tab === "sql" && !python
       ? withQuery(
           `/worktrees/${worktree}/compile/${encodeURIComponent(fullNode)}`,
           { environment, ...partition },
@@ -211,7 +226,10 @@ export default function Inspector({
       : null,
     { refresh: snapshot.revision },
   );
-  const error = saveError || compilation.error;
+  const error =
+    saveError ||
+    compilation.error ||
+    (signature.kind !== "component" && signature.definition?.error);
   const schemas = Object.fromEntries(
     Object.entries(inputColumns).map(([port, columns]) => [
       port,
@@ -354,15 +372,29 @@ export default function Inspector({
             key={key}
             className={tab === key ? "active" : ""}
             aria-pressed={tab === key}
-            title={t(key)}
+            title={t(
+              key === "sql" && node.language === "python" ? "code" : key,
+            )}
             onClick={() => setTab(key)}
           >
             <Icon size={14} />
-            <span>{t(key)}</span>
+            <span>
+              {t(key === "sql" && node.language === "python" ? "code" : key)}
+            </span>
           </button>
         ))}
       </div>
       <div className="inspector-body">
+        {node.language === "python" && !snapshot.python_enabled && (
+          <p className="notice">
+            {t("pythonDisabledHint")}{" "}
+            <RouterLink
+              to={projectSettingsUrl(snapshot.worktree.project, "python")}
+            >
+              {t("pythonOpenSettings")}
+            </RouterLink>
+          </p>
+        )}
         {error && <div className="notice error">{error}</div>}
         {tab === "parameters" ? (
           <fieldset className="readonly-fields" disabled={readOnly}>
@@ -590,6 +622,19 @@ export default function Inspector({
               </button>
             </div>
           </fieldset>
+        ) : tab === "sql" && node.language === "python" ? (
+          <Suspense fallback={<p>{t("loading")}</p>}>
+            <CodeEditor
+              value={
+                snapshot.bundle ? nodeCode(snapshot.bundle, node, parent) : ""
+              }
+              language="python"
+              readOnly
+              height="330px"
+            />
+          </Suspense>
+        ) : tab === "sql" && python ? (
+          <p className="notice">{t("pythonComponentNoSql")}</p>
         ) : tab === "sql" ? (
           <>
             <p className="muted small">{t("compileHint")}</p>
@@ -630,8 +675,8 @@ export default function Inspector({
               node.component
                 ? `components/${node.component}.json`
                 : node.template
-                  ? `templates/${node.template}.sql`
-                  : nodeCodePath(node.id, parent)
+                  ? `templates/${node.template}${node.template.endsWith(".py") ? "" : ".sql"}`
+                  : nodeCodePath(node.id, parent, node.language)
             }
             onHistory={onHistory}
           />

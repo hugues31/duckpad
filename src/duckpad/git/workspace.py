@@ -10,7 +10,7 @@ from pathlib import Path
 from ..bundle import file_node_names, files_to_bundle, is_declarative, validate
 from ..comparison import categories, compare_files, fields
 from ..merge import merge_files
-from ..node_code import code_path
+from ..node_code import code_path, template_path
 from ..util import Problem, digest, now, uid
 from . import command
 from .command import GitError
@@ -29,7 +29,7 @@ def entity_sources(entity):
     Templates have no graph file or node. A code file that Duckpad cannot version is None.
     """
     if entity.startswith("template/"):
-        code = f"templates/{entity.removeprefix('template/')}.sql"
+        code = template_path(entity.removeprefix("template/"))
         if not is_declarative(code):
             raise Problem("Choose a node or template", 422)
         return None, code, None
@@ -277,7 +277,8 @@ class GitWorkspace:
     def versions(self, path, commits, graph, code, node):
         """An element's version in each commit, parsing each distinct file content once."""
         commits = sorted(commits)
-        names = [name for name in (graph, code) if name]
+        python_code = code.removesuffix(".sql") + ".py" if node is not None and code else None
+        names = [name for name in (graph, code, python_code) if name]
         listing = self.git(
             path,
             "cat-file",
@@ -292,12 +293,23 @@ class GitWorkspace:
             return self.blobs(path, {files[name] for files in located.values() if files[name]}, parse)
 
         sources = contents(code, text) if code else {}
+        if python_code:
+            sources.update(contents(python_code, text))
         if node is None:
             return {commit: sources.get(files[code]) for commit, files in located.items()}
         nodes = contents(graph, lambda content: graph_node(content, node))
+
+        def source(files):
+            declaration = nodes.get(files[graph])
+            selected = (
+                python_code
+                if isinstance(declaration, dict) and declaration.get("language") == "python"
+                else code
+            )
+            return sources.get(files[selected]) if selected else None
+
         return {
-            commit: entity_value(nodes.get(files[graph]), sources.get(files[code]) if code else None)
-            for commit, files in located.items()
+            commit: entity_value(nodes.get(files[graph]), source(files)) for commit, files in located.items()
         }
 
     def blobs(self, path, objects, parse):

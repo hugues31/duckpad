@@ -91,6 +91,17 @@ export function AssistantRun({
               />
             </>
           )}
+          {!!approval.python_nodes?.length && (
+            <div className="notice">
+              <strong>{t("pythonExecution")}</strong>
+              <p>{t("pythonTrustHint")}</p>
+              <ul>
+                {approval.python_nodes.map((node) => (
+                  <li key={node.node}>{node.label}</li>
+                ))}
+              </ul>
+            </div>
+          )}
           {!!approval.exports?.length && (
             <div className="notice error">
               <strong>{t("assistantIrreversibleExports")}</strong>

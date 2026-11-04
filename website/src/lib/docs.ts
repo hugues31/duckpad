@@ -44,6 +44,12 @@ export const sections = [
           "Declare inputs, outputs and typed parameters; write sources and exports.",
       },
       {
+        slug: "python",
+        title: "Python nodes",
+        description:
+          "Use typed Python nodes, locked environments and managed files alongside SQL.",
+      },
+      {
         slug: "data_preparation",
         title: "Prepare columns & values",
         description: "Select, rename, cast and clean data with guided forms.",

@@ -21,7 +21,9 @@ import {
 } from "@xyflow/react";
 import {
   AlertTriangle,
+  ArrowLeft,
   ArrowRight,
+  Braces,
   ChevronLeft,
   ChevronRight,
   Database,
@@ -39,6 +41,7 @@ import {
   arrangeLineage,
   buildLineageGraph,
   cellId,
+  pythonCardHeight,
   requestId,
   type Cell,
   type Entry,
@@ -65,6 +68,9 @@ type CardData = {
   select: (id: string) => void;
   page: (id: string, values: Partial<Query>) => void;
   expand: () => void;
+  parent: (cell: Cell) => void;
+  /** Whether this card lists the captured parents of its Python result. */
+  parents: boolean;
   replay?: (value: NonNullable<Explanation["replay"]>) => void;
 };
 type CardNode = Node<CardData, "lineage">;
@@ -110,10 +116,18 @@ function CalculationCard({ data }: NodeProps<CardNode>) {
       .join(" + ");
     formula = operation === "sum" ? values : `(${values}) / ${result.total}`;
   }
+  // The card header names the opaque Python operation; it has no formula.
+  const python = result.kind === "python";
+  if (python) formula = undefined;
   const offset = query.offset || 0;
+  // Parent results page together; the longest one sets the page count.
+  const parentRows = Math.max(
+    0,
+    ...(result.parents || []).map((parent) => parent.count),
+  );
   return (
     <article
-      className={`lineage-card ${source ? "is-source" : "calculation"} ${data.root ? "root" : ""}`}
+      className={`lineage-card ${source ? "is-source" : "calculation"} ${python ? "python" : ""} ${data.root ? "root" : ""}`}
       aria-label={`${result.column}: ${formatValue(result.value)}`}
     >
       {!source && !group && (
@@ -127,6 +141,8 @@ function CalculationCard({ data }: NodeProps<CardNode>) {
           <Database size={14} />
         ) : group ? (
           <Layers size={14} />
+        ) : python ? (
+          <Braces size={14} />
         ) : (
           <GitBranch size={14} />
         )}
@@ -137,11 +153,13 @@ function CalculationCard({ data }: NodeProps<CardNode>) {
               ? "lineageSource"
               : group
                 ? "lineageValueGroup"
-                : !result.complete
-                  ? "partial"
-                  : isExplained(operation)
-                    ? operationKeys[operation]
-                    : "lineageCalculation",
+                : python
+                  ? "pythonOpaque"
+                  : !result.complete
+                    ? "partial"
+                    : isExplained(operation)
+                      ? operationKeys[operation]
+                      : "lineageCalculation",
         )}
         {data.root && <span>{t("lineageSelectedValue")}</span>}
       </div>
@@ -188,6 +206,93 @@ function CalculationCard({ data }: NodeProps<CardNode>) {
           <p>{t("partitionReplayHint")}</p>
         </div>
       )}
+      {python && (
+        <p className="lineage-source-location">
+          {displayNodeName(names?.[result.node || ""], result.node || "", t)} ·{" "}
+          {t("lineageRow")} {result.row + 1}
+        </p>
+      )}
+      {python && data.parents && !!result.parents?.length && (
+        <>
+          <p className="lineage-card-reason">{t("pythonParentHint")}</p>
+          <div className="lineage-parents nodrag nowheel">
+            <p className="muted small">{t("pythonCapturedParents")}</p>
+            {result.parents?.map((parent) => (
+              <details key={parent.dataset} open>
+                <summary>
+                  {displayNodeName(names?.[parent.node], parent.node, t)} ·{" "}
+                  {parent.port}
+                </summary>
+                <table>
+                  <thead>
+                    <tr>
+                      {parent.columns.map((column) => (
+                        <th key={column.name}>{column.name}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {parent.rows.map((row) => (
+                      <tr key={row.row}>
+                        {row.values.map((value, index) => (
+                          <td key={parent.columns[index].name}>
+                            <button
+                              className="button secondary small"
+                              aria-label={t("pythonParentCell")
+                                .replace("{column}", parent.columns[index].name)
+                                .replace("{row}", String(row.row + 1))}
+                              disabled={disabled}
+                              onClick={() =>
+                                data.parent({
+                                  dataset: parent.dataset,
+                                  row: row.row,
+                                  column: parent.columns[index].name,
+                                })
+                              }
+                            >
+                              {formatValue(value)}
+                            </button>
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </details>
+            ))}
+          </div>
+          {parentRows > result.page_size && (
+            <div className="lineage-page nodrag">
+              <button
+                className="icon"
+                aria-label={t("previous")}
+                disabled={disabled || offset === 0}
+                onClick={() =>
+                  data.page(entry.id, {
+                    offset: Math.max(0, offset - result.page_size),
+                  })
+                }
+              >
+                <ChevronLeft size={14} />
+              </button>
+              <span>
+                {offset + 1}–{Math.min(offset + result.page_size, parentRows)} /{" "}
+                {parentRows}
+              </span>
+              <button
+                className="icon"
+                aria-label={t("next")}
+                disabled={disabled || offset + result.page_size >= parentRows}
+                onClick={() =>
+                  data.page(entry.id, { offset: offset + result.page_size })
+                }
+              >
+                <ChevronRight size={14} />
+              </button>
+            </div>
+          )}
+        </>
+      )}
       {source ? (
         <div className="lineage-source-location" title={result.node}>
           {displayNodeName(names?.[result.node || ""], result.node || "", t)} ·{" "}
@@ -227,7 +332,7 @@ function CalculationCard({ data }: NodeProps<CardNode>) {
               {result.calculation.selection.join(" · ")}
             </p>
           )}
-          {!result.complete ? (
+          {python ? null : !result.complete ? (
             <p className="lineage-card-warning">
               <AlertTriangle size={14} />
               {t("lineageLimitedHint")}
@@ -332,7 +437,7 @@ function FitGraph({ version }: { version: Graph }) {
 
 export default function LineagePanel(props: Props) {
   return (
-    <LineageDialog
+    <LineageExplorer
       key={JSON.stringify([
         props.worktree,
         props.environment,
@@ -343,7 +448,37 @@ export default function LineagePanel(props: Props) {
   );
 }
 
-function LineageDialog({ worktree, environment, cell, onClose }: Props) {
+function LineageExplorer(props: Props) {
+  const [parents, setParents] = useState<Cell[]>([]);
+  const cell = parents.at(-1) || props.cell;
+  const onParent = useCallback(
+    (parent: Cell) => setParents((current) => [...current, parent]),
+    [],
+  );
+  return (
+    <LineageDialog
+      {...props}
+      key={cellId(cell)}
+      cell={cell}
+      onParent={onParent}
+      onBack={
+        parents.length
+          ? () => setParents((current) => current.slice(0, -1))
+          : undefined
+      }
+      onClose={props.onClose}
+    />
+  );
+}
+
+function LineageDialog({
+  worktree,
+  environment,
+  cell,
+  onClose,
+  onParent,
+  onBack,
+}: Props & { onParent: (cell: Cell) => void; onBack?: () => void }) {
   const t = useT();
   const currentWorktree = useOptionalWorktree();
   const navigate = useNavigate();
@@ -479,25 +614,32 @@ function LineageDialog({ worktree, environment, cell, onClose }: Props) {
     return () => abort.abort();
   }, [worktree, environment, cell, pages, budget, revision, t]);
 
-  const nodes = useMemo(
-    () =>
-      arrangeLineage<CardNode>(
-        (graph?.entries || []).map((entry) => ({
+  const nodes = useMemo(() => {
+    // The cells of one Python result share its captured parents: its first card lists them.
+    const listed = new Set<string>();
+    return arrangeLineage<CardNode>(
+      (graph?.entries || []).map((entry) => {
+        const parents =
+          entry.result.kind === "python" && !listed.has(entry.result.dataset);
+        if (parents) listed.add(entry.result.dataset);
+        return {
           id: entry.id,
           type: "lineage",
           position: { x: 0, y: 0 },
           width: 330,
           style: { pointerEvents: "auto" },
           height:
-            entry.result.kind === "source" || entry.group || entry.deferred
-              ? entry.result.origin
-                ? 210
-                : 132
-              : entry.result.replay
-                ? 410
-                : entry.result.origin || entry.result.partition_groups?.length
-                  ? 330
-                  : 260,
+            entry.result.kind === "python"
+              ? pythonCardHeight(entry.result, parents)
+              : entry.result.kind === "source" || entry.group || entry.deferred
+                ? entry.result.origin
+                  ? 210
+                  : 132
+                : entry.result.replay
+                  ? 410
+                  : entry.result.origin || entry.result.partition_groups?.length
+                    ? 330
+                    : 260,
           data: {
             entry,
             root: graph?.root === entry.id,
@@ -511,6 +653,8 @@ function LineageDialog({ worktree, environment, cell, onClose }: Props) {
               }));
             },
             expand: () => setBudget((value) => value + 60),
+            parent: onParent,
+            parents,
             replay:
               currentWorktree?.canEdit &&
               !currentWorktree.statuses.active &&
@@ -518,11 +662,11 @@ function LineageDialog({ worktree, environment, cell, onClose }: Props) {
                 ? replay
                 : undefined,
           },
-        })),
-        graph?.edges || [],
-      ),
-    [graph, pending, currentWorktree, replay],
-  );
+        };
+      }),
+      graph?.edges || [],
+    );
+  }, [graph, pending, currentWorktree, replay, onParent]);
   const active = graph?.entries.find((entry) => entry.id === selected);
 
   return createPortal(
@@ -548,7 +692,13 @@ function LineageDialog({ worktree, environment, cell, onClose }: Props) {
       }}
     >
       <header className="lineage-header">
-        <div>
+        {onBack && (
+          <button className="button secondary" onClick={onBack}>
+            <ArrowLeft size={14} />
+            {t("lineageBackToPython")}
+          </button>
+        )}
+        <div className="lineage-title">
           <h2 id={titleId}>{t("lineageDialogTitle")}</h2>
           <div className="lineage-selected">
             {cell.column}
@@ -735,7 +885,7 @@ function CalculationDetails({
             environment={entry.result.environment || ""}
           />
         )}
-      {entry.result.expression && (
+      {entry.result.expression && entry.result.kind !== "python" && (
         <pre className="expression">{entry.result.expression}</pre>
       )}
       {entry.result.warnings.map((warning) => (

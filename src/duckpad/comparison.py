@@ -6,7 +6,7 @@ from . import project_extensions, variables, views
 from .bundle import files_to_bundle
 from .components import expand
 from .graph import reachable
-from .node_code import code_path
+from .node_code import code_path, template_path
 from .node_names import graph_names, name_text, node_name
 from .templates import DESCRIPTIVE, directives, executable_sql
 from .util import Problem
@@ -41,11 +41,17 @@ def entities(bundle):
                 if node.get("component")
                 else bundle["templates"].get(node["template"], "")
                 if node.get("template")
-                else bundle.get("node_sql", {}).get(code_path(key, parent), "")
+                else bundle.get("node_sql", {}).get(
+                    code_path(key, scope.removeprefix("component/") or None, node.get("language", "sql")), ""
+                )
             )
             if not node.get("template") and not node.get("component"):
                 node = {**node, "sql": definition}
-            node_file = code_path(key, parent) if "sql" in node else file
+            node_file = (
+                code_path(key, scope.removeprefix("component/") or None, node.get("language", "sql"))
+                if "sql" in node
+                else file
+            )
             add(f"{scope + '/' if scope else ''}node/{key}", "node", names[key], node, node_file, scope)
         for edge in value.get("edges", []):
             name = (
@@ -57,7 +63,7 @@ def entities(bundle):
     for key, value in sorted(bundle["components"].items()):
         graph(value, f"components/{key}.json", f"component/{key}")
     for key, value in sorted(bundle["templates"].items()):
-        add(f"template/{key}", "template", label(value, key), value, f"templates/{key}.sql")
+        add(f"template/{key}", "template", label(value, key), value, template_path(key))
     if bundle.get("extensions") is not None:
         add(
             "file/" + project_extensions.FILE,

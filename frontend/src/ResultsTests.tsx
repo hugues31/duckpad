@@ -15,7 +15,7 @@ import { countLabel, useT } from "./i18n";
 import { worktreeUrl } from "./navigation";
 import { nodeCode } from "./nodeCode";
 import { clock } from "./ResultsPanel";
-import { testSource } from "./samples";
+import { pythonCheckSource, testSource } from "./samples";
 import type {
   ExecutionResult,
   FlowNode,
@@ -27,9 +27,22 @@ import { useApiResource } from "./useApiResource";
 
 const HISTORY = 10;
 
-/** The tests a node's code declares, in declaration order. */
-export function declaredTests(signature: NodeInterface) {
+/** The tests a node's code declares, in declaration order; Python checks are known once they run. */
+export function declaredTests(
+  signature: NodeInterface,
+  results: ExecutionResult[] = [],
+) {
   if (signature.kind === "component") return [];
+  if (signature.definition?.language === "python")
+    return [
+      ...new Set(
+        results.flatMap((item) =>
+          item.origin.kind === "test" && item.origin.name
+            ? [item.origin.name]
+            : [],
+        ),
+      ),
+    ];
   return (signature.definition?.blocks || []).flatMap((block) =>
     block.test_name ? [block.test_name] : [],
   );
@@ -85,6 +98,7 @@ export default function ResultsTests({
       : null,
     { refresh },
   );
+  const python = node.language === "python";
   const code =
     snapshot.bundle && !node.component
       ? nodeCode(snapshot.bundle, node, parent)
@@ -108,14 +122,17 @@ export default function ResultsTests({
       <div className="results-empty-tab">
         <Info size={18} aria-hidden="true" />
         <div>
-          <strong>{t("noTests")}</strong>
-          <p className="muted small">{t("noTestsHint")}</p>
+          <strong>{t(python ? "pythonNoChecks" : "noTests")}</strong>
+          <p className="muted small">
+            {t(python ? "pythonTestHint" : "noTestsHint")}
+          </p>
           <pre className="expression">
-            {
-              "-- @test amount_present: error\nSELECT * FROM {{ result }} WHERE amount IS NULL;"
-            }
+            {python
+              ? 'self.check("amount_present", orders.filter("amount IS NULL"), severity="warning")'
+              : "-- @test amount_present: error\nSELECT * FROM {{ result }} WHERE amount IS NULL;"}
           </pre>
-          <p className="muted small">{t("testFromFilterTip")}</p>
+          {/* Tests created from a filter are SQL. */}
+          {!python && <p className="muted small">{t("testFromFilterTip")}</p>}
           {!node.component && (
             <button className="button secondary small" onClick={onEditCode}>
               <Code2 size={13} aria-hidden="true" />
@@ -175,9 +192,17 @@ export default function ResultsTests({
               const status = item?.status;
               const Icon = status ? STATUS_ICONS[status] : Info;
               const observed = Number(item?.observed ?? 0);
-              const source = testSource(code, name);
+              const source = python
+                ? pythonCheckSource(code, name)
+                : testSource(code, name);
+              // A failed Python check reports its severity; self.check defaults to error.
               const severity =
-                source?.match(/@test\s+\w+\s*:\s*(warning|error)/)?.[1] ||
+                (python && status !== "ok" && status) ||
+                source?.match(
+                  python
+                    ? /severity\s*=\s*["'](warning|error)["']/
+                    : /@test\s+\w+\s*:\s*(warning|error)/,
+                )?.[1] ||
                 "error";
               const recent = executions.slice(0, HISTORY).reverse();
               let failingRuns = 0;
@@ -252,7 +277,8 @@ export default function ResultsTests({
                       </span>
                     </td>
                     <td>
-                      {status && status !== "ok" && observed > 0 && (
+                      {/* Python checks keep no query to recompute their rows. */}
+                      {!python && status && status !== "ok" && observed > 0 && (
                         <button
                           className="text-button"
                           disabled={!canShowRows}
@@ -319,9 +345,11 @@ export default function ResultsTests({
             })}
           </tbody>
         </table>
-        <p className="muted small results-note">
-          <Info size={12} aria-hidden="true" /> {t("failingRowsNote")}
-        </p>
+        {!python && (
+          <p className="muted small results-note">
+            <Info size={12} aria-hidden="true" /> {t("failingRowsNote")}
+          </p>
+        )}
       </div>
     </div>
   );

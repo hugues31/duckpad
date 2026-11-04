@@ -41,7 +41,10 @@ class PartitionLineage:
             dependencies[data.id] = data.id
             missing.extend(self.restore_inputs(context, cursor, data, visited))
         if replacements:
-            dataset.query = sql(rename_tables(sqlglot.parse_one(dataset.query, read="duckdb"), replacements))
+            if dataset.query:
+                dataset.query = sql(
+                    rename_tables(sqlglot.parse_one(dataset.query, read="duckdb"), replacements)
+                )
             dataset.dependencies = dependencies
             for witness in dataset.witnesses.values():
                 witness["dataset"] = replacements.get(witness["dataset"], witness["dataset"])

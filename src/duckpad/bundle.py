@@ -6,7 +6,7 @@ import tomllib
 from contextlib import suppress
 from pathlib import Path
 
-from . import __version__, partitions, project_extensions, variables, views
+from . import partitions, project_extensions, variables, views
 from .components import expand
 from .node_code import node_sql
 from .node_names import Name, node_names
@@ -19,12 +19,13 @@ ROOT_FILES = (
     "documentation.json",
     "README.md",
     "pyproject.toml",
+    "uv.lock",
     variables.FILE,
     project_extensions.FILE,
     views.FILE,
 )
 DECLARATIVE_PATH = re.compile(
-    r"(?:templates|nodes)/[A-Za-z0-9_-]+\.sql|components/[A-Za-z0-9_-]+(?:\.json|/[A-Za-z0-9_-]+\.sql)"
+    r"templates/[A-Za-z0-9_-]+\.(?:sql|py)|nodes/[A-Za-z0-9_-]+\.(?:sql|py)|components/[A-Za-z0-9_-]+(?:\.json|/[A-Za-z0-9_-]+\.(?:sql|py))|modules/(?:[A-Za-z0-9_]+/)*[A-Za-z0-9_]+\.py"
 )
 
 
@@ -47,12 +48,14 @@ def files_to_bundle(files):
         return {
             "flow": json.loads(files["flow.json"]),
             "templates": {
-                Path(n).stem: text
+                (Path(n).name if n.endswith(".py") else Path(n).stem): text
                 for n, text in files.items()
-                if n.startswith("templates/") and n.endswith(".sql")
+                if n.startswith("templates/") and n.endswith((".sql", ".py"))
             },
             "node_sql": {
-                n: text for n, text in files.items() if n.endswith(".sql") and not n.startswith("templates/")
+                n: text
+                for n, text in files.items()
+                if n.endswith((".sql", ".py")) and not n.startswith(("templates/", "modules/"))
             },
             "components": {
                 Path(n).stem: json.loads(text)
@@ -61,6 +64,10 @@ def files_to_bundle(files):
             },
             "documentation": documentation,
             "pyproject": files.get("pyproject.toml"),
+            "python_lock": files.get("uv.lock"),
+            "python_helpers": {
+                n.removeprefix("modules/"): v for n, v in files.items() if n.startswith("modules/")
+            },
             "variables": variables.read(files.get(variables.FILE)),
             "extensions": project_extensions.read(files.get(project_extensions.FILE)),
             "views": views.read(files.get(views.FILE)),
@@ -71,12 +78,18 @@ def files_to_bundle(files):
 
 def default_pyproject(name):
     """A dependency-only project, suitable for uv sync without packaging the flow."""
+    import sys
+
+    import duckdb
+
+    from .python_environment import manifest_settings
+
     slug = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-") or "untitled"
     return (
         f'[project]\nname = "duckpad-project-{slug}"\n'
-        'version = "0.1.0"\nreadme = "README.md"\nrequires-python = ">=3.11"\n'
-        f'dependencies = ["duckpad=={__version__}"]\n'
-        "\n[tool.uv]\npackage = false\n"
+        f'version = "0.1.0"\nreadme = "README.md"\nrequires-python = "=={sys.version_info.major}.{sys.version_info.minor}.*"\n'
+        f'dependencies = ["duckdb=={duckdb.__version__}", "pytz>=2024.1"]\n'
+        "\n[tool.uv]\npackage = false\n" + manifest_settings()
     )
 
 
@@ -87,12 +100,22 @@ def bundle_to_files(bundle):
     if not isinstance(code, dict) or any(
         not isinstance(path, str)
         or not is_declarative(path)
-        or not path.endswith(".sql")
+        or not path.endswith((".sql", ".py"))
         or path.startswith("templates/")
         or not isinstance(text, str)
         for path, text in code.items()
     ):
-        raise Problem("Node code must map node SQL paths to text", 422)
+        raise Problem("Node code must map node SQL or Python paths to text", 422)
+    helpers = bundle.get("python_helpers", {})
+    if (
+        not isinstance(helpers, dict)
+        or any(
+            not isinstance(name, str) or not is_declarative("modules/" + name) or not isinstance(text, str)
+            for name, text in helpers.items()
+        )
+        or not isinstance(bundle.get("python_lock"), str | None)
+    ):
+        raise Problem("Python helpers must map relative .py paths to text and uv.lock must be text", 422)
     if not all(isinstance(section, dict) for section in (flow, documentation, templates, components)):
         raise Problem("A project bundle needs flow, documentation, templates and components objects", 422)
     readme, pyproject = documentation.get("project"), bundle.get("pyproject")
@@ -104,13 +127,18 @@ def bundle_to_files(bundle):
     name = flow.get("name")
     return {
         **code,
+        **({"uv.lock": bundle["python_lock"]} if bundle.get("python_lock") is not None else {}),
+        **{f"modules/{name}": text for name, text in bundle.get("python_helpers", {}).items()},
         "flow.json": dumps(flow),
         "documentation.json": dumps({k: v for k, v in documentation.items() if k != "project"}),
         "README.md": readme,
         "pyproject.toml": pyproject
         if pyproject is not None
         else default_pyproject(name if isinstance(name, str) else "Untitled project"),
-        **{f"templates/{key}.sql": value for key, value in templates.items()},
+        **{
+            f"templates/{key}" if key.endswith(".py") else f"templates/{key}.sql": value
+            for key, value in templates.items()
+        },
         **{f"components/{key}.json": dumps(value) for key, value in components.items()},
         **(
             {project_extensions.FILE: project_extensions.write(bundle["extensions"])}
@@ -133,6 +161,15 @@ def validate(bundle):
             tomllib.loads(bundle["pyproject"])
         except (ValueError, TypeError) as error:
             errors.append({"file": "pyproject.toml", "message": str(error)})
+    for name in bundle.get("python_helpers", {}):
+        parts = name.removesuffix(".py").split("/")
+        if parts[0] == "duckpad":
+            message = "A helper module named duckpad would replace the Duckpad SDK; rename it"
+        elif not all(part.isidentifier() for part in parts):
+            message = "Helper module paths must be Python identifiers to be importable"
+        else:
+            continue
+        errors.append({"file": "modules/" + name, "message": message})
     try:
         if not all(
             isinstance(bundle.get(key), dict) for key in ("flow", "templates", "components", "documentation")
@@ -167,7 +204,10 @@ def validate(bundle):
                         bundle["components"][node["component"]].get("parameters", {})
                         if node.get("component")
                         else {
-                            p["name"]: p for p in parse_template(node_sql(bundle, node, parent))["parameters"]
+                            p["name"]: p
+                            for p in parse_template(
+                                node_sql(bundle, node, parent), node.get("language", "sql")
+                            )["parameters"]
                         }
                     )
                     if target["param"] not in parameters:
@@ -181,11 +221,14 @@ def validate(bundle):
     except (Problem, KeyError, TypeError, AttributeError, RecursionError) as error:
         return [{"file": "flow.json", "message": str(error)}]
     for name, sql in {
-        **{f"templates/{key}.sql": text for key, text in bundle["templates"].items()},
+        **{
+            (f"templates/{key}" if key.endswith(".py") else f"templates/{key}.sql"): text
+            for key, text in bundle["templates"].items()
+        },
         **bundle.get("node_sql", {}),
     }.items():
         try:
-            parse_template(sql)
+            parse_template(sql, "python" if name.endswith(".py") else "sql")
         except Exception as error:
             errors.append({"file": name, "message": str(error)})
     errors.extend(project_extensions.problems(bundle))

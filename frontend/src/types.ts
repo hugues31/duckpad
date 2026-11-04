@@ -11,6 +11,7 @@ export type Json =
   string | number | boolean | null | Json[] | { [key: string]: Json };
 export type Theme = "light" | "dark";
 export interface FlowNode {
+  language?: "sql" | "python";
   partitions?: "all";
   outputs?: Record<string, { partition?: { by: string; column: string } }>;
   id: string;
@@ -38,12 +39,20 @@ export interface Graph {
 export type TemplateKind = "source" | "transform" | "export";
 /** A parameter declared by a template or exposed by a component. */
 export interface Parameter {
+  label?: string;
+  description?: string;
+  python_type?: string;
+  ge?: number;
+  gt?: number;
+  lt?: number;
+  le?: number;
   name: string;
   type: string;
   default?: Json;
 }
 /** A template's interface, or only the error that prevents parsing it. */
 export interface ParsedTemplate {
+  language?: "sql" | "python";
   error?: string;
   label?: string;
   description?: string;
@@ -171,6 +180,7 @@ export type Capability = "read" | "write";
 /** Databases are read as tables; file storage is a location for file nodes. */
 export type ConnectorFamily = "database" | "storage";
 export interface Snapshot {
+  python_enabled?: boolean;
   node_names?: NodeNames;
   partitions?: Record<string, PartitionDescription>;
   role: ProjectRole;
@@ -361,7 +371,8 @@ export type NodeRunStatus =
 export interface ExecutionResult {
   level: "info" | "warning" | "error";
   message: string;
-  origin: { kind: string; block?: number; name?: string };
+  /** SQL messages name their code block; Python sends "Python" or "Python stdout/stderr". */
+  origin: { kind: string; block?: number | string; name?: string };
   output?: string | null;
   observed?: Json;
   status?: "ok" | "warning" | "error";
@@ -376,6 +387,7 @@ export interface TestExecution {
 }
 /** What a run did with one node. */
 export interface NodeRun {
+  artifact?: { name?: string };
   partitioned?: boolean;
   results?: ExecutionResult[];
   status: NodeRunStatus;

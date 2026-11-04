@@ -115,3 +115,30 @@ it("suggests table names listed from the database connection", () => {
     screen.getByText("Cannot list schemas and tables: password failed"),
   ).toBeTruthy();
 });
+
+it("explains integer and bound errors on numeric Python fields", () => {
+  render(
+    <ParameterField
+      parameter={{
+        name: "limit",
+        type: "number",
+        python_type: "int",
+        ge: 1,
+        le: 10,
+      }}
+      value={1}
+      onChange={() => {}}
+      connections={[]}
+    />,
+  );
+  const input = screen.getByRole("textbox", {
+    name: "limit",
+  }) as HTMLInputElement;
+  fireEvent.change(input, { target: { value: "2.5" } });
+  fireEvent.blur(input);
+  expect(input.validationMessage).toBe("Enter a whole number");
+  fireEvent.change(input, { target: { value: "11" } });
+  fireEvent.blur(input);
+  expect(input.validationMessage).toBe("The value must satisfy: ≥ 1, ≤ 10");
+  expect(screen.getByText("int · ≥ 1 · ≤ 10")).toBeTruthy();
+});

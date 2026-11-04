@@ -457,6 +457,7 @@
   padding: 10px 14px;
 }
 .log-error {
+  overflow-wrap: anywhere;
   margin-bottom: 10px;
 }
 .run-summary {
@@ -496,6 +497,7 @@
   padding-top: 2px;
 }
 .log-entry > div {
+  white-space: pre-wrap;
   display: flex;
   flex-direction: column;
   gap: 2px;

@@ -274,7 +274,7 @@ test("instance configuration is available without a project and separate from pe
     );
     await page.setViewportSize({ width: 800, height: 900 });
     const navigation = page.getByRole("navigation", {
-      name: "Instance settings",
+      name: "Settings sections",
       exact: true,
     });
     expect(
@@ -353,15 +353,27 @@ test("project administrators manage their project and password without instance 
     await expect(
       member.getByLabel(`Project role · ${username}`, { exact: true }),
     ).toBeEnabled();
+    await member.getByRole("link", { name: "General", exact: true }).click();
     await expect(
       member.getByRole("button", { name: "Delete project", exact: true }),
     ).toBeVisible();
+    await member
+      .getByRole("link", { name: "Connections", exact: true })
+      .click();
     await expect(
       member.getByRole("heading", {
         name: "Authorized connections",
         exact: true,
       }),
-    ).toHaveCount(0);
+    ).toBeVisible();
+    await expect(
+      member.getByText(
+        "Only an instance administrator can change these settings.",
+      ),
+    ).toBeVisible();
+    await expect(
+      member.getByRole("button", { name: "Save connections", exact: true }),
+    ).toBeDisabled();
     await expect(
       member.getByRole("link", { name: "Instance settings", exact: true }),
     ).toHaveCount(0);

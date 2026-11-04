@@ -7,7 +7,7 @@ import { conflictLabel } from "./variables";
 /** File name followed by the semantic JSON pointer used by the merge engine. */
 export function conflictPath(path: string) {
   const [, file = path, pointer = ""] =
-    path.match(/^(.*?\.(?:json|sql|md|toml))(\/.*)?$/) || [];
+    path.match(/^(.*?\.(?:json|sql|py|md|toml))(\/.*)?$/) || [];
   return {
     file,
     parts: pointer
@@ -30,7 +30,16 @@ function definition(files: Record<string, string>, file: string) {
   }
 }
 
-/** Prefer a user label, then the SQL/component label, then the stable identifier. */
+/** The label a node's code declares: `-- @label` in SQL; `# @label`, else the class name, in Python. */
+function codeLabel(code: string | undefined, python: boolean) {
+  const label = python
+    ? code?.match(/^[\t ]*# @label (.+)$/m)?.[1] ||
+      code?.match(/^class\s+(\w+)\s*\([^)]*\bNode\b/m)?.[1]
+    : code?.match(/^\s*--\s*@label\s+(.+)$/m)?.[1];
+  return label?.trim();
+}
+
+/** Prefer a user label, then the code/component label, then the stable identifier. */
 export function conflictTitle(
   path: string,
   t: Translate,
@@ -41,20 +50,26 @@ export function conflictTitle(
   const variable = conflictLabel(path, t);
   if (variable) return variable;
   const { file, parts } = conflictPath(path);
-  const sql = file.match(/^(?:nodes\/|components\/([^/]+)\/)([^/]+)\.sql$/);
-  const component = file.match(/^components\/([^/]+)\.json$/)?.[1] || sql?.[1];
-  const graphFile = sql
+  const code = file.match(
+    /^(?:nodes\/|components\/([^/]+)\/)([^/]+)\.(?:sql|py)$/,
+  );
+  const component = file.match(/^components\/([^/]+)\.json$/)?.[1] || code?.[1];
+  const graphFile = code
     ? component
       ? `components/${component}.json`
       : "flow.json"
     : file;
-  const node = sql?.[2] || (parts[0] === "nodes" ? parts[1] : undefined);
+  const node = code?.[2] || (parts[0] === "nodes" ? parts[1] : undefined);
+  // Python node and template code; helper modules declare no node label.
+  const pythonFile = /^(?:nodes|components|templates)\/.+\.py$/.test(file);
   const field = file.endsWith(".sql")
     ? t("sql")
-    : parts
-        .slice(node ? 2 : 0)
-        .filter((part) => part !== "params")
-        .join(" · ");
+    : pythonFile
+      ? t("code")
+      : parts
+          .slice(node ? 2 : 0)
+          .filter((part) => part !== "params")
+          .join(" · ");
   const entity = entities.find((item) =>
     node
       ? item.kind === "node" &&
@@ -71,11 +86,21 @@ export function conflictTitle(
     const graph = definition(files, graphFile);
     const nodes = Array.isArray(graph.nodes) ? graph.nodes : [];
     const found = object(nodes.find((item) => object(item).id === node));
-    const code =
-      files[file.endsWith(".sql") ? file : `nodes/${node}.sql`] ||
-      files[`${component ? `components/${component}` : "nodes"}/${node}.sql`] ||
-      files[`templates/${found.template}.sql`];
-    const label = code?.match(/^\s*--\s*@label\s+(.+)$/m)?.[1]?.trim();
+    const python = pythonFile || found.language === "python";
+    const extension = python ? "py" : "sql";
+    const template = String(found.template);
+    const label = codeLabel(
+      files[
+        file.endsWith(".sql") || pythonFile
+          ? file
+          : `nodes/${node}.${extension}`
+      ] ||
+        files[
+          `${component ? `components/${component}` : "nodes"}/${node}.${extension}`
+        ] ||
+        files[`templates/${template}${template.endsWith(".py") ? "" : ".sql"}`],
+      python,
+    );
     const componentName =
       typeof found.component === "string"
         ? definition(files, `components/${found.component}.json`).name
@@ -86,7 +111,7 @@ export function conflictTitle(
           ? found.label
           : typeof componentName === "string"
             ? componentName
-            : label
+            : label && !python
               ? templateLabel(
                   String(
                     found.preset || found.template || found.origin || "sql",
@@ -94,7 +119,7 @@ export function conflictTitle(
                   label,
                   t,
                 )
-              : undefined;
+              : label;
     } else {
       name = label || (typeof graph.name === "string" ? graph.name : undefined);
     }

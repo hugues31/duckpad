@@ -5,6 +5,7 @@ import { useId, useState, type ReactNode } from "react";
 import { FileUp } from "lucide-react";
 import { uploadFile } from "./api";
 import { useT } from "./i18n";
+import { numberBounds } from "./numberBounds";
 import type { Column, Json, Parameter, Snapshot } from "./types";
 import {
   ExpressionInput,
@@ -78,10 +79,17 @@ export default function ParameterField({
         <label htmlFor={id}>
           {location && name === "connection"
             ? t("location")
-            : name.replaceAll("_", " ")}
+            : parameter.label || name.replaceAll("_", " ")}
         </label>
         {variable?.control}
-        <small>{base}</small>
+        <small>
+          {parameter.python_type === "int" || parameter.python_type === "float"
+            ? parameter.python_type
+            : base}
+          {numberBounds(parameter)
+            .map((bound) => ` · ${bound}`)
+            .join("")}
+        </small>
       </span>
       {variable?.bound ? (
         variable.bound
@@ -133,6 +141,7 @@ export default function ParameterField({
         <ParameterInput
           id={id}
           kind={base}
+          limits={parameter}
           value={value}
           onChange={onChange}
           onBlur={onBlur}
@@ -228,6 +237,9 @@ export default function ParameterField({
           <ExpressionValues value={text} variables={expressionVariables} />
         )}
       {uploadError && <span className="notice error">{uploadError}</span>}
+      {parameter.description && (
+        <small className="muted">{parameter.description}</small>
+      )}
       {base === "column" && schemas && (
         <datalist id={columnList}>
           {schemas.map((s) => (

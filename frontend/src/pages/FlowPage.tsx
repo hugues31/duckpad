@@ -26,6 +26,7 @@ import {
 import Inspector from "../Inspector";
 import {
   NEW_NODE_SQL,
+  NEW_NODE_PYTHON,
   detachNode,
   localDefinitions,
   nodeCode,
@@ -267,11 +268,15 @@ export default function FlowPage() {
     position?: FlowNode["position"],
     connection?: NodeConnection,
     linked = false,
+    language: "sql" | "python" = "sql",
   ) {
     if (connection && !graph?.nodes.some((n) => n.id === connection.nodeId))
       return;
+    if (id.endsWith(".py")) language = "python";
     const created: FlowNode = {
       id: identifier(),
+      // SQL is the default: flow.json names the language of Python nodes only.
+      ...(language === "python" && { language }),
       ...(kind === "component" ? { component: id } : { template: id }),
       params: {},
       position:
@@ -285,8 +290,8 @@ export default function FlowPage() {
         if (id) detachNode(value, created, parent);
         else {
           delete created.template;
-          (value.node_sql ||= {})[nodeCodePath(created.id, parent)] =
-            NEW_NODE_SQL;
+          (value.node_sql ||= {})[nodeCodePath(created.id, parent, language)] =
+            language === "python" ? NEW_NODE_PYTHON : NEW_NODE_SQL;
         }
       }
       g.nodes.push(created);
@@ -314,7 +319,14 @@ export default function FlowPage() {
   async function removeNodes(ids: string[], edges: string[] = []) {
     await save(snapshot, (value) => {
       const g = graphAt(value, path);
-      ids.forEach((id) => delete value.node_sql?.[nodeCodePath(id, parent)]);
+      g.nodes
+        .filter((node) => ids.includes(node.id))
+        .forEach(
+          (node) =>
+            delete value.node_sql?.[
+              nodeCodePath(node.id, parent, node.language)
+            ],
+        );
       g.nodes = g.nodes.filter((n) => !ids.includes(n.id));
       g.edges = g.edges.filter(
         (e) =>
@@ -412,7 +424,11 @@ export default function FlowPage() {
         onAdd={(kind, id, linked) =>
           safe(() => addNode(kind, id, undefined, undefined, linked))
         }
-        onNewNode={() => safe(() => addNode("template", ""))}
+        onNewNode={(language) =>
+          safe(() =>
+            addNode("template", "", undefined, undefined, false, language),
+          )
+        }
         onNewTemplate={() =>
           openModal({
             kind: "template",
@@ -653,7 +669,7 @@ export default function FlowPage() {
                     duplicate.origin = node.template || node.origin;
                     delete duplicate.template;
                     (value.node_sql ||= {})[
-                      nodeCodePath(duplicate.id, parent)
+                      nodeCodePath(duplicate.id, parent, duplicate.language)
                     ] = sql;
                   }
                   nodeGraph(value, parent).nodes.push(duplicate);
