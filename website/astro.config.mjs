@@ -16,6 +16,8 @@ function repositoryLinks() {
         node.url = `${prefix}/demos/${node.url.slice(7)}`;
       } else if (node.type === "link" && node.url.startsWith("../")) {
         node.url = `https://github.com/hugues31/duckpad/blob/main/${node.url.slice(3)}`;
+      } else if (node.type === "link" && node.url.startsWith("examples/")) {
+        node.url = `https://github.com/hugues31/duckpad/blob/main/docs/${node.url}`;
       }
       node.children?.forEach(visit);
     }
