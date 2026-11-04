@@ -155,6 +155,7 @@ class Exhaust(dp.Node):
     assert projects.snapshot(tree["id"])["bundle"]
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX resource limits")
 def test_python_limits_are_restored_after_the_node(services):
     store, _, _, engine = services
     code = """import duckpad as dp
