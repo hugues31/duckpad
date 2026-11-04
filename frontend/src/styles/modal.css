@@ -1,9 +1,14 @@
-/* Modal dialogs. */
+/*
+ * Modal dialogs. The backdrop's blur is the one seen through a modal: the
+ * blurred backdrop is the backdrop root of the modal, so a backdrop-filter on
+ * the modal itself would only blur the tint and paint it twice.
+ */
 .modal-backdrop {
   position: fixed;
   inset: 0;
   background: #10233270;
-  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
   z-index: 100;
   display: flex;
   align-items: center;
@@ -18,8 +23,7 @@
   border-radius: 24px;
   display: flex;
   flex-direction: column;
-  -webkit-backdrop-filter: blur(10px);
-  backdrop-filter: blur(10px);
+  background: var(--glass);
 }
 /* White glass lets the workspace show through without a dark color cast. */
 :root:not([data-theme="dark"]) .modal-backdrop {
@@ -36,10 +40,6 @@
     0 4px 16px #18181b0d;
 }
 @media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
-  .modal {
-    -webkit-backdrop-filter: none;
-    backdrop-filter: none;
-  }
   :root:not([data-theme="dark"]) .modal {
     background: var(--surface);
   }
