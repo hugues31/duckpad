@@ -18,6 +18,7 @@ import tomllib
 import zipfile
 from functools import cache
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import _duckdb
 import duckdb
@@ -124,6 +125,12 @@ def runtime_wheel(directory):
     return target
 
 
+def requirement_name(dependency):
+    """The normalized distribution name a requirement string starts with."""
+    match = re.match(r"\s*([A-Za-z0-9][A-Za-z0-9._-]*)", dependency)
+    return re.sub(r"[-_.]+", "-", match[1]).lower() if match else dependency
+
+
 def validate_manifest(text):
     try:
         manifest = tomllib.loads(text)
@@ -149,11 +156,10 @@ def validate_manifest(text):
         )
     if project.get("dynamic"):
         raise Problem("Python project dependency declarations must be static", 422)
-    lists = [
-        dependencies,
-        *project.get("optional-dependencies", {}).values(),
-        *manifest.get("dependency-groups", {}).values(),
-    ]
+    tables = [project.get("optional-dependencies", {}), manifest.get("dependency-groups", {})]
+    if not all(isinstance(table, dict) for table in tables):
+        raise Problem("Optional dependencies and dependency groups must be tables of lists", 422)
+    lists = [dependencies, *(items for table in tables for items in table.values())]
     for items in lists:
         if not isinstance(items, list):
             raise Problem("Python dependencies must be lists", 422)
@@ -170,10 +176,9 @@ def validate_manifest(text):
                     "Direct dependency URLs and local paths are unsupported; use the operator package index",
                     422,
                 )
-            match = re.match(r"^([A-Za-z0-9][A-Za-z0-9._-]*)\s*(?:\[|[<>=!~;]|$)", dependency)
-            if not match:
+            if not re.match(r"^[A-Za-z0-9][A-Za-z0-9._-]*\s*(?:\[|[<>=!~;]|$)", dependency):
                 raise Problem("Dependencies must be named packages from the operator package index", 422)
-            name = re.sub(r"[-_.]+", "-", match[1]).lower()
+            name = requirement_name(dependency)
             if name == "duckpad":
                 raise Problem(
                     "Remove the Duckpad server dependency: the server supplies the lightweight SDK", 422
@@ -182,7 +187,9 @@ def validate_manifest(text):
                 raise Problem("All DuckDB dependencies must match the server's exact version", 422)
     if uv.get("sources") != {"duckdb": {"path": f".duckpad-runtime/{runtime_tag()}"}}:
         raise Problem(
-            "The project's DuckDB source must match the operator runtime; other sources are unsupported", 422
+            "The project's DuckDB source must match this server's runtime: set [tool.uv.sources] to "
+            f'duckdb = {{ path = ".duckpad-runtime/{runtime_tag()}" }}; other sources are unsupported',
+            422,
         )
     return manifest
 
@@ -209,6 +216,51 @@ UV_ENVIRONMENT = {
     "ALL_PROXY",
     "NO_PROXY",
 }
+
+
+PYPI = "https://pypi.org/simple"
+PYPI_FILES = "files.pythonhosted.org"
+
+
+def operator_sources():
+    """Package sources the operator configured; PyPI unless a default index replaces it."""
+    names = ("UV_DEFAULT_INDEX", "UV_INDEX_URL", "UV_INDEX", "UV_EXTRA_INDEX_URL", "UV_FIND_LINKS")
+    entries = [e for name in names for e in re.split(r"[\s,]+", os.environ.get(name, "")) if e]
+    # Named indexes are written `name=url`.
+    sources = {re.sub(r"^[\w.-]+=(?=\S)", "", entry).rstrip("/") for entry in entries}
+    if not (os.environ.get("UV_DEFAULT_INDEX") or os.environ.get("UV_INDEX_URL")):
+        sources.add(PYPI)
+    return sources
+
+
+def check_lock_sources(text):
+    """Reject a uv.lock whose packages come from outside the runtime wheel and operator indexes."""
+    try:
+        packages = tomllib.loads(text).get("package", [])
+    except (ValueError, TypeError):
+        raise Problem("uv.lock is not a valid lock file", 422) from None
+    allowed = operator_sources()
+    runtime = f".duckpad-runtime/{runtime_tag()}"
+    for package in packages:
+        name, source = package.get("name"), package.get("source", {})
+        if source in ({"virtual": "."}, {"path": runtime}):
+            continue
+        registry = str(source.get("registry", "")).rstrip("/")
+        files = [package.get("sdist", {}), *package.get("wheels", [])]
+        if registry in allowed and all(
+            # PyPI's file host also serves mirrors that keep upstream links.
+            urlsplit(item["url"]).netloc in (urlsplit(registry).netloc, PYPI_FILES)
+            if "url" in item
+            else Path(registry, item.get("path", "")).resolve().is_relative_to(Path(registry).resolve())
+            for item in files
+            if item
+        ):
+            continue
+        raise Problem(
+            f"uv.lock takes {name} from a source the server does not use; "
+            "regenerate the lock on an editable branch with the operator's package index",
+            422,
+        )
 
 
 def uv_executable():
@@ -285,7 +337,9 @@ def cached_lock(files, home, *, read_only=False, allow_builds=False, project=Non
     root.mkdir(parents=True, exist_ok=True)
 
     def key(lock):
-        return digest([files["pyproject.toml"], lock, runtime_signature(), allow_builds])
+        return digest(
+            [files["pyproject.toml"], lock, runtime_signature(), allow_builds, sorted(operator_sources())]
+        )
 
     cached = root / (key(files.get("uv.lock")) + ".json")
     with FileLock(str(cached.with_suffix(".lock"))):
@@ -315,8 +369,17 @@ def resolve_lock(files, home, *, read_only=False, allow_builds=False):
         (directory / "README.md").write_bytes(files.get("README.md", "").encode("utf-8"))
         (directory / ".duckpad-runtime").mkdir()
         shutil.copyfile(wheel, directory / ".duckpad-runtime" / wheel.name)
-        if files.get("uv.lock") and "<<<<<<<" not in files["uv.lock"]:
-            (directory / "uv.lock").write_bytes(files["uv.lock"].encode("utf-8"))
+        previous = files.get("uv.lock")
+        if previous and "<<<<<<<" not in previous:
+            try:
+                check_lock_sources(previous)
+            except Problem:
+                if read_only:
+                    raise
+                # Like a conflicted lock, a foreign one is resolved again from the manifest.
+                previous = None
+        if previous and "<<<<<<<" not in previous:
+            (directory / "uv.lock").write_bytes(previous.encode("utf-8"))
         elif read_only:
             raise Problem(
                 "This tagged Python project needs a valid uv.lock; update and tag its editable branch", 422
@@ -326,7 +389,9 @@ def resolve_lock(files, home, *, read_only=False, allow_builds=False):
             directory,
             allow_builds=allow_builds,
         )
-        return (directory / "uv.lock").read_bytes().decode("utf-8")
+        locked = (directory / "uv.lock").read_bytes().decode("utf-8")
+        check_lock_sources(locked)
+        return locked
 
 
 def prepare(files, home, project, *, allow_builds=False):
@@ -398,6 +463,7 @@ def prepare_environment(files, home, project, *, allow_builds=False):
     validate_manifest(files["pyproject.toml"])
     if not files.get("uv.lock"):
         raise Problem("Save the Python project to generate uv.lock before execution", 422)
+    check_lock_sources(files["uv.lock"])
     root = Path(home) / "python"
     root.mkdir(parents=True, exist_ok=True)
     signature = digest([project, files["pyproject.toml"], files["uv.lock"], runtime_signature()])

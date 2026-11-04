@@ -69,8 +69,9 @@ the local environment. Component imports copy helpers and report conflicting
 helpers or missing dependency declarations instead of installing them silently.
 
 Add business dependencies to `project.dependencies` in `pyproject.toml`.
-Saving an enabled Python project resolves and commits `uv.lock`; the save remains
-pending while uv prepares the lock, with resolver errors shown in the editor.
+Saving a change to `pyproject.toml` or `uv.lock` in an enabled Python project
+resolves and commits `uv.lock`; the save remains pending while uv prepares the
+lock, with resolver errors shown in the editor. Other saves keep the current lock.
 The first execution creates a cached project environment. Environments are
 immutable and separated by project, manifest, lock and runtime fingerprint.
 Changing a helper, code or dependencies invalidates the affected results.
@@ -84,7 +85,8 @@ generated `pytz` dependency supports DuckDB timestamp conversion. Tags and jobs
 use `uv --locked`: missing, conflicting, stale or incompatible locks fail without
 editing the tag. Regenerate a conflicted lock on an editable branch and tag the
 result. Moving a project to another Python ABI, OS or DuckDB runtime requires
-updating these declarations and its lock on an editable branch first.
+updating these declarations and its lock on an editable branch first. Until then,
+runs report the expected runtime source; edits that leave dependencies alone still save.
 
 The server installation includes `uv`. Wheels are required by default; source builds
 need a separate administrator opt-in and run dependency build code with the
@@ -93,7 +95,7 @@ An offline installation can provide `UV_OFFLINE`, `UV_CACHE_DIR`, `UV_FIND_LINKS
 or an operator index via `UV_INDEX` / `UV_DEFAULT_INDEX` / `UV_EXTRA_INDEX_URL`,
 with `UV_INDEX_<NAME>_USERNAME` / `_PASSWORD` for an authenticated index and the
 standard `HTTP_PROXY` / `HTTPS_PROXY` / `NO_PROXY` variables. Cache the locked wheels
-in advance. Project manifests cannot override the operator index, cache, or build policy, including through optional dependencies or dependency groups. Validated manifest/lock pairs are cached, so unchanged executions do not relock or contact the index. A missing offline dependency produces a preparation error. The
+in advance. Project manifests cannot override the operator index, cache, or build policy, including through optional dependencies or dependency groups. A `uv.lock` that takes packages from another index or file host is resolved again on an editable branch and refused for tags. Validated manifest/lock pairs are cached, so unchanged executions do not relock or contact the index. A missing offline dependency produces a preparation error. The
 operator can supply `DUCKPAD_RUNTIME_WHEEL` matching the installed runtime.
 The project’s Python settings show resolution, installation, readiness and the
 last preparation error. Environments unused for seven days are removed during

@@ -532,6 +532,15 @@ class Projects:
         policy = get_policy(self.store, record["project"])
         if not (policy.get("enabled") and any(name.endswith(".py") for name in proposal)):
             return proposal
+        saved = self.read_files(record)
+        lock = saved.get("uv.lock")
+        if (
+            lock
+            and "<<<<<<<" not in lock
+            and all(proposal.get(n) == saved.get(n) for n in ("pyproject.toml", "uv.lock"))
+        ):
+            # Untouched dependencies keep their lock; a launch reports a manifest this server cannot use.
+            return proposal
         from .python_environment import lock_files
 
         return {

@@ -198,3 +198,103 @@ def test_dependency_resolution_does_not_hold_repository_lock(services, monkeypat
     projects.write(
         tree["id"], snapshot["revision"], {**snapshot["files"], "README.md": "Updated description\n"}
     )
+
+
+LOCK = """version = 1
+revision = 3
+
+[[package]]
+name = "pytz"
+version = "2024.1"
+source = {{ registry = "{registry}" }}
+wheels = [{{ {file}, hash = "sha256:00" }}]
+"""
+
+
+def lock(registry="https://pypi.org/simple", file='url = "https://files.pythonhosted.org/packages/pytz.whl"'):
+    return LOCK.format(registry=registry, file=file)
+
+
+@pytest.mark.parametrize(
+    "foreign",
+    [
+        lock("http://127.0.0.1:9/simple", 'url = "http://127.0.0.1:9/pytz.whl"'),
+        lock(file='url = "http://127.0.0.1:9/pytz.whl"'),
+        lock(file='path = "/srv/elsewhere/pytz.whl"'),
+    ],
+)
+def test_locks_only_take_packages_from_operator_sources(tmp_path, monkeypatch, foreign):
+    from duckpad import python_environment as environment
+
+    manifest = default_pyproject("Review")
+    wheel = tmp_path / "runtime.whl"
+    wheel.write_bytes(b"runtime")
+    monkeypatch.setattr(environment, "runtime_wheel", lambda _: wheel)
+    monkeypatch.setattr(environment, "command", lambda *args, **kwargs: pytest.fail("uv must not run"))
+    files = {"pyproject.toml": manifest, "uv.lock": foreign}
+    with pytest.raises(Problem, match="source the server does not use"):
+        environment.resolve_lock(files, tmp_path, read_only=True)
+    with pytest.raises(Problem, match="source the server does not use"):
+        environment.prepare_environment(files, tmp_path, "project")
+
+    def command(arguments, directory, **options):
+        # An editable branch resolves a foreign lock again from its manifest.
+        assert not (directory / "uv.lock").exists()
+        (directory / "uv.lock").write_text(lock())
+
+    monkeypatch.setattr(environment, "command", command)
+    assert environment.resolve_lock(files, tmp_path) == lock()
+
+
+def test_operator_indexes_replace_pypi_in_locks(tmp_path, monkeypatch):
+    from duckpad.python_environment import check_lock_sources
+
+    monkeypatch.setenv("UV_DEFAULT_INDEX", "https://mirror.example/simple/")
+    monkeypatch.setenv("UV_FIND_LINKS", f"{tmp_path},https://wheels.example/")
+    with pytest.raises(Problem):
+        check_lock_sources(lock())
+    check_lock_sources(lock("https://mirror.example/simple", 'url = "https://mirror.example/files/pytz.whl"'))
+    check_lock_sources(lock(str(tmp_path), f'path = "{tmp_path / "pytz.whl"}"'))
+    check_lock_sources(lock("https://wheels.example", 'url = "https://wheels.example/pytz.whl"'))
+
+
+def test_manifest_from_another_runtime_blocks_runs_but_not_unrelated_saves(services):
+    from duckpad.bundle import bundle_to_files
+    from duckpad.python_environment import runtime_tag
+
+    store, projects, _, engine = services
+    tree = flow(services)
+    project = tree["project"]
+    snapshot = projects.snapshot(tree["id"])
+    windows = runtime_tag().rsplit("-", 3)[0] + "-cp312-abi3-win_amd64.whl"
+    # A pull from another platform's Duckpad, or a server upgrade, leaves another runtime's manifest.
+    store.put("settings", "python:" + project, {"enabled": False})
+    foreign = snapshot["files"]["pyproject.toml"].replace(runtime_tag(), windows)
+    snapshot = projects.write(
+        tree["id"], snapshot["revision"], {**snapshot["files"], "pyproject.toml": foreign}
+    )
+    store.put("settings", "python:" + project, {"enabled": True})
+    bundle = snapshot["bundle"]
+    bundle["templates"]["total"] += "\n-- unrelated edit"
+    snapshot = projects.write(tree["id"], snapshot["revision"], bundle_to_files(bundle))
+    with pytest.raises(Problem, match=f'path = ".duckpad-runtime/{runtime_tag()}"'):
+        engine.launch(tree["id"], "dev")
+    # Editing the manifest still validates it at save time.
+    with pytest.raises(Problem, match="must match this server's runtime"):
+        projects.write(
+            tree["id"],
+            snapshot["revision"],
+            {**snapshot["files"], "pyproject.toml": foreign.replace("0.1.0", "0.1.1")},
+        )
+
+
+@pytest.mark.parametrize("table", ["optional-dependencies", "dependency-groups"])
+def test_dependency_tables_must_be_tables(table):
+    manifest = default_pyproject("Review")
+    manifest = (
+        manifest.replace("[tool.uv]", f'{table} = ["requests"]\n\n[tool.uv]', 1)
+        if table == "optional-dependencies"
+        else f'{table} = ["requests"]\n' + manifest
+    )
+    with pytest.raises(Problem, match="tables of lists"):
+        validate_manifest(manifest)
