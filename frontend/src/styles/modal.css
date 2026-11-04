@@ -19,7 +19,7 @@
   display: flex;
   flex-direction: column;
 }
-/* Opaque light dialogs stay white over the dimmed workspace. */
+/* Nearly white glass keeps a subtle hint of the workspace behind light dialogs. */
 :root:not([data-theme="dark"]) .modal-backdrop {
   background: #18181b33;
 }
@@ -27,13 +27,27 @@
   --surface: #fff;
   --surface-alt: #f6f7f9;
   --border: #e4e4e9;
-  background: var(--surface);
+  background: #fffffff0;
   border-color: var(--border);
   box-shadow:
     0 24px 64px #18181b24,
     0 4px 16px #18181b0d;
-  -webkit-backdrop-filter: none;
-  backdrop-filter: none;
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+}
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+  :root:not([data-theme="dark"]) .modal {
+    background: var(--surface);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+@supports not (
+  (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))
+) {
+  :root:not([data-theme="dark"]) .modal {
+    background: var(--surface);
+  }
 }
 @media (prefers-contrast: more) {
   :root:not([data-theme="dark"]) .modal {
