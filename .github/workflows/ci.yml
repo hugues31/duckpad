@@ -193,7 +193,7 @@ jobs:
       - run: npm run test:unit --prefix frontend
       - run: npm run build --prefix frontend
 
-  browser-shards:
+  browser:
     name: Browser shard ${{ matrix.shard }}/6
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -219,37 +219,9 @@ jobs:
       # The runner supplies Chromium's libraries; these tests do not compare font snapshots.
       # Keep one worker and one disposable server per shard to isolate shared instance settings.
       - run: npm exec --prefix frontend -- playwright install --only-shell chromium
-      - run: npm run test:e2e --prefix frontend -- --shard=${{ matrix.shard }}/6 --reporter=list,blob
+      - run: npm run test:e2e --prefix frontend -- --shard=${{ matrix.shard }}/6
       - uses: actions/upload-artifact@v7
-        if: always()
+        if: failure()
         with:
           name: browser-diagnostics-${{ matrix.shard }}
-          path: |
-            frontend/test-results/
-            frontend/blob-report/
-          if-no-files-found: ignore
-
-  browser:
-    name: Frontend and browser tests
-    if: always()
-    needs: [frontend, browser-shards]
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - name: Require frontend checks and every browser shard
-        env:
-          FRONTEND_RESULT: ${{ needs.frontend.result }}
-          BROWSER_RESULT: ${{ needs.browser-shards.result }}
-        run: test "$FRONTEND_RESULT" = success && test "$BROWSER_RESULT" = success
-
-  package:
-    name: Source archive and installed wheel
-    if: always()
-    needs: python
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - name: Require Python and package validation
-        env:
-          PYTHON_RESULT: ${{ needs.python.result }}
-        run: test "$PYTHON_RESULT" = success
+          path: frontend/test-results/

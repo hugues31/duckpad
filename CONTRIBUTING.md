@@ -45,7 +45,7 @@ npm run build --prefix frontend
 npm run test:e2e --prefix frontend
 ```
 
-Use `uv run ruff format src tests scripts` and `npm run format --prefix frontend` to fix formatting. Add a regression test with every bug fix: a Python test for service behavior, a Vitest unit test for a frontend helper or shared hook, a Playwright scenario for interface behavior.
+CI runs pytest on four processes with `-n 4 --dist worksteal`; add these options for a faster local run. Use `uv run ruff format src tests scripts` and `npm run format --prefix frontend` to fix formatting. Add a regression test with every bug fix: a Python test for service behavior, a Vitest unit test for a frontend helper or shared hook, a Playwright scenario for interface behavior.
 
 CI also runs the Python suite from the extracted source archive. A script or file read by a test must be listed in the sdist `include` of `pyproject.toml`. To reproduce that check after building the frontend:
 
