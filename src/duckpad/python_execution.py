@@ -101,7 +101,7 @@ def execute(cursor, payload):
     db.complete()
     # User code shares the run's cursor: `USE` must not move its outputs or later nodes.
     scope = "USE " + ".".join(
-        qi(part) for part in db.execute("SELECT current_database(), current_schema()").fetchone()
+        qi(part) for part in db.execute("SELECT current_database(), current_schema()").fetchall()[0]
     )
     log = BoundedLog()
     created = []
@@ -145,7 +145,7 @@ def execute(cursor, payload):
             instance._workspace = artifacts
             instance._connections = payload.get("connections", {})
             values = instance.run(**{name: db.table(table) for name, table in payload["inputs"].items()})
-            db.execute(scope)
+            db.execute(scope).complete()
             if contract["outputs"] == ["result"] and not isinstance(values, Outputs):
                 values = {"result": values}
             elif not contract["outputs"] and values is None:
@@ -195,7 +195,7 @@ def execute(cursor, payload):
             output["artifacts"] = instance._artifacts
     except BaseException as error:
         with contextlib.suppress(Exception):
-            db.execute(scope)
+            db.execute(scope).complete()
         for table in created:
             db.execute(f"DROP TABLE IF EXISTS {qi(table)}")
         frames = error.__traceback__
@@ -210,7 +210,7 @@ def execute(cursor, payload):
         output["error"] = detail
     finally:
         with contextlib.suppress(Exception):
-            db.execute(scope)
+            db.execute(scope).complete()
         if not restore_limits(limits):
             output["restart"] = True
         if output.get("restart"):

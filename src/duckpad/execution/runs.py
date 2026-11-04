@@ -981,15 +981,20 @@ class Runner:
                     },
                 )
             for check in response.get("checks", []):
+                # Recorded like SQL tests, so the Tests tab, badges and history read them the same way.
+                name, observed = redact(check["name"], execution.secrets), check["count"]
                 record_result(
                     execution.run,
                     key,
                     {
-                        "level": check["severity"] if check["count"] else "info",
-                        "message": f"{check['name']}: {check['count']} failing rows",
-                        "origin": {"kind": "test", "name": check["name"], "block": "Python"},
+                        "level": check["severity"] if observed else "info",
+                        "status": check["severity"] if observed else "ok",
+                        "message": f"Test {name} failed: {observed} failing rows"
+                        if observed
+                        else f"Test {name} passed",
+                        "origin": {"kind": "test", "name": name, "block": "Python"},
                         "output": None,
-                        "observed": check["count"],
+                        "observed": observed,
                     },
                 )
             if response.get("error"):

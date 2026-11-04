@@ -186,6 +186,7 @@ def test_use_in_python_keeps_outputs_and_later_nodes_in_place(services):
     store, _, _, engine = services
     code = SPLIT.replace(
         '        print("processing orders")',
+        '        assert orders.count("*").fetchall() == [(5,)]\n'
         '        self.db.execute("CREATE SCHEMA IF NOT EXISTS scratch")\n        self.db.execute("USE scratch")',
     )
     tree = flow(services, code)
