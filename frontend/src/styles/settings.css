@@ -119,6 +119,12 @@
   align-items: start;
   gap: 10px;
   line-height: 1.5;
+  margin: 16px 0;
+}
+
+.settings-card .check-row > span {
+  display: grid;
+  gap: 4px;
 }
 
 .settings-card .check-row input {
