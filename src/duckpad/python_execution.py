@@ -9,6 +9,11 @@ import types
 from collections import deque
 from pathlib import Path
 
+try:
+    import resource
+except ImportError:  # pragma: no cover - Windows has no POSIX resource limits
+    resource = None
+
 from .python_contract import parse_python
 from .python_sdk import Node, Outputs, Relation
 from .util import qi
@@ -62,6 +67,29 @@ def relation(connection, value):
     raise TypeError("Outputs must be DuckDB relations, Arrow tables/readers, or pandas/Polars DataFrames")
 
 
+LIMITS = ("RLIMIT_AS", "RLIMIT_DATA", "RLIMIT_NOFILE", "RLIMIT_NPROC", "RLIMIT_STACK")
+
+
+def process_limits():
+    """The worker's own resource limits, which user code may lower."""
+    if resource is None:
+        return {}
+    return {name: resource.getrlimit(getattr(resource, name)) for name in LIMITS if hasattr(resource, name)}
+
+
+def restore_limits(limits):
+    """Whether every limit is back; a lowered hard limit cannot be raised again."""
+    restored = True
+    for name, value in limits.items():
+        limit = getattr(resource, name)
+        if resource.getrlimit(limit) != value:
+            try:
+                resource.setrlimit(limit, value)
+            except (OSError, ValueError):
+                restored = False
+    return restored
+
+
 def execute(cursor, payload):
     contract = parse_python(payload["code"])
     if contract["inputs"] != list(payload["inputs"]) or set(contract["outputs"]) != set(payload["outputs"]):
@@ -71,6 +99,7 @@ def execute(cursor, payload):
     log = BoundedLog()
     created = []
     instance = None
+    limits = process_limits()
     output = {"messages": [], "checks": [], "artifacts": {}, "log": ""}
     workspace = Path(payload["workspace"])
     modules = workspace / "modules"
@@ -154,6 +183,8 @@ def execute(cursor, payload):
         for table in created:
             db.execute(f"DROP TABLE IF EXISTS {qi(table)}")
         _, error, frames = sys.exc_info()
+        if isinstance(error, MemoryError):
+            output["restart"] = True
         # Start at the user's code: the worker's own calling frames are not actionable.
         while frames is not None and frames.tb_frame.f_code.co_filename == __file__:
             frames = frames.tb_next
@@ -162,6 +193,13 @@ def execute(cursor, payload):
         detail = detail.replace(str(Path(__file__).parent), "<duckpad>")
         output["error"] = detail
     finally:
+        if not restore_limits(limits):
+            output["restart"] = True
+        if output.get("restart"):
+            # Memory exhaustion or changed limits leave the worker unreliable for later queries.
+            output["error"] = (output.get("error") or "Python changed the worker's resource limits") + (
+                "\nThe execution worker was restarted; the next run recomputes this context."
+            )
         if instance is not None:
             output["messages"] = instance._messages
         output["log"] = log.text

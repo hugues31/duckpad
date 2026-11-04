@@ -179,6 +179,11 @@ class Database:
             self.default_cursor = self.cursor()
         return self.default_cursor.execute(query, parameters)
 
+    def retire(self) -> None:
+        """Stop a worker that cannot be trusted with more queries; later calls fail at once."""
+        self.stop_worker()
+        self._stopped()
+
     def stop_worker(self) -> None:
         if self.process.poll() is None:
             self.process.terminate()
@@ -256,9 +261,12 @@ class Cursor:
     def python(self, payload):
         self.python_active.set()
         try:
-            return self.database.call("python", cursor=self.identity, payload=payload)
+            result = self.database.call("python", cursor=self.identity, payload=payload)
         finally:
             self.python_active.clear()
+        if isinstance(result, dict) and result.get("restart"):
+            self.database.retire()
+        return result
 
     def setup(self, captured, offline):
         self.database.call("setup", cursor=self.identity, captured=captured, offline=offline)

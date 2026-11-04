@@ -145,7 +145,31 @@ class Exhaust(dp.Node):
     run = wait_run(store, engine.launch(tree["id"], "dev"), timeout=30)
     assert run["status"] == "failed"
     assert "MemoryError" in run["nodes"]["python"]["error"]
+    assert "worker was restarted" in run["nodes"]["python"]["error"]
+    # The lowered limit must not survive in a worker that later queries would reuse.
+    assert engine.pool.contexts[(tree["id"], "dev")].db.closed
+    again = wait_run(store, engine.launch(tree["id"], "dev"), timeout=30)
+    assert again["status"] == "failed" and "MemoryError" in again["nodes"]["python"]["error"]
     assert projects.snapshot(tree["id"])["bundle"]
+
+
+def test_python_limits_are_restored_after_the_node(services):
+    store, _, _, engine = services
+    code = """import duckpad as dp
+import resource
+class Narrow(dp.Node):
+    def run(self) -> dp.Relation:
+        soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+        resource.setrlimit(resource.RLIMIT_NOFILE, (min(soft, 64), hard))
+        return self.db.sql("SELECT 1 AS x")
+"""
+    tree = single(services, code)
+    run = wait_run(store, engine.launch(tree["id"], "dev"), timeout=30)
+    assert run["status"] == "success", run["nodes"]["python"].get("error")
+    context = engine.context(tree["id"], "dev")
+    assert not context.db.closed
+    with context.db.cursor() as cursor:
+        assert cursor.execute("SELECT count(*) FROM range(10)").fetchone() == (10,)
 
 
 def test_partition_validation_prevents_write(tmp_path):
