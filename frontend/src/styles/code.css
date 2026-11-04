@@ -1,0 +1,213 @@
+/* Code tab: file tree, editor column and conflict comparison. */
+.code-workspace {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--surface);
+}
+.code-workspace[hidden] {
+  display: none;
+}
+.code-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--border);
+}
+.code-toolbar strong {
+  font-size: 12px;
+}
+.code-toolbar p {
+  margin: 5px 0 0;
+  font-size: 11px;
+  max-width: 560px;
+}
+.code-toolbar .row {
+  flex-wrap: wrap;
+}
+.code-layout {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+.code-files {
+  width: clamp(150px, 23vw, 280px);
+  flex-shrink: 0;
+  overflow: auto;
+  background: var(--surface-alt);
+  border-right: 1px solid var(--border);
+  padding: 10px 6px;
+}
+.file-tree-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+.file-tree-row > span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.project-file-tree svg,
+.file-tree-indent {
+  flex-shrink: 0;
+}
+.file-tree-indent {
+  width: 13px;
+}
+.file-tree-row:hover {
+  background: var(--surface);
+}
+.project-file-tree [aria-selected="true"] > .file-tree-row {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+.project-file-tree [role="treeitem"]:focus-visible {
+  outline: none;
+}
+.project-file-tree [role="treeitem"]:focus-visible > .file-tree-row {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.code-editor-column {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+.code-file-heading {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-height: 40px;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.code-editor-body {
+  flex: 1;
+  min-height: 0;
+}
+.code-workspace > .notice {
+  margin: 10px 20px;
+}
+.conflict-summary {
+  font-weight: 600;
+}
+.conflict-card {
+  margin: 20px 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.conflict-card h3 {
+  margin: 0;
+  padding: 12px 16px;
+  background: var(--surface-alt);
+  font-size: 14px;
+}
+.conflict-title {
+  display: block;
+}
+.conflict-path {
+  display: block;
+  font-size: 11px;
+  font-weight: normal;
+  margin-top: 5px;
+  overflow-wrap: anywhere;
+}
+.conflict-card .git-conflict-values {
+  padding: 16px;
+}
+.conflict-value {
+  min-width: 0;
+}
+.conflict-value pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.conflict-value mark {
+  color: inherit;
+  border-radius: 2px;
+}
+.conflict-added {
+  background: #1c9e5230;
+  text-decoration: underline;
+  text-decoration-color: #23864b;
+}
+.conflict-removed {
+  background: #d5394930;
+  text-decoration: line-through;
+  text-decoration-color: #be3944;
+}
+[data-theme="dark"] .conflict-added {
+  background: #2fc26a40;
+}
+[data-theme="dark"] .conflict-removed {
+  background: #f25d6b40;
+}
+.conflict-diff-labels {
+  display: flex;
+  gap: 12px;
+  padding: 10px 16px;
+  background: var(--surface);
+  font-weight: 600;
+  font-size: 12px;
+}
+.conflict-diff-labels span {
+  flex: 1;
+}
+.conflict-base,
+.conflict-file-choices,
+.conflict-presence {
+  display: block;
+  padding: 12px 16px;
+}
+.conflict-file-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+}
+.conflict-base summary {
+  cursor: pointer;
+}
+.conflict-result {
+  display: block;
+  padding: 0 16px 16px;
+  font-weight: 600;
+}
+.conflict-result textarea {
+  display: block;
+  width: 100%;
+  min-height: 90px;
+  margin-top: 8px;
+  font-family: monospace;
+  resize: vertical;
+}
+.modal:has(.conflict-content) footer {
+  flex-wrap: wrap;
+}
+@media (max-width: 700px) {
+  .conflict-content {
+    padding: 16px;
+  }
+  .conflict-content .git-conflict-values {
+    grid-template-columns: 1fr;
+  }
+  .conflict-diff-labels {
+    flex-wrap: wrap;
+  }
+}
