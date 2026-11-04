@@ -7,7 +7,7 @@ import sys
 
 import pytest
 from helpers import wait_run
-from test_python_nodes import single
+from test_python_nodes import SPLIT, flow, single
 
 from duckpad.bundle import bundle_to_files
 from duckpad.python_execution import BoundedLog
@@ -180,3 +180,16 @@ def test_python_benchmark_records_peak_memory(tmp_path):
     report = json.loads(result.stdout)
     assert report["output_rows"] == 5000
     assert report["peak_combined_rss_mib"] > 0 and report["incremental_rss_mib"] < 512
+
+
+def test_use_in_python_keeps_outputs_and_later_nodes_in_place(services):
+    store, _, _, engine = services
+    code = SPLIT.replace(
+        '        print("processing orders")',
+        '        self.db.execute("CREATE SCHEMA IF NOT EXISTS scratch")\n        self.db.execute("USE scratch")',
+    )
+    tree = flow(services, code)
+    run = wait_run(store, engine.launch(tree["id"], "dev"), timeout=60)
+    assert run["status"] == "success", run["nodes"]
+    assert [row["values"] for row in engine.preview(tree["id"], "dev", "total")["rows"]] == [[9]]
+    assert engine.preview(tree["id"], "dev", "python", "valid")["rows"]

@@ -99,6 +99,10 @@ def execute(cursor, payload):
         raise ValueError("Python ports changed; reconnect and save the node before running")
     db = cursor.cursor
     db.complete()
+    # User code shares the run's cursor: `USE` must not move its outputs or later nodes.
+    scope = "USE " + ".".join(
+        qi(part) for part in db.execute("SELECT current_database(), current_schema()").fetchone()
+    )
     log = BoundedLog()
     created = []
     instance = None
@@ -141,6 +145,7 @@ def execute(cursor, payload):
             instance._workspace = artifacts
             instance._connections = payload.get("connections", {})
             values = instance.run(**{name: db.table(table) for name, table in payload["inputs"].items()})
+            db.execute(scope)
             if contract["outputs"] == ["result"] and not isinstance(values, Outputs):
                 values = {"result": values}
             elif not contract["outputs"] and values is None:
@@ -189,6 +194,8 @@ def execute(cursor, payload):
             output["messages"] = instance._messages
             output["artifacts"] = instance._artifacts
     except BaseException as error:
+        with contextlib.suppress(Exception):
+            db.execute(scope)
         for table in created:
             db.execute(f"DROP TABLE IF EXISTS {qi(table)}")
         frames = error.__traceback__
@@ -202,6 +209,8 @@ def execute(cursor, payload):
         detail = detail.replace(str(Path(__file__).parent), "<duckpad>")
         output["error"] = detail
     finally:
+        with contextlib.suppress(Exception):
+            db.execute(scope)
         if not restore_limits(limits):
             output["restart"] = True
         if output.get("restart"):
