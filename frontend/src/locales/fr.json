@@ -1337,7 +1337,7 @@
   "pythonModuleReserved": "duckpad est réservé au SDK Duckpad. Choisissez un autre nom.",
   "pythonMessage": "Message Python",
   "pythonOutput": "Sortie Python",
-  "pythonNoChecks": "Aucune vérification Python au dernier run",
+  "pythonNoChecks": "Aucune vérification Python lors de la dernière exécution",
   "pythonComponentNoSql": "Ce composant contient des nœuds Python, qui n’ont pas de SQL compilé. Ouvrez le composant pour consulter leur code.",
   "pythonCreateModule": "Créer un module Python",
   "lineageBackToPython": "Retour à l’étape Python",
