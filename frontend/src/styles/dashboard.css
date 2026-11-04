@@ -1,0 +1,214 @@
+/* Project dashboard and the new project dialog. */
+.dashboard-brand {
+  margin-right: auto;
+  font-size: 15px;
+  font-weight: 650;
+}
+.project-dashboard {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: clamp(24px, 5vw, 72px) clamp(20px, 5vw, 64px);
+}
+.dashboard-content {
+  max-width: 1120px;
+  margin: 0 auto;
+}
+.dashboard-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 20px;
+  margin-bottom: 32px;
+}
+.dashboard-heading h1 {
+  font-size: 32px;
+  letter-spacing: -0.04em;
+  margin: 8px 0;
+}
+#projects-heading:focus {
+  /* Keep the navigation focus target without outlining a noninteractive title. */
+  outline: none;
+}
+.dashboard-heading h1,
+.login-card h1 {
+  color: var(--accent);
+}
+@supports (background-clip: text) {
+  .dashboard-heading h1,
+  .login-card h1 {
+    background-color: var(--accent);
+    background-image: var(--accent-gradient);
+    background-clip: text;
+    color: transparent;
+  }
+}
+@media (forced-colors: active), print {
+  .dashboard-heading h1,
+  .login-card h1 {
+    background: none;
+    color: inherit;
+  }
+}
+.dashboard-heading p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.6;
+}
+.project-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr));
+  gap: 18px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.project-grid li {
+  min-width: 0;
+}
+.project-card {
+  width: 100%;
+  height: 100%;
+  color: inherit;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 24px;
+  text-align: left;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--glass-shadow);
+}
+.project-card:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.project-card-icon {
+  display: flex;
+  padding: 12px;
+  border-radius: 10px;
+  color: var(--accent);
+  background: var(--accent-soft);
+  margin-bottom: 8px;
+}
+.project-card strong {
+  font-size: 17px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.project-card-date {
+  color: var(--muted);
+  font-size: 12px;
+}
+.project-card-action {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  margin-top: auto;
+  padding-top: 18px;
+  color: var(--accent);
+  font-weight: 600;
+}
+.dashboard-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: clamp(24px, 6vw, 72px) 20px;
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.dashboard-empty > svg {
+  color: var(--accent);
+  margin-bottom: 24px;
+}
+.dashboard-empty p {
+  max-width: 460px;
+  color: var(--muted);
+  line-height: 1.7;
+}
+.dashboard-example-note {
+  margin: 24px 0 0;
+  font-size: 12px;
+}
+.new-project-content {
+  display: grid;
+  gap: 22px;
+}
+.project-templates {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 185px), 1fr));
+  gap: 12px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.project-templates legend {
+  margin-bottom: 18px;
+  line-height: 1.5;
+}
+.project-template {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  cursor: pointer;
+}
+/* A lone last card spans the row instead of leaving an empty column. */
+.project-template:last-of-type:nth-of-type(odd) {
+  grid-column: 1 / -1;
+}
+.project-template:has(:checked) {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+.project-template:has(:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+.project-template:has(:disabled) {
+  cursor: wait;
+  opacity: 0.65;
+}
+.project-template input {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  margin: 0;
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+}
+.project-template > svg {
+  color: var(--accent);
+}
+.project-template strong {
+  font-size: 14px;
+  line-height: 1.4;
+}
+.project-template > span {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.new-project-content > p,
+.import-warning {
+  margin: 0;
+}
+.import-warning p {
+  margin: 0;
+}
+.import-warning ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+}
