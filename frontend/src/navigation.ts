@@ -18,6 +18,7 @@ export const settingsSections = [
   ["connections", "connections"],
   ["extensions", "extensions"],
   ["sql-resources", "sqlResources"],
+  ["monitoring", "monitoring"],
 ] as const;
 export type Area =
   | "home"

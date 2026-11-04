@@ -6,7 +6,9 @@ from copy import deepcopy
 
 from uvicorn.config import LOGGING_CONFIG
 
-POLLING_PATH = re.compile(r"/api/(?:resources|workspace|worktrees/[^/]+(?:/status|/generations/[^/]+)?)")
+POLLING_PATH = re.compile(
+    r"/api/(?:resources|monitoring(?:/logs)?|workspace|worktrees/[^/]+(?:/status|/generations/[^/]+)?)"
+)
 
 
 class PollingAccessFilter(logging.Filter):
@@ -42,6 +44,11 @@ def server_log_config(level="info"):
     config = deepcopy(LOGGING_CONFIG)
     config["filters"] = {"polling": {"()": PollingAccessFilter}}
     config["loggers"]["uvicorn.access"]["filters"] = ["polling"]
+    config["loggers"]["duckpad"] = {
+        "handlers": ["default"],
+        "level": level.upper(),
+        "propagate": False,
+    }
     config["formatters"]["execution"] = {"format": "%(message)s"}
     config["handlers"]["execution"] = {
         "class": "logging.StreamHandler",

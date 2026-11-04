@@ -1,6 +1,7 @@
 import SettingsLayout from "./SettingsLayout";
 import { NavLink } from "react-router";
 import {
+  Activity,
   Blocks,
   Cpu,
   MessageSquare,
@@ -17,12 +18,14 @@ import ConnectionsPanel from "./ConnectionsPanel";
 import EnvironmentsPanel from "./EnvironmentsPanel";
 import ExtensionSettings from "./ExtensionSettings";
 import GitHostsSettings from "./GitHostsSettings";
+import InstanceMonitoring from "./InstanceMonitoring";
 import { useT } from "./i18n";
 import SQLResourceSettings from "./SQLResourceSettings";
 import SSOSettings from "./SSOSettings";
 import type { ConnectorEditor, Workspace } from "./types";
 
 const sectionIcons = {
+  monitoring: Activity,
   usersPermissions: Users,
   assistant: MessageSquare,
   ssoSettings: KeyRound,
@@ -67,6 +70,7 @@ export default function InstanceSettings({
         );
       })}
     >
+      {section === "monitoring" && <InstanceMonitoring />}
       {section === "usersPermissions" && <UsersPage refresh={refresh} />}
       {section === "assistant" && <AssistantSettings />}
       {section === "extensions" && <ExtensionSettings />}

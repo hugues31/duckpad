@@ -34,6 +34,7 @@ from .example import create_example
 from .execution.samples import Sample
 from .git.identity import commit_author
 from .jobs import Jobs
+from .monitoring import Monitoring
 from .oidc import CALLBACK_PATH, OIDC, TRANSACTION_LIFETIME, OIDCSettings
 from .python_policy import get_policy
 from .resources import resource_usage
@@ -100,13 +101,17 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
     credentials = projects.remotes.credentials
     assistant = Assistant(services, auth)
     jobs = Jobs(services)
+    monitoring = Monitoring(store.paths.home)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-        if watch:
-            projects.start_watcher()
-        yield
-        services.close()
+        with monitoring.logs.capture():
+            try:
+                if watch:
+                    projects.start_watcher()
+                yield
+            finally:
+                services.close()
 
     app = FastAPI(
         title="Duckpad",
@@ -142,6 +147,7 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
             "environments",
             "catalog",
             "resources",
+            "monitoring",
             "sql-resources",
             "sso",
             "extensions",
@@ -327,6 +333,18 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
     @app.get("/api/resources", response_model=None)
     def resources() -> Record:
         return resource_usage()
+
+    @app.get("/api/monitoring", response_model=None)
+    def instance_monitoring() -> Record:
+        return monitoring.snapshot()
+
+    @app.get("/api/monitoring/logs", response_model=None)
+    def instance_logs(
+        level: Literal["debug", "info", "warning", "error", "critical"] = "debug",
+        q: Annotated[str, Query(max_length=200)] = "",
+        limit: Annotated[int, Query(ge=1, le=200)] = 200,
+    ) -> Record:
+        return monitoring.logs.snapshot(level, q, limit)
 
     # Instance
 

@@ -123,6 +123,8 @@ ROUTE_ACCESS = {
         "GET /api/sso",
         "PUT /api/sso",
         "GET /api/resources",
+        "GET /api/monitoring",
+        "GET /api/monitoring/logs",
         "GET /api/extensions/settings",
         "PUT /api/extensions/settings",
         "GET /api/sql-resources",
