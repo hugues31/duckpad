@@ -18,6 +18,8 @@
   border-radius: 24px;
   display: flex;
   flex-direction: column;
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
 }
 /* White glass lets the workspace show through without a dark color cast. */
 :root:not([data-theme="dark"]) .modal-backdrop {
@@ -32,14 +34,14 @@
   box-shadow:
     0 24px 64px #18181b24,
     0 4px 16px #18181b0d;
-  -webkit-backdrop-filter: blur(8px);
-  backdrop-filter: blur(8px);
 }
 @media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
-  :root:not([data-theme="dark"]) .modal {
-    background: var(--surface);
+  .modal {
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
+  }
+  :root:not([data-theme="dark"]) .modal {
+    background: var(--surface);
   }
 }
 @supports not (
