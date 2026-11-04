@@ -67,6 +67,9 @@ The same page shows recent Duckpad and Uvicorn logs, newest first, with minimum
 severity and case-insensitive text filters. Refresh manually or every five
 seconds while the page is open. Capture follows the server's configured log
 level. Successful monitoring requests do not enter this history.
+The compact refresh bar also shows the update time; hover it for the full date.
+A badge legend identifies DEBUG (gray), INFO (blue), WARNING (amber), ERROR
+(red) and CRITICAL (solid red), in both light and dark themes.
 
 This first version keeps up to 1,000 entries in backend memory, truncates each
 message to 4,000 characters, and returns up to 200 matches. Restarting clears
