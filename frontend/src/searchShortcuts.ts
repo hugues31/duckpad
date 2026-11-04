@@ -3,7 +3,7 @@ import { useEffect } from "react";
 export const searchShortcutLabel = (key: string) =>
   `${/Mac|iPhone|iPad/.test(navigator.platform) ? "⌘" : "Ctrl+"}${key.toUpperCase()}`;
 
-/** Search shortcuts yield to editors, form fields and blocking dialogs. */
+/** Search shortcuts work in the floating assistant but yield to other editors and modals. */
 export function useSearchShortcut(
   key: "f" | "k" | undefined,
   onShortcut: () => void,
@@ -14,7 +14,6 @@ export function useSearchShortcut(
       if (
         event.defaultPrevented ||
         event.isComposing ||
-        event.repeat ||
         event.altKey ||
         event.shiftKey ||
         !(event.ctrlKey || event.metaKey) ||
@@ -30,9 +29,13 @@ export function useSearchShortcut(
       const editing = target?.closest(
         'input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="textbox"]',
       );
-      if (editing && !target?.closest(".search-field")) return;
+      if (
+        editing &&
+        !target?.closest('.search-field, .assistant-chat[aria-modal="false"]')
+      )
+        return;
       event.preventDefault();
-      onShortcut();
+      if (!event.repeat) onShortcut();
     };
     document.addEventListener("keydown", handle);
     return () => document.removeEventListener("keydown", handle);

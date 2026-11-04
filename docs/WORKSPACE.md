@@ -31,8 +31,10 @@ their project, branch and component path; selecting one opens that location.
 Search uses saved project metadata, excluding SQL, parameter values and result rows.
 
 Press **Ctrl+F** (**⌘F** on macOS) for canvas search or **Ctrl+K** (**⌘K**) for
-instance search. Text editors, other form fields and open dialogs retain their
-own keyboard shortcuts.
+instance search. Both shortcuts also work while typing in the floating AI
+assistant, without sending or clearing the draft. Text editors, other form fields
+and blocking dialogs (including the maximized assistant) retain their own keyboard
+shortcuts.
 
 ## Save and run
 

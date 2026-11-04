@@ -15,7 +15,7 @@ test.afterEach(async ({ page }) => {
   });
 });
 
-test("search shortcuts work with the floating assistant and respect its modal and input states", async ({
+test("search shortcuts work from the floating assistant composer and respect modal boundaries", async ({
   page,
 }) => {
   await signIn(page);
@@ -51,6 +51,15 @@ test("search shortcuts work with the floating assistant and respect its modal an
   const message = chat.getByRole("textbox", { name: "Message", exact: true });
   await message.fill("Keep this draft");
   await expect(chat).toHaveAttribute("aria-modal", "false");
+  // Observe cancellation after the app handles the real keyboard event.
+  await page.evaluate(() => {
+    window.addEventListener("keydown", (event) => {
+      if ((event.ctrlKey || event.metaKey) && ["f", "k"].includes(event.key))
+        document.body.dataset.searchDefaultPrevented = String(
+          event.defaultPrevented,
+        );
+    });
+  });
 
   for (const modifier of ["Control", "Meta"]) {
     await page.getByRole("link", { name: "Flow", exact: true }).focus();
@@ -83,7 +92,40 @@ test("search shortcuts work with the floating assistant and respect its modal an
 
     await message.focus();
     await page.keyboard.press(`${modifier}+f`);
+    await expect(search).toBeFocused();
+    await expect(page.locator("body")).toHaveAttribute(
+      "data-search-default-prevented",
+      "true",
+    );
+    await search.fill("premium");
+    await search.press("Enter");
+    await expect(
+      page.locator('.react-flow__node[data-id="premium"]'),
+    ).toHaveClass(/selected/);
+    await expect(message).toHaveValue("Keep this draft");
+    await expect(chat.getByRole("log")).not.toContainText("Keep this draft");
+
+    // Holding the shortcut must not fall through to the browser on repeat.
+    await message.focus();
+    await page.keyboard.down(modifier);
+    await page.keyboard.down("f");
+    await page.keyboard.down("f");
+    await expect(search).toBeFocused();
+    await expect(page.locator("body")).toHaveAttribute(
+      "data-search-default-prevented",
+      "true",
+    );
+    await page.keyboard.up("f");
+    await page.keyboard.up(modifier);
+
+    await message.focus();
     await page.keyboard.press(`${modifier}+k`);
+    await expect(dialog.getByRole("combobox")).toBeFocused();
+    await expect(page.locator("body")).toHaveAttribute(
+      "data-search-default-prevented",
+      "true",
+    );
+    await page.keyboard.press("Escape");
     await expect(message).toBeFocused();
     await expect(message).toHaveValue("Keep this draft");
     await expect(dialog).toHaveCount(0);
