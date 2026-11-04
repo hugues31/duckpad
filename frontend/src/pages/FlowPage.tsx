@@ -412,7 +412,6 @@ export default function FlowPage() {
         onAdd={(kind, id, linked) =>
           safe(() => addNode(kind, id, undefined, undefined, linked))
         }
-        onNewNode={() => safe(() => addNode("template", ""))}
         onNewTemplate={() =>
           openModal({
             kind: "template",

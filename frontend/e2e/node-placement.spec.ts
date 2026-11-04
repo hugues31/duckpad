@@ -13,12 +13,12 @@ async function openProject(page: Page, example = false) {
   const { id } = await response.json();
   await page.goto(`/worktrees/${id}/flow`);
   await expect(
-    page.getByRole("button", { name: "New SQL node", exact: true }),
+    page.locator(".palette").getByRole("button", { name: "SQL", exact: true }),
   ).toBeVisible();
   return id as string;
 }
 
-async function addNode(page: Page, label = "New SQL node") {
+async function addNode(page: Page, label = "SQL") {
   const before = await page.locator(".react-flow__node").count();
   const saved = page.waitForResponse(
     (response) =>
@@ -113,11 +113,11 @@ test("repeated Northstar palette additions avoid existing bounds after pan and z
   await expect.poll(zoom).not.toBeCloseTo(1, 2);
   const chosen = await zoom();
   for (const label of [
-    "New SQL node",
+    "SQL",
     "Filter",
     "Add linked: Filter",
     "Regional report",
-    "New SQL node",
+    "SQL",
     "Filter",
   ]) {
     await addNode(page, label);

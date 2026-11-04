@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Boxes, Code2, Link, Plus, Search, X } from "lucide-react";
+import { Code2, Download, Link, Plus, Search, X } from "lucide-react";
 import { NodeIcon } from "./Canvas";
 import { DRAG_TYPE, nodeChoices, type NodeKind } from "./graph";
 import { templateLabel, useT } from "./i18n";
@@ -17,7 +17,6 @@ export default function NodePalette({
   onClose,
   onAdd,
   onNewTemplate,
-  onNewNode,
   onLibrary,
 }: {
   readOnly: boolean;
@@ -27,7 +26,6 @@ export default function NodePalette({
   hidden: boolean;
   onClose: () => void;
   onAdd: (kind: NodeKind, id: string, linked?: boolean) => void;
-  onNewNode: () => void;
   onNewTemplate: () => void;
   onLibrary: () => void;
 }) {
@@ -125,20 +123,34 @@ export default function NodePalette({
           </section>
         ))}
       </div>
-      <fieldset className="palette-bottom" disabled={readOnly}>
-        <button className="text-button" onClick={onNewNode}>
-          <Code2 size={14} />
-          {t("newSqlNode")}
-        </button>
-        <button className="text-button" onClick={onNewTemplate}>
-          <Code2 size={14} />
-          {t("newTemplate")}
-        </button>
-        <button className="text-button" onClick={onLibrary}>
-          <Boxes size={14} />
-          {t("library")}
-        </button>
-        <p>{t("dragHint")}</p>
+      <fieldset
+        className="palette-bottom"
+        disabled={readOnly}
+        aria-label={t("addToPalette")}
+      >
+        <span className="palette-actions-label" aria-hidden="true">
+          {t("addToPalette")}
+        </span>
+        <div className="palette-actions">
+          <button
+            className="button secondary small"
+            title={t("newTemplate")}
+            aria-label={t("newTemplate")}
+            onClick={onNewTemplate}
+          >
+            <Code2 size={15} aria-hidden="true" />
+            {t("sql")}
+          </button>
+          <button
+            className="button secondary small"
+            title={t("library")}
+            aria-label={t("library")}
+            onClick={onLibrary}
+          >
+            <Download size={15} aria-hidden="true" />
+            {t("paletteImport")}
+          </button>
+        </div>
       </fieldset>
     </aside>
   );

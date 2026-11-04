@@ -43,7 +43,7 @@ You are in **Flow**, the visual canvas. A few concepts will help:
 
 ## 3. Create your first SQL node · 3 minutes
 
-Choose **New SQL node** in the palette. Select it, set its **Display name** to
+Click **SQL** in the palette's **Transformations** list. Set its **Display name** to
 **Sample orders**, then choose **Edit code** in the inspector. Replace the
 entire default code, including its `-- @input source` line, with:
 
@@ -68,7 +68,7 @@ and upload your own file.
 
 ## 4. Connect a transformation · 3 minutes
 
-Choose **New SQL node** again and set its **Display name** to **Revenue report**.
+Click **SQL** in the **Transformations** list again and set its **Display name** to **Revenue report**.
 Choose **Edit code**, replace the code with the following, then **Save changes**:
 
 ```sql

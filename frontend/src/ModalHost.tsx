@@ -304,7 +304,9 @@ function WorktreeDialog({
         <RevisionEditor
           snapshot={snapshot}
           title={t(modal.create ? "newTemplate" : "editTemplate")}
-          description={modal.create ? undefined : t("sharedTemplateHint")}
+          description={t(
+            modal.create ? "newTemplateHint" : "sharedTemplateHint",
+          )}
           readOnly={!canEdit}
           read={(bundle) =>
             modal.create ? NEW_TEMPLATE : bundle.templates[modal.template]

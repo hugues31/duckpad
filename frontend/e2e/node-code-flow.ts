@@ -156,7 +156,10 @@ export async function verifyNodeCode(page: Page) {
   await expect
     .poll(async () => (await read()).files[`nodes/${duplicate.id}.sql`])
     .toBeUndefined();
-  await page.getByRole("button", { name: "New SQL node", exact: true }).click();
+  await page
+    .locator(".palette")
+    .getByRole("button", { name: "SQL", exact: true })
+    .click();
   await expect(
     inspector.getByRole("button", { name: "Edit code", exact: true }),
   ).toBeVisible();
@@ -164,7 +167,7 @@ export async function verifyNodeCode(page: Page) {
   const fresh = snapshot.bundle!.flow.nodes.at(-1)!;
   expect(fresh.template).toBeUndefined();
   expect(snapshot.files[`nodes/${fresh.id}.sql`]).toBe(
-    "-- @input source\n-- @output result\nSELECT * FROM {{ source }};\n",
+    snapshot.bundle!.templates.sql,
   );
   return { worktree: worktree.id, normal: first.id, linked: shared };
 }

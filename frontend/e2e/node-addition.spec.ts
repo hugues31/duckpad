@@ -81,7 +81,7 @@ async function delaySave(page: Page, endpoint: string, fail = false) {
 async function expectPending(page: Page) {
   await expect(adding(page)).toBeVisible();
   await expect(
-    page.getByRole("button", { name: "New SQL node" }),
+    page.locator(".palette").getByRole("button", { name: "SQL", exact: true }),
   ).toBeDisabled();
   await expect(
     page
@@ -103,7 +103,7 @@ async function expectPending(page: Page) {
 }
 
 const additions = [
-  { name: "SQL node", button: "New SQL node" },
+  { name: "SQL node", button: "SQL" },
   { name: "template copy", button: "Filter" },
   { name: "linked node", button: "Add linked: Filter" },
   { name: "component", button: "Reusable branch" },
@@ -175,7 +175,10 @@ test("a failed addition restores the inspector and allows retrying", async ({
 }) => {
   const { endpoint, existing } = await prepare(page);
   const { writes, release } = await delaySave(page, endpoint, true);
-  await page.getByRole("button", { name: "New SQL node" }).click();
+  await page
+    .locator(".palette")
+    .getByRole("button", { name: "SQL", exact: true })
+    .click();
   try {
     await expectPending(page);
   } finally {
@@ -190,7 +193,10 @@ test("a failed addition restores the inspector and allows retrying", async ({
   await expect(page.locator(".react-flow__node")).toHaveCount(1);
   const after: Snapshot = await (await page.request.get(endpoint)).json();
   expect(after.bundle!.flow.nodes).toEqual([existing]);
-  await page.getByRole("button", { name: "New SQL node" }).click();
+  await page
+    .locator(".palette")
+    .getByRole("button", { name: "SQL", exact: true })
+    .click();
   await expect(page.locator(".react-flow__node")).toHaveCount(2);
   await expect(displayName(page)).toBeEditable();
   await expect(displayName(page)).toHaveValue("");
