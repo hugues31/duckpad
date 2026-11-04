@@ -240,7 +240,7 @@ def test_locks_only_take_packages_from_operator_sources(tmp_path, monkeypatch, f
     def command(arguments, directory, **options):
         # An editable branch resolves a foreign lock again from its manifest.
         assert not (directory / "uv.lock").exists()
-        (directory / "uv.lock").write_text(lock())
+        (directory / "uv.lock").write_bytes(lock().encode())
 
     monkeypatch.setattr(environment, "command", command)
     assert environment.resolve_lock(files, tmp_path) == lock()
