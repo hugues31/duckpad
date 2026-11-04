@@ -53,6 +53,15 @@ def constant(node):
     return value
 
 
+def is_label(line):
+    return line.strip().startswith("# @label ")
+
+
+def executable_python(source):
+    """Node code without its label comment, so relabeling never invalidates results."""
+    return "\n".join(line for line in (source or "").splitlines() if not is_label(line))
+
+
 def parse_python(source):
     try:
         tree = ast.parse(source)
@@ -194,11 +203,7 @@ def parse_python(source):
         fail(cls, "Parameter names must be unique")
     return {
         "label": next(
-            (
-                line.split("@label", 1)[1].strip()
-                for line in source.splitlines()
-                if line.strip().startswith("# @label ")
-            ),
+            (line.split("@label", 1)[1].strip() for line in source.splitlines() if is_label(line)),
             cls.name,
         ),
         "description": ast.get_docstring(cls) or "",

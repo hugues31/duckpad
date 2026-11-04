@@ -12,6 +12,7 @@ from ..datasets import Context
 from ..graph import connection_references
 from ..partition_storage import PartitionStorage
 from ..projects import Projects
+from ..python_contract import executable_python
 from ..templates import executable_sql
 from ..types import Connections, Record
 from ..util import Problem, digest
@@ -93,7 +94,7 @@ class Fingerprints:
             collected = node.get("partition_collect_inputs", [])
             return digest(
                 {
-                    "sql": node["template_sql"]
+                    "sql": executable_python(node["template_sql"])
                     if node.get("language") == "python"
                     else executable_sql(node["template_sql"]),
                     "python": [

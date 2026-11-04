@@ -230,6 +230,45 @@ def test_invalid_edits_keep_contract_edges_and_parameters(services):
         assert nodes["python"].get("error")
 
 
+def test_python_traceback_starts_at_user_code(services):
+    store, _, _, engine = services
+    code = SPLIT.replace('print("processing orders")', "1 / 0")
+    run = wait_run(store, engine.launch(flow(services, code)["id"], "dev"), timeout=60)
+    error = run["nodes"]["python"]["error"]
+    assert "ZeroDivisionError" in error and "nodes/python.py" in error
+    assert "python_execution" not in error
+
+
+def test_relabeling_python_code_keeps_fingerprints(services):
+    _, projects, _, engine = services
+    worktree = flow(services)
+    snapshot = projects.snapshot(worktree["id"])
+    before, _ = engine.fingerprints.batch(snapshot["bundle"], "dev")
+    proposal = {**snapshot["files"], "nodes/python.py": "# @label Reusable splitter\n" + SPLIT}
+    snapshot = projects.write(worktree["id"], snapshot["revision"], proposal)
+    after, _ = engine.fingerprints.batch(snapshot["bundle"], "dev")
+    assert after == before
+    snapshot = projects.write(
+        worktree["id"], snapshot["revision"], {**proposal, "nodes/python.py": SPLIT + "\n# note\n"}
+    )
+    changed, _ = engine.fingerprints.batch(snapshot["bundle"], "dev")
+    assert changed["python"] != before["python"]
+
+
+def test_python_syntax_error_is_reported_once_with_other_flow_problems(services):
+    _, projects, _, _ = services
+    worktree = flow(services)
+    snapshot = projects.snapshot(worktree["id"])
+    snapshot["bundle"]["flow"]["edges"] = [e for e in snapshot["bundle"]["flow"]["edges"] if e["id"] != "b"]
+    files = {**bundle_to_files(snapshot["bundle"]), "nodes/python.py": "class Split(:"}
+    projects.write(worktree["id"], snapshot["revision"], files)
+    diagnostics = projects.snapshot(worktree["id"])["diagnostics"]
+    python = [d for d in diagnostics if d["file"] == "nodes/python.py"]
+    assert len(python) == 1 and python[0]["message"].startswith("Python line 1")
+    assert not any(d["file"] == "flow.json" and d["message"] == python[0]["message"] for d in diagnostics)
+    assert any("Connect input 'source'" in d["message"] for d in diagnostics)
+
+
 def test_opaque_lineage_uses_retained_parent_generation(services):
     store, projects, _, engine = services
     worktree = flow(services)

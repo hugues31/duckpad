@@ -80,14 +80,23 @@ def expand(bundle, tolerant=False):
                     boundaries[key] = ports
                 else:
                     text = node_sql(bundle, node, stack[-1] if stack else None)
-                    template = parse_template(text, node.get("language", "sql"))
                     if node.get("language") == "python":
                         from .python_nodes import retained_contract
 
+                        try:
+                            template = parse_template(text, "python")
+                        except Problem as error:
+                            # An invalid edit keeps the last valid ports, so the rest of the
+                            # flow is still validated and the error is reported once, in place.
+                            if not node.get("python_contract"):
+                                raise
+                            template = {"error": str(error)}
                         template = retained_contract(node, template, graph.get("edges", []))
                         if template.get("error"):
                             add_leaf(node, key, path, template, text, local_ports, template["error"])
                             continue
+                    else:
+                        template = parse_template(text, node.get("language", "sql"))
                     add_leaf(node, key, path, template, text, local_ports)
             except (Problem, KeyError, TypeError) as error:
                 if not tolerant:

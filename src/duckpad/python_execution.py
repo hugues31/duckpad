@@ -153,7 +153,11 @@ def execute(cursor, payload):
     except BaseException:
         for table in created:
             db.execute(f"DROP TABLE IF EXISTS {qi(table)}")
-        detail = traceback.format_exc()
+        _, error, frames = sys.exc_info()
+        # Start at the user's code: the worker's own calling frames are not actionable.
+        while frames is not None and frames.tb_frame.f_code.co_filename == __file__:
+            frames = frames.tb_next
+        detail = "".join(traceback.format_exception(type(error), error, frames))
         detail = detail.replace(str(modules), "modules").replace(str(workspace), "<execution>")
         detail = detail.replace(str(Path(__file__).parent), "<duckpad>")
         output["error"] = detail

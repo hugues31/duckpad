@@ -202,9 +202,7 @@ class Engine:
         with self.lock:
             worktrees = {w["id"] for project in projects for w in self.store.worktrees(project)}
             if worktrees & self.active.keys():
-                raise Problem(
-                    "Stop active executions before changing project connections or deleting the project", 409
-                )
+                raise Problem("Stop this project's active executions before changing its settings", 409)
             for worktree in worktrees:
                 self.pool.discard(worktree)
 

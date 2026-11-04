@@ -686,14 +686,22 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
 
                     collection[path] = retained_contract(node, parsed, graph.get("edges", []))
                     if collection[path].get("error"):
-                        result["diagnostics"].append(
-                            {
-                                "file": path,
-                                "node": node["id"],
-                                "code": "python_contract",
-                                "message": collection[path]["error"],
-                            }
+                        file = "templates/" + path if node.get("template") else path
+                        located = {"node": node["id"], "code": "python_contract"}
+                        message = collection[path]["error"]
+                        # A syntax error is already reported for its file: locate it on the node.
+                        same = next(
+                            (
+                                d
+                                for d in result["diagnostics"]
+                                if d.get("file") == file and d.get("message") == message and "node" not in d
+                            ),
+                            None,
                         )
+                        if same:
+                            same.update(located)
+                        else:
+                            result["diagnostics"].append({"file": file, "message": message, **located})
         result["variables"] = (
             variables.summary(
                 result["bundle"],
