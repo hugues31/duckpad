@@ -118,7 +118,7 @@
 }
 
 .monitoring-level-info {
-  color: var(--accent);
+  color: light-dark(#1559df, #90bfff);
   background: var(--accent-soft);
 }
 
