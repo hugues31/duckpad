@@ -120,7 +120,7 @@ def test_success_waits_prints_progress_and_records_the_trigger(server, tmp_path)
     assert lines[0].startswith(f"Run {run['id']} accepted: Job daily, tag v1 (")
     assert lines[0].endswith(", environment dev")
     assert any(line.endswith("] success: 1/1 nodes succeeded") for line in lines)
-    assert "Node source (source): success" in lines and "Outcome: success" in lines
+    assert "Node source (SQL template): success" in lines and "Outcome: success" in lines
 
 
 def test_typed_partition_file_and_partial_failure_exit_code(server, instance, tmp_path):

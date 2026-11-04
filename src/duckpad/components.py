@@ -4,6 +4,7 @@ import copy
 
 from . import partitions, variables, views
 from .node_code import code_path, node_sql
+from .node_names import name_text, node_caption
 from .templates import IDENTIFIER, directives, parse_template
 from .util import Problem, uid
 
@@ -27,11 +28,12 @@ def expand_for(bundle, environment, tolerant=True, computed=None, partition=None
 def expand(bundle, tolerant=False):
     nodes, edges, boundaries = {}, [], {}
 
-    def add_leaf(node, key, template, text, local_ports, error=None):
+    def add_leaf(node, key, path, template, text, local_ports, error=None):
         nodes[key] = {
             **copy.deepcopy(node),
             "id": key,
             "root": key.split("::")[0],
+            "display_name": name_text(path),
             "parsed": template,
             "template_sql": text,
             **({"error": error} if error else {}),
@@ -41,10 +43,12 @@ def expand(bundle, tolerant=False):
             for direction in ("inputs", "outputs")
         }
 
-    def visit(graph, prefix="", stack=()):
+    def visit(graph, prefix="", stack=(), parents=()):
         local_ports = {}
         for node in graph.get("nodes", []):
             key = prefix + node["id"]
+            # Display name parts: component instances, then this node.
+            path = [*parents, node_caption(bundle, node, stack[-1] if stack else None)]
             try:
                 if node.get("component"):
                     definition_id = node["component"]
@@ -62,7 +66,7 @@ def expand(bundle, tolerant=False):
                             if not target_node:
                                 raise Problem(f"Invalid exposed parameter target: {name}")
                             target_node.setdefault("params", {})[target["param"]] = value
-                    inner = visit(definition, key + "::", (*stack, definition_id))
+                    inner = visit(definition, key + "::", (*stack, definition_id), path)
                     ports = {"inputs": {}, "outputs": {}}
                     for direction in ("inputs", "outputs"):
                         for name, target in definition.get(direction, {}).items():
@@ -76,7 +80,7 @@ def expand(bundle, tolerant=False):
                     boundaries[key] = ports
                 else:
                     text = node_sql(bundle, node, stack[-1] if stack else None)
-                    add_leaf(node, key, parse_template(text), text, local_ports)
+                    add_leaf(node, key, path, parse_template(text), text, local_ports)
             except (Problem, KeyError, TypeError) as error:
                 if not tolerant:
                     raise
@@ -108,7 +112,7 @@ def expand(bundle, tolerant=False):
                     "outputs": sorted(outputs),
                     "parameters": [],
                 }
-                add_leaf(node, key, template, text, local_ports, str(error))
+                add_leaf(node, key, path, template, text, local_ports, str(error))
         for edge in graph.get("edges", []):
             try:
                 source, output = local_ports[edge["source"]]["outputs"][edge["sourceHandle"]]
@@ -139,12 +143,14 @@ def expand(bundle, tolerant=False):
         for edge in edges:
             port = (edge["target"], edge["targetHandle"])
             if port in occupied:
-                nodes[edge["target"]]["error"] = f"Input {port} has more than one source"
+                nodes[edge["target"]]["error"] = (
+                    f"Input {nodes[edge['target']]['display_name']}.{port[1]} has more than one source"
+                )
             occupied.add(port)
         for key, node in nodes.items():
             for port in node["parsed"]["inputs"]:
                 if (key, port) not in occupied:
-                    node["error"] = f"Connect input {port} on {node.get('label', key)}"
+                    node["error"] = f"Connect input {port} on {node['display_name']}"
     return nodes, edges, boundaries
 
 

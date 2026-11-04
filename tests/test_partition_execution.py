@@ -22,6 +22,7 @@ def test_serial_execution_preserves_duplicates_and_manifest_order(services, monk
     project["templates"]["keys"] = (
         "-- @output result\nSELECT 'b' batch, 'two' task UNION ALL SELECT 'a', 'one';"
     )
+    project["templates"]["transform"] = "-- @label Scaled amounts\n" + project["templates"]["transform"]
     worktree = projects.create("Partition equivalence", project)["id"]
     calls = Counter()
     compute = engine.runs._compute
@@ -35,6 +36,8 @@ def test_serial_execution_preserves_duplicates_and_manifest_order(services, monk
     run = join_run(store, launched["id"])
     assert run["status"] == "success", run
     assert calls == {"keys": 1, "lookup": 1, "source": 2, "transform": 2, "collect": 1}
+    # Partitioned node states keep the display name of the run's other nodes.
+    assert run["nodes"]["transform"]["label"] == "Scaled amounts"
     preview = engine.preview(worktree, "dev", "collect")
     actual = [r["values"] for r in preview["rows"]]
     with duckdb.connect() as db:

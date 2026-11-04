@@ -14,6 +14,11 @@ Select a node for its parameters and code on the right and its
 its contents; use the breadcrumbs to return. **Fit view** brings the graph into
 view. Drag a port onto empty space to add a compatible connected node.
 
+Node names come from **Display name**, then the SQL `-- @label` directive or
+template name. Diagnostics, lineage, variable usage, conflict titles and new
+Git commits use the same names. References inside a component include its parent
+path; IDs remain available in file paths and tooltips.
+
 ## Find nodes and projects
 
 Use **Find a node…** to search the current graph by label, ID or template.

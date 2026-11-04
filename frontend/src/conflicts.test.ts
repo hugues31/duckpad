@@ -140,6 +140,29 @@ describe("conflict content", () => {
       parts: [],
     });
   });
+
+  it("uses shared names and component paths in conflict headings", () => {
+    const names = {
+      report: [{ label: "Revenue report", template: "sql" }],
+      filter: [{ label: "Filter", template: "filter" }],
+      "components/nested/filter": [
+        { label: "Reporting" },
+        { label: "Filter", template: "filter" },
+      ],
+    };
+    const title = (path: string) => conflictTitle(path, t, [], [], names);
+    expect(title("nodes/report.sql")).toBe("Revenue report · SQL");
+    expect(title("flow.json/nodes/filter/params/condition")).toBe(
+      "Filter · condition",
+    );
+    expect(title("components/nested.json/nodes/filter/params/condition")).toBe(
+      "Reporting / Filter · condition",
+    );
+    expect(title("components/nested/filter.sql")).toBe(
+      "Reporting / Filter · SQL",
+    );
+    expect(title("flow.json/nodes/unknown/label")).toBe("unknown · label");
+  });
 });
 
 it("highlights separate character changes without marking unchanged text", () => {

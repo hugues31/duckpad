@@ -1,6 +1,7 @@
 import type { ConflictValue, EntityChange, MergeConflict } from "./gitTypes";
 import { templateLabel, type Translate } from "./i18n";
 import type { Conflict, Json } from "./types";
+import { displayNodeName, type NodeNames } from "./nodeNames";
 import { conflictLabel } from "./variables";
 
 /** File name followed by the semantic JSON pointer used by the merge engine. */
@@ -35,6 +36,7 @@ export function conflictTitle(
   t: Translate,
   versions: Record<string, string>[] = [],
   entities: EntityChange[] = [],
+  names: NodeNames = {},
 ) {
   const variable = conflictLabel(path, t);
   if (variable) return variable;
@@ -60,7 +62,10 @@ export function conflictTitle(
       : item.file === file &&
         (item.kind === "component" || item.kind === "template"),
   );
-  let name = entity?.name;
+  // Names resolved by the server cover every version, including nodes removed from one.
+  const named =
+    node && names[component ? `components/${component}/${node}` : node];
+  let name = named ? displayNodeName(named, node, t) : entity?.name;
   for (const files of versions) {
     if (name) break;
     const graph = definition(files, graphFile);
