@@ -1,7 +1,9 @@
 """Static Python port and parameter discovery. Never import or execute project code."""
 
 import ast
+import copy
 import math
+from functools import lru_cache
 from typing import NoReturn
 
 from .util import Problem
@@ -63,6 +65,12 @@ def executable_python(source):
 
 
 def parse_python(source):
+    """The static contract of a node's code; snapshots parse the same unchanged code often."""
+    return copy.deepcopy(parsed_contract(source))
+
+
+@lru_cache(maxsize=256)
+def parsed_contract(source):
     try:
         tree = ast.parse(source)
     except SyntaxError as error:

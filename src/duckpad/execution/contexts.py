@@ -176,16 +176,7 @@ class ContextPool:
         elif opening and requirements is None and existing:
             requirements = existing.extensions
         resources = self.sql_resources() if opening else {}
-        python_signature = ""
-        if opening:
-            record = self.projects.get(worktree)
-            files = self.projects.read_files(record)
-            policy = get_policy(self.store, record["project"])
-            if policy.get("enabled"):
-                if python:
-                    python_signature = digest([files.get("pyproject.toml"), files.get("uv.lock")])
-                elif existing and not getattr(existing.db, "closed", False):
-                    python_signature = existing.python_signature
+        python_signature = self._python_signature(worktree, python, existing) if opening else ""
         while True:
             self.projects.get(worktree)
             if environment not in self.catalog.environment_names():
@@ -201,7 +192,6 @@ class ContextPool:
                             context.extensions != requirements
                             or context.resources != resources
                             or context.partition_artifacts != partition_artifacts
-                            or context.python_signature != python_signature
                         )
                     )
                 ):
@@ -296,26 +286,46 @@ class ContextPool:
         """DuckDB threads and memory limit of new SQL sessions; None leaves DuckDB's automatic sizing."""
         return {**SQL_RESOURCES, **self.store.get("settings", "sql_resources", {})}
 
-    def renew(self, context: Context) -> None:
-        """Move a context's results to a new isolated worker when its project's connections changed.
+    def _python_signature(self, worktree: str, python: bool, existing: Context | None) -> str:
+        """The project environment a worker runs on: requested by Python runs, kept by others."""
+        record = self.projects.get(worktree)
+        if not get_policy(self.store, record["project"]).get("enabled"):
+            return ""
+        if python:
+            files = self.projects.read_files(record)
+            return digest([files.get("pyproject.toml"), files.get("uv.lock")])
+        if existing and not getattr(existing.db, "closed", False):
+            return existing.python_signature
+        return ""
+
+    def renew(self, context: Context, python: bool = False) -> None:
+        """Move a context's results to a new worker when its connections or Python environment changed.
 
         A worker attaches its connections once, then locks its configuration: new settings or
-        credentials need a new worker. The old worker keeps serving its results until the new one
-        has started, so a connection that fails to start, such as a wrong password, leaves them
-        untouched. Only the run that owns the worktree may call this.
+        credentials need a new worker, as does a run that needs another project environment. The
+        old worker keeps serving its results until the new one has started, so a connection that
+        fails to start, such as a wrong password, leaves them untouched. Only the run that owns
+        the worktree may call this.
         """
         previous = context.db
-        if not self.isolated or previous is None or getattr(previous, "closed", False):
+        if previous is None or getattr(previous, "closed", False):
             return
-        project = self.projects.get(context.worktree)["project"]
-        connections, secrets = self._configured_connections(project, context.environment)
-        # Secret values only reach this in-memory comparison, never a stored fingerprint.
-        if attached(connections) == attached(context.connections):
-            # A new name or description changes no setup: runs only report it.
-            context.connections, context.secrets = connections, secrets
+        python_signature = self._python_signature(context.worktree, python, context)
+        connections, secrets = context.connections, context.secrets
+        changed = python_signature != context.python_signature
+        if self.isolated:
+            project = self.projects.get(context.worktree)["project"]
+            connections, secrets = self._configured_connections(project, context.environment)
+            # Secret values only reach this in-memory comparison, never a stored fingerprint.
+            if attached(connections) == attached(context.connections):
+                # A new name or description changes no setup: runs only report it.
+                context.connections, context.secrets = connections, secrets
+            else:
+                changed = True
+        if not changed:
             return
         files = {r for r, c in context.connections.items() if database_files(c["definition"], c["values"])}
-        if files:
+        if files and self.isolated:
             # DuckDB locks an attached database file: the old worker releases it for the new one.
             cursor = previous.cursor()
             try:
@@ -330,8 +340,8 @@ class ContextPool:
             context.extensions,
             context.resources,
             context.partition_artifacts,
-            (connections, secrets),
-            python=bool(context.python_signature),
+            (connections, secrets) if self.isolated else None,
+            python=bool(python_signature),
         )
         handoff = self.store.paths.exports(context.worktree, context.environment) / ".temporary"
         handoff = handoff / f"handoff-{uid()}.duckdb"
@@ -342,13 +352,14 @@ class ContextPool:
             except (duckdb.Error, Problem) as error:
                 candidate.close()
                 raise Problem(
-                    "Cannot move the results to a SQL session with the new connection settings: "
+                    "Cannot move the results to a new execution worker: "
                     f"{redact(str(error), context.secrets)}. Check the free disk space of the Duckpad server.",
                     503,
                 ) from None
             with context.lock:
                 cancel_lineage(context)
                 context.db, context.connections, context.secrets = candidate, connections, secrets
+                context.python_signature = python_signature
                 # Release the old worker's memory before the new one loads the results.
                 previous.close()
                 try:

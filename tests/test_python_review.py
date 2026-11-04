@@ -4,12 +4,14 @@ import json
 import os
 import subprocess
 import sys
+import time
+from pathlib import Path
 
 import pytest
 from helpers import wait_run
 from test_python_nodes import flow, single
 
-from duckpad.bundle import default_pyproject
+from duckpad.bundle import bundle_to_files, default_pyproject
 from duckpad.python_environment import validate_manifest
 from duckpad.python_execution import BoundedLog
 from duckpad.util import Problem
@@ -247,6 +249,68 @@ def test_environment_cleanup_preserves_active_leases(tmp_path):
         assert directory.exists()
     prune_environments(tmp_path)
     assert not directory.exists()
+
+
+def test_environment_cleanup_errors_and_leftovers(tmp_path, monkeypatch):
+    import shutil
+
+    from duckpad import python_environment
+
+    old = time.time() - 8 * 86400
+    unused = tmp_path / "unused"
+    (unused / "ready.json").parent.mkdir()
+    (unused / "ready.json").write_text("{}")
+    os.utime(unused / "ready.json", (old, old))
+    interrupted = tmp_path / ("a" * 64)
+    interrupted.mkdir()
+    os.utime(interrupted, (old, old))
+    (tmp_path / ("b" * 64 + ".lock")).write_text("")
+    os.utime(tmp_path / ("b" * 64 + ".lock"), (old, old))
+    wheels = tmp_path / "wheels" / "0123456789abcdef"
+    wheels.mkdir(parents=True)
+    os.utime(wheels, (old, old))
+    real = shutil.rmtree
+
+    def refuse(path, *args, **kwargs):
+        if Path(path) == unused:
+            raise PermissionError("busy")
+        return real(path, *args, **kwargs)
+
+    monkeypatch.setattr(python_environment.shutil, "rmtree", refuse)
+    python_environment.prune_environments(tmp_path)
+    assert unused.exists()
+    assert not interrupted.exists() and not wheels.exists()
+    assert not (tmp_path / ("b" * 64 + ".lock")).exists()
+
+
+def test_helper_modules_cannot_shadow_the_sdk(services):
+    _, projects, _, _ = services
+    worktree = flow(services)
+    snapshot = projects.snapshot(worktree["id"])
+    files = {**snapshot["files"], "modules/duckpad.py": "x = 1\n", "modules/2024/report.py": "x = 2\n"}
+    projects.write(worktree["id"], snapshot["revision"], files)
+    problems = {d["file"]: d["message"] for d in projects.snapshot(worktree["id"])["diagnostics"]}
+    assert "replace the Duckpad SDK" in problems["modules/duckpad.py"]
+    assert "Python identifiers" in problems["modules/2024/report.py"]
+
+
+def test_first_python_run_keeps_existing_sql_results(services):
+    store, projects, _, engine = services
+    worktree = single(
+        services,
+        "import duckpad as dp\nclass Source(dp.Node):\n    def run(self) -> dp.Relation:\n        return self.db.sql('SELECT 2 AS two')\n",
+    )
+    snapshot = projects.snapshot(worktree["id"])
+    bundle = snapshot["bundle"]
+    bundle["flow"]["nodes"].append({"id": "other", "template": "other", "params": {}})
+    bundle["templates"]["other"] = "-- @output result\nSELECT 7 AS seven"
+    projects.write(worktree["id"], snapshot["revision"], bundle_to_files(bundle))
+    assert wait_run(store, engine.launch(worktree["id"], "dev", "other"), timeout=60)["status"] == "success"
+    sql_worker = engine.context(worktree["id"], "dev").db
+    assert wait_run(store, engine.launch(worktree["id"], "dev", "python"), timeout=120)["status"] == "success"
+    # The run moved to the project environment's worker and brought the SQL result along.
+    assert engine.context(worktree["id"], "dev").db is not sql_worker
+    assert [row["values"] for row in engine.preview(worktree["id"], "dev", "other")["rows"]] == [[7]]
 
 
 def test_float_defaults_are_normalized_for_direct_calls():

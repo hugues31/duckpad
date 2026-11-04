@@ -108,11 +108,17 @@ def execute(cursor, payload):
     artifacts.mkdir(exist_ok=True)
     for name, source in payload.get("helpers", {}).items():
         relative = Path(name)
-        if relative.is_absolute() or ".." in relative.parts or relative.suffix != ".py":
+        if (
+            relative.is_absolute()
+            or ".." in relative.parts
+            or relative.suffix != ".py"
+            or relative.with_suffix("").parts[0] == "duckpad"
+        ):
             raise ValueError("Invalid helper module path")
         target = modules / relative
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(source, encoding="utf-8")
+        # Keep the saved bytes: text mode would double CRLF line endings on Windows.
+        target.write_bytes(source.encode("utf-8"))
     previous_path = list(sys.path)
     previous_modules = set(sys.modules)
     module_name = "_duckpad_node"

@@ -90,7 +90,9 @@ The server installation includes `uv`. Wheels are required by default; source bu
 need a separate administrator opt-in and run dependency build code with the
 server account's permissions. This opt-in requires trust in those dependencies.
 An offline installation can provide `UV_OFFLINE`, `UV_CACHE_DIR`, `UV_FIND_LINKS`
-or an operator index via `UV_INDEX` / `UV_DEFAULT_INDEX`. Cache the locked wheels
+or an operator index via `UV_INDEX` / `UV_DEFAULT_INDEX` / `UV_EXTRA_INDEX_URL`,
+with `UV_INDEX_<NAME>_USERNAME` / `_PASSWORD` for an authenticated index and the
+standard `HTTP_PROXY` / `HTTPS_PROXY` / `NO_PROXY` variables. Cache the locked wheels
 in advance. Project manifests cannot override the operator index, cache, or build policy, including through optional dependencies or dependency groups. Validated manifest/lock pairs are cached, so unchanged executions do not relock or contact the index. A missing offline dependency produces a preparation error. The
 operator can supply `DUCKPAD_RUNTIME_WHEEL` matching the installed runtime.
 The project’s Python settings show resolution, installation, readiness and the

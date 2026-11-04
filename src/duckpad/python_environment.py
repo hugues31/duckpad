@@ -6,6 +6,7 @@ import hashlib
 import importlib.metadata
 import io
 import json
+import logging
 import os
 import re
 import shutil
@@ -24,6 +25,8 @@ from filelock import FileLock
 
 from .python_sdk import SDK_CONTRACT
 from .util import Problem, atomic_write, digest
+
+logger = logging.getLogger(__name__)
 
 MODULES = (
     "python_sdk.py",
@@ -184,31 +187,49 @@ def validate_manifest(text):
     return manifest
 
 
+# Operator settings uv may need: locale, temporary space, certificates, proxies and indexes.
+UV_ENVIRONMENT = {
+    "PATH",
+    "SYSTEMROOT",
+    "WINDIR",
+    "LANG",
+    "LC_ALL",
+    "HOME",
+    "TEMP",
+    "TMP",
+    "UV_DEFAULT_INDEX",
+    "UV_EXTRA_INDEX_URL",
+    "UV_FIND_LINKS",
+    "UV_CACHE_DIR",
+    "UV_OFFLINE",
+    "SSL_CERT_FILE",
+    "SSL_CERT_DIR",
+    "HTTP_PROXY",
+    "HTTPS_PROXY",
+    "ALL_PROXY",
+    "NO_PROXY",
+}
+
+
+def uv_executable():
+    """The uv installed with Duckpad, even when its environment is not on PATH."""
+    try:
+        from uv import find_uv_bin
+
+        return find_uv_bin()
+    except (ImportError, FileNotFoundError):
+        return shutil.which("uv")
+
+
 def command(arguments, directory, *, allow_builds=False):
-    executable = shutil.which("uv")
+    executable = uv_executable()
     if not executable:
         raise Problem("Python environment setup requires the uv executable on the server", 503)
     environment = {
         k: v
         for k, v in os.environ.items()
-        if k
-        in (
-            "PATH",
-            "SYSTEMROOT",
-            "WINDIR",
-            "LANG",
-            "LC_ALL",
-            "HOME",
-            "TEMP",
-            "TMP",
-            "UV_INDEX",
-            "UV_DEFAULT_INDEX",
-            "UV_FIND_LINKS",
-            "UV_CACHE_DIR",
-            "UV_OFFLINE",
-            "SSL_CERT_FILE",
-            "SSL_CERT_DIR",
-        )
+        # UV_INDEX also covers named indexes and their UV_INDEX_<NAME>_USERNAME/PASSWORD.
+        if k.upper() in UV_ENVIRONMENT or k.startswith("UV_INDEX")
     }
     environment.update(UV_PYTHON_DOWNLOADS="never", UV_LINK_MODE="copy")
     options = [] if allow_builds else ["--no-build"]
@@ -312,34 +333,65 @@ def prepare(files, home, project, *, allow_builds=False):
     try:
         result = prepare_environment(files, home, project, allow_builds=allow_builds)
         set_status(home, project, "ready")
-        prune_environments(Path(home) / "python")
+        try:
+            prune_environments(Path(home) / "python")
+        except Exception:  # Housekeeping must not fail a prepared run.
+            logger.warning("Python environment cleanup failed", exc_info=True)
         return result
     except Exception as error:
         set_status(home, project, "error", error)
         raise
 
 
+UNUSED = 7 * 86400
+
+
 def prune_environments(root):
-    """Keep active workers and recently used immutable environments."""
+    """Keep active workers and recently used environments; cleanup never fails a run."""
     from filelock import Timeout
 
-    for marker in root.glob("*/ready.json"):
-        if time.time() - marker.stat().st_mtime < 7 * 86400:
+    def stale(path, age=UNUSED):
+        try:
+            return time.time() - path.stat().st_mtime >= age
+        except FileNotFoundError:
+            return False
+
+    for directory in root.iterdir():
+        if not directory.is_dir() or directory.name in ("wheels", "locks", "status"):
+            continue
+        marker = directory / "ready.json"
+        # An unfinished preparation older than a day was interrupted; a running one holds the lock.
+        if not (stale(marker) if marker.exists() else len(directory.name) == 64 and stale(directory, 86400)):
             continue
         try:
-            with FileLock(str(marker.parent) + ".lock", timeout=0):
+            with FileLock(str(directory) + ".lock", timeout=0):
                 active = False
-                for path in root.glob(marker.parent.name + ".lease.*"):
+                for path in root.glob(directory.name + ".lease.*"):
                     try:
                         with FileLock(str(path), timeout=0):
                             pass
                         path.unlink(missing_ok=True)
                     except Timeout:
                         active = True
-                if not active and marker.exists() and time.time() - marker.stat().st_mtime >= 7 * 86400:
-                    shutil.rmtree(marker.parent)
+                if not active and (not marker.exists() or stale(marker)):
+                    shutil.rmtree(directory)
         except (Timeout, FileNotFoundError):
             continue
+        except OSError as error:
+            logger.warning("Could not remove unused Python environment %s: %s", directory.name, error)
+    for lock in root.glob("*.lock"):
+        if len(lock.stem) == 64 and not (root / lock.stem).exists() and stale(lock, 86400):
+            lock.unlink(missing_ok=True)
+    current = runtime_signature()[:16]
+    for wheels in (root / "wheels").glob("*"):
+        if wheels.is_dir() and wheels.name != current and stale(wheels):
+            try:
+                with FileLock(str(root / "runtime.lock"), timeout=0):
+                    shutil.rmtree(wheels)
+            except Timeout:
+                continue
+            except OSError as error:
+                logger.warning("Could not remove an old Python runtime wheel: %s", error)
 
 
 def prepare_environment(files, home, project, *, allow_builds=False):

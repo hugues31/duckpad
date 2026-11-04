@@ -161,6 +161,15 @@ def validate(bundle):
             tomllib.loads(bundle["pyproject"])
         except (ValueError, TypeError) as error:
             errors.append({"file": "pyproject.toml", "message": str(error)})
+    for name in bundle.get("python_helpers", {}):
+        parts = name.removesuffix(".py").split("/")
+        if parts[0] == "duckpad":
+            message = "A helper module named duckpad would replace the Duckpad SDK; rename it"
+        elif not all(part.isidentifier() for part in parts):
+            message = "Helper module paths must be Python identifiers to be importable"
+        else:
+            continue
+        errors.append({"file": "modules/" + name, "message": message})
     try:
         if not all(
             isinstance(bundle.get(key), dict) for key in ("flow", "templates", "components", "documentation")
