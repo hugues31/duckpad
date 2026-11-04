@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { RefreshCw } from "lucide-react";
+import { Info, RefreshCw } from "lucide-react";
 import { withQuery } from "./api";
 import { useLanguage, useT } from "./i18n";
+import Select from "./Select";
 import { useApiResource } from "./useApiResource";
 
 interface Summary {
@@ -38,13 +39,29 @@ function LogLevel({ level }: { level: string }) {
   );
 }
 
+function MetricHeading({ title, hint }: { title: string; hint: string }) {
+  return (
+    <div className="monitoring-metric-heading">
+      <h3>{title}</h3>
+      <button
+        type="button"
+        className="icon monitoring-info"
+        aria-label={hint}
+        data-tooltip={hint}
+      >
+        <Info size={16} aria-hidden="true" />
+      </button>
+    </div>
+  );
+}
+
 export default function InstanceMonitoring() {
   const t = useT();
   const language = useLanguage();
-  const [automatic, setAutomatic] = useState(true);
+  const [refreshSeconds, setRefreshSeconds] = useState(5);
   const [level, setLevel] = useState("debug");
   const [query, setQuery] = useState("");
-  const interval = automatic ? 5000 : undefined;
+  const interval = refreshSeconds ? refreshSeconds * 1000 : undefined;
   const summary = useApiResource<Summary>("/monitoring", { interval });
   const logs = useApiResource<Logs>(
     withQuery("/monitoring/logs", { level, q: query }),
@@ -71,25 +88,36 @@ export default function InstanceMonitoring() {
         role="group"
         aria-label={t("monitoringRefreshControls")}
       >
-        <label className="monitoring-auto">
-          <input
-            type="checkbox"
-            checked={automatic}
-            onChange={(event) => setAutomatic(event.target.checked)}
-          />
-          {t("monitoringAutoRefresh")}
-        </label>
-        <button
-          className="button small"
-          disabled={summary.pending || logs.pending}
-          onClick={() => {
-            summary.reload();
-            logs.reload();
-          }}
-        >
-          <RefreshCw size={16} aria-hidden="true" />
-          {t("monitoringRefresh")}
-        </button>
+        <div className="monitoring-refresh">
+          <button
+            className="button secondary small"
+            disabled={summary.pending || logs.pending}
+            onClick={() => {
+              summary.reload();
+              logs.reload();
+            }}
+          >
+            <RefreshCw size={16} aria-hidden="true" />
+            {t("monitoringRefresh")}
+          </button>
+          <Select
+            aria-label={t("monitoringRefreshInterval")}
+            title={t("monitoringRefreshInterval")}
+            value={refreshSeconds}
+            onChange={(event) => setRefreshSeconds(Number(event.target.value))}
+          >
+            <option value={0}>{t("monitoringRefreshManual")}</option>
+            {[5, 10, 30, 60, 300].map((seconds) => (
+              <option key={seconds} value={seconds}>
+                {new Intl.NumberFormat(language, {
+                  style: "unit",
+                  unit: seconds < 60 ? "second" : "minute",
+                  unitDisplay: "narrow",
+                }).format(seconds < 60 ? seconds : seconds / 60)}
+              </option>
+            ))}
+          </Select>
+        </div>
         {data && (
           <time
             className="muted monitoring-updated"
@@ -112,7 +140,10 @@ export default function InstanceMonitoring() {
       {data && (
         <div className="monitoring-metrics">
           <section className="settings-card" aria-label={t("monitoringDisk")}>
-            <h3>{t("monitoringDisk")}</h3>
+            <MetricHeading
+              title={t("monitoringDisk")}
+              hint={t("monitoringDiskHint")}
+            />
             <strong className="monitoring-value">
               {bytes(disk?.free_bytes)}
             </strong>
@@ -134,10 +165,12 @@ export default function InstanceMonitoring() {
                 {t("monitoringDiskLow")}
               </p>
             )}
-            <p className="muted">{t("monitoringDiskHint")}</p>
           </section>
           <section className="settings-card" aria-label={t("monitoringMemory")}>
-            <h3>{t("monitoringMemory")}</h3>
+            <MetricHeading
+              title={t("monitoringMemory")}
+              hint={t("monitoringMemoryHint")}
+            />
             <strong className="monitoring-value">
               {bytes(data.resources.memory_bytes)}
             </strong>
@@ -147,17 +180,18 @@ export default function InstanceMonitoring() {
                 bytes(data.resources.memory_total_bytes),
               )}
             </p>
-            <p className="muted">{t("monitoringMemoryHint")}</p>
           </section>
           <section
             className="settings-card"
             aria-label={t("monitoringBackend")}
           >
-            <h3>{t("monitoringBackend")}</h3>
+            <MetricHeading
+              title={t("monitoringBackend")}
+              hint={t("monitoringProcessHint")}
+            />
             <strong className="monitoring-value">
               {bytes(data.process_memory_bytes)}
             </strong>
-            <p className="muted">{t("monitoringProcessHint")}</p>
             <p>
               {t("monitoringUptime")
                 .replace(

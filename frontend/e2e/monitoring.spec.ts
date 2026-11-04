@@ -2,6 +2,80 @@ import { expect, test } from "@playwright/test";
 import en from "../src/locales/en.json" with { type: "json" };
 import { openInstanceSettings, signIn } from "./helpers";
 
+test("refresh interval controls both metrics and logs, including manual mode", async ({
+  page,
+}) => {
+  await signIn(page);
+  await page.clock.install();
+  await page.clock.pauseAt(new Date(Date.now() + 1000));
+  let summaries = 0;
+  let logs = 0;
+  await page.route("**/api/monitoring", (route) =>
+    route.fulfill({
+      json: {
+        sampled_at: new Date(++summaries * 1000).toISOString(),
+        version: "0.0.0",
+        uptime_seconds: 3600,
+        disk: null,
+        process_memory_bytes: null,
+        resources: { memory_bytes: null, memory_total_bytes: null },
+      },
+    }),
+  );
+  await page.route("**/api/monitoring/logs?*", (route) =>
+    route.fulfill({
+      json: {
+        entries: [
+          {
+            id: ++logs,
+            timestamp: new Date().toISOString(),
+            level: "info",
+            logger: "duckpad.app",
+            message: `Refresh ${logs}`,
+            truncated: false,
+          },
+        ],
+        retained: 1,
+        matched: 1,
+        capacity: 1000,
+      },
+    }),
+  );
+  await openInstanceSettings(page, en.monitoring);
+  const panel = page.getByRole("region", { name: en.monitoring, exact: true });
+  const interval = panel.getByRole("combobox", {
+    name: en.monitoringRefreshInterval,
+  });
+  const expectRefreshes = async (count: number) => {
+    await expect(panel.locator(".monitoring-updated")).toHaveAttribute(
+      "datetime",
+      new Date(count * 1000).toISOString(),
+    );
+    await expect(panel.locator(".monitoring-log-list pre")).toHaveText(
+      `Refresh ${count}`,
+    );
+    expect([summaries, logs]).toEqual([count, count]);
+  };
+  await expect(interval).toHaveValue("5");
+  await expectRefreshes(1);
+  await page.clock.runFor(5000);
+  await expectRefreshes(2);
+  await interval.selectOption("10");
+  await expectRefreshes(3);
+  await page.clock.runFor(5000);
+  await expectRefreshes(3);
+  await page.clock.runFor(5000);
+  await expectRefreshes(4);
+  await interval.selectOption("0");
+  await expectRefreshes(5);
+  await page.clock.runFor(60000);
+  await expectRefreshes(5);
+  await panel
+    .getByRole("button", { name: en.monitoringRefresh, exact: true })
+    .click();
+  await expectRefreshes(6);
+});
+
 test("administrators can inspect metrics and filter recent backend logs", async ({
   page,
 }) => {
@@ -18,8 +92,8 @@ test("administrators can inspect metrics and filter recent backend logs", async 
     panel.getByRole("region", { name: en.monitoringBackend, exact: true }),
   ).toContainText("Duckpad");
   await panel
-    .getByRole("checkbox", { name: en.monitoringAutoRefresh })
-    .uncheck();
+    .getByRole("combobox", { name: en.monitoringRefreshInterval })
+    .selectOption("0");
   await panel
     .getByRole("searchbox", { name: en.monitoringLogSearch })
     .fill("no-such-log-entry");
@@ -124,8 +198,8 @@ test("monitoring reports unavailable metrics, low disk space and refresh errors"
   await expect(disk).toContainText(en.monitoringUnavailable);
   await expect(disk.getByRole("progressbar")).toHaveCount(0);
   await panel
-    .getByRole("checkbox", { name: en.monitoringAutoRefresh })
-    .uncheck();
+    .getByRole("combobox", { name: en.monitoringRefreshInterval })
+    .selectOption("0");
   fail = true;
   await panel.getByRole("button", { name: en.monitoringRefresh }).click();
   await expect(panel.getByRole("alert")).toHaveText(
