@@ -30,7 +30,31 @@ jobs:
       - run: uv run ruff check src tests scripts
       - run: uv run ruff format --check src tests scripts
       - run: uv run ty check --python-version ${{ matrix.python }}
-      - run: uv run pytest -q
+      - name: Run Python tests
+        if: matrix.python != '3.12'
+        run: uv run pytest -q -n 4 --dist worksteal --durations=30
+      # Python 3.12 exercises the same suite from the archive instead of running it twice.
+      - uses: ./.github/actions/setup-frontend
+        if: matrix.python == '3.12'
+      - if: matrix.python == '3.12'
+        run: npm run build --prefix frontend
+      # uv builds the wheel from the sdist, checking that the source archive is complete.
+      - if: matrix.python == '3.12'
+        run: uv build
+      - name: Run tests from the source archive
+        if: matrix.python == '3.12'
+        run: |
+          archive_tests="$(mktemp -d)"
+          tar -xzf dist/duckpad-*.tar.gz --strip-components=1 -C "$archive_tests"
+          export PATH="$PWD/.venv/bin:$PATH"
+          cd "$archive_tests"
+          PYTHONPATH="$PWD/src" python -m pytest -q -n 4 --dist worksteal --durations=30
+      - name: Smoke test the installed wheel outside the checkout
+        if: matrix.python == '3.12'
+        run: |
+          uv venv /tmp/duckpad-smoke --python 3.12
+          uv pip install --python /tmp/duckpad-smoke/bin/python dist/*.whl
+          uv run python scripts/smoke_wheel.py --python /tmp/duckpad-smoke/bin/python
 
   typing-policy:
     name: Python typing exceptions may only shrink
@@ -151,42 +175,29 @@ jobs:
       - run: uv sync --locked --python 3.12
       - run: uv run pytest -q tests/test_project_paths.py tests/test_trusted_local.py
 
-  browser:
-    name: Frontend and browser tests
+  frontend:
+    name: Frontend checks
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - uses: actions/setup-python@v7
-        with:
-          python-version: '3.12'
-      - uses: actions/setup-node@v7
-        with:
-          node-version: '22'
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
-      - uses: astral-sh/setup-uv@v7
-      - run: uv sync --locked --python 3.12
-      - run: npm ci --prefix frontend
+      - uses: ./.github/actions/setup-frontend
       - run: npm run format:check --prefix frontend
       - run: npm run lint --prefix frontend
       - run: npm run check:i18n --prefix frontend
       - run: npm run test:unit --prefix frontend
       - run: npm run build --prefix frontend
-      - run: npm exec --prefix frontend -- playwright install --with-deps chromium
-      - run: npm run test:e2e --prefix frontend
-      - uses: actions/upload-artifact@v7
-        if: failure()
-        with:
-          name: browser-diagnostics
-          path: frontend/test-results/
 
-  package:
-    name: Source archive and installed wheel
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
+  browser-shards:
+    name: Browser shard ${{ matrix.shard }}/6
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6]
     steps:
       - uses: actions/checkout@v7
         with:
@@ -194,26 +205,48 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
-      - uses: actions/setup-node@v7
-        with:
-          node-version: '22'
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
+      - uses: ./.github/actions/setup-frontend
       - uses: astral-sh/setup-uv@v7
       - run: uv sync --locked --python 3.12
-      - run: npm ci --prefix frontend
       - run: npm run build --prefix frontend
-      # uv builds the wheel from the sdist, checking that the source archive is complete.
-      - run: uv build
-      - name: Run tests from the source archive
-        run: |
-          archive_tests="$(mktemp -d)"
-          tar -xzf dist/duckpad-*.tar.gz --strip-components=1 -C "$archive_tests"
-          export PATH="$PWD/.venv/bin:$PATH"
-          cd "$archive_tests"
-          PYTHONPATH="$PWD/src" python -m pytest -q
-      - name: Smoke test the installed wheel outside the checkout
-        run: |
-          uv venv /tmp/duckpad-smoke --python 3.12
-          uv pip install --python /tmp/duckpad-smoke/bin/python dist/*.whl
-          uv run python scripts/smoke_wheel.py --python /tmp/duckpad-smoke/bin/python
+      - uses: actions/cache@v5
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-ubuntu-24.04-${{ runner.arch }}-${{ hashFiles('frontend/package-lock.json') }}
+      # The runner supplies Chromium's libraries; these tests do not compare font snapshots.
+      # Keep one worker and one disposable server per shard to isolate shared instance settings.
+      - run: npm exec --prefix frontend -- playwright install --only-shell chromium
+      - run: npm run test:e2e --prefix frontend -- --shard=${{ matrix.shard }}/6 --reporter=list,blob
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: browser-diagnostics-${{ matrix.shard }}
+          path: |
+            frontend/test-results/
+            frontend/blob-report/
+          if-no-files-found: ignore
+
+  browser:
+    name: Frontend and browser tests
+    if: always()
+    needs: [frontend, browser-shards]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require frontend checks and every browser shard
+        env:
+          FRONTEND_RESULT: ${{ needs.frontend.result }}
+          BROWSER_RESULT: ${{ needs.browser-shards.result }}
+        run: test "$FRONTEND_RESULT" = success && test "$BROWSER_RESULT" = success
+
+  package:
+    name: Source archive and installed wheel
+    if: always()
+    needs: python
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require Python and package validation
+        env:
+          PYTHON_RESULT: ${{ needs.python.result }}
+        run: test "$PYTHON_RESULT" = success
