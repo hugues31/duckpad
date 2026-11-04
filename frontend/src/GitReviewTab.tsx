@@ -89,6 +89,7 @@ export default function GitReviewTab({
                     t,
                     [snapshot?.files || {}],
                     review.comparison.entities,
+                    review.node_names,
                   )}
                 />
               </legend>

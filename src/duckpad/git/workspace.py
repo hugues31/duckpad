@@ -7,7 +7,7 @@ from collections import OrderedDict
 from contextlib import suppress
 from pathlib import Path
 
-from ..bundle import files_to_bundle, is_declarative, validate
+from ..bundle import file_node_names, files_to_bundle, is_declarative, validate
 from ..comparison import categories, compare_files, fields
 from ..merge import merge_files
 from ..node_code import code_path
@@ -644,6 +644,7 @@ class GitWorkspace:
         return {
             **{k: v for k, v in review.items() if k not in ("base", "current", "incoming", "remote_guard")},
             "choices": choices,
+            "node_names": file_node_names(review["base"], review["incoming"], review["current"]),
             "conflicts": evidence,
             "unresolved": unresolved,
             "diagnostics": errors,

@@ -565,8 +565,8 @@ def test_exposed_component_parameters_bind_variables_on_the_instance(services):
         "threshold": "threshold"
     }
     assert variables.usages(projects.snapshot(worktree)["bundle"])["threshold"] == [
-        {"node": "large", "label": "Large orders", "param": "threshold"},
-        {"node": "summary", "label": "Summary", "param": "minimum"},
+        {"node": "large", "label": "Large orders", "name": [{"label": "Large orders"}], "param": "threshold"},
+        {"node": "summary", "label": "Summary", "name": [{"label": "Summary"}], "param": "minimum"},
     ]
     save(projects, worktree, lambda bundle: bundle["variables"]["threshold"]["environments"].update(prod=950))
     assert engine.preview(worktree, "prod", "summary", "summary")["status"] == "stale"
@@ -773,7 +773,9 @@ def test_compare_versions_lists_changed_variables_and_the_nodes_they_affect():
         "fields": ["environments/prod"],
         "categories": ["processing"],
     }
-    assert change["usages"] == [{"node": "large", "label": "Large orders", "param": "threshold"}]
+    assert change["usages"] == [
+        {"node": "large", "label": "Large orders", "name": [{"label": "Large orders"}], "param": "threshold"}
+    ]
     assert report["impact"]["direct"] == ["large"]
     assert report["impact"]["downstream"] == ["total"]
     assert commit_message(before, after).startswith("feat(variable): update threshold")
@@ -848,7 +850,9 @@ def test_api_snapshot_lists_variables_with_values_usages_and_diagnostics(client,
         "dev": {"value": 300, "source": "default"},
         "prod": {"value": 900, "source": "environment"},
     }
-    assert threshold["usages"] == [{"node": "large", "label": "Large orders", "param": "threshold"}]
+    assert threshold["usages"] == [
+        {"node": "large", "label": "Large orders", "name": [{"label": "Large orders"}], "param": "threshold"}
+    ]
     # Raw file saves are diagnosed, not rejected.
     declared = {**VARIABLES, "db_password": {"type": "text", "default": 3, "environments": {"qa": "x"}}}
     files = {**snapshot["files"], "variables.json": json.dumps(declared)}
@@ -893,7 +897,7 @@ def test_renaming_a_variable_updates_its_declaration_and_references_in_one_commi
     assert renamed["bundle"]["variables"]["minimum_amount"] == VARIABLES["threshold"]
     assert node(renamed["bundle"], "large")["params"]["threshold"] == {"$var": "minimum_amount"}
     assert renamed["variables"]["declarations"]["minimum_amount"]["usages"] == [
-        {"node": "large", "label": "Large orders", "param": "threshold"}
+        {"node": "large", "label": "Large orders", "name": [{"label": "Large orders"}], "param": "threshold"}
     ]
     assert client.post(url, json={"revision": snapshot["revision"], "name": "other"}).status_code == 409
     revision = renamed["revision"]
@@ -961,7 +965,7 @@ def test_grouping_through_the_api_binds_the_new_instance_in_one_save(app, client
     assert node(grouped["bundle"], instance)["params"] == {"threshold": {"$var": "threshold"}}
     assert grouped["diagnostics"] == []
     assert grouped["variables"]["declarations"]["threshold"]["usages"] == [
-        {"node": instance, "label": "Large orders", "param": "threshold"}
+        {"node": instance, "label": "Large orders", "name": [{"label": "Large orders"}], "param": "threshold"}
     ]
     response = client.post(path + "/runs", json={"environment": "prod"})
     assert wait_run(app.state.services.store, response.json())["status"] == "success"

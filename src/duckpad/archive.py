@@ -11,6 +11,7 @@ from . import project_extensions
 from .bundle import files_to_bundle, is_declarative
 from .components import expand
 from .graph import connection_references
+from .node_names import graph_names, name_text
 from .projects import decode
 from .templates import URI, base_type
 from .util import Problem
@@ -98,9 +99,7 @@ def absolute_path(value):
 def import_warnings(bundle, granted):
     """What the archive cannot carry: connections unavailable to the project and absolute input files."""
     try:
-        labels = {
-            node["id"]: str(node.get("label") or node["id"]) for node in bundle["flow"].get("nodes", [])
-        }
+        labels = {key: name_text(name) for key, name in graph_names(bundle).items()}
         nodes, _, _ = expand(bundle, tolerant=True)
         connections, files = set(), set()
         for node in nodes.values():

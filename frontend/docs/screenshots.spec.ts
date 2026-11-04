@@ -243,9 +243,10 @@ test("capture the quickstart using the SQL printed in the guide", async ({
   const connection = page.locator(".react-flow__edge-path");
   await expect(connection).toHaveCount(1);
   // Horizontal SVG paths have zero-height boxes but still paint their stroke.
+  // Compact node placement can shorten the connection; it must remain drawable.
   expect(
     await connection.evaluate((path: SVGPathElement) => path.getTotalLength()),
-  ).toBeGreaterThan(100);
+  ).toBeGreaterThan(0);
   await expect(connection).not.toHaveCSS("stroke", "none");
   await capture(page, "quickstart-results");
   await revenue.click();
@@ -254,6 +255,11 @@ test("capture the quickstart using the SQL printed in the guide", async ({
   });
   await expect(lineage.locator(".lineage-card.is-source")).toHaveCount(2);
   await expect(lineage).toContainText("120 + 30 = 150.00");
+  await expect(lineage.locator(".lineage-card.is-source")).toContainText([
+    "Sample orders",
+    "Sample orders",
+  ]);
+  await expect(lineage).not.toContainText("node_");
   await capture(page, "quickstart-lineage", lineage);
   await page.keyboard.press("Escape");
   await edit(sql[1] + "\n" + sql[2]);

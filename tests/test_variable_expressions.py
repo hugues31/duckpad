@@ -533,11 +533,29 @@ def test_usages_list_expression_references_and_comparisons_follow_their_values()
     )
     found = variables.usages(bundle)
     assert found["threshold"] == [
-        {"node": "large", "label": "Large orders", "param": "condition", "expression": True},
-        {"node": "paid", "label": "Paid", "param": "condition", "expression": True},
+        {
+            "node": "large",
+            "label": "Large orders",
+            "name": [{"label": "Large orders"}],
+            "param": "condition",
+            "expression": True,
+        },
+        {
+            "node": "paid",
+            "label": "Paid",
+            "name": [{"label": "Paid"}],
+            "param": "condition",
+            "expression": True,
+        },
     ]
     assert found["online_only"] == [
-        {"node": "recent", "label": "Recent", "param": "condition", "expression": True}
+        {
+            "node": "recent",
+            "label": "Recent",
+            "name": [{"label": "Recent"}],
+            "param": "condition",
+            "expression": True,
+        }
     ]
     assert "segment" not in found
     before = bundle_to_files(bundle)
@@ -615,7 +633,13 @@ def test_api_renames_references_and_lists_usages_and_values(client):
     assert response.status_code == 200, response.text
     summary = client.get(path).json()["variables"]
     assert summary["declarations"]["threshold"]["usages"] == [
-        {"node": "large", "label": "Large orders", "param": "condition", "expression": True}
+        {
+            "node": "large",
+            "label": "Large orders",
+            "name": [{"label": "Large orders"}],
+            "param": "condition",
+            "expression": True,
+        }
     ]
     revision = client.get(path).json()["revision"]
     response = client.post(
@@ -625,7 +649,13 @@ def test_api_renames_references_and_lists_usages_and_values(client):
     renamed = client.get(path).json()
     assert node(renamed["bundle"], "large")["params"]["condition"] == "amount >= {{ var.minimum }}"
     assert renamed["variables"]["declarations"]["minimum"]["usages"] == [
-        {"node": "large", "label": "Large orders", "param": "condition", "expression": True}
+        {
+            "node": "large",
+            "label": "Large orders",
+            "name": [{"label": "Large orders"}],
+            "param": "condition",
+            "expression": True,
+        }
     ]
     compiled = client.get(path + "/compile/large", params={"environment": "prod"}).json()
     assert compiled[0]["sql"].endswith("WHERE amount >= $var_minimum")

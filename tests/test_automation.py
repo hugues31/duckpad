@@ -114,7 +114,7 @@ def test_job_and_run_contract_trigger_requester_and_log(api):
     assert call("GET", "/jobs/daily").json()["last_run"] == finished
     log = call("GET", f"/runs/{run['id']}/log", actor="reader")
     assert log.headers["content-type"].startswith("text/plain")
-    assert "Node source (source): success" in log.text and "Outcome: success" in log.text
+    assert "Node source (SQL template): success" in log.text and "Outcome: success" in log.text
     assert "SELECT" not in log.text
     assert call("POST", f"/runs/{run['id']}/cancel").json() == finished
 
