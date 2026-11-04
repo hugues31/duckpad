@@ -275,7 +275,8 @@ export default function FlowPage() {
     if (id.endsWith(".py")) language = "python";
     const created: FlowNode = {
       id: identifier(),
-      language,
+      // SQL is the default: flow.json names the language of Python nodes only.
+      ...(language === "python" && { language }),
       ...(kind === "component" ? { component: id } : { template: id }),
       params: {},
       position:

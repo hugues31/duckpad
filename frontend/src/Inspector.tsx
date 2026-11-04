@@ -3,6 +3,7 @@ import { useOptionalWorktree, usePartitionQuery } from "./worktree";
 import Select from "./Select";
 import { nodeCodePath, nodeEntity, templateUsage } from "./nodeCode";
 import { lazy, Suspense, useRef, useState } from "react";
+import { Link as RouterLink } from "react-router";
 import {
   ArrowRight,
   BookOpen,
@@ -19,8 +20,10 @@ import {
 import { api, withQuery } from "./api";
 import { nodeInterface, type NodeInterface } from "./graph";
 import { nodeLabel, templateLabel, useT } from "./i18n";
+import { projectSettingsUrl } from "./navigation";
 import NodeDocumentation from "./NodeDocumentation";
 import NodeInfo from "./NodeInfo";
+import { numberBoundsError } from "./numberBounds";
 import ParameterField from "./ParameterField";
 import QueryBuilder from "./QueryBuilder";
 import type { ResultsTab } from "./ResultsPanel";
@@ -155,37 +158,10 @@ export default function Inspector({
         throw new Error(t("invalidNumber"));
       for (const parameter of signature.parameters) {
         const current = value.params[parameter.name] ?? parameter.default;
-        if (typeof current !== "number") continue;
-        if (parameter.python_type === "int" && !Number.isInteger(current))
-          throw new Error(t("invalidInteger"));
-        const bounds = (
-          [
-            ["ge", parameter.ge],
-            ["gt", parameter.gt],
-            ["le", parameter.le],
-            ["lt", parameter.lt],
-          ] as const
-        ).filter(
-          (pair): pair is ["ge" | "gt" | "le" | "lt", number] =>
-            pair[1] !== undefined,
-        );
-        if (
-          bounds.some(([op, limit]) =>
-            op === "ge"
-              ? current < limit
-              : op === "gt"
-                ? current <= limit
-                : op === "le"
-                  ? current > limit
-                  : current >= limit,
-          )
-        )
-          throw new Error(
-            t("invalidNumberBounds").replace(
-              "{bounds}",
-              bounds.map(([op, n]) => `${op} ${n}`).join(", "),
-            ),
-          );
+        const invalid =
+          typeof current === "number" &&
+          numberBoundsError(current, parameter, t);
+        if (invalid) throw new Error(invalid);
       }
       const variables = { ...declared.current };
       const saved = await onSave(value, base, variables);
@@ -405,7 +381,14 @@ export default function Inspector({
       </div>
       <div className="inspector-body">
         {node.language === "python" && !snapshot.python_enabled && (
-          <p className="notice">{t("pythonDisabledHint")}</p>
+          <p className="notice">
+            {t("pythonDisabledHint")}{" "}
+            <RouterLink
+              to={projectSettingsUrl(snapshot.worktree.project, "python")}
+            >
+              {t("pythonOpenSettings")}
+            </RouterLink>
+          </p>
         )}
         {error && <div className="notice error">{error}</div>}
         {tab === "parameters" ? (

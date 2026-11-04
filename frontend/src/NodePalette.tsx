@@ -136,7 +136,7 @@ export default function NodePalette({
           title={!snapshot.python_enabled ? t("pythonDisabledHint") : undefined}
           onClick={() => onNewNode("python")}
         >
-          <Code2 size={14} />
+          <NodeIcon kind="python" size={14} />
           {t("newPythonNode")}
         </button>
         <button className="text-button" onClick={onNewTemplate}>

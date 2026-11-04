@@ -113,6 +113,11 @@ function CalculationCard({ data }: NodeProps<CardNode>) {
   }
   if (result.kind === "python") formula = t("pythonOpaque");
   const offset = query.offset || 0;
+  // Parent results page together; the longest one sets the page count.
+  const parentRows = Math.max(
+    0,
+    ...(result.parents || []).map((parent) => parent.count),
+  );
   return (
     <article
       className={`lineage-card ${source ? "is-source" : "calculation"} ${data.root ? "root" : ""}`}
@@ -192,7 +197,7 @@ function CalculationCard({ data }: NodeProps<CardNode>) {
       )}
       {result.kind === "python" && (
         <div
-          className="nodrag nowheel"
+          className="lineage-parents nodrag nowheel"
           style={{ maxHeight: 300, overflow: "auto" }}
         >
           <strong>{t("pythonOpaque")}</strong>
@@ -241,29 +246,36 @@ function CalculationCard({ data }: NodeProps<CardNode>) {
               </table>
             </details>
           ))}
-          <button
-            disabled={disabled || offset === 0}
-            onClick={() =>
-              data.page(entry.id, {
-                offset: Math.max(0, offset - result.page_size),
-              })
-            }
-          >
-            {t("previous")}
-          </button>
-          <button
-            disabled={
-              disabled ||
-              !(result.parents || []).some(
-                (p) => p.count > offset + result.page_size,
-              )
-            }
-            onClick={() =>
-              data.page(entry.id, { offset: offset + result.page_size })
-            }
-          >
-            {t("next")}
-          </button>
+          {parentRows > result.page_size && (
+            <div className="lineage-page">
+              <button
+                className="icon"
+                aria-label={t("previous")}
+                disabled={disabled || offset === 0}
+                onClick={() =>
+                  data.page(entry.id, {
+                    offset: Math.max(0, offset - result.page_size),
+                  })
+                }
+              >
+                <ChevronLeft size={14} />
+              </button>
+              <span>
+                {offset + 1}–{Math.min(offset + result.page_size, parentRows)} /{" "}
+                {parentRows}
+              </span>
+              <button
+                className="icon"
+                aria-label={t("next")}
+                disabled={disabled || offset + result.page_size >= parentRows}
+                onClick={() =>
+                  data.page(entry.id, { offset: offset + result.page_size })
+                }
+              >
+                <ChevronRight size={14} />
+              </button>
+            </div>
+          )}
         </div>
       )}
       {source ? (
@@ -305,20 +317,14 @@ function CalculationCard({ data }: NodeProps<CardNode>) {
               {result.calculation.selection.join(" · ")}
             </p>
           )}
-          {!result.complete ? (
+          {result.kind === "python" ? null : !result.complete ? (
             <p className="lineage-card-warning">
               <AlertTriangle size={14} />
-              {t(
-                result.kind === "python"
-                  ? "pythonParentHint"
-                  : "lineageLimitedHint",
-              )}
+              {t("lineageLimitedHint")}
             </p>
           ) : (
             <p className="lineage-card-reason">
-              {result.kind === "python" ? (
-                t("pythonParentHint")
-              ) : query.group !== undefined ? (
+              {query.group !== undefined ? (
                 <>
                   {t("lineageRowsFor")}{" "}
                   <strong>{formatValue(result.group)}</strong>

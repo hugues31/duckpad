@@ -115,6 +115,7 @@ export default function ProjectSettings({
       onDeleted();
     });
   const admin = settings?.role === "admin";
+  const instanceAdmin = workspace.user.role === "admin";
   const available =
     settings?.users.filter(
       (u) => !settings.members.some((m) => m.id === u.id),
@@ -288,57 +289,54 @@ export default function ProjectSettings({
             </div>
           </>
         )}
-        {section === "connections" && (
-          <>
-            {workspace.user.role !== "admin" && (
+        {/* Drafts start from the loaded settings, so an early edit cannot drop saved values. */}
+        {section === "connections" && settings && (
+          <div className="settings-card">
+            <h2>{t("authorizedConnections")}</h2>
+            <p className="muted">{t("authorizedConnectionsHint")}</p>
+            {!instanceAdmin && (
               <p className="notice">{t("projectInstanceAdminHint")}</p>
             )}
-            <div className="settings-card">
-              <h2>{t("authorizedConnections")}</h2>
-              <p className="muted">{t("authorizedConnectionsHint")}</p>
-              <div className="connection-grants">
-                {workspace.catalog.connections.map((c) => (
-                  <label key={c.id}>
-                    <input
-                      type="checkbox"
-                      checked={grants.draft.includes(c.id)}
-                      disabled={workspace.user.role !== "admin" || pending}
-                      onChange={(e) => {
-                        const granted = e.target.checked;
-                        grants.update((ids) =>
-                          granted
-                            ? [...ids, c.id]
-                            : ids.filter((id) => id !== c.id),
-                        );
-                      }}
-                    />
-                    {c.name}
-                  </label>
-                ))}
-              </div>
-              <div className="row gap">
-                <button
-                  className="button secondary"
-                  disabled={
-                    workspace.user.role !== "admin" || pending || !grants.dirty
-                  }
-                  onClick={() => act(grants.persist)}
-                >
-                  {t("saveConnections")}
-                </button>
-                {grants.dirty && (
-                  <span className="muted small">{t("unsavedChanges")}</span>
-                )}
-              </div>
+            <div className="connection-grants">
+              {workspace.catalog.connections.map((c) => (
+                <label key={c.id}>
+                  <input
+                    type="checkbox"
+                    checked={grants.draft.includes(c.id)}
+                    disabled={!instanceAdmin || pending}
+                    onChange={(e) => {
+                      const granted = e.target.checked;
+                      grants.update((ids) =>
+                        granted
+                          ? [...ids, c.id]
+                          : ids.filter((id) => id !== c.id),
+                      );
+                    }}
+                  />
+                  {c.name}
+                </label>
+              ))}
             </div>
-          </>
+            <div className="row gap">
+              <button
+                className="button secondary"
+                disabled={!instanceAdmin || pending || !grants.dirty}
+                onClick={() => act(grants.persist)}
+              >
+                {t("saveConnections")}
+              </button>
+              {grants.dirty && (
+                <span className="muted small">{t("unsavedChanges")}</span>
+              )}
+            </div>
+          </div>
         )}
         {section === "python" && settings && (
           <>
             <div className="settings-card">
               <h2>{t("pythonExecution")}</h2>
               <p className="muted">{t("pythonTrustHint")}</p>
-              {workspace.user.role !== "admin" && (
+              {!instanceAdmin && (
                 <p className="notice">{t("projectInstanceAdminHint")}</p>
               )}
               <label className="check-row">
@@ -347,13 +345,16 @@ export default function ProjectSettings({
                   aria-label={t("pythonPolicy_enabled")}
                   aria-description={t("pythonSecretsHint")}
                   checked={python.draft.enabled}
-                  disabled={workspace.user.role !== "admin" || pending}
-                  onChange={(event) =>
+                  disabled={!instanceAdmin || pending}
+                  onChange={(event) => {
+                    const enabled = event.target.checked;
+                    // Source builds only apply to enabled Python.
                     python.update((value) => ({
                       ...value,
-                      enabled: event.target.checked,
-                    }))
-                  }
+                      enabled,
+                      allow_builds: enabled && value.allow_builds,
+                    }));
+                  }}
                 />
                 <span>
                   <strong>{t("pythonPolicy_enabled")}</strong>
@@ -366,11 +367,7 @@ export default function ProjectSettings({
                   aria-label={t("pythonPolicy_allow_builds")}
                   aria-description={t("pythonBuildsHint")}
                   checked={python.draft.allow_builds}
-                  disabled={
-                    workspace.user.role !== "admin" ||
-                    pending ||
-                    !python.draft.enabled
-                  }
+                  disabled={!instanceAdmin || pending || !python.draft.enabled}
                   onChange={(event) =>
                     python.update((value) => ({
                       ...value,
@@ -384,15 +381,18 @@ export default function ProjectSettings({
                 </span>
               </label>
               <p className="notice">{t("pythonResetHint")}</p>
-              <button
-                className="button primary"
-                disabled={
-                  workspace.user.role !== "admin" || pending || !python.dirty
-                }
-                onClick={() => act(python.persist)}
-              >
-                {t("save")}
-              </button>
+              <div className="row gap">
+                <button
+                  className="button primary"
+                  disabled={!instanceAdmin || pending || !python.dirty}
+                  onClick={() => act(python.persist)}
+                >
+                  {t("save")}
+                </button>
+                {python.dirty && (
+                  <span className="muted small">{t("unsavedChanges")}</span>
+                )}
+              </div>
             </div>
             <PythonEnvironmentStatus project={project} />
           </>

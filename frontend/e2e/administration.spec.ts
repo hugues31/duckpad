@@ -188,8 +188,22 @@ test("project settings keep unsaved connection grants until they are saved or di
     .getByRole("button", { name: en.leavePage, exact: true })
     .click();
   await expect(page).toHaveURL(/\/projects$/);
+  // Grants appear only with the loaded settings, so an early click cannot drop saved ones.
+  const settingsUrl = `**/api/projects/${project}/settings`;
+  let release = () => {};
+  const loaded = new Promise<void>((resolve) => (release = resolve));
+  await page.route(settingsUrl, async (route) => {
+    await loaded;
+    await route.continue();
+  });
   await page.goto(`/projects/${project}/settings/connections`);
+  await expect(
+    page.getByRole("heading", { name: en.projectSettings, exact: true }),
+  ).toBeVisible();
+  await expect(grant).toHaveCount(0);
+  release();
   await expect(grant).toBeChecked();
+  await page.unroute(settingsUrl);
 
   // Section navigation guards unsaved grants before opening the general settings.
   await grant.uncheck();

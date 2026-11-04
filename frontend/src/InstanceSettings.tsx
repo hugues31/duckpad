@@ -50,48 +50,42 @@ export default function InstanceSettings({
       title={t("instanceSettings")}
       eyebrow={t("instance")}
       description={t("instanceSettingsDescription")}
-      navigation={
-        <>
-          {" "}
-          {settingsSections.map(([slug, key]) => {
-            const Icon = sectionIcons[key];
-            return (
-              <NavLink
-                to={`/instance-settings/${slug}`}
-                end
-                key={key}
-                className={section === key ? "active" : ""}
-                aria-current={section === key ? "page" : undefined}
-              >
-                <Icon size={18} aria-hidden="true" />
-                <span>{t(key)}</span>
-              </NavLink>
-            );
-          })}
-        </>
-      }
+      contentKey={section}
+      navigation={settingsSections.map(([slug, key]) => {
+        const Icon = sectionIcons[key];
+        return (
+          <NavLink
+            to={`/instance-settings/${slug}`}
+            end
+            key={key}
+            className={section === key ? "active" : ""}
+            aria-current={section === key ? "page" : undefined}
+          >
+            <Icon size={18} aria-hidden="true" />
+            <span>{t(key)}</span>
+          </NavLink>
+        );
+      })}
     >
-      <div className="settings-content" key={section}>
-        {section === "usersPermissions" && <UsersPage refresh={refresh} />}
-        {section === "assistant" && <AssistantSettings />}
-        {section === "extensions" && <ExtensionSettings />}
-        {section === "sqlResources" && <SQLResourceSettings />}
-        {section === "ssoSettings" && <SSOSettings />}
-        {section === "gitHosts" && <GitHostsSettings />}
-        {section === "environments" && (
-          <EnvironmentsPanel
-            environments={workspace.catalog.environment_details}
-            refresh={refresh}
-          />
-        )}
-        {section === "connections" && (
-          <ConnectionsPanel
-            workspace={workspace}
-            refresh={refresh}
-            onEditor={onConnectorEditor}
-          />
-        )}
-      </div>
+      {section === "usersPermissions" && <UsersPage refresh={refresh} />}
+      {section === "assistant" && <AssistantSettings />}
+      {section === "extensions" && <ExtensionSettings />}
+      {section === "sqlResources" && <SQLResourceSettings />}
+      {section === "ssoSettings" && <SSOSettings />}
+      {section === "gitHosts" && <GitHostsSettings />}
+      {section === "environments" && (
+        <EnvironmentsPanel
+          environments={workspace.catalog.environment_details}
+          refresh={refresh}
+        />
+      )}
+      {section === "connections" && (
+        <ConnectionsPanel
+          workspace={workspace}
+          refresh={refresh}
+          onEditor={onConnectorEditor}
+        />
+      )}
     </SettingsLayout>
   );
 }

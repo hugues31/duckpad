@@ -39,7 +39,7 @@ test("settings use desktop columns and remain usable on narrow screens in both l
   await openInstanceSettings(page);
   await expect(page).toHaveURL(/\/instance-settings\/users$/);
   const navigation = page.getByRole("navigation", {
-    name: "Instance settings",
+    name: "Settings sections",
     exact: true,
   });
   await expect(
@@ -90,7 +90,7 @@ test("settings use desktop columns and remain usable on narrow screens in both l
   ).toHaveAttribute("aria-current", "page");
   await expect(
     page
-      .getByRole("navigation", { name: fr.instanceSettings, exact: true })
+      .getByRole("navigation", { name: fr.settingsSections, exact: true })
       .getByRole("link"),
   ).toHaveCount(8);
   await noPageOverflow(page);
@@ -122,7 +122,7 @@ test("project controls use sections and extension policies use desktop columns",
     });
     await expect(participants).toBeVisible();
     const navigation = page.getByRole("navigation", {
-      name: "Project settings",
+      name: "Settings sections",
       exact: true,
     });
     await expect(navigation.getByRole("link")).toHaveCount(4);

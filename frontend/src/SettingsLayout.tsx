@@ -1,4 +1,5 @@
-import type { ReactNode } from "react";
+import { useId, type Key, type ReactNode } from "react";
+import { useT } from "./i18n";
 
 export default function SettingsLayout({
   title,
@@ -8,6 +9,7 @@ export default function SettingsLayout({
   children,
   badge,
   className = "",
+  contentKey,
 }: {
   title: string;
   eyebrow: string;
@@ -16,24 +18,33 @@ export default function SettingsLayout({
   children: ReactNode;
   badge?: ReactNode;
   className?: string;
+  /** Remounts the content, such as when another section opens. */
+  contentKey?: Key;
 }) {
+  const t = useT();
+  const heading = useId();
   return (
     <section
       className={`full-panel instance-settings ${className}`}
-      aria-label={title}
+      aria-labelledby={heading}
     >
       <div className="settings-container">
         <header className="settings-heading">
           <span className="eyebrow">{eyebrow}</span>
-          <h1>{title}</h1>
+          <h1 id={heading}>{title}</h1>
           <p className="muted">{description}</p>
           {badge}
         </header>
         <div className="settings-layout">
-          <nav className="settings-navigation" aria-label={title}>
+          <nav
+            className="settings-navigation"
+            aria-label={t("settingsSections")}
+          >
             {navigation}
           </nav>
-          <div className="settings-content">{children}</div>
+          <div className="settings-content" key={contentKey}>
+            {children}
+          </div>
         </div>
       </div>
     </section>

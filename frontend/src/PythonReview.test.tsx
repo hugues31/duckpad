@@ -13,6 +13,9 @@ import ResultsLog from "./ResultsLog";
 import ParameterField from "./ParameterField";
 import type { NodeResult, Snapshot, Statuses, Workspace } from "./types";
 
+// Asking the assistant needs the application shell.
+vi.mock("./AskAssistant", () => ({ default: () => null }));
+
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
@@ -78,6 +81,72 @@ it("shows historical Python logs without durations and offers their artifacts", 
   expect(await screen.findByRole("button", { name: /Download/ })).toBeTruthy();
 });
 
+const logProps = {
+  snapshot: { worktree: { id: "tree" } } as Snapshot,
+  environment: "dev",
+  fullNode: "python",
+  readOnly: false,
+  inputs: [],
+  statuses: { nodes: {} } as unknown as Statuses,
+  onTests: () => {},
+};
+
+it("offers a download before any run only for Python nodes without outputs", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () =>
+      json({ status: "available", filename: "report.txt", run: "run" }),
+    ),
+  );
+  const { rerender } = render(
+    <MemoryRouter>
+      <ResultsLog {...logProps} exportNode={false} download />
+    </MemoryRouter>,
+  );
+  expect(screen.getByText("This node has not run in this environment"));
+  expect(screen.queryByRole("button", { name: /Download/ })).toBeNull();
+  rerender(
+    <MemoryRouter>
+      <ResultsLog {...logProps} exportNode download />
+    </MemoryRouter>,
+  );
+  expect(await screen.findByRole("button", { name: /Download/ })).toBeTruthy();
+});
+
+it("shows a Python traceback once, in a code block, and its summary in the timeline", async () => {
+  const traceback =
+    'Traceback (most recent call last):\n  File "nodes/boom.py", line 7, in run\n    raise ValueError("boom")\nValueError: boom\n';
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () =>
+      json({
+        id: "run",
+        commit: "abc123456",
+        status: "failed",
+        environment: "dev",
+        nodes: { python: { status: "failed", error: traceback } },
+      }),
+    ),
+  );
+  const { container } = render(
+    <MemoryRouter>
+      <ResultsLog
+        {...logProps}
+        exportNode={false}
+        download={false}
+        result={{ error: traceback, error_run: "run" } as NodeResult}
+      />
+    </MemoryRouter>,
+  );
+  await screen.findByText("ValueError: boom");
+  expect(container.querySelector(".log-error pre")?.textContent).toBe(
+    traceback,
+  );
+  expect(container.querySelector(".log-timeline")?.textContent).not.toContain(
+    "Traceback",
+  );
+});
+
 it("saves Python activation explicitly and disables source builds until activation", async () => {
   let policy = { enabled: false, allow_builds: false };
   const writes: unknown[] = [];
@@ -127,10 +196,18 @@ it("saves Python activation explicitly and disables source builds until activati
   fireEvent.click(enabled);
   expect(writes).toEqual([]);
   expect(builds).toHaveProperty("disabled", false);
+  expect(screen.getByText("Unsaved changes")).toBeTruthy();
   fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
   await waitFor(() =>
     expect(writes).toEqual([{ enabled: true, allow_builds: false }]),
   );
+  await waitFor(() => expect(screen.queryByText("Unsaved changes")).toBeNull());
+  // Disabling Python also withdraws source builds.
+  fireEvent.click(builds);
+  expect(builds).toHaveProperty("checked", true);
+  fireEvent.click(enabled);
+  expect(builds).toHaveProperty("checked", false);
+  expect(builds).toHaveProperty("disabled", true);
   expect(
     screen.queryByText("Allow Python to read authorized connection secrets"),
   ).toBeNull();
@@ -159,5 +236,6 @@ it("explains integer and bound errors on numeric Python fields", () => {
   expect(input.validationMessage).toBe("Enter a whole number");
   fireEvent.change(input, { target: { value: "11" } });
   fireEvent.blur(input);
-  expect(input.validationMessage).toContain("ge 1, le 10");
+  expect(input.validationMessage).toBe("The value must satisfy: ≥ 1, ≤ 10");
+  expect(screen.getByText("int · ≥ 1 · ≤ 10")).toBeTruthy();
 });

@@ -116,7 +116,7 @@ export default function ResultsLog({
         <Info size={18} aria-hidden="true" />
         <div>
           <strong>{t("notRunHere")}</strong>
-          {download ? (
+          {exportNode && download ? (
             <ExportDownload
               key={`${worktree}:${environment}:${fullNode}`}
               worktree={worktree}
@@ -143,6 +143,7 @@ export default function ResultsLog({
     ) : (
       <p className="muted small results-note">{t("loading")}</p>
     );
+  const error = state.error && partitionMessage(t, state.error);
   const results = state.results || [];
   const messages = results.filter((item) => item.origin.kind !== "test");
   const tests = results.filter((item) => item.origin.kind === "test");
@@ -254,7 +255,7 @@ export default function ResultsLog({
       kind: "step",
       level: "error",
       time: state.finished,
-      message: state.error ? partitionMessage(t, state.error) : t(state.status),
+      message: error ? errorSummary(error) : t(state.status),
       aside: t(state.status),
     });
   const counts = {
@@ -307,9 +308,14 @@ export default function ResultsLog({
         </Link>
       </div>
       <div className="data-scroll log-scroll">
-        {state.error && (
+        {error && (
           <div className="notice error log-error">
-            <p>{partitionMessage(t, state.error)}</p>
+            {/* Multi-line errors such as tracebacks keep their layout; the timeline shows their summary. */}
+            {error.includes("\n") ? (
+              <pre className="expression">{error}</pre>
+            ) : (
+              <p>{error}</p>
+            )}
             <AskAssistant
               node={fullNode}
               run={run.id}
@@ -438,6 +444,14 @@ export default function ResultsLog({
         )}
       </div>
     </div>
+  );
+}
+
+/** The line naming a failure: a Python traceback ends with it, other errors start with it. */
+function errorSummary(error: string) {
+  const lines = error.split("\n").filter((line) => line.trim());
+  return (
+    (error.startsWith("Traceback") ? lines.at(-1) : lines[0])?.trim() || error
   );
 }
 

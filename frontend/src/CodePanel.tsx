@@ -55,6 +55,17 @@ export default function CodePanel({
     if (!hidden) setAssistantFile(assistantFile);
   }, [hidden, assistantFile, setAssistantFile]);
 
+  // The SDK is imported as duckpad; a helper module must not shadow it.
+  const moduleError = !moduleName
+    ? ""
+    : !/^[A-Za-z_]\w*(?:\/[A-Za-z_]\w*)*$/.test(moduleName)
+      ? t("pythonModuleNameHint")
+      : /^duckpad(?:\/|$)/.test(moduleName)
+        ? t("pythonModuleReserved")
+        : `modules/${moduleName}.py` in files
+          ? t("pythonModuleExists")
+          : "";
+
   const edit = (text: string) => {
     if (!path || readOnly || pending || text === files[path]) return;
     update((current) => ({ ...current, [path]: text }));
@@ -149,17 +160,27 @@ export default function CodePanel({
                 title={t("pythonModuleNameHint")}
                 id="python-module-name"
                 value={moduleName}
+                aria-invalid={!!moduleError}
+                aria-describedby="python-module-name-message"
                 onChange={(event) => setModuleName(event.target.value)}
                 placeholder="helpers"
               />
-              <p className="muted small">{t("pythonModuleNameHint")}</p>
+              {moduleError ? (
+                <p
+                  id="python-module-name-message"
+                  role="alert"
+                  className="notice error small"
+                >
+                  {moduleError}
+                </p>
+              ) : (
+                <p id="python-module-name-message" className="muted small">
+                  {t("pythonModuleNameHint")}
+                </p>
+              )}
               <button
                 className="button secondary small"
-                disabled={
-                  pending ||
-                  !/^[A-Za-z_]\w*(?:\/[A-Za-z_]\w*)*$/.test(moduleName) ||
-                  `modules/${moduleName}.py` in files
-                }
+                disabled={pending || !moduleName || !!moduleError}
                 onClick={() => {
                   const name = `modules/${moduleName}.py`;
                   update((current) => ({

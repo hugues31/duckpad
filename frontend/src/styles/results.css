@@ -457,7 +457,6 @@
   padding: 10px 14px;
 }
 .log-error {
-  white-space: pre-wrap;
   overflow-wrap: anywhere;
   margin-bottom: 10px;
 }

@@ -274,7 +274,7 @@ test("instance configuration is available without a project and separate from pe
     );
     await page.setViewportSize({ width: 800, height: 900 });
     const navigation = page.getByRole("navigation", {
-      name: "Instance settings",
+      name: "Settings sections",
       exact: true,
     });
     expect(

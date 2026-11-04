@@ -28,18 +28,21 @@ export default function PythonEnvironmentStatus({
     let stopped = false;
     let timer: ReturnType<typeof setTimeout>;
     const read = async () => {
+      // Preparation steps change within seconds; settled states rarely do.
+      let busy = false;
       try {
         const result = await api<NonNullable<typeof status>>(
           `/projects/${project}/python/environment`,
         );
+        busy = result.state === "resolving" || result.state === "installing";
         if (!stopped) {
           setStatus(result);
           setError("");
         }
       } catch (e) {
-        if (!stopped) setError(String(e));
+        if (!stopped) setError((e as Error).message);
       }
-      if (!stopped) timer = setTimeout(read, 2000);
+      if (!stopped) timer = setTimeout(read, busy ? 2000 : 15000);
     };
     void read();
     return () => {

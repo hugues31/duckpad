@@ -233,13 +233,16 @@
 .lineage-details select {
   font-size: 11px;
 }
-.lineage-details table {
+.lineage-details table,
+.lineage-parents table {
   width: 100%;
   border-collapse: collapse;
   table-layout: fixed;
 }
 .lineage-details th,
-.lineage-details td {
+.lineage-details td,
+.lineage-parents th,
+.lineage-parents td {
   text-align: left;
   padding: 8px 4px;
   border-bottom: 1px solid var(--border);

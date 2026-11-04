@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useT } from "./i18n";
+import { numberBoundsError, type NumberLimits } from "./numberBounds";
 import type { Json } from "./types";
 
 /** Keep incomplete input intact until it can be committed as a parameter value. */
@@ -14,8 +15,7 @@ export default function ParameterInput({
   onChange,
   onBlur,
   commitOnChange = false,
-  integer = false,
-  bounds = {},
+  limits = {},
 }: {
   kind: "number" | "list";
   id?: string;
@@ -30,10 +30,11 @@ export default function ParameterInput({
   onBlur?: () => void;
   /** Let form validation see incomplete values while preserving their input text. */
   commitOnChange?: boolean;
-  integer?: boolean;
-  bounds?: { ge?: number; le?: number; gt?: number; lt?: number };
+  /** The type and bounds a Python number parameter declares. */
+  limits?: NumberLimits;
 }) {
   const t = useT();
+  const integer = limits.python_type === "int";
   const [draft, setDraft] = useState<string | null>(null);
   const parse = (text: string) =>
     kind === "list"
@@ -64,44 +65,16 @@ export default function ParameterInput({
       onBlur={(e) => {
         if (draft !== null) {
           const parsed = parse(draft);
-          if (
-            kind === "number" &&
-            (typeof parsed === "string" ||
-              (integer &&
-                typeof parsed === "number" &&
-                !Number.isInteger(parsed)))
-          ) {
-            e.currentTarget.setCustomValidity(
-              t(
-                integer && typeof parsed === "number"
-                  ? "invalidInteger"
-                  : "invalidNumber",
-              ),
-            );
-            e.currentTarget.reportValidity();
-            return;
-          }
-          const limits = Object.entries(bounds).filter(
-            ([, limit]) => limit !== undefined,
-          ) as [string, number][];
-          if (
-            typeof parsed === "number" &&
-            limits.some(([op, limit]) =>
-              op === "ge"
-                ? parsed < limit
-                : op === "le"
-                  ? parsed > limit
-                  : op === "gt"
-                    ? parsed <= limit
-                    : parsed >= limit,
-            )
-          ) {
-            e.currentTarget.setCustomValidity(
-              t("invalidNumberBounds").replace(
-                "{bounds}",
-                limits.map(([op, limit]) => `${op} ${limit}`).join(", "),
-              ),
-            );
+          const invalid =
+            kind !== "number"
+              ? ""
+              : typeof parsed === "string"
+                ? t("invalidNumber")
+                : typeof parsed === "number"
+                  ? numberBoundsError(parsed, limits, t)
+                  : "";
+          if (invalid) {
+            e.currentTarget.setCustomValidity(invalid);
             e.currentTarget.reportValidity();
             return;
           }
