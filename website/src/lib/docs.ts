@@ -20,6 +20,12 @@ export const sections = [
         description:
           "Navigate the canvas, search projects and choose your preferences.",
       },
+      {
+        slug: "comparison",
+        title: "Dataiku & Alteryx vocabulary",
+        description:
+          "Match Duckpad concepts to familiar Dataiku DSS and Alteryx Designer terms.",
+      },
     ],
   },
   {

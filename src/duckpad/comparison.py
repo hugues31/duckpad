@@ -7,6 +7,7 @@ from .bundle import files_to_bundle
 from .components import expand
 from .graph import reachable
 from .node_code import code_path, template_path
+from .node_names import graph_names, name_text, node_name
 from .templates import DESCRIPTIVE, directives, executable_sql
 from .util import Problem
 
@@ -32,6 +33,8 @@ def entities(bundle):
         metadata = {k: v for k, v in value.items() if k not in ("nodes", "edges")}
         add(scope or "flow", kind, label(value, scope or "Project"), metadata, file, scope)
         nodes = {n["id"]: n for n in value.get("nodes", [])}
+        parent = scope.removeprefix("component/") or None
+        names = {key: name_text(name) for key, name in graph_names(bundle, parent).items()}
         for key, node in nodes.items():
             definition = (
                 bundle["components"].get(node.get("component"), {})
@@ -42,7 +45,6 @@ def entities(bundle):
                     code_path(key, scope.removeprefix("component/") or None, node.get("language", "sql")), ""
                 )
             )
-            name = label(node, label(definition, key))
             if not node.get("template") and not node.get("component"):
                 node = {**node, "sql": definition}
             node_file = (
@@ -50,9 +52,11 @@ def entities(bundle):
                 if "sql" in node
                 else file
             )
-            add(f"{scope + '/' if scope else ''}node/{key}", "node", name, node, node_file, scope)
+            add(f"{scope + '/' if scope else ''}node/{key}", "node", names[key], node, node_file, scope)
         for edge in value.get("edges", []):
-            name = f"{label(nodes.get(edge['source'], {}), edge['source'])} → {label(nodes.get(edge['target'], {}), edge['target'])}"
+            name = (
+                f"{names.get(edge['source'], edge['source'])} → {names.get(edge['target'], edge['target'])}"
+            )
             add(f"{scope + '/' if scope else ''}edge/{edge['id']}", "edge", name, edge, file, scope)
 
     graph(bundle["flow"], "flow.json")
@@ -86,13 +90,7 @@ def entities(bundle):
         add(f"file/{views.FILE}", "file", views.FILE, shared, views.FILE)
 
     def instance_name(identity):
-        graph = bundle["flow"]
-        names = []
-        for part in identity.split("::"):
-            node = next((n for n in graph.get("nodes", []) if n["id"] == part), {})
-            names.append(label(node, part))
-            graph = bundle["components"].get(node.get("component"), {})
-        return " / ".join(names)
+        return node_name(bundle, identity)
 
     for section, values in sorted(bundle["documentation"].items()):
         if isinstance(values, dict):
@@ -203,6 +201,7 @@ def potential_impact(before, after):
                 not in (
                     "position",
                     "label",
+                    "display_name",
                     "name",
                     "description",
                     "documentation",

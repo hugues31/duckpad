@@ -17,6 +17,7 @@ import math
 import re
 from collections.abc import Iterable
 
+from .node_names import graph_names, name_text
 from .templates import VARIABLE_REFERENCE, base_type, directives, is_date, parse_parameter, type_argument
 from .types import Record
 from .util import Problem, dumps
@@ -673,8 +674,10 @@ def annotate(statements: list[Record], node: Record) -> list[Record]:
 def usages(bundle):
     """Variable name -> the root flow node parameters bound to it or referencing it in their text."""
     result: dict[str, list[Record]] = {}
+    captions = graph_names(bundle)
     for node in bundle["flow"].get("nodes", []):
-        usage = {"node": node["id"], "label": node.get("label") or node["id"]}
+        caption = captions[node["id"]]
+        usage = {"node": node["id"], "label": name_text(caption), "name": caption}
         for param, name in sorted(references(node.get("params")).items()):
             result.setdefault(name, []).append({**usage, "param": param})
         for param, names in sorted(referenced(node.get("params")).items()):

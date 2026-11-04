@@ -16,7 +16,7 @@ from typing import Literal, Unpack, cast, overload
 
 from . import views
 from .builtin_templates import BUILTINS
-from .bundle import ROOT_FILES, bundle_to_files, files_to_bundle, is_declarative
+from .bundle import ROOT_FILES, bundle_to_files, file_node_names, files_to_bundle, is_declarative
 from .comparison import commit_message
 from .components import expand, reconcile_documentation
 from .git import command
@@ -24,8 +24,9 @@ from .git.command import GitError, GitOptions
 from .git.identity import SYSTEM_IDENTITY, current_identity
 from .git.remote import Remotes
 from .git.workspace import GitWorkspace, diagnose, require_valid
-from .merge import merge_files
+from .merge import conflict_details, merge_files
 from .node_code import owned_paths
+from .node_names import node_names
 from .store import Store
 from .templates import parse_template
 from .types import Files, Record
@@ -48,6 +49,14 @@ def decode(name: str, content: bytes) -> str:
         return content.decode("utf-8")
     except UnicodeDecodeError as error:
         raise Problem(f"{name} is not valid UTF-8 text", 422) from error
+
+
+def conflict_view(conflict: Record) -> Record:
+    """A retained conflict with its review evidence and the names of nodes in any of its versions."""
+    return {
+        **conflict_details(conflict),
+        "node_names": file_node_names(conflict["base"], conflict["proposal"], conflict["current"]),
+    }
 
 
 class Projects:
@@ -407,9 +416,10 @@ class Projects:
             "revision": revision,
             "commit": commit,
             "bundle": bundle,
+            "node_names": node_names(bundle),
             "files": files,
             "diagnostics": errors,
-            "conflicts": self.store.conflicts(worktree_id),
+            "conflicts": [conflict_view(c) for c in self.store.conflicts(worktree_id)],
         }
 
     def base(self, worktree: Record, revision: str, current: Files) -> Files | None:
@@ -582,13 +592,25 @@ class Projects:
                         evidence=[],
                     )
                 conflict.update(current=snapshot["files"], revision=snapshot["revision"])
+                _, conflict["paths"] = merge_files(
+                    conflict["base"], conflict["current"], conflict["proposal"]
+                )
                 self.store.put("conflict", conflict_id, conflict)
                 raise Problem(
                     "Files changed again. Review the refreshed conflict before resolving.", 409, conflict
                 )
-            proposal = {"current": conflict["current"], "proposal": conflict["proposal"]}.get(choice, files)
-            if proposal is None:
+            if choice not in ("current", "proposal", "combined"):
+                raise Problem("Choose current, proposal or combined")
+            if choice == "combined" and files is None:
                 raise Problem("Combined file contents are required")
+            proposal, _ = merge_files(
+                conflict["base"],
+                conflict["current"],
+                conflict["proposal"],
+                choices=dict.fromkeys(conflict["paths"], "incoming" if choice == "proposal" else choice),
+                evidence=[],
+                resolutions=files if choice == "combined" else None,
+            )
             result = self.write(
                 conflict["worktree"],
                 snapshot["revision"],

@@ -415,7 +415,7 @@ class PartitionRun:
                 key: {
                     "status": "pending",
                     "writes_external": nodes[key]["parsed"]["writes_external"],
-                    "label": nodes[key].get("label", key),
+                    "label": nodes[key]["display_name"],
                     "fingerprint": fingerprints[key],
                     "results": [],
                     "partitioned": True,

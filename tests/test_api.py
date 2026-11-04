@@ -91,6 +91,45 @@ def test_named_example_populates_an_independent_project(client, worktree):
     assert unchanged["bundle"]["flow"]["nodes"] == []
 
 
+def test_example_runs_its_checks_messages_and_variables(app, client):
+    example = client.post("/api/example", json={}).json()
+    snapshot = client.get(f"/api/worktrees/{example['id']}").json()
+    assert snapshot["diagnostics"] == []
+    assert [view["name"] for view in snapshot["bundle"]["views"]["validated:orders"]] == ["Orders to review"]
+    response = client.post(f"/api/worktrees/{example['id']}/runs", json={"environment": "dev"})
+    run = wait_run(app.state.services.store, response.json(), timeout=120)
+    assert run["status"] == "success"
+    # The only warning is the review test; other tests pass and messages are informative.
+    assert run["warning_count"] == 1
+    outcomes = {
+        (node, item["origin"].get("name") or item["message"]): item.get("status") or item["level"]
+        for node, result in run["nodes"].items()
+        for item in result.get("results") or []
+    }
+    assert outcomes == {
+        ("enriched", "every_order_matched"): "ok",
+        ("period", "single_month"): "ok",
+        ("validated", "order_id_unique"): "ok",
+        ("validated", "amount_positive"): "ok",
+        ("validated", "large_order_review"): "warning",
+        ("validated", "107 paid orders kept, 13 excluded"): "info",
+        ("report::rank", "South leads with 25.7% of revenue"): "info",
+        ("premium::rank", "South leads with 27.3% of revenue"): "info",
+        ("export", "report_not_empty"): "ok",
+        ("export_premium", "report_not_empty"): "ok",
+    }
+    assert {name: value["value"] for name, value in run["variables"].items()} == {
+        "high_value_threshold": 300,
+        "review_threshold": 450,
+        "report_month": "2026-10",
+    }
+    exports = app.state.services.store.paths.exports(example["id"], "dev")
+    assert sorted(path.name for path in exports.glob("*.csv")) == [
+        "high-value-orders-2026-10.csv",
+        "regional-revenue-2026-10.csv",
+    ]
+
+
 @pytest.mark.parametrize("body", [None, {}])
 def test_example_shortcut_retains_its_default_name(client, body):
     response = client.post("/api/example", json=body)

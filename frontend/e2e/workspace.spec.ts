@@ -216,7 +216,7 @@ test("drag a filter, configure it without SQL, and group it into a reusable comp
     .dragTo(page.locator(".react-flow__pane"), {
       targetPosition: { x: 350, y: 240 },
     });
-  await expect(page.locator(".react-flow__node")).toHaveCount(10);
+  await expect(page.locator(".react-flow__node")).toHaveCount(11);
   const inspector = page.locator(".inspector");
   await inspector
     .getByLabel("source", { exact: true })

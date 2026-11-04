@@ -9,7 +9,9 @@ import {
   type CSSProperties,
 } from "react";
 import { useLocation, useOutletContext } from "react-router";
-import Canvas from "../Canvas";
+import { Loader2 } from "lucide-react";
+import Canvas, { type CanvasHandle, type FocusRequest } from "../Canvas";
+import { findNodePosition } from "../graphLayout";
 import CanvasHeader from "../CanvasHeader";
 import { noticeCount } from "../FlowToolbar";
 import {
@@ -128,17 +130,17 @@ export default function FlowPage() {
   const { path, selected, cell } = view;
   const location = useLocation();
   const sizes = usePanelSizes();
+  const canvas = useRef<CanvasHandle>(null);
   const [selection, setSelection] = useState<string[]>([]);
+  const [addingNode, setAddingNode] = useState(false);
+  const additionPending = useRef(false);
   const [resultsTab, setResultsTab] = useState<ResultsTab>("data");
   // Badges and summary links open their results tab, even when the panel is hidden.
   const showResults = (tab: ResultsTab) => {
     setResultsTab(tab);
     panels.set({ preview: true });
   };
-  const [focusRequest, setFocusRequest] = useState<{
-    id: string;
-    key: string;
-  } | null>(null);
+  const [focusRequest, setFocusRequest] = useState<FocusRequest | null>(null);
   const bundle = snapshot.bundle;
   const declared = snapshot.variables?.declarations;
   const valueProducers = useMemo(
@@ -243,13 +245,27 @@ export default function FlowPage() {
     if (!canEdit) return;
     await save(snapshot, (value) => change(graphAt(value, path)));
   }
+  /**
+   * Save a new node, then select it. Editors stay inert meanwhile, so an edit
+   * cannot land on the node the inspector still shows.
+   */
+  async function insertNode(id: string, change: (value: Bundle) => void) {
+    if (!canEdit || additionPending.current) return false;
+    additionPending.current = true;
+    setAddingNode(true);
+    try {
+      await save(snapshot, change);
+      select(id);
+      return true;
+    } finally {
+      additionPending.current = false;
+      setAddingNode(false);
+    }
+  }
   async function addNode(
     kind: NodeKind,
     id: string,
-    position = {
-      x: 160 + ((graph?.nodes.length || 0) % 4) * 240,
-      y: 120 + Math.floor((graph?.nodes.length || 0) / 4) * 210,
-    },
+    position?: FlowNode["position"],
     connection?: NodeConnection,
     linked = false,
     language: "sql" | "python" = "sql",
@@ -262,9 +278,12 @@ export default function FlowPage() {
       language,
       ...(kind === "component" ? { component: id } : { template: id }),
       params: {},
-      position,
+      position:
+        position ??
+        canvas.current?.newNodePosition(graph?.nodes || []) ??
+        findNodePosition(graph?.nodes || []),
     };
-    await save(snapshot, (value) => {
+    const added = await insertNode(created.id, (value) => {
       const g = graphAt(value, path);
       if (kind === "template" && !linked) {
         if (id) detachNode(value, created, parent);
@@ -293,7 +312,8 @@ export default function FlowPage() {
               },
         );
     });
-    select(created.id);
+    if (added && !position)
+      setFocusRequest({ id: created.id, key: created.id, reveal: true });
   }
   async function removeNodes(ids: string[], edges: string[] = []) {
     await save(snapshot, (value) => {
@@ -329,7 +349,7 @@ export default function FlowPage() {
       bundle?.templates.filter !== undefined &&
       filter?.inputs?.length === 1 &&
       filter.parameters?.some((p) => p.name === "condition");
-    await save(snapshot, (value) => {
+    const added = await insertNode(created.id, (value) => {
       const g = graphAt(value, path);
       if (reusable) {
         created.template = "filter";
@@ -346,8 +366,7 @@ export default function FlowPage() {
         targetHandle: reusable ? filter!.inputs![0] : "source",
       });
     });
-    notify(t("filterNodeAdded"));
-    select(created.id);
+    if (added) notify(t("filterNodeAdded"));
   }
   function openComponent(id: string) {
     const instance = graph?.nodes.find((n) => n.id === id);
@@ -396,7 +415,7 @@ export default function FlowPage() {
       }
     >
       <NodePalette
-        readOnly={!canEdit}
+        readOnly={!canEdit || addingNode}
         snapshot={snapshot}
         excludedComponents={path.map((part) => part.definition)}
         hidden={!panels.open.palette}
@@ -419,7 +438,13 @@ export default function FlowPage() {
         }
         onLibrary={() => openModal({ kind: "library", worktree })}
       />
-      <main className="canvas-column">
+      {addingNode && (
+        <div className="node-add-status" role="status">
+          <Loader2 size={16} className="spin" aria-hidden="true" />
+          {t("addingNode")}
+        </div>
+      )}
+      <main className="canvas-column" inert={addingNode}>
         <CanvasHeader
           projectName={project?.name || bundle.flow.name}
           path={path}
@@ -453,11 +478,14 @@ export default function FlowPage() {
         />
         <div className="canvas">
           <Canvas
+            ref={canvas}
             valueProducers={valueProducers}
-            readOnly={!canEdit}
+            // Its delete keys listen on the document, which inert does not cover.
+            readOnly={!canEdit || addingNode}
             nodes={graph.nodes}
             edges={graph.edges}
             parsed={snapshot.parsed_templates}
+            names={snapshot.node_names}
             local={local}
             components={bundle.components}
             excludedComponents={path.map((part) => part.definition)}
@@ -535,6 +563,7 @@ export default function FlowPage() {
         className="inspector-layer"
         id="node-inspector"
         hidden={!panels.open.inspector}
+        inert={addingNode}
       >
         {node && definition ? (
           <Inspector
@@ -624,7 +653,7 @@ export default function FlowPage() {
               openModal({ kind: "relinkNode", worktree, node: node.id, parent })
             }
             onDuplicate={() =>
-              safe(async () => {
+              safe(() => {
                 const duplicate = {
                   ...structuredClone(node),
                   id: identifier(),
@@ -633,7 +662,7 @@ export default function FlowPage() {
                     y: node.position.y + 40,
                   },
                 };
-                await save(snapshot, (value) => {
+                return insertNode(duplicate.id, (value) => {
                   if (!duplicate.component) {
                     const sql = nodeCode(value, node, parent);
                     duplicate.origin = node.template || node.origin;
@@ -644,7 +673,6 @@ export default function FlowPage() {
                   }
                   nodeGraph(value, parent).nodes.push(duplicate);
                 });
-                select(duplicate.id);
               })
             }
             onHistory={() =>

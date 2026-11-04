@@ -53,4 +53,9 @@ def server_log_config(level="info"):
         "level": level.upper(),
         "propagate": False,
     }
+    config["loggers"]["duckpad.assistant"] = {
+        "handlers": ["default"],
+        "level": level.upper(),
+        "propagate": False,
+    }
     return config

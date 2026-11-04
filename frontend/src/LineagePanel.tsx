@@ -1,3 +1,4 @@
+import { displayNodeName } from "./nodeNames";
 import {
   useCallback,
   useEffect,
@@ -85,6 +86,7 @@ const isExplained = (
 function CalculationCard({ data }: NodeProps<CardNode>) {
   const t = useT();
   const translate = useTranslateValue();
+  const names = useOptionalWorktree()?.snapshot?.node_names;
   const { entry, disabled } = data;
   const { result, query, group } = entry;
   const source = result.kind === "source" && !entry.deferred;
@@ -258,8 +260,9 @@ function CalculationCard({ data }: NodeProps<CardNode>) {
         </div>
       )}
       {source ? (
-        <div className="lineage-source-location">
-          {result.node?.split("::").at(-1)} · {t("lineageRow")} {result.row + 1}
+        <div className="lineage-source-location" title={result.node}>
+          {displayNodeName(names?.[result.node || ""], result.node || "", t)} ·{" "}
+          {t("lineageRow")} {result.row + 1}
         </div>
       ) : entry.deferred ? (
         <button
@@ -768,6 +771,7 @@ function CalculationDetails({
   onClose: () => void;
 }) {
   const t = useT();
+  const names = useOptionalWorktree()?.snapshot?.node_names;
   const selections = [entry.result, ...entry.hidden].filter(
     (step) => step.context_total > 0,
   );
@@ -819,8 +823,12 @@ function CalculationDetails({
         </button>
       </div>
       <p>
-        {entry.result.node} · {entry.result.port} · {t("lineageRow")}{" "}
-        {entry.result.row + 1}
+        {displayNodeName(
+          names?.[entry.result.node || ""],
+          entry.result.node || "",
+          t,
+        )}{" "}
+        · {entry.result.port} · {t("lineageRow")} {entry.result.row + 1}
       </p>
       {entry.result.variables &&
         Object.keys(entry.result.variables).length > 0 && (
@@ -853,7 +861,12 @@ function CalculationDetails({
               >
                 {selections.map((step, index) => (
                   <option key={cellId(step)} value={index}>
-                    {step.node?.split("::").at(-1)} · {step.column}
+                    {displayNodeName(
+                      names?.[step.node || ""],
+                      step.node || "",
+                      t,
+                    )}{" "}
+                    · {step.column}
                   </option>
                 ))}
               </select>

@@ -1,3 +1,4 @@
+import { displayNodeName } from "./nodeNames";
 import { ValueSourceFields } from "./ValueSourceFields";
 import { localDefinitions } from "./nodeCode";
 import { useEffect, useId, useMemo, useState } from "react";
@@ -175,7 +176,9 @@ export default function VariablesPanel({
         <div className="notice warning" key={name}>
           {fill(t("undeclaredVariableUsed"), {
             name,
-            nodes: usages.map((usage) => usage.label).join(", "),
+            nodes: usages
+              .map((usage) => displayNodeName(usage.name, usage.label, t))
+              .join(", "),
           })}{" "}
           {editable && (
             <button className="text-button" onClick={() => open(null, name)}>
@@ -829,7 +832,9 @@ function VariableEditor({
                 onClick={() => onOpenNode(usage.node)}
               >
                 <span className="grow">
-                  <strong>{usage.label}</strong>
+                  <strong title={usage.node}>
+                    {displayNodeName(usage.name, usage.label, t)}
+                  </strong>
                   <small>
                     {usage.param}
                     {type ? ` · ${type}` : ""}

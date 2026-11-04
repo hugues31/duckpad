@@ -1,64 +1,64 @@
 WEBVTT
 
-00:00:00.350 --> 00:00:03.302
+00:00:00.350 --> 00:00:03.425
 Your next pipeline starts with a drag.
 
-00:00:03.779 --> 00:00:05.017
-Meet Duckpad.
+00:00:03.704 --> 00:00:07.151
+This is Duckpad: a visual workspace for
 
-00:00:05.398 --> 00:00:07.874
-An open-source workspace for people who
+00:00:07.245 --> 00:00:09.667
+turning data into answers.
 
-00:00:07.969 --> 00:00:08.921
-work with data.
+00:00:09.853 --> 00:00:12.741
+Drag in a step, connect your sources, and
 
-00:00:09.493 --> 00:00:11.683
-Drop a step onto the canvas.
+00:00:12.881 --> 00:00:16.561
+shape your data with simple controls or SQL.
 
-00:00:11.874 --> 00:00:14.874
-Connect your sources. Shape the flow.
+00:00:16.655 --> 00:00:17.679
+Need a hand?
 
-00:00:15.112 --> 00:00:18.064
-Use simple controls to filter, join, and
+00:00:17.819 --> 00:00:20.568
+Ask the AI assistant about your flow.
 
-00:00:18.160 --> 00:00:19.112
-transform.
+00:00:20.707 --> 00:00:23.735
+It reads your project, explains the logic,
 
-00:00:19.398 --> 00:00:22.731
-Or open the SQL when you want to go deeper.
+00:00:23.782 --> 00:00:26.065
+and can make changes you can review and
 
-00:00:23.017 --> 00:00:26.636
-Run with DuckDB, then explore the result
+00:00:26.158 --> 00:00:27.183
+undo.
 
-00:00:26.826 --> 00:00:28.064
-right where you built it.
+00:00:27.276 --> 00:00:30.444
+Keep quality checks beside your SQL.
 
-00:00:28.445 --> 00:00:31.112
-Wonder where a number came from? Click it.
+00:00:30.583 --> 00:00:33.798
+Run data tests, inspect failing rows, and
 
-00:00:31.302 --> 00:00:33.969
-Follow the calculation, all the way back to
+00:00:34.031 --> 00:00:36.220
+surface useful messages right where you
 
-00:00:34.064 --> 00:00:34.826
-the source.
+00:00:36.406 --> 00:00:36.965
+work.
 
-00:00:35.207 --> 00:00:38.636
-Turn useful steps into reusable components.
+00:00:37.059 --> 00:00:39.947
+Explore the result, then trace a value back
 
-00:00:38.921 --> 00:00:41.302
-And keep your work versioned with Git.
+00:00:40.040 --> 00:00:41.717
+to the data behind it.
 
-00:00:41.493 --> 00:00:44.588
-Review what changed. Explore a branch.
+00:00:41.903 --> 00:00:44.419
+Every change is versioned with Git, so you
 
-00:00:44.826 --> 00:00:47.207
-Build with the confidence to go back.
+00:00:44.512 --> 00:00:47.680
+can compare, branch, and keep moving.
 
-00:00:47.493 --> 00:00:50.064
-From the first connection to a result you
+00:00:47.773 --> 00:00:50.195
+From a first connection to a result you
 
-00:00:50.160 --> 00:00:51.017
-can explain.
+00:00:50.382 --> 00:00:51.593
+understand.
 
-00:00:51.398 --> 00:00:55.398
+00:00:51.640 --> 00:00:56.361
 Duckpad. See the flow. Trust the result.

@@ -60,6 +60,7 @@ See [installation](docs/INSTALLATION.md) for platform requirements and setup opt
 [Installation & accounts](docs/INSTALLATION.md) · [Single sign-on](docs/SSO.md) ·
 [Python nodes](docs/PYTHON.md) ·
 [Offline extensions](docs/OFFLINE_EXTENSIONS.md) · [Project documentation](docs/DOCUMENTATION.md) ·
+[Dataiku & Alteryx vocabulary](docs/COMPARISON.md) ·
 [Architecture](docs/ARCHITECTURE.md) · [Validation](docs/VALIDATION.md) ·
 [Releases](docs/RELEASING.md) · [Security](SECURITY.md)
 

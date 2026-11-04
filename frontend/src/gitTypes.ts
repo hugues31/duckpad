@@ -1,3 +1,4 @@
+import type { NodeNames } from "./nodeNames";
 import type { Diagnostic, FlowEdge, Json, VariableUsage } from "./types";
 
 export type ChangeStatus = "added" | "removed" | "modified" | "unchanged";
@@ -189,7 +190,7 @@ export interface RemoteStatus {
 
 export type MergeChoice = "base" | "current" | "incoming";
 
-interface ConflictValue {
+export interface ConflictValue {
   /** False when the field does not exist in this version. */
   present: boolean;
   /** The field's value, or null when absent. */
@@ -207,6 +208,7 @@ export interface MergeConflict {
 
 /** A merge proposed into a worktree, with the changes it would make there. */
 export interface MergeReview {
+  node_names?: NodeNames;
   id: string;
   /** The destination worktree. */
   worktree: string;

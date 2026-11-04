@@ -9,7 +9,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 from pydantic_ai import RunContext
 
-from .. import variables
+from .. import variables, views
 from ..auth import Auth
 from ..components import expand_for
 from ..execution.samples import Sample
@@ -266,7 +266,11 @@ def read_documentation(
     offset: int = 0,
     limit: int = 20,
 ) -> dict:
-    """Read paginated README, descriptions, variable declarations or the available definition file names."""
+    """Read project README, descriptions, variable declarations or definition file names.
+
+    For Duckpad syntax and product help use read_guide instead. Use read_variables to page a
+    particular variable's usages before deleting it or changing its bindings.
+    """
     snapshot = ctx.deps.snapshot()
     bundle = snapshot["bundle"] or {}
     if section == "files":
@@ -285,6 +289,55 @@ def read_documentation(
             {"id": k, "description": v} for k, v in bundle.get("documentation", {}).get(section, {}).items()
         ]
     return ctx.deps.safe(page(items, offset, limit))
+
+
+def variable_usages(bundle):
+    """Variable name -> its node bindings (whole parameters, expressions, paths) and saved view filters."""
+    found = variables.usages(bundle)
+    for output, saved in views.declarations(bundle).items():
+        for view in saved:
+            for name in variables.expression_references(view.get("filter", "")):
+                found.setdefault(name, []).append(
+                    {"output": output, "view": view["name"], "file": "views.json"}
+                )
+    return found
+
+
+def read_variables(
+    ctx: RunContext[Dependencies],
+    name: str = "",
+    section: Literal["declarations", "usages"] = "declarations",
+    offset: int = 0,
+    limit: int = 20,
+) -> dict:
+    """Read variable definitions, configured values by environment, or a page of references.
+
+    Set name to inspect one variable. section=usages requires name and lists node bindings,
+    expressions, file/destination paths and saved result-view filters, including undeclared names.
+    Declarations include diagnostics and usage_count. Computed values are not read or executed.
+    """
+    bundle = ctx.deps.snapshot()["bundle"]
+    if bundle is None:
+        raise Problem("Project files are invalid", 422)
+    if section == "usages":
+        if not name:
+            raise Problem("Choose a variable to inspect its usages", 422)
+        return ctx.deps.safe(page(variable_usages(bundle).get(name, []), offset, limit))
+    summary = variables.summary(bundle, ctx.deps.services.catalog.environment_names())
+    if name and name not in summary["declarations"]:
+        raise Problem("Variable not found", 404)
+    used = variable_usages(bundle)
+    items = [
+        {
+            "name": key,
+            "definition": bundle["variables"][key],
+            **{k: definition[k] for k in ("values", "errors", "warnings")},
+            "usage_count": len(used.get(key, [])),
+        }
+        for key, definition in summary["declarations"].items()
+        if not name or key == name
+    ]
+    return ctx.deps.safe({**page(items, offset, limit), "file_error": summary["file_error"]})
 
 
 def read_schemas(ctx: RunContext[Dependencies], node: str = "", offset: int = 0) -> dict:
@@ -483,6 +536,7 @@ READ_TOOLS = [
     read_file,
     read_sql,
     read_documentation,
+    read_variables,
     read_schemas,
     read_runs,
     search_project,

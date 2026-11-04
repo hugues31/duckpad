@@ -1,5 +1,6 @@
 import { expect, type Page } from "@playwright/test";
 import en from "../src/locales/en.json" with { type: "json" };
+import type { Snapshot } from "../src/types";
 
 /** Administrator password of the disposable instance started by scripts/e2e_server.py. */
 export const PASSWORD = "duckpad-browser-test";
@@ -90,4 +91,21 @@ export async function stubDuckDBWebsites(
       });
     },
   );
+}
+
+/**
+ * Remove the Northstar example's variables, their references and its shared view,
+ * for variable workflows that start from a project without variables.
+ */
+export function withoutExampleVariables(
+  bundle: NonNullable<Snapshot["bundle"]>,
+) {
+  const params = (id: string) =>
+    bundle.flow.nodes.find((node) => node.id === id)!.params;
+  delete params("validated").review_threshold;
+  params("premium").condition = "amount >= 300";
+  params("export").destination = "regional-revenue.csv";
+  params("export_premium").destination = "high-value-orders.csv";
+  delete bundle.variables;
+  delete bundle.views;
 }

@@ -332,7 +332,18 @@ def test_private_discovery_and_all_direct_resource_routes(instance):
     branch = projects.branch(worktree["id"], "private-branch")
     run = engine.launch(worktree["id"], "dev")
     wait_run(store, run)
-    store.put("conflict", "private-conflict", {"id": "private-conflict", "worktree": worktree["id"]})
+    store.put(
+        "conflict",
+        "private-conflict",
+        {
+            "id": "private-conflict",
+            "worktree": worktree["id"],
+            "base": {},
+            "current": {},
+            "proposal": {},
+            "paths": [],
+        },
+    )
     workspace = request(client, outsider, "GET", "/workspace").json()
     assert workspace["projects"] == workspace["worktrees"] == []
     assert request(client, outsider, "GET", "/library").json() == []
@@ -504,7 +515,11 @@ def test_every_api_route_requires_its_classified_access_level(instance):
     actors += [owner_headers, {"authorization": "Bearer " + admin}]
     store, engine = app.state.services.store, app.state.services.engine
     run = wait_run(store, engine.launch(worktree["id"], "dev"))
-    store.put("conflict", "probe", {"id": "probe", "worktree": worktree["id"]})
+    store.put(
+        "conflict",
+        "probe",
+        {"id": "probe", "worktree": worktree["id"], "base": {}, "current": {}, "proposal": {}, "paths": []},
+    )
     from duckpad.jobs import Jobs
     from duckpad.schemas import NewJob
 

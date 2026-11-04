@@ -1,12 +1,173 @@
 import { expect, test } from "@playwright/test";
-import { openInstanceSettings, signIn } from "./helpers";
+import {
+  openInstanceSettings,
+  signIn,
+  withoutExampleVariables,
+} from "./helpers";
 import { verifyAssistantEditing } from "./assistant-editing-flow";
+import { verifyAssistantKnowledge } from "./assistant-knowledge-flow";
+import type { Snapshot } from "../src/types";
 
 // Later specs share the server: an enabled assistant adds buttons to their screens.
 test.afterEach(async ({ page }) => {
   await page.request.put("/api/assistant/settings", {
     data: { enabled: false, providers: [] },
   });
+});
+
+test("search shortcuts work from the floating assistant composer and respect modal boundaries", async ({
+  page,
+}) => {
+  await signIn(page);
+  const configured = await page.request.put("/api/assistant/settings", {
+    data: {
+      enabled: true,
+      providers: [
+        {
+          id: "primary",
+          kind: "deepseek",
+          api_key: "browser-test-key",
+          models: ["test"],
+        },
+      ],
+      default_provider: "primary",
+      default_model: "test",
+    },
+  });
+  expect(configured.ok()).toBeTruthy();
+  const response = await page.request.post("/api/example", { data: {} });
+  expect(response.ok()).toBeTruthy();
+  const { id } = await response.json();
+  await page.goto(`/worktrees/${id}/flow`);
+  await page
+    .getByRole("button", { name: "Open AI assistant", exact: true })
+    .click();
+  const chat = page.getByRole("dialog", { name: "AI assistant", exact: true });
+  const search = page.getByRole("combobox", { name: "Find a node…" });
+  const global = page.getByRole("button", {
+    name: "Search instance",
+    exact: true,
+  });
+  const message = chat.getByRole("textbox", { name: "Message", exact: true });
+  await message.fill("Keep this draft");
+  await expect(chat).toHaveAttribute("aria-modal", "false");
+  // Observe cancellation after the app handles the real keyboard event.
+  await page.evaluate(() => {
+    window.addEventListener("keydown", (event) => {
+      if ((event.ctrlKey || event.metaKey) && ["f", "k"].includes(event.key))
+        document.body.dataset.searchDefaultPrevented = String(
+          event.defaultPrevented,
+        );
+    });
+  });
+
+  for (const modifier of ["Control", "Meta"]) {
+    await page.getByRole("link", { name: "Flow", exact: true }).focus();
+    await page.keyboard.press(`${modifier}+f`);
+    await expect(search).toBeFocused();
+    await search.fill("premium");
+    await search.press("Enter");
+    await expect(
+      page.locator('.react-flow__node[data-id="premium"]'),
+    ).toHaveClass(/selected/);
+    await expect(chat).toBeVisible();
+
+    await global.focus();
+    await page.keyboard.press(`${modifier}+k`);
+    const dialog = page.getByRole("dialog", {
+      name: "Search instance",
+      exact: true,
+    });
+    await expect(dialog.getByRole("combobox")).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(
+      dialog.getByRole("button", { name: "Close", exact: true }),
+    ).toBeFocused();
+    await page.keyboard.press("Shift+Tab");
+    await expect(dialog.getByRole("combobox")).toBeFocused();
+    await page.keyboard.press(`${modifier}+f`);
+    await expect(search).not.toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(dialog).toHaveCount(0);
+
+    await message.focus();
+    await page.keyboard.press(`${modifier}+f`);
+    await expect(search).toBeFocused();
+    await expect(page.locator("body")).toHaveAttribute(
+      "data-search-default-prevented",
+      "true",
+    );
+    await search.fill("premium");
+    await search.press("Enter");
+    await expect(
+      page.locator('.react-flow__node[data-id="premium"]'),
+    ).toHaveClass(/selected/);
+    await expect(message).toHaveValue("Keep this draft");
+    await expect(chat.getByRole("log")).not.toContainText("Keep this draft");
+
+    // Holding the shortcut must not fall through to the browser on repeat.
+    await message.focus();
+    await page.keyboard.down(modifier);
+    await page.keyboard.down("f");
+    await page.keyboard.down("f");
+    await expect(search).toBeFocused();
+    await expect(page.locator("body")).toHaveAttribute(
+      "data-search-default-prevented",
+      "true",
+    );
+    await page.keyboard.up("f");
+    await page.keyboard.up(modifier);
+
+    await message.focus();
+    await page.keyboard.press(`${modifier}+k`);
+    await expect(dialog.getByRole("combobox")).toBeFocused();
+    await expect(page.locator("body")).toHaveAttribute(
+      "data-search-default-prevented",
+      "true",
+    );
+    await page.keyboard.press("Escape");
+    await expect(message).toBeFocused();
+    await expect(message).toHaveValue("Keep this draft");
+    await expect(dialog).toHaveCount(0);
+
+    await chat.getByRole("button", { name: "Maximize assistant" }).click();
+    await expect(chat).toHaveAttribute("aria-modal", "true");
+    const minimize = chat.getByRole("button", { name: "Minimize assistant" });
+    await minimize.focus();
+    await page.keyboard.press(`${modifier}+f`);
+    await page.keyboard.press(`${modifier}+k`);
+    await expect(minimize).toBeFocused();
+    await expect(dialog).toHaveCount(0);
+    await minimize.click();
+    await expect(chat).toHaveAttribute("aria-modal", "false");
+    await page.getByRole("link", { name: "Flow", exact: true }).focus();
+    await page.keyboard.press(`${modifier}+f`);
+    await expect(search).toBeFocused();
+  }
+});
+
+test("consult Duckpad syntax and manage variable deletion and inheritance", async ({
+  page,
+}) => {
+  test.setTimeout(90000);
+  await signIn(page);
+  const configured = await page.request.put("/api/assistant/settings", {
+    data: {
+      enabled: true,
+      providers: [
+        {
+          id: "primary",
+          kind: "deepseek",
+          api_key: "browser-test-key",
+          models: ["test"],
+        },
+      ],
+      default_provider: "primary",
+      default_model: "test",
+    },
+  });
+  expect(configured.ok()).toBeTruthy();
+  await verifyAssistantKnowledge(page);
 });
 
 test("configure an OAuth2 gateway without exposing its saved secret", async ({
@@ -252,6 +413,17 @@ test("a pending Code file is saved before the assistant turn", async ({
   const example = await (
     await page.request.post("/api/example", { data: {} })
   ).json();
+  // Without Northstar's variables, Code offers to create variables.json as a draft.
+  const endpoint = `/api/worktrees/${example.id}`;
+  const snapshot: Snapshot = await (await page.request.get(endpoint)).json();
+  withoutExampleVariables(snapshot.bundle!);
+  expect(
+    (
+      await page.request.put(endpoint, {
+        data: { revision: snapshot.revision, bundle: snapshot.bundle },
+      })
+    ).ok(),
+  ).toBeTruthy();
   await page.goto(`/worktrees/${example.id}/code`);
   await page
     .getByRole("button", { name: "Create variables.json", exact: true })

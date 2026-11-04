@@ -3,9 +3,22 @@
 import json
 
 from . import project_extensions, variables, views
-from .util import dumps
+from .util import Problem, dumps
 
 MISSING = object()
+
+
+def conflict_details(conflict):
+    """Review evidence and an editable merge, without changing the retained conflict."""
+    evidence = []
+    merged, _ = merge_files(
+        conflict["base"],
+        conflict["current"],
+        conflict["proposal"],
+        choices=dict.fromkeys(conflict["paths"], "incoming"),
+        evidence=evidence,
+    )
+    return {**conflict, "fields": evidence, "merged": merged}
 
 
 def by_identity(value):
@@ -19,7 +32,7 @@ def by_identity(value):
     return mapping if len(mapping) == len(value) else None
 
 
-def merge_values(base, current, proposed, path="", choices=None, evidence=None):
+def merge_values(base, current, proposed, path="", choices=None, evidence=None, resolution=MISSING):
     """Three-way merge logical fields; arrays with stable IDs merge by identity."""
     if current == proposed or proposed == base:
         return current, []
@@ -65,6 +78,7 @@ def merge_values(base, current, proposed, path="", choices=None, evidence=None):
                 path + "/" + key.replace("~", "~0").replace("/", "~1"),
                 choices,
                 evidence,
+                resolution.get(key, MISSING) if isinstance(resolution, dict) else MISSING,
             )
             if value is not MISSING:
                 result[key] = value
@@ -72,7 +86,10 @@ def merge_values(base, current, proposed, path="", choices=None, evidence=None):
         return result, conflicts
     mappings = [by_identity(v) for v in (base, current, proposed)]
     if all(mapping is not None for mapping in mappings):
-        result, conflicts = merge_values(*mappings, path, choices, evidence)
+        resolved = by_identity(resolution)
+        result, conflicts = merge_values(
+            *mappings, path, choices, evidence, resolved if resolved is not None else MISSING
+        )
         order = list(dict.fromkeys([x["id"] for x in current + proposed + base]))
         return [result[k] for k in order if k in result], conflicts
     if evidence is not None:
@@ -90,13 +107,24 @@ def merge_values(base, current, proposed, path="", choices=None, evidence=None):
         )
         if choice in values:
             return values[choice], []
+        if choice == "combined":
+            return resolution, []
     return current, [path or "/"]
 
 
-def merge_files(base, current, proposal, choices=None, evidence=None):
+def merge_files(base, current, proposal, choices=None, evidence=None, resolutions=None):
+    """Merge independent edits, using combined contents only at conflicting paths."""
     result, conflicts = {}, []
     for name in sorted(base.keys() | current.keys() | proposal.keys()):
         values = [v.get(name, MISSING) for v in (base, current, proposal)]
+        resolution = (
+            (resolutions or {}).get(name, MISSING)
+            if any(
+                choice == "combined" and (path == name or path.startswith(name + "/"))
+                for path, choice in (choices or {}).items()
+            )
+            else MISSING
+        )
         if (
             name in (variables.FILE, project_extensions.FILE, views.FILE)
             and values[0] is MISSING
@@ -108,18 +136,24 @@ def merge_files(base, current, proposal, choices=None, evidence=None):
         try:
             if name.endswith(".json") and all(v is not MISSING for v in values):
                 parsed = [json.loads(v) for v in values]
+                resolved = MISSING
+                if isinstance(resolution, str):
+                    try:
+                        resolved = json.loads(resolution)
+                    except (ValueError, TypeError) as error:
+                        raise Problem(f"Combined contents for {name} must be valid JSON", 422) from error
                 named = [views.by_name(v) for v in parsed] if name == views.FILE else [None]
                 if all(v is not None for v in named):
                     # Shared views merge view by view, keyed by their name.
-                    merged, errors = merge_values(*named, name, choices, evidence)
+                    merged, errors = merge_values(*named, name, choices, evidence, views.by_name(resolved))
                     merged = views.from_names(merged, [parsed[1], parsed[2], parsed[0]])
                 else:
-                    merged, errors = merge_values(*parsed, name, choices, evidence)
+                    merged, errors = merge_values(*parsed, name, choices, evidence, resolved)
                 content = dumps(merged)
             else:
-                content, errors = merge_values(*values, name, choices, evidence)
+                content, errors = merge_values(*values, name, choices, evidence, resolution)
         except (ValueError, TypeError):
-            content, errors = merge_values(*values, name, choices, evidence)
+            content, errors = merge_values(*values, name, choices, evidence, resolution)
         if name == "uv.lock" and errors:
             # Generated dependency state is resolved again from the merged manifest.
             # Editable saves/runs regenerate it; a tag must carry the resolved lock.

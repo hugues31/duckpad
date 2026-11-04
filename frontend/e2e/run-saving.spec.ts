@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { signIn } from "./helpers";
+import { signIn, withoutExampleVariables } from "./helpers";
 import type { Run, Snapshot } from "../src/types";
 
 async function prepare(page: Page, environment = "dev") {
@@ -9,6 +9,7 @@ async function prepare(page: Page, environment = "dev") {
   const { id } = await created.json();
   const endpoint = `/api/worktrees/${id}`;
   const snapshot: Snapshot = await (await page.request.get(endpoint)).json();
+  withoutExampleVariables(snapshot.bundle!);
   snapshot.bundle!.variables = {
     order_status: { type: "choice(paid|refunded|pending)", default: "paid" },
   };

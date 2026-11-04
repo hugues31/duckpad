@@ -302,7 +302,7 @@ class Runner:
             "nodes": {
                 n: {
                     "status": "pending",
-                    "label": nodes[n].get("label", n),
+                    "label": nodes[n]["display_name"],
                     "writes_external": nodes[n]["parsed"]["writes_external"],
                     "fingerprint": fingerprints[n],
                     "results": [],

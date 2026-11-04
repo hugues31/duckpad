@@ -1,5 +1,14 @@
+import { displayNodeName, type NodeNames } from "./nodeNames";
 import { useOptionalWorktree } from "./worktree";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+  type Ref,
+} from "react";
 import {
   Controls,
   ControlButton,
@@ -45,7 +54,7 @@ import { useT, templateLabel, nodeLabel } from "./i18n";
 import { DRAG_TYPE, nodeInterface, type NodeConnection } from "./graph";
 import ConnectionPalette from "./ConnectionPalette";
 import { WarningBadge, warningCount } from "./ExecutionMessages";
-import { layoutNodes } from "./graphLayout";
+import { findNodePosition, layoutNodes } from "./graphLayout";
 import { SearchField } from "./Search";
 import type { NodeKind } from "./NodePalette";
 import type {
@@ -204,7 +213,18 @@ function PipelineNode({ id, data, selected }: NodeProps<PipelineNode>) {
   );
 }
 const nodeTypes = { pipeline: PipelineNode };
+export interface CanvasHandle {
+  newNodePosition: (nodes: FlowNode[]) => FlowNode["position"];
+}
+export interface FocusRequest {
+  id: string;
+  key: string;
+  /** Keep the zoom and pan only if the node is hidden, as for a new node. */
+  reveal?: boolean;
+}
 interface CanvasProps {
+  names?: NodeNames;
+  ref?: Ref<CanvasHandle>;
   readOnly?: boolean;
   nodes: FlowNode[];
   edges: FlowEdge[];
@@ -217,7 +237,7 @@ interface CanvasProps {
   prefix: string;
   viewKey: string;
   selected: string | null;
-  focusRequest?: { id: string; key: string } | null;
+  focusRequest?: FocusRequest | null;
   onSelect: (id: string | null) => void;
   onMove: (nodes: FlowNode[]) => Promise<void>;
   onConnect: (edge: Omit<FlowEdge, "id">) => void;
@@ -234,23 +254,51 @@ interface CanvasProps {
   /** Show the results log of a node whose warning badge was clicked. */
   onWarnings?: (id: string) => void;
 }
-function CanvasInner(props: CanvasProps) {
+function CanvasInner({ ref, ...props }: CanvasProps) {
   const t = useT();
-  const { getNodes, setViewport, screenToFlowPosition } = useReactFlow();
+  const { getNodes, getViewport, setViewport, screenToFlowPosition } =
+    useReactFlow();
   const initialized = useNodesInitialized();
   const safeArea = useRef<HTMLDivElement>(null);
   const [frame, setFrame] = useState({ x: 0, y: 0, width: 0, height: 0 });
   const viewportTouched = useRef(false);
+  useImperativeHandle(ref, () => ({
+    newNodePosition: (graphNodes) => {
+      const rendered = new Map(getNodes().map((node) => [node.id, node]));
+      const area = safeArea.current?.getBoundingClientRect();
+      const start = area && screenToFlowPosition({ x: area.left, y: area.top });
+      const end =
+        area && screenToFlowPosition({ x: area.right, y: area.bottom });
+      return findNodePosition(
+        graphNodes.map((node) => ({
+          ...node,
+          position: rendered.get(node.id)?.position ?? node.position,
+          measured: rendered.get(node.id)?.measured,
+        })),
+        {
+          selected: props.selected,
+          visible:
+            start && end
+              ? {
+                  ...start,
+                  width: end.x - start.x,
+                  height: end.y - start.y,
+                }
+              : undefined,
+        },
+      );
+    },
+  }));
   const lastFit = useRef("");
   const [query, setQuery] = useState("");
-  const [focus, setFocus] = useState<{ id: string } | null>(
-    props.focusRequest ? { id: props.focusRequest.id } : null,
+  const [focus, setFocus] = useState<Omit<FocusRequest, "key"> | null>(
+    props.focusRequest ?? null,
   );
   // Each new request from the page focuses its node once.
   const [handledRequest, setHandledRequest] = useState(props.focusRequest);
   if (props.focusRequest !== handledRequest) {
     setHandledRequest(props.focusRequest);
-    if (props.focusRequest) setFocus({ id: props.focusRequest.id });
+    if (props.focusRequest) setFocus(props.focusRequest);
   }
   const [pendingConnection, setPendingConnection] = useState<{
     endpoint: Omit<NodeConnection, "port">;
@@ -361,7 +409,11 @@ function CanvasInner(props: CanvasProps) {
             valueProducer: props.valueProducers?.includes(
               props.prefix + node.id,
             ),
-            label: nodeLabel(node, signature, t),
+            label: displayNodeName(
+              props.names?.[props.prefix + node.id]?.slice(-1),
+              nodeLabel(node, signature, t),
+              t,
+            ),
             kind,
             inputs,
             outputs,
@@ -387,6 +439,7 @@ function CanvasInner(props: CanvasProps) {
       props.nodes,
       props.valueProducers,
       props.parsed,
+      props.names,
       props.local,
       props.components,
       props.statuses,
@@ -417,9 +470,31 @@ function CanvasInner(props: CanvasProps) {
     if (!focus || !initialized || !frame.width || !frame.height) return;
     const target = getNodes().filter((node) => node.id === focus.id);
     if (!target.length) return;
+    if (focus.reveal) {
+      const bounds = getNodesBounds(target);
+      const { x, y, zoom } = getViewport();
+      const left = x + bounds.x * zoom;
+      const top = y + bounds.y * zoom;
+      const width = bounds.width * zoom;
+      const height = bounds.height * zoom;
+      if (
+        left >= frame.x &&
+        top >= frame.y &&
+        left + width <= frame.x + frame.width &&
+        top + height <= frame.y + frame.height
+      )
+        return;
+      viewportTouched.current = true;
+      void setViewport({
+        x: x + frame.x + (frame.width - width) / 2 - left,
+        y: y + frame.y + (frame.height - height) / 2 - top,
+        zoom,
+      });
+      return;
+    }
     viewportTouched.current = true;
     fitGraph(target);
-  }, [focus, initialized, frame, getNodes, fitGraph]);
+  }, [focus, initialized, frame, getNodes, getViewport, setViewport, fitGraph]);
   if (pendingConnection) {
     // Close the palette once its endpoint is gone or the graph became read-only.
     const { nodeId, handleId, handleType } = pendingConnection.endpoint;
