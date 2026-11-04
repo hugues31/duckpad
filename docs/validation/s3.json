@@ -4,6 +4,8 @@
     "Parquet read",
     "join",
     "CSV export",
+    "relative paths under a URI root",
+    "custom storage type",
     "repeat native replacement",
     "shared connection reuse",
     "cell lineage",
@@ -12,8 +14,8 @@
   "connector": "s3",
   "duckdb": "2.0.0",
   "endpoint": "Moto S3 emulator on localhost",
-  "first_run_seconds": 0.657233414996881,
-  "platform": "Linux-7.2.9-2-cachyos-x86_64-with-glibc2.44",
-  "repeat_run_seconds": 0.06959461997030303,
+  "first_run_seconds": 0.5448201920000031,
+  "platform": "Linux-7.0.0-1017-azure-x86_64-with-glibc2.43",
+  "repeat_run_seconds": 0.2725349560000012,
   "status": "passed"
 }
