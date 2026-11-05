@@ -457,6 +457,7 @@ export interface Run {
   commit: string;
   /** The node whose subtree ran, or "project". */
   scope: string;
+  scope_name?: NodeName;
   trigger: string;
   entry_point: "ui" | "api" | "assistant";
   status: RunStatus;

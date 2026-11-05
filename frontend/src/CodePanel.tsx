@@ -254,6 +254,7 @@ export default function CodePanel({
               </div>
             )}
           <ProjectFileTree
+            names={snapshot.node_names}
             files={files}
             selected={path}
             onSelect={setSelected}

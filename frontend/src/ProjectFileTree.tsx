@@ -7,6 +7,8 @@ import {
   FolderOpen,
 } from "lucide-react";
 import { useT } from "./i18n";
+import { projectFileLabel } from "./projectFiles";
+import type { NodeNames } from "./nodeNames";
 
 interface Entry {
   name: string;
@@ -47,10 +49,12 @@ export default function ProjectFileTree({
   files,
   selected,
   onSelect,
+  names = {},
 }: {
   files: Record<string, string>;
   selected: string;
   onSelect: (path: string) => void;
+  names?: NodeNames;
 }) {
   const t = useT();
   const entries = useMemo(() => fileTree(Object.keys(files)), [files]);
@@ -129,7 +133,11 @@ export default function ProjectFileTree({
         <div
           key={entry.path}
           role="treeitem"
-          aria-label={entry.path}
+          aria-label={
+            /^(nodes|components)\/.+\.(sql|py)$/.test(entry.path)
+              ? projectFileLabel(entry.path, names, t)
+              : entry.path
+          }
           aria-level={level}
           aria-expanded={folder ? expanded : undefined}
           aria-selected={!folder && selected === entry.path}
@@ -156,7 +164,9 @@ export default function ProjectFileTree({
               <span className="file-tree-indent" />
             )}
             <Icon size={15} />
-            <span>{entry.name}</span>
+            <span>
+              {folder ? entry.name : projectFileLabel(entry.path, names, t)}
+            </span>
           </div>
           {folder && expanded && (
             <div role="group">{render(entry.children, level + 1)}</div>

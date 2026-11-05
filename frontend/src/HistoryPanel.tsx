@@ -21,6 +21,7 @@ import { useApiResource } from "./useApiResource";
 import { useAsyncAction } from "./useAsyncAction";
 import NewTagModal from "./NewTagModal";
 import TagBadges from "./TagBadges";
+import { runScopeLabel } from "./runNames";
 import { VariableValues } from "./VariableFields";
 import ExecutionMessages, {
   WarningBadge,
@@ -139,9 +140,7 @@ export default function HistoryPanel({
                 )}
               </span>
               <span className="grow">
-                <strong>
-                  {run.scope === "project" ? t("fullRun") : run.scope}
-                </strong>
+                <strong title={run.scope}>{runScopeLabel(run, t)}</strong>
                 <small>
                   {new Date(run.started).toLocaleString()} · {run.environment} ·{" "}
                   {run.job

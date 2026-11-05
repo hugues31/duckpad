@@ -49,6 +49,8 @@ def test_names_and_diagnostics_do_not_require_an_explicit_label(named_bundle, se
     ]
     worktree = projects.create("Display names", named_bundle)["id"]
     run = join_run(store, engine.launch(worktree, "dev")["id"])
+    scoped = join_run(store, engine.launch(worktree, "dev", "node_source")["id"])
+    assert scoped["scope_name"] == [{"label": "Revenue report", "template": "sql"}]
     assert run["nodes"]["node_filter"]["error"] == "Connect input source on Filter"
     assert run["nodes"]["node_filter"]["label"] == "Filter"
     with pytest.raises(Problem, match="Connect input source on Filter"):

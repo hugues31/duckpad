@@ -1,5 +1,20 @@
 import { describe, expect, it } from "vitest";
-import { projectFileLanguage } from "./projectFiles";
+import { projectFileLanguage, projectFileLabel } from "./projectFiles";
+import en from "./locales/en.json";
+
+it("labels SQL and Python node files without exposing raw IDs", () => {
+  const names = {
+    node_1: [{ label: "Orders" }],
+    "components/report/node_2": [{ label: "Report" }, { label: "Totals" }],
+  };
+  const t = (key: keyof typeof en) => en[key];
+  expect(projectFileLabel("nodes/node_1.sql", names, t)).toBe("Orders");
+  expect(projectFileLabel("components/report/node_2.py", names, t)).toBe(
+    "Report / Totals",
+  );
+  expect(projectFileLabel("nodes/node_removed.sql", names, t)).toBe(en.node);
+  expect(projectFileLabel("templates/sql.sql", names, t)).toBe("sql.sql");
+});
 
 describe("projectFileLanguage", () => {
   it("highlights SQL templates as SQL", () => {
