@@ -6,6 +6,7 @@ import io
 import logging
 import shutil
 import tarfile
+import tempfile
 import threading
 import time
 from collections import OrderedDict
@@ -42,6 +43,8 @@ CACHED_REVISIONS = 256
 # After a restart, the base of a save is searched in this many latest commits of its branch.
 BASE_SEARCH = 32
 EXTERNAL_SAVE = "feat(project): save external changes"
+# A save keeps its backups in an untracked worktree folder named with this prefix.
+SAVE_BACKUPS = ".duckpad-save-"
 OPEN_FAILURE = "Git could not open this branch. It may be checked out outside Duckpad."
 
 
@@ -50,6 +53,27 @@ def decode(name: str, content: bytes) -> str:
         return content.decode("utf-8")
     except UnicodeDecodeError as error:
         raise Problem(f"{name} is not valid UTF-8 text", 422) from error
+
+
+def definition_names(path: Path) -> list[str]:
+    """Root file names, present or not, and the files found in the definition folders."""
+    return [
+        *ROOT_FILES,
+        *(
+            p.relative_to(path).as_posix()
+            for folder, pattern in [
+                ("templates", "*.sql"),
+                ("templates", "*.py"),
+                ("nodes", "*.sql"),
+                ("nodes", "*.py"),
+                ("modules", "**/*.py"),
+                ("components", "*/*.py"),
+                ("components", "*.json"),
+                ("components", "*/*.sql"),
+            ]
+            for p in sorted((path / folder).glob(pattern))
+        ),
+    ]
 
 
 def conflict_view(conflict: Record) -> Record:
@@ -275,21 +299,7 @@ class Projects:
 
     def read_files(self, worktree: Mapping[str, str]) -> Files:
         path = Path(worktree["path"])
-        names = list(ROOT_FILES)
-        names += [
-            p.relative_to(path).as_posix()
-            for folder, pattern in [
-                ("templates", "*.sql"),
-                ("templates", "*.py"),
-                ("nodes", "*.sql"),
-                ("nodes", "*.py"),
-                ("modules", "**/*.py"),
-                ("components", "*/*.py"),
-                ("components", "*.json"),
-                ("components", "*/*.sql"),
-            ]
-            for p in sorted((path / folder).glob(pattern))
-        ]
+        names = definition_names(path)
         if any(
             (path / name).is_symlink() or not (path / name).resolve().is_relative_to(path.resolve())
             for name in names
@@ -302,14 +312,67 @@ class Projects:
         }
 
     def commit(self, path: str | Path, message: str, *, assistant: str | None = None) -> str:
+        with self._save_transaction(path):
+            return self._commit(path, message, assistant=assistant)
+
+    @contextmanager
+    def _save_transaction(self, path: str | Path) -> Generator[None, None, None]:
+        """Restore files, index and HEAD on failure while the caller holds the repository lock.
+
+        Backups are prepared before changing anything, on each destination's filesystem.
+        Rollback renames them into place rather than writing more data to a possibly full disk.
+        """
+        path = Path(path)
+
+        def present(root: Path) -> set[str]:
+            return {n for n in definition_names(root) if is_declarative(n) and (root / n).is_file()}
+
+        original = present(path)
+        head = self.git(path, "rev-parse", "--verify", "HEAD", check=False)
+        index = Path(self.git(path, "rev-parse", "--absolute-git-dir")) / "index"
+        with (
+            tempfile.TemporaryDirectory(prefix=SAVE_BACKUPS, dir=path) as directory,
+            tempfile.TemporaryDirectory(prefix="duckpad-index-", dir=index.parent) as git_directory,
+        ):
+            backup = Path(directory)
+            for name in original:
+                target = backup / name
+                target.parent.mkdir(parents=True, exist_ok=True)
+                # Symbolic links, which saves refuse, are kept as links rather than followed.
+                shutil.copy2(path / name, target, follow_symlinks=False)
+            saved_index = Path(git_directory) / "index"
+            if index.exists():
+                shutil.copy2(index, saved_index)
+            try:
+                yield
+            except Exception:
+                for name in present(path) - original:
+                    (path / name).unlink(missing_ok=True)
+                for name in original:
+                    target = path / name
+                    if not target.is_file() or target.read_bytes() != (backup / name).read_bytes():
+                        (backup / name).replace(target)
+                # A timeout can arrive after Git has already advanced the branch.
+                latest = self.git(path, "rev-parse", "--verify", "HEAD", check=False)
+                if latest != head:
+                    if head:
+                        self.git(path, "update-ref", "HEAD", head, latest)
+                    else:
+                        self.git(path, "update-ref", "-d", "HEAD", latest)
+                if saved_index.exists():
+                    saved_index.replace(index)
+                else:
+                    index.unlink(missing_ok=True)
+                raise
+
+    def _commit(self, path: str | Path, message: str, *, assistant: str | None = None) -> str:
         tracked = self.git(path, "ls-files").splitlines()
         existing = self.read_files({"path": str(path)})
         head = self.git(path, "rev-parse", "--verify", "HEAD", check=False)
         previous_files = self.revision_files(path, head) if head else {}
         try:
             bundle = files_to_bundle(existing)
-            head = self.git(path, "rev-parse", "--verify", "HEAD", check=False)
-            previous = files_to_bundle(self.revision_files(path, head)) if head else None
+            previous = files_to_bundle(previous_files) if head else None
             if previous is not None:
                 for name in owned_paths(previous) - owned_paths(bundle):
                     if name in existing:
@@ -517,11 +580,14 @@ class Projects:
             if validate:
                 # Problems already saved, such as an input not connected yet, do not block the change.
                 require_valid(merged, "The proposed changes are invalid", baseline=current)
-            # Finalize the independent external save unit before the UI action.
-            if self.git(worktree["path"], "status", "--porcelain"):
-                self.commit(worktree["path"], EXTERNAL_SAVE)
-            self._write_files(worktree, merged, current)
-            self.commit(worktree["path"], message, assistant=assistant)
+            # Check before creating the transaction's untracked backup directory.
+            external = self.git(worktree["path"], "status", "--porcelain")
+            with self._save_transaction(worktree["path"]):
+                # Retain the independent external save unit only if the whole save succeeds.
+                if external:
+                    self._commit(worktree["path"], EXTERNAL_SAVE)
+                self._write_files(worktree, merged, current)
+                self._commit(worktree["path"], message, assistant=assistant)
             self.observed[worktree_id] = self.read_files(worktree)
             self.pending.pop(worktree_id, None)
             self.on_change(worktree_id)
@@ -714,6 +780,9 @@ class Projects:
             try:
                 if not Path(path).is_dir():
                     raise FileNotFoundError(f"No directory at {path}")
+                # A process stopped during a save leaves its backups behind.
+                for backup in Path(path).glob(SAVE_BACKUPS + "*"):
+                    shutil.rmtree(backup, ignore_errors=True)
                 head = self.git(path, "rev-parse", "HEAD")
                 self.observed[worktree["id"]] = self.revision_files(path, head)
             except (OSError, Problem) as error:

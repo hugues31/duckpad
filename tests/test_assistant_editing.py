@@ -1,6 +1,7 @@
 """Assistant save units, attribution, permission boundaries and durable inverse merges."""
 
 import json
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -8,10 +9,12 @@ from pydantic_ai.models.function import DeltaToolCall, FunctionModel
 from pydantic_ai.models.test import TestModel
 from test_assistant import configure, conversation, dependencies, project, turn
 from test_assistant import instance as instance
+from test_project_save_atomicity import observe_after_quiet_period
 
 from duckpad.assistant.editing import WRITE_TOOLS, NodeEdit, edit_flow
 from duckpad.assistant.runs import RUN_TOOLS
 from duckpad.bundle import bundle_to_files
+from duckpad.git.command import GitTimeout
 from duckpad.util import Problem
 
 SQL = "-- @output result\nSELECT 1 AS value;\n"
@@ -148,6 +151,42 @@ def test_each_write_is_one_attributed_commit_and_can_be_undone(instance, name, a
     head = projects.snapshot(worktree["id"])["commit"]
     undo(client, identity, resumed, context)
     assert projects.snapshot(worktree["id"])["commit"] == head
+
+
+@pytest.mark.parametrize("failure", ["index_lock", "timeout"])
+def test_failed_assistant_save_leaves_no_project_change_or_action(instance, monkeypatch, failure):
+    app, client = instance
+    worktree, context = seed(app, client)
+    projects = app.state.services.projects
+    before = projects.snapshot(worktree["id"])
+    git = projects.git
+
+    def timeout(path, *args, **options):
+        if args[0] == "commit":
+            raise GitTimeout
+        return git(path, *args, **options)
+
+    with monkeypatch.context() as fault:
+        if failure == "index_lock":
+            lock = Path(git(worktree["path"], "rev-parse", "--absolute-git-dir")) / "index.lock"
+            lock.touch()
+        else:
+            fault.setattr(projects, "git", timeout)
+        try:
+            _, result = write_turn(
+                app, client, context, [("write_sql", {"node": "first", "sql": SQL.replace("1", "2")})]
+            )
+        finally:
+            if failure == "index_lock":
+                lock.unlink()
+    card = result["tools"][0]
+    assert card["status"] == "error"
+    assert "action" not in card
+    after = projects.snapshot(worktree["id"])
+    assert after["commit"] == before["commit"]
+    assert after["files"] == before["files"]
+    observe_after_quiet_period(projects, worktree)
+    assert projects.snapshot(worktree["id"])["commit"] == before["commit"]
 
 
 @pytest.mark.parametrize("reference", ["binding", "expression", "path", "view"])
