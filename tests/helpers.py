@@ -1,7 +1,10 @@
 """Shared builders and deterministic waits for the test suite."""
 
+import asyncio
 import threading
 import time
+
+import httpx2
 
 from duckpad.execution.runs import UNFINISHED_RUN_STATUSES
 from duckpad.extensions import core_catalog
@@ -34,6 +37,48 @@ def join_run(store, run_id, timeout=30):
             thread.join(timeout)
             assert not thread.is_alive(), f"Run {run_id} did not finish within {timeout} seconds"
     return store.get("run", run_id)
+
+
+class LockHolder:
+    """Holds a lock in another thread, as a long save would, until `release` or a timeout."""
+
+    def __init__(self, lock, timeout=5):
+        self.released = None
+        self.held, self.stop = threading.Event(), threading.Event()
+
+        def hold():
+            with lock:
+                self.held.set()
+                self.stop.wait(timeout)
+                self.released = time.monotonic()
+
+        self.thread = threading.Thread(target=hold, daemon=True)
+
+    def acquire(self):
+        self.thread.start()
+        assert self.held.wait(5), "The lock was not acquired"
+
+    def holding(self):
+        return self.released is None
+
+    def release(self):
+        self.stop.set()
+        self.thread.join(5)
+
+
+async def assert_responsive(holding):
+    """A callback due in 10 ms runs while `holding()` is still true: the event loop never waited."""
+    fired = asyncio.Event()
+    asyncio.get_running_loop().call_later(0.01, fired.set)
+    await fired.wait()
+    assert holding(), "The event loop waited for the lock"
+
+
+def asgi_client(app, **options):
+    """A client calling the app in the test's own event loop, unlike TestClient's loop thread."""
+    return httpx2.AsyncClient(
+        transport=httpx2.ASGITransport(app=app), base_url="http://testserver", timeout=30, **options
+    )
 
 
 def excel_built_in():
