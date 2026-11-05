@@ -797,13 +797,17 @@ class Runner:
             variables=variables.expression_values(node),
             bound=node.get("variables"),
         )
+        # Locations map DuckDB errors back to the authored code; runs do not record them.
+        locations = [statement.pop("source_location") for statement in statements]
         state["statements"] = variables.annotate(statements, node)
         self._persist(run, execution.secrets)
         staged: dict[str, Dataset] = {}
         check_failure = None
-        statement = None
+        location: Record | None = None
+        executed = ""
         try:
-            for statement in statements:
+            for index, statement in enumerate(statements):
+                location, executed = locations[index], statement["query"]
                 if execution.canceled:
                     raise Problem("Execution canceled")
                 if statement.get("message_block") or statement.get("test_name"):
@@ -858,13 +862,13 @@ class Runner:
                         duration=time.monotonic() - output_start,
                     )
                     continue
-                statement["executed_sql"] = "DESCRIBE " + statement["query"]
+                executed = "DESCRIBE " + statement["query"]
                 plan = plan_materialization(
                     cursor, statement, data_inputs, instrument=not statement["source"]
                 )
                 statement["materialization_sql"] = [plan["sql"]]
                 self._persist(run, execution.secrets)
-                statement["executed_sql"] = plan["sql"]
+                executed = plan["sql"]
                 cursor.execute(plan["sql"], statement["bindings"])
                 created_tables.append((table, plan["storage"]))
                 columns, column_map, view_sql = publish_view(cursor, table, plan)
@@ -904,12 +908,10 @@ class Runner:
                     groups=plan["groups"],
                     duration=time.monotonic() - output_start,
                 )
-        except Exception as error:
-            if statement is not None:
-                raise SqlSourceError(
-                    error, statement["source_location"], statement.get("executed_sql", statement["query"])
-                ) from error
-            raise
+        except duckdb.Error as error:
+            if location is None:
+                raise
+            raise SqlSourceError(error, location, executed) from error
 
         if check_failure is not None:
             raise Problem(check_failure or "An execution check reported an error")

@@ -1,7 +1,12 @@
 import { PartitionInspector } from "./PartitionControls";
 import { useOptionalWorktree, usePartitionQuery } from "./worktree";
 import Select from "./Select";
-import { nodeCode, nodeCodePath, nodeEntity, templateUsage } from "./nodeCode";
+import {
+  nodeCode,
+  nodeEntity,
+  nodeSourcePath,
+  templateUsage,
+} from "./nodeCode";
 import { lazy, Suspense, useRef, useState } from "react";
 import { Link as RouterLink } from "react-router";
 import {
@@ -674,9 +679,7 @@ export default function Inspector({
             definitionFile={
               node.component
                 ? `components/${node.component}.json`
-                : node.template
-                  ? `templates/${node.template}${node.template.endsWith(".py") ? "" : ".sql"}`
-                  : nodeCodePath(node.id, parent, node.language)
+                : nodeSourcePath(node, parent)
             }
             onHistory={onHistory}
           />

@@ -219,6 +219,14 @@ export default function ResultsPanel({
         result_run: dataset?.run,
       }
     : baseResult;
+  // The node's own last execution failed; blocked, canceled and per-key states keep their own views.
+  const failure =
+    !target.input &&
+    !partition.manifest &&
+    baseResult?.error &&
+    baseResult.execution_status === "failed"
+      ? baseResult
+      : null;
   // A preview lacking some partitions is incomplete, as the banner below details.
   const datasetStatus = dataset?.incomplete ? "incomplete" : dataset?.status;
   const running = computing(statuses, fullNode);
@@ -409,9 +417,9 @@ export default function ResultsPanel({
       </div>
       {shown === "data" ? (
         <>
-          {result?.error && !target.input && (
+          {failure && (
             <ExecutionError
-              failure={result}
+              failure={failure}
               node={producer}
               environment={environment}
               currentSource={
@@ -427,7 +435,7 @@ export default function ResultsPanel({
               onLog={() => onTab("log")}
             />
           )}
-          {(!result?.error || target.input || dataset) && (
+          {(!failure || dataset) && (
             <ResultsData
               key={`${target.node}:${target.port}:${environment}:${JSON.stringify(partition)}`}
               snapshot={snapshot}

@@ -12,6 +12,13 @@ export const nodeCodePath = (id: string, parent?: string, language = "sql") => {
     ? `components/${parent}/${id}.${extension}`
     : `nodes/${id}.${extension}`;
 };
+export const templateCodePath = (template: string) =>
+  `templates/${template}${template.endsWith(".py") ? "" : ".sql"}`;
+/** The project file holding a node's code: its shared template or its own file. */
+export const nodeSourcePath = (node: FlowNode, parent?: string) =>
+  node.template
+    ? templateCodePath(node.template)
+    : nodeCodePath(node.id, parent, node.language);
 /** A node's element ID in Git comparisons and histories. */
 export const nodeEntity = (id: string, parent?: string) =>
   `${parent ? `component/${parent}/` : ""}node/${id}`;

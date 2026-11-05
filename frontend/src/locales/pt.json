@@ -1380,9 +1380,9 @@
   "partitionSettingsHint": "Configure as chaves de partição, a política de execução e a retenção das prévias para o ramo selecionado.",
   "partitionRunSelectedAction": "Executar as chaves selecionadas",
   "fullRun": "Execução completa",
-  "errorLine": "Line {line}",
-  "openErrorLine": "Open code at line {line}",
-  "viewErrorLog": "View log",
-  "errorCompiledSql": "SQL before execution",
-  "errorCodeChanged": "The code has changed since this failure. Run the node again to check this version."
+  "errorLine": "Linha {line}",
+  "openErrorLine": "Abrir o código na linha {line}",
+  "viewErrorLog": "Ver o log",
+  "errorCompiledSql": "SQL antes da execução",
+  "errorCodeChanged": "O código mudou desde esta falha. Execute o nó novamente para verificar esta versão."
 }

@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useState } from "react";
 import { Download, FileCode2, Loader2, Plus, Save } from "lucide-react";
 import { downloadProject } from "./api";
-import { nodeCodePath, nodeLocation } from "./nodeCode";
+import { nodeLocation, nodeSourcePath } from "./nodeCode";
 import { useT } from "./i18n";
 import ProjectFileTree from "./ProjectFileTree";
 import { projectFileLanguage } from "./projectFiles";
@@ -51,15 +51,15 @@ export default function CodePanel({
   const [error, setError] = useState("");
   const path = selected in files ? selected : Object.keys(files).sort()[0];
 
+  // The failure reported in this saved file, if any.
   const diagnostic = Object.entries(statuses.nodes).flatMap(([id, result]) => {
-    const location = snapshot.bundle && nodeLocation(snapshot.bundle, id);
-    if (!location || !result.diagnostic) return [];
-    const { node, parent } = location;
-    const file = node.template
-      ? `templates/${node.template}${node.template.endsWith(".py") ? "" : ".sql"}`
-      : nodeCodePath(node.id, parent, node.language);
-    return file === path && result.diagnostic.source === snapshot.files[path]
-      ? [result.diagnostic]
+    const found = result.diagnostic;
+    const location =
+      found && snapshot.bundle && nodeLocation(snapshot.bundle, id);
+    return location &&
+      found.source === snapshot.files[path] &&
+      nodeSourcePath(location.node, location.parent) === path
+      ? [found]
       : [];
   })[0];
 

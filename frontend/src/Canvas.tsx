@@ -113,7 +113,6 @@ type PipelineData = {
   icon: string;
   linked?: string;
   warnings: number;
-  onFailure?: () => void;
 };
 type PipelineNode = Node<PipelineData, "pipeline">;
 
@@ -175,14 +174,6 @@ function PipelineNode({ id, data, selected }: NodeProps<PipelineNode>) {
           <StatusTag
             className={`node-status ${data.status}`}
             title={t(data.status)}
-            onClick={
-              data.status === "failed"
-                ? (event) => {
-                    event.stopPropagation();
-                    data.onFailure?.();
-                  }
-                : undefined
-            }
           >
             <StatusIcon
               status={data.status}
@@ -270,6 +261,7 @@ interface CanvasProps {
   onSelection: (ids: string[]) => void;
   /** Show the results log of a node whose warning badge was clicked. */
   onWarnings?: (id: string) => void;
+  /** Show the error of a node whose Failed badge was clicked. */
   onFailure?: (id: string) => void;
 }
 function CanvasInner({ ref, ...props }: CanvasProps) {
@@ -277,7 +269,6 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
   const { getNodes, getViewport, setViewport, screenToFlowPosition } =
     useReactFlow();
   const initialized = useNodesInitialized();
-  const { onSelect, onFailure } = props;
   const safeArea = useRef<HTMLDivElement>(null);
   const [frame, setFrame] = useState({ x: 0, y: 0, width: 0, height: 0 });
   const viewportTouched = useRef(false);
@@ -425,10 +416,6 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
           selected: node.id === props.selected,
           data: {
             fullNode: props.prefix + node.id,
-            onFailure: () => {
-              onSelect(node.id);
-              onFailure?.(node.id);
-            },
             valueProducer: props.valueProducers?.includes(
               props.prefix + node.id,
             ),
@@ -470,8 +457,6 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
       props.statuses,
       props.prefix,
       props.selected,
-      onSelect,
-      onFailure,
       t,
     ],
   );
@@ -699,12 +684,14 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
         onNodeClick={(event, node) => {
           setFocus(null);
           if (!event.shiftKey) props.onSelect(node.id);
-          // A warning badge opens the node's results on its log.
-          if (
-            !event.shiftKey &&
-            (event.target as Element).closest(".warning-badge")
-          )
-            props.onWarnings?.(node.id);
+          // A warning badge opens the node's results on its log, a Failed badge on its error.
+          const badge = event.shiftKey
+            ? null
+            : (event.target as Element).closest(
+                ".warning-badge, .node-status.failed",
+              );
+          if (badge?.matches(".warning-badge")) props.onWarnings?.(node.id);
+          else if (badge) props.onFailure?.(node.id);
         }}
         onPaneClick={() => {
           setFocus(null);
