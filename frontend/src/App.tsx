@@ -288,14 +288,26 @@ function SignedIn({
 
 /** Finish autosaves before navigation; confirm only edits that can still be discarded. */
 function NavigationGuard({ drafts }: { drafts: DraftRegistry }) {
-  const { area } = usePageRoute();
+  const { area, section } = usePageRoute();
   const { id: worktree, saving } = useWorktree();
   const blocker = useBlocker(({ currentLocation, nextLocation }) => {
     // Router history can advance before an unmounted editor's cleanup runs.
     // Only drafts belonging to the page being left may block a transition.
     const leavesPage = currentLocation.pathname !== nextLocation.pathname;
-    if (!isWorktreePage(currentLocation.pathname, worktree))
-      return area === "projectSettings" && leavesPage && drafts.dirty("page");
+    if (!isWorktreePage(currentLocation.pathname, worktree)) {
+      const changesPartitionContext =
+        section === "partitions" &&
+        ["worktree", "environment"].some(
+          (key) =>
+            new URLSearchParams(currentLocation.search).get(key) !==
+            new URLSearchParams(nextLocation.search).get(key),
+        );
+      return (
+        area === "projectSettings" &&
+        (leavesPage || changesPartitionContext) &&
+        (drafts.dirty("page") || saving)
+      );
+    }
     const leavesWorktree = !isWorktreePage(nextLocation.pathname, worktree);
     return (
       (drafts.dirty("worktree") && leavesWorktree) ||

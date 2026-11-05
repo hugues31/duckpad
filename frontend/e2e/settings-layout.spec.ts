@@ -112,7 +112,7 @@ test("project controls use sections and extension policies use desktop columns",
   try {
     await page.goto(`/projects/${project.project}/settings`);
     const participants = page.locator(".settings-card").filter({
-      has: page.getByRole("heading", { name: "Participants", exact: true }),
+      has: page.getByRole("heading", { name: "Users", exact: true }),
     });
     const connections = page.locator(".settings-card").filter({
       has: page.getByRole("heading", {

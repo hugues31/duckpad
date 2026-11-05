@@ -309,10 +309,7 @@ test("partition controls fit a laptop, preserve selection and explain failed key
   await page
     .getByRole("link", { name: "Partition settings", exact: true })
     .click();
-  await page
-    .getByRole("button", { name: "Partition settings", exact: true })
-    .click();
-  const settings = page.getByRole("dialog", { name: "Partition settings" });
+  const settings = page.getByRole("form", { name: "Partition settings" });
   await expect(settings.getByLabel("Source node")).toHaveValue("keys");
   await expect(
     settings.getByLabel("Source node").locator("option:checked"),
@@ -321,7 +318,6 @@ test("partition controls fit a laptop, preserve selection and explain failed key
     settings.getByLabel("Source column", { exact: true }),
   ).toHaveValue("batch");
   await expect(settings.getByLabel("Preview budget (MiB)")).toHaveValue("1024");
-  await settings.getByRole("button", { name: "Cancel", exact: true }).click();
   await page.goBack();
   await run.click();
   await expect

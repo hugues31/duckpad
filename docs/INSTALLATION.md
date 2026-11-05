@@ -306,13 +306,13 @@ read-only for everyone, including instance administrators. Jobs execute a pinned
 tag or an acceptance branch in their own worktree; Operators cannot run arbitrary
 branch versions directly. See the [Jobs guide](JOBS.md).
 
-Open a project and select **Project settings** to add participants, change roles or
+Open a project and select **Project settings** to add users, change roles or
 remove access. Every instance and project must retain an active admin. Instance
 admins choose the connections authorized for each project on this screen. A project
 admin cannot grant connections or promote an instance admin. Readers can copy data
 they can see; read access is not an extraction restriction.
 
-![Project participants with separate administrator, editor and reader roles](images/project-access.png)
+![Project users with separate administrator, editor and reader roles](images/project-access.png)
 
 Memberships, password hashes and connection grants remain in instance SQLite,
 outside project Git.

@@ -847,15 +847,13 @@ test("capture account roles, project access and personal preferences", async ({
     );
     await page.getByLabel("User", { exact: true }).selectOption(user.id);
     await page.getByLabel("Project role", { exact: true }).selectOption(role);
-    await page
-      .getByRole("button", { name: "Add participant", exact: true })
-      .click();
+    await page.getByRole("button", { name: "Add user", exact: true }).click();
     await expect(
       page.getByLabel(`Project role · ${username}`, { exact: true }),
     ).toHaveValue(role);
   }
   const participants = page.locator(".settings-card").filter({
-    has: page.getByRole("heading", { name: "Participants", exact: true }),
+    has: page.getByRole("heading", { name: "Users", exact: true }),
   });
   await capture(page, "project-access", participants);
   await openUserSettings(page);

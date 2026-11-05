@@ -42,15 +42,11 @@ test("readers can inspect partition settings without editing or running the proj
     ).ok(),
   ).toBeTruthy();
   await page.goto("/projects/" + project.project + "/settings/partitions");
-  await page
-    .getByRole("button", { name: "Partition settings", exact: true })
-    .click();
-  const editor = page.getByRole("dialog", { name: "Partition settings" });
+  const editor = page.getByRole("form", { name: "Partition settings" });
   await expect(editor.getByLabel("Dimension name")).toBeDisabled();
   await expect(
     editor.getByRole("button", { name: "Save changes", exact: true }),
   ).toBeDisabled();
-  await editor.getByRole("button", { name: "Cancel", exact: true }).click();
   await page
     .getByRole("navigation", { name: "Project navigation" })
     .getByRole("link", { name: "Flow", exact: true })

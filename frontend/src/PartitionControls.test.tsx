@@ -162,7 +162,6 @@ it("saves a dimension only once its value source names a node and a column", () 
   });
   try {
     render(<PartitionSettings />);
-    fireEvent.click(screen.getByRole("button", { name: "Partition settings" }));
     const save = screen.getByRole("button", { name: "Save changes" });
     expect(save).toHaveProperty("disabled", true);
     // No port is preselected before a node is chosen.

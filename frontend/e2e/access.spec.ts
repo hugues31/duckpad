@@ -15,7 +15,7 @@ async function login(
   ).toBeVisible();
 }
 
-test("manage instance accounts, project participants and live reader access", async ({
+test("manage instance accounts, project users and live reader access", async ({
   page,
   browser,
 }) => {
@@ -49,9 +49,7 @@ test("manage instance accounts, project participants and live reader access", as
     .click();
   await page.getByLabel("User", { exact: true }).selectOption(reader.id);
   await page.getByLabel("Project role", { exact: true }).selectOption("reader");
-  await page
-    .getByRole("button", { name: "Add participant", exact: true })
-    .click();
+  await page.getByRole("button", { name: "Add user", exact: true }).click();
   await expect(
     page.getByRole("row").filter({ hasText: username }),
   ).toBeVisible();

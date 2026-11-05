@@ -8,7 +8,7 @@ Downstream nodes inherit that key. Shared lookups run once.
 
 ## Configure a dimension
 
-Open **Project settings → Partitions → Partition settings** to choose the control node, output, key
+Open **Project settings → Partitions** to choose the control node, output, key
 column, type and optional attribute columns. The control output is read in full
 at launch; null or duplicate keys and incompatible types stop partition consumers.
 Use text for numeric identifiers that cannot round-trip exactly through a browser.
