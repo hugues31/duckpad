@@ -57,6 +57,12 @@ class Dependencies:
     editing_snapshot: dict | None = None
     writer: Callable | None = None
     launcher: Callable | None = None
+    # Credentials of the settings revision; `check` fails once a newer revision is saved.
+    secrets: list[str] | None = None
+
+    def __post_init__(self):
+        if self.secrets is None:
+            self.secrets = self.configuration.secrets()
 
     def check(self, *, data=False, write=False):
         user = self.auth.check(self.token)
@@ -124,8 +130,7 @@ class Dependencies:
     def safe(self, value):
         """Redact configured credentials even if user-authored content happens to repeat one."""
         text = json.dumps(clean(value), ensure_ascii=False)
-        keys = self.configuration.secrets()
-        for key in keys:
+        for key in self.secrets or ():
             if key:
                 text = text.replace(json.dumps(key, ensure_ascii=False)[1:-1], "[redacted]")
         return json.loads(text)

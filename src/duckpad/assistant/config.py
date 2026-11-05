@@ -5,10 +5,12 @@ import json
 import logging
 import secrets
 from contextlib import asynccontextmanager
+from functools import partial
 from typing import Literal
 from urllib.parse import urlsplit
 
 import httpx2
+from anyio import to_thread
 from pydantic import BaseModel, ConfigDict, Field, SecretStr
 from pydantic_ai import Agent
 from pydantic_ai.exceptions import ModelHTTPError, UnexpectedModelBehavior, UsageLimitExceeded
@@ -140,9 +142,13 @@ class Configuration:
         self.model_override = None
         self.tokens: dict[tuple, TokenState] = {}
 
-    def secrets(self):
+    @staticmethod
+    def credentials(config):
         # Tokens are never offered to the model; holding back JWT-sized text would stall streaming.
-        return [p.get(field, "") for p in self.get()["providers"] for field in ("api_key", "client_secret")]
+        return [p.get(field, "") for p in config["providers"] for field in ("api_key", "client_secret")]
+
+    def secrets(self):
+        return self.credentials(self.get())
 
     def log_failure(self, error, provider, model="-", *, operation="turn"):
         """Log categories by default and a redacted exception traceback at DEBUG."""
@@ -404,13 +410,14 @@ class Configuration:
             yield model
 
     async def test(self, check: ConnectionCheck | None = None):
+        # Settings and failure logs read the Store, whose lock other threads can hold for a while.
         if check and check.provider:
-            provider, name = self.draft(check.provider), check.model.strip()
+            provider, name = await to_thread.run_sync(self.draft, check.provider), check.model.strip()
             if not name:
                 raise Problem("Choose an allowed assistant model")
             self.require_key(provider)
         else:
-            config = self.get()
+            config = await to_thread.run_sync(self.get)
             provider = self.select(config, config["default_provider"], config["default_model"])
             name = config["default_model"]
         try:
@@ -423,12 +430,15 @@ class Configuration:
                 async for _ in events:
                     pass
         except Exception as error:
-            self.log_failure(error, provider, name, operation="connection test")
+            await to_thread.run_sync(
+                partial(self.log_failure, error, provider, name, operation="connection test")
+            )
             raise Problem(provider_error(error), 502) from None
         return {"ok": True}
 
     async def models(self, identity):
-        provider = next((p for p in self.get()["providers"] if p["id"] == identity), None)
+        config = await to_thread.run_sync(self.get)
+        provider = next((p for p in config["providers"] if p["id"] == identity), None)
         if provider is None:
             raise Problem("Provider not found", 404)
         return await self.discover(provider)
@@ -465,7 +475,7 @@ class Configuration:
                     "listed": True,
                 }
         except Exception as error:
-            self.log_failure(error, provider, operation="model discovery")
+            await to_thread.run_sync(partial(self.log_failure, error, provider, operation="model discovery"))
             raise Problem(provider_error(error), 502) from None
 
 

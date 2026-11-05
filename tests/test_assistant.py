@@ -6,6 +6,7 @@ import json
 import pytest
 from assistant_model import test_model as deterministic_model
 from fastapi.testclient import TestClient
+from helpers import LockHolder, asgi_client, assert_responsive
 from pydantic_ai import models
 from pydantic_ai.models.test import TestModel
 
@@ -407,6 +408,86 @@ def test_stop_closes_provider_stream_and_allows_another_turn(instance):
     assert not app.state.assistant.active
     app.state.assistant.configuration.model_override = deterministic_model()
     assert turn(client, identity, context)[-1]["turn"]["status"] == "complete"
+
+
+def test_stream_waits_for_the_store_outside_the_event_loop(instance):
+    from pydantic_ai.models.function import FunctionModel
+
+    app, client = instance
+    configure(client)
+    _, context = project(client)
+    identity = conversation(client, context)
+    holder = LockHolder(app.state.services.store.lock)
+    holding = asyncio.Event()
+
+    async def locked(messages, info):
+        # Taken after `prepare`, so the response itself meets the held lock.
+        holder.acquire()
+        holding.set()
+        yield "Saved "
+        yield "after the lock."
+
+    app.state.assistant.configuration.model_override = FunctionModel(stream_function=locked)
+    request = {"message": "Explain this flow", "provider": "primary", "model": "test", "context": context}
+
+    async def scenario():
+        headers = {"authorization": "Bearer " + client.cookies["duckpad_session"]}
+        async with asgi_client(app, headers=headers) as http:
+            response = asyncio.create_task(
+                http.post(f"/api/assistant/conversations/{identity}/messages", json=request)
+            )
+            await holding.wait()
+            try:
+                await assert_responsive(holder.holding)
+                assert not response.done()
+            finally:
+                holder.release()
+            return await response
+
+    events = [json.loads(line) for line in asyncio.run(scenario()).text.splitlines()]
+    assert events[-1]["turn"]["status"] == "complete"
+    assert events[-1]["turn"]["text"] == "Saved after the lock."
+
+
+def test_streamed_text_rechecks_access_once_per_interval(instance, monkeypatch):
+    from pydantic_ai.models.function import FunctionModel
+
+    import duckpad.assistant.service as service
+
+    app, client = instance
+    configure(client)
+    _, context = project(client)
+    identity = conversation(client, context)
+    checks = 0
+    check = Dependencies.check
+
+    def counted(self, **options):
+        nonlocal checks
+        checks += 1
+        return check(self, **options)
+
+    async def chatty(messages, info):
+        nonlocal checks
+        checks = 0
+        for _ in range(50):
+            yield "word "
+
+    monkeypatch.setattr(Dependencies, "check", counted)
+    monkeypatch.setattr(service, "RECHECK_INTERVAL", 60)
+    app.state.assistant.configuration.model_override = FunctionModel(stream_function=chatty)
+    assert turn(client, identity, context)[-1]["turn"]["status"] == "complete"
+    assert checks == 0
+
+    async def revoked(messages, info):
+        yield "visible "
+        app.state.auth.logout(client.cookies["duckpad_session"])
+        yield "hidden"
+
+    monkeypatch.setattr(service, "RECHECK_INTERVAL", 0)
+    app.state.assistant.configuration.model_override = FunctionModel(stream_function=revoked)
+    result = turn(client, identity, context)[-1]["turn"]
+    assert result["status"] == "error" and result["error"] == "Authentication required"
+    assert "hidden" not in result["text"]
 
 
 def test_provider_errors_never_echo_secrets(instance, caplog):
