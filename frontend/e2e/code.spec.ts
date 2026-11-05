@@ -146,6 +146,19 @@ test("project Markdown and Python dependencies round trip between Code, Document
   await page.getByRole("link", { name: "Documentation", exact: true }).click();
   await expect(page.locator(".documentation-page")).toContainText("README.md");
   await page.locator(".project-documentation").fill(markdown);
+  await page
+    .getByRole("button", { name: "Markdown preview", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Revenue", exact: true }),
+  ).toBeVisible();
+  await expect(page.locator(".documentation-preview strong")).toHaveText(
+    "business context",
+  );
+  await expect(
+    page.getByRole("heading", { name: "Generated project reference" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Edit", exact: true }).click();
   const saved = page.waitForResponse(
     (response) =>
       response.url().endsWith(`/worktrees/${worktree.id}`) &&

@@ -12,3 +12,25 @@
   line-height: 1.9;
   margin: 25px 0 20px;
 }
+.documentation-preview,
+.generated-documentation {
+  overflow-wrap: anywhere;
+  overflow-x: auto;
+  margin-block: 16px;
+}
+.documentation-preview pre {
+  overflow-x: auto;
+}
+.documentation-preview table,
+.generated-documentation table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.documentation-preview th,
+.documentation-preview td,
+.generated-documentation th,
+.generated-documentation td {
+  padding: 8px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+}

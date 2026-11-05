@@ -1387,5 +1387,10 @@
   "noJobsAdmin": "Create a Job to run this project from an external scheduler or API. Use New Job to choose its version and scope.",
   "jobAutomation": "Run from an API or scheduler",
   "jobAutomationHint": "Use an API token with permission to run this Job. The API returns a run ID; follow its status to detect failures. Scheduling happens outside Duckpad.",
-  "jobScopeSelectHint": "Choose a version, then search its nodes. Leave Whole project selected to run everything."
+  "jobScopeSelectHint": "Choose a version, then search its nodes. Leave Whole project selected to run everything.",
+  "markdownPreview": "Markdown preview",
+  "generatedDocumentation": "Generated project reference",
+  "generatedDocumentationHint": "Read-only reference from node definitions, documentation and the latest results in this environment.",
+  "documentationSchemaHint": "Run this output to discover its columns and types.",
+  "noDeclaredTests": "No declared tests"
 }
