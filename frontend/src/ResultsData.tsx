@@ -92,6 +92,7 @@ export default function ResultsData({
   onRun,
   runLabel,
   reason,
+  failureShown = false,
   onExplain,
   onSave,
   onAddFilter,
@@ -115,6 +116,8 @@ export default function ResultsData({
   runLabel?: string;
   /** Why the node has no result, such as the inputs a blocked collector waits for. */
   reason?: string;
+  /** The panel already shows the node's last run error above these rows. */
+  failureShown?: boolean;
   onExplain: (cell: Cell) => void;
   onSave: SaveProject;
   onAddFilter: (condition: string) => Promise<unknown>;
@@ -378,7 +381,7 @@ export default function ResultsData({
           <Loader2 size={14} className="spin" aria-label={t("loading")} />
         )}
       </div>
-      {(error || page?.error) && (
+      {(error || (!failureShown && page?.error)) && (
         <div className="inline-error" role="alert">
           {errorText(error || page?.error || "")}
           {error && !failing && !sameSample(sample, ALL_ROWS) && (

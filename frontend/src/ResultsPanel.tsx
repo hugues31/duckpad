@@ -457,6 +457,7 @@ export default function ResultsPanel({
               onRun={runResult}
               runLabel={runLabel}
               reason={target.input ? undefined : blocked}
+              failureShown={!!failure}
               onExplain={onExplain}
               onSave={onSave}
               onAddFilter={(condition) => onAddFilter(target.port, condition)}
