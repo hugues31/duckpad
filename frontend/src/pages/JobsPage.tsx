@@ -9,6 +9,9 @@ import { useT } from "../i18n";
 import { ConfirmModal, Modal } from "../modals";
 import { worktreeUrl } from "../navigation";
 import Select from "../Select";
+import { SearchField } from "../Search";
+import { displayNodeName, type NodeNames } from "../nodeNames";
+import { jobSlug, jobInvocation, jobCron } from "../jobs";
 import { useShell, useWorkspace } from "../shell";
 import type { Environment, Project, Run } from "../types";
 import { useApiResource } from "../useApiResource";
@@ -98,7 +101,11 @@ function ProjectJobs({ project }: { project: Project }) {
         </p>
       )}
       {!jobs.data && !jobs.error && <PageLoading />}
-      {jobs.data?.length === 0 && <p className="empty-state">{t("noJobs")}</p>}
+      {jobs.data?.length === 0 && (
+        <p className="empty-state">
+          {t(project.role === "admin" ? "noJobsAdmin" : "noJobs")}
+        </p>
+      )}
       <div className="administration-table">
         <table>
           <thead>
@@ -269,6 +276,12 @@ function JobDetails({
   };
   return (
     <section className="job-details settings-card">
+      <details open>
+        <summary>{t("jobAutomation")}</summary>
+        <p>{t("jobAutomationHint")}</p>
+        <pre className="expression">{jobInvocation(job.slug)}</pre>
+        <pre className="expression">{jobCron(job.slug)}</pre>
+      </details>
       <div className="page-heading">
         <div>
           <h2>{job.name}</h2>
@@ -477,11 +490,35 @@ function JobForm({
   const t = useT();
   const workspace = useWorkspace();
   const action = useAsyncAction();
-  const [kind, setKind] = useState<"tag" | "branch">("tag");
+  const [targetKind, setKind] = useState<"tag" | "branch" | null>(null);
+  const [ref, setRef] = useState("");
+  const [name, setName] = useState(job?.name || "");
+  const [slug, setSlug] = useState<string | null>(null);
+  const [scope, setScope] = useState(job?.scope || "");
+  const [scopeQuery, setScopeQuery] = useState("");
   const tags = useApiResource<GitTag[]>(`/worktrees/${project.main}/git/tags`);
   const branches = useApiResource<Branch[]>(
     `/worktrees/${project.main}/git/branches`,
   );
+  const kind = targetKind ?? (tags.data?.length ? "tag" : "branch");
+  const nodes = useApiResource<NodeNames>(
+    job
+      ? `/jobs/${job.slug}/nodes`
+      : ref
+        ? withQuery(`/projects/${project.id}/job-nodes`, { kind, ref })
+        : null,
+  );
+  const scopeOptions = [
+    { key: "", label: t("jobWholeProject"), detail: "" },
+    ...Object.entries(nodes.data || {}).map(([key, parts]) => ({
+      key,
+      label: displayNodeName(parts, t("node"), t),
+      detail: "",
+    })),
+  ].filter((item) =>
+    item.label.toLocaleLowerCase().includes(scopeQuery.toLocaleLowerCase()),
+  );
+  const scopeValid = !scope || !!nodes.data?.[scope];
   return (
     <Modal title={t(job ? "editJob" : "newJob")} onClose={onClose}>
       <form
@@ -492,7 +529,7 @@ function JobForm({
             name: data.get("name"),
             description: data.get("description"),
             environment: data.get("environment"),
-            scope: data.get("scope") || null,
+            scope: scope || null,
           };
           void action.run(async () => {
             const saved = await api<Job>(
@@ -503,7 +540,7 @@ function JobForm({
                   : {
                       ...fields,
                       slug: data.get("slug"),
-                      target: { kind, ref: data.get("ref") },
+                      target: { kind, ref },
                     },
                 job ? "PATCH" : "POST",
               ),
@@ -513,6 +550,17 @@ function JobForm({
         }}
       >
         <div className="modal-content">
+          <label className="field">
+            <span>{t("name")}</span>
+            <input
+              name="name"
+              required
+              maxLength={120}
+              autoFocus
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+            />
+          </label>
           {!job && (
             <label className="field">
               <span>{t("jobSlug")}</span>
@@ -523,22 +571,14 @@ function JobForm({
                 required
                 maxLength={80}
                 pattern="[a-z0-9]+(-[a-z0-9]+)*"
-                autoFocus
+                value={slug ?? jobSlug(name)}
+                onChange={(event) => setSlug(event.target.value)}
               />
               <small className="muted" id="job-slug-help">
                 {t("jobSlugHint")}
               </small>
             </label>
           )}
-          <label className="field">
-            <span>{t("name")}</span>
-            <input
-              name="name"
-              required
-              maxLength={120}
-              defaultValue={job?.name}
-            />
-          </label>
           <label className="field">
             <span>{t("jobDescription")}</span>
             <textarea
@@ -561,19 +601,6 @@ function JobForm({
               ))}
             </Select>
           </label>
-          <label className="field">
-            <span>{t("jobScope")}</span>
-            <input
-              name="scope"
-              aria-label={t("jobScope")}
-              aria-describedby="job-scope-help"
-              defaultValue={job?.scope || ""}
-              placeholder={t("jobWholeProject")}
-            />
-            <small className="muted" id="job-scope-help">
-              {t("jobScopeHint")}
-            </small>
-          </label>
           {!job && (
             <>
               <label className="field">
@@ -581,7 +608,11 @@ function JobForm({
                 <Select
                   aria-label={t("jobTarget")}
                   value={kind}
-                  onChange={(e) => setKind(e.target.value as "tag" | "branch")}
+                  onChange={(e) => {
+                    setKind(e.target.value as "tag" | "branch");
+                    setRef("");
+                    setScope("");
+                  }}
                 >
                   <option value="tag">{t("jobTagTarget")}</option>
                   <option value="branch">{t("jobBranchTarget")}</option>
@@ -592,9 +623,12 @@ function JobForm({
                 <Select
                   aria-label={t("jobVersion")}
                   name="ref"
-                  key={kind}
                   required
-                  defaultValue=""
+                  value={ref}
+                  onChange={(event) => {
+                    setRef(event.target.value);
+                    setScope("");
+                  }}
                 >
                   <option value="">{t("jobChooseVersion")}</option>
                   {(kind === "tag" ? tags.data || [] : branches.data || []).map(
@@ -608,9 +642,30 @@ function JobForm({
               </label>
             </>
           )}
-          {(action.error || tags.error || branches.error) && (
+          <div className="field">
+            <span>{t("jobScope")}</span>
+            <p title={scope}>
+              {scope
+                ? displayNodeName(nodes.data?.[scope], t("node"), t)
+                : t("jobWholeProject")}
+            </p>
+            <SearchField
+              label={t("jobScope")}
+              query={scopeQuery}
+              onQuery={setScopeQuery}
+              options={scopeOptions}
+              showEmpty
+              pending={nodes.pending}
+              onSelect={(index) => {
+                setScope(scopeOptions[index].key);
+                setScopeQuery("");
+              }}
+            />
+            <small className="muted">{t("jobScopeSelectHint")}</small>
+          </div>
+          {(action.error || tags.error || branches.error || nodes.error) && (
             <p className="notice error" role="alert">
-              {action.error || tags.error || branches.error}
+              {action.error || tags.error || branches.error || nodes.error}
             </p>
           )}
         </div>
@@ -618,7 +673,15 @@ function JobForm({
           <button type="button" className="button secondary" onClick={onClose}>
             {t("cancel")}
           </button>
-          <button className="button primary" disabled={action.pending}>
+          <button
+            className="button primary"
+            disabled={
+              action.pending ||
+              nodes.pending ||
+              !scopeValid ||
+              (!job && (!ref || tags.pending || branches.pending))
+            }
+          >
             {t(job ? "save" : "create")}
           </button>
         </footer>

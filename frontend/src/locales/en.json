@@ -332,7 +332,6 @@
   "jobDescription": "Description",
   "jobSlug": "Slug",
   "jobSlugHint": "Unique on this instance and permanent. Use lowercase letters, digits and hyphens.",
-  "jobScopeHint": "Leave empty for the whole project, or enter a node ID (component::node for a nested node). Its upstream nodes also run.",
   "jobTarget": "Target",
   "jobTagTarget": "Tag (pinned commit)",
   "jobBranchTarget": "Branch (latest commit at launch)",
@@ -1384,5 +1383,9 @@
   "openErrorLine": "Open code at line {line}",
   "viewErrorLog": "View log",
   "errorCompiledSql": "SQL before execution",
-  "errorCodeChanged": "The code has changed since this failure. Run the node again to check this version."
+  "errorCodeChanged": "The code has changed since this failure. Run the node again to check this version.",
+  "noJobsAdmin": "Create a Job to run this project from an external scheduler or API. Use New Job to choose its version and scope.",
+  "jobAutomation": "Run from an API or scheduler",
+  "jobAutomationHint": "Use an API token with permission to run this Job. The API returns a run ID; follow its status to detect failures. Scheduling happens outside Duckpad.",
+  "jobScopeSelectHint": "Choose a version, then search its nodes. Leave Whole project selected to run everything."
 }

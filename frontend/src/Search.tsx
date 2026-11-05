@@ -26,6 +26,7 @@ export function SearchField({
   message,
   autoFocus = false,
   shortcut,
+  showEmpty = false,
 }: {
   label: string;
   query: string;
@@ -36,6 +37,7 @@ export function SearchField({
   message?: string;
   autoFocus?: boolean;
   shortcut?: "f";
+  showEmpty?: boolean;
 }) {
   const t = useT();
   const id = useId();
@@ -49,10 +51,10 @@ export function SearchField({
   }, []);
   useSearchShortcut(shortcut, focusSearch);
   const list = useRef<HTMLDivElement>(null);
-  const expanded = open && !!query.trim();
+  const expanded = open && (showEmpty || !!query.trim());
   const index = Math.min(active, Math.max(0, options.length - 1));
   useEffect(() => {
-    list.current?.children[index]?.scrollIntoView({ block: "nearest" });
+    list.current?.children[index]?.scrollIntoView?.({ block: "nearest" });
   }, [index]);
   const choose = (index: number) => {
     onSelect(index);
@@ -123,6 +125,7 @@ export function SearchField({
         )}
         {query && (
           <button
+            type="button"
             className="icon"
             aria-label={t("clearSearch")}
             onClick={() => {

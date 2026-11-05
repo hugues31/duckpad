@@ -332,7 +332,6 @@
   "jobDescription": "Descrição",
   "jobSlug": "Identificador",
   "jobSlugHint": "Único nesta instância e permanente. Use letras minúsculas, algarismos e hífenes.",
-  "jobScopeHint": "Deixe vazio para o projeto inteiro ou introduza o ID de um nó (componente::nó para um nó aninhado). Os nós a montante também são executados.",
   "jobTarget": "Destino",
   "jobTagTarget": "Tag (commit fixado)",
   "jobBranchTarget": "Ramo (último commit ao executar)",
@@ -1384,5 +1383,9 @@
   "openErrorLine": "Abrir o código na linha {line}",
   "viewErrorLog": "Ver o log",
   "errorCompiledSql": "SQL antes da execução",
-  "errorCodeChanged": "O código mudou desde esta falha. Execute o nó novamente para verificar esta versão."
+  "errorCodeChanged": "O código mudou desde esta falha. Execute o nó novamente para verificar esta versão.",
+  "noJobsAdmin": "Create a Job to run this project from an external scheduler or API. Use New Job to choose its version and scope.",
+  "jobAutomation": "Run from an API or scheduler",
+  "jobAutomationHint": "Use an API token with permission to run this Job. The API returns a run ID; follow its status to detect failures. Scheduling happens outside Duckpad.",
+  "jobScopeSelectHint": "Choose a version, then search its nodes. Leave Whole project selected to run everything."
 }

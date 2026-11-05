@@ -927,6 +927,16 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
         return engine.statuses(worktree, environment)
 
     # Jobs are instance metadata; their detached worktrees only expose read routes.
+    @app.get("/api/projects/{project}/job-nodes", response_model=None)
+    def job_target_nodes(project: str, kind: str, ref: str) -> Record:
+        _, commit = jobs.resolve(project, kind, ref)
+        return jobs.scope_nodes(project, commit)
+
+    @app.get("/api/jobs/{slug}/nodes", response_model=None)
+    def job_scope_nodes(slug: str) -> Record:
+        job = jobs.get(slug)
+        return jobs.scope_nodes(job["project"], jobs.current_commit(job))
+
     @app.get("/api/projects/{project}/jobs", response_model=None)
     def list_jobs(project: str) -> list[Record]:
         return [jobs.public(job) for job in store.all("job") if job["project"] == project]

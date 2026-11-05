@@ -332,7 +332,6 @@
   "jobDescription": "Description",
   "jobSlug": "Identifiant",
   "jobSlugHint": "Unique sur cette instance et permanent. Lettres minuscules, chiffres et tirets.",
-  "jobScopeHint": "Laissez vide pour le projet entier, ou saisissez un identifiant de nœud (composant::nœud pour un nœud imbriqué). Ses nœuds amont sont également exécutés.",
   "jobTarget": "Cible",
   "jobTagTarget": "Tag (commit épinglé)",
   "jobBranchTarget": "Branche (dernier commit au lancement)",
@@ -1384,5 +1383,9 @@
   "openErrorLine": "Ouvrir le code à la ligne {line}",
   "viewErrorLog": "Voir le log",
   "errorCompiledSql": "SQL avant exécution",
-  "errorCodeChanged": "Le code a changé depuis cet échec. Relancez le nœud pour vérifier cette version."
+  "errorCodeChanged": "Le code a changé depuis cet échec. Relancez le nœud pour vérifier cette version.",
+  "noJobsAdmin": "Créez un Job pour exécuter ce projet depuis un ordonnanceur externe ou une API. Utilisez Nouveau Job pour choisir sa version et son périmètre.",
+  "jobAutomation": "Exécuter depuis une API ou un ordonnanceur",
+  "jobAutomationHint": "Utilisez un jeton API autorisé à exécuter ce Job. L’API retourne un identifiant de run ; suivez son état pour détecter les erreurs. La planification est externe à Duckpad.",
+  "jobScopeSelectHint": "Choisissez une version, puis recherchez ses nœuds. Gardez Projet entier pour tout exécuter."
 }
