@@ -73,7 +73,7 @@ input and `result` output. **Edit code** changes only that node. Its `-- @param`
 declarations generate the form; guided controls remain while their supporting
 parameters are present.
 
-The **SQL** and **Python** buttons under **Add to palette** create reusable templates.
+The **SQL** and **Python** buttons at the bottom of the palette create reusable templates.
 Python requires administrator activation in the project settings.
 Save the code to make it available in the palette, then click or drag the entry
 to create independent nodes. **Import** copies a reusable definition from another

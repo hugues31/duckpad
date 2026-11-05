@@ -1,7 +1,8 @@
 # Python nodes
 
 An administrator enables **Python execution** in project settings. An editor can
-then choose **Python** under **Add to palette**, edit the template and save it.
+then click the **Python** button at the bottom of the palette, edit the template
+and save it.
 Click or drag its new palette entry onto the flow and connect its tabular ports
 to SQL nodes. Each ordinary insertion owns an independent copy of the code;
 **Add linked** creates instances that share the template. Results, parameters,

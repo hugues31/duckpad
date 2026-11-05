@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
-import { Code2, Download, Link, Plus, Search, X } from "lucide-react";
+import { Link, Plus, Search, X } from "lucide-react";
+import AddIcon from "./AddIcon";
 import { NodeIcon } from "./Canvas";
 import { DRAG_TYPE, nodeChoices, type NodeKind } from "./graph";
 import { templateLabel, useT } from "./i18n";
@@ -134,9 +135,6 @@ export default function NodePalette({
         disabled={readOnly}
         aria-label={t("addToPalette")}
       >
-        <span className="palette-actions-label" aria-hidden="true">
-          {t("addToPalette")}
-        </span>
         <div className="palette-actions">
           <button
             className="button secondary small"
@@ -144,7 +142,7 @@ export default function NodePalette({
             aria-label={t("newTemplate")}
             onClick={() => onNewTemplate("sql")}
           >
-            <Code2 size={15} aria-hidden="true" />
+            <AddIcon glyph="duckdb" />
             {t("sql")}
           </button>
           <button
@@ -158,7 +156,7 @@ export default function NodePalette({
             aria-label={t("newPythonTemplate")}
             onClick={() => onNewTemplate("python")}
           >
-            <NodeIcon kind="python" size={15} aria-hidden="true" />
+            <AddIcon glyph="python" />
             {t("python")}
           </button>
           <button
@@ -167,7 +165,7 @@ export default function NodePalette({
             aria-label={t("library")}
             onClick={onLibrary}
           >
-            <Download size={15} aria-hidden="true" />
+            <AddIcon glyph="import" />
             {t("paletteImport")}
           </button>
         </div>

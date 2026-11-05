@@ -14,10 +14,10 @@ or **Add linked**; editing a shared template affects all of its linked nodes in
 that branch. See
 [code ownership](AUTHORING.md#editing-node-code).
 
-To create a reusable definition directly, choose **SQL** under **Add to palette**.
-Edit its SQL and `@label`, then save: the template appears in the palette without
-adding a node to the canvas. Use **Import** beside it to copy a template or
-component from another project.
+To create a reusable definition directly, click the **SQL** button at the bottom
+of the palette. Edit its SQL and `@label`, then save: the template appears in the
+palette without adding a node to the canvas. Use **Import** beside it to copy a
+template or component from another project.
 
 The inspector's **SQL** tab compiles the current configuration without running
 it. After a run, **Results → Log → Executed SQL** shows what actually ran.

@@ -347,13 +347,6 @@ fieldset.palette-bottom {
   margin: 0;
   min-width: 0;
 }
-.palette-actions-label {
-  display: block;
-  margin-bottom: 8px;
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--muted);
-}
 .palette-actions {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
