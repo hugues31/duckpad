@@ -80,7 +80,7 @@ def explain_missing(message):
     """Name the project extension to enable when a node uses a capability of an unloaded extension."""
     return MISSING.sub(
         lambda match: (
-            f"{match[1]}\nEnable the {match[2]} extension in Project settings > Extensions; "
+            f"{match[1]}\nEnable the {match[2]} extension in the Project settings → Extensions section; "
             "an instance administrator may need to import it first."
         ),
         message,
