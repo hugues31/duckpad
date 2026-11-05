@@ -2,7 +2,9 @@
 
 import asyncio
 import json
+from functools import partial
 
+import anyio
 import pytest
 from assistant_model import test_model as deterministic_model
 from fastapi.testclient import TestClient
@@ -447,6 +449,42 @@ def test_stream_waits_for_the_store_outside_the_event_loop(instance):
     events = [json.loads(line) for line in asyncio.run(scenario()).text.splitlines()]
     assert events[-1]["turn"]["status"] == "complete"
     assert events[-1]["turn"]["text"] == "Saved after the lock."
+
+
+def test_cancelled_stream_still_saves_its_turn_behind_a_held_lock(instance):
+    from pydantic_ai.models.function import FunctionModel
+
+    app, client = instance
+    configure(client)
+    _, context = project(client)
+    identity = conversation(client, context)
+    holder = LockHolder(app.state.services.store.lock, timeout=0.5)
+    streaming = asyncio.Event()
+
+    async def endless(messages, info):
+        yield "Partial "
+        streaming.set()
+        await asyncio.sleep(30)
+        yield "never sent"
+
+    app.state.assistant.configuration.model_override = FunctionModel(stream_function=endless)
+    request = {"message": "Explain this flow", "provider": "primary", "model": "test", "context": context}
+
+    async def scenario():
+        headers = {"authorization": "Bearer " + client.cookies["duckpad_session"]}
+        async with asgi_client(app, headers=headers) as http, anyio.create_task_group() as group:
+            send = partial(http.post, f"/api/assistant/conversations/{identity}/messages", json=request)
+            group.start_soon(send)
+            await streaming.wait()
+            holder.acquire()
+            # As a task group does on a client disconnect: every later checkpoint is cancelled too.
+            group.cancel_scope.cancel()
+
+    asyncio.run(scenario())
+    assert holder.released is not None
+    record = app.state.services.store.get("assistant_conversation", identity)
+    assert record["turns"][-1]["status"] == "stopped"
+    assert identity not in app.state.assistant.active
 
 
 def test_streamed_text_rechecks_access_once_per_interval(instance, monkeypatch):

@@ -5,11 +5,11 @@ import json
 import threading
 import time
 from contextlib import suppress
-from functools import partial, wraps
+from functools import wraps
 from weakref import WeakValueDictionary
 
 import anyio
-import anyio.to_thread
+from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, ConfigDict, Field
 from pydantic_ai import (
     Agent,
@@ -104,7 +104,7 @@ async def blocking(function, *args):
     saving its turn, instead of skipping it.
     """
     with anyio.CancelScope(shield=True):
-        return await anyio.to_thread.run_sync(partial(function, *args))
+        return await run_in_threadpool(function, *args)
 
 
 def guarded(function):
