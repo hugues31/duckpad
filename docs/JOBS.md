@@ -17,12 +17,13 @@ Project admins choose **New Job**, then enter a name. Duckpad suggests a permane
 instance-wide slug (lowercase letters, digits and hyphens), which can be edited.
 Choose the environment and version, then search the version's nodes in **Scope**.
 Keep **Whole project** to run everything, or select a node to run its launch scope,
-including upstream dependencies. Projects without tags start with **Branch** as
-the target, so a Job can be created without leaving the form.
+including upstream dependencies. Projects without tags start with **Branch** and
+the main branch, so a Job can be created without leaving the form.
 Choose a tag to pin its current commit, or a branch for acceptance runs that should
 resolve the branch head at each launch. Uncommitted edits are never a Job target.
-After creation, the Job details show a curl API call and a cron example. Use an
-API token with run permission and configure scheduling outside Duckpad.
+After creation, **Run from an API or scheduler** in the Job details shows a curl
+call and a cron example for this server. Use an API token with run permission and
+configure scheduling outside Duckpad.
 
 Run-time variable overrides are not available yet; each run uses the versioned
 `variables.json` values for the selected environment.
