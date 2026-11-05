@@ -34,7 +34,7 @@ export async function projectNavigationFlow(page: Page) {
   const navigation = page.getByRole("navigation", {
     name: en.projectNavigation,
   });
-  await expect(navigation.getByRole("link")).toHaveCount(8);
+  await expect(navigation.getByRole("link")).toHaveCount(7);
   await expect(
     page.getByRole("button", { name: en.run, exact: true }),
   ).toBeVisible();
