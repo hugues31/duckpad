@@ -93,12 +93,11 @@ function ExtensionRequirements() {
   }
 
   return (
-    <section className="full-panel project-extensions-page">
+    <section className="settings-card project-extensions-page">
       <div className="page-heading">
         <div>
-          <span className="eyebrow">{t("extensions")}</span>
-          <h1>{t("projectExtensionsTitle")}</h1>
-          <p>{t("projectExtensionsHint")}</p>
+          <h2>{t("projectExtensionsTitle")}</h2>
+          <p className="muted">{t("projectExtensionsHint")}</p>
         </div>
         <button
           className="button secondary"
