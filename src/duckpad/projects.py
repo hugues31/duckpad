@@ -6,6 +6,7 @@ import io
 import logging
 import shutil
 import tarfile
+import tempfile
 import threading
 import time
 from collections import OrderedDict
@@ -302,14 +303,63 @@ class Projects:
         }
 
     def commit(self, path: str | Path, message: str, *, assistant: str | None = None) -> str:
+        with self._save_transaction(path):
+            return self._commit(path, message, assistant=assistant)
+
+    @contextmanager
+    def _save_transaction(self, path: str | Path) -> Generator[None, None, None]:
+        """Restore files, index and HEAD on failure while the caller holds the repository lock.
+
+        Backups are prepared before changing anything, on each destination's filesystem.
+        Rollback renames them into place rather than writing more data to a possibly full disk.
+        """
+        path = Path(path)
+        worktree = {"path": str(path)}
+        original = self.read_files(worktree)
+        head = self.git(path, "rev-parse", "--verify", "HEAD", check=False)
+        index = Path(self.git(path, "rev-parse", "--absolute-git-dir")) / "index"
+        with (
+            tempfile.TemporaryDirectory(prefix=".duckpad-save-", dir=path) as directory,
+            tempfile.TemporaryDirectory(prefix="duckpad-index-", dir=index.parent) as git_directory,
+        ):
+            backup = Path(directory)
+            for name in original:
+                target = backup / name
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(path / name, target)
+            saved_index = Path(git_directory) / "index"
+            if index.exists():
+                shutil.copy2(index, saved_index)
+            try:
+                yield
+            except Exception:
+                current = self.read_files(worktree)
+                for name in original.keys() | current.keys():
+                    if name not in original:
+                        (path / name).unlink(missing_ok=True)
+                    elif current.get(name) != original[name]:
+                        (backup / name).replace(path / name)
+                # A timeout can arrive after Git has already advanced the branch.
+                latest = self.git(path, "rev-parse", "--verify", "HEAD", check=False)
+                if latest != head:
+                    if head:
+                        self.git(path, "update-ref", "HEAD", head, latest)
+                    else:
+                        self.git(path, "update-ref", "-d", "HEAD", latest)
+                if saved_index.exists():
+                    saved_index.replace(index)
+                else:
+                    index.unlink(missing_ok=True)
+                raise
+
+    def _commit(self, path: str | Path, message: str, *, assistant: str | None = None) -> str:
         tracked = self.git(path, "ls-files").splitlines()
         existing = self.read_files({"path": str(path)})
         head = self.git(path, "rev-parse", "--verify", "HEAD", check=False)
         previous_files = self.revision_files(path, head) if head else {}
         try:
             bundle = files_to_bundle(existing)
-            head = self.git(path, "rev-parse", "--verify", "HEAD", check=False)
-            previous = files_to_bundle(self.revision_files(path, head)) if head else None
+            previous = files_to_bundle(previous_files) if head else None
             if previous is not None:
                 for name in owned_paths(previous) - owned_paths(bundle):
                     if name in existing:
@@ -517,11 +567,14 @@ class Projects:
             if validate:
                 # Problems already saved, such as an input not connected yet, do not block the change.
                 require_valid(merged, "The proposed changes are invalid", baseline=current)
-            # Finalize the independent external save unit before the UI action.
-            if self.git(worktree["path"], "status", "--porcelain"):
-                self.commit(worktree["path"], EXTERNAL_SAVE)
-            self._write_files(worktree, merged, current)
-            self.commit(worktree["path"], message, assistant=assistant)
+            # Check before creating the transaction's untracked backup directory.
+            external = self.git(worktree["path"], "status", "--porcelain")
+            with self._save_transaction(worktree["path"]):
+                # Retain the independent external save unit only if the whole save succeeds.
+                if external:
+                    self._commit(worktree["path"], EXTERNAL_SAVE)
+                self._write_files(worktree, merged, current)
+                self._commit(worktree["path"], message, assistant=assistant)
             self.observed[worktree_id] = self.read_files(worktree)
             self.pending.pop(worktree_id, None)
             self.on_change(worktree_id)
