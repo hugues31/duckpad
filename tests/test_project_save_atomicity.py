@@ -7,17 +7,18 @@ import pytest
 
 from duckpad import projects as project_module
 from duckpad.git.command import GitError, GitTimeout
-from duckpad.projects import EXTERNAL_SAVE, QUIET_PERIOD
+from duckpad.projects import EXTERNAL_SAVE, QUIET_PERIOD, SAVE_BACKUPS
+from duckpad.services import Services
 from duckpad.util import dumps
 
 
-def observe_after_quiet_period(projects, worktree, monkeypatch):
+def observe_after_quiet_period(projects, worktree):
+    """Run the watcher twice, as if the changes it notices had been quiet for QUIET_PERIOD."""
     with projects.locked(worktree["id"]):
         projects._observe(worktree)
-        later = project_module.time.monotonic() + QUIET_PERIOD + 1
-        with monkeypatch.context() as clock:
-            clock.setattr(project_module.time, "monotonic", lambda: later)
-            projects._observe(worktree)
+        if worktree["id"] in projects.pending:
+            projects.pending[worktree["id"]] -= QUIET_PERIOD + 1
+        projects._observe(worktree)
 
 
 @pytest.mark.parametrize("linked", [False, True])
@@ -80,7 +81,7 @@ def test_failed_save_restores_files_index_and_head(services, monkeypatch, linked
     assert index.read_bytes() == original_index
     if staged:
         assert (path / "notes.txt").read_text() == "Staged outside Duckpad"
-    observe_after_quiet_period(projects, worktree, monkeypatch)
+    observe_after_quiet_period(projects, worktree)
     assert projects.git(path, "rev-parse", "HEAD") == before["commit"]
     assert worktree["id"] not in projects.pending
 
@@ -114,7 +115,7 @@ def test_failed_save_keeps_preexisting_external_edits_without_committing_them(se
     assert commits == 2
     assert projects.git(path, "rev-parse", "HEAD") == before["commit"]
     assert projects.read_files(worktree) == existing
-    observe_after_quiet_period(projects, worktree, monkeypatch)
+    observe_after_quiet_period(projects, worktree)
     head = projects.git(path, "rev-parse", "HEAD")
     assert projects.revision_files(path, head) == existing
     assert projects.git(path, "rev-list", "--count", before["commit"] + "..HEAD") == "1"
@@ -144,7 +145,7 @@ def test_partial_disk_write_leaves_no_temporary_files(services, monkeypatch):
     assert writes == 2
     assert projects.read_files(worktree) == before["files"]
     assert projects.git(path, "status", "--porcelain") == ""
-    observe_after_quiet_period(projects, worktree, monkeypatch)
+    observe_after_quiet_period(projects, worktree)
     assert projects.git(path, "rev-parse", "HEAD") == before["commit"]
 
 
@@ -175,3 +176,20 @@ def test_failed_commit_restores_reconciled_documentation_and_owned_code(services
     projects.commit(path, EXTERNAL_SAVE)
     assert "nodes/source.sql" not in projects.read_files(worktree)
     assert "Keep this documentation" not in (path / "documentation.json").read_text()
+
+
+def test_restart_removes_backups_left_by_an_interrupted_save(tmp_path):
+    home = tmp_path / "instance"
+    services = Services.open(home)
+    worktree = services.projects.create("Interrupted save")
+    leftover = Path(worktree["path"]) / (SAVE_BACKUPS + "interrupted")
+    (leftover / "nodes").mkdir(parents=True)
+    (leftover / "nodes" / "source.sql").write_text("SELECT 1 AS value;\n")
+    services.close()
+    services = Services.open(home)
+    try:
+        services.projects.start_watcher()
+        assert not leftover.exists()
+        assert services.projects.git(worktree["path"], "status", "--porcelain") == ""
+    finally:
+        services.close()

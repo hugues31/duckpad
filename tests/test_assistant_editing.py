@@ -9,12 +9,12 @@ from pydantic_ai.models.function import DeltaToolCall, FunctionModel
 from pydantic_ai.models.test import TestModel
 from test_assistant import configure, conversation, dependencies, project, turn
 from test_assistant import instance as instance
+from test_project_save_atomicity import observe_after_quiet_period
 
 from duckpad.assistant.editing import WRITE_TOOLS, NodeEdit, edit_flow
 from duckpad.assistant.runs import RUN_TOOLS
 from duckpad.bundle import bundle_to_files
 from duckpad.git.command import GitTimeout
-from duckpad.projects import QUIET_PERIOD
 from duckpad.util import Problem
 
 SQL = "-- @output result\nSELECT 1 AS value;\n"
@@ -185,10 +185,7 @@ def test_failed_assistant_save_leaves_no_project_change_or_action(instance, monk
     after = projects.snapshot(worktree["id"])
     assert after["commit"] == before["commit"]
     assert after["files"] == before["files"]
-    projects._observe(worktree)
-    if worktree["id"] in projects.pending:
-        projects.pending[worktree["id"]] -= QUIET_PERIOD + 1
-    projects._observe(worktree)
+    observe_after_quiet_period(projects, worktree)
     assert projects.snapshot(worktree["id"])["commit"] == before["commit"]
 
 

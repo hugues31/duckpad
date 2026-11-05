@@ -43,6 +43,8 @@ CACHED_REVISIONS = 256
 # After a restart, the base of a save is searched in this many latest commits of its branch.
 BASE_SEARCH = 32
 EXTERNAL_SAVE = "feat(project): save external changes"
+# A save keeps its backups in an untracked worktree folder named with this prefix.
+SAVE_BACKUPS = ".duckpad-save-"
 OPEN_FAILURE = "Git could not open this branch. It may be checked out outside Duckpad."
 
 
@@ -51,6 +53,27 @@ def decode(name: str, content: bytes) -> str:
         return content.decode("utf-8")
     except UnicodeDecodeError as error:
         raise Problem(f"{name} is not valid UTF-8 text", 422) from error
+
+
+def definition_names(path: Path) -> list[str]:
+    """Root file names, present or not, and the files found in the definition folders."""
+    return [
+        *ROOT_FILES,
+        *(
+            p.relative_to(path).as_posix()
+            for folder, pattern in [
+                ("templates", "*.sql"),
+                ("templates", "*.py"),
+                ("nodes", "*.sql"),
+                ("nodes", "*.py"),
+                ("modules", "**/*.py"),
+                ("components", "*/*.py"),
+                ("components", "*.json"),
+                ("components", "*/*.sql"),
+            ]
+            for p in sorted((path / folder).glob(pattern))
+        ),
+    ]
 
 
 def conflict_view(conflict: Record) -> Record:
@@ -276,21 +299,7 @@ class Projects:
 
     def read_files(self, worktree: Mapping[str, str]) -> Files:
         path = Path(worktree["path"])
-        names = list(ROOT_FILES)
-        names += [
-            p.relative_to(path).as_posix()
-            for folder, pattern in [
-                ("templates", "*.sql"),
-                ("templates", "*.py"),
-                ("nodes", "*.sql"),
-                ("nodes", "*.py"),
-                ("modules", "**/*.py"),
-                ("components", "*/*.py"),
-                ("components", "*.json"),
-                ("components", "*/*.sql"),
-            ]
-            for p in sorted((path / folder).glob(pattern))
-        ]
+        names = definition_names(path)
         if any(
             (path / name).is_symlink() or not (path / name).resolve().is_relative_to(path.resolve())
             for name in names
@@ -314,31 +323,35 @@ class Projects:
         Rollback renames them into place rather than writing more data to a possibly full disk.
         """
         path = Path(path)
-        worktree = {"path": str(path)}
-        original = self.read_files(worktree)
+
+        def present() -> set[str]:
+            return {n for n in definition_names(path) if is_declarative(n) and (path / n).is_file()}
+
+        original = present()
         head = self.git(path, "rev-parse", "--verify", "HEAD", check=False)
         index = Path(self.git(path, "rev-parse", "--absolute-git-dir")) / "index"
         with (
-            tempfile.TemporaryDirectory(prefix=".duckpad-save-", dir=path) as directory,
+            tempfile.TemporaryDirectory(prefix=SAVE_BACKUPS, dir=path) as directory,
             tempfile.TemporaryDirectory(prefix="duckpad-index-", dir=index.parent) as git_directory,
         ):
             backup = Path(directory)
             for name in original:
                 target = backup / name
                 target.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(path / name, target)
+                # Symbolic links, which saves refuse, are kept as links rather than followed.
+                shutil.copy2(path / name, target, follow_symlinks=False)
             saved_index = Path(git_directory) / "index"
             if index.exists():
                 shutil.copy2(index, saved_index)
             try:
                 yield
             except Exception:
-                current = self.read_files(worktree)
-                for name in original.keys() | current.keys():
-                    if name not in original:
-                        (path / name).unlink(missing_ok=True)
-                    elif current.get(name) != original[name]:
-                        (backup / name).replace(path / name)
+                for name in present() - original:
+                    (path / name).unlink(missing_ok=True)
+                for name in original:
+                    target = path / name
+                    if not target.is_file() or target.read_bytes() != (backup / name).read_bytes():
+                        (backup / name).replace(target)
                 # A timeout can arrive after Git has already advanced the branch.
                 latest = self.git(path, "rev-parse", "--verify", "HEAD", check=False)
                 if latest != head:
@@ -767,6 +780,9 @@ class Projects:
             try:
                 if not Path(path).is_dir():
                     raise FileNotFoundError(f"No directory at {path}")
+                # A process stopped during a save leaves its backups behind.
+                for backup in Path(path).glob(SAVE_BACKUPS + "*"):
+                    shutil.rmtree(backup, ignore_errors=True)
                 head = self.git(path, "rev-parse", "HEAD")
                 self.observed[worktree["id"]] = self.revision_files(path, head)
             except (OSError, Problem) as error:
