@@ -144,7 +144,7 @@
   "undeclaredVariableUsed": "{name} est utilisée par {nodes} mais n’est pas déclarée.",
   "declareVariable": "La déclarer",
   "files": "Fichiers du projet",
-  "run": "Exécuter le pipeline",
+  "run": "Tout exécuter",
   "runNode": "Exécuter avec les ancêtres",
   "running": "En cours",
   "stop": "Arrêter l’exécution",
@@ -1371,5 +1371,8 @@
   "monitoringLogSearch": "Rechercher dans les logs",
   "monitoringLogCount": "{shown} sur {matched} résultats · {retained} entrées conservées sur {capacity}",
   "monitoringLogsEmpty": "Aucun log ne correspond à ces filtres.",
-  "monitoringLogTruncated": "Message limité à 4 000 caractères."
+  "monitoringLogTruncated": "Message limité à 4 000 caractères.",
+  "projectNavigation": "Navigation du projet",
+  "partitionSettingsHint": "Configurez les clés de partition, la politique d’exécution et la conservation des aperçus pour la branche sélectionnée.",
+  "partitionRunSelectedAction": "Exécuter les clés sélectionnées"
 }

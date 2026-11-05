@@ -120,7 +120,9 @@ test("worktree URLs restore branch, tab and environment without running a pipeli
     .getByRole("link", { name: "Project settings", exact: true })
     .click();
   await expect(page).toHaveURL(
-    new RegExp(`/projects/${first.project}/settings/participants$`),
+    new RegExp(
+      `/projects/${first.project}/settings/participants\\?worktree=${branch.id}&environment=prod$`,
+    ),
   );
   await page.reload();
   await expect(
@@ -130,7 +132,9 @@ test("worktree URLs restore branch, tab and environment without running a pipeli
   await page.reload();
   await submitLogin(page);
   await expect(page).toHaveURL(
-    new RegExp(`/projects/${first.project}/settings/participants$`),
+    new RegExp(
+      `/projects/${first.project}/settings/participants\\?worktree=${branch.id}&environment=prod$`,
+    ),
   );
   await expect(
     page.getByRole("heading", { name: "Project settings", exact: true }),

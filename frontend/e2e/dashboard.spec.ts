@@ -42,7 +42,7 @@ test("empty dashboard creates and opens a project, then lists it from the Duckpa
     "Dashboard creation",
   );
   await expect(
-    page.getByRole("button", { name: "Run pipeline", exact: true }),
+    page.getByRole("button", { name: "Run all", exact: true }),
   ).toBeVisible();
   await page
     .getByRole("link", { name: "Duckpad — Projects", exact: true })
@@ -56,7 +56,7 @@ test("empty dashboard creates and opens a project, then lists it from the Duckpa
   await expect(page.getByLabel("Active project")).toHaveCount(0);
   await expect(page.getByLabel("Branch", { exact: true })).toHaveCount(0);
   await expect(
-    page.getByRole("button", { name: "Run pipeline", exact: true }),
+    page.getByRole("button", { name: "Run all", exact: true }),
   ).toHaveCount(0);
 });
 
@@ -156,7 +156,7 @@ test("late snapshots cannot replace the project opened from the dashboard", asyn
     .click();
   await expect(page.getByLabel("Active project")).toHaveValue(second.project);
   await expect(
-    page.getByRole("button", { name: "Run pipeline", exact: true }),
+    page.getByRole("button", { name: "Run all", exact: true }),
   ).toBeVisible();
   release();
   await page.unrouteAll({ behavior: "wait" });

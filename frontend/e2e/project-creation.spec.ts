@@ -70,7 +70,7 @@ test("new project offers empty and independent example projects from the dashboa
       response.url().endsWith("/runs") &&
       response.request().method() === "POST",
   );
-  await page.getByRole("button", { name: "Run pipeline", exact: true }).click();
+  await page.getByRole("button", { name: "Run all", exact: true }).click();
   const run = await (await runResponse).json();
   await expect
     .poll(

@@ -3,7 +3,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import {
   PartitionInspector,
-  PartitionSelector,
+  PartitionSettings,
   PartitionStrip,
 } from "./PartitionControls";
 import { partitionMessage } from "./partitions";
@@ -141,6 +141,7 @@ it("saves a dimension only once its value source names a node and a column", () 
   Object.assign(state, {
     snapshot: {
       partitions: { dev: { dimension: null, manifest: null, nodes: {} } },
+      worktree: { branch: "main" },
       parsed_templates: { keys: { outputs: ["result"] } },
       bundle: {
         flow: {
@@ -160,7 +161,7 @@ it("saves a dimension only once its value source names a node and a column", () 
     },
   });
   try {
-    render(<PartitionSelector />);
+    render(<PartitionSettings />);
     fireEvent.click(screen.getByRole("button", { name: "Partition settings" }));
     const save = screen.getByRole("button", { name: "Save changes" });
     expect(save).toHaveProperty("disabled", true);

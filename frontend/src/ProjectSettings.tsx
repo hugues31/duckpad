@@ -5,9 +5,11 @@ import {
   Users,
   Database,
   Code2,
+  Layers,
   Settings as SettingsIcon,
 } from "lucide-react";
-import { NavLink } from "react-router";
+import { NavLink, useLocation } from "react-router";
+import { PartitionSettings } from "./PartitionControls";
 import PythonEnvironmentStatus from "./PythonEnvironmentStatus";
 import SettingsLayout from "./SettingsLayout";
 import { api, send } from "./api";
@@ -47,7 +49,7 @@ const NO_CONNECTIONS: string[] = [];
 const sameConnections = (a: string[], b: string[]) =>
   a.length === b.length && a.every((id) => b.includes(id));
 
-/** A project's participants, authorized connections and deletion. */
+/** Project access, runtime policies, branch partitions and general settings. */
 export default function ProjectSettings({
   project,
   section = "participants",
@@ -62,6 +64,7 @@ export default function ProjectSettings({
   onDeleted: () => void;
 }) {
   const t = useT();
+  const { search } = useLocation();
   const [selectedUser, setSelectedUser] = useState("");
   const [settings, setSettings] = useState<Settings | null>(null);
   const [confirmation, setConfirmation] = useState<Confirmation | null>(null);
@@ -139,10 +142,15 @@ export default function ProjectSettings({
             ["participants", "participants", Users],
             ["connections", "connections", Database],
             ["python", "pythonExecution", Code2],
+            ["partitions", "partitions", Layers],
             ["general", "generalSettings", SettingsIcon],
           ] as const
         ).map(([slug, label, Icon]) => (
-          <NavLink key={slug} to={`/projects/${project}/settings/${slug}`} end>
+          <NavLink
+            key={slug}
+            to={`/projects/${project}/settings/${slug}${search}`}
+            end
+          >
             <Icon size={18} aria-hidden="true" />
             <span>{t(label)}</span>
           </NavLink>
@@ -153,6 +161,7 @@ export default function ProjectSettings({
             {error}
           </div>
         )}
+        {section === "partitions" && <PartitionSettings />}
         {section === "participants" && (
           <>
             <div className="role-guide">

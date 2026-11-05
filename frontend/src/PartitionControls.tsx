@@ -6,6 +6,8 @@ import { Link } from "react-router";
 import { withQuery } from "./api";
 import { useT, useTranslateValue } from "./i18n";
 import { Modal } from "./modals";
+import { projectPageUrl } from "./navigation";
+import { PageLoading, RouteError } from "./pages/PageStates";
 import type {
   PartitionDefinition,
   PartitionEntry,
@@ -24,7 +26,6 @@ export function PartitionSelector() {
   const t = useT();
   const worktree = useOptionalWorktree();
   const [open, setOpen] = useState(false);
-  const [editing, setEditing] = useState(false);
   const root = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   const close = () => {
@@ -50,56 +51,41 @@ export function PartitionSelector() {
     };
   }, [open]);
   const description = worktree?.snapshot?.partitions?.[worktree.environment];
-  if (!worktree?.snapshot) return null;
+  if (!worktree?.snapshot || !description?.dimension) return null;
   return (
     <div className="partition-selector" ref={root}>
       <button
         ref={trigger}
-        className={
-          description?.dimension
-            ? "button secondary small partition-trigger"
-            : "icon"
-        }
-        aria-label={description?.dimension ? undefined : t("partitionSettings")}
-        title={description?.dimension ? undefined : t("partitionSettings")}
+        className="button secondary small partition-trigger"
         aria-expanded={open}
-        onClick={() =>
-          description?.dimension ? setOpen(!open) : setEditing(true)
-        }
+        onClick={() => setOpen(!open)}
       >
-        {description?.dimension ? (
-          <span className="partition-trigger-label">
-            {t("partition")}:{" "}
-            {description.manifest
-              ? worktree.partitionEntry
-                ? String(worktree.partitionEntry.key.value)
-                : t("partitionAll")
-              : t("partitionNotCalculated")}
-          </span>
-        ) : (
-          <Settings2 size={16} />
-        )}
+        <span className="partition-trigger-label">
+          {t("partition")}:{" "}
+          {description.manifest
+            ? worktree.partitionEntry
+              ? String(worktree.partitionEntry.key.value)
+              : t("partitionAll")
+            : t("partitionNotCalculated")}
+        </span>
       </button>
       {open && (
         <div className="partition-menu">
           <PartitionStrip onSelect={close} />
-          <button
+          <Link
             className="button secondary small"
-            onClick={() => {
-              setOpen(false);
-              setEditing(true);
-            }}
+            to={projectPageUrl(
+              worktree.snapshot.worktree.project,
+              "settings/partitions",
+              worktree.id,
+              worktree.environment,
+            )}
           >
             <Settings2 size={14} />
             {t("partitionSettings")}
-          </button>
+          </Link>
         </div>
       )}
-      {editing &&
-        createPortal(
-          <DimensionEditor onClose={() => setEditing(false)} />,
-          document.body,
-        )}
     </div>
   );
 }
@@ -276,6 +262,48 @@ export function PartitionStrip({
         </p>
       )}
     </section>
+  );
+}
+
+/** Partition definitions belong to the working branch, not instance settings. */
+export function PartitionSettings() {
+  const t = useT();
+  const worktree = useOptionalWorktree();
+  const [editing, setEditing] = useState(false);
+  if (worktree?.loadError && !worktree.snapshot) return <RouteError />;
+  if (!worktree?.snapshot) return <PageLoading />;
+  const original = Object.entries(
+    worktree.snapshot.bundle?.flow.partitions || {},
+  )[0];
+  return (
+    <div className="settings-card">
+      <h2>{t("partitions")}</h2>
+      <p className="muted">{t("partitionSettingsHint")}</p>
+      <p>
+        {t("branch")}: <strong>{worktree.snapshot.worktree.branch}</strong>
+      </p>
+      {original && (
+        <p>
+          {t("partitionDimension")}: <strong>{original[0]}</strong>
+        </p>
+      )}
+      <button
+        className="button secondary"
+        disabled={!worktree.snapshot.bundle}
+        onClick={() => setEditing(true)}
+      >
+        <Settings2 size={16} />
+        {t("partitionSettings")}
+      </button>
+      {editing &&
+        createPortal(
+          <DimensionEditor
+            key={worktree.id}
+            onClose={() => setEditing(false)}
+          />,
+          document.body,
+        )}
+    </div>
   );
 }
 

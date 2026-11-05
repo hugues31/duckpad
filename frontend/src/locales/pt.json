@@ -144,7 +144,7 @@
   "undeclaredVariableUsed": "{name} é usada por {nodes}, mas não está declarada.",
   "declareVariable": "Declarar",
   "files": "Arquivos do projeto",
-  "run": "Executar pipeline",
+  "run": "Executar tudo",
   "runNode": "Executar com ancestrais",
   "running": "Em execução",
   "stop": "Interromper execução",
@@ -1371,5 +1371,8 @@
   "monitoringLogSearch": "Pesquisar registos",
   "monitoringLogCount": "{shown} de {matched} resultados · {retained} de {capacity} registos retidos",
   "monitoringLogsEmpty": "Nenhum registo corresponde a estes filtros.",
-  "monitoringLogTruncated": "Mensagem limitada a 4 000 caracteres."
+  "monitoringLogTruncated": "Mensagem limitada a 4 000 caracteres.",
+  "projectNavigation": "Navegação do projeto",
+  "partitionSettingsHint": "Configure as chaves de partição, a política de execução e a retenção das prévias para o ramo selecionado.",
+  "partitionRunSelectedAction": "Executar as chaves selecionadas"
 }

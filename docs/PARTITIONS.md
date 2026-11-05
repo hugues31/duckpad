@@ -8,7 +8,7 @@ Downstream nodes inherit that key. Shared lookups run once.
 
 ## Configure a dimension
 
-Open **Partition settings** from its toolbar icon, or **Partition → Partition settings** to choose the control node, output, key
+Open **Project settings → Partitions → Partition settings** to choose the control node, output, key
 column, type and optional attribute columns. The control output is read in full
 at launch; null or duplicate keys and incompatible types stop partition consumers.
 Use text for numeric identifiers that cannot round-trip exactly through a browser.
@@ -103,7 +103,7 @@ The preview budget is shown in MiB (1 MiB = 1,048,576 bytes).
 
 ## Launch and retry
 
-**Run pipeline** recalculates the list and runs every key. The arrow beside it opens **Run with options…**, which
+**Run all** recalculates the list and runs every key. The arrow beside it opens **Run with options…**, which
 offers **Failed**, **Missing** and **Selected keys**, plus a parallelism limit and
 failure policy for this run. Targeted node runs reuse the retained list, or calculate
 it first when none exists yet; selecting a key before running a node limits that

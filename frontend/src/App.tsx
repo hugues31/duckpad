@@ -35,6 +35,7 @@ import { useSearchShortcut } from "./searchShortcuts";
 import { ShellContext, type Shell } from "./shell";
 import { Toast, useToast } from "./Toast";
 import TopBar from "./TopBar";
+import ProjectTabs from "./ProjectTabs";
 import type { Workspace } from "./types";
 import { usePolling } from "./usePolling";
 import { usePanelVisibility } from "./WorkspacePanels";
@@ -158,19 +159,26 @@ function SignedIn({
     requestedEnvironment && environments.includes(requestedEnvironment)
       ? requestedEnvironment
       : environments[0] || "";
-  // The Pipelines link returns to the branch opened last, or to the main
-  // branch of a project whose settings are open and whose branches were not.
+  // Project tabs carry their branch in the URL; other pages return to the
+  // last open pipeline. A project link without branch context uses main.
   const [lastWorktree, setLastWorktree] = useState("");
   if (worktree && worktree !== lastWorktree) setLastWorktree(worktree);
   const last = workspace?.worktrees.find((w) => w.id === lastWorktree);
   const settingsProject =
-    route.area === "projectSettings"
+    route.area === "projectSettings" || route.area === "jobs"
       ? workspace?.projects.find((p) => p.id === route.projectId)
       : undefined;
-  const pipeline =
-    settingsProject && last?.project !== settingsProject.id
-      ? settingsProject.main
-      : last?.id;
+  const requestedWorktree = new URLSearchParams(location.search).get(
+    "worktree",
+  );
+  const contextWorktree = settingsProject
+    ? workspace?.worktrees.find(
+        (w) => w.id === requestedWorktree && w.project === settingsProject.id,
+      )?.id || settingsProject.main
+    : "";
+  const pipeline = contextWorktree || last?.id;
+  const partitionSettings =
+    route.area === "projectSettings" && route.section === "partitions";
   const openSearch = useCallback(() => setSearchOpen(true), []);
   useSearchShortcut(workspace ? "k" : undefined, openSearch);
   const closeModal = useCallback(() => setModal(null), []);
@@ -235,7 +243,9 @@ function SignedIn({
   };
   return (
     <ShellContext.Provider value={shell}>
-      <WorktreeProvider worktree={worktree}>
+      <WorktreeProvider
+        worktree={worktree || (partitionSettings ? contextWorktree : "")}
+      >
         <div className="app-shell">
           <div className="workspace-shell">
             <TopBar
@@ -253,6 +263,15 @@ function SignedIn({
                 environment={environment}
                 onClose={() => setSearchOpen(false)}
               />
+            )}
+            {settingsProject && contextWorktree && (
+              <div className="flow-toolbar">
+                <ProjectTabs
+                  project={settingsProject.id}
+                  worktree={contextWorktree}
+                  environment={environment}
+                />
+              </div>
             )}
             {workspace ? <Outlet /> : <PageLoading />}
           </div>

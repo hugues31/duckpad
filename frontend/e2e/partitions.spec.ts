@@ -31,7 +31,7 @@ test("inspect retained keys, unavailable previews and global collectors without 
   await expect(panel).toContainText(
     "The partition key list is not calculated yet.",
   );
-  await page.getByRole("button", { name: "Run pipeline", exact: true }).click();
+  await page.getByRole("button", { name: "Run all", exact: true }).click();
   await expect
     .poll(
       async () =>
@@ -138,7 +138,7 @@ test("inspect retained keys, unavailable previews and global collectors without 
       response.request().method() === "POST",
   );
   await options
-    .getByRole("button", { name: "Run pipeline", exact: true })
+    .getByRole("button", { name: "Run selected keys", exact: true })
     .click();
   const launchResponse = await launching;
   expect(launchResponse.ok()).toBeTruthy();
@@ -263,7 +263,7 @@ test("partition controls fit a laptop, preserve selection and explain failed key
   await page.goto(
     `/worktrees/${created.id}/flow?environment=dev&node=transform`,
   );
-  const run = page.getByRole("button", { name: "Run pipeline", exact: true });
+  const run = page.getByRole("button", { name: "Run all", exact: true });
   const bounds = await run.boundingBox();
   expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(1366);
   await run.click();
@@ -307,6 +307,9 @@ test("partition controls fit a laptop, preserve selection and explain failed key
     .getByRole("button", { name: "Partition: batch-011", exact: true })
     .click();
   await page
+    .getByRole("link", { name: "Partition settings", exact: true })
+    .click();
+  await page
     .getByRole("button", { name: "Partition settings", exact: true })
     .click();
   const settings = page.getByRole("dialog", { name: "Partition settings" });
@@ -319,6 +322,7 @@ test("partition controls fit a laptop, preserve selection and explain failed key
   ).toHaveValue("batch");
   await expect(settings.getByLabel("Preview budget (MiB)")).toHaveValue("1024");
   await settings.getByRole("button", { name: "Cancel", exact: true }).click();
+  await page.goBack();
   await run.click();
   await expect
     .poll(

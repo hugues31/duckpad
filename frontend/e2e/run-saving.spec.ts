@@ -95,7 +95,7 @@ for (const entry of [
       );
       const button =
         entry === "pipeline"
-          ? page.getByRole("button", { name: "Run pipeline", exact: true })
+          ? page.getByRole("button", { name: "Run all", exact: true })
           : page
               .locator(
                 entry === "inspector"
@@ -146,7 +146,7 @@ for (const node of [false, true]) {
       await (
         node
           ? page.locator(".inspector .run-node")
-          : page.getByRole("button", { name: "Run pipeline", exact: true })
+          : page.getByRole("button", { name: "Run all", exact: true })
       ).click();
       const dialog = page.getByRole("dialog", {
         name: "Confirm execution",
@@ -160,7 +160,7 @@ for (const node of [false, true]) {
         dialog.getByRole("button", { name: "Loading…", exact: true }),
       ).toBeDisabled();
       await expect(
-        page.getByRole("button", { name: "Run pipeline", exact: true }),
+        page.getByRole("button", { name: "Run all", exact: true }),
       ).toHaveAttribute("aria-busy", "true");
       gate.release();
       const response = await launched;
@@ -201,7 +201,7 @@ for (const [environment, status] of [
     try {
       await bindStatus(page);
       const button = page.getByRole("button", {
-        name: "Run pipeline",
+        name: "Run all",
         exact: true,
       });
       await button.click();
@@ -256,7 +256,7 @@ test("Run persists unsaved Code edits before launching", async ({ page }) => {
     "Unsaved changes",
   );
   const launched = runResponse(page, endpoint);
-  await page.getByRole("button", { name: "Run pipeline", exact: true }).click();
+  await page.getByRole("button", { name: "Run all", exact: true }).click();
   const response = await launched;
   expect(response.ok()).toBeTruthy();
   await expectNewBinding(page, (await response.json()).id);

@@ -58,7 +58,7 @@ SELECT * FROM (VALUES
 ) AS sample(order_id, region, status, amount);
 ```
 
-Choose **Save changes**, then **Run pipeline**. Select the node: its **Data** tab
+Choose **Save changes**, then **Run all**. Select the node: its **Data** tab
 under the canvas shows all four orders.
 
 `-- @output orders` names the table it publishes. The rest is DuckDB SQL, ending

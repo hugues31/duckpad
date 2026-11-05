@@ -118,7 +118,7 @@ async function run(page: Page) {
   const response = page.waitForResponse(
     (r) => r.url().endsWith("/runs") && r.request().method() === "POST",
   );
-  await page.getByRole("button", { name: "Run pipeline", exact: true }).click();
+  await page.getByRole("button", { name: "Run all", exact: true }).click();
   const result = await response;
   expect(result.ok()).toBeTruthy();
   const execution = await result.json();
@@ -479,7 +479,7 @@ test("capture project variables, a parameter binding and a run confirmation", as
   ).toBeVisible();
 
   await page.getByLabel("Environment", { exact: true }).selectOption("prod");
-  await page.getByRole("button", { name: "Run pipeline", exact: true }).click();
+  await page.getByRole("button", { name: "Run all", exact: true }).click();
   const confirmation = page.getByRole("dialog", { name: "Confirm execution" });
   await expect(
     confirmation.getByRole("row").filter({ hasText: "order_status" }),

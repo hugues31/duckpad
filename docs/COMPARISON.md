@@ -21,7 +21,7 @@ feature coverage differ.
 | [Data test](TESTS.md) | Data quality rule | Test tool |
 | [Component](COMPONENTS.md) | [Application-as-recipe](https://doc.dataiku.com/dss/latest/applications/application-as-recipe.html) | [Standard macro](https://help.alteryx.com/designer/current/en/apps-and-macros/macros.html) |
 | [Project variable](VARIABLES.md) | [Project variable](https://doc.dataiku.com/dss/latest/scenarios/variables.html#variables-scope) | [User constant](https://help.alteryx.com/designer/current/en/tools/preparation/formula-tool/constants.html) |
-| [Run pipeline](WORKSPACE.md#save-and-run) | Build (job) | Run workflow |
+| [Run all](WORKSPACE.md#save-and-run) | Build (job) | Run workflow |
 | [Results panel](RESULTS.md) | Dataset Explore tab | Results window / Browse tool |
 
 Duckpad exposes tables on node outputs; Dataiku shows datasets as separate Flow

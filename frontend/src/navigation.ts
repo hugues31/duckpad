@@ -62,4 +62,15 @@ export function worktreeUrl(
 export const projectSettingsUrl = (project: string, section?: string) =>
   `/projects/${encodeURIComponent(project)}/settings${section ? `/${section}` : ""}`;
 
+/** Project pages carry branch context without changing their project-wide scope. */
+export function projectPageUrl(
+  project: string,
+  page: string,
+  worktree: string,
+  environment: string,
+) {
+  const query = new URLSearchParams({ worktree, environment });
+  return `/projects/${encodeURIComponent(project)}/${page}?${query}`;
+}
+
 export const SSO_RETURN_KEY = "duckpad-sign-in-return";

@@ -1,5 +1,5 @@
 import type { PartitionLaunchOptions } from "./partitions";
-import { PartitionRunSummary } from "./PartitionRunMenu";
+import { PartitionRunSummary, partitionRunLabels } from "./PartitionRunMenu";
 import ConvertNodeDialog from "./ConvertNodeDialog";
 import { nodeCode, nodeCodePath, nodeGraph } from "./nodeCode";
 import { useRef, useState } from "react";
@@ -245,7 +245,8 @@ function WorktreeDialog({
           <p>{t("confirmRunHint")}</p>
           <p>
             {snapshot.bundle?.flow.name || ""} · {snapshot.worktree.branch} ·{" "}
-            {modal.node || t("run")}
+            {modal.node ||
+              t(partitionRunLabels[modal.options?.partitions?.mode || "all"])}
           </p>
           <PartitionRunSummary options={modal.options} node={modal.node} />
           <ScopeVariables

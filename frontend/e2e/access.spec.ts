@@ -72,7 +72,7 @@ test("manage instance accounts, project participants and live reader access", as
     })
     .click();
   await expect(
-    readerPage.getByRole("button", { name: "Run pipeline", exact: true }),
+    readerPage.getByRole("button", { name: "Run all", exact: true }),
   ).toBeDisabled();
   await expect(
     readerPage.getByRole("button", { name: "New working branch", exact: true }),
@@ -103,7 +103,7 @@ test("manage instance accounts, project participants and live reader access", as
     .getByLabel(`Project role · ${username}`, { exact: true })
     .selectOption("editor");
   await expect(
-    readerPage.getByRole("button", { name: "Run pipeline", exact: true }),
+    readerPage.getByRole("button", { name: "Run all", exact: true }),
   ).toBeEnabled();
   await page
     .getByRole("row")

@@ -144,7 +144,7 @@
   "undeclaredVariableUsed": "{name} is used by {nodes} but is not declared.",
   "declareVariable": "Declare it",
   "files": "Project files",
-  "run": "Run pipeline",
+  "run": "Run all",
   "runNode": "Run with ancestors",
   "running": "Running",
   "stop": "Stop execution",
@@ -1371,5 +1371,8 @@
   "monitoringLogSearch": "Search logs",
   "monitoringLogCount": "{shown} of {matched} matches · {retained} of {capacity} entries retained",
   "monitoringLogsEmpty": "No logs match these filters.",
-  "monitoringLogTruncated": "Message shortened to 4,000 characters."
+  "monitoringLogTruncated": "Message shortened to 4,000 characters.",
+  "projectNavigation": "Project navigation",
+  "partitionSettingsHint": "Configure the partition keys, execution policy and preview retention for the selected branch.",
+  "partitionRunSelectedAction": "Run selected keys"
 }
