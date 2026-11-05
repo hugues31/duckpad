@@ -127,7 +127,8 @@ export function WorktreeProvider({
   const pendingWrites = useRef(new Set<Promise<Snapshot>>());
   // The commits of the session's saves by working branch, which undo reverts.
   const histories = useRef(new Map<string, History>());
-  const reverting = useRef(false);
+  // Undos and redos run one after another, each on the history the last one left.
+  const reverts = useRef<Promise<unknown>>(Promise.resolve());
   const [starting, setStarting] = useState(false);
   const launching = useRef(false);
   const [gitVersion, setGitVersion] = useState(0);
@@ -243,34 +244,35 @@ export function WorktreeProvider({
     return entry;
   };
 
-  async function revert(direction: keyof History, change?: string) {
-    if (!canEdit || reverting.current) return false;
-    reverting.current = true;
+  async function revertNow(direction: keyof History, change?: string) {
+    if (!canEdit) return false;
+    // Pending edits are saved first, so they are the latest change.
+    await flush();
+    await drafts.persist();
+    await flush();
+    const commits = history(id)[direction];
+    const index = change ? commits.lastIndexOf(change) : commits.length - 1;
+    if (index < 0) return false;
+    const [commit] = commits.splice(index, 1);
     try {
-      // Pending edits are saved first, so they are the latest change.
-      await flush();
-      await drafts.persist();
-      await flush();
-      const commits = history(id)[direction];
-      const index = change ? commits.lastIndexOf(change) : commits.length - 1;
-      if (index < 0) return false;
-      const [commit] = commits.splice(index, 1);
-      try {
-        const result = await write(id, () =>
-          api<Snapshot>(`/worktrees/${id}/revert`, send({ commit })),
-        );
-        if (result.change)
-          history(id)[direction === "undo" ? "redo" : "undo"].push(
-            result.change,
-          );
-        return true;
-      } catch (error) {
-        commits.splice(index, 0, commit);
-        throw error;
-      }
-    } finally {
-      reverting.current = false;
+      const result = await write(id, () =>
+        api<Snapshot>(`/worktrees/${id}/revert`, send({ commit })),
+      );
+      if (result.change)
+        history(id)[direction === "undo" ? "redo" : "undo"].push(result.change);
+      return true;
+    } catch (error) {
+      commits.splice(index, 0, commit);
+      throw error;
     }
+  }
+
+  function revert(direction: keyof History, change?: string) {
+    const next = reverts.current
+      .catch(() => undefined)
+      .then(() => revertNow(direction, change));
+    reverts.current = next;
+    return next;
   }
 
   async function flush() {
