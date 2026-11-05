@@ -1,5 +1,6 @@
 """Durable chat action receipts and three-way inverses of their exact Git changes."""
 
+from contextlib import nullcontext
 from difflib import unified_diff
 
 from pydantic import BaseModel, ConfigDict
@@ -62,7 +63,7 @@ class Actions:
 
     def apply(self, deps, identity, turn, tool_id, base, files, details):
         assistant = self.assistant
-        with assistant.lock, self.projects.locked(deps.context["worktree"]):
+        with assistant.lock(identity), self.projects.locked(deps.context["worktree"]):
             user, _ = deps.check(write=True)
             assistant.owned(user, identity)
             cancellation = assistant.active.get(identity)
@@ -99,7 +100,7 @@ class Actions:
 
     def undo(self, user, identity, data):
         assistant = self.assistant
-        with assistant.lock:
+        with assistant.lock(identity):
             record = assistant.owned(user, identity)
             context = validate_context(assistant.services, user, data.context)
             if any(record[k] != context[k] for k in ("project", "worktree", "branch")):
@@ -153,9 +154,10 @@ class Actions:
     def resolve(self, user, conflict_id, choice, files):
         """The usual conflict UI also finalizes the associated action receipt."""
         assistant = self.assistant
-        with assistant.lock:
-            conflict = self.projects.conflict(conflict_id)
-            link = conflict.get("assistant_action")
+        conflict = self.projects.conflict(conflict_id)
+        link = conflict.get("assistant_action")
+        # Other conflicts take no conversation lock.
+        with assistant.lock(link["conversation"]) if link else nullcontext():
             if link and link["conversation"] in assistant.active:
                 raise Problem("Wait for the assistant response before resolving its conflict", 409)
             assistant.services.engine.access.worktree(user, conflict["worktree"], "editor")

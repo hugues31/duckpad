@@ -1,10 +1,15 @@
 """Assistant save units, attribution, permission boundaries and durable inverse merges."""
 
+import asyncio
 import json
+import threading
+import time
 from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
+from helpers import asgi_client, assert_responsive
+from pydantic_ai.messages import ToolReturnPart, UserPromptPart
 from pydantic_ai.models.function import DeltaToolCall, FunctionModel
 from pydantic_ai.models.test import TestModel
 from test_assistant import configure, conversation, dependencies, project, turn
@@ -151,6 +156,62 @@ def test_each_write_is_one_attributed_commit_and_can_be_undone(instance, name, a
     head = projects.snapshot(worktree["id"])["commit"]
     undo(client, identity, resumed, context)
     assert projects.snapshot(worktree["id"])["commit"] == head
+
+
+def test_a_project_write_never_delays_other_conversations(instance, monkeypatch):
+    app, client = instance
+    worktree, context = seed(app, client)
+    projects = app.state.services.projects
+    save, writing, proceed = projects.write, threading.Event(), threading.Event()
+    released = None
+    changed = "-- @output result\nSELECT 2 AS value;\n"
+
+    def slow(*args, **kwargs):
+        # The writing conversation holds its lock, and the repository's, meanwhile.
+        nonlocal released
+        writing.set()
+        proceed.wait(5)
+        released = time.monotonic()
+        return save(*args, **kwargs)
+
+    async def stream(messages, info):
+        prompts = [p.content for m in messages for p in m.parts if isinstance(p, UserPromptPart)]
+        if "Change the first node" in prompts and not any(
+            isinstance(p, ToolReturnPart) for p in messages[-1].parts
+        ):
+            args = json.dumps({"node": "first", "sql": changed})
+            yield {0: DeltaToolCall(name="write_sql", json_args=args, tool_call_id="edit")}
+        else:
+            yield "Done."
+
+    monkeypatch.setattr(projects, "write", slow)
+    app.state.assistant.configuration.model_override = FunctionModel(stream_function=stream)
+    writer, reader = conversation(client, context), conversation(client, context)
+
+    async def scenario():
+        headers = {"authorization": "Bearer " + client.cookies["duckpad_session"]}
+        async with asgi_client(app, headers=headers) as http:
+
+            def send(identity, message):
+                return http.post(
+                    f"/api/assistant/conversations/{identity}/messages",
+                    json={"message": message, "provider": "primary", "model": "test", "context": context},
+                )
+
+            edit = asyncio.create_task(send(writer, "Change the first node"))
+            assert await asyncio.to_thread(writing.wait, 5)
+            try:
+                other = await send(reader, "Explain this flow")
+                assert released is None, "The other conversation waited for the write"
+                await assert_responsive(lambda: released is None)
+            finally:
+                proceed.set()
+            return other, await edit
+
+    other, edit = (json.loads(r.text.splitlines()[-1])["turn"] for r in asyncio.run(scenario()))
+    assert other["status"] == "complete" and other["text"] == "Done."
+    assert edit["status"] == "complete" and edit["tools"][0]["action"]["status"] == "applied"
+    assert projects.snapshot(worktree["id"])["files"]["nodes/first.sql"] == changed
 
 
 @pytest.mark.parametrize("failure", ["index_lock", "timeout"])

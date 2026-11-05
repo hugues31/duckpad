@@ -45,7 +45,9 @@ class Approvals:
         from .service import TurnRequest
 
         assistant = self.assistant
-        with assistant.lock, assistant.store.transaction():
+        # The conversation lock serializes this decision; a Store transaction would also hold the
+        # Store lock while `prepare` reads the branch with Git.
+        with assistant.lock(identity):
             record = assistant.owned(user, identity)
             if identity in assistant.active:
                 raise Problem("A response is already in progress", 409)
@@ -95,7 +97,11 @@ class Approvals:
         if not card or card.get("approval", {}).get("decision") is not True or card.get("consumed"):
             raise Problem("Explicit run approval is required", 403)
         services = deps.services
-        with self.assistant.lock, services.projects.locked(deps.context["worktree"]), services.engine.lock:
+        with (
+            self.assistant.lock(identity),
+            services.projects.locked(deps.context["worktree"]),
+            services.engine.lock,
+        ):
             user, _ = deps.check(write=True)
             self.assistant.owned(user, identity)
             cancellation = self.assistant.active.get(identity)

@@ -1,6 +1,7 @@
 """Authenticated assistant endpoints; the application middleware validates every session."""
 
 from fastapi import APIRouter, Query, Request
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import StreamingResponse
 from starlette.background import BackgroundTask
 
@@ -43,7 +44,7 @@ def router(assistant: Assistant):
     async def discover(request: Request, provider: ProviderSettings):
         """List the models of unsaved provider settings, reusing the saved key when allowed."""
         assistant.services.engine.access.instance_admin(request.state.user)
-        return await configuration.discover(configuration.draft(provider))
+        return await configuration.discover(await run_in_threadpool(configuration.draft, provider))
 
     @routes.get("/conversations")
     def conversations(request: Request, offset: int = Query(default=0, ge=0)):
