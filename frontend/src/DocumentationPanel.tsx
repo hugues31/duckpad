@@ -10,11 +10,11 @@ export default function DocumentationPanel({
   readOnly = false,
   snapshot,
   onSave,
-  statuses = { nodes: {}, active: null },
+  statuses,
 }: {
   readOnly?: boolean;
   snapshot: Snapshot;
-  statuses?: Statuses;
+  statuses: Statuses;
   /** Save the text on top of the given revision; resolve to the saved snapshot. */
   onSave: (text: string, base: Snapshot) => Promise<Snapshot>;
 }) {

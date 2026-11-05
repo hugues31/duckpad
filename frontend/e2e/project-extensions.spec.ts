@@ -10,7 +10,9 @@ async function project(page: Page) {
   });
   expect(result.ok()).toBeTruthy();
   const worktree = await result.json();
-  await page.goto(`/worktrees/${worktree.id}/extensions`);
+  await page.goto(
+    `/projects/${worktree.project}/settings/extensions?worktree=${worktree.id}&environment=dev`,
+  );
   await expect(page).toHaveURL(/\/settings\/extensions/);
   await expect(
     page
@@ -36,10 +38,48 @@ async function add(page: Page, name: string, source: string) {
   return page.getByRole("article", { name, exact: true });
 }
 
+test("extension settings switch branches and environments without losing their context", async ({
+  page,
+}) => {
+  const main = await project(page);
+  const response = await page.request.post(`/api/worktrees/${main}/branches`, {
+    data: { name: "feature/extensions" },
+  });
+  expect(response.ok()).toBeTruthy();
+  const branch = await response.json();
+  await page.goto(
+    `/projects/${branch.project}/settings/extensions?worktree=${branch.id}&environment=prod`,
+  );
+  const branchPicker = page.getByLabel("Branch", { exact: true });
+  const environment = page.getByLabel("Environment", { exact: true });
+  await expect(branchPicker).toHaveValue(branch.id);
+  await expect(environment).toHaveValue("prod");
+  const json = await add(page, "json", "core");
+  await json
+    .getByRole("checkbox", { name: "Activate for this project" })
+    .check();
+  await expect(json.getByRole("status")).toHaveText("Active for this project");
+  await branchPicker.selectOption(main);
+  await expect(page).toHaveURL(
+    new RegExp(`/settings/extensions\\?worktree=${main}&environment=prod$`),
+  );
+  await expect(json).toHaveCount(0);
+  await branchPicker.selectOption(branch.id);
+  await expect(json.getByRole("status")).toHaveText("Active for this project");
+  await page.reload();
+  await expect(branchPicker).toHaveValue(branch.id);
+  await environment.selectOption("dev");
+  await expect(page).toHaveURL(
+    new RegExp(`/settings/extensions\\?worktree=${branch.id}&environment=dev$`),
+  );
+  await expect(json.getByRole("status")).toHaveText("Active for this project");
+});
+
 test("project extensions distinguish missing imports, check loading and persist activation", async ({
   page,
 }) => {
   const identity = await project(page);
+  const settingsUrl = page.url();
   const missing = await add(page, "missing_capability", "community");
   await expect(missing.getByRole("status")).toHaveText("Import required");
   const unavailable = missing.getByRole("checkbox", {
@@ -64,7 +104,7 @@ test("project extensions distinguish missing imports, check loading and persist 
   await expect(
     page.getByLabel("Extension source", { exact: true }),
   ).toHaveValue("community");
-  await page.goto(`/worktrees/${identity}/extensions`);
+  await page.goto(settingsUrl);
   const json = await add(page, "json", "core");
   await expect(json.getByRole("status")).toHaveText("Ready to activate");
   const activation = json.getByRole("checkbox", {
@@ -210,6 +250,7 @@ test("a downloaded community binary is imported and activated without a connecti
     "Set DUCKPAD_TEST_STATRS_BINARY to a compatible downloaded binary for the integration check",
   );
   const identity = await project(page);
+  const settingsUrl = page.url();
   const stats = await add(page, "duckfn_statrs", "community");
   await stats.getByRole("link", { name: "Open instance import" }).click();
   await page
@@ -219,7 +260,7 @@ test("a downloaded community binary is imported and activated without a connecti
     .getByRole("button", { name: "Import extension", exact: true })
     .click();
   await expect(page.getByRole("status")).toContainText("Extension imported");
-  await page.goto(`/worktrees/${identity}/extensions`);
+  await page.goto(settingsUrl);
   await stats
     .getByRole("checkbox", { name: "Activate for this project", exact: true })
     .click();

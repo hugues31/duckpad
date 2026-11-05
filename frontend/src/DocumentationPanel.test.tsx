@@ -38,7 +38,11 @@ const snapshot = {
 
 it("renders Markdown safely and keeps generated reference read only", () => {
   const { container } = render(
-    <DocumentationPanel snapshot={snapshot} onSave={vi.fn()} />,
+    <DocumentationPanel
+      snapshot={snapshot}
+      statuses={{ nodes: {}, active: null }}
+      onSave={vi.fn()}
+    />,
   );
   fireEvent.click(screen.getByRole("button", { name: "Markdown preview" }));
   expect(screen.getByRole("heading", { name: "Revenue guide" })).toBeTruthy();

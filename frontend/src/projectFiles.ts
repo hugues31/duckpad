@@ -1,3 +1,8 @@
+import { displayNodeName, type NodeNames } from "./nodeNames";
+import type { Translate } from "./i18n";
+import { nodeLocation, nodeSourcePath } from "./nodeCode";
+import type { Snapshot } from "./types";
+
 export function projectFileLanguage(path: string): string {
   if (path.endsWith(".py")) return "python";
   if (path === "uv.lock") return "ini";
@@ -7,11 +12,6 @@ export function projectFileLanguage(path: string): string {
   if (path.endsWith(".toml")) return "ini";
   return "json";
 }
-import { displayNodeName, type NodeNames } from "./nodeNames";
-import type { Translate } from "./i18n";
-import { nodeLocation, nodeSourcePath } from "./nodeCode";
-import type { Snapshot } from "./types";
-
 export function initialProjectFile(snapshot: Snapshot, selectedNode: string) {
   const location =
     snapshot.bundle &&

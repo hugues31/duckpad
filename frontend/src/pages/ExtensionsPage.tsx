@@ -1,7 +1,6 @@
 import { Download, FlaskConical, Trash2, Upload } from "lucide-react";
 import { useState } from "react";
-import { Link, Navigate, useSearchParams } from "react-router";
-import { projectPageUrl } from "../navigation";
+import { Link, useSearchParams } from "react-router";
 import { api, send } from "../api";
 import ExtensionCatalog, { ExtensionAvailability } from "../ExtensionCatalog";
 import {
@@ -35,22 +34,6 @@ export default function ExtensionsPage() {
   const { snapshot, loadError } = useWorktree();
   if (!snapshot) return loadError ? <RouteError /> : <PageLoading />;
   return <ExtensionRequirements />;
-}
-
-/** Keep existing bookmarks working after moving extensions into project settings. */
-export function LegacyExtensionsPage() {
-  const { id, snapshot, environment } = useLoadedWorktree();
-  return (
-    <Navigate
-      replace
-      to={projectPageUrl(
-        snapshot.worktree.project,
-        "settings/extensions",
-        id,
-        environment,
-      )}
-    />
-  );
 }
 
 function ExtensionRequirements() {

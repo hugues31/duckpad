@@ -53,13 +53,7 @@ export default function ProjectTabs({
       className="tabs main-tabs"
       aria-label={t("projectNavigation")}
     >
-      {(
-        [
-          ...workspaceTabs.filter((tab) => tab !== "extensions"),
-          "jobs",
-          "projectSettings",
-        ] as const
-      ).map((tab) => {
+      {([...workspaceTabs, "jobs", "projectSettings"] as const).map((tab) => {
         const Icon = icons[tab];
         return (
           <Link

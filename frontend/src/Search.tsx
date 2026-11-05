@@ -192,12 +192,12 @@ interface SearchResponse {
 
 export default function InstanceSearch({
   workspace,
-  currentWorktree = "",
+  currentWorktree,
   environment,
   onClose,
 }: {
   workspace: Workspace;
-  currentWorktree?: string;
+  currentWorktree: string;
   environment: string;
   onClose: () => void;
 }) {

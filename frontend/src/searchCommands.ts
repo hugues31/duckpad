@@ -61,14 +61,7 @@ export function searchCommands(
       `tab:${tab}`,
       t(tab),
       project.name,
-      tab === "extensions"
-        ? projectPageUrl(
-            project.id,
-            "settings/extensions",
-            tree.id,
-            environment,
-          )
-        : worktreeUrl(tree.id, tab, environment),
+      worktreeUrl(tree.id, tab, environment),
     );
   add(
     "jobs",
@@ -87,6 +80,7 @@ export function searchCommands(
     ["connections", "connections"],
     ["python", "pythonExecution"],
     ["partitions", "partitions"],
+    ["extensions", "extensions"],
     ["general", "generalSettings"],
   ] as const)
     add(

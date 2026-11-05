@@ -21,13 +21,13 @@ export default function CodePanel({
   hidden,
   readOnly,
   snapshot,
-  selectedNode = "",
+  selectedNode,
   onSave,
 }: {
   hidden: boolean;
   readOnly: boolean;
   snapshot: Snapshot;
-  selectedNode?: string;
+  selectedNode: string;
   /** Save the files on top of the given revision; resolve to the saved snapshot. */
   onSave: (files: Files, base: Snapshot) => Promise<Snapshot>;
 }) {

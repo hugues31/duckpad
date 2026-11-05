@@ -94,16 +94,20 @@ test("command search runs the project and navigates project and settings destina
     .getByRole("option", { name: "Variables Commands workspace", exact: true })
     .click();
   await expect(page).toHaveURL(/\/variables/);
-  await page.keyboard.press("ControlOrMeta+k");
-  dialog = page.getByRole("dialog", { name: "Search instance" });
-  await dialog.getByRole("combobox").fill("Connections");
-  await dialog
-    .getByRole("option", {
-      name: "Connections Project settings · Commands workspace",
-      exact: true,
-    })
-    .click();
-  await expect(page).toHaveURL(/\/settings\/connections/);
+  for (const section of ["Connections", "Extensions"]) {
+    await page.keyboard.press("ControlOrMeta+k");
+    dialog = page.getByRole("dialog", { name: "Search instance" });
+    await dialog.getByRole("combobox").fill(section);
+    await dialog
+      .getByRole("option", {
+        name: `${section} Project settings · Commands workspace`,
+        exact: true,
+      })
+      .click();
+    await expect(page).toHaveURL(
+      new RegExp(`/settings/${section.toLowerCase()}`),
+    );
+  }
 });
 
 test("canvas search finds labels and IDs, centers distant nodes and never saves or runs", async ({

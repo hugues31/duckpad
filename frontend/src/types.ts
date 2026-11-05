@@ -424,7 +424,6 @@ export interface NodeRun {
   references?: Record<string, string[]>;
 }
 export interface Run {
-  flow?: Bundle["flow"];
   partitions?: {
     manifest?: string;
     total: number;
@@ -460,7 +459,7 @@ export interface Run {
   commit: string;
   /** The node whose subtree ran, or "project". */
   scope: string;
-  scope_name?: NodeName;
+  scope_name: NodeName;
   trigger: string;
   entry_point: "ui" | "api" | "assistant";
   status: RunStatus;

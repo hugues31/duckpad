@@ -179,7 +179,7 @@ function SignedIn({
       settingsProject.main
     : "";
   const pipeline = contextWorktree || last?.id;
-  const partitionSettings =
+  const worktreeSettings =
     route.area === "projectSettings" &&
     ["partitions", "extensions"].includes(route.section || "");
   const openSearch = useCallback(() => setSearchOpen(true), []);
@@ -247,7 +247,7 @@ function SignedIn({
   return (
     <ShellContext.Provider value={shell}>
       <WorktreeProvider
-        worktree={worktree || (partitionSettings ? contextWorktree : "")}
+        worktree={worktree || (worktreeSettings ? contextWorktree : "")}
       >
         <div className="app-shell">
           <div className="workspace-shell">
