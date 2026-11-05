@@ -502,6 +502,25 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
 
     # Projects and worktrees
 
+    @app.get("/api/projects", response_model=None)
+    def project_activity(request: Request) -> list[Record]:
+        visible = store.visible_projects(request.state.user)
+        latest = store.latest_project_runs([project["id"] for project in visible])
+        for project in visible:
+            path = projects.get(project["main"])["path"]
+            dates = projects.git(
+                path,
+                "for-each-ref",
+                "--sort=-committerdate",
+                "--count=1",
+                "--format=%(committerdate:iso-strict)",
+                "refs/heads",
+                check=False,
+            )
+            project["updated"] = dates.strip() or project["created"]
+            project["last_run"] = latest.get(project["id"])
+        return visible
+
     @app.post("/api/projects", response_model=None)
     def create_project(data: schemas.NewProject, request: Request) -> Record:
         return access.create(request.state.user, lambda grant: projects.create(data.name, record=grant))

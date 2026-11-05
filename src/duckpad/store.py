@@ -400,6 +400,31 @@ class Store:
             rows = session.exec(select(m.Run).where(m.Run.status.in_(statuses)))
             return [self._record("run", row, session) for row in rows]
 
+    def latest_project_runs(self, projects):
+        """Bounded dashboard metadata; never load captured SQL or connection snapshots."""
+        if not projects:
+            return {}
+        latest = (
+            select(
+                m.Run.project,
+                m.Run.id,
+                m.Run.status,
+                m.Run.started,
+                m.Run.environment,
+                func.row_number()
+                .over(partition_by=m.Run.project, order_by=[m.Run.started.desc(), m.Run.id.desc()])
+                .label("rank"),
+            )
+            .where(m.Run.project.in_(projects))
+            .subquery()
+        )
+        with self.session() as session:
+            rows = session.execute(select(latest).where(latest.c.rank == 1)).mappings()
+            return {
+                row["project"]: {key: row[key] for key in ("id", "status", "started", "environment")}
+                for row in rows
+            }
+
     def worktrees(self, project):
         with self.session() as session:
             rows = session.exec(

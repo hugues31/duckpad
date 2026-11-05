@@ -106,6 +106,22 @@ test("dashboard lists projects once, opens their main branch and supports keyboa
     name: "Open project: Dashboard second",
     exact: true,
   });
+  await expect(secondCard).toContainText("Last modified");
+  await expect(secondCard).toContainText("Last run");
+  await page
+    .getByRole("searchbox", { name: "Search projects" })
+    .fill("Dashboard second");
+  await expect(firstCard).toHaveCount(0);
+  await expect(secondCard).toBeVisible();
+  await page
+    .getByRole("searchbox", { name: "Search projects" })
+    .fill("Dashboard");
+  await page
+    .getByRole("combobox", { name: "Sort projects" })
+    .selectOption("name");
+  const names = await page.locator(".project-card strong").allTextContents();
+  expect(names).toEqual([...names].sort((a, b) => a.localeCompare(b)));
+  await page.getByRole("searchbox", { name: "Search projects" }).fill("");
   await secondCard.focus();
   await page.keyboard.press("Enter");
   await expect(page.getByLabel("Active project")).toHaveValue(second.project);

@@ -67,6 +67,38 @@ def test_session_reports_the_packaged_version(client):
     )
 
 
+def test_project_activity_returns_latest_run_summary_only_for_visible_projects(app, client, worktree):
+    store, projects = app.state.services.store, app.state.services.projects
+    tree = projects.get(worktree)
+    assert client.get("/api/projects").json()[0]["last_run"] is None
+    for index, status in enumerate(("success", "failed")):
+        store.put(
+            "run",
+            f"run_{index}",
+            {
+                "id": f"run_{index}",
+                "project": tree["project"],
+                "worktree": worktree,
+                "environment": "dev",
+                "status": status,
+                "started": f"2026-01-0{index + 1}T00:00:00Z",
+                "connections": {"private": "must not be listed"},
+                "nodes": {},
+            },
+        )
+    activity = client.get("/api/projects").json()[0]
+    assert activity["updated"] == projects.git(tree["path"], "log", "-1", "--format=%cI")
+    assert activity["last_run"] == {
+        "id": "run_1",
+        "status": "failed",
+        "environment": "dev",
+        "started": "2026-01-02T00:00:00Z",
+    }
+    app.state.auth.create_user("outsider", "outsider-password")
+    token = app.state.auth.login("outsider", "outsider-password")
+    assert client.get("/api/projects", headers={"Authorization": "Bearer " + token}).json() == []
+
+
 def test_named_example_populates_an_independent_project(client, worktree):
     before = client.get(f"/api/worktrees/{worktree}").json()
     response = client.post("/api/example", json={"name": "  Revenue lab  "})

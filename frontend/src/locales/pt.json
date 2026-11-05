@@ -181,6 +181,7 @@
   "notes": "Documentação",
   "info": "Info",
   "nodeChanges": "Alterações",
+  "lastModified": "Last modified",
   "byAuthor": "por {author}",
   "noSavedChange": "Nenhuma alteração salva",
   "nodeCreated": "Criação",
@@ -1392,5 +1393,7 @@
   "generatedDocumentationHint": "Read-only reference from node definitions, documentation and the latest results in this environment.",
   "documentationSchemaHint": "Run this output to discover its columns and types.",
   "noDeclaredTests": "No declared tests",
-  "missingFunctionExtensionHint": "If this function comes from an extension, enable it in Project settings."
+  "missingFunctionExtensionHint": "If this function comes from an extension, enable it in Project settings.",
+  "searchProjects": "Search projects",
+  "sortProjects": "Sort projects"
 }

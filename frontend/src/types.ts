@@ -204,6 +204,8 @@ export interface Snapshot {
   variables: VariablesSummary | null;
 }
 export interface Project {
+  updated?: string;
+  last_run?: Pick<Run, "id" | "status" | "started" | "environment"> | null;
   role: ProjectRole;
   id: string;
   name: string;
