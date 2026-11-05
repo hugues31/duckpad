@@ -14,6 +14,9 @@ import { useState } from "react";
 import Select from "./Select";
 import { projectList, type ProjectSort } from "./projectList";
 
+/** Search and sort appear once the projects no longer fit at a glance. */
+const SEARCH_FROM = 7;
+
 export default function ProjectDashboard({
   projects,
   busy,
@@ -52,27 +55,24 @@ export default function ProjectDashboard({
             {activityError}
           </p>
         )}
-        {!!projects.length && (
-          <div className="row gap">
-            <label className="field">
-              <span>{t("searchProjects")}</span>
-              <input
-                type="search"
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-              />
-            </label>
-            <label className="field">
-              <span>{t("sortProjects")}</span>
-              <Select
-                value={sort}
-                onChange={(event) => setSort(event.target.value as ProjectSort)}
-              >
-                <option value="modified">{t("lastModified")}</option>
-                <option value="name">{t("name")}</option>
-                <option value="run">{t("jobLastRun")}</option>
-              </Select>
-            </label>
+        {projects.length >= SEARCH_FROM && (
+          <div className="project-dashboard-tools">
+            <input
+              type="search"
+              aria-label={t("searchProjects")}
+              placeholder={t("searchProjects")}
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+            />
+            <Select
+              aria-label={t("sortProjects")}
+              value={sort}
+              onChange={(event) => setSort(event.target.value as ProjectSort)}
+            >
+              <option value="modified">{t("lastModified")}</option>
+              <option value="name">{t("name")}</option>
+              <option value="run">{t("projectLastRun")}</option>
+            </Select>
           </div>
         )}
         {!!projects.length && !visible.length && (
@@ -99,24 +99,27 @@ export default function ProjectDashboard({
                       )}
                     </time>
                   </span>
-                  <span className="project-card-date">
-                    {t("jobLastRun")}:{" "}
-                    {project.last_run ? (
-                      <>
-                        <span className={`badge ${project.last_run.status}`}>
-                          {t(project.last_run.status)}
-                        </span>{" "}
-                        · {project.last_run.environment} ·{" "}
-                        <time dateTime={project.last_run.started}>
-                          {dateFormat.format(
-                            new Date(project.last_run.started),
-                          )}
-                        </time>
-                      </>
-                    ) : (
-                      "—"
-                    )}
-                  </span>
+                  {/* Undefined until the activity request answers. */}
+                  {project.last_run !== undefined && (
+                    <span className="project-card-date">
+                      {t("projectLastRun")}:{" "}
+                      {project.last_run ? (
+                        <>
+                          <span className={`badge ${project.last_run.status}`}>
+                            {t(project.last_run.status)}
+                          </span>{" "}
+                          · {project.last_run.environment} ·{" "}
+                          <time dateTime={project.last_run.started}>
+                            {dateFormat.format(
+                              new Date(project.last_run.started),
+                            )}
+                          </time>
+                        </>
+                      ) : (
+                        "—"
+                      )}
+                    </span>
+                  )}
                   <span className="project-card-action">
                     {t("openProject")}
                     <ArrowRight size={16} />

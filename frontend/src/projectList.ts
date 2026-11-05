@@ -12,12 +12,10 @@ export function projectList(
         ? project.last_run?.started
         : project.updated || project.created) || "",
     ) || 0;
+  const fold = (text: string) =>
+    text.normalize("NFD").replace(/\p{M}/gu, "").toLocaleLowerCase();
   return projects
-    .filter((project) =>
-      project.name
-        .toLocaleLowerCase()
-        .includes(query.trim().toLocaleLowerCase()),
-    )
+    .filter((project) => fold(project.name).includes(fold(query.trim())))
     .sort(
       (a, b) =>
         (sort === "name" ? 0 : time(b) - time(a)) ||

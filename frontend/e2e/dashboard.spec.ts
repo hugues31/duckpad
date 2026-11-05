@@ -66,6 +66,9 @@ test("dashboard lists projects once, opens their main branch and supports keyboa
   await signIn(page);
   const first = await createProject(page, "Dashboard first");
   const second = await createProject(page, "Dashboard second");
+  // Search and sort appear from seven projects.
+  for (const index of [3, 4, 5, 6, 7])
+    await createProject(page, `Dashboard extra ${index}`);
   const branch = await page.request.post(
     `/api/worktrees/${first.id}/branches`,
     {

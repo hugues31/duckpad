@@ -1396,5 +1396,6 @@
   "missingFunctionExtensionHint": "If this function comes from an extension, enable it in Project settings.",
   "openExtensionSettings": "Open extension settings",
   "searchProjects": "Search projects",
-  "sortProjects": "Sort projects"
+  "sortProjects": "Sort projects",
+  "projectLastRun": "Last run"
 }

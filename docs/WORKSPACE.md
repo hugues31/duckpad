@@ -7,8 +7,8 @@ canvas; **Code** edits its files; **Documentation** explains the project;
 Python, partitions, extensions and general settings. These tabs keep the selected
 branch and environment when you return to the flow. Partition and extension settings apply to the branch shown in the top bar.
 
-**Projects** shows the last modification date and latest run status. Search by
-project name, or sort by name, modification date or latest run.
+**Projects** shows the last modification date and latest run status. From seven
+projects, search by project name, or sort by name, modification date or latest run.
 **Code** opens the selected node's source, or the README without a selected node.
 Its tree labels node files by display name, keeps file paths in tooltips, and
 collapses built-in templates by default.

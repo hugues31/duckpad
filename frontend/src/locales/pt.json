@@ -1396,5 +1396,6 @@
   "missingFunctionExtensionHint": "Se esta função vem de uma extensão, ative-a nas configurações do projeto.",
   "openExtensionSettings": "Abrir as configurações de extensões",
   "searchProjects": "Pesquisar projetos",
-  "sortProjects": "Ordenar projetos"
+  "sortProjects": "Ordenar projetos",
+  "projectLastRun": "Última execução"
 }

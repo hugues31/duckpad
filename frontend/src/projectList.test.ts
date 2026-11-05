@@ -26,6 +26,9 @@ it("filters names and sorts modification dates and last runs without changing wo
   expect(projectList(projects, " ALP ", "name").map((p) => p.id)).toEqual([
     "1",
   ]);
+  expect(
+    projectList([{ ...projects[0], name: "Émile" }], "emile", "name"),
+  ).toHaveLength(1);
   expect(projectList(projects, "", "modified").map((p) => p.id)).toEqual([
     "2",
     "1",
