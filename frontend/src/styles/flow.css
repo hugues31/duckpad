@@ -609,6 +609,11 @@ fieldset.palette-bottom {
   max-width: 100%;
   margin-top: 7px;
 }
+.node-row-count {
+  color: var(--muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
 .node-status {
   display: inline-flex;
   align-items: center;

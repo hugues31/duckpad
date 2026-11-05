@@ -1,4 +1,5 @@
 import { PythonIcon } from "./AddIcon";
+import { primaryOutputCount, showMinimap } from "./canvasResults";
 import { displayNodeName, type NodeNames } from "./nodeNames";
 import { useOptionalWorktree } from "./worktree";
 import {
@@ -93,6 +94,7 @@ function StatusIcon({ status, ...props }: LucideProps & { status: string }) {
 
 /** What the canvas shows of a node. */
 type PipelineData = {
+  count?: number;
   fullNode: string;
   valueProducer?: boolean;
   label: string;
@@ -170,20 +172,28 @@ function PipelineNode({ id, data, selected }: NodeProps<PipelineNode>) {
           </span>
         )}
         <WarningBadge count={data.warnings} />
-        {data.status && (
-          <StatusTag
-            className={`node-status ${data.status}`}
-            title={t(data.status)}
-          >
-            <StatusIcon
-              status={data.status}
-              size={13}
-              className={data.status === "running" ? "spin" : ""}
-              aria-hidden="true"
-            />
-            <span>{t(data.status)}</span>
-          </StatusTag>
-        )}
+        {(data.status === "valid" || data.status === "success") &&
+          data.count != null && (
+            <span className="node-row-count">
+              {data.count.toLocaleString()} {t("rows")}
+            </span>
+          )}
+        {data.status &&
+          data.status !== "valid" &&
+          data.status !== "success" && (
+            <StatusTag
+              className={`node-status ${data.status}`}
+              title={t(data.status)}
+            >
+              <StatusIcon
+                status={data.status}
+                size={13}
+                className={data.status === "running" ? "spin" : ""}
+                aria-hidden="true"
+              />
+              <span>{t(data.status)}</span>
+            </StatusTag>
+          )}
       </div>
       {data.inputs.map((port: string, i: number) => (
         <Handle
@@ -428,6 +438,13 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
             inputs,
             outputs,
             status,
+            count: primaryOutputCount(
+              node,
+              props.prefix + node.id,
+              outputs,
+              props.components,
+              props.statuses,
+            ),
             warnings: states.reduce(
               (count, state) => count + warningCount(state.results),
               0,
@@ -821,18 +838,20 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
             </ControlButton>
           </div>
         </Panel>
-        <MiniMap
-          pannable
-          zoomable
-          nodeColor={(n) =>
-            n.data.kind === "source"
-              ? "#4a8aff"
-              : n.data.kind === "component"
-                ? "#9d91df"
-                : "#a4a4ac"
-          }
-          maskColor="var(--minimap-mask)"
-        />
+        {showMinimap(frame.width, frame.height) && (
+          <MiniMap
+            pannable
+            zoomable
+            nodeColor={(n) =>
+              n.data.kind === "source"
+                ? "#4a8aff"
+                : n.data.kind === "component"
+                  ? "#9d91df"
+                  : "#a4a4ac"
+            }
+            maskColor="var(--minimap-mask)"
+          />
+        )}
         {!nodes.length && (
           <div className="canvas-empty">
             <Sparkles size={30} />
