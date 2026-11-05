@@ -1,11 +1,12 @@
-import Markdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import { memo, useMemo } from "react";
+import MarkdownText from "./MarkdownText";
 import { displayNodeName } from "./nodeNames";
 import { projectDocumentation } from "./projectDocumentation";
 import { useT } from "./i18n";
 import type { Snapshot, Statuses } from "./types";
 
-export default function GeneratedDocumentation({
+/** Memoized: the README editor above re-renders on every keystroke. */
+export default memo(function GeneratedDocumentation({
   snapshot,
   statuses,
 }: {
@@ -13,6 +14,10 @@ export default function GeneratedDocumentation({
   statuses: Statuses;
 }) {
   const t = useT();
+  const nodes = useMemo(
+    () => projectDocumentation(snapshot, statuses),
+    [snapshot, statuses],
+  );
   return (
     <section
       className="generated-documentation"
@@ -20,12 +25,12 @@ export default function GeneratedDocumentation({
     >
       <h2>{t("generatedDocumentation")}</h2>
       <p className="muted">{t("generatedDocumentationHint")}</p>
-      {projectDocumentation(snapshot, statuses).map((node) => (
+      {nodes.map((node) => (
         <details className="settings-card" key={node.id}>
           <summary title={node.id}>
             {displayNodeName(node.name, t("node"), t)}
           </summary>
-          <Markdown remarkPlugins={[remarkGfm]}>{node.description}</Markdown>
+          <MarkdownText>{node.description}</MarkdownText>
           <h3>{t("results_tests")}</h3>
           {node.tests.length ? (
             <ul>
@@ -41,9 +46,7 @@ export default function GeneratedDocumentation({
               <h3>
                 {t("output")}: {output.port}
               </h3>
-              <Markdown remarkPlugins={[remarkGfm]}>
-                {output.description}
-              </Markdown>
+              <MarkdownText>{output.description}</MarkdownText>
               {output.dataset?.status === "stale" && (
                 <p className="badge stale">{t("stale")}</p>
               )}
@@ -65,7 +68,7 @@ export default function GeneratedDocumentation({
                         <td>{column.name}</td>
                         <td>{column.type || "—"}</td>
                         <td>
-                          <Markdown>{column.description}</Markdown>
+                          <MarkdownText>{column.description}</MarkdownText>
                         </td>
                       </tr>
                     ))}
@@ -78,4 +81,4 @@ export default function GeneratedDocumentation({
       ))}
     </section>
   );
-}
+});

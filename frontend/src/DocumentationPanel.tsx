@@ -1,6 +1,5 @@
 import { useState } from "react";
-import Markdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import MarkdownText from "./MarkdownText";
 import GeneratedDocumentation from "./GeneratedDocumentation";
 import { useT } from "./i18n";
 import { useRevisionDraft } from "./useRevisionDraft";
@@ -48,12 +47,12 @@ export default function DocumentationPanel({
         </button>
       </div>
       {preview ? (
-        <div
+        <section
           className="documentation-preview"
           aria-label={t("markdownPreview")}
         >
-          <Markdown remarkPlugins={[remarkGfm]}>{draft}</Markdown>
-        </div>
+          <MarkdownText>{draft}</MarkdownText>
+        </section>
       ) : (
         <textarea
           aria-label={t("projectDocs")}
