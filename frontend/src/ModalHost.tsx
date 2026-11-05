@@ -1,7 +1,7 @@
 import type { PartitionLaunchOptions } from "./partitions";
 import { PartitionRunSummary } from "./PartitionRunMenu";
 import ConvertNodeDialog from "./ConvertNodeDialog";
-import { NEW_NODE_PYTHON, nodeCode, nodeCodePath, nodeGraph } from "./nodeCode";
+import { nodeCode, nodeCodePath, nodeGraph } from "./nodeCode";
 import { useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { Boxes } from "lucide-react";
@@ -27,11 +27,32 @@ import { ScopeVariables } from "./VariableFields";
 import { ConflictDialog, CombinedResolutionDialog } from "./ConflictDialog";
 import { useWorktree } from "./worktree";
 
-const NEW_TEMPLATE = `-- @label Custom transform
+/** What the template editor starts from and says, per language. */
+const TEMPLATE_EDITOR = {
+  sql: {
+    code: `-- @label Custom transform
 -- @input source
 -- @output result
 SELECT * FROM {{ source }};
-`;
+`,
+    create: "newTemplate",
+    hint: "newTemplateHint",
+    edit: "editTemplate",
+  },
+  python: {
+    code: `# @label Custom Python transform
+import duckpad as dp
+
+
+class Transform(dp.Node):
+    def run(self, source: dp.Relation) -> dp.Relation:
+        return source
+`,
+    create: "newPythonTemplate",
+    hint: "newPythonTemplateHint",
+    edit: "editPythonTemplate",
+  },
+} as const;
 
 /**
  * The open dialog, as plain data. Its actions are built when it renders, so
@@ -302,34 +323,17 @@ function WorktreeDialog({
       );
     }
     case "template": {
-      const python = modal.template.endsWith(".py");
+      const language = modal.template.endsWith(".py") ? "python" : "sql";
+      const text = TEMPLATE_EDITOR[language];
       return (
         <RevisionEditor
           snapshot={snapshot}
-          title={t(
-            modal.create
-              ? python
-                ? "newPythonTemplate"
-                : "newTemplate"
-              : python
-                ? "editPythonTemplate"
-                : "editTemplate",
-          )}
-          language={python ? "python" : "sql"}
-          description={t(
-            modal.create
-              ? python
-                ? "newPythonTemplateHint"
-                : "newTemplateHint"
-              : "sharedTemplateHint",
-          )}
+          title={t(modal.create ? text.create : text.edit)}
+          language={language}
+          description={t(modal.create ? text.hint : "sharedTemplateHint")}
           readOnly={!canEdit}
           read={(bundle) =>
-            modal.create
-              ? python
-                ? "# @label Custom Python transform\n" + NEW_NODE_PYTHON
-                : NEW_TEMPLATE
-              : bundle.templates[modal.template]
+            modal.create ? text.code : bundle.templates[modal.template]
           }
           write={(bundle, text) => {
             bundle.templates[modal.template] = text;
