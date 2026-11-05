@@ -21,7 +21,7 @@ choices accepted on 1 November 2026; the original proposal is in Git history.
   Custom types declare the same database/storage family as built-ins.
 - Built-ins follow the release until customized. An override survives upgrades;
   resetting removes only the override, while duplication creates a custom type.
-- Format capabilities load through the project's Extensions tab and must already
+- Format capabilities load through the project's Extensions settings and must already
   be installed by an administrator. Connector extensions install on first use
   from their declared repository or an offline import, in a child process.
   Runtime-linked extensions need neither.

@@ -50,6 +50,66 @@ async function fixture(page: Page, name: string) {
   return { worktree, snapshot: await saved.json() };
 }
 
+test("command search runs the project and navigates project and settings destinations", async ({
+  page,
+}) => {
+  await signIn(page);
+  const { worktree } = await fixture(page, "Commands workspace");
+  await page.goto(`/worktrees/${worktree.id}/flow`);
+  await expect(
+    page.getByRole("button", { name: "Run all", exact: true }),
+  ).toBeVisible();
+  await page.keyboard.press("ControlOrMeta+k");
+  let dialog = page.getByRole("dialog", { name: "Search instance" });
+  for (const label of [
+    "Run all",
+    "New working branch",
+    "Flow",
+    "Code",
+    "Documentation",
+    "Variables",
+    "History",
+    "Jobs",
+    "Project settings",
+  ]) {
+    await expect(
+      dialog.getByRole("option", {
+        name: `${label} Commands workspace`,
+        exact: true,
+      }),
+    ).toBeVisible();
+  }
+  await dialog.getByRole("combobox").fill("Run all");
+  const launch = page.waitForResponse(
+    (response) =>
+      response.url().endsWith(`/worktrees/${worktree.id}/runs`) &&
+      response.request().method() === "POST",
+  );
+  await dialog.getByRole("combobox").press("Enter");
+  expect((await launch).ok()).toBeTruthy();
+  await page.keyboard.press("ControlOrMeta+k");
+  dialog = page.getByRole("dialog", { name: "Search instance" });
+  await dialog.getByRole("combobox").fill("Variables");
+  await dialog
+    .getByRole("option", { name: "Variables Commands workspace", exact: true })
+    .click();
+  await expect(page).toHaveURL(/\/variables/);
+  for (const section of ["Connections", "Extensions"]) {
+    await page.keyboard.press("ControlOrMeta+k");
+    dialog = page.getByRole("dialog", { name: "Search instance" });
+    await dialog.getByRole("combobox").fill(section);
+    await dialog
+      .getByRole("option", {
+        name: `${section} Project settings · Commands workspace`,
+        exact: true,
+      })
+      .click();
+    await expect(page).toHaveURL(
+      new RegExp(`/settings/${section.toLowerCase()}`),
+    );
+  }
+});
+
 test("canvas search finds labels and IDs, centers distant nodes and never saves or runs", async ({
   page,
 }) => {

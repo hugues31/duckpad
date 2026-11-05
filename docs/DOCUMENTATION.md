@@ -1,7 +1,15 @@
 # Document a project
 
 Write the project overview in **Documentation**. It edits `README.md`, also
-available in **Code**. Documentation is versioned with the project.
+available in **Code**. Switch between **Edit** and **Markdown preview** to see
+formatted headings, lists, links and tables without losing the draft.
+Documentation is versioned with the project.
+
+The **Generated project reference** below the overview is read only. Expand a node
+to see its outputs, descriptions, columns, types and tests. Columns come from the
+latest retained results in the current environment, or from documented columns
+before a run. Stale schemas are marked; run an output to discover its schema.
+Python checks appear after they have executed.
 
 ![Business documentation for Paid orders alongside its result table](images/node-documentation.png)
 

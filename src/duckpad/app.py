@@ -502,6 +502,26 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
 
     # Projects and worktrees
 
+    @app.get("/api/projects", response_model=None)
+    def project_activity(request: Request) -> list[Record]:
+        visible = store.visible_projects(request.state.user)
+        latest = store.latest_project_runs([project["id"] for project in visible])
+        paths = {worktree["id"]: worktree["path"] for worktree in store.all("worktree")}
+        # One git call per project: the dashboard loads this once, without polling.
+        for project in visible:
+            dates = projects.git(
+                paths[project["main"]],
+                "for-each-ref",
+                "--sort=-committerdate",
+                "--count=1",
+                "--format=%(committerdate:iso-strict)",
+                "refs/heads",
+                check=False,
+            )
+            project["updated"] = dates.strip() or project["created"]
+            project["last_run"] = latest.get(project["id"])
+        return visible
+
     @app.post("/api/projects", response_model=None)
     def create_project(data: schemas.NewProject, request: Request) -> Record:
         return access.create(request.state.user, lambda grant: projects.create(data.name, record=grant))
@@ -927,6 +947,16 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
         return engine.statuses(worktree, environment)
 
     # Jobs are instance metadata; their detached worktrees only expose read routes.
+    @app.get("/api/projects/{project}/job-nodes", response_model=None)
+    def job_target_nodes(project: str, kind: str, ref: str) -> Record:
+        _, commit = jobs.resolve(project, kind, ref)
+        return jobs.scope_nodes(project, commit)
+
+    @app.get("/api/jobs/{slug}/nodes", response_model=None)
+    def job_scope_nodes(slug: str) -> Record:
+        job = jobs.get(slug)
+        return jobs.scope_nodes(job["project"], jobs.current_commit(job))
+
     @app.get("/api/projects/{project}/jobs", response_model=None)
     def list_jobs(project: str) -> list[Record]:
         return [jobs.public(job) for job in store.all("job") if job["project"] == project]

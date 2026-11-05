@@ -81,7 +81,7 @@ test("display names follow SQL and templates through messages, lineage, usages a
   );
 
   const started = await page.request.post(url + "/runs", {
-    data: { environment: "dev" },
+    data: { environment: "dev", node: "node_filter" },
   });
   expect(started.ok()).toBeTruthy();
   const run = await started.json();
@@ -92,6 +92,29 @@ test("display names follow SQL and templates through messages, lineage, usages a
     )
     .toBe("success");
   await page.reload();
+  await page.getByRole("link", { name: "History", exact: true }).click();
+  await expect(page.locator(".history-row .grow strong")).toHaveText("Filter");
+  await expect(page.locator(".history-row .grow strong")).toHaveAttribute(
+    "title",
+    "node_filter",
+  );
+  await page.getByRole("link", { name: "Flow", exact: true }).click();
+  await page.locator('.react-flow__node[data-id="node_report"]').click();
+  await page.getByRole("link", { name: "Code", exact: true }).click();
+  await expect(page.locator(".code-file-heading")).toContainText(
+    "nodes/node_report.sql",
+  );
+  const file = page.getByRole("treeitem", {
+    name: "Revenue report",
+    exact: true,
+  });
+  await expect(file).toHaveAttribute("aria-selected", "true");
+  await expect(file.locator(".file-tree-row")).toHaveAttribute(
+    "title",
+    "nodes/node_report.sql",
+  );
+  await expect(page.getByRole("tree")).not.toContainText("node_report");
+  await page.getByRole("link", { name: "Flow", exact: true }).click();
   await page
     .locator(".react-flow__node")
     .filter({ has: page.getByText("Filter", { exact: true }) })

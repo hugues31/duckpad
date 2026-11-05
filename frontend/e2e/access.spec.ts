@@ -89,10 +89,13 @@ test("manage instance accounts, project users and live reader access", async ({
     .getByRole("link", { name: "Documentation", exact: true })
     .click();
   const documentation = readerPage.locator(".documentation-page");
-  await expect(documentation.locator("textarea")).toHaveAttribute(
-    "readonly",
-    "",
-  );
+  await expect(
+    documentation.getByRole("region", { name: "Markdown preview" }),
+  ).toHaveCount(1);
+  await expect(
+    documentation.getByRole("button", { name: "Edit", exact: true }),
+  ).toHaveCount(0);
+  await expect(documentation.locator("textarea")).toHaveCount(0);
   await expect(
     documentation.getByRole("button", { name: "Save changes", exact: true }),
   ).toBeDisabled();

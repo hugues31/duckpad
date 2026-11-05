@@ -34,12 +34,12 @@ test("Code has a keyboard file tree, preserves drafts across files and tabs, sav
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   const { worktree, snapshot } = await openCode(page);
+  await expect(page.locator(".code-file-heading")).toContainText("README.md");
   await expect(page.locator(".main-tabs a")).toHaveText([
     "Flow",
     "Code",
     "Documentation",
     "Variables",
-    "Extensions",
     "History",
     "Jobs",
     "Project settings",
@@ -51,7 +51,6 @@ test("Code has a keyboard file tree, preserves drafts across files and tabs, sav
     exact: true,
   });
   await templates.focus();
-  await templates.press("ArrowLeft");
   await expect(templates).toHaveAttribute("aria-expanded", "false");
   const sql = tree.getByRole("treeitem", {
     name: "templates/sql.sql",
@@ -114,6 +113,7 @@ test("Code has a keyboard file tree, preserves drafts across files and tabs, sav
   expect(bytes.length).toBeGreaterThan(100);
   await page.reload();
   await page.getByRole("link", { name: "Code", exact: true }).click();
+  await page.getByRole("treeitem", { name: "templates", exact: true }).click();
   await page
     .getByRole("treeitem", { name: "templates/sql.sql", exact: true })
     .click();
@@ -145,6 +145,19 @@ test("project Markdown and Python dependencies round trip between Code, Document
   await page.getByRole("link", { name: "Documentation", exact: true }).click();
   await expect(page.locator(".documentation-page")).toContainText("README.md");
   await page.locator(".project-documentation").fill(markdown);
+  await page
+    .getByRole("button", { name: "Markdown preview", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Revenue", exact: true }),
+  ).toBeVisible();
+  await expect(page.locator(".documentation-preview strong")).toHaveText(
+    "business context",
+  );
+  await expect(
+    page.getByRole("heading", { name: "Generated project reference" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Edit", exact: true }).click();
   const saved = page.waitForResponse(
     (response) =>
       response.url().endsWith(`/worktrees/${worktree.id}`) &&
@@ -202,6 +215,7 @@ test("invalid project files remain editable in Code and can be repaired", async 
   page,
 }) => {
   const { snapshot } = await openCode(page);
+  await page.getByRole("treeitem", { name: "flow.json", exact: true }).click();
   await editCode(page, "invalid JSON");
   await page.getByRole("button", { name: "Save changes", exact: true }).click();
   await expect(page.locator(".banner.error")).toBeVisible();
@@ -224,6 +238,7 @@ test("conflicting saves preserve the draft and download failures can be retried"
   page,
 }) => {
   const { worktree, snapshot } = await openCode(page);
+  await page.getByRole("treeitem", { name: "templates", exact: true }).click();
   await page
     .getByRole("treeitem", { name: "templates/sql.sql", exact: true })
     .click();
@@ -281,7 +296,6 @@ test("Code is localized and keeps the tree beside Monaco at a narrow width", asy
     fr.code,
     fr.documentation,
     fr.variables,
-    fr.extensions,
     fr.history,
     fr.jobs,
     fr.projectSettings,

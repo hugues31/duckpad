@@ -50,7 +50,7 @@ Wrong-platform, wrong-version, malformed, oversized and invalid-signature files
 are rejected before replacing an existing import. An active execution returns
 HTTP 409. After validation, Duckpad closes existing databases and registers the
 new import outside project Git. No network download or native `LOAD` is part of
-importing: activate it from a project's **Extensions** tab or test the actual
+importing: activate it from a **Project settings → Extensions** section or test the actual
 connection/pipeline afterward to verify execution,
 CPU support, system libraries and credentials.
 

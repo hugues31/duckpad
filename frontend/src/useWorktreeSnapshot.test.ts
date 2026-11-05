@@ -32,6 +32,7 @@ const run = (id: string, worktree: string): Run => ({
   environment: "dev",
   commit: "0123abc",
   scope: "project",
+  scope_name: [],
   trigger: "manual",
   entry_point: "ui",
   status: "running",

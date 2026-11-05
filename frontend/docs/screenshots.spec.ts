@@ -163,6 +163,7 @@ test("capture project creation, results, lineage and SQL", async ({ page }) => {
   await capture(page, "lineage", lineage);
   await page.keyboard.press("Escape");
   await page.getByRole("link", { name: "Code", exact: true }).click();
+  await page.getByRole("treeitem", { name: "templates", exact: true }).click();
   await page
     .getByRole("treeitem", { name: "templates/sql.sql", exact: true })
     .click();
@@ -921,7 +922,9 @@ test("capture project extension activation and missing imports", async ({
       })
     ).ok(),
   ).toBeTruthy();
-  await page.goto(`/worktrees/${worktree.id}/extensions`);
+  await page.goto(
+    `/projects/${worktree.project}/settings/extensions?worktree=${worktree.id}&environment=dev`,
+  );
   await expect(
     page
       .getByRole("article", { name: "json", exact: true })

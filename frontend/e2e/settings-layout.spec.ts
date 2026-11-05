@@ -125,7 +125,7 @@ test("project controls use sections and extension policies use desktop columns",
       name: "Settings sections",
       exact: true,
     });
-    await expect(navigation.getByRole("link")).toHaveCount(5);
+    await expect(navigation.getByRole("link")).toHaveCount(6);
     await beside(navigation, page.locator(".settings-content"));
     await navigation
       .getByRole("link", { name: "Connections", exact: true })
