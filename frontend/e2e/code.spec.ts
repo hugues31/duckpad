@@ -41,6 +41,8 @@ test("Code has a keyboard file tree, preserves drafts across files and tabs, sav
     "Variables",
     "Extensions",
     "History",
+    "Jobs",
+    "Project settings",
   ]);
   await expect(page.getByRole("dialog")).toHaveCount(0);
   const tree = page.getByRole("tree", { name: "Project files" });
@@ -281,6 +283,8 @@ test("Code is localized and keeps the tree beside Monaco at a narrow width", asy
     fr.variables,
     fr.extensions,
     fr.history,
+    fr.jobs,
+    fr.projectSettings,
   ]);
   await expect(
     page.getByRole("button", { name: fr.downloadProject }),

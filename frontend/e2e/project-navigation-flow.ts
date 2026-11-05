@@ -42,9 +42,10 @@ export async function projectNavigationFlow(page: Page) {
   await expect(
     navigation.getByRole("link", { name: en.jobs, exact: true }),
   ).toHaveAttribute("aria-current", "page");
+  // Route focus goes to the page heading, not to the shared tab bar.
   await expect(
     page.getByRole("heading", { name: en.jobs, exact: true }),
-  ).toBeVisible();
+  ).toBeFocused();
   await navigation
     .getByRole("link", { name: en.projectSettings, exact: true })
     .click();

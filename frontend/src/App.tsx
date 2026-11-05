@@ -160,7 +160,8 @@ function SignedIn({
       ? requestedEnvironment
       : environments[0] || "";
   // Project tabs carry their branch in the URL; other pages return to the
-  // last open pipeline. A project link without branch context uses main.
+  // last open pipeline. A project page without branch context uses the branch
+  // of that project opened last, then main.
   const [lastWorktree, setLastWorktree] = useState("");
   if (worktree && worktree !== lastWorktree) setLastWorktree(worktree);
   const last = workspace?.worktrees.find((w) => w.id === lastWorktree);
@@ -168,13 +169,14 @@ function SignedIn({
     route.area === "projectSettings" || route.area === "jobs"
       ? workspace?.projects.find((p) => p.id === route.projectId)
       : undefined;
-  const requestedWorktree = new URLSearchParams(location.search).get(
-    "worktree",
-  );
+  const projectWorktree = (id: string | null) =>
+    workspace?.worktrees.find(
+      (w) => w.id === id && w.project === settingsProject?.id,
+    )?.id;
   const contextWorktree = settingsProject
-    ? workspace?.worktrees.find(
-        (w) => w.id === requestedWorktree && w.project === settingsProject.id,
-      )?.id || settingsProject.main
+    ? projectWorktree(new URLSearchParams(location.search).get("worktree")) ||
+      projectWorktree(lastWorktree) ||
+      settingsProject.main
     : "";
   const pipeline = contextWorktree || last?.id;
   const partitionSettings =
@@ -265,7 +267,7 @@ function SignedIn({
               />
             )}
             {settingsProject && contextWorktree && (
-              <div className="flow-toolbar">
+              <div className="flow-toolbar project-toolbar">
                 <ProjectTabs
                   project={settingsProject.id}
                   worktree={contextWorktree}
@@ -442,8 +444,9 @@ function PageFocus({ ready }: { ready: boolean }) {
         !document.activeElement?.closest(".topbar")
       )
         return;
+      // Project pages focus their heading rather than the shared tab bar.
       const target = document.querySelector<HTMLElement>(
-        "h1, .flow-toolbar, .empty-state",
+        "h1, .flow-toolbar:not(.project-toolbar), .empty-state",
       );
       if (target) {
         target.tabIndex = -1;

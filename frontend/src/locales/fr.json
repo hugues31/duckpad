@@ -1374,5 +1374,6 @@
   "monitoringLogTruncated": "Message limité à 4 000 caractères.",
   "projectNavigation": "Navigation du projet",
   "partitionSettingsHint": "Configurez les clés de partition, la politique d’exécution et la conservation des aperçus pour la branche sélectionnée.",
-  "partitionRunSelectedAction": "Exécuter les clés sélectionnées"
+  "partitionRunSelectedAction": "Exécuter les clés sélectionnées",
+  "fullRun": "Exécution complète"
 }

@@ -1374,5 +1374,6 @@
   "monitoringLogTruncated": "Mensagem limitada a 4 000 caracteres.",
   "projectNavigation": "Navegação do projeto",
   "partitionSettingsHint": "Configure as chaves de partição, a política de execução e a retenção das prévias para o ramo selecionado.",
-  "partitionRunSelectedAction": "Executar as chaves selecionadas"
+  "partitionRunSelectedAction": "Executar as chaves selecionadas",
+  "fullRun": "Execução completa"
 }

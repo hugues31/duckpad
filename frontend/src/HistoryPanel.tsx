@@ -140,7 +140,7 @@ export default function HistoryPanel({
               </span>
               <span className="grow">
                 <strong>
-                  {run.scope === "project" ? t("run") : run.scope}
+                  {run.scope === "project" ? t("fullRun") : run.scope}
                 </strong>
                 <small>
                   {new Date(run.started).toLocaleString()} · {run.environment} ·{" "}

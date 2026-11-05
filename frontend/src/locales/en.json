@@ -1374,5 +1374,6 @@
   "monitoringLogTruncated": "Message shortened to 4,000 characters.",
   "projectNavigation": "Project navigation",
   "partitionSettingsHint": "Configure the partition keys, execution policy and preview retention for the selected branch.",
-  "partitionRunSelectedAction": "Run selected keys"
+  "partitionRunSelectedAction": "Run selected keys",
+  "fullRun": "Full run"
 }
