@@ -30,22 +30,25 @@ export default function DocumentationPanel({
       <span className="eyebrow">{t("documentation")}</span>
       <h1>{t("projectDocs")}</h1>
       <p className="muted">{t("emptyDocumentation")}</p>
-      <div className="segmented">
-        <button
-          aria-pressed={!preview}
-          className={!preview ? "active" : ""}
-          onClick={() => setPreview(false)}
-        >
-          {t("edit")}
-        </button>
-        <button
-          aria-pressed={preview}
-          className={preview ? "active" : ""}
-          onClick={() => setPreview(true)}
-        >
-          {t("markdownPreview")}
-        </button>
-      </div>
+      {/* Readers only get the preview. */}
+      {!readOnly && (
+        <div className="segmented">
+          <button
+            aria-pressed={!preview}
+            className={!preview ? "active" : ""}
+            onClick={() => setPreview(false)}
+          >
+            {t("edit")}
+          </button>
+          <button
+            aria-pressed={preview}
+            className={preview ? "active" : ""}
+            onClick={() => setPreview(true)}
+          >
+            {t("markdownPreview")}
+          </button>
+        </div>
+      )}
       {preview ? (
         <section
           className="documentation-preview"
