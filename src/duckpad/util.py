@@ -60,8 +60,11 @@ def digest(value: object) -> str:
 def atomic_write(path: Path, content: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(path.name + ".tmp-" + uuid.uuid4().hex)
-    temporary.write_bytes(content.encode("utf-8"))
-    temporary.replace(path)
+    try:
+        temporary.write_bytes(content.encode("utf-8"))
+        temporary.replace(path)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 def qi(value: object) -> str:

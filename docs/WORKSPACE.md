@@ -41,6 +41,11 @@ shortcuts.
 
 ## Save and run
 
+A save applies its project files and Git commit together. If writing a file or
+committing fails, the previous files, staged changes and branch commit are
+restored before the file watcher resumes. Failed assistant edits follow the same
+rule. Existing external edits remain available for their own save.
+
 Every run first saves pending editor changes and waits for saves already in
 progress; a failed save stops the launch. **Run all** runs the whole flow;
 a node's **Run with ancestors** runs a smaller scope. **Stop execution** requests
