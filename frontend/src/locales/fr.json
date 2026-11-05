@@ -723,7 +723,7 @@
   "extensionNotPublished": "Aucun téléchargement publié pour le serveur",
   "extensionNotPublishedHint": "Vérifiez le nom et la source, ou obtenez une version compatible auprès de son éditeur.",
   "instanceSearch": "Rechercher dans l’instance",
-  "instanceSearchHint": "Trouvez des projets, branches ouvertes et nœuds par nom ou identifiant. Seuls les projets auxquels vous avez accès sont recherchés.",
+  "instanceSearchHint": "Lancez des actions, ouvrez des pages et des paramètres, ou trouvez des projets, branches ouvertes et nœuds par nom ou identifiant. Seuls les projets auxquels vous avez accès sont recherchés.",
   "clearSearch": "Effacer la recherche",
   "searchResults": "Résultats",
   "noSearchResults": "Aucun résultat correspondant",

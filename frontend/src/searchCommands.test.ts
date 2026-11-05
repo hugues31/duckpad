@@ -69,6 +69,7 @@ it("hides mutations for readers, operators and job worktrees and limits instance
 it("never matches commands on the project name and starts actions only from their name", () => {
   const keys = (query: string) =>
     matchCommands(commands(), query).map((item) => item.key);
+  expect(keys("")[0]).toBe("run");
   expect(keys("revenue")).toEqual([]);
   expect(keys("all")).not.toContain("run");
   expect(keys("run")[0]).toBe("run");

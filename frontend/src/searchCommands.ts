@@ -27,22 +27,62 @@ export function searchCommands(
   canBranch = false,
 ): SearchCommand[] {
   const commands: SearchCommand[] = [];
-  let project: Project | undefined;
+  const tree = workspace.worktrees.find((item) => item.id === worktree);
+  const project: Project | undefined = workspace.projects.find(
+    (item) => item.id === tree?.project,
+  );
   const add = (
     key: string,
     label: string,
     category: string,
     to?: string,
     action?: SearchCommand["action"],
+    scope?: string,
   ) =>
     commands.push({
       key,
       label,
-      detail: [category, project?.name].filter(Boolean).join(" · "),
+      detail: [category, scope].filter(Boolean).join(" · "),
       keywords: `${label} ${category}`,
       to,
       action,
     });
+  // The current project's actions and pages come first.
+  if (tree && project) {
+    const here = (
+      key: string,
+      label: string,
+      category: string,
+      to?: string,
+      action?: SearchCommand["action"],
+    ) => add(key, label, category, to, action, project.name);
+    const editable =
+      ["admin", "editor"].includes(project.role) && !tree.read_only;
+    if (editable && canRun) here("run", t("run"), "", undefined, "run");
+    if (editable && canBranch)
+      here("newBranch", t("newBranch"), "", undefined, "newBranch");
+    for (const tab of workspaceTabs)
+      here(`tab:${tab}`, t(tab), "", worktreeUrl(tree.id, tab, environment));
+    here(
+      "jobs",
+      t("jobs"),
+      "",
+      projectPageUrl(project.id, "jobs", tree.id, environment),
+    );
+    here(
+      "projectSettings",
+      t("projectSettings"),
+      "",
+      projectPageUrl(project.id, "settings/participants", tree.id, environment),
+    );
+    for (const [slug, label] of projectSettingsSections)
+      here(
+        `projectSettings:${slug}`,
+        t(label),
+        t("projectSettings"),
+        projectPageUrl(project.id, `settings/${slug}`, tree.id, environment),
+      );
+  }
   add("projects", t("projects"), t("workspace"), "/projects");
   add(
     "preferences",
@@ -58,35 +98,6 @@ export function searchCommands(
         t("instanceSettings"),
         `/instance-settings/${slug}`,
       );
-  const tree = workspace.worktrees.find((item) => item.id === worktree);
-  project = workspace.projects.find((item) => item.id === tree?.project);
-  if (!tree || !project) return commands;
-  const editable =
-    ["admin", "editor"].includes(project.role) && !tree.read_only;
-  if (editable && canRun) add("run", t("run"), "", undefined, "run");
-  if (editable && canBranch)
-    add("newBranch", t("newBranch"), "", undefined, "newBranch");
-  for (const tab of workspaceTabs)
-    add(`tab:${tab}`, t(tab), "", worktreeUrl(tree.id, tab, environment));
-  add(
-    "jobs",
-    t("jobs"),
-    "",
-    projectPageUrl(project.id, "jobs", tree.id, environment),
-  );
-  add(
-    "projectSettings",
-    t("projectSettings"),
-    "",
-    projectPageUrl(project.id, "settings/participants", tree.id, environment),
-  );
-  for (const [slug, label] of projectSettingsSections)
-    add(
-      `projectSettings:${slug}`,
-      t(label),
-      t("projectSettings"),
-      projectPageUrl(project.id, `settings/${slug}`, tree.id, environment),
-    );
   return commands;
 }
 
