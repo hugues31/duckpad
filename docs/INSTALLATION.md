@@ -345,3 +345,5 @@ Activation gives Python access to the secrets of that project's authorized
 connections because SQL and Python share a worker. Source builds require a
 separate opt-in; wheels are the default. See [Python nodes](PYTHON.md) for
 operator indexes, offline wheel caches, runtime compatibility and memory limits.
+For a private package repository, follow the
+[on-premises Artifactory setup](PYTHON.md#use-an-on-premises-artifactory-index).

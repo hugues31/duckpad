@@ -106,6 +106,89 @@ The project’s Python settings show resolution, installation, readiness and the
 last preparation error. Environments unused for seven days are removed during
 later preparations; active workers hold a lease that prevents removal.
 
+### Use an on-premises Artifactory index
+
+Configure the environment of the **Duckpad server process** before starting it.
+Python dependencies are resolved by the server's `uv`, so this is an instance-wide
+operator setting, not a node parameter or a Duckpad connection. Installing `pytz`
+in the server's own Python environment does not install it in project environments.
+
+Use the Artifactory PyPI repository's **simple API** endpoint, for example:
+
+```text
+https://artifactory.example.com/artifactory/api/pypi/python-virtual/simple
+```
+
+Replace the example host and repository key with your own. The repository must
+serve `pytz` and all other project dependencies as compatible wheels. It can be
+a virtual repository combining internal packages and a remote PyPI repository,
+or a local repository populated in advance for an offline installation.
+
+For a Bash terminal launch with authentication:
+
+```bash
+export UV_DEFAULT_INDEX='artifactory=https://artifactory.example.com/artifactory/api/pypi/python-virtual/simple'
+export UV_INDEX_ARTIFACTORY_USERNAME='your-username'
+read -r -s -p 'Artifactory password or access token: ' UV_INDEX_ARTIFACTORY_PASSWORD
+export UV_INDEX_ARTIFACTORY_PASSWORD
+duckpad start
+```
+
+The `artifactory=` prefix names the index; its name matches the
+`UV_INDEX_ARTIFACTORY_USERNAME` and `UV_INDEX_ARTIFACTORY_PASSWORD` variables.
+Use the authentication method required by your Artifactory administrator. For
+JFrog JWT authentication, set the username to an empty string and supply the JWT
+as the password. See [uv's Artifactory authentication guide](https://docs.astral.sh/uv/guides/integration/jfrog/).
+Omit both credential variables for a repository that permits anonymous reads.
+
+For Docker, Kubernetes or a system service, inject these same variables into the
+running Duckpad container or service through its deployment configuration and
+secret store, then restart it. Setting them only in a host terminal does not update
+an existing service. Keep credentials out of node code, project files and index
+URLs; the named index lets `uv.lock` record the repository without credentials.
+
+`UV_DEFAULT_INDEX` **replaces PyPI**. Setting only `UV_INDEX` or
+`UV_EXTRA_INDEX_URL` adds an index while retaining PyPI as a fallback. Remove
+unwanted additional indexes when the server must use Artifactory exclusively.
+See [uv's index selection rules](https://docs.astral.sh/uv/concepts/indexes/).
+Duckpad runs uv with `--no-config`: `pip.conf`, `PIP_INDEX_URL`, user `uv.toml`
+and a project's `[[tool.uv.index]]` are not configuration routes for these
+environments. Project index overrides are rejected.
+
+If Artifactory uses a private certificate authority, set `SSL_CERT_FILE` to a
+PEM CA bundle readable by the Duckpad service account, and mount it into the
+container when applicable. For example, set
+`SSL_CERT_FILE=/path/to/company-ca-bundle.pem` in that service's environment.
+The bundle replaces uv's default CA bundle, so include every CA needed by the
+configured sources. Keep TLS verification enabled. Proxy settings, when needed,
+also belong in the server environment (`HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY`).
+See [uv's custom CA configuration](https://docs.astral.sh/uv/concepts/authentication/certificates/#custom-certificates).
+
+After restarting the server, enable Python in **Project settings → Python** if
+necessary. On an editable branch, make a change to `pyproject.toml` in **Code**
+(adding a comment is sufficient) and save it to regenerate an existing PyPI lock
+against Artifactory. Keep the generated DuckDB pin and runtime source. Check that
+`pytz` in `uv.lock` now uses the Artifactory registry, then run the Python node and
+check its results and the preparation status in the project's Python settings.
+Existing tags are immutable: regenerate the lock on an editable branch and create
+a new tag before running a job against the new index.
+
+If preparation still fails:
+
+- A request to `https://pypi.org/simple/pytz/` means the resolver is still using
+  PyPI. Check the environment of the actual server process, its restart, and that
+  `UV_DEFAULT_INDEX` was used instead of an additional index variable.
+- A request to `files.pythonhosted.org` can come from upstream download links
+  returned by a mirror. For an installation without public internet access,
+  Artifactory must serve the wheel files itself as well as the simple index.
+- HTTP 401/403 indicates a credential or repository permission problem. Check the
+  index name and the account's read access to both metadata and wheel downloads.
+- Certificate errors require the correct CA bundle; timeouts require checking
+  DNS, firewall and proxy access from the server or container, not the browser.
+- A missing package or compatible wheel must be made available in Artifactory.
+  Setting `UV_OFFLINE=1` disables network access to Artifactory too; use it only
+  when the required packages are already cached or available locally.
+
 ## Checks, writes and artifacts
 
 Execution creates a fresh instance, runs `run`, validates every output, evaluates
