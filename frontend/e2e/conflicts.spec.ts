@@ -61,7 +61,9 @@ for (const [language, theme, choice] of [
     );
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.goto(`/worktrees/${tree.id}/code`);
-    await page.getByRole("treeitem", { name: sqlPath, exact: true }).click();
+    await page
+      .getByRole("treeitem", { name: "Revenue report", exact: true })
+      .click();
     await replaceEditor(
       page,
       page.locator(".code-workspace .monaco-editor textarea"),

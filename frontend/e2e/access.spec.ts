@@ -89,7 +89,12 @@ test("manage instance accounts, project users and live reader access", async ({
     .getByRole("link", { name: "Documentation", exact: true })
     .click();
   const documentation = readerPage.locator(".documentation-page");
-  await expect(documentation.locator(".documentation-preview")).toBeVisible();
+  await expect(
+    documentation.getByRole("button", {
+      name: "Markdown preview",
+      exact: true,
+    }),
+  ).toHaveAttribute("aria-pressed", "true");
   await documentation
     .getByRole("button", { name: "Edit", exact: true })
     .click();
