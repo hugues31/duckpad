@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useT } from "./i18n";
-import { useRevisionDraft } from "./useRevisionDraft";
+import { useIdleSave, useRevisionDraft } from "./useRevisionDraft";
 import type { Documentation, Snapshot } from "./types";
 
 /**
@@ -20,13 +20,13 @@ export default function NodeDocumentation({
   ) => Promise<Snapshot>;
 }) {
   const t = useT();
-  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
   const editable =
     !snapshot.worktree.read_only &&
     (snapshot.role === "admin" || snapshot.role === "editor");
   const current = snapshot.bundle?.documentation?.nodes?.[fullNode] || "";
-  // Switching nodes or tabs saves the notes rather than dropping them.
-  const { draft, update, persist, pending } = useRevisionDraft(
+  // Notes are saved after a pause in typing, on blur, and when the tab closes.
+  const { draft, dirty, update, persist, rejected } = useRevisionDraft(
     current,
     snapshot,
     (text, base) =>
@@ -36,14 +36,17 @@ export default function NodeDocumentation({
     { autosave: editable },
   );
   async function save() {
-    setMessage("");
+    if (!editable) return;
+    setError("");
     try {
       await persist();
-      setMessage(t("saved"));
     } catch (e) {
-      setMessage((e as Error).message);
+      setError((e as Error).message);
     }
   }
+  useIdleSave(draft, dirty && editable, () => {
+    if (!rejected()) void save();
+  });
   return (
     <>
       <textarea
@@ -53,15 +56,9 @@ export default function NodeDocumentation({
         value={draft}
         placeholder={t("documentationPlaceholder")}
         onChange={(e) => update(() => e.target.value)}
+        onBlur={() => void save()}
       />
-      <button
-        className="button primary full"
-        onClick={save}
-        disabled={!editable || pending}
-      >
-        {t(pending ? "saving" : "save")}
-      </button>
-      {message && <p className="muted small">{message}</p>}
+      {error && <div className="notice error">{error}</div>}
     </>
   );
 }

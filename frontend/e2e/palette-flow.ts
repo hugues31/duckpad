@@ -1,4 +1,5 @@
 import { expect, type Page } from "@playwright/test";
+import { closeEditor } from "./helpers";
 import type { Snapshot } from "../src/types";
 
 /** Exercise palette authoring against a local instance or an authenticated preview. */
@@ -74,10 +75,7 @@ export async function verifyPalette(
   await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
   await page.evaluate((text) => navigator.clipboard.writeText(text), code);
   await page.keyboard.press("ControlOrMeta+V");
-  await dialog
-    .getByRole("button", { name: "Save changes", exact: true })
-    .click();
-  await expect(dialog).toHaveCount(0);
+  await closeEditor(dialog);
   const template = palette.getByRole("button", { name, exact: true });
   await expect(template).toBeVisible();
   let snapshot = await read(project);

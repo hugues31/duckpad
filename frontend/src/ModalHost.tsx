@@ -2,7 +2,14 @@ import type { PartitionLaunchOptions } from "./partitions";
 import { PartitionRunSummary, partitionRunLabels } from "./PartitionRunMenu";
 import ConvertNodeDialog from "./ConvertNodeDialog";
 import { nodeCode, nodeCodePath, nodeGraph } from "./nodeCode";
-import { useRef, useState } from "react";
+import {
+  lazy,
+  Suspense,
+  useEffect,
+  useEffectEvent,
+  useRef,
+  useState,
+} from "react";
 import { useLocation, useNavigate } from "react-router";
 import { Boxes } from "lucide-react";
 import { api, errorDetail, importProjectArchive, send, withQuery } from "./api";
@@ -23,9 +30,12 @@ import type {
 } from "./types";
 import { useApiResource } from "./useApiResource";
 import { useAsyncAction } from "./useAsyncAction";
+import { useIdleSave, useRevisionDraft } from "./useRevisionDraft";
 import { ScopeVariables } from "./VariableFields";
 import { ConflictDialog, CombinedResolutionDialog } from "./ConflictDialog";
 import { useWorktree } from "./worktree";
+
+const CodeEditor = lazy(() => import("./Editor"));
 
 /** What the template editor starts from and says, per language. */
 const TEMPLATE_EDITOR = {
@@ -53,6 +63,10 @@ class Transform(dp.Node):
     edit: "editPythonTemplate",
   },
 } as const;
+
+/** The code of a new template, saved before its editor opens. */
+export const newTemplateCode = (language: "sql" | "python") =>
+  TEMPLATE_EDITOR[language].code;
 
 /**
  * The open dialog, as plain data. Its actions are built when it renders, so
@@ -345,9 +359,7 @@ function WorktreeDialog({
           language={language}
           description={t(modal.create ? text.hint : "sharedTemplateHint")}
           readOnly={!canEdit}
-          read={(bundle) =>
-            modal.create ? text.code : bundle.templates[modal.template]
-          }
+          read={(bundle) => bundle.templates[modal.template] ?? ""}
           write={(bundle, text) => {
             bundle.templates[modal.template] = text;
           }}
@@ -417,13 +429,21 @@ function NewBranchDialog({
   );
 }
 
-/** Edit a text of the bundle; saving applies it to the revision shown when the dialog opened. */
+/**
+ * Edit a text of the bundle. Edits are saved after a pause in typing, with
+ * Ctrl+S or ⌘S, and when the dialog closes; a failed save keeps it open once.
+ */
 function RevisionEditor({
   snapshot,
   fullNode,
   read,
   write,
-  ...props
+  title,
+  description,
+  language,
+  readOnly,
+  revealLine,
+  onClose,
 }: {
   snapshot: Snapshot;
   title: string;
@@ -436,22 +456,91 @@ function RevisionEditor({
   write: (bundle: Bundle, text: string) => void;
   onClose: () => void;
 }) {
+  const t = useT();
   const { save, statuses } = useWorktree();
-  const [base] = useState(snapshot);
+  const { draft, dirty, pending, update, persist, rejected } = useRevisionDraft(
+    read(snapshot.bundle!),
+    snapshot,
+    (text: string, base: Snapshot) =>
+      save(base, (bundle) => write(bundle, text)),
+    { autosave: !readOnly },
+  );
+  const [error, setError] = useState("");
+  // The text whose save failed when closing; closing again leaves it unsaved.
+  const [unsavable, setUnsavable] = useState<string | null>(null);
+  const saveNow = async () => {
+    if (readOnly) return true;
+    setError("");
+    try {
+      await persist();
+      return true;
+    } catch (e) {
+      setError((e as Error).message);
+      return false;
+    }
+  };
+  useIdleSave(draft, dirty && !readOnly, () => {
+    if (!rejected()) void saveNow();
+  });
+  const saveShortcut = useEffectEvent((event: KeyboardEvent) => {
+    if (
+      !(event.ctrlKey || event.metaKey) ||
+      event.altKey ||
+      event.key.toLowerCase() !== "s"
+    )
+      return;
+    // The browser would otherwise save the page.
+    event.preventDefault();
+    void saveNow();
+  });
+  useEffect(() => {
+    // Capture the key before the code editor handles it.
+    window.addEventListener("keydown", saveShortcut, true);
+    return () => window.removeEventListener("keydown", saveShortcut, true);
+  }, []);
+  const close = async () => {
+    if (unsavable === draft || (await saveNow())) onClose();
+    else setUnsavable(draft);
+  };
   const diagnostic = fullNode
     ? statuses.nodes[fullNode]?.diagnostic
     : undefined;
   return (
-    <EditorModal
-      {...props}
-      value={read(base.bundle!)}
-      diagnostic={
-        diagnostic?.source === read(snapshot.bundle!) ? diagnostic : undefined
-      }
-      onSave={async (text) => {
-        await save(base, (bundle) => write(bundle, text));
-      }}
-    />
+    <Modal title={title} onClose={close} wide>
+      {description && <p className="modal-description">{description}</p>}
+      <Suspense fallback={<p>{t("loading")}</p>}>
+        <CodeEditor
+          value={draft}
+          onChange={(text) => update(() => text)}
+          language={language}
+          readOnly={readOnly}
+          height="460px"
+          diagnostic={
+            diagnostic?.source === read(snapshot.bundle!)
+              ? diagnostic
+              : undefined
+          }
+          revealLine={revealLine}
+        />
+      </Suspense>
+      {error && <div className="notice error">{error}</div>}
+      <footer>
+        {!readOnly && (
+          <span
+            className="editor-save-state muted small"
+            role="status"
+            title={t("editorAutosaveHint")}
+          >
+            {t(
+              pending ? "saving" : dirty || error ? "unsavedChanges" : "saved",
+            )}
+          </span>
+        )}
+        <button className="button secondary" onClick={close}>
+          {t("close")}
+        </button>
+      </footer>
+    </Modal>
   );
 }
 

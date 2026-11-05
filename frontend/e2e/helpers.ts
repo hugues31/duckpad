@@ -1,4 +1,4 @@
-import { expect, type Page } from "@playwright/test";
+import { expect, type Locator, type Page } from "@playwright/test";
 import en from "../src/locales/en.json" with { type: "json" };
 import type { Snapshot } from "../src/types";
 
@@ -25,6 +25,33 @@ export async function signIn(page: Page) {
   await expect(
     page.getByRole("heading", { name: en.projects, exact: true }),
   ).toBeVisible();
+}
+
+/**
+ * Make edits that the flow saves by itself, and wait until they are saved.
+ * Leaving the focused field saves it without waiting for the typing pause.
+ */
+export async function autosaved(page: Page, edit: () => Promise<unknown>) {
+  const saved = page.waitForResponse(
+    (response) =>
+      response.request().method() === "PUT" &&
+      /^\/api\/worktrees\/[^/]+$/.test(new URL(response.url()).pathname),
+  );
+  await edit();
+  await page.evaluate(() =>
+    (document.activeElement as HTMLElement | null)?.blur(),
+  );
+  expect((await saved).ok()).toBeTruthy();
+  await expect(page.locator(".save-status")).toHaveText("All changes saved");
+}
+
+/** Close a code editor dialog, which saves its pending edits before closing. */
+export async function closeEditor(dialog: Locator) {
+  await dialog
+    .locator("footer")
+    .getByRole("button", { name: "Close", exact: true })
+    .click();
+  await expect(dialog).toHaveCount(0);
 }
 
 export async function openInstanceSettings(

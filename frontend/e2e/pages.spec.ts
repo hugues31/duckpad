@@ -144,6 +144,14 @@ test("a failed save is reported once, and a failed reload does not fail a save",
   const project = await createProject(page, "Save reports");
   await page.goto(`/worktrees/${project.id}/flow`);
   const endpoint = `**/api/worktrees/${project.id}`;
+  await page
+    .getByRole("button", { name: "New SQL template", exact: true })
+    .click();
+  const dialog = page.getByRole("dialog", {
+    name: "New SQL template",
+    exact: true,
+  });
+  await expect(dialog.locator(".monaco-editor")).toBeVisible();
   await page.route(endpoint, async (route) => {
     if (route.request().method() === "PUT")
       await route.fulfill({
@@ -152,25 +160,28 @@ test("a failed save is reported once, and a failed reload does not fail a save",
       });
     else await route.continue();
   });
-  await page
-    .getByRole("button", { name: "New SQL template", exact: true })
-    .click();
-  const dialog = page.getByRole("dialog", {
-    name: "New SQL template",
-    exact: true,
-  });
-  await dialog
-    .getByRole("button", { name: "Save changes", exact: true })
-    .click();
+  await dialog.locator(".monaco-editor textarea").focus();
+  await page.keyboard.insertText("-- Edited\n");
+  await page.keyboard.press("ControlOrMeta+S");
   await expect(dialog.locator(".notice.error")).toHaveText(
     "Simulated save failure",
   );
+  await expect(dialog.locator(".editor-save-state")).toHaveText(
+    "Unsaved changes",
+  );
   // Checked once: a toast would already be shown, and disappears later.
   expect(await page.locator(".toast").count()).toBe(0);
-  await dialog
-    .getByRole("button", { name: "Close", exact: true })
-    .first()
-    .click();
+  // Closing tries once more and stays open; closing again leaves the edit.
+  const close = dialog
+    .locator("footer")
+    .getByRole("button", { name: "Close", exact: true });
+  await close.click();
+  await expect(dialog.locator(".notice.error")).toHaveText(
+    "Simulated save failure",
+  );
+  await close.click();
+  await expect(dialog).toHaveCount(0);
+  expect(await page.locator(".toast").count()).toBe(0);
   await page.unroute(endpoint);
 
   // Reading the saved state fails until the save is reported.

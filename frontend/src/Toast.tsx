@@ -4,9 +4,16 @@ import { useT } from "./i18n";
 
 const TOAST_DURATION = 7000;
 
+/** A button offered with a message, such as undoing what it reports. */
+export interface ToastAction {
+  label: string;
+  run: () => void;
+}
+
 interface Message {
   text: string;
   error: boolean;
+  action?: ToastAction;
 }
 
 export function useToast() {
@@ -17,7 +24,8 @@ export function useToast() {
     return () => clearTimeout(timer);
   }, [message]);
   const notify = useCallback(
-    (text: string, error = false) => setMessage({ text, error }),
+    (text: string, error = false, action?: ToastAction) =>
+      setMessage({ text, error, action }),
     [],
   );
   const dismiss = useCallback(() => setMessage(null), []);
@@ -40,6 +48,17 @@ export function Toast({
     >
       {message.error ? <AlertCircle size={17} /> : <Check size={17} />}
       <span>{message.text}</span>
+      {message.action && (
+        <button
+          className="text-button"
+          onClick={() => {
+            onDismiss();
+            message.action!.run();
+          }}
+        >
+          {message.action.label}
+        </button>
+      )}
       <button
         className="icon"
         title={t("close")}

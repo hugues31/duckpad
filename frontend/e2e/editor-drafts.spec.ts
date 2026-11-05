@@ -273,10 +273,8 @@ test("Inspector saves guided expressions and uploads before another node opens",
   await select(page, "filtered");
   await inspector.getByLabel("Column", { exact: true }).selectOption("amount");
   await inspector.getByLabel("Operator", { exact: true }).selectOption(">");
+  // The guided form writes the condition, saved when another node opens.
   await inspector.getByLabel("Value", { exact: true }).fill("100");
-  await inspector
-    .getByRole("button", { name: "Apply to parameters", exact: true })
-    .click();
   await select(page, "upload");
   await expect
     .poll(async () => (await saved("filtered"))?.params.condition)
@@ -328,9 +326,9 @@ test("an Inspector draft that could not be saved guards navigation", async ({
   await expect(label).toHaveValue("Large orders");
 
   await page.unrouteAll();
-  await inspector
-    .getByRole("button", { name: "Save changes", exact: true })
-    .click();
+  // Leaving the field again retries the save.
+  await label.focus();
+  await label.blur();
   await expect
     .poll(async () => (await saved("filtered"))?.label)
     .toBe("Large orders");
@@ -339,7 +337,7 @@ test("an Inspector draft that could not be saved guards navigation", async ({
   await expect(guard).toHaveCount(0);
 });
 
-test("node documentation keeps typing through saves and is saved when another node opens", async ({
+test("node documentation saves after a pause, keeps typing through saves and is saved when another node opens", async ({
   page,
 }) => {
   const { endpoint, read } = await prepare(page);
@@ -366,8 +364,12 @@ test("node documentation keeps typing through saves and is saved when another no
   ).toBe(true);
   await expect(node(page, "rows")).toContainText("Remote rows");
   await expect(notes).toHaveValue("Keeps paid orders");
+  await expect.poll(documented).toBe("Keeps paid orders");
+  await expect(
+    inspector.getByRole("button", { name: "Save changes", exact: true }),
+  ).toHaveCount(0);
 
-  // Keep typing while the explicit save is in flight.
+  // Keep typing while the save of a pause is in flight.
   let started!: () => void;
   const saving = new Promise<void>((resolve) => (started = resolve));
   let release!: () => void;
@@ -378,25 +380,29 @@ test("node documentation keeps typing through saves and is saved when another no
     await released;
     await route.continue();
   });
-  await inspector
-    .getByRole("button", { name: "Save changes", exact: true })
-    .click();
-  await saving;
   await notes.focus();
   await page.keyboard.press("ControlOrMeta+End");
   await page.keyboard.type(" above 100");
+  await saving;
+  await page.keyboard.type(" daily");
   release();
-  await expect.poll(documented).toBe("Keeps paid orders");
-  await expect(inspector.getByText("All changes saved")).toBeVisible();
-  await expect(notes).toHaveValue("Keeps paid orders above 100");
+  await expect.poll(documented).toBe("Keeps paid orders above 100 daily");
+  await expect(notes).toHaveValue("Keeps paid orders above 100 daily");
+  await expect(page.locator(".save-status")).toHaveText("All changes saved");
 
+  // Opening another node before the pause saves the latest notes.
+  await page.keyboard.type(" for review");
   await select(page, "rows");
-  await expect.poll(documented).toBe("Keeps paid orders above 100");
+  await expect
+    .poll(documented)
+    .toBe("Keeps paid orders above 100 daily for review");
   await select(page, "filtered");
   await inspector
     .getByRole("button", { name: "Documentation", exact: true })
     .click();
-  await expect(notes).toHaveValue("Keeps paid orders above 100");
+  await expect(notes).toHaveValue(
+    "Keeps paid orders above 100 daily for review",
+  );
 });
 
 test("the node palette never offers a component that would contain itself", async ({

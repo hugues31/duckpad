@@ -83,9 +83,10 @@ Worktree IDs avoid putting branch names or paths in URLs. The optional
 not-found screen; inaccessible resources show an unavailable screen.
 
 Sign-in preserves a validated internal destination, including across OIDC.
-Code drafts survive tab changes within a worktree. Navigation waits for autosaved
-editors (Inspector, node documentation) to save. Leaving with drafts that need an
-explicit save, or after a failed autosave, requires confirmation; reloads use
+Code drafts survive tab changes within a worktree. The flow's editors (Inspector,
+node documentation, code editor dialog) save after a typing pause, on blur and on
+close, and navigation waits for them. Leaving with drafts that need an explicit
+save, or after a failed autosave, requires confirmation; reloads use
 `beforeunload`. Responses from an old worktree cannot replace the current snapshot.
 
 FastAPI's final route serves the application shell for direct navigation. API
@@ -96,6 +97,10 @@ routes, `/assets` and the optional `/site` documentation mount precede it.
 A UI save includes its base revision. The writer compares that revision, current
 files and the proposal. Disjoint fields merge; conflicting edits retain all three
 versions in SQLite for resolution. Invalid saves are still committed and diagnosed.
+A save reports the commit it created. Canvas undo posts that commit to
+`/revert`, which saves its inverse with the same three-way merge (base: the
+commit, proposal: its parent), so later independent edits remain; reverting the
+undo commit redoes the change. The page keeps these commits per session.
 Computation conflicts block affected execution scopes; metadata-only conflicts do
 not. Resolution rechecks current files before writing.
 

@@ -24,6 +24,15 @@ import {
   type PathPart,
 } from "../graph";
 import Inspector from "../Inspector";
+import { newTemplateCode } from "../ModalHost";
+import {
+  copiedNodes,
+  copyNodes,
+  pastableNodes,
+  pasteNodes,
+  type CopiedNodes,
+} from "../nodeClipboard";
+import { blockingDialogShown, typingTarget } from "../searchShortcuts";
 import {
   detachNode,
   localDefinitions,
@@ -124,6 +133,8 @@ export default function FlowPage() {
     canEdit,
     save,
     run,
+    undo,
+    redo,
   } = useLoadedWorktree();
   const view = useOutletContext<FlowView>();
   const { path, selected, cell } = view;
@@ -246,15 +257,18 @@ export default function FlowPage() {
     await save(snapshot, (value) => change(graphAt(value, path)));
   }
   /**
-   * Save a new node, then select it. Editors stay inert meanwhile, so an edit
-   * cannot land on the node the inspector still shows.
+   * Save new nodes, then select the one `change` returns. Editors stay inert
+   * meanwhile, so an edit cannot land on the node the inspector still shows.
    */
-  async function insertNode(id: string, change: (value: Bundle) => void) {
+  async function insertNode(change: (value: Bundle) => string) {
     if (!canEdit || additionPending.current) return false;
     additionPending.current = true;
     setAddingNode(true);
     try {
-      await save(snapshot, change);
+      let id = "";
+      await save(snapshot, (value) => {
+        id = change(value);
+      });
       select(id);
       return true;
     } finally {
@@ -282,7 +296,7 @@ export default function FlowPage() {
         canvas.current?.newNodePosition(graph?.nodes || []) ??
         findNodePosition(graph?.nodes || []),
     };
-    const added = await insertNode(created.id, (value) => {
+    const added = await insertNode((value) => {
       const g = graphAt(value, path);
       if (kind === "template" && !linked) detachNode(value, created, parent);
       g.nodes.push(created);
@@ -303,12 +317,13 @@ export default function FlowPage() {
                 targetHandle: connection.handleId,
               },
         );
+      return created.id;
     });
     if (added && !position)
       setFocusRequest({ id: created.id, key: created.id, reveal: true });
   }
   async function removeNodes(ids: string[], edges: string[] = []) {
-    await save(snapshot, (value) => {
+    const { change } = await save(snapshot, (value) => {
       const g = graphAt(value, path);
       g.nodes
         .filter((node) => ids.includes(node.id))
@@ -327,7 +342,90 @@ export default function FlowPage() {
       );
     });
     if (selected && ids.includes(selected)) select(null);
+    if (change && ids.length)
+      notify(
+        ids.length === 1
+          ? t("nodeDeleted")
+          : t("nodesDeleted").replace("{count}", String(ids.length)),
+        false,
+        { label: t("undo"), run: () => revert("undo", change) },
+      );
   }
+  /** Undo or redo a change, from a shortcut or a toast, and report it. */
+  function revert(direction: "undo" | "redo", change?: string) {
+    safe(async () => {
+      const done = await (direction === "undo" ? undo(change) : redo());
+      notify(
+        t(
+          direction === "undo"
+            ? done
+              ? "changeUndone"
+              : "nothingToUndo"
+            : done
+              ? "changeRedone"
+              : "nothingToRedo",
+        ),
+      );
+    });
+  }
+  /** Paste the copied nodes into the opened graph and select the first one. */
+  async function paste(copied: CopiedNodes) {
+    const opened = path.map((part) => part.definition);
+    if (!pastableNodes(bundle!, copied, opened).length) {
+      notify(t("nothingPasted"), true);
+      return;
+    }
+    let ids: string[] = [];
+    const added = await insertNode((value) => {
+      ids = pasteNodes(value, parent, copied, opened);
+      return ids[0];
+    });
+    if (added) setFocusRequest({ id: ids[0], key: ids[0], reveal: true });
+  }
+  // Undo, redo, copy and paste yield to typing and to blocking dialogs.
+  const shortcut = useEffectEvent((event: KeyboardEvent) => {
+    if (
+      event.defaultPrevented ||
+      event.isComposing ||
+      event.altKey ||
+      !(event.ctrlKey || event.metaKey) ||
+      typingTarget(event.target) ||
+      blockingDialogShown()
+    )
+      return;
+    const key = event.key.toLowerCase();
+    const editable = canEdit && !addingNode && !!bundle;
+    if (key === "z" || key === "y") {
+      if (!editable) return;
+      event.preventDefault();
+      if (!event.repeat)
+        revert(key === "y" || event.shiftKey ? "redo" : "undo");
+    } else if (key === "c" && !event.shiftKey && bundle) {
+      // Selected text is copied as usual.
+      if (window.getSelection()?.toString()) return;
+      const copied = copyNodes(
+        bundle,
+        parent,
+        selection.length ? selection : selected ? [selected] : [],
+      );
+      if (!copied) return;
+      event.preventDefault();
+      notify(
+        copied.nodes.length === 1
+          ? t("nodeCopied")
+          : t("nodesCopied").replace("{count}", String(copied.nodes.length)),
+      );
+    } else if (key === "v" && !event.shiftKey) {
+      const copied = copiedNodes();
+      if (!editable || !copied) return;
+      event.preventDefault();
+      if (!event.repeat) safe(() => paste(copied));
+    }
+  });
+  useEffect(() => {
+    document.addEventListener("keydown", shortcut);
+    return () => document.removeEventListener("keydown", shortcut);
+  }, []);
   /** Insert a Filter node reading one output of the selected node, with a sample's condition. */
   async function addFilterNode(port: string, condition: string) {
     if (!node) return;
@@ -341,7 +439,7 @@ export default function FlowPage() {
       bundle?.templates.filter !== undefined &&
       filter?.inputs?.length === 1 &&
       filter.parameters?.some((p) => p.name === "condition");
-    const added = await insertNode(created.id, (value) => {
+    const added = await insertNode((value) => {
       const g = graphAt(value, path);
       if (reusable) {
         created.template = "filter";
@@ -357,6 +455,7 @@ export default function FlowPage() {
         target: created.id,
         targetHandle: reusable ? filter!.inputs![0] : "source",
       });
+      return created.id;
     });
     if (added) notify(t("filterNodeAdded"));
   }
@@ -432,12 +531,14 @@ export default function FlowPage() {
           safe(() => addNode(kind, id, undefined, undefined, linked))
         }
         onNewTemplate={(language) =>
-          openModal({
-            kind: "template",
-            worktree,
-            template:
-              identifier("template") + (language === "python" ? ".py" : ""),
-            create: true,
+          safe(async () => {
+            // Edits are saved as they are typed, so the template exists first.
+            const template =
+              identifier("template") + (language === "python" ? ".py" : "");
+            await save(snapshot, (value) => {
+              value.templates[template] = newTemplateCode(language);
+            });
+            openModal({ kind: "template", worktree, template, create: true });
           })
         }
         onLibrary={() => openModal({ kind: "library", worktree })}
@@ -676,7 +777,7 @@ export default function FlowPage() {
                     y: node.position.y + 40,
                   },
                 };
-                return insertNode(duplicate.id, (value) => {
+                return insertNode((value) => {
                   if (!duplicate.component) {
                     const sql = nodeCode(value, node, parent);
                     duplicate.origin = node.template || node.origin;
@@ -686,6 +787,7 @@ export default function FlowPage() {
                     ] = sql;
                   }
                   nodeGraph(value, parent).nodes.push(duplicate);
+                  return duplicate.id;
                 });
               })
             }

@@ -65,6 +65,27 @@ export function useDraftRegistry() {
   }, [drafts, register]);
 }
 
+/** How long edits pause before they are saved, in milliseconds. */
+export const AUTOSAVE_DELAY = 800;
+
+/**
+ * Call `save` once `value` has not changed for `delay` while `enabled`.
+ * Drafts call it with their `persist` unless the draft was `rejected`.
+ */
+export function useIdleSave(
+  value: unknown,
+  enabled: boolean,
+  save: () => void,
+  delay = AUTOSAVE_DELAY,
+) {
+  const onIdle = useEffectEvent(save);
+  useEffect(() => {
+    if (!enabled) return;
+    const timer = setTimeout(() => onIdle(), delay);
+    return () => clearTimeout(timer);
+  }, [value, enabled, delay]);
+}
+
 interface DraftOptions<T> {
   /** Which navigation must confirm before discarding the draft. */
   scope?: DraftScope;
@@ -168,9 +189,15 @@ export function useRevisionDraft<T, Revision>(
     persist().catch(() => undefined);
   };
   const flush = async () => {
-    do {
-      await persist();
-    } while (unsaved());
+    try {
+      do {
+        await persist();
+      } while (unsaved());
+    } catch (error) {
+      // The navigation reports the failure, edits typed meanwhile included.
+      rejected.current = { draft: latest.current };
+      throw error;
+    }
   };
   const register = useContext(DraftContext);
   // The registry and the unmount use the actions of the latest render.
@@ -198,5 +225,7 @@ export function useRevisionDraft<T, Revision>(
     update,
     persist,
     discard,
+    /** Whether a failed save already reported the current draft; only an explicit save resends it. */
+    rejected: () => rejected.current?.draft === latest.current,
   };
 }
