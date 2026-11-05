@@ -17,17 +17,23 @@ export function initialProjectFile(snapshot: Snapshot, selectedNode: string) {
     snapshot.bundle &&
     selectedNode &&
     nodeLocation(snapshot.bundle, selectedNode);
-  const source = location && nodeSourcePath(location.node, location.parent);
+  // A component instance opens its definition, as the Inspector does.
+  const source =
+    location &&
+    (location.node.component
+      ? `components/${location.node.component}.json`
+      : nodeSourcePath(location.node, location.parent));
   if (source && source in snapshot.files) return source;
   return "README.md" in snapshot.files
     ? "README.md"
     : Object.keys(snapshot.files).sort()[0] || "";
 }
 
-/** File identities stay stable while the tree shows the authored node captions. */
-export function projectFileLabel(path: string, names: NodeNames, t: Translate) {
+/** The caption of a node's code file, or null for other files. Inside a
+ * component folder, the component name is already shown by the folder. */
+export function nodeFileLabel(path: string, names: NodeNames, t: Translate) {
   const node = path.match(/^(nodes\/|components\/[^/]+\/)([^/]+)\.(sql|py)$/);
-  if (!node) return path.split("/").at(-1)!;
+  if (!node) return null;
   const key = node[1] === "nodes/" ? node[2] : node[1] + node[2];
-  return displayNodeName(names[key], t("node"), t);
+  return displayNodeName(names[key]?.slice(-1), t("node"), t);
 }

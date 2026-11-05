@@ -7,7 +7,7 @@ import {
   FolderOpen,
 } from "lucide-react";
 import { useT } from "./i18n";
-import { projectFileLabel } from "./projectFiles";
+import { nodeFileLabel } from "./projectFiles";
 import type { NodeNames } from "./nodeNames";
 
 interface Entry {
@@ -45,6 +45,15 @@ function fileTree(paths: string[]) {
   return root.children;
 }
 
+/** Unfold the folders that contain a path. */
+function reveal(collapsed: Set<string>, path: string) {
+  const next = new Set(collapsed);
+  const parts = path.split("/");
+  for (let i = 1; i < parts.length; i++)
+    next.delete(parts.slice(0, i).join("/"));
+  return next;
+}
+
 export default function ProjectFileTree({
   files,
   selected,
@@ -58,9 +67,15 @@ export default function ProjectFileTree({
 }) {
   const t = useT();
   const entries = useMemo(() => fileTree(Object.keys(files)), [files]);
-  const [collapsed, setCollapsed] = useState<Set<string>>(
-    () => new Set(["templates"]),
+  // Built-in templates start folded, except around the opened file.
+  const [collapsed, setCollapsed] = useState<Set<string>>(() =>
+    reveal(new Set(["templates"]), selected),
   );
+  const [revealed, setRevealed] = useState(selected);
+  if (revealed !== selected) {
+    setRevealed(selected);
+    setCollapsed((previous) => reveal(previous, selected));
+  }
   const [focused, setFocused] = useState(selected);
   const tree = useRef<HTMLDivElement>(null);
   const visible: Entry[] = [];
@@ -131,15 +146,12 @@ export default function ProjectFileTree({
       const expanded = !collapsed.has(entry.path);
       const Icon = folder ? (expanded ? FolderOpen : Folder) : FileCode2;
       const Chevron = expanded ? ChevronDown : ChevronRight;
+      const label = folder ? null : nodeFileLabel(entry.path, names, t);
       return (
         <div
           key={entry.path}
           role="treeitem"
-          aria-label={
-            /^(nodes|components)\/.+\.(sql|py)$/.test(entry.path)
-              ? projectFileLabel(entry.path, names, t)
-              : entry.path
-          }
+          aria-label={label ?? entry.path}
           aria-level={level}
           aria-expanded={folder ? expanded : undefined}
           aria-selected={!folder && selected === entry.path}
@@ -166,9 +178,7 @@ export default function ProjectFileTree({
               <span className="file-tree-indent" />
             )}
             <Icon size={15} />
-            <span>
-              {folder ? entry.name : projectFileLabel(entry.path, names, t)}
-            </span>
+            <span>{label ?? entry.name}</span>
           </div>
           {folder && expanded && (
             <div role="group">{render(entry.children, level + 1)}</div>

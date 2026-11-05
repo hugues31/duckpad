@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { projectFileLanguage, projectFileLabel } from "./projectFiles";
+import { projectFileLanguage, nodeFileLabel } from "./projectFiles";
 import en from "./locales/en.json";
 import { initialProjectFile } from "./projectFiles";
 import type { Snapshot } from "./types";
@@ -11,6 +11,7 @@ it("opens the selected node source or the README, including component and linked
       "nodes/node_1.sql": "",
       "templates/shared.sql": "",
       "components/report/node_2.py": "",
+      "components/report.json": "",
     },
     bundle: {
       flow: {
@@ -27,6 +28,7 @@ it("opens the selected node source or the README, including component and linked
   expect(initialProjectFile(snapshot, "removed")).toBe("README.md");
   expect(initialProjectFile(snapshot, "node_1")).toBe("nodes/node_1.sql");
   expect(initialProjectFile(snapshot, "linked")).toBe("templates/shared.sql");
+  expect(initialProjectFile(snapshot, "report")).toBe("components/report.json");
   expect(initialProjectFile(snapshot, "report::node_2")).toBe(
     "components/report/node_2.py",
   );
@@ -38,12 +40,10 @@ it("labels SQL and Python node files without exposing raw IDs", () => {
     "components/report/node_2": [{ label: "Report" }, { label: "Totals" }],
   };
   const t = (key: keyof typeof en) => en[key];
-  expect(projectFileLabel("nodes/node_1.sql", names, t)).toBe("Orders");
-  expect(projectFileLabel("components/report/node_2.py", names, t)).toBe(
-    "Report / Totals",
-  );
-  expect(projectFileLabel("nodes/node_removed.sql", names, t)).toBe(en.node);
-  expect(projectFileLabel("templates/sql.sql", names, t)).toBe("sql.sql");
+  expect(nodeFileLabel("nodes/node_1.sql", names, t)).toBe("Orders");
+  expect(nodeFileLabel("components/report/node_2.py", names, t)).toBe("Totals");
+  expect(nodeFileLabel("nodes/node_removed.sql", names, t)).toBe(en.node);
+  expect(nodeFileLabel("templates/sql.sql", names, t)).toBeNull();
 });
 
 describe("projectFileLanguage", () => {
