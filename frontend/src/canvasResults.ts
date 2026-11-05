@@ -1,6 +1,7 @@
+import { exposedSource } from "./graph";
 import type { ComponentDefinition, FlowNode, Statuses } from "./types";
 
-/** Follow the primary exposed port; summing component internals double-counts rows. */
+/** The row count of a node's primary output, through component boundaries. */
 export function primaryOutputCount(
   node: FlowNode,
   id: string,
@@ -8,23 +9,10 @@ export function primaryOutputCount(
   components: Record<string, ComponentDefinition>,
   statuses: Statuses,
 ) {
-  let port = ports.includes("result") ? "result" : ports[0];
+  const port = ports.includes("result") ? "result" : ports[0];
   if (!port) return undefined;
-  let current = node;
-  const seen = new Set<string>();
-  while (current.component) {
-    if (seen.has(current.component)) return undefined;
-    seen.add(current.component);
-    const definition = components[current.component];
-    const output = definition?.outputs?.[port];
-    const child =
-      output && definition.nodes.find((item) => item.id === output.node);
-    if (!output || !child) return undefined;
-    id += `::${output.node}`;
-    port = output.port;
-    current = child;
-  }
-  return statuses.nodes[id]?.outputs[port]?.count;
+  const source = exposedSource(components, node, id, port);
+  return statuses.nodes[source.node]?.outputs[source.port]?.count;
 }
 
 export const showMinimap = (width: number, height: number) =>

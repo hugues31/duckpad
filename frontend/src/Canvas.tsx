@@ -175,7 +175,8 @@ function PipelineNode({ id, data, selected }: NodeProps<PipelineNode>) {
         {(data.status === "valid" || data.status === "success") &&
           data.count != null && (
             <span className="node-row-count">
-              {data.count.toLocaleString()} {t("rows")}
+              {data.count.toLocaleString()}{" "}
+              {t(data.count === 1 ? "row" : "rows")}
             </span>
           )}
         {data.status &&
