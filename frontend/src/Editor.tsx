@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import type { SqlDiagnostic } from "./types";
 import Editor, { loader } from "@monaco-editor/react";
 import * as monaco from "monaco-editor/esm/vs/editor/editor.api";
 import "monaco-editor/esm/vs/basic-languages/sql/sql.contribution";
@@ -101,15 +102,54 @@ export default function CodeEditor({
   language = "sql",
   readOnly = false,
   height = "380px",
+  diagnostic,
+  revealLine,
 }: {
   value: string;
   onChange?: (v: string) => void;
   language?: string;
   readOnly?: boolean;
   height?: string;
+  diagnostic?: SqlDiagnostic | null;
+  revealLine?: number;
 }) {
+  const editor = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
+  const mark = () => {
+    const model = editor.current?.getModel();
+    if (!model) return;
+    const valid = diagnostic && value === diagnostic.source;
+    monaco.editor.setModelMarkers(
+      model,
+      "execution",
+      valid
+        ? [
+            {
+              severity: monaco.MarkerSeverity.Error,
+              message: diagnostic.message,
+              startLineNumber: diagnostic.line,
+              endLineNumber: diagnostic.line,
+              startColumn: diagnostic.column,
+              endColumn: model.getLineMaxColumn(diagnostic.line),
+            },
+          ]
+        : [],
+    );
+  };
+  useEffect(mark, [diagnostic, value]);
   return (
     <Editor
+      onMount={(instance) => {
+        editor.current = instance;
+        mark();
+        if (revealLine) {
+          instance.setPosition({
+            lineNumber: revealLine,
+            column: diagnostic?.column || 1,
+          });
+          instance.revealLineInCenter(revealLine);
+          instance.focus();
+        }
+      }}
       height={height}
       language={language}
       value={value}

@@ -130,6 +130,7 @@ function PipelineNode({ id, data, selected }: NodeProps<PipelineNode>) {
     updateNodeInternals(id);
   }, [id, portLayout, updateNodeInternals]);
   const source = data.kind === "source";
+  const StatusTag = data.status === "failed" ? "button" : "span";
   const portPosition = (index: number, count: number) => {
     const spacing = Math.min(24, 72 / Math.max(1, count - 1));
     const top = 48 + (index - (count - 1) / 2) * spacing;
@@ -170,7 +171,10 @@ function PipelineNode({ id, data, selected }: NodeProps<PipelineNode>) {
         )}
         <WarningBadge count={data.warnings} />
         {data.status && (
-          <span className={`node-status ${data.status}`} title={t(data.status)}>
+          <StatusTag
+            className={`node-status ${data.status}`}
+            title={t(data.status)}
+          >
             <StatusIcon
               status={data.status}
               size={13}
@@ -178,7 +182,7 @@ function PipelineNode({ id, data, selected }: NodeProps<PipelineNode>) {
               aria-hidden="true"
             />
             <span>{t(data.status)}</span>
-          </span>
+          </StatusTag>
         )}
       </div>
       {data.inputs.map((port: string, i: number) => (
@@ -257,6 +261,8 @@ interface CanvasProps {
   onSelection: (ids: string[]) => void;
   /** Show the results log of a node whose warning badge was clicked. */
   onWarnings?: (id: string) => void;
+  /** Show the error of a node whose Failed badge was clicked. */
+  onFailure?: (id: string) => void;
 }
 function CanvasInner({ ref, ...props }: CanvasProps) {
   const t = useT();
@@ -678,12 +684,14 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
         onNodeClick={(event, node) => {
           setFocus(null);
           if (!event.shiftKey) props.onSelect(node.id);
-          // A warning badge opens the node's results on its log.
-          if (
-            !event.shiftKey &&
-            (event.target as Element).closest(".warning-badge")
-          )
-            props.onWarnings?.(node.id);
+          // A warning badge opens the node's results on its log, a Failed badge on its error.
+          const badge = event.shiftKey
+            ? null
+            : (event.target as Element).closest(
+                ".warning-badge, .node-status.failed",
+              );
+          if (badge?.matches(".warning-badge")) props.onWarnings?.(node.id);
+          else if (badge) props.onFailure?.(node.id);
         }}
         onPaneClick={() => {
           setFocus(null);

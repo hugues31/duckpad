@@ -81,9 +81,17 @@ type WorktreeModal = { worktree: string } & (
     }
   | { kind: "conflict"; conflict: string }
   | { kind: "combinedResolution"; conflict: string }
-  | { kind: "template"; template: string; create?: boolean }
+  | {
+      kind: "template";
+      template: string;
+      create?: boolean;
+      fullNode?: string;
+      line?: number;
+    }
   | {
       kind: "nodeCode" | "convertNode" | "relinkNode";
+      fullNode?: string;
+      line?: number;
       node: string;
       parent?: string;
     }
@@ -310,6 +318,8 @@ function WorktreeDialog({
       return (
         <RevisionEditor
           snapshot={snapshot}
+          fullNode={modal.fullNode || modal.node}
+          revealLine={modal.line}
           title={t(node.template ? "viewNodeCode" : "editNodeCode")}
           language={node.language || "sql"}
           readOnly={!canEdit || !!node.template}
@@ -329,6 +339,8 @@ function WorktreeDialog({
       return (
         <RevisionEditor
           snapshot={snapshot}
+          fullNode={modal.fullNode}
+          revealLine={modal.line}
           title={t(modal.create ? text.create : text.edit)}
           language={language}
           description={t(modal.create ? text.hint : "sharedTemplateHint")}
@@ -408,6 +420,7 @@ function NewBranchDialog({
 /** Edit a text of the bundle; saving applies it to the revision shown when the dialog opened. */
 function RevisionEditor({
   snapshot,
+  fullNode,
   read,
   write,
   ...props
@@ -417,16 +430,24 @@ function RevisionEditor({
   description?: string;
   language?: string;
   readOnly: boolean;
+  fullNode?: string;
+  revealLine?: number;
   read: (bundle: Bundle) => string;
   write: (bundle: Bundle, text: string) => void;
   onClose: () => void;
 }) {
-  const { save } = useWorktree();
+  const { save, statuses } = useWorktree();
   const [base] = useState(snapshot);
+  const diagnostic = fullNode
+    ? statuses.nodes[fullNode]?.diagnostic
+    : undefined;
   return (
     <EditorModal
       {...props}
       value={read(base.bundle!)}
+      diagnostic={
+        diagnostic?.source === read(snapshot.bundle!) ? diagnostic : undefined
+      }
       onSave={async (text) => {
         await save(base, (bundle) => write(bundle, text));
       }}

@@ -3,6 +3,7 @@ import { templateLabel, type Translate } from "./i18n";
 import type { Conflict, Json } from "./types";
 import { displayNodeName, type NodeNames } from "./nodeNames";
 import { conflictLabel } from "./variables";
+import { templateCodePath } from "./nodeCode";
 
 /** File name followed by the semantic JSON pointer used by the merge engine. */
 export function conflictPath(path: string) {
@@ -98,7 +99,7 @@ export function conflictTitle(
         files[
           `${component ? `components/${component}` : "nodes"}/${node}.${extension}`
         ] ||
-        files[`templates/${template}${template.endsWith(".py") ? "" : ".sql"}`],
+        files[templateCodePath(template)],
       python,
     );
     const componentName =

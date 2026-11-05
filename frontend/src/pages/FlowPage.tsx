@@ -29,6 +29,7 @@ import {
   localDefinitions,
   nodeCode,
   nodeCodePath,
+  nodeLocation,
   nodeEntity,
   nodeGraph,
 } from "../nodeCode";
@@ -133,6 +134,7 @@ export default function FlowPage() {
   const [addingNode, setAddingNode] = useState(false);
   const additionPending = useRef(false);
   const [resultsTab, setResultsTab] = useState<ResultsTab>("data");
+  const [failureFocus, setFailureFocus] = useState(0);
   // Badges and summary links open their results tab, even when the panel is hidden.
   const showResults = (tab: ResultsTab) => {
     setResultsTab(tab);
@@ -385,13 +387,29 @@ export default function FlowPage() {
     inspector: panels.open.inspector && !!node,
     preview: panels.open.preview && !!node,
   };
-  const editCode = () =>
-    node &&
+  const editCode = (line?: number, target = fullNode) => {
+    const location = nodeLocation(bundle, target);
+    if (!location) return;
+    const { node, parent } = location;
     openModal(
       node.template
-        ? { kind: "template", worktree, template: node.template }
-        : { kind: "nodeCode", worktree, node: node.id, parent },
+        ? {
+            kind: "template",
+            worktree,
+            template: node.template,
+            fullNode: target,
+            line,
+          }
+        : {
+            kind: "nodeCode",
+            worktree,
+            node: node.id,
+            parent,
+            fullNode: target,
+            line,
+          },
     );
+  };
   return (
     <div
       className={`flow-layout ${shown.palette ? "palette-open" : ""} ${shown.inspector ? "inspector-open" : ""} ${shown.preview ? "preview-open" : ""} ${path.length ? "nested-flow" : ""}`}
@@ -504,12 +522,16 @@ export default function FlowPage() {
             onOpen={openComponent}
             onSelection={updateSelection}
             onWarnings={() => showResults("log")}
+            onFailure={() => {
+              setFailureFocus((value) => value + 1);
+              showResults("data");
+            }}
           />
         </div>
         {node && signature ? (
           <ResultsPanel
             readOnly={!canEdit}
-            key={[worktree, fullNode, ...ports].join(":")}
+            key={[worktree, fullNode, failureFocus, ...ports].join(":")}
             user={workspace.user.id}
             snapshot={snapshot}
             environment={environment}
@@ -610,9 +632,15 @@ export default function FlowPage() {
             onDelete={() => safe(() => removeNodes([node.id]))}
             onRun={() => run(fullNode)}
             onOpen={() => openComponent(node.id)}
-            onEditTemplate={editCode}
+            onEditTemplate={() => editCode()}
             onViewCode={() =>
-              openModal({ kind: "nodeCode", worktree, node: node.id, parent })
+              openModal({
+                kind: "nodeCode",
+                worktree,
+                node: node.id,
+                parent,
+                fullNode,
+              })
             }
             onDetach={() =>
               safe(() =>

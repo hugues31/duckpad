@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useState } from "react";
 import { Download, FileCode2, Loader2, Plus, Save } from "lucide-react";
 import { downloadProject } from "./api";
+import { nodeLocation, nodeSourcePath } from "./nodeCode";
 import { useT } from "./i18n";
 import ProjectFileTree from "./ProjectFileTree";
 import { projectFileLanguage } from "./projectFiles";
@@ -29,7 +30,7 @@ export default function CodePanel({
   onSave: (files: Files, base: Snapshot) => Promise<Snapshot>;
 }) {
   const t = useT();
-  const { setAssistantFile } = useWorktree();
+  const { setAssistantFile, statuses } = useWorktree();
   // The panel stays mounted across the worktree's tabs.
   const {
     draft: files,
@@ -49,6 +50,18 @@ export default function CodePanel({
   const [downloading, setDownloading] = useState(false);
   const [error, setError] = useState("");
   const path = selected in files ? selected : Object.keys(files).sort()[0];
+
+  // The failure reported in this saved file, if any.
+  const diagnostic = Object.entries(statuses.nodes).flatMap(([id, result]) => {
+    const found = result.diagnostic;
+    const location =
+      found && snapshot.bundle && nodeLocation(snapshot.bundle, id);
+    return location &&
+      found.source === snapshot.files[path] &&
+      nodeSourcePath(location.node, location.parent) === path
+      ? [found]
+      : [];
+  })[0];
 
   // The server validates the context against saved files; a draft file is not shared.
   const assistantFile = path && path in snapshot.files ? path : "";
@@ -262,6 +275,7 @@ export default function CodePanel({
                     <CodeEditor
                       key={path}
                       value={files[path]}
+                      diagnostic={diagnostic}
                       onChange={edit}
                       language={projectFileLanguage(path)}
                       readOnly={readOnly || pending}

@@ -1,3 +1,4 @@
+import type { SqlDiagnostic } from "./types";
 import {
   lazy,
   Suspense,
@@ -212,6 +213,8 @@ export function EditorModal({
   onSave,
   onClose,
   readOnly = false,
+  diagnostic,
+  revealLine,
 }: {
   title: string;
   description?: string;
@@ -220,6 +223,8 @@ export function EditorModal({
   onSave?: (v: string) => Promise<void>;
   onClose: () => void;
   readOnly?: boolean;
+  diagnostic?: SqlDiagnostic | null;
+  revealLine?: number;
 }) {
   const t = useT();
   const [text, setText] = useState(value);
@@ -234,6 +239,8 @@ export function EditorModal({
           language={language}
           readOnly={readOnly}
           height="460px"
+          diagnostic={diagnostic}
+          revealLine={revealLine}
         />
       </Suspense>
       {error && <div className="notice error">{error}</div>}

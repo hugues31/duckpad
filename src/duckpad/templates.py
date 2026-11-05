@@ -12,6 +12,7 @@ from sqlglot import exp
 from sqlglot.tokens import TokenType
 
 from .data_preparation import PREPARATION_TYPES, render_preparation
+from .sql_errors import SqlSourceError, source_context
 from .util import Problem, literal, qi
 
 REFERENCE = re.compile(r"{{\s*(\w+)\s*}}")
@@ -89,6 +90,7 @@ def parse_template(sql, language="sql"):
         "blocks": [],
     }
     current, buffer = None, []
+    buffer_lines = []
     message_block = 0
     check = {}
     test_names = set()
@@ -99,19 +101,24 @@ def parse_template(sql, language="sql"):
             kind = "test" if "test_name" in check else "message"
             raise Problem(f"Each @{kind} block must contain a query")
         if sql:
+            first = next(i for i, text in enumerate(buffer) if text.strip())
             template["blocks"].append(
                 {
                     "output": current,
                     "sql": sql,
+                    "source_lines": buffer_lines[first:],
+                    "source_column": len(buffer[first]) - len(buffer[first].lstrip()) + 1,
                     **check,
                 }
             )
         buffer.clear()
+        buffer_lines.clear()
 
-    for line in sql.splitlines():
+    for line_number, line in enumerate(sql.splitlines(), 1):
         found = directive(line)
         if not found:
             buffer.append(line)
+            buffer_lines.append(line_number)
             continue
         key, value = found
         if key in DESCRIPTIVE:
@@ -718,7 +725,12 @@ def compile_template(
     allowed = set(inputs.values())
     statements = []
     for block in execution_blocks(template):
-        tree = parse_block(REFERENCE.sub(lambda m: values[m[1]], block["sql"]))
+        source_location = source_context(block, values, physical_outputs)
+        rendered = REFERENCE.sub(lambda m: values[m[1]], block["sql"])
+        try:
+            tree = parse_block(rendered)
+        except Problem as error:
+            raise SqlSourceError(error, source_location, rendered, phase="compilation") from error
         message_block = block.get("message_block")
         source = check_access(block, tree, allowed, connections, resources)
         query = tree.sql(dialect="duckdb")
@@ -736,6 +748,7 @@ def compile_template(
                 "output": output,
                 "table": physical,
                 "query": query,
+                "source_location": source_location,
                 "source": source,
                 # Runs materialize outputs from this query and record the statements they execute.
                 "sql": query,

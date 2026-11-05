@@ -385,8 +385,18 @@ export interface TestExecution {
   started: string;
   results: ExecutionResult[];
 }
+export interface SqlDiagnostic {
+  phase?: "compilation" | "execution";
+  message: string;
+  source: string;
+  line: number;
+  column: number;
+  executed_sql: string;
+}
+
 /** What a run did with one node. */
 export interface NodeRun {
+  diagnostic?: SqlDiagnostic | null;
   artifact?: { name?: string };
   partitioned?: boolean;
   results?: ExecutionResult[];
@@ -465,6 +475,7 @@ export interface Run {
 }
 /** The latest results of a node in an environment. */
 export interface NodeResult {
+  diagnostic?: SqlDiagnostic | null;
   results?: ExecutionResult[];
   result_run?: string;
   /** The failed execution, which can differ from the last successful output generation. */
