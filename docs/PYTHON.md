@@ -119,8 +119,7 @@ Use the Artifactory PyPI repository's **simple API** endpoint, for example:
 https://artifactory.example.com/artifactory/api/pypi/python-virtual/simple
 ```
 
-Replace the example host and repository key with your own. The repository must
-serve `pytz` and all other project dependencies as compatible wheels. It can be
+The repository must serve `pytz` and all other project dependencies as compatible wheels. It can be
 a virtual repository combining internal packages and a remote PyPI repository,
 or a local repository populated in advance for an offline installation.
 
@@ -136,8 +135,7 @@ duckpad start
 
 The `artifactory=` prefix names the index; its name matches the
 `UV_INDEX_ARTIFACTORY_USERNAME` and `UV_INDEX_ARTIFACTORY_PASSWORD` variables.
-Use the authentication method required by your Artifactory administrator. For
-JFrog JWT authentication, set the username to an empty string and supply the JWT
+For JFrog JWT authentication, set the username to an empty string and supply the JWT
 as the password. See [uv's Artifactory authentication guide](https://docs.astral.sh/uv/guides/integration/jfrog/).
 Omit both credential variables for a repository that permits anonymous reads.
 
@@ -164,14 +162,11 @@ configured sources. Keep TLS verification enabled. Proxy settings, when needed,
 also belong in the server environment (`HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY`).
 See [uv's custom CA configuration](https://docs.astral.sh/uv/concepts/authentication/certificates/#custom-certificates).
 
-After restarting the server, enable Python in **Project settings → Python** if
-necessary. On an editable branch, make a change to `pyproject.toml` in **Code**
-(adding a comment is sufficient) and save it to regenerate an existing PyPI lock
-against Artifactory. Keep the generated DuckDB pin and runtime source. Check that
-`pytz` in `uv.lock` now uses the Artifactory registry, then run the Python node and
-check its results and the preparation status in the project's Python settings.
-Existing tags are immutable: regenerate the lock on an editable branch and create
-a new tag before running a job against the new index.
+After restarting the server, run the Python node on an editable branch. Its
+`uv.lock` still takes `pytz` from PyPI, so Duckpad resolves it again against
+Artifactory and commits the new lock; no manual edit is needed. The project's
+Python settings show the preparation status. Tags are immutable and refuse the
+old PyPI lock: create a new tag from the updated branch before running jobs.
 
 If preparation still fails:
 
