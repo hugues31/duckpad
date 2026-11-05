@@ -80,6 +80,10 @@ test("execution errors open from the canvas, point into saved code and clear aft
   };
   await run();
   await page.reload();
+  await panel
+    .getByLabel("Output", { exact: true })
+    .selectOption("input:source");
+  await expect(panel.locator(".data-table")).toContainText("France");
   await panel.getByRole("tab", { name: "Log", exact: true }).click();
   await page
     .locator('[data-id="query"]')

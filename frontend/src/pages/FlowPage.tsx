@@ -134,6 +134,7 @@ export default function FlowPage() {
   const [addingNode, setAddingNode] = useState(false);
   const additionPending = useRef(false);
   const [resultsTab, setResultsTab] = useState<ResultsTab>("data");
+  const [failureFocus, setFailureFocus] = useState(0);
   // Badges and summary links open their results tab, even when the panel is hidden.
   const showResults = (tab: ResultsTab) => {
     setResultsTab(tab);
@@ -521,13 +522,16 @@ export default function FlowPage() {
             onOpen={openComponent}
             onSelection={updateSelection}
             onWarnings={() => showResults("log")}
-            onFailure={() => showResults("data")}
+            onFailure={() => {
+              setFailureFocus((value) => value + 1);
+              showResults("data");
+            }}
           />
         </div>
         {node && signature ? (
           <ResultsPanel
             readOnly={!canEdit}
-            key={[worktree, fullNode, ...ports].join(":")}
+            key={[worktree, fullNode, failureFocus, ...ports].join(":")}
             user={workspace.user.id}
             snapshot={snapshot}
             environment={environment}
