@@ -5,7 +5,6 @@ import {
   BookOpen,
   CalendarClock,
   FileCode2,
-  Puzzle,
   Settings2,
   Variable,
   Workflow,
@@ -23,7 +22,6 @@ const icons = {
   code: FileCode2,
   documentation: BookOpen,
   variables: Variable,
-  extensions: Puzzle,
   history: Activity,
   jobs: CalendarClock,
   projectSettings: Settings2,
@@ -55,7 +53,13 @@ export default function ProjectTabs({
       className="tabs main-tabs"
       aria-label={t("projectNavigation")}
     >
-      {([...workspaceTabs, "jobs", "projectSettings"] as const).map((tab) => {
+      {(
+        [
+          ...workspaceTabs.filter((tab) => tab !== "extensions"),
+          "jobs",
+          "projectSettings",
+        ] as const
+      ).map((tab) => {
         const Icon = icons[tab];
         return (
           <Link

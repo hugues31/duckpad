@@ -40,7 +40,6 @@ test("Code has a keyboard file tree, preserves drafts across files and tabs, sav
     "Code",
     "Documentation",
     "Variables",
-    "Extensions",
     "History",
     "Jobs",
     "Project settings",

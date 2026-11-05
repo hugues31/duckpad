@@ -180,7 +180,8 @@ function SignedIn({
     : "";
   const pipeline = contextWorktree || last?.id;
   const partitionSettings =
-    route.area === "projectSettings" && route.section === "partitions";
+    route.area === "projectSettings" &&
+    ["partitions", "extensions"].includes(route.section || "");
   const openSearch = useCallback(() => setSearchOpen(true), []);
   useSearchShortcut(workspace ? "k" : undefined, openSearch);
   const closeModal = useCallback(() => setModal(null), []);

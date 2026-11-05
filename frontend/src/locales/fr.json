@@ -181,7 +181,6 @@
   "notes": "Documentation",
   "info": "Infos",
   "nodeChanges": "Modifications",
-  "lastModified": "Dernière modification",
   "byAuthor": "par {author}",
   "noSavedChange": "Aucune modification enregistrée",
   "nodeCreated": "Création",
@@ -1392,5 +1391,6 @@
   "generatedDocumentation": "Référence générée du projet",
   "generatedDocumentationHint": "Référence en lecture seule issue des définitions, de la documentation et des derniers résultats de cet environnement.",
   "documentationSchemaHint": "Exécutez cette sortie pour découvrir ses colonnes et types.",
-  "noDeclaredTests": "Aucun test déclaré"
+  "noDeclaredTests": "Aucun test déclaré",
+  "missingFunctionExtensionHint": "Si cette fonction provient d’une extension, activez-la dans les paramètres du projet."
 }

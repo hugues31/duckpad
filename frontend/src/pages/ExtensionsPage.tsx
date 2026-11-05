@@ -1,6 +1,7 @@
 import { Download, FlaskConical, Trash2, Upload } from "lucide-react";
 import { useState } from "react";
-import { Link } from "react-router";
+import { Link, Navigate, useSearchParams } from "react-router";
+import { projectPageUrl } from "../navigation";
 import { api, send } from "../api";
 import ExtensionCatalog, { ExtensionAvailability } from "../ExtensionCatalog";
 import {
@@ -15,8 +16,8 @@ import Select from "../Select";
 import { useWorkspace } from "../shell";
 import { useApiResource } from "../useApiResource";
 import { useAsyncAction } from "../useAsyncAction";
-import { useLoadedWorktree } from "../worktree";
-import { InvalidProject } from "./PageStates";
+import { useLoadedWorktree, useWorktree } from "../worktree";
+import { InvalidProject, PageLoading, RouteError } from "./PageStates";
 
 interface ExtensionState extends ProjectExtension {
   name: string;
@@ -31,6 +32,28 @@ interface Extensions {
 }
 
 export default function ExtensionsPage() {
+  const { snapshot, loadError } = useWorktree();
+  if (!snapshot) return loadError ? <RouteError /> : <PageLoading />;
+  return <ExtensionRequirements />;
+}
+
+/** Keep existing bookmarks working after moving extensions into project settings. */
+export function LegacyExtensionsPage() {
+  const { id, snapshot, environment } = useLoadedWorktree();
+  return (
+    <Navigate
+      replace
+      to={projectPageUrl(
+        snapshot.worktree.project,
+        "settings/extensions",
+        id,
+        environment,
+      )}
+    />
+  );
+}
+
+function ExtensionRequirements() {
   const t = useT();
   const { user } = useWorkspace();
   const { id, snapshot, canEdit, save, statuses } = useLoadedWorktree();
@@ -42,7 +65,8 @@ export default function ExtensionsPage() {
   } = useApiResource<Extensions>(`/worktrees/${id}/extensions`, {
     refresh: snapshot.revision,
   });
-  const [name, setName] = useState("");
+  const [params] = useSearchParams();
+  const [name, setName] = useState(params.get("extension") || "");
   const [source, setSource] = useState<ExtensionSource>("core");
   const { pending, error, run } = useAsyncAction();
   const [failed, setFailed] = useState<string | null>(null);

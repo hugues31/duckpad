@@ -126,3 +126,17 @@ describe("extension catalog", () => {
     );
   });
 });
+import { missingFunctionExtension } from "./extensions";
+
+it("offers extension setup for missing functions without guessing an extension", () => {
+  expect(
+    missingFunctionExtension(
+      "Catalog Error: Scalar Function with name missing_fn does not exist!",
+    ),
+  ).toEqual({ name: "" });
+  expect(
+    missingFunctionExtension("Function ST_Point is in the spatial extension"),
+  ).toEqual({ name: "spatial" });
+  expect(missingFunctionExtension("Table orders does not exist")).toBeNull();
+  expect(missingFunctionExtension("Syntax error near SELECT")).toBeNull();
+});

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   Plus,
+  Puzzle,
   Trash2,
   Users,
   Database,
@@ -12,6 +13,7 @@ import { NavLink, useLocation } from "react-router";
 import { PartitionSettings } from "./PartitionControls";
 import PythonEnvironmentStatus from "./PythonEnvironmentStatus";
 import SettingsLayout from "./SettingsLayout";
+import ExtensionsPage from "./pages/ExtensionsPage";
 import { api, send } from "./api";
 import { useT } from "./i18n";
 import { Modal } from "./modals";
@@ -143,6 +145,7 @@ export default function ProjectSettings({
             ["connections", "connections", Database],
             ["python", "pythonExecution", Code2],
             ["partitions", "partitions", Layers],
+            ["extensions", "extensions", Puzzle],
             ["general", "generalSettings", SettingsIcon],
           ] as const
         ).map(([slug, label, Icon]) => (
@@ -162,6 +165,7 @@ export default function ProjectSettings({
           </div>
         )}
         {section === "partitions" && <PartitionSettings />}
+        {section === "extensions" && <ExtensionsPage />}
         {section === "participants" && (
           <>
             <div className="role-guide">

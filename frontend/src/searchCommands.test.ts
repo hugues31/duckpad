@@ -18,10 +18,13 @@ it("offers every project tab, settings sections and available working branch act
   expect(items.find((item) => item.key === "newBranch")?.label).toBe(
     "New working branch",
   );
-  for (const tab of workspaceTabs)
+  for (const tab of workspaceTabs.filter((tab) => tab !== "extensions"))
     expect(items.find((item) => item.key === `tab:${tab}`)?.to).toBe(
       `/worktrees/tree/${tab}?environment=prod`,
     );
+  expect(items.find((item) => item.key === "tab:extensions")?.to).toBe(
+    "/projects/project/settings/extensions?worktree=tree&environment=prod",
+  );
   expect(items.find((item) => item.key === "jobs")?.to).toContain(
     "worktree=tree&environment=prod",
   );

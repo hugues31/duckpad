@@ -11,6 +11,17 @@ async function project(page: Page) {
   expect(result.ok()).toBeTruthy();
   const worktree = await result.json();
   await page.goto(`/worktrees/${worktree.id}/extensions`);
+  await expect(page).toHaveURL(/\/settings\/extensions/);
+  await expect(
+    page
+      .locator(".main-tabs")
+      .getByRole("link", { name: "Extensions", exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    page
+      .getByRole("navigation", { name: "Settings sections" })
+      .getByRole("link", { name: "Extensions", exact: true }),
+  ).toHaveAttribute("aria-current", "page");
   return worktree.id as string;
 }
 

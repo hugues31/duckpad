@@ -61,7 +61,14 @@ export function searchCommands(
       `tab:${tab}`,
       t(tab),
       project.name,
-      worktreeUrl(tree.id, tab, environment),
+      tab === "extensions"
+        ? projectPageUrl(
+            project.id,
+            "settings/extensions",
+            tree.id,
+            environment,
+          )
+        : worktreeUrl(tree.id, tab, environment),
     );
   add(
     "jobs",
