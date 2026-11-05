@@ -218,31 +218,44 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
         assert isinstance(error, HTTPException)
         return request_problem(request, Problem(str(error.detail), error.status_code), error.headers)
 
+    def protected(request: Request) -> bool:
+        return request.url.path.startswith("/api/") and request.url.path not in PUBLIC_API_PATHS
+
+    def admit(request: Request) -> dict[str, str] | None:
+        """Authenticate and authorize a request; return the Git identity of its commits, if any.
+
+        Protected API requests read the Store, whose lock other threads can hold for a while:
+        the middleware runs them in the threadpool, so the event loop keeps serving.
+        """
+        user = None
+        if protected(request):
+            header = request.headers.get("authorization", "")
+            scheme, _, bearer = header.partition(" ")
+            request.state.token_name = None
+            if scheme.lower() == "bearer" and bearer.startswith("dpk_"):
+                user, request.state.token_name = auth.check_api_token(bearer)
+                parts = request.url.path.strip("/").split("/")
+                if parts[1:2] == ["ssh-key"] or (
+                    parts[1:2] == ["worktrees"]
+                    and parts[3:4] == ["git"]
+                    and parts[4:] in (["consent"], ["fetch"], ["push"])
+                ):
+                    raise Problem("API tokens cannot authorize Git credentials or network Git", 403)
+            else:
+                user = auth.check(session_token(request))
+            request.state.user = user
+            authorize(request, user)
+        if request.method not in SAFE_METHODS:
+            origin = request.headers.get("origin")
+            if origin and urlparse(origin).netloc != request.headers.get("host"):
+                raise Problem("Cross-origin writes are not allowed", 403)
+        return auth.commit_identity(user) if user else None
+
     @app.middleware("http")
     async def authentication(request: Request, call_next: RequestResponseEndpoint) -> Response:
         try:
-            if request.url.path.startswith("/api/") and request.url.path not in PUBLIC_API_PATHS:
-                header = request.headers.get("authorization", "")
-                scheme, _, bearer = header.partition(" ")
-                request.state.token_name = None
-                if scheme.lower() == "bearer" and bearer.startswith("dpk_"):
-                    request.state.user, request.state.token_name = auth.check_api_token(bearer)
-                    parts = request.url.path.strip("/").split("/")
-                    if parts[1:2] == ["ssh-key"] or (
-                        parts[1:2] == ["worktrees"]
-                        and parts[3:4] == ["git"]
-                        and parts[4:] in (["consent"], ["fetch"], ["push"])
-                    ):
-                        raise Problem("API tokens cannot authorize Git credentials or network Git", 403)
-                else:
-                    request.state.user = auth.check(session_token(request))
-                authorize(request, request.state.user)
-            if request.method not in SAFE_METHODS:
-                origin = request.headers.get("origin")
-                if origin and urlparse(origin).netloc != request.headers.get("host"):
-                    raise Problem("Cross-origin writes are not allowed", 403)
-            user = getattr(request.state, "user", None)
-            with commit_author(auth.commit_identity(user) if user else None):
+            identity = await run_in_threadpool(admit, request) if protected(request) else admit(request)
+            with commit_author(identity):
                 response = await call_next(request)
         except Problem as error:
             response = request_problem(request, error)

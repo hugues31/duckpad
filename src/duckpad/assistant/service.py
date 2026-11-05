@@ -3,9 +3,13 @@
 import asyncio
 import json
 import threading
+import time
 from contextlib import suppress
 from functools import wraps
+from weakref import WeakValueDictionary
 
+import anyio
+from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, ConfigDict, Field
 from pydantic_ai import (
     Agent,
@@ -76,6 +80,8 @@ When data tools are unavailable, do not invent values or ask the user to bypass 
 Page context contains only identifiers and names; read saved content through tools.
 """
 MAX_TURNS = 100
+# Seconds between access rechecks while a response streams; tools recheck on every call.
+RECHECK_INTERVAL = 1.0
 
 
 class TurnRequest(BaseModel):
@@ -89,6 +95,16 @@ class TurnRequest(BaseModel):
 class Rename(BaseModel):
     model_config = ConfigDict(extra="forbid")
     title: str = Field(min_length=1, max_length=120)
+
+
+async def blocking(function, *args):
+    """Run Store and lock work in a worker thread, so waiting for it never stalls the event loop.
+
+    The call is shielded: a cancelled response still waits for work it cannot interrupt, such as
+    saving its turn, instead of skipping it.
+    """
+    with anyio.CancelScope(shield=True):
+        return await run_in_threadpool(function, *args)
 
 
 def guarded(function):
@@ -121,14 +137,28 @@ class Assistant:
         self.services, self.auth = services, auth
         self.store = services.store
         self.configuration = Configuration(self.store)
-        self.lock = threading.RLock()
+        # Entries disappear once no thread holds or waits for a conversation's lock.
+        self.locks = WeakValueDictionary()
+        self.locks_guard = threading.Lock()
         self.active = {}
         self.actions = Actions(self)
         self.approvals = Approvals(self)
 
+    def lock(self, identity):
+        """The lock serializing one conversation's responses, actions and record updates.
+
+        A project write holds it, so it never delays other conversations. Take it before
+        repository, engine and Store locks.
+        """
+        with self.locks_guard:
+            lock = self.locks.get(identity)
+            if lock is None:
+                lock = self.locks[identity] = threading.RLock()
+            return lock
+
     def save_turn(self, identity, turn):
         """Persist in-progress actions as well as final responses, without losing renamed titles."""
-        with self.lock, self.store.transaction():
+        with self.lock(identity), self.store.transaction():
             record = self.store.get("assistant_conversation", identity)
             if not record:
                 return
@@ -190,14 +220,14 @@ class Assistant:
         return self.public(record)
 
     def rename(self, user, identity, title):
-        with self.lock, self.store.transaction():
+        with self.lock(identity), self.store.transaction():
             record = self.owned(user, identity)
             record["title"] = title.strip() or "New conversation"
             self.store.put("assistant_conversation", identity, record)
         return self.public(record)
 
     def stop(self, user, identity):
-        with self.lock:
+        with self.lock(identity):
             self.owned(user, identity)
             token = self.active.get(identity)
             if token:
@@ -205,13 +235,13 @@ class Assistant:
         return {"ok": True}
 
     def delete(self, user, identity):
-        with self.lock, self.store.transaction():
+        with self.lock(identity), self.store.transaction():
             self.stop(user, identity)
             self.store.delete("assistant_conversation", identity)
         return {"ok": True}
 
     def prepare(self, user, token, identity, data, *, resume=None):
-        with self.lock:
+        with self.lock(identity):
             record = self.owned(user, identity)
             last = record["turns"][-1] if resume is None and record["turns"] else {}
             if last.get("status") == "awaiting_approval":
@@ -233,7 +263,13 @@ class Assistant:
                 raise Problem("This conversation is full. Start a new conversation.", 409)
             provider = self.configuration.select(config, data.provider, data.model)
             deps = Dependencies(
-                self.services, self.auth, token, self.configuration, config["revision"], context
+                self.services,
+                self.auth,
+                token,
+                self.configuration,
+                config["revision"],
+                context,
+                secrets=Configuration.credentials(config),
             )
             deps.check()
             if context["worktree"]:
@@ -274,12 +310,43 @@ class Assistant:
         ), cancellation
 
     def release(self, identity, token):
-        with self.lock:
+        with self.lock(identity):
             if self.active.get(identity) is token:
                 self.active.pop(identity)
                 token.cancel()
 
+    def tools(self, config, deps):
+        """The tools of a response, for the user's current role on its branch."""
+        tools = [read_guide]
+        if deps.context["worktree"]:
+            tools.extend(
+                [
+                    *READ_TOOLS,
+                    *DEBUG_TOOLS,
+                    *([*DATA_TOOLS, read_run_sql] if config["allow_data"] else []),
+                    *([*WRITE_TOOLS, *RUN_TOOLS] if deps.can_write() else []),
+                ]
+            )
+        return tools
+
+    def finish(self, identity, owner, turn, messages, config, deps):
+        """Save a response's final turn and history, then accept the conversation's next prompt."""
+        # Never recreate a conversation deleted during a response; honor FK cascades too.
+        with self.lock(identity), self.store.transaction():
+            current = self.store.get("assistant_conversation", identity)
+            if current and current["user"] == owner:
+                current["turns"] = [turn if t["id"] == turn["id"] else t for t in current["turns"]]
+                current["updated"] = now()
+                current["allow_data"] = current["allow_data"] or config["allow_data"]
+                if len(current["turns"]) == 1:
+                    current["title"] = " ".join(turn["user"].split())[:80]
+                if messages is not None:
+                    current["messages"] = deps.safe(messages)
+                self.store.put("assistant_conversation", identity, current)
+            self.active.pop(identity, None)
+
     async def stream(self, identity, record, data, provider, config, deps, cancellation, *, resume=None):
+        """Stream a response. Store and lock work runs in worker threads (see `blocking`)."""
         turn: Record = (
             resume
             if resume is not None
@@ -299,6 +366,8 @@ class Assistant:
         stream = None
         buffer = ""
         text_parts = int(bool(turn["text"]))
+        # `prepare` has just checked access.
+        checked = time.monotonic()
         deps.writer = lambda tool_id, base, files, details: self.actions.apply(
             deps, identity, turn, tool_id, base, files, details
         )
@@ -316,7 +385,7 @@ class Assistant:
             if resume is not None
             else None
         )
-        hold = max(map(len, self.configuration.secrets()), default=0)
+        hold = max(map(len, deps.secrets or ()), default=0)
 
         def event(kind, **content):
             return json.dumps(deps.safe({"type": kind, **content}), ensure_ascii=False) + "\n"
@@ -329,19 +398,17 @@ class Assistant:
             turn["text"] += chunk
             return chunk
 
+        async def recheck():
+            """Recheck access at most once per interval, rather than for each streamed fragment."""
+            nonlocal checked
+            if time.monotonic() - checked >= RECHECK_INTERVAL:
+                await blocking(deps.check)
+                checked = time.monotonic()
+
         try:
-            self.save_turn(identity, turn)
+            await blocking(self.save_turn, identity, turn)
             yield event("start", conversation=identity)
-            tools = [read_guide]
-            if deps.context["worktree"]:
-                tools.extend(
-                    [
-                        *READ_TOOLS,
-                        *DEBUG_TOOLS,
-                        *([*DATA_TOOLS, read_run_sql] if config["allow_data"] else []),
-                        *([*WRITE_TOOLS, *RUN_TOOLS] if deps.can_write() else []),
-                    ]
-                )
+            tools = await blocking(self.tools, config, deps)
             history = ModelMessagesTypeAdapter.validate_python(record["messages"])
             if resume is None:
                 # A new prompt can never answer older tool calls, e.g. after an interrupted resume.
@@ -372,7 +439,7 @@ class Assistant:
                     cancellation_token=cancellation,
                 ) as stream:
                     async for item in stream:
-                        deps.check()
+                        await recheck()
                         delta = ""
                         if isinstance(item, PartStartEvent) and isinstance(item.part, TextPart):
                             separator = "\n\n" if text_parts else ""
@@ -412,7 +479,7 @@ class Assistant:
                         elif isinstance(item, AgentRunResultEvent):
                             messages = json.loads(item.result.all_messages_json())
                             if isinstance(item.result.output, DeferredToolRequests):
-                                self.approvals.capture(deps, turn, item.result.output)
+                                await blocking(self.approvals.capture, deps, turn, item.result.output)
                                 for card in turn["tools"]:
                                     if card["id"] in turn["approvals"]:
                                         yield event("tool", tool=card)
@@ -426,14 +493,14 @@ class Assistant:
             if turn["status"] != "awaiting_approval":
                 turn["status"] = "complete"
         except RunTimedOut as error:
-            self.configuration.log_failure(error, provider, data.model)
+            await blocking(self.configuration.log_failure, error, provider, data.model)
             turn.update(status="error", error="The assistant timed out. Try a narrower question.")
         except (RunCancelled, asyncio.CancelledError):
             turn["status"] = "stopped"
         except Problem as error:
             turn.update(status="error", error=deps.safe(str(error)))
         except Exception as error:
-            self.configuration.log_failure(error, provider, data.model)
+            await blocking(self.configuration.log_failure, error, provider, data.model)
             turn.update(status="error", error=provider_error(error))
         finally:
             if stream is not None:
@@ -443,17 +510,5 @@ class Assistant:
             for card in turn["tools"]:
                 if card["status"] == "running":
                     card["status"] = "stopped"
-            # Never recreate a conversation deleted during a response; honor FK cascades too.
-            with self.lock, self.store.transaction():
-                current = self.store.get("assistant_conversation", identity)
-                if current and current["user"] == record["user"]:
-                    current["turns"] = [turn if t["id"] == turn["id"] else t for t in current["turns"]]
-                    current["updated"] = now()
-                    current["allow_data"] = current["allow_data"] or config["allow_data"]
-                    if len(current["turns"]) == 1:
-                        current["title"] = " ".join(turn["user"].split())[:80]
-                    if messages is not None:
-                        current["messages"] = deps.safe(messages)
-                    self.store.put("assistant_conversation", identity, current)
-                self.active.pop(identity, None)
+            await blocking(self.finish, identity, record["user"], turn, messages, config, deps)
         yield event("done", turn=turn)

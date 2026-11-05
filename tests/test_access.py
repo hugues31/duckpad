@@ -1,5 +1,6 @@
 """Authorization, revocation and SQL isolation acceptance tests."""
 
+import asyncio
 import re
 import shutil
 from concurrent.futures import ThreadPoolExecutor
@@ -8,7 +9,7 @@ from pathlib import Path
 import pytest
 from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
-from helpers import enable_excel, wait_run
+from helpers import LockHolder, asgi_client, assert_responsive, enable_excel, wait_run
 from xlsx_fixture import workbook
 
 from duckpad.app import create_app
@@ -188,6 +189,31 @@ def own_project(app, client, headers, name="Private"):
     response = request(client, headers, "POST", "/projects", json={"name": name})
     assert response.status_code == 200
     return response.json()
+
+
+@pytest.mark.parametrize("credential", ["session", "api_token"])
+def test_authentication_waits_for_the_store_outside_the_event_loop(instance, credential):
+    app, _ = instance
+    user, headers = account(app, "member")
+    if credential == "api_token":
+        token = app.state.auth.create_api_token(user, user["id"], "Automation")["token"]
+        headers = {"authorization": "Bearer " + token}
+    holder = LockHolder(app.state.services.store.lock)
+
+    async def scenario():
+        async with asgi_client(app, headers=headers) as http:
+            holder.acquire()
+            try:
+                session = asyncio.create_task(http.get("/api/session"))
+                await assert_responsive(holder.holding)
+                assert not session.done()
+            finally:
+                holder.release()
+            return await session
+
+    response = asyncio.run(scenario())
+    assert response.status_code == 200
+    assert response.json()["username"] == "member"
 
 
 def test_accounts_memberships_and_grants_survive_restart(tmp_path):
