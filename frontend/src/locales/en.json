@@ -1379,5 +1379,10 @@
   "projectNavigation": "Project navigation",
   "partitionSettingsHint": "Configure the partition keys, execution policy and preview retention for the selected branch.",
   "partitionRunSelectedAction": "Run selected keys",
-  "fullRun": "Full run"
+  "fullRun": "Full run",
+  "errorLine": "Line {line}",
+  "openErrorLine": "Open code at line {line}",
+  "viewErrorLog": "View log",
+  "errorCompiledSql": "SQL before execution",
+  "errorCodeChanged": "The code has changed since this failure. Run the node again to check this version."
 }

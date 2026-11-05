@@ -582,3 +582,24 @@
 .results-panel:has(.sample-popover) {
   z-index: 30;
 }
+
+.execution-error {
+  margin: 12px;
+  padding: 14px;
+  border: 1px solid light-dark(#b43b43, #ff9aa3);
+  border-radius: 8px;
+  min-height: 0;
+  overflow: auto;
+}
+.execution-error-message {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  margin: 12px 0;
+}
+.execution-error details {
+  margin-top: 12px;
+}
+.execution-error details pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

@@ -29,6 +29,7 @@ import {
   localDefinitions,
   nodeCode,
   nodeCodePath,
+  nodeLocation,
   nodeEntity,
   nodeGraph,
 } from "../nodeCode";
@@ -385,13 +386,29 @@ export default function FlowPage() {
     inspector: panels.open.inspector && !!node,
     preview: panels.open.preview && !!node,
   };
-  const editCode = () =>
-    node &&
+  const editCode = (line?: number, target = fullNode) => {
+    const location = nodeLocation(bundle, target);
+    if (!location) return;
+    const { node, parent } = location;
     openModal(
       node.template
-        ? { kind: "template", worktree, template: node.template }
-        : { kind: "nodeCode", worktree, node: node.id, parent },
+        ? {
+            kind: "template",
+            worktree,
+            template: node.template,
+            fullNode: target,
+            line,
+          }
+        : {
+            kind: "nodeCode",
+            worktree,
+            node: node.id,
+            parent,
+            fullNode: target,
+            line,
+          },
     );
+  };
   return (
     <div
       className={`flow-layout ${shown.palette ? "palette-open" : ""} ${shown.inspector ? "inspector-open" : ""} ${shown.preview ? "preview-open" : ""} ${path.length ? "nested-flow" : ""}`}
@@ -504,6 +521,7 @@ export default function FlowPage() {
             onOpen={openComponent}
             onSelection={updateSelection}
             onWarnings={() => showResults("log")}
+            onFailure={() => showResults("data")}
           />
         </div>
         {node && signature ? (
@@ -610,9 +628,15 @@ export default function FlowPage() {
             onDelete={() => safe(() => removeNodes([node.id]))}
             onRun={() => run(fullNode)}
             onOpen={() => openComponent(node.id)}
-            onEditTemplate={editCode}
+            onEditTemplate={() => editCode()}
             onViewCode={() =>
-              openModal({ kind: "nodeCode", worktree, node: node.id, parent })
+              openModal({
+                kind: "nodeCode",
+                worktree,
+                node: node.id,
+                parent,
+                fullNode,
+              })
             }
             onDetach={() =>
               safe(() =>

@@ -113,6 +113,7 @@ type PipelineData = {
   icon: string;
   linked?: string;
   warnings: number;
+  onFailure?: () => void;
 };
 type PipelineNode = Node<PipelineData, "pipeline">;
 
@@ -130,6 +131,7 @@ function PipelineNode({ id, data, selected }: NodeProps<PipelineNode>) {
     updateNodeInternals(id);
   }, [id, portLayout, updateNodeInternals]);
   const source = data.kind === "source";
+  const StatusTag = data.status === "failed" ? "button" : "span";
   const portPosition = (index: number, count: number) => {
     const spacing = Math.min(24, 72 / Math.max(1, count - 1));
     const top = 48 + (index - (count - 1) / 2) * spacing;
@@ -170,7 +172,18 @@ function PipelineNode({ id, data, selected }: NodeProps<PipelineNode>) {
         )}
         <WarningBadge count={data.warnings} />
         {data.status && (
-          <span className={`node-status ${data.status}`} title={t(data.status)}>
+          <StatusTag
+            className={`node-status ${data.status}`}
+            title={t(data.status)}
+            onClick={
+              data.status === "failed"
+                ? (event) => {
+                    event.stopPropagation();
+                    data.onFailure?.();
+                  }
+                : undefined
+            }
+          >
             <StatusIcon
               status={data.status}
               size={13}
@@ -178,7 +191,7 @@ function PipelineNode({ id, data, selected }: NodeProps<PipelineNode>) {
               aria-hidden="true"
             />
             <span>{t(data.status)}</span>
-          </span>
+          </StatusTag>
         )}
       </div>
       {data.inputs.map((port: string, i: number) => (
@@ -257,12 +270,14 @@ interface CanvasProps {
   onSelection: (ids: string[]) => void;
   /** Show the results log of a node whose warning badge was clicked. */
   onWarnings?: (id: string) => void;
+  onFailure?: (id: string) => void;
 }
 function CanvasInner({ ref, ...props }: CanvasProps) {
   const t = useT();
   const { getNodes, getViewport, setViewport, screenToFlowPosition } =
     useReactFlow();
   const initialized = useNodesInitialized();
+  const { onSelect, onFailure } = props;
   const safeArea = useRef<HTMLDivElement>(null);
   const [frame, setFrame] = useState({ x: 0, y: 0, width: 0, height: 0 });
   const viewportTouched = useRef(false);
@@ -410,6 +425,10 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
           selected: node.id === props.selected,
           data: {
             fullNode: props.prefix + node.id,
+            onFailure: () => {
+              onSelect(node.id);
+              onFailure?.(node.id);
+            },
             valueProducer: props.valueProducers?.includes(
               props.prefix + node.id,
             ),
@@ -451,6 +470,8 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
       props.statuses,
       props.prefix,
       props.selected,
+      onSelect,
+      onFailure,
       t,
     ],
   );

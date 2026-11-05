@@ -54,7 +54,10 @@ def test_descriptive_directives_are_recognized_in_every_form(directive):
     described = directive + "\n" + sql
     assert executable_sql(described) == sql
     assert directives(described)[0] == (directive.split("@")[1].split()[0], "Renamed")
-    assert parse_template(described)["blocks"] == parse_template(sql)["blocks"]
+    original, renamed = parse_template(sql)["blocks"][0], parse_template(described)["blocks"][0]
+    assert original["sql"] == renamed["sql"]
+    assert original["output"] == renamed["output"]
+    assert renamed["source_lines"] == [line + 1 for line in original["source_lines"]]
 
 
 def test_directives_inside_sql_lines_are_not_directives():

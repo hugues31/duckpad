@@ -1379,5 +1379,10 @@
   "projectNavigation": "Navigation du projet",
   "partitionSettingsHint": "Configurez les clés de partition, la politique d’exécution et la conservation des aperçus pour la branche sélectionnée.",
   "partitionRunSelectedAction": "Exécuter les clés sélectionnées",
-  "fullRun": "Exécution complète"
+  "fullRun": "Exécution complète",
+  "errorLine": "Ligne {line}",
+  "openErrorLine": "Ouvrir le code à la ligne {line}",
+  "viewErrorLog": "Voir le log",
+  "errorCompiledSql": "SQL avant exécution",
+  "errorCodeChanged": "Le code a changé depuis cet échec. Relancez le nœud pour vérifier cette version."
 }

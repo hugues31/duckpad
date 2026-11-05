@@ -201,7 +201,14 @@ class Results:
                 else run
                 for node, run in context.result_runs.items()
             }
-        runs = {run: self.store.get("run", run) for run in set(generations.values())}
+        error_runs = {
+            node: value.get("error_run") for node, value in result.items() if value.get("error_run")
+        }
+        runs = {
+            run: self.store.get("run", run) for run in set(generations.values()) | set(error_runs.values())
+        }
+        for node, run_id in error_runs.items():
+            result[node]["diagnostic"] = runs[run_id]["nodes"][node].get("diagnostic")
         for node, run_id in generations.items():
             state = runs[run_id]["nodes"][node]
             result.setdefault(node, {"outputs": {}, "error": None, "execution_status": state["status"]})
@@ -573,6 +580,8 @@ class Results:
             )
             partitions.filter_statements(statements, node, partition)
             for statement in statements:
+                # Source substitution values are private execution metadata.
+                statement.pop("source_location", None)
                 statement["sql"] = redact(statement["sql"], secrets)
             if partition and partition.get("plan"):
                 for statement in statements:

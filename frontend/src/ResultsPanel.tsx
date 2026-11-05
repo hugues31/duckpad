@@ -17,8 +17,9 @@ import {
 import { WarningBadge, warningCount } from "./ExecutionMessages";
 import { nodeInterface, outputSource, type NodeInterface } from "./graph";
 import { nodeLabel, useT } from "./i18n";
-import { localDefinitions } from "./nodeCode";
+import { localDefinitions, nodeCode, nodeLocation } from "./nodeCode";
 import type { Cell } from "./lineageGraph";
+import ExecutionError from "./ExecutionError";
 import ResultsColumns from "./ResultsColumns";
 import ResultsData, { type FailingRows } from "./ResultsData";
 import ResultsLog from "./ResultsLog";
@@ -126,7 +127,7 @@ export default function ResultsPanel({
     change: (documentation: Documentation) => void,
   ) => Promise<unknown>;
   onAddFilter: (port: string, condition: string) => Promise<unknown>;
-  onEditCode: () => void;
+  onEditCode: (line?: number, fullNode?: string) => void;
 }) {
   const t = useT();
   const ports = signature.outputs;
@@ -170,6 +171,8 @@ export default function ResultsPanel({
   const collector =
     snapshot.partitions?.[environment]?.nodes[producer]?.collect.length;
   const baseResult = statuses.nodes[producer];
+  const sourceLocation =
+    snapshot.bundle && nodeLocation(snapshot.bundle, producer);
   // A blocked collector waits for keys: retry those that failed rather than every key.
   const blocked = collector ? baseResult?.error || undefined : undefined;
   const failedKeys = useApiResource<PartitionPage>(
@@ -405,33 +408,55 @@ export default function ResultsPanel({
         })}
       </div>
       {shown === "data" ? (
-        <ResultsData
-          key={`${target.node}:${target.port}:${environment}:${JSON.stringify(partition)}`}
-          snapshot={snapshot}
-          environment={environment}
-          target={target}
-          dataset={dataset}
-          canEdit={!readOnly}
-          active={!!statuses.active}
-          starting={worktree?.starting}
-          sample={shownSample.sample}
-          view={shownSample.view}
-          failing={failing}
-          tests={tests}
-          onSample={(sample, view) => {
-            setShownSample({ environment, sample, view });
-            storeSample(storage(target), sample, view);
-          }}
-          onFailing={setFailing}
-          onRun={runResult}
-          runLabel={runLabel}
-          reason={target.input ? undefined : blocked}
-          onExplain={onExplain}
-          onSave={onSave}
-          onAddFilter={(condition) => onAddFilter(target.port, condition)}
-          onEditCode={onEditCode}
-          inspected={{ node, parent, fullNode }}
-        />
+        <>
+          {result?.error && !target.input && (
+            <ExecutionError
+              failure={result}
+              node={producer}
+              environment={environment}
+              currentSource={
+                snapshot.bundle && sourceLocation
+                  ? nodeCode(
+                      snapshot.bundle,
+                      sourceLocation.node,
+                      sourceLocation.parent,
+                    )
+                  : ""
+              }
+              onEditCode={(line) => onEditCode(line, producer)}
+              onLog={() => onTab("log")}
+            />
+          )}
+          {(!result?.error || target.input || dataset) && (
+            <ResultsData
+              key={`${target.node}:${target.port}:${environment}:${JSON.stringify(partition)}`}
+              snapshot={snapshot}
+              environment={environment}
+              target={target}
+              dataset={dataset}
+              canEdit={!readOnly}
+              active={!!statuses.active}
+              starting={worktree?.starting}
+              sample={shownSample.sample}
+              view={shownSample.view}
+              failing={failing}
+              tests={tests}
+              onSample={(sample, view) => {
+                setShownSample({ environment, sample, view });
+                storeSample(storage(target), sample, view);
+              }}
+              onFailing={setFailing}
+              onRun={runResult}
+              runLabel={runLabel}
+              reason={target.input ? undefined : blocked}
+              onExplain={onExplain}
+              onSave={onSave}
+              onAddFilter={(condition) => onAddFilter(target.port, condition)}
+              onEditCode={() => onEditCode()}
+              inspected={{ node, parent, fullNode }}
+            />
+          )}
+        </>
       ) : shown === "columns" ? (
         <ResultsColumns
           key={`${target.node}:${target.port}:${environment}:${JSON.stringify(partition)}`}
@@ -478,7 +503,7 @@ export default function ResultsPanel({
             setFailing({ test, count });
             onTab("data");
           }}
-          onEditCode={onEditCode}
+          onEditCode={() => onEditCode()}
         />
       ) : (
         <ResultsLog

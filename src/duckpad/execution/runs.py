@@ -32,6 +32,7 @@ from ..partition_runs import PartitionRun
 from ..partition_storage import PartitionStorage
 from ..projects import Projects
 from ..python_policy import get_policy
+from ..sql_errors import SqlSourceError
 from ..store import Store
 from ..templates import base_type, compile_template
 from ..types import Connections, Record, RunToken, SQLCursor
@@ -705,6 +706,8 @@ class Runner:
             self._drop_staged(context, created_tables)
             types = {base_type(p["type"]) for p in node["parsed"]["parameters"]}
             message = project_extensions.explain_missing(redact(str(error), secrets)) + failure_hint(types)
+            if isinstance(error, SqlSourceError) and not execution.canceled:
+                state["diagnostic"] = {**error.diagnostic, "message": message, "source": node["template_sql"]}
             state.update(status="canceled" if execution.canceled else "failed", error=message)
             with context.lock:
                 context.errors[key] = message
@@ -798,103 +801,116 @@ class Runner:
         self._persist(run, execution.secrets)
         staged: dict[str, Dataset] = {}
         check_failure = None
-        for statement in statements:
-            if execution.canceled:
-                raise Problem("Execution canceled")
-            if statement.get("message_block") or statement.get("test_name"):
-                if execution.schema_only:
+        statement = None
+        try:
+            for statement in statements:
+                if execution.canceled:
+                    raise Problem("Execution canceled")
+                if statement.get("message_block") or statement.get("test_name"):
+                    if execution.schema_only:
+                        continue
+                    execute_check = execute_test if statement.get("test_name") else execute_messages
+                    failure = execute_check(
+                        cursor, statement, run, key, execution.secrets, lambda: execution.canceled
+                    )
+                    if check_failure is None:
+                        check_failure = failure
+                    self._persist(run, execution.secrets)
                     continue
-                execute_check = execute_test if statement.get("test_name") else execute_messages
-                failure = execute_check(
-                    cursor, statement, run, key, execution.secrets, lambda: execution.canceled
+                if not statement["output"]:
+                    if execution.schema_only:
+                        continue
+                    if check_failure is not None:
+                        raise Problem(check_failure or "An execution check reported an error")
+                    self._export(execution, key, statement)
+                    continue
+                table = statement["table"]
+                if execution.partition is not None:
+                    partitions.filter_statements([statement], node, execution.partition, cursor)
+                if execution.schema_only:
+                    statement["query"] = f"SELECT * FROM ({statement['query']}) AS empty_partition LIMIT 0"
+                output_start = time.monotonic()
+                data_inputs = {data.table: data for data in [*input_datasets.values(), *staged.values()]}
+                collected = collected_pass_through(statement["query"], data_inputs)
+                if collected and not execution.schema_only:
+                    storage = table + "_disk"
+                    cursor.execute(f"CREATE VIEW {qi(storage)} AS SELECT * FROM {qi(collected.storage)}")
+                    created_tables.append((table, storage))
+                    projection = ", ".join(
+                        f"{qi(collected.stored(c['name']))} AS {qi(c['name'])}" for c in collected.columns
+                    )
+                    cursor.execute(f"CREATE VIEW {qi(table)} AS SELECT {projection} FROM {qi(storage)}")
+                    staged[statement["output"]] = Dataset(
+                        id=table,
+                        node=key,
+                        port=statement["output"],
+                        columns=collected.columns,
+                        count=collected.count,
+                        run=run["id"],
+                        query=statement["query"],
+                        bindings=statement["bindings"],
+                        dependencies={collected.table: collected.id},
+                        fingerprint=execution.fingerprints[key],
+                        storage=storage,
+                        disk=True,
+                        column_map=collected.column_map,
+                        origins=copy.deepcopy(collected.origins),
+                        duration=time.monotonic() - output_start,
+                    )
+                    continue
+                statement["executed_sql"] = "DESCRIBE " + statement["query"]
+                plan = plan_materialization(
+                    cursor, statement, data_inputs, instrument=not statement["source"]
                 )
-                if check_failure is None:
-                    check_failure = failure
+                statement["materialization_sql"] = [plan["sql"]]
                 self._persist(run, execution.secrets)
-                continue
-            if not statement["output"]:
-                if execution.schema_only:
-                    continue
-                if check_failure is not None:
-                    raise Problem(check_failure or "An execution check reported an error")
-                self._export(execution, key, statement)
-                continue
-            table = statement["table"]
-            if execution.partition is not None:
-                partitions.filter_statements([statement], node, execution.partition, cursor)
-            if execution.schema_only:
-                statement["query"] = f"SELECT * FROM ({statement['query']}) AS empty_partition LIMIT 0"
-            output_start = time.monotonic()
-            data_inputs = {data.table: data for data in [*input_datasets.values(), *staged.values()]}
-            collected = collected_pass_through(statement["query"], data_inputs)
-            if collected and not execution.schema_only:
-                storage = table + "_disk"
-                cursor.execute(f"CREATE VIEW {qi(storage)} AS SELECT * FROM {qi(collected.storage)}")
-                created_tables.append((table, storage))
-                projection = ", ".join(
-                    f"{qi(collected.stored(c['name']))} AS {qi(c['name'])}" for c in collected.columns
-                )
-                cursor.execute(f"CREATE VIEW {qi(table)} AS SELECT {projection} FROM {qi(storage)}")
+                statement["executed_sql"] = plan["sql"]
+                cursor.execute(plan["sql"], statement["bindings"])
+                created_tables.append((table, plan["storage"]))
+                columns, column_map, view_sql = publish_view(cursor, table, plan)
+                statement["materialization_sql"].extend(view_sql)
+                count_row = cursor.execute(f"SELECT count(*) FROM {qi(table)}").fetchone()
+                assert count_row is not None
+                count = count_row[0]
+                source_columns = plan["columns"]
+                if source_columns is None and any(
+                    s.get("node") == key and s.get("port") == statement["output"]
+                    for s in [*execution.sources.values(), execution.partition_plan.get("source") or {}]
+                ):
+                    source_columns = [
+                        {"name": c[0], "type": c[1]}
+                        for c in cursor.execute(
+                            "DESCRIBE " + statement["query"], statement["bindings"]
+                        ).fetchall()
+                    ]
                 staged[statement["output"]] = Dataset(
                     id=table,
                     node=key,
                     port=statement["output"],
-                    columns=collected.columns,
-                    count=collected.count,
+                    columns=columns,
+                    count=count,
                     run=run["id"],
                     query=statement["query"],
                     bindings=statement["bindings"],
-                    dependencies={collected.table: collected.id},
+                    labels=statement.get("variable_bindings", {}),
+                    dependencies={data.table: data.id for data in data_inputs.values()},
                     fingerprint=execution.fingerprints[key],
-                    storage=storage,
-                    disk=True,
-                    column_map=collected.column_map,
-                    origins=copy.deepcopy(collected.origins),
+                    storage=plan["storage"],
+                    source_columns=source_columns or columns,
+                    bound_values=copy.deepcopy(execution.values),
+                    source=statement["source"],
+                    column_map=column_map,
+                    witnesses=plan["witnesses"],
+                    groups=plan["groups"],
                     duration=time.monotonic() - output_start,
                 )
-                continue
-            plan = plan_materialization(cursor, statement, data_inputs, instrument=not statement["source"])
-            statement["materialization_sql"] = [plan["sql"]]
-            self._persist(run, execution.secrets)
-            cursor.execute(plan["sql"], statement["bindings"])
-            created_tables.append((table, plan["storage"]))
-            columns, column_map, view_sql = publish_view(cursor, table, plan)
-            statement["materialization_sql"].extend(view_sql)
-            count_row = cursor.execute(f"SELECT count(*) FROM {qi(table)}").fetchone()
-            assert count_row is not None
-            count = count_row[0]
-            source_columns = plan["columns"]
-            if source_columns is None and any(
-                s.get("node") == key and s.get("port") == statement["output"]
-                for s in [*execution.sources.values(), execution.partition_plan.get("source") or {}]
-            ):
-                source_columns = [
-                    {"name": c[0], "type": c[1]}
-                    for c in cursor.execute(
-                        "DESCRIBE " + statement["query"], statement["bindings"]
-                    ).fetchall()
-                ]
-            staged[statement["output"]] = Dataset(
-                id=table,
-                node=key,
-                port=statement["output"],
-                columns=columns,
-                count=count,
-                run=run["id"],
-                query=statement["query"],
-                bindings=statement["bindings"],
-                labels=statement.get("variable_bindings", {}),
-                dependencies={data.table: data.id for data in data_inputs.values()},
-                fingerprint=execution.fingerprints[key],
-                storage=plan["storage"],
-                source_columns=source_columns or columns,
-                bound_values=copy.deepcopy(execution.values),
-                source=statement["source"],
-                column_map=column_map,
-                witnesses=plan["witnesses"],
-                groups=plan["groups"],
-                duration=time.monotonic() - output_start,
-            )
+        except Exception as error:
+            if statement is not None:
+                raise SqlSourceError(
+                    error, statement["source_location"], statement.get("executed_sql", statement["query"])
+                ) from error
+            raise
+
         if check_failure is not None:
             raise Problem(check_failure or "An execution check reported an error")
         return staged
