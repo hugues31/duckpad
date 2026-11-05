@@ -344,4 +344,6 @@ An instance administrator enables Python in each project's **Python** settings.
 Activation gives Python access to the secrets of that project's authorized
 connections because SQL and Python share a worker. Source builds require a
 separate opt-in; wheels are the default. See [Python nodes](PYTHON.md) for
-operator indexes, offline wheel caches, runtime compatibility and memory limits.
+operator indexes (including an
+[on-premises Artifactory](PYTHON.md#use-an-on-premises-artifactory-index)),
+offline wheel caches, runtime compatibility and memory limits.
