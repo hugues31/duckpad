@@ -50,7 +50,7 @@ export function Toast({
       <span>{message.text}</span>
       {message.action && (
         <button
-          className="text-button"
+          className="text-button toast-action"
           onClick={() => {
             onDismiss();
             message.action!.run();
