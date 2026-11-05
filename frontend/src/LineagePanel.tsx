@@ -1,3 +1,4 @@
+import { PythonIcon } from "./AddIcon";
 import { displayNodeName } from "./nodeNames";
 import {
   useCallback,
@@ -23,7 +24,6 @@ import {
   AlertTriangle,
   ArrowLeft,
   ArrowRight,
-  Braces,
   ChevronLeft,
   ChevronRight,
   Database,
@@ -142,7 +142,7 @@ function CalculationCard({ data }: NodeProps<CardNode>) {
         ) : group ? (
           <Layers size={14} />
         ) : python ? (
-          <Braces size={14} />
+          <PythonIcon size={14} />
         ) : (
           <GitBranch size={14} />
         )}

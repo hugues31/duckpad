@@ -91,6 +91,12 @@ export async function verifyPalette(
   await page.reload();
   await template.click();
   await expect(page.locator(".react-flow__node")).toHaveCount(1);
+  // Python entries and nodes show the Python logo, SQL ones keep the code icon.
+  for (const icon of [
+    template.locator(".palette-icon svg"),
+    page.locator(".react-flow__node .node-shape svg"),
+  ])
+    await expect(icon).toHaveClass(python ? /lucide-python/ : /lucide-code/);
   await template.dragTo(page.locator(".react-flow__pane"), {
     targetPosition: { x: 700, y: 450 },
   });
