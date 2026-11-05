@@ -45,12 +45,13 @@ function fileTree(paths: string[]) {
   return root.children;
 }
 
-/** Unfold the folders that contain a path. */
+/** Unfold the folders that contain a path, keeping the same set if none is folded. */
 function reveal(collapsed: Set<string>, path: string) {
-  const next = new Set(collapsed);
   const parts = path.split("/");
-  for (let i = 1; i < parts.length; i++)
-    next.delete(parts.slice(0, i).join("/"));
+  const folders = parts.slice(1).map((_, i) => parts.slice(0, i + 1).join("/"));
+  if (!folders.some((folder) => collapsed.has(folder))) return collapsed;
+  const next = new Set(collapsed);
+  for (const folder of folders) next.delete(folder);
   return next;
 }
 
@@ -71,10 +72,12 @@ export default function ProjectFileTree({
   const [collapsed, setCollapsed] = useState<Set<string>>(() =>
     reveal(new Set(["templates"]), selected),
   );
+  // A file opened from elsewhere, such as the canvas, unfolds its folders once;
+  // folding them again afterwards is the user's choice.
   const [revealed, setRevealed] = useState(selected);
-  if (revealed !== selected) {
+  if (revealed !== selected && reveal(collapsed, selected) !== collapsed) {
     setRevealed(selected);
-    setCollapsed((previous) => reveal(previous, selected));
+    setCollapsed(reveal(collapsed, selected));
   }
   const [focused, setFocused] = useState(selected);
   const tree = useRef<HTMLDivElement>(null);
@@ -97,13 +100,15 @@ export default function ProjectFileTree({
       .find((item) => item.dataset.path === path)
       ?.focus();
   };
-  const toggle = (path: string) =>
+  const toggle = (path: string) => {
+    setRevealed(selected);
     setCollapsed((previous) => {
       const next = new Set(previous);
       if (next.has(path)) next.delete(path);
       else next.add(path);
       return next;
     });
+  };
   const keyDown = (event: KeyboardEvent, entry: Entry) => {
     if (event.target !== event.currentTarget) return;
     const index = visible.indexOf(entry);

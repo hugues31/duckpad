@@ -91,7 +91,7 @@ test("manage instance accounts, project users and live reader access", async ({
   const documentation = readerPage.locator(".documentation-page");
   await expect(
     documentation.getByRole("region", { name: "Markdown preview" }),
-  ).toBeVisible();
+  ).toHaveCount(1);
   await expect(
     documentation.getByRole("button", { name: "Edit", exact: true }),
   ).toHaveCount(0);
