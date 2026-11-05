@@ -424,6 +424,7 @@ export interface NodeRun {
   references?: Record<string, string[]>;
 }
 export interface Run {
+  flow?: Bundle["flow"];
   partitions?: {
     manifest?: string;
     total: number;

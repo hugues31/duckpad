@@ -19,4 +19,29 @@ it("uses captured scope names including component paths and unnamed historical r
   expect(runScopeLabel({ ...run, scope: "project" }, (key) => en[key])).toBe(
     en.fullRun,
   );
+  expect(
+    runScopeLabel(
+      {
+        ...run,
+        nodes: {},
+        flow: {
+          id: "project",
+          name: "Project",
+          edges: [],
+          nodes: [
+            {
+              id: "node_1",
+              component: "report",
+              params: {},
+              position: { x: 0, y: 0 },
+            },
+          ],
+        },
+        components: {
+          report: { name: "Historical report", nodes: [], edges: [] },
+        },
+      },
+      (key) => en[key],
+    ),
+  ).toBe("Historical report");
 });
