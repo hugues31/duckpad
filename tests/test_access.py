@@ -90,6 +90,7 @@ ROUTE_ACCESS = {
     ],
     EDITOR: [
         "PUT /api/worktrees/{worktree}",
+        "POST /api/worktrees/{worktree}/revert",
         "POST /api/worktrees/{worktree}/extensions/check",
         "POST /api/worktrees/{worktree}/uploads",
         "POST /api/worktrees/{worktree}/git/open",
@@ -466,7 +467,7 @@ def test_project_role_matrix_and_cross_project_import(instance, role):
         f"/worktrees/{worktree}",
         json={"revision": snapshot["revision"], "bundle": snapshot["bundle"]},
     ).status_code == (403 if role in ("reader", "operator") else 200)
-    for suffix in ("branches", "group", "import", "merge", "runs", "uploads"):
+    for suffix in ("branches", "group", "import", "merge", "revert", "runs", "uploads"):
         if role in ("reader", "operator"):
             assert (
                 request(client, headers, "POST", f"/worktrees/{worktree}/{suffix}", json={}).status_code

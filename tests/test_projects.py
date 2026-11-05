@@ -134,6 +134,50 @@ def test_external_and_ui_disjoint_edits_merge(services, tmp_path):
     assert result["bundle"]["flow"]["nodes"][1]["label"] == "Renamed filter"
 
 
+def test_revert_undoes_and_redoes_one_save_and_keeps_independent_edits(services, tmp_path):
+    _, projects, _, _ = services
+    worktree = projects.create("Undo", example_bundle(tmp_path / "input.csv"))
+    snapshot = projects.snapshot(worktree["id"])
+    deleted = copy.deepcopy(snapshot["bundle"])
+    deleted["flow"]["nodes"] = [n for n in deleted["flow"]["nodes"] if n["id"] != "filter"]
+    deleted["flow"]["edges"] = []
+    removal = projects.write(worktree["id"], snapshot["revision"], bundle_to_files(deleted))
+    assert removal["change"] == removal["commit"]
+    # A later save of another node, from a client that never saw the deletion.
+    renamed = copy.deepcopy(snapshot["bundle"])
+    renamed["flow"]["nodes"][2]["label"] = "Renamed total"
+    projects.write(worktree["id"], snapshot["revision"], bundle_to_files(renamed))
+
+    undone = projects.revert(worktree["id"], removal["change"])
+    nodes = {n["id"]: n for n in undone["bundle"]["flow"]["nodes"]}
+    assert nodes["filter"] == snapshot["bundle"]["flow"]["nodes"][1]
+    assert nodes["total"]["label"] == "Renamed total"
+    assert sorted(e["id"] for e in undone["bundle"]["flow"]["edges"]) == ["a", "b"]
+
+    redone = projects.revert(worktree["id"], undone["change"])
+    nodes = {n["id"]: n for n in redone["bundle"]["flow"]["nodes"]}
+    assert sorted(nodes) == ["source", "total"]
+    assert nodes["total"]["label"] == "Renamed total"
+    assert redone["bundle"]["flow"]["edges"] == []
+
+    unchanged = projects.write(worktree["id"], redone["revision"], redone["files"])
+    assert unchanged["change"] is None
+    assert unchanged["commit"] == redone["commit"]
+
+
+def test_revert_accepts_only_commits_of_the_branch(services, tmp_path):
+    _, projects, _, _ = services
+    worktree = projects.create("Foreign", example_bundle(tmp_path / "input.csv"))
+    other = projects.create("Other", example_bundle(tmp_path / "other.csv"))
+    head = projects.snapshot(worktree["id"])["commit"]
+    foreign = projects.snapshot(other["id"])["commit"]
+    with pytest.raises(Problem, match="no longer part of the branch") as missing:
+        projects.revert(worktree["id"], foreign)
+    assert missing.value.status == 409
+    with pytest.raises(Problem, match="first commit"):
+        projects.revert(worktree["id"], head)
+
+
 def test_conflict_survives_service_restart_and_refreshes_on_new_external_edit(services, tmp_path):
     store, projects, _, engine = services
     worktree = projects.create("Conflict", example_bundle(tmp_path / "input.csv"))

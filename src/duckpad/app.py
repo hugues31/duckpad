@@ -768,6 +768,10 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
         proposal = data.files if data.files is not None else bundle_to_files(data.bundle)
         return projects.write(worktree, data.revision, proposal)
 
+    @app.post("/api/worktrees/{worktree}/revert", response_model=None)
+    def revert_change(worktree: str, data: schemas.Revert) -> Record:
+        return projects.revert(worktree, data.commit)
+
     @app.get("/api/worktrees/{worktree}/archive.zip", response_model=None)
     def download_project(worktree: str) -> Response:
         snapshot = projects.snapshot(worktree, committed=True)
