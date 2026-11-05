@@ -1,6 +1,6 @@
 import { Download, FlaskConical, Trash2, Upload } from "lucide-react";
 import { useState } from "react";
-import { Link } from "react-router";
+import { Link, useSearchParams } from "react-router";
 import { api, send } from "../api";
 import ExtensionCatalog, { ExtensionAvailability } from "../ExtensionCatalog";
 import {
@@ -15,8 +15,8 @@ import Select from "../Select";
 import { useWorkspace } from "../shell";
 import { useApiResource } from "../useApiResource";
 import { useAsyncAction } from "../useAsyncAction";
-import { useLoadedWorktree } from "../worktree";
-import { InvalidProject } from "./PageStates";
+import { useLoadedWorktree, useWorktree } from "../worktree";
+import { InvalidProject, PageLoading, RouteError } from "./PageStates";
 
 interface ExtensionState extends ProjectExtension {
   name: string;
@@ -31,6 +31,12 @@ interface Extensions {
 }
 
 export default function ExtensionsPage() {
+  const { snapshot, loadError } = useWorktree();
+  if (!snapshot) return loadError ? <RouteError /> : <PageLoading />;
+  return <ExtensionRequirements />;
+}
+
+function ExtensionRequirements() {
   const t = useT();
   const { user } = useWorkspace();
   const { id, snapshot, canEdit, save, statuses } = useLoadedWorktree();
@@ -42,7 +48,14 @@ export default function ExtensionsPage() {
   } = useApiResource<Extensions>(`/worktrees/${id}/extensions`, {
     refresh: snapshot.revision,
   });
-  const [name, setName] = useState("");
+  const [params] = useSearchParams();
+  // From a run error: prefill a new requirement, or focus a declared one.
+  const requested = params.get("extension") || "";
+  const declared = Object.hasOwn(
+    Object(snapshot.bundle?.extensions ?? {}),
+    requested,
+  );
+  const [name, setName] = useState(declared ? "" : requested);
   const [source, setSource] = useState<ExtensionSource>("core");
   const { pending, error, run } = useAsyncAction();
   const [failed, setFailed] = useState<string | null>(null);
@@ -80,12 +93,11 @@ export default function ExtensionsPage() {
   }
 
   return (
-    <section className="full-panel project-extensions-page">
+    <section className="settings-card project-extensions-page">
       <div className="page-heading">
         <div>
-          <span className="eyebrow">{t("extensions")}</span>
-          <h1>{t("projectExtensionsTitle")}</h1>
-          <p>{t("projectExtensionsHint")}</p>
+          <h2>{t("projectExtensionsTitle")}</h2>
+          <p className="muted">{t("projectExtensionsHint")}</p>
         </div>
         <button
           className="button secondary"
@@ -214,6 +226,7 @@ export default function ExtensionsPage() {
                     <input
                       type="checkbox"
                       aria-label={t("projectExtensionActivate")}
+                      autoFocus={item.name === requested}
                       checked={enabled}
                       disabled={
                         busy || (!item.enabled && item.status !== "ready")
@@ -238,9 +251,9 @@ export default function ExtensionsPage() {
                     />
                   </label>
                 )}
-                <h2>
+                <h3>
                   <code>{item.name}</code>
-                </h2>
+                </h3>
                 <span className="project-extension-source">
                   {t(extensionSourceKey(item.source))}
                 </span>

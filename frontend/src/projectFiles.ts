@@ -1,3 +1,8 @@
+import { displayNodeName, type NodeNames } from "./nodeNames";
+import type { Translate } from "./i18n";
+import { nodeLocation, nodeSourcePath } from "./nodeCode";
+import type { Snapshot } from "./types";
+
 export function projectFileLanguage(path: string): string {
   if (path.endsWith(".py")) return "python";
   if (path === "uv.lock") return "ini";
@@ -6,4 +11,29 @@ export function projectFileLanguage(path: string): string {
   // Monaco's INI tokenizer covers TOML sections, keys, strings and comments.
   if (path.endsWith(".toml")) return "ini";
   return "json";
+}
+export function initialProjectFile(snapshot: Snapshot, selectedNode: string) {
+  const location =
+    snapshot.bundle &&
+    selectedNode &&
+    nodeLocation(snapshot.bundle, selectedNode);
+  // A component instance opens its definition, as the Inspector does.
+  const source =
+    location &&
+    (location.node.component
+      ? `components/${location.node.component}.json`
+      : nodeSourcePath(location.node, location.parent));
+  if (source && source in snapshot.files) return source;
+  return "README.md" in snapshot.files
+    ? "README.md"
+    : Object.keys(snapshot.files).sort()[0] || "";
+}
+
+/** The caption of a node's code file, or null for other files. Inside a
+ * component folder, the component name is already shown by the folder. */
+export function nodeFileLabel(path: string, names: NodeNames, t: Translate) {
+  const node = path.match(/^(nodes\/|components\/[^/]+\/)([^/]+)\.(sql|py)$/);
+  if (!node) return null;
+  const key = node[1] === "nodes/" ? node[2] : node[1] + node[2];
+  return displayNodeName(names[key]?.slice(-1), t("node"), t);
 }

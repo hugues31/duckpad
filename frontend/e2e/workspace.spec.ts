@@ -1138,7 +1138,9 @@ test("documentation waits for its refreshed revision and preserves edits during 
   await page.getByRole("link", { name: "Documentation", exact: true }).click();
   const panel = page.locator(".documentation-page");
   const editor = panel.locator(".project-documentation");
-  const button = panel.getByRole("button");
+  const button = panel.getByRole("button", {
+    name: /^(Save changes|Saving…)$/,
+  });
   const worktree = new URL(page.url()).pathname.split("/")[2];
   let releaseRefresh!: () => void;
   const refreshGate = new Promise<void>((resolve) => {

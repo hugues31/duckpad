@@ -1,6 +1,7 @@
 import type { ComponentType } from "react";
 import { matchRoutes, redirect, type RouteObject } from "react-router";
 import {
+  projectSettingsSections,
   settingsSections,
   workspaceTabs,
   type PageHandle,
@@ -16,7 +17,6 @@ import ProjectSettingsPage from "./pages/ProjectSettingsPage";
 import ProjectsPage from "./pages/ProjectsPage";
 import { NotFoundPage } from "./pages/PageStates";
 import UserSettingsPage from "./pages/UserSettingsPage";
-import ExtensionsPage from "./pages/ExtensionsPage";
 import VariablesPage from "./pages/VariablesPage";
 import WorktreePage, { CodePage } from "./pages/WorktreePage";
 
@@ -31,7 +31,6 @@ const tabPages: Record<WorkspaceTab, ComponentType> = {
   code: CodePage,
   documentation: DocumentationPage,
   variables: VariablesPage,
-  extensions: ExtensionsPage,
   history: HistoryPage,
 };
 
@@ -59,13 +58,12 @@ export const pageRoutes: RouteObject[] = [
         `/projects/${params.projectId}/settings/participants${new URL(request.url).search}`,
       ),
   },
-  ...["participants", "connections", "python", "partitions", "general"].map(
-    (section) =>
-      page(
-        `projects/:projectId/settings/${section}`,
-        { area: "projectSettings", section },
-        ProjectSettingsPage,
-      ),
+  ...projectSettingsSections.map(([section]) =>
+    page(
+      `projects/:projectId/settings/${section}`,
+      { area: "projectSettings", section },
+      ProjectSettingsPage,
+    ),
   ),
   page("projects/:projectId/jobs", { area: "jobs" }, JobsPage),
   // The tabs of a working branch share its toolbar and code editor.

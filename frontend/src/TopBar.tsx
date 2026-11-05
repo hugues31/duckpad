@@ -47,11 +47,12 @@ export default function TopBar({
     projectId ||
     workspace?.worktrees.find((w) => w.id === worktree)?.project ||
     "";
-  const partitionSettings =
-    area === "projectSettings" && section === "partitions";
+  const worktreeSettings =
+    area === "projectSettings" &&
+    (section === "partitions" || section === "extensions");
   const contextUrl = (id: string, env: string) =>
-    partitionSettings
-      ? projectPageUrl(project, "settings/partitions", id, env)
+    worktreeSettings
+      ? projectPageUrl(project, `settings/${section}`, id, env)
       : worktreeUrl(id, tab, env);
   return (
     <header className="topbar">
@@ -136,7 +137,7 @@ export default function TopBar({
         </div>
       )}
       <div className="topbar-right">
-        {snapshot && (area === "pipelines" || partitionSettings) && (
+        {snapshot && (area === "pipelines" || worktreeSettings) && (
           <>
             <div className="branch-picker">
               <GitBranch size={14} />

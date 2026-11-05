@@ -11,7 +11,8 @@ from contextlib import contextmanager
 from pathlib import Path
 
 from sqlalchemy import URL, and_, delete, event, func, literal_column, or_
-from sqlmodel import Session, create_engine, select
+from sqlalchemy import select as sql_select
+from sqlmodel import Session, col, create_engine, select
 
 from . import models as m
 from .migrations import upgrade
@@ -399,6 +400,34 @@ class Store:
         with self.session() as session:
             rows = session.exec(select(m.Run).where(m.Run.status.in_(statuses)))
             return [self._record("run", row, session) for row in rows]
+
+    def latest_project_runs(self, projects):
+        """Bounded dashboard metadata; never load captured SQL or connection snapshots."""
+        if not projects:
+            return {}
+        latest = (
+            sql_select(
+                col(m.Run.project),
+                col(m.Run.id),
+                col(m.Run.status),
+                col(m.Run.started),
+                col(m.Run.environment),
+                func.row_number()
+                .over(
+                    partition_by=col(m.Run.project),
+                    order_by=[col(m.Run.started).desc(), col(m.Run.id).desc()],
+                )
+                .label("rank"),
+            )
+            .where(col(m.Run.project).in_(projects))
+            .subquery()
+        )
+        with self.session() as session:
+            rows = session.execute(sql_select(latest).where(latest.c.rank == 1)).mappings()
+            return {
+                row["project"]: {key: row[key] for key in ("id", "status", "started", "environment")}
+                for row in rows
+            }
 
     def worktrees(self, project):
         with self.session() as session:

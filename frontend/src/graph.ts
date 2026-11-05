@@ -69,11 +69,24 @@ export function outputSource(bundle: Bundle, node: string, port: string) {
     if (!definition) return { node, port };
     graph = definition;
   }
-  let current = graph.nodes.find((n) => n.id === ids[ids.length - 1]);
+  const current = graph.nodes.find((n) => n.id === ids[ids.length - 1]);
+  return exposedSource(bundle.components, current, node, port);
+}
+
+/** Follow a component instance's exposed port to the node inside it that
+ * stores the rows; the same node and port otherwise. */
+export function exposedSource(
+  components: Record<string, ComponentDefinition>,
+  current: FlowNode | undefined,
+  node: string,
+  port: string,
+) {
   const source = { node, port };
-  while (current?.component) {
+  const seen = new Set<string>();
+  while (current?.component && !seen.has(current.component)) {
+    seen.add(current.component);
     const definition: ComponentDefinition | undefined =
-      bundle.components[current.component];
+      components[current.component];
     const exposed = definition?.outputs?.[source.port];
     if (!exposed) break;
     source.node += "::" + exposed.node;

@@ -28,8 +28,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useNavigate } from "react-router";
-import Markdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import MarkdownText from "./MarkdownText";
 import { useAssistantError } from "./assistantErrors";
 import { api, send, streamAssistant } from "./api";
 import type {
@@ -269,21 +268,7 @@ export function AssistantMessage({
         )}
         {turn.text && (
           <div className="assistant-markdown">
-            <Markdown
-              remarkPlugins={[remarkGfm]}
-              skipHtml
-              urlTransform={(url) => (/^(https?:\/\/|#)/i.test(url) ? url : "")}
-              components={{
-                img: () => null,
-                a: ({ children, href }) => (
-                  <a href={href} target="_blank" rel="noreferrer">
-                    {children}
-                  </a>
-                ),
-              }}
-            >
-              {turn.text}
-            </Markdown>
+            <MarkdownText>{turn.text}</MarkdownText>
           </div>
         )}
         {turn.error && (

@@ -8,6 +8,9 @@ import { worktreeUrl } from "./navigation";
 import type { Workspace } from "./types";
 import { searchShortcutLabel, useSearchShortcut } from "./searchShortcuts";
 import { useApiResource } from "./useApiResource";
+import { matchCommands, searchCommands } from "./searchCommands";
+import { useOptionalWorktree } from "./worktree";
+import { useShell } from "./shell";
 
 export interface SearchOption {
   key: string;
@@ -26,6 +29,7 @@ export function SearchField({
   message,
   autoFocus = false,
   shortcut,
+  inline = false,
 }: {
   label: string;
   query: string;
@@ -36,11 +40,13 @@ export function SearchField({
   message?: string;
   autoFocus?: boolean;
   shortcut?: "f";
+  /** Keep the list in the page flow and always shown, as in a form or dialog. */
+  inline?: boolean;
 }) {
   const t = useT();
   const id = useId();
   const [active, setActive] = useState(0);
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(autoFocus);
   const input = useRef<HTMLInputElement>(null);
   const focusSearch = useCallback(() => {
     input.current?.focus();
@@ -49,10 +55,17 @@ export function SearchField({
   }, []);
   useSearchShortcut(shortcut, focusSearch);
   const list = useRef<HTMLDivElement>(null);
-  const expanded = open && !!query.trim();
+  const expanded = inline || (open && !!query.trim());
   const index = Math.min(active, Math.max(0, options.length - 1));
   useEffect(() => {
-    list.current?.children[index]?.scrollIntoView({ block: "nearest" });
+    // Scroll the list only: scrollIntoView would also scroll a dialog.
+    const box = list.current;
+    const item = box?.children[index] as HTMLElement | undefined;
+    if (!box || !item) return;
+    const top = item.offsetTop - box.offsetTop;
+    if (top < box.scrollTop) box.scrollTop = top;
+    else if (top + item.offsetHeight > box.scrollTop + box.clientHeight)
+      box.scrollTop = top + item.offsetHeight - box.clientHeight;
   }, [index]);
   const choose = (index: number) => {
     onSelect(index);
@@ -60,7 +73,7 @@ export function SearchField({
   };
   return (
     <div
-      className="search-field"
+      className={inline ? "search-field inline" : "search-field"}
       onBlur={(event) => {
         if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false);
       }}
@@ -123,6 +136,7 @@ export function SearchField({
         )}
         {query && (
           <button
+            type="button"
             className="icon"
             aria-label={t("clearSearch")}
             onClick={() => {
@@ -186,17 +200,37 @@ interface SearchResponse {
 
 export default function InstanceSearch({
   workspace,
+  currentWorktree,
   environment,
   onClose,
 }: {
   workspace: Workspace;
+  currentWorktree: string;
   environment: string;
   onClose: () => void;
 }) {
   const t = useT();
   const navigate = useNavigate();
+  const worktree = useOptionalWorktree();
+  const { openModal } = useShell();
   const [query, setQuery] = useState("");
   const q = query.trim();
+  // Roles are checked by searchCommands; this only needs the loaded branch.
+  const loaded = !!worktree?.snapshot && worktree.id === currentWorktree;
+  const commands = matchCommands(
+    searchCommands(
+      workspace,
+      currentWorktree,
+      environment,
+      t,
+      loaded &&
+        !!worktree.snapshot?.bundle &&
+        !worktree.starting &&
+        !worktree.statuses.active,
+      loaded,
+    ),
+    q,
+  );
   const {
     data: response,
     error,
@@ -216,6 +250,7 @@ export default function InstanceSearch({
       <div className="modal-content instance-search">
         <p>{t("instanceSearchHint")}</p>
         <SearchField
+          inline
           autoFocus
           label={t("instanceSearch")}
           query={query}
@@ -229,27 +264,39 @@ export default function InstanceSearch({
                 ? t("searchMore")
                 : undefined)
           }
-          options={results.map((result, index) => ({
-            key: String(index),
-            label: result.label,
-            detail: [
-              t(
-                result.kind === "node"
-                  ? "node"
-                  : result.kind === "branch"
-                    ? "branch"
-                    : "project",
-              ),
-              result.project_name,
-              result.branch,
-              ...(result.breadcrumbs || []),
-              result.node,
-            ]
-              .filter(Boolean)
-              .join(" · "),
-          }))}
+          options={[
+            ...commands,
+            ...results.map((result, index) => ({
+              key: String(index),
+              label: result.label,
+              detail: [
+                t(
+                  result.kind === "node"
+                    ? "node"
+                    : result.kind === "branch"
+                      ? "branch"
+                      : "project",
+                ),
+                result.project_name,
+                result.branch,
+                ...(result.breadcrumbs || []),
+                result.node,
+              ]
+                .filter(Boolean)
+                .join(" · "),
+            })),
+          ]}
           onSelect={(index) => {
-            const result = results[index];
+            const command = commands[index];
+            if (command) {
+              onClose();
+              if (command.to) void navigate(command.to);
+              else if (command.action === "run") void worktree?.run();
+              else if (command.action === "newBranch")
+                openModal({ kind: "newBranch", worktree: currentWorktree });
+              return;
+            }
+            const result = results[index - commands.length];
             const url = worktreeUrl(result.worktree, "flow", environment);
             const node = result.node
               ? `&${new URLSearchParams({ node: [...(result.path || []), result.node].join("::") })}`

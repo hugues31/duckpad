@@ -63,6 +63,9 @@
 }
 
 /* Jobs share the execution log and settings card surfaces. */
+.job-scope .search-dropdown [role="listbox"] {
+  max-height: 180px;
+}
 .jobs-page .job-details {
   margin-top: 24px;
 }

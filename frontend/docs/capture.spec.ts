@@ -157,6 +157,10 @@ test("record a real pipeline, source lineage and SQL workspace", async ({
     await expect(page.locator(".code-workspace .monaco-editor")).toBeVisible();
     await click(
       page,
+      page.getByRole("treeitem", { name: "templates", exact: true }),
+    );
+    await click(
+      page,
       page.getByRole("treeitem", { name: "templates/sql.sql", exact: true }),
     );
     await expect(page.locator(".code-file-heading")).toContainText(

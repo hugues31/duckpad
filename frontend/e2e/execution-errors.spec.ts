@@ -135,3 +135,56 @@ test("execution errors open from the canvas, point into saved code and clear aft
   await expect(card).toHaveCount(0);
   await expect(panel.locator(".data-table")).toContainText("France");
 });
+
+test("missing functions link editors to extension setup in Project settings", async ({
+  page,
+}) => {
+  await signIn(page);
+  const tree = await (
+    await page.request.post("/api/projects", {
+      data: { name: "Missing function" },
+    })
+  ).json();
+  const endpoint = `/api/worktrees/${tree.id}`;
+  const snapshot: Snapshot = await (await page.request.get(endpoint)).json();
+  snapshot.bundle!.flow.nodes = [
+    {
+      id: "query",
+      label: "Extension function",
+      params: {},
+      position: { x: 0, y: 0 },
+    },
+  ];
+  snapshot.bundle!.node_sql = {
+    "nodes/query.sql":
+      "-- @output result\nSELECT missing_extension_function();",
+  };
+  expect(
+    (
+      await page.request.put(endpoint, {
+        data: { revision: snapshot.revision, bundle: snapshot.bundle },
+      })
+    ).ok(),
+  ).toBeTruthy();
+  const run = await (
+    await page.request.post(`${endpoint}/runs`, {
+      data: { environment: "dev", node: "query" },
+    })
+  ).json();
+  await expect
+    .poll(
+      async () =>
+        (await (await page.request.get(`/api/runs/${run.id}`)).json()).status,
+    )
+    .toBe("failed");
+  await page.goto(`/worktrees/${tree.id}/flow?node=query`);
+  const error = page.getByRole("alert", { name: "Last run failed" });
+  await expect(error).toContainText("If this function comes from an extension");
+  await error
+    .getByRole("link", { name: "Open extension settings", exact: true })
+    .click();
+  await expect(page).toHaveURL(/\/settings\/extensions/);
+  await expect(
+    page.getByRole("heading", { name: "Extensions for this project" }),
+  ).toBeVisible();
+});

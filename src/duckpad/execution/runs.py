@@ -28,6 +28,7 @@ from ..materialize import (
     plan_materialization,
     publish_view,
 )
+from ..node_names import node_name_parts
 from ..partition_runs import PartitionRun
 from ..partition_storage import PartitionStorage
 from ..projects import Projects
@@ -306,6 +307,7 @@ class Runner:
             "commit": snapshot["commit"],
             "revision": snapshot["revision"],
             "scope": target or "project",
+            "scope_name": node_name_parts(bundle, target) if target else [],
             "trigger": "manual",
             "entry_point": entry_point,
             "status": "preparing",

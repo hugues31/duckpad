@@ -5,7 +5,6 @@ export const workspaceTabs = [
   "code",
   "documentation",
   "variables",
-  "extensions",
   "history",
 ] as const;
 export type WorkspaceTab = (typeof workspaceTabs)[number];
@@ -19,6 +18,14 @@ export const settingsSections = [
   ["extensions", "extensions"],
   ["sql-resources", "sqlResources"],
   ["monitoring", "monitoring"],
+] as const;
+export const projectSettingsSections = [
+  ["participants", "participants"],
+  ["connections", "connections"],
+  ["python", "pythonExecution"],
+  ["partitions", "partitions"],
+  ["extensions", "extensions"],
+  ["general", "generalSettings"],
 ] as const;
 export type Area =
   | "home"

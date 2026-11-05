@@ -56,6 +56,16 @@
   color: var(--muted);
   line-height: 1.6;
 }
+.project-dashboard-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+.project-dashboard-tools input {
+  width: min(320px, 100%);
+}
 .project-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr));
