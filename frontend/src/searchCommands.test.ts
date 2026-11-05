@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { searchCommands } from "./searchCommands";
+import { matchCommands, searchCommands } from "./searchCommands";
 import { workspaceTabs } from "./navigation";
 import en from "./locales/en.json";
 import type { Workspace } from "./types";
@@ -64,4 +64,14 @@ it("hides mutations for readers, operators and job worktrees and limits instance
       (item) => item.key === "jobs",
     ),
   ).toBe(false);
+});
+
+it("never matches commands on the project name and starts actions only from their name", () => {
+  const keys = (query: string) =>
+    matchCommands(commands(), query).map((item) => item.key);
+  expect(keys("revenue")).toEqual([]);
+  expect(keys("all")).not.toContain("run");
+  expect(keys("run")[0]).toBe("run");
+  expect(keys("project settings")).toContain("projectSettings:connections");
+  expect(keys("connections")).toEqual(["projectSettings:connections"]);
 });

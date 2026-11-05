@@ -8,7 +8,7 @@ import { worktreeUrl } from "./navigation";
 import type { Workspace } from "./types";
 import { searchShortcutLabel, useSearchShortcut } from "./searchShortcuts";
 import { useApiResource } from "./useApiResource";
-import { searchCommands } from "./searchCommands";
+import { matchCommands, searchCommands } from "./searchCommands";
 import { useOptionalWorktree } from "./worktree";
 import { useShell } from "./shell";
 
@@ -45,7 +45,7 @@ export function SearchField({
   const t = useT();
   const id = useId();
   const [active, setActive] = useState(0);
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(autoFocus);
   const input = useRef<HTMLInputElement>(null);
   const focusSearch = useCallback(() => {
     input.current?.focus();
@@ -207,22 +207,21 @@ export default function InstanceSearch({
   const { openModal } = useShell();
   const [query, setQuery] = useState("");
   const q = query.trim();
-  const editable =
-    !!worktree?.snapshot && worktree.canEdit && worktree.id === currentWorktree;
-  const commands = searchCommands(
-    workspace,
-    currentWorktree,
-    environment,
-    t,
-    editable &&
-      !!worktree?.snapshot?.bundle &&
-      !worktree.starting &&
-      !worktree.statuses.active,
-    editable,
-  ).filter((item) =>
-    `${item.label} ${item.detail}`
-      .toLocaleLowerCase()
-      .includes(q.toLocaleLowerCase()),
+  // Roles are checked by searchCommands; this only needs the loaded branch.
+  const loaded = !!worktree?.snapshot && worktree.id === currentWorktree;
+  const commands = matchCommands(
+    searchCommands(
+      workspace,
+      currentWorktree,
+      environment,
+      t,
+      loaded &&
+        !!worktree.snapshot?.bundle &&
+        !worktree.starting &&
+        !worktree.statuses.active,
+      loaded,
+    ),
+    q,
   );
   const {
     data: response,
