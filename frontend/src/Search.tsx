@@ -8,6 +8,9 @@ import { worktreeUrl } from "./navigation";
 import type { Workspace } from "./types";
 import { searchShortcutLabel, useSearchShortcut } from "./searchShortcuts";
 import { useApiResource } from "./useApiResource";
+import { searchCommands } from "./searchCommands";
+import { useOptionalWorktree } from "./worktree";
+import { useShell } from "./shell";
 
 export interface SearchOption {
   key: string;
@@ -189,17 +192,38 @@ interface SearchResponse {
 
 export default function InstanceSearch({
   workspace,
+  currentWorktree = "",
   environment,
   onClose,
 }: {
   workspace: Workspace;
+  currentWorktree?: string;
   environment: string;
   onClose: () => void;
 }) {
   const t = useT();
   const navigate = useNavigate();
+  const worktree = useOptionalWorktree();
+  const { openModal } = useShell();
   const [query, setQuery] = useState("");
   const q = query.trim();
+  const editable =
+    !!worktree?.snapshot && worktree.canEdit && worktree.id === currentWorktree;
+  const commands = searchCommands(
+    workspace,
+    currentWorktree,
+    environment,
+    t,
+    editable &&
+      !!worktree?.snapshot?.bundle &&
+      !worktree.starting &&
+      !worktree.statuses.active,
+    editable,
+  ).filter((item) =>
+    `${item.label} ${item.detail}`
+      .toLocaleLowerCase()
+      .includes(q.toLocaleLowerCase()),
+  );
   const {
     data: response,
     error,
@@ -219,6 +243,7 @@ export default function InstanceSearch({
       <div className="modal-content instance-search">
         <p>{t("instanceSearchHint")}</p>
         <SearchField
+          showEmpty
           autoFocus
           label={t("instanceSearch")}
           query={query}
@@ -232,27 +257,39 @@ export default function InstanceSearch({
                 ? t("searchMore")
                 : undefined)
           }
-          options={results.map((result, index) => ({
-            key: String(index),
-            label: result.label,
-            detail: [
-              t(
-                result.kind === "node"
-                  ? "node"
-                  : result.kind === "branch"
-                    ? "branch"
-                    : "project",
-              ),
-              result.project_name,
-              result.branch,
-              ...(result.breadcrumbs || []),
-              result.node,
-            ]
-              .filter(Boolean)
-              .join(" · "),
-          }))}
+          options={[
+            ...commands,
+            ...results.map((result, index) => ({
+              key: String(index),
+              label: result.label,
+              detail: [
+                t(
+                  result.kind === "node"
+                    ? "node"
+                    : result.kind === "branch"
+                      ? "branch"
+                      : "project",
+                ),
+                result.project_name,
+                result.branch,
+                ...(result.breadcrumbs || []),
+                result.node,
+              ]
+                .filter(Boolean)
+                .join(" · "),
+            })),
+          ]}
           onSelect={(index) => {
-            const result = results[index];
+            const command = commands[index];
+            if (command) {
+              onClose();
+              if (command.to) void navigate(command.to);
+              else if (command.action === "run") void worktree?.run();
+              else if (command.action === "newBranch")
+                openModal({ kind: "newBranch", worktree: currentWorktree });
+              return;
+            }
+            const result = results[index - commands.length];
             const url = worktreeUrl(result.worktree, "flow", environment);
             const node = result.node
               ? `&${new URLSearchParams({ node: [...(result.path || []), result.node].join("::") })}`

@@ -261,6 +261,7 @@ function SignedIn({
             />
             {searchOpen && workspace && (
               <InstanceSearch
+                currentWorktree={worktree || contextWorktree}
                 workspace={workspace}
                 environment={environment}
                 onClose={() => setSearchOpen(false)}
