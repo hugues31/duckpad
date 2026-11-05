@@ -324,10 +324,10 @@ class Projects:
         """
         path = Path(path)
 
-        def present() -> set[str]:
-            return {n for n in definition_names(path) if is_declarative(n) and (path / n).is_file()}
+        def present(root: Path) -> set[str]:
+            return {n for n in definition_names(root) if is_declarative(n) and (root / n).is_file()}
 
-        original = present()
+        original = present(path)
         head = self.git(path, "rev-parse", "--verify", "HEAD", check=False)
         index = Path(self.git(path, "rev-parse", "--absolute-git-dir")) / "index"
         with (
@@ -346,7 +346,7 @@ class Projects:
             try:
                 yield
             except Exception:
-                for name in present() - original:
+                for name in present(path) - original:
                     (path / name).unlink(missing_ok=True)
                 for name in original:
                     target = path / name
