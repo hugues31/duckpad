@@ -1,5 +1,6 @@
 import {
   projectPageUrl,
+  projectSettingsSections,
   settingsSections,
   workspaceTabs,
   worktreeUrl,
@@ -75,14 +76,7 @@ export function searchCommands(
     project.name,
     projectPageUrl(project.id, "settings/participants", tree.id, environment),
   );
-  for (const [slug, label] of [
-    ["participants", "participants"],
-    ["connections", "connections"],
-    ["python", "pythonExecution"],
-    ["partitions", "partitions"],
-    ["extensions", "extensions"],
-    ["general", "generalSettings"],
-  ] as const)
+  for (const [slug, label] of projectSettingsSections)
     add(
       `projectSettings:${slug}`,
       t(label),

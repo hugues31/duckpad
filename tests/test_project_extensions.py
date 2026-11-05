@@ -139,7 +139,7 @@ def test_a_format_without_its_extension_names_the_extension_to_enable(tmp_path, 
             error = run["nodes"][node]["error"]
             assert error == (
                 f"Catalog Error: {capability} is not in the catalog, but it exists in the avro extension.\n"
-                "Enable the avro extension in the project's Extensions tab; "
+                "Enable the avro extension in Project settings > Extensions; "
                 "an instance administrator may need to import it first."
             ), error
         # Neither execution mode downloads or loads the extension on demand.

@@ -1,6 +1,7 @@
 import type { ComponentType } from "react";
 import { matchRoutes, redirect, type RouteObject } from "react-router";
 import {
+  projectSettingsSections,
   settingsSections,
   workspaceTabs,
   type PageHandle,
@@ -57,14 +58,7 @@ export const pageRoutes: RouteObject[] = [
         `/projects/${params.projectId}/settings/participants${new URL(request.url).search}`,
       ),
   },
-  ...[
-    "participants",
-    "connections",
-    "python",
-    "partitions",
-    "extensions",
-    "general",
-  ].map((section) =>
+  ...projectSettingsSections.map(([section]) =>
     page(
       `projects/:projectId/settings/${section}`,
       { area: "projectSettings", section },

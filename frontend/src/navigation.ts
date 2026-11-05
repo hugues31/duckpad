@@ -19,6 +19,14 @@ export const settingsSections = [
   ["sql-resources", "sqlResources"],
   ["monitoring", "monitoring"],
 ] as const;
+export const projectSettingsSections = [
+  ["participants", "participants"],
+  ["connections", "connections"],
+  ["python", "pythonExecution"],
+  ["partitions", "partitions"],
+  ["extensions", "extensions"],
+  ["general", "generalSettings"],
+] as const;
 export type Area =
   | "home"
   | "projects"
