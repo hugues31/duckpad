@@ -4,7 +4,7 @@ import { downloadProject } from "./api";
 import { nodeLocation, nodeSourcePath } from "./nodeCode";
 import { useT } from "./i18n";
 import ProjectFileTree from "./ProjectFileTree";
-import { projectFileLanguage } from "./projectFiles";
+import { initialProjectFile, projectFileLanguage } from "./projectFiles";
 import { useRevisionDraft } from "./useRevisionDraft";
 import type { Snapshot } from "./types";
 import { useWorktree } from "./worktree";
@@ -21,11 +21,13 @@ export default function CodePanel({
   hidden,
   readOnly,
   snapshot,
+  selectedNode = "",
   onSave,
 }: {
   hidden: boolean;
   readOnly: boolean;
   snapshot: Snapshot;
+  selectedNode?: string;
   /** Save the files on top of the given revision; resolve to the saved snapshot. */
   onSave: (files: Files, base: Snapshot) => Promise<Snapshot>;
 }) {
@@ -46,7 +48,14 @@ export default function CodePanel({
   });
   // The name of the helper module being created, if any.
   const [moduleName, setModuleName] = useState<string | null>(null);
-  const [selected, setSelected] = useState("flow.json");
+  const [selected, setSelected] = useState(() =>
+    initialProjectFile(snapshot, selectedNode),
+  );
+  const [openedNode, setOpenedNode] = useState<string | null>(null);
+  if (!hidden && openedNode !== selectedNode) {
+    setOpenedNode(selectedNode);
+    setSelected(initialProjectFile(snapshot, selectedNode));
+  }
   const [downloading, setDownloading] = useState(false);
   const [error, setError] = useState("");
   const path = selected in files ? selected : Object.keys(files).sort()[0];

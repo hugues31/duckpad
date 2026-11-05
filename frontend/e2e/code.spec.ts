@@ -34,6 +34,7 @@ test("Code has a keyboard file tree, preserves drafts across files and tabs, sav
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   const { worktree, snapshot } = await openCode(page);
+  await expect(page.locator(".code-file-heading")).toContainText("README.md");
   await expect(page.locator(".main-tabs a")).toHaveText([
     "Flow",
     "Code",
@@ -51,7 +52,6 @@ test("Code has a keyboard file tree, preserves drafts across files and tabs, sav
     exact: true,
   });
   await templates.focus();
-  await templates.press("ArrowLeft");
   await expect(templates).toHaveAttribute("aria-expanded", "false");
   const sql = tree.getByRole("treeitem", {
     name: "templates/sql.sql",
@@ -114,6 +114,7 @@ test("Code has a keyboard file tree, preserves drafts across files and tabs, sav
   expect(bytes.length).toBeGreaterThan(100);
   await page.reload();
   await page.getByRole("link", { name: "Code", exact: true }).click();
+  await page.getByRole("treeitem", { name: "templates", exact: true }).click();
   await page
     .getByRole("treeitem", { name: "templates/sql.sql", exact: true })
     .click();

@@ -58,6 +58,7 @@ export default function WorktreePage() {
         }
       />
       <CodePanel
+        selectedNode={assistantNode}
         key={id}
         hidden={tab !== "code"}
         readOnly={!canEdit}

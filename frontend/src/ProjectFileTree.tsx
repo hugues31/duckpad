@@ -58,7 +58,9 @@ export default function ProjectFileTree({
 }) {
   const t = useT();
   const entries = useMemo(() => fileTree(Object.keys(files)), [files]);
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const [collapsed, setCollapsed] = useState<Set<string>>(
+    () => new Set(["templates"]),
+  );
   const [focused, setFocused] = useState(selected);
   const tree = useRef<HTMLDivElement>(null);
   const visible: Entry[] = [];

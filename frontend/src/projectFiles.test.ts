@@ -1,6 +1,36 @@
 import { describe, expect, it } from "vitest";
 import { projectFileLanguage, projectFileLabel } from "./projectFiles";
 import en from "./locales/en.json";
+import { initialProjectFile } from "./projectFiles";
+import type { Snapshot } from "./types";
+
+it("opens the selected node source or the README, including component and linked nodes", () => {
+  const snapshot = {
+    files: {
+      "README.md": "",
+      "nodes/node_1.sql": "",
+      "templates/shared.sql": "",
+      "components/report/node_2.py": "",
+    },
+    bundle: {
+      flow: {
+        nodes: [
+          { id: "node_1" },
+          { id: "linked", template: "shared" },
+          { id: "report", component: "report" },
+        ],
+      },
+      components: { report: { nodes: [{ id: "node_2", language: "python" }] } },
+    },
+  } as unknown as Snapshot;
+  expect(initialProjectFile(snapshot, "")).toBe("README.md");
+  expect(initialProjectFile(snapshot, "removed")).toBe("README.md");
+  expect(initialProjectFile(snapshot, "node_1")).toBe("nodes/node_1.sql");
+  expect(initialProjectFile(snapshot, "linked")).toBe("templates/shared.sql");
+  expect(initialProjectFile(snapshot, "report::node_2")).toBe(
+    "components/report/node_2.py",
+  );
+});
 
 it("labels SQL and Python node files without exposing raw IDs", () => {
   const names = {

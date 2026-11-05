@@ -9,6 +9,20 @@ export function projectFileLanguage(path: string): string {
 }
 import { displayNodeName, type NodeNames } from "./nodeNames";
 import type { Translate } from "./i18n";
+import { nodeLocation, nodeSourcePath } from "./nodeCode";
+import type { Snapshot } from "./types";
+
+export function initialProjectFile(snapshot: Snapshot, selectedNode: string) {
+  const location =
+    snapshot.bundle &&
+    selectedNode &&
+    nodeLocation(snapshot.bundle, selectedNode);
+  const source = location && nodeSourcePath(location.node, location.parent);
+  if (source && source in snapshot.files) return source;
+  return "README.md" in snapshot.files
+    ? "README.md"
+    : Object.keys(snapshot.files).sort()[0] || "";
+}
 
 /** File identities stay stable while the tree shows the authored node captions. */
 export function projectFileLabel(path: string, names: NodeNames, t: Translate) {
