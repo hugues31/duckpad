@@ -9,16 +9,16 @@ export function jobSlug(name: string) {
     .replace(/^-|-$/g, "");
 }
 
-export function jobInvocation(slug: string) {
-  return `# DUCKPAD_SERVER and DUCKPAD_TOKEN come from your environment.
+export function jobInvocation(slug: string, server: string) {
+  return `# DUCKPAD_TOKEN holds an API token allowed to run this Job.
 printf 'header = "Authorization: Bearer %s"\\n' "$DUCKPAD_TOKEN" | \\
   curl --fail-with-body --silent --show-error --config - \\
   -H 'Content-Type: application/json' \\
   -d '{"trigger":{"source":"api"}}' \\
-  "$DUCKPAD_SERVER/api/v1/jobs/${encodeURIComponent(slug)}/runs"`;
+  "${server}/api/v1/jobs/${encodeURIComponent(slug)}/runs"`;
 }
 
-export function jobCron(slug: string) {
-  return `# Daily at 02:00; configure DUCKPAD_SERVER in the scheduler environment.
-0 2 * * * /opt/duckpad/bin/duckpad run ${slug} --token-file /etc/duckpad/job.token --source cron --timeout 2h`;
+export function jobCron(slug: string, server: string) {
+  return `# Daily at 02:00, with the API token stored in /etc/duckpad/job.token.
+0 2 * * * DUCKPAD_SERVER=${server} /opt/duckpad/bin/duckpad run ${slug} --token-file /etc/duckpad/job.token --source cron --timeout 2h`;
 }

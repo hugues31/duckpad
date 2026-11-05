@@ -29,7 +29,7 @@ export function SearchField({
   message,
   autoFocus = false,
   shortcut,
-  showEmpty = false,
+  inline = false,
 }: {
   label: string;
   query: string;
@@ -40,7 +40,8 @@ export function SearchField({
   message?: string;
   autoFocus?: boolean;
   shortcut?: "f";
-  showEmpty?: boolean;
+  /** Keep the list in the page flow and always shown, as in a form or dialog. */
+  inline?: boolean;
 }) {
   const t = useT();
   const id = useId();
@@ -54,10 +55,17 @@ export function SearchField({
   }, []);
   useSearchShortcut(shortcut, focusSearch);
   const list = useRef<HTMLDivElement>(null);
-  const expanded = open && (showEmpty || !!query.trim());
+  const expanded = inline || (open && !!query.trim());
   const index = Math.min(active, Math.max(0, options.length - 1));
   useEffect(() => {
-    list.current?.children[index]?.scrollIntoView?.({ block: "nearest" });
+    // Scroll the list only: scrollIntoView would also scroll a dialog.
+    const box = list.current;
+    const item = box?.children[index] as HTMLElement | undefined;
+    if (!box || !item) return;
+    const top = item.offsetTop - box.offsetTop;
+    if (top < box.scrollTop) box.scrollTop = top;
+    else if (top + item.offsetHeight > box.scrollTop + box.clientHeight)
+      box.scrollTop = top + item.offsetHeight - box.clientHeight;
   }, [index]);
   const choose = (index: number) => {
     onSelect(index);
@@ -65,7 +73,7 @@ export function SearchField({
   };
   return (
     <div
-      className="search-field"
+      className={inline ? "search-field inline" : "search-field"}
       onBlur={(event) => {
         if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false);
       }}
@@ -242,7 +250,7 @@ export default function InstanceSearch({
       <div className="modal-content instance-search">
         <p>{t("instanceSearchHint")}</p>
         <SearchField
-          showEmpty
+          inline
           autoFocus
           label={t("instanceSearch")}
           query={query}

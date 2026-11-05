@@ -270,7 +270,7 @@
   color: var(--muted);
   margin-top: 0;
 }
-.instance-search .search-dropdown {
+.search-field.inline .search-dropdown {
   position: static;
   margin-top: 8px;
   box-shadow: none;

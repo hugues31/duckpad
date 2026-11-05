@@ -11,12 +11,13 @@ it("suggests a bounded API slug from a human name", () => {
 });
 
 it("uses the public run API and CLI scheduler with credential placeholders", () => {
-  expect(jobInvocation("daily-revenue")).toContain(
-    "/api/v1/jobs/daily-revenue/runs",
+  const server = "https://duckpad.example.com";
+  expect(jobInvocation("daily-revenue", server)).toContain(
+    '"https://duckpad.example.com/api/v1/jobs/daily-revenue/runs"',
   );
-  expect(jobInvocation("daily-revenue")).toContain("--config -");
-  expect(jobCron("daily-revenue")).toContain(
-    "duckpad run daily-revenue --token-file",
+  expect(jobInvocation("daily-revenue", server)).toContain("--config -");
+  expect(jobCron("daily-revenue", server)).toContain(
+    "DUCKPAD_SERVER=https://duckpad.example.com /opt/duckpad/bin/duckpad run daily-revenue --token-file",
   );
-  expect(jobCron("daily-revenue")).toContain("0 2 * * *");
+  expect(jobCron("daily-revenue", server)).toContain("0 2 * * *");
 });

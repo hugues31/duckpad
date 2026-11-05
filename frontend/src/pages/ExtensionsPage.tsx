@@ -49,7 +49,13 @@ function ExtensionRequirements() {
     refresh: snapshot.revision,
   });
   const [params] = useSearchParams();
-  const [name, setName] = useState(params.get("extension") || "");
+  // From a run error: prefill a new requirement, or focus a declared one.
+  const requested = params.get("extension") || "";
+  const declared = Object.hasOwn(
+    Object(snapshot.bundle?.extensions ?? {}),
+    requested,
+  );
+  const [name, setName] = useState(declared ? "" : requested);
   const [source, setSource] = useState<ExtensionSource>("core");
   const { pending, error, run } = useAsyncAction();
   const [failed, setFailed] = useState<string | null>(null);
@@ -221,6 +227,7 @@ function ExtensionRequirements() {
                     <input
                       type="checkbox"
                       aria-label={t("projectExtensionActivate")}
+                      autoFocus={item.name === requested}
                       checked={enabled}
                       disabled={
                         busy || (!item.enabled && item.status !== "ready")

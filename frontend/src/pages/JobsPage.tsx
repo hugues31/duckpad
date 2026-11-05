@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useParams } from "react-router";
-import { Play, Plus, Square } from "lucide-react";
+import { CalendarClock, Play, Plus, Square } from "lucide-react";
 import { api, errorDetail, send, withQuery } from "../api";
 import ComparisonView from "../ComparisonView";
 import type { Branch, Comparison, GitTag } from "../gitTypes";
@@ -75,6 +75,8 @@ function ProjectJobs({ project }: { project: Project }) {
     null,
   );
   const [deleting, setDeleting] = useState<Job | null>(null);
+  // A new Job opens with its API and scheduler examples unfolded.
+  const [created, setCreated] = useState<string | null>(null);
   const current = jobs.data?.find((job) => job.slug === selected);
   const changed = async () => {
     jobs.reload();
@@ -101,11 +103,22 @@ function ProjectJobs({ project }: { project: Project }) {
         </p>
       )}
       {!jobs.data && !jobs.error && <PageLoading />}
-      {jobs.data?.length === 0 && (
-        <p className="empty-state">
-          {t(project.role === "admin" ? "noJobsAdmin" : "noJobs")}
-        </p>
-      )}
+      {jobs.data?.length === 0 &&
+        (project.role === "admin" ? (
+          <div className="empty-state">
+            <CalendarClock size={28} aria-hidden="true" />
+            <p>{t("noJobsAdmin")}</p>
+            <button
+              className="button primary"
+              onClick={() => setEditing("new")}
+            >
+              <Plus size={16} />
+              {t("newJob")}
+            </button>
+          </div>
+        ) : (
+          <p className="empty-state">{t("noJobs")}</p>
+        ))}
       <div className="administration-table">
         <table>
           <thead>
@@ -170,6 +183,7 @@ function ProjectJobs({ project }: { project: Project }) {
           key={current.slug}
           job={current}
           project={project}
+          created={created === current.slug}
           onChanged={changed}
           onEdit={() => setEditing(current)}
           onVersion={(tag) => setChanging({ job: current, tag })}
@@ -182,6 +196,7 @@ function ProjectJobs({ project }: { project: Project }) {
           job={editing === "new" ? null : editing}
           onClose={() => setEditing(null)}
           onSaved={async (job) => {
+            if (editing === "new") setCreated(job.slug);
             setSelected(job.slug);
             setEditing(null);
             await changed();
@@ -220,6 +235,7 @@ function ProjectJobs({ project }: { project: Project }) {
 function JobDetails({
   job,
   project,
+  created,
   onChanged,
   onEdit,
   onVersion,
@@ -227,6 +243,7 @@ function JobDetails({
 }: {
   job: Job;
   project: Project;
+  created: boolean;
   onChanged: () => Promise<void>;
   onEdit: () => void;
   onVersion: (tag?: string) => void;
@@ -238,6 +255,9 @@ function JobDetails({
   const runs = useApiResource<Run[]>(`/jobs/${job.slug}/runs`, {
     interval: 2000,
   });
+  const names = useApiResource<NodeNames>(
+    job.scope ? `/jobs/${job.slug}/nodes` : null,
+  );
   const [runId, setRunId] = useState<string | null>(null);
   const [confirmation, setConfirmation] = useState<
     (Environment & { job_revision: string; failedPartitions?: boolean }) | null
@@ -276,12 +296,6 @@ function JobDetails({
   };
   return (
     <section className="job-details settings-card">
-      <details open>
-        <summary>{t("jobAutomation")}</summary>
-        <p>{t("jobAutomationHint")}</p>
-        <pre className="expression">{jobInvocation(job.slug)}</pre>
-        <pre className="expression">{jobCron(job.slug)}</pre>
-      </details>
       <div className="page-heading">
         <div>
           <h2>{job.name}</h2>
@@ -352,8 +366,13 @@ function JobDetails({
         </p>
       )}
       <p className="muted">
-        {t("jobScope")}: {job.scope || t("jobWholeProject")} · {t("jobVersion")}
-        : {version(job.target)} ·{" "}
+        {t("jobScope")}:{" "}
+        <span title={job.scope || undefined}>
+          {job.scope
+            ? displayNodeName(names.data?.[job.scope], job.scope, t)
+            : t("jobWholeProject")}
+        </span>{" "}
+        · {t("jobVersion")}: {version(job.target)} ·{" "}
         <code>{job.target.commit || job.resolved_commit}</code>
       </p>
       {project.role === "admin" && (
@@ -377,6 +396,16 @@ function JobDetails({
           </button>
         </div>
       )}
+      <details open={created}>
+        <summary>{t("jobAutomation")}</summary>
+        <p>{t("jobAutomationHint")}</p>
+        <pre className="expression">
+          {jobInvocation(job.slug, window.location.origin)}
+        </pre>
+        <pre className="expression">
+          {jobCron(job.slug, window.location.origin)}
+        </pre>
+      </details>
       <h3>{t("jobRecentRuns")}</h3>
       {runs.error && <p className="notice error">{runs.error}</p>}
       {runs.data?.length === 0 && <p className="muted">{t("noHistory")}</p>}
@@ -491,7 +520,7 @@ function JobForm({
   const workspace = useWorkspace();
   const action = useAsyncAction();
   const [targetKind, setKind] = useState<"tag" | "branch" | null>(null);
-  const [ref, setRef] = useState("");
+  const [chosenRef, setRef] = useState<string | null>(null);
   const [name, setName] = useState(job?.name || "");
   const [slug, setSlug] = useState<string | null>(null);
   const [scope, setScope] = useState(job?.scope || "");
@@ -501,6 +530,13 @@ function JobForm({
     `/worktrees/${project.main}/git/branches`,
   );
   const kind = targetKind ?? (tags.data?.length ? "tag" : "branch");
+  // Without tags, the Job targets the main branch until another is chosen.
+  const ref =
+    chosenRef ??
+    (tags.data && kind === "branch"
+      ? workspace.worktrees.find((item) => item.id === project.main)?.branch ||
+        ""
+      : "");
   const nodes = useApiResource<NodeNames>(
     job
       ? `/jobs/${job.slug}/nodes`
@@ -610,7 +646,7 @@ function JobForm({
                   value={kind}
                   onChange={(e) => {
                     setKind(e.target.value as "tag" | "branch");
-                    setRef("");
+                    setRef(null);
                     setScope("");
                   }}
                 >
@@ -626,6 +662,9 @@ function JobForm({
                   required
                   value={ref}
                   onChange={(event) => {
+                    // Keep the target that lists this version, even if tags
+                    // finish loading afterwards.
+                    setKind(kind);
                     setRef(event.target.value);
                     setScope("");
                   }}
@@ -642,7 +681,7 @@ function JobForm({
               </label>
             </>
           )}
-          <div className="field">
+          <div className="field job-scope">
             <span>{t("jobScope")}</span>
             <p title={scope}>
               {scope
@@ -654,7 +693,7 @@ function JobForm({
               query={scopeQuery}
               onQuery={setScopeQuery}
               options={scopeOptions}
-              showEmpty
+              inline
               pending={nodes.pending}
               onSelect={(index) => {
                 setScope(scopeOptions[index].key);
