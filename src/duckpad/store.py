@@ -11,7 +11,8 @@ from contextlib import contextmanager
 from pathlib import Path
 
 from sqlalchemy import URL, and_, delete, event, func, literal_column, or_
-from sqlmodel import Session, create_engine, select
+from sqlalchemy import select as sql_select
+from sqlmodel import Session, col, create_engine, select
 
 from . import models as m
 from .migrations import upgrade
@@ -405,21 +406,24 @@ class Store:
         if not projects:
             return {}
         latest = (
-            select(
-                m.Run.project,
-                m.Run.id,
-                m.Run.status,
-                m.Run.started,
-                m.Run.environment,
+            sql_select(
+                col(m.Run.project),
+                col(m.Run.id),
+                col(m.Run.status),
+                col(m.Run.started),
+                col(m.Run.environment),
                 func.row_number()
-                .over(partition_by=m.Run.project, order_by=[m.Run.started.desc(), m.Run.id.desc()])
+                .over(
+                    partition_by=col(m.Run.project),
+                    order_by=[col(m.Run.started).desc(), col(m.Run.id).desc()],
+                )
                 .label("rank"),
             )
-            .where(m.Run.project.in_(projects))
+            .where(col(m.Run.project).in_(projects))
             .subquery()
         )
         with self.session() as session:
-            rows = session.execute(select(latest).where(latest.c.rank == 1)).mappings()
+            rows = session.execute(sql_select(latest).where(latest.c.rank == 1)).mappings()
             return {
                 row["project"]: {key: row[key] for key in ("id", "status", "started", "environment")}
                 for row in rows

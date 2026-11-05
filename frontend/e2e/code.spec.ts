@@ -215,6 +215,7 @@ test("invalid project files remain editable in Code and can be repaired", async 
   page,
 }) => {
   const { snapshot } = await openCode(page);
+  await page.getByRole("treeitem", { name: "flow.json", exact: true }).click();
   await editCode(page, "invalid JSON");
   await page.getByRole("button", { name: "Save changes", exact: true }).click();
   await expect(page.locator(".banner.error")).toBeVisible();
@@ -237,6 +238,7 @@ test("conflicting saves preserve the draft and download failures can be retried"
   page,
 }) => {
   const { worktree, snapshot } = await openCode(page);
+  await page.getByRole("treeitem", { name: "templates", exact: true }).click();
   await page
     .getByRole("treeitem", { name: "templates/sql.sql", exact: true })
     .click();
@@ -294,7 +296,6 @@ test("Code is localized and keeps the tree beside Monaco at a narrow width", asy
     fr.code,
     fr.documentation,
     fr.variables,
-    fr.extensions,
     fr.history,
     fr.jobs,
     fr.projectSettings,

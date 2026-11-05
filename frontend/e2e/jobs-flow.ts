@@ -93,7 +93,11 @@ export async function jobsFlow(page: Page) {
     (await (await page.request.get(`/api/jobs/${slug}`)).json()).target.commit,
   ).toBe(second);
   await page.getByText("Version history", { exact: true }).click();
-  await expect(page.locator(".job-details details")).toContainText("v10 → v20");
+  await expect(
+    page
+      .locator(".job-details details")
+      .filter({ has: page.getByText("Version history", { exact: true }) }),
+  ).toContainText("v10 → v20");
 
   const username = `operator-${suffix}`;
   const password = "job-acceptance-password";

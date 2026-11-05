@@ -5,7 +5,7 @@ it("suggests a bounded API slug from a human name", () => {
   expect(jobSlug("  Daily Revenue / Production  ")).toBe(
     "daily-revenue-production",
   );
-  expect(jobSlug("Crème brûlée")).toBe("creme-brulee");
+  expect(jobSlug("Annual R\u00e9venue")).toBe("annual-revenue");
   expect(jobSlug("a".repeat(79) + " b")).toBe("a".repeat(79));
   expect(jobSlug("!!!")).toBe("");
 });

@@ -2,11 +2,16 @@
 
 Open a project from **Projects** to enter its working branch. **Flow** is the
 canvas; **Code** edits its files; **Documentation** explains the project;
-**Variables** configures shared values; **Extensions** enables installed
-capabilities; **History** lists executions; **Jobs** manages repeatable runs;
-**Project settings** contains access, connections, Python, partitions and general
-settings. These tabs keep the selected branch and environment when you return to
-the flow. Partition settings apply to the branch shown in the top bar.
+**Variables** configures shared values; **History** lists executions;
+**Jobs** manages repeatable runs; **Project settings** contains access, connections,
+Python, partitions, extensions and general settings. These tabs keep the selected
+branch and environment when you return to the flow. Partition and extension settings apply to the branch shown in the top bar.
+
+**Projects** shows the last modification date and latest run status. Search by
+project name, or sort by name, modification date or latest run.
+**Code** opens the selected node's source, or the README without a selected node.
+Its tree labels node files by display name, keeps file paths in tooltips, and
+collapses built-in templates by default.
 
 ## Build and inspect
 
@@ -32,6 +37,9 @@ it. Inside a component, this searches that component's nodes.
 nodes across projects you can read, including nested components. Results show
 their project, branch and component path; selecting one opens that location.
 Search uses saved project metadata, excluding SQL, parameter values and result rows.
+It also offers **Run all**, **New working branch**, project tabs and settings
+sections according to the current context and permissions. Actions appear before
+typing; filter by their names or settings category.
 
 Press **Ctrl+F** (**⌘F** on macOS) for canvas search or **Ctrl+K** (**⌘K**) for
 instance search. Both shortcuts also work while typing in the floating AI
@@ -52,8 +60,10 @@ a node's **Run with ancestors** runs a smaller scope. **Stop execution** request
 cancellation of active SQL. A protected environment asks for confirmation.
 
 Results belong to a branch and environment. A change can mark previous results
-**Stale**, and a failed run retains the previous successful data. After a backend
-restart, run again to restore previews and lineage. **History** retains execution
+**Stale**, and a failed run retains the previous successful data. Successful canvas
+nodes show the primary output's row count. Stale, failed and warning indicators
+remain visible; the minimap hides when panels leave little canvas space. After a
+backend restart, run again to restore previews and lineage. **History** retains execution
 records; the node's **Log** connects the displayed data to its recorded run.
 See [results and logs](RESULTS.md) and [environments](ENVIRONMENTS.md).
 

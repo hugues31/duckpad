@@ -96,6 +96,7 @@ def test_project_activity_returns_latest_run_summary_only_for_visible_projects(a
     }
     app.state.auth.create_user("outsider", "outsider-password")
     token = app.state.auth.login("outsider", "outsider-password")
+    client.cookies.clear()
     assert client.get("/api/projects", headers={"Authorization": "Bearer " + token}).json() == []
 
 

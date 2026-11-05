@@ -56,6 +56,9 @@ test("command search runs the project and navigates project and settings destina
   await signIn(page);
   const { worktree } = await fixture(page, "Commands workspace");
   await page.goto(`/worktrees/${worktree.id}/flow`);
+  await expect(
+    page.getByRole("button", { name: "Run all", exact: true }),
+  ).toBeVisible();
   await page.keyboard.press("ControlOrMeta+k");
   let dialog = page.getByRole("dialog", { name: "Search instance" });
   for (const label of [

@@ -89,6 +89,10 @@ test("manage instance accounts, project users and live reader access", async ({
     .getByRole("link", { name: "Documentation", exact: true })
     .click();
   const documentation = readerPage.locator(".documentation-page");
+  await expect(documentation.locator(".documentation-preview")).toBeVisible();
+  await documentation
+    .getByRole("button", { name: "Edit", exact: true })
+    .click();
   await expect(documentation.locator("textarea")).toHaveAttribute(
     "readonly",
     "",

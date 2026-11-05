@@ -13,12 +13,17 @@ retrying it. Different Jobs can run in parallel.
 
 ## Create a Job
 
-Project admins choose **New Job**, then enter a permanent instance-wide slug
-(lowercase letters, digits and hyphens), name, description, environment and scope.
-Leave scope empty for the whole project, or supply a node ID such as `report` or
-`component::node` to run its launch scope, including upstream dependencies.
+Project admins choose **New Job**, then enter a name. Duckpad suggests a permanent
+instance-wide slug (lowercase letters, digits and hyphens), which can be edited.
+Choose the environment and version, then search the version's nodes in **Scope**.
+Keep **Whole project** to run everything, or select a node to run its launch scope,
+including upstream dependencies. Projects without tags start with **Branch** as
+the target, so a Job can be created without leaving the form.
 Choose a tag to pin its current commit, or a branch for acceptance runs that should
 resolve the branch head at each launch. Uncommitted edits are never a Job target.
+After creation, the Job details show a curl API call and a cron example. Use an
+API token with run permission and configure scheduling outside Duckpad.
+
 Run-time variable overrides are not available yet; each run uses the versioned
 `variables.json` values for the selected environment.
 

@@ -86,7 +86,7 @@ one declared file parameter (or a list) as their only positional argument, with
 named options such as `header = true` or `delim = ';'` afterward.
 
 For Parquet use `read_parquet({{ path }})`. A format provided by an extension,
-such as XLSX, may need that extension enabled in the project's **Extensions** tab;
+such as XLSX, may need that extension enabled in the **Project settings → Extensions** section;
 S3 and databases need a connection. Follow [Connections](CONNECTORS.md#file-formats-and-extensions).
 
 ## Read a database table
