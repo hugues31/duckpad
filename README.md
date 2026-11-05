@@ -44,7 +44,7 @@ password from the terminal. Follow **[Duckpad in 15 minutes](docs/QUICKSTART.md)
 to build your first pipeline from scratch, write SQL and explain a result.
 
 Prefer a ready-made project? Choose **New project → Start from an example**,
-enter a name, then **Create → Run pipeline** to explore Northstar.
+enter a name, then **Create → Run all** to explore Northstar.
 See [installation](docs/INSTALLATION.md) for platform requirements and setup options.
 
 ## Go further

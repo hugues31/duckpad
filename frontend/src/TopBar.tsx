@@ -1,5 +1,5 @@
 import { Link, useNavigate } from "react-router";
-import { usePageRoute, worktreeUrl } from "./navigation";
+import { usePageRoute, worktreeUrl, projectPageUrl } from "./navigation";
 import Select from "./Select";
 import {
   GitBranch,
@@ -36,7 +36,7 @@ export default function TopBar({
 }) {
   const t = useT();
   const navigate = useNavigate();
-  const { area, tab, projectId } = usePageRoute();
+  const { area, tab, projectId, section } = usePageRoute();
   const { workspace, environment, preferences, openModal, openWorktree } =
     useShell();
   const { id: worktree, snapshot, canEdit, gitVersion } = useWorktree();
@@ -47,6 +47,12 @@ export default function TopBar({
     projectId ||
     workspace?.worktrees.find((w) => w.id === worktree)?.project ||
     "";
+  const partitionSettings =
+    area === "projectSettings" && section === "partitions";
+  const contextUrl = (id: string, env: string) =>
+    partitionSettings
+      ? projectPageUrl(project, "settings/partitions", id, env)
+      : worktreeUrl(id, tab, env);
   return (
     <header className="topbar">
       <nav className="rail" aria-label={t("workspace")}>
@@ -130,14 +136,16 @@ export default function TopBar({
         </div>
       )}
       <div className="topbar-right">
-        {snapshot && area === "pipelines" && (
+        {snapshot && (area === "pipelines" || partitionSettings) && (
           <>
             <div className="branch-picker">
               <GitBranch size={14} />
               <Select
                 aria-label={t("branch")}
                 value={worktree}
-                onChange={(e) => openWorktree(e.target.value, tab)}
+                onChange={(e) =>
+                  void navigate(contextUrl(e.target.value, environment))
+                }
               >
                 {snapshot.worktree.read_only && (
                   <option value={worktree}>{t("jobResults")}</option>
@@ -186,7 +194,7 @@ export default function TopBar({
                 aria-label={t("environment")}
                 value={environment}
                 onChange={(e) =>
-                  void navigate(worktreeUrl(worktree, tab, e.target.value))
+                  void navigate(contextUrl(worktree, e.target.value))
                 }
               >
                 {workspace?.catalog.environment_details.map((env) => (

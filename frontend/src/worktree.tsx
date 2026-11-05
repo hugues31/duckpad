@@ -25,7 +25,7 @@ export interface Worktree {
   partition: PartitionContext | null;
   partitionEntry: PartitionEntry | null;
   selectPartition: (entry: PartitionEntry | null) => void;
-  /** Empty outside the pipeline pages, where nothing is loaded. */
+  /** Loaded for pipeline pages and partition settings; empty elsewhere. */
   id: string;
   assistantNode: string;
   assistantFile: string;

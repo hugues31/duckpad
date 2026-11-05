@@ -35,6 +35,7 @@ import { useSearchShortcut } from "./searchShortcuts";
 import { ShellContext, type Shell } from "./shell";
 import { Toast, useToast } from "./Toast";
 import TopBar from "./TopBar";
+import ProjectTabs from "./ProjectTabs";
 import type { Workspace } from "./types";
 import { usePolling } from "./usePolling";
 import { usePanelVisibility } from "./WorkspacePanels";
@@ -158,19 +159,28 @@ function SignedIn({
     requestedEnvironment && environments.includes(requestedEnvironment)
       ? requestedEnvironment
       : environments[0] || "";
-  // The Pipelines link returns to the branch opened last, or to the main
-  // branch of a project whose settings are open and whose branches were not.
+  // Project tabs carry their branch in the URL; other pages return to the
+  // last open pipeline. A project page without branch context uses the branch
+  // of that project opened last, then main.
   const [lastWorktree, setLastWorktree] = useState("");
   if (worktree && worktree !== lastWorktree) setLastWorktree(worktree);
   const last = workspace?.worktrees.find((w) => w.id === lastWorktree);
   const settingsProject =
-    route.area === "projectSettings"
+    route.area === "projectSettings" || route.area === "jobs"
       ? workspace?.projects.find((p) => p.id === route.projectId)
       : undefined;
-  const pipeline =
-    settingsProject && last?.project !== settingsProject.id
-      ? settingsProject.main
-      : last?.id;
+  const projectWorktree = (id: string | null) =>
+    workspace?.worktrees.find(
+      (w) => w.id === id && w.project === settingsProject?.id,
+    )?.id;
+  const contextWorktree = settingsProject
+    ? projectWorktree(new URLSearchParams(location.search).get("worktree")) ||
+      projectWorktree(lastWorktree) ||
+      settingsProject.main
+    : "";
+  const pipeline = contextWorktree || last?.id;
+  const partitionSettings =
+    route.area === "projectSettings" && route.section === "partitions";
   const openSearch = useCallback(() => setSearchOpen(true), []);
   useSearchShortcut(workspace ? "k" : undefined, openSearch);
   const closeModal = useCallback(() => setModal(null), []);
@@ -235,7 +245,9 @@ function SignedIn({
   };
   return (
     <ShellContext.Provider value={shell}>
-      <WorktreeProvider worktree={worktree}>
+      <WorktreeProvider
+        worktree={worktree || (partitionSettings ? contextWorktree : "")}
+      >
         <div className="app-shell">
           <div className="workspace-shell">
             <TopBar
@@ -254,6 +266,15 @@ function SignedIn({
                 onClose={() => setSearchOpen(false)}
               />
             )}
+            {settingsProject && contextWorktree && (
+              <div className="flow-toolbar project-toolbar">
+                <ProjectTabs
+                  project={settingsProject.id}
+                  worktree={contextWorktree}
+                  environment={environment}
+                />
+              </div>
+            )}
             {workspace ? <Outlet /> : <PageLoading />}
           </div>
           <AssistantChat />
@@ -269,14 +290,26 @@ function SignedIn({
 
 /** Finish autosaves before navigation; confirm only edits that can still be discarded. */
 function NavigationGuard({ drafts }: { drafts: DraftRegistry }) {
-  const { area } = usePageRoute();
+  const { area, section } = usePageRoute();
   const { id: worktree, saving } = useWorktree();
   const blocker = useBlocker(({ currentLocation, nextLocation }) => {
     // Router history can advance before an unmounted editor's cleanup runs.
     // Only drafts belonging to the page being left may block a transition.
     const leavesPage = currentLocation.pathname !== nextLocation.pathname;
-    if (!isWorktreePage(currentLocation.pathname, worktree))
-      return area === "projectSettings" && leavesPage && drafts.dirty("page");
+    if (!isWorktreePage(currentLocation.pathname, worktree)) {
+      const changesPartitionContext =
+        section === "partitions" &&
+        ["worktree", "environment"].some(
+          (key) =>
+            new URLSearchParams(currentLocation.search).get(key) !==
+            new URLSearchParams(nextLocation.search).get(key),
+        );
+      return (
+        area === "projectSettings" &&
+        (leavesPage || changesPartitionContext) &&
+        (drafts.dirty("page") || saving)
+      );
+    }
     const leavesWorktree = !isWorktreePage(nextLocation.pathname, worktree);
     return (
       (drafts.dirty("worktree") && leavesWorktree) ||
@@ -411,8 +444,9 @@ function PageFocus({ ready }: { ready: boolean }) {
         !document.activeElement?.closest(".topbar")
       )
         return;
+      // Project pages focus their heading rather than the shared tab bar.
       const target = document.querySelector<HTMLElement>(
-        "h1, .flow-toolbar, .empty-state",
+        "h1, .flow-toolbar:not(.project-toolbar), .empty-state",
       );
       if (target) {
         target.tabIndex = -1;

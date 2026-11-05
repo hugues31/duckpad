@@ -34,9 +34,7 @@ SELECT 'info' AS level, 'Control completed' AS message;`,
     ).toBeTruthy();
     await page.goto(`/worktrees/${worktree.id}/flow`);
     await page.locator('.react-flow__node[data-id="control"]').click();
-    await page
-      .getByRole("button", { name: "Run pipeline", exact: true })
-      .click();
+    await page.getByRole("button", { name: "Run all", exact: true }).click();
     await page.getByRole("tab", { name: "Log", exact: true }).click();
     await expect(
       page.getByText("Control completed", { exact: true }),

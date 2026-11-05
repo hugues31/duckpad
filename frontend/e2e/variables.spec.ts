@@ -69,7 +69,7 @@ test("calculate a control value, retain it for a targeted launch and show its pr
   await expect(row).toContainText("Retained value");
   // The page polls run states: capture it once it shows the finished run.
   await expect(
-    page.getByRole("button", { name: "Run pipeline", exact: true }),
+    page.getByRole("button", { name: "Run all", exact: true }),
   ).toBeVisible();
   await page.screenshot({
     path: resolve("../docs/images/computed-variables.png"),
@@ -121,7 +121,7 @@ test("calculate a control value, retain it for a targeted launch and show its pr
   // A protected launch confirms producers, even when that environment retains a value.
   await run(page, url, "prod");
   await page.goto(`/worktrees/${id}/flow?environment=prod&node=validated`);
-  await page.getByRole("button", { name: "Run pipeline", exact: true }).click();
+  await page.getByRole("button", { name: "Run all", exact: true }).click();
   const confirmation = page.getByRole("dialog", { name: "Confirm execution" });
   await expect(confirmation.locator(".variable-values")).toContainText(
     "Calculated at launch",
@@ -419,7 +419,7 @@ test("use a production value, confirm its run and explain it in History (workflo
   await expect(variables).toContainText("refunded");
   await expect(variables).toContainText("prod value");
 
-  await page.getByRole("button", { name: "Run pipeline", exact: true }).click();
+  await page.getByRole("button", { name: "Run all", exact: true }).click();
   const confirmation = page.getByRole("dialog", { name: "Confirm execution" });
   await expect(confirmation).toContainText("Variables used by this run · prod");
   const listed = confirmation

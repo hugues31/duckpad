@@ -54,15 +54,18 @@ export const pageRoutes: RouteObject[] = [
   ),
   {
     path: "projects/:projectId/settings",
-    loader: ({ params }) =>
-      redirect(`/projects/${params.projectId}/settings/participants`),
+    loader: ({ params, request }) =>
+      redirect(
+        `/projects/${params.projectId}/settings/participants${new URL(request.url).search}`,
+      ),
   },
-  ...["participants", "connections", "python", "general"].map((section) =>
-    page(
-      `projects/:projectId/settings/${section}`,
-      { area: "projectSettings", section },
-      ProjectSettingsPage,
-    ),
+  ...["participants", "connections", "python", "partitions", "general"].map(
+    (section) =>
+      page(
+        `projects/:projectId/settings/${section}`,
+        { area: "projectSettings", section },
+        ProjectSettingsPage,
+      ),
   ),
   page("projects/:projectId/jobs", { area: "jobs" }, JobsPage),
   // The tabs of a working branch share its toolbar and code editor.
@@ -107,11 +110,14 @@ export function signInReturn(value: string | null): string | null {
   if (url.origin !== window.location.origin) return null;
   const area = matchPage(url.pathname)?.area;
   if (!area || area === "notFound" || area === "home") return null;
-  const environment = url.searchParams.get("environment");
-  return (
-    url.pathname +
-    (area === "pipelines" && environment
-      ? `?${new URLSearchParams({ environment })}`
-      : "")
-  );
+  const query = new URLSearchParams();
+  const projectPage = area === "projectSettings" || area === "jobs";
+  for (const [key, value] of url.searchParams) {
+    if (
+      (key === "environment" && (area === "pipelines" || projectPage)) ||
+      (key === "worktree" && projectPage)
+    )
+      query.set(key, value);
+  }
+  return url.pathname + (query.size ? `?${query}` : "");
 }

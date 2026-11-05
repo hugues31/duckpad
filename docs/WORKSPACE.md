@@ -3,7 +3,10 @@
 Open a project from **Projects** to enter its working branch. **Flow** is the
 canvas; **Code** edits its files; **Documentation** explains the project;
 **Variables** configures shared values; **Extensions** enables installed
-capabilities; **History** lists executions. The top bar selects the environment.
+capabilities; **History** lists executions; **Jobs** manages repeatable runs;
+**Project settings** contains access, connections, Python, partitions and general
+settings. These tabs keep the selected branch and environment when you return to
+the flow. Partition settings apply to the branch shown in the top bar.
 
 ## Build and inspect
 
@@ -39,7 +42,7 @@ shortcuts.
 ## Save and run
 
 Every run first saves pending editor changes and waits for saves already in
-progress; a failed save stops the launch. **Run pipeline** runs the whole flow;
+progress; a failed save stops the launch. **Run all** runs the whole flow;
 a node's **Run with ancestors** runs a smaller scope. **Stop execution** requests
 cancellation of active SQL. A protected environment asks for confirmation.
 

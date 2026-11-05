@@ -85,9 +85,6 @@ function ProjectJobs({ project }: { project: Project }) {
           <h1>{t("jobs")}</h1>
           <p className="muted">{t("jobsHint")}</p>
         </div>
-        <Link className="button secondary" to={worktreeUrl(project.main)}>
-          {t("flow")}
-        </Link>
         {project.role === "admin" && (
           <button className="button primary" onClick={() => setEditing("new")}>
             <Plus size={16} />

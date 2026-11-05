@@ -118,7 +118,7 @@ async function run(page: Page) {
   const response = page.waitForResponse(
     (r) => r.url().endsWith("/runs") && r.request().method() === "POST",
   );
-  await page.getByRole("button", { name: "Run pipeline", exact: true }).click();
+  await page.getByRole("button", { name: "Run all", exact: true }).click();
   const result = await response;
   expect(result.ok()).toBeTruthy();
   const execution = await result.json();
@@ -480,7 +480,7 @@ test("capture project variables, a parameter binding and a run confirmation", as
   ).toBeVisible();
 
   await page.getByLabel("Environment", { exact: true }).selectOption("prod");
-  await page.getByRole("button", { name: "Run pipeline", exact: true }).click();
+  await page.getByRole("button", { name: "Run all", exact: true }).click();
   const confirmation = page.getByRole("dialog", { name: "Confirm execution" });
   await expect(
     confirmation.getByRole("row").filter({ hasText: "order_status" }),
@@ -848,15 +848,13 @@ test("capture account roles, project access and personal preferences", async ({
     );
     await page.getByLabel("User", { exact: true }).selectOption(user.id);
     await page.getByLabel("Project role", { exact: true }).selectOption(role);
-    await page
-      .getByRole("button", { name: "Add participant", exact: true })
-      .click();
+    await page.getByRole("button", { name: "Add user", exact: true }).click();
     await expect(
       page.getByLabel(`Project role · ${username}`, { exact: true }),
     ).toHaveValue(role);
   }
   const participants = page.locator(".settings-card").filter({
-    has: page.getByRole("heading", { name: "Participants", exact: true }),
+    has: page.getByRole("heading", { name: "Users", exact: true }),
   });
   await capture(page, "project-access", participants);
   await openUserSettings(page);

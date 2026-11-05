@@ -19,7 +19,7 @@ async function waitForRun(page: Page, id: string) {
     )
     .toBe("success");
   await expect(
-    page.getByRole("button", { name: "Run pipeline", exact: true }),
+    page.getByRole("button", { name: "Run all", exact: true }),
   ).toBeEnabled();
 }
 
@@ -123,9 +123,7 @@ test("selects a surviving environment before requesting results when dev is abse
         response.url().endsWith("/runs") &&
         response.request().method() === "POST",
     );
-    await page
-      .getByRole("button", { name: "Run pipeline", exact: true })
-      .click();
+    await page.getByRole("button", { name: "Run all", exact: true }).click();
     await page
       .getByRole("dialog", { name: "Confirm execution" })
       .getByRole("button", { name: "Confirm and run", exact: true })
@@ -242,9 +240,7 @@ test("manage environment labels, colors, confirmation and selected-environment d
       "background-color",
       "rgb(18, 58, 188)",
     );
-    await page
-      .getByRole("button", { name: "Run pipeline", exact: true })
-      .click();
+    await page.getByRole("button", { name: "Run all", exact: true }).click();
     await expect(
       page.getByRole("dialog", { name: "Confirm execution" }),
     ).toContainText("Release candidate");
@@ -317,16 +313,12 @@ test("confirmation gates every pipeline and node run, including stale clients", 
         response.url().endsWith("/runs") &&
         response.request().method() === "POST",
     );
-    await page
-      .getByRole("button", { name: "Run pipeline", exact: true })
-      .click();
+    await page.getByRole("button", { name: "Run all", exact: true }).click();
     await waitForRun(page, (await (await launched).json()).id);
     expect(requests).toHaveLength(1);
     await expect(page.getByRole("dialog")).toHaveCount(0);
     await page.getByLabel("Environment", { exact: true }).selectOption("prod");
-    await page
-      .getByRole("button", { name: "Run pipeline", exact: true })
-      .click();
+    await page.getByRole("button", { name: "Run all", exact: true }).click();
     const dialog = page.getByRole("dialog", {
       name: "Confirm execution",
       exact: true,
@@ -335,16 +327,12 @@ test("confirmation gates every pipeline and node run, including stale clients", 
     await page.getByRole("button", { name: "Cancel", exact: true }).click();
     await expect(dialog).toHaveCount(0);
     expect(requests).toHaveLength(1);
-    await page
-      .getByRole("button", { name: "Run pipeline", exact: true })
-      .click();
+    await page.getByRole("button", { name: "Run all", exact: true }).click();
     await page.keyboard.press("Escape");
     await expect(dialog).toHaveCount(0);
     expect(requests).toHaveLength(1);
     for (let index = 0; index < 2; index++) {
-      await page
-        .getByRole("button", { name: "Run pipeline", exact: true })
-        .click();
+      await page.getByRole("button", { name: "Run all", exact: true }).click();
       await expect(dialog).toBeVisible();
       launched = page.waitForResponse(
         (response) =>
@@ -383,9 +371,7 @@ test("confirmation gates every pipeline and node run, including stale clients", 
       data: { ...original[0], confirm_before_run: true },
     });
     await page.getByLabel("Environment", { exact: true }).selectOption("dev");
-    await page
-      .getByRole("button", { name: "Run pipeline", exact: true })
-      .click();
+    await page.getByRole("button", { name: "Run all", exact: true }).click();
     await expect(dialog).toContainText("dev");
     await page.getByRole("button", { name: "Cancel", exact: true }).click();
     const runs = await (

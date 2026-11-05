@@ -13,6 +13,13 @@ import Select from "./Select";
 import { useApiResource } from "./useApiResource";
 import { useOptionalWorktree } from "./worktree";
 
+export const partitionRunLabels = {
+  all: "run",
+  failed: "partitionRunFailed",
+  missing: "partitionRunMissing",
+  selected: "partitionRunSelectedAction",
+} as const;
+
 export function PartitionRunSummary({
   options,
   node,
@@ -234,7 +241,7 @@ function RunOptions({ onClose }: { onClose: () => void }) {
             void worktree.run(undefined, options);
           }}
         >
-          {t("run")}
+          {t(partitionRunLabels[mode])}
         </button>
       </footer>
     </Modal>

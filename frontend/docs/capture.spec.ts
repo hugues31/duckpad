@@ -32,7 +32,7 @@ test("record a real pipeline, source lineage and SQL workspace", async ({
     .getByRole("button", { name: "Open example project", exact: true })
     .click();
   await expect(
-    setup.getByRole("button", { name: "Run pipeline", exact: true }),
+    setup.getByRole("button", { name: "Run all", exact: true }),
   ).toBeVisible();
 
   const media = resolve("../website/public/demos");
@@ -90,7 +90,7 @@ test("record a real pipeline, source lineage and SQL workspace", async ({
     );
     await click(
       page,
-      page.getByRole("button", { name: "Run pipeline", exact: true }),
+      page.getByRole("button", { name: "Run all", exact: true }),
     );
     const run = await (await response).json();
     await expect

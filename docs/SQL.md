@@ -21,7 +21,7 @@ template or component from another project.
 
 The inspector's **SQL** tab compiles the current configuration without running
 it. After a run, **Results → Log → Executed SQL** shows what actually ran.
-Saving code makes affected results stale; choose **Run pipeline** to recompute.
+Saving code makes affected results stale; choose **Run all** to recompute.
 
 ## Declarations
 

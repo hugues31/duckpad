@@ -24,7 +24,7 @@ export async function verifyDataPreparation(page: Page) {
   };
   const run = async (status = "success") => {
     await expect(
-      page.getByRole("button", { name: "Run pipeline", exact: true }),
+      page.getByRole("button", { name: "Run all", exact: true }),
     ).toBeEnabled({ timeout: 30000 });
     const launched = page.waitForResponse(
       (response) =>
@@ -32,9 +32,7 @@ export async function verifyDataPreparation(page: Page) {
         response.request().method() === "POST",
       { timeout: 30000 },
     );
-    await page
-      .getByRole("button", { name: "Run pipeline", exact: true })
-      .click();
+    await page.getByRole("button", { name: "Run all", exact: true }).click();
     const result = await (await launched).json();
     await expect
       .poll(
@@ -45,7 +43,7 @@ export async function verifyDataPreparation(page: Page) {
       )
       .toBe(status);
     await expect(
-      page.getByRole("button", { name: "Run pipeline", exact: true }),
+      page.getByRole("button", { name: "Run all", exact: true }),
     ).toBeEnabled({ timeout: 30000 });
     return (await page.request.get(`/api/runs/${result.id}`)).json();
   };

@@ -1,45 +1,22 @@
 import { PartitionRunMenu } from "./PartitionRunMenu";
 import { PartitionSelector } from "./PartitionControls";
-import { Link } from "react-router";
+import ProjectTabs from "./ProjectTabs";
 import {
-  Activity,
   AlertCircle,
   ArrowRight,
-  BookOpen,
   Check,
-  FileCode2,
   GitMerge,
   Loader2,
   Play,
   Square,
-  Settings2,
-  Variable,
-  Puzzle,
-  Workflow,
-  type LucideIcon,
 } from "lucide-react";
 import { useT } from "./i18n";
-import {
-  projectSettingsUrl,
-  workspaceTabs,
-  worktreeUrl,
-  type WorkspaceTab,
-} from "./navigation";
 import { useShell } from "./shell";
 import type { Diagnostic, Run, Snapshot } from "./types";
 import { useLoadedWorktree } from "./worktree";
 
-const TAB_ICONS: Record<WorkspaceTab, LucideIcon> = {
-  flow: Workflow,
-  code: FileCode2,
-  documentation: BookOpen,
-  variables: Variable,
-  extensions: Puzzle,
-  history: Activity,
-};
-
 /** Tabs, save state and run controls of the open working branch. */
-export function FlowToolbar({ tab }: { tab: WorkspaceTab }) {
+export function FlowToolbar() {
   const t = useT();
   const { drafts, openModal } = useShell();
   const {
@@ -57,37 +34,13 @@ export function FlowToolbar({ tab }: { tab: WorkspaceTab }) {
   const saveState = t(saving ? "saving" : dirty ? "unsavedChanges" : "saved");
   return (
     <div className="flow-toolbar">
-      <div className="tabs main-tabs">
-        {workspaceTabs.map((key) => {
-          const Icon = TAB_ICONS[key];
-          return (
-            <Link
-              to={worktreeUrl(id, key, environment)}
-              key={key}
-              className={tab === key ? "active" : ""}
-              aria-current={tab === key ? "page" : undefined}
-            >
-              <Icon size={15} />
-              {t(key)}
-            </Link>
-          );
-        })}
-      </div>
+      <ProjectTabs
+        project={snapshot.worktree.project}
+        worktree={id}
+        environment={environment}
+      />
       <div className="row gap">
         <PartitionSelector />
-        <Link
-          className="button secondary small"
-          to={`/projects/${snapshot.worktree.project}/jobs`}
-        >
-          {t("jobs")}
-        </Link>
-        <Link
-          className="button secondary small"
-          to={projectSettingsUrl(snapshot.worktree.project)}
-        >
-          <Settings2 size={14} />
-          {t("projectSettings")}
-        </Link>
         <span className="save-status" title={saveState}>
           {saving ? (
             <Loader2 size={13} className="spin" />

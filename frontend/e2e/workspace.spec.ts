@@ -17,14 +17,14 @@ async function sample(page: Page) {
   } else
     await page.getByRole("button", { name: "Open example project" }).click();
   await expect(
-    page.getByRole("button", { name: "Run pipeline", exact: true }),
+    page.getByRole("button", { name: "Run all", exact: true }),
   ).toBeVisible();
 }
 async function run(page: Page) {
   const response = page.waitForResponse(
     (r) => r.url().endsWith("/runs") && r.request().method() === "POST",
   );
-  await page.getByRole("button", { name: "Run pipeline", exact: true }).click();
+  await page.getByRole("button", { name: "Run all", exact: true }).click();
   if (
     (await page.getByLabel("Environment", { exact: true }).inputValue()) ===
     "prod"
@@ -42,7 +42,7 @@ async function run(page: Page) {
     )
     .toBe("success");
   await expect(
-    page.getByRole("button", { name: "Run pipeline", exact: true }),
+    page.getByRole("button", { name: "Run all", exact: true }),
   ).toBeVisible();
 }
 
@@ -1213,9 +1213,7 @@ test("runs use a configured environment after the selected environment is delete
     const launched = page.waitForResponse(
       (r) => r.url().endsWith("/runs") && r.request().method() === "POST",
     );
-    await page
-      .getByRole("button", { name: "Run pipeline", exact: true })
-      .click();
+    await page.getByRole("button", { name: "Run all", exact: true }).click();
     const response = await launched;
     expect(response.ok()).toBe(true);
     expect((await response.json()).environment).toBe("dev");

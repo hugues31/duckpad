@@ -36,7 +36,7 @@ export default function WorktreePage() {
   if (!snapshot) return <PageLoading />;
   return (
     <>
-      <FlowToolbar tab={tab} />
+      <FlowToolbar />
       <WorkspaceNotices
         snapshot={snapshot}
         active={statuses.active}

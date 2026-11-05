@@ -218,7 +218,7 @@ test("reader search excludes private projects and removes results when membershi
       reader.locator('.react-flow__node[data-id="distant"]'),
     ).toHaveClass(/selected/);
     await expect(
-      reader.getByRole("button", { name: "Run pipeline", exact: true }),
+      reader.getByRole("button", { name: "Run all", exact: true }),
     ).toBeDisabled();
     await reader.getByRole("combobox", { name: "Find a node…" }).fill("first");
     await reader.getByRole("listbox").getByRole("option").click();

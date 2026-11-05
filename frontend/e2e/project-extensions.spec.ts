@@ -228,7 +228,7 @@ test("a downloaded community binary is imported and activated without a connecti
     ).ok(),
   ).toBeTruthy();
   await page.getByRole("link", { name: "Flow", exact: true }).click();
-  await page.getByRole("button", { name: "Run pipeline", exact: true }).click();
+  await page.getByRole("button", { name: "Run all", exact: true }).click();
   await expect
     .poll(async () => {
       const response = await page.request.get(

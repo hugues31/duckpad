@@ -40,7 +40,7 @@ it("submits only typed key values when the initial selection includes provenance
     screen.getByLabelText("Key selection", { selector: "select" }),
     { target: { value: "selected" } },
   );
-  fireEvent.click(screen.getByRole("button", { name: "Run pipeline" }));
+  fireEvent.click(screen.getByRole("button", { name: "Run selected keys" }));
   expect(run).toHaveBeenCalledWith(
     undefined,
     expect.objectContaining({

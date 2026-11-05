@@ -73,9 +73,7 @@ test("a member reads an upload and exports it as project files, without any conn
         response.url().endsWith("/runs") &&
         response.request().method() === "POST",
     );
-    await page
-      .getByRole("button", { name: "Run pipeline", exact: true })
-      .click();
+    await page.getByRole("button", { name: "Run all", exact: true }).click();
     const run = await (await launched).json();
     await expect
       .poll(
