@@ -68,10 +68,16 @@ runtime compatibility, dependencies and authoring.
 ## Editing node code
 
 Palette entries, **Add a connected node** and **Duplicate node** copy SQL into
-independent nodes. **New SQL node** starts with a minimal `source` input and
-`result` output. **Edit code** changes only that node. Its `-- @param`
+independent nodes. The **SQL** entry in the palette list starts with a `source`
+input and `result` output. **Edit code** changes only that node. Its `-- @param`
 declarations generate the form; guided controls remain while their supporting
 parameters are present.
+
+The **SQL** and **Python** buttons at the bottom of the palette create reusable
+templates. Python requires administrator activation in the project settings.
+Save the code to make it available in the palette, then click or drag the entry
+to create independent nodes. **Import** copies a reusable definition from
+another project into this palette.
 
 Use **Add linked** to share a template. Linked nodes show a badge and template
 name. **View code** is read-only; **Edit template (N nodes)** edits every linked

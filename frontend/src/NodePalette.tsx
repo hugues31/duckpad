@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
-import { Boxes, Code2, Link, Plus, Search, X } from "lucide-react";
+import { Link, Plus, Search, X } from "lucide-react";
+import AddIcon from "./AddIcon";
 import { NodeIcon } from "./Canvas";
 import { DRAG_TYPE, nodeChoices, type NodeKind } from "./graph";
 import { templateLabel, useT } from "./i18n";
@@ -17,7 +18,6 @@ export default function NodePalette({
   onClose,
   onAdd,
   onNewTemplate,
-  onNewNode,
   onLibrary,
 }: {
   readOnly: boolean;
@@ -27,8 +27,7 @@ export default function NodePalette({
   hidden: boolean;
   onClose: () => void;
   onAdd: (kind: NodeKind, id: string, linked?: boolean) => void;
-  onNewNode: (language: "sql" | "python") => void;
-  onNewTemplate: () => void;
+  onNewTemplate: (language: "sql" | "python") => void;
   onLibrary: () => void;
 }) {
   const t = useT();
@@ -102,13 +101,7 @@ export default function NodePalette({
                   >
                     <span className={`palette-icon ${item.category}`}>
                       <NodeIcon
-                        kind={
-                          item.kind === "component"
-                            ? "component"
-                            : item.id.endsWith(".py")
-                              ? "python"
-                              : item.id
-                        }
+                        kind={item.kind === "component" ? "component" : item.id}
                         size={17}
                       />
                     </span>
@@ -131,29 +124,45 @@ export default function NodePalette({
           </section>
         ))}
       </div>
-      <fieldset className="palette-bottom" disabled={readOnly}>
-        <button className="text-button" onClick={() => onNewNode("sql")}>
-          <Code2 size={14} />
-          {t("newSqlNode")}
-        </button>
-        <button
-          className="text-button"
-          disabled={!snapshot.python_enabled}
-          title={!snapshot.python_enabled ? t("pythonDisabledHint") : undefined}
-          onClick={() => onNewNode("python")}
-        >
-          <NodeIcon kind="python" size={14} />
-          {t("newPythonNode")}
-        </button>
-        <button className="text-button" onClick={onNewTemplate}>
-          <Code2 size={14} />
-          {t("newTemplate")}
-        </button>
-        <button className="text-button" onClick={onLibrary}>
-          <Boxes size={14} />
-          {t("library")}
-        </button>
-        <p>{t("dragHint")}</p>
+      <fieldset
+        className="palette-bottom"
+        disabled={readOnly}
+        aria-label={t("addToPalette")}
+      >
+        <div className="palette-actions">
+          <button
+            className="button secondary small"
+            title={t("newTemplate")}
+            aria-label={t("newTemplate")}
+            onClick={() => onNewTemplate("sql")}
+          >
+            <AddIcon glyph="duckdb" />
+            {t("sql")}
+          </button>
+          <button
+            className="button secondary small"
+            disabled={!snapshot.python_enabled}
+            title={t(
+              snapshot.python_enabled
+                ? "newPythonTemplate"
+                : "pythonDisabledHint",
+            )}
+            aria-label={t("newPythonTemplate")}
+            onClick={() => onNewTemplate("python")}
+          >
+            <AddIcon glyph="python" />
+            {t("python")}
+          </button>
+          <button
+            className="button secondary small"
+            title={t("library")}
+            aria-label={t("library")}
+            onClick={onLibrary}
+          >
+            <AddIcon glyph="import" />
+            {t("paletteImport")}
+          </button>
+        </div>
       </fieldset>
     </aside>
   );

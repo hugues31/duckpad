@@ -1,3 +1,4 @@
+import { PythonIcon } from "./AddIcon";
 import { displayNodeName, type NodeNames } from "./nodeNames";
 import { useOptionalWorktree } from "./worktree";
 import {
@@ -37,7 +38,6 @@ import {
   Sigma,
   FileOutput,
   Code2,
-  Braces,
   Link,
   Boxes,
   Check,
@@ -69,6 +69,9 @@ import type {
 
 /** The icon of a template, from its ID, or of any component. */
 export function NodeIcon({ kind, ...props }: LucideProps & { kind: string }) {
+  // Python template IDs end with ".py", whatever their name says.
+  if (kind === "python" || kind.endsWith(".py"))
+    return <PythonIcon {...props} />;
   if (kind.includes("export")) return <FileOutput {...props} />;
   if (kind === "join") return <GitMerge {...props} />;
   if (kind === "filter") return <Filter {...props} />;
@@ -76,7 +79,6 @@ export function NodeIcon({ kind, ...props }: LucideProps & { kind: string }) {
     return <Sigma {...props} />;
   if (kind.startsWith("load_")) return <FileInput {...props} />;
   if (kind === "component") return <Boxes {...props} />;
-  if (kind === "python") return <Braces {...props} />;
   return <Code2 {...props} />;
 }
 function StatusIcon({ status, ...props }: LucideProps & { status: string }) {
