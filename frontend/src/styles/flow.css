@@ -335,7 +335,8 @@
   opacity: 1;
 }
 .palette-bottom {
-  padding: 15px;
+  flex-shrink: 0;
+  padding: 12px 8px;
   border-top: 1px solid var(--border);
   background: transparent;
 }
@@ -346,14 +347,21 @@ fieldset.palette-bottom {
   margin: 0;
   min-width: 0;
 }
-.palette-bottom .text-button {
-  font-size: 11px;
-  margin-bottom: 6px;
+.palette-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
 }
-.palette-bottom p {
-  font-size: 11px;
-  color: var(--muted);
-  margin: 8px 0 0;
+.palette-actions .button {
+  min-width: 0;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  padding: 6px 2px;
+  font-size: 10px;
+}
+.palette-actions svg {
+  flex-shrink: 0;
 }
 .canvas-column {
   position: absolute;

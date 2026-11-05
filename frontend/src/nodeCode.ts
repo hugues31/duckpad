@@ -1,9 +1,5 @@
 import type { Bundle, FlowNode, ParsedTemplate, Snapshot } from "./types";
 
-export const NEW_NODE_SQL =
-  "-- @input source\n-- @output result\nSELECT * FROM {{ source }};\n";
-export const NEW_NODE_PYTHON =
-  "import duckpad as dp\n\n\nclass Transform(dp.Node):\n    def run(self, source: dp.Relation) -> dp.Relation:\n        return source\n";
 export const nodeCodePath = (id: string, parent?: string, language = "sql") => {
   const extension = language === "python" ? "py" : "sql";
   return parent

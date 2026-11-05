@@ -210,7 +210,8 @@ test("capture the quickstart using the SQL printed in the guide", async ({
   };
   const add = async (label: string, code: string, count: number) => {
     await page
-      .getByRole("button", { name: "New SQL node", exact: true })
+      .locator(".palette")
+      .getByRole("button", { name: "SQL", exact: true })
       .click();
     await expect(page.locator(".react-flow__node")).toHaveCount(count);
     await expect(inspector.getByLabel("Display name")).toHaveValue("");

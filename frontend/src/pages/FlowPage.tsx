@@ -25,8 +25,6 @@ import {
 } from "../graph";
 import Inspector from "../Inspector";
 import {
-  NEW_NODE_SQL,
-  NEW_NODE_PYTHON,
   detachNode,
   localDefinitions,
   nodeCode,
@@ -268,15 +266,13 @@ export default function FlowPage() {
     position?: FlowNode["position"],
     connection?: NodeConnection,
     linked = false,
-    language: "sql" | "python" = "sql",
   ) {
     if (connection && !graph?.nodes.some((n) => n.id === connection.nodeId))
       return;
-    if (id.endsWith(".py")) language = "python";
     const created: FlowNode = {
       id: identifier(),
       // SQL is the default: flow.json names the language of Python nodes only.
-      ...(language === "python" && { language }),
+      ...(id.endsWith(".py") && { language: "python" as const }),
       ...(kind === "component" ? { component: id } : { template: id }),
       params: {},
       position:
@@ -286,14 +282,7 @@ export default function FlowPage() {
     };
     const added = await insertNode(created.id, (value) => {
       const g = graphAt(value, path);
-      if (kind === "template" && !linked) {
-        if (id) detachNode(value, created, parent);
-        else {
-          delete created.template;
-          (value.node_sql ||= {})[nodeCodePath(created.id, parent, language)] =
-            language === "python" ? NEW_NODE_PYTHON : NEW_NODE_SQL;
-        }
-      }
+      if (kind === "template" && !linked) detachNode(value, created, parent);
       g.nodes.push(created);
       if (connection)
         connectInput(
@@ -424,16 +413,12 @@ export default function FlowPage() {
         onAdd={(kind, id, linked) =>
           safe(() => addNode(kind, id, undefined, undefined, linked))
         }
-        onNewNode={(language) =>
-          safe(() =>
-            addNode("template", "", undefined, undefined, false, language),
-          )
-        }
-        onNewTemplate={() =>
+        onNewTemplate={(language) =>
           openModal({
             kind: "template",
             worktree,
-            template: identifier("template"),
+            template:
+              identifier("template") + (language === "python" ? ".py" : ""),
             create: true,
           })
         }

@@ -1,10 +1,15 @@
 # Python nodes
 
 An administrator enables **Python execution** in project settings. An editor can
-then add **New Python node** to a flow, edit its code and connect its tabular ports
-to SQL nodes. Results, parameters, messages and downloads use the same panels.
-Operators run reviewed jobs; they cannot activate Python or edit its code.
-Assistant run approvals list the Python nodes that will execute.
+then click the **Python** button at the bottom of the palette, edit the template
+and save it. Click or drag its new palette entry onto the flow and connect its
+tabular ports to SQL nodes. Each ordinary insertion owns an independent copy of
+the code; **Add linked** creates instances that share the template. Results,
+parameters, messages and downloads use the same panels. Operators run reviewed
+jobs; they cannot activate Python or edit its code. Assistant run approvals list
+the Python nodes that will execute.
+
+Use a `# @label My transform` comment to name the template's palette entry.
 
 ## Author a node
 

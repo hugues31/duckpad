@@ -13,7 +13,7 @@ export async function verifyPython(page: Page) {
     (await page.request.get(endpoint)).json();
   await page.goto(`/worktrees/${worktree.id}/flow`);
   await expect(
-    page.getByRole("button", { name: "New Python node", exact: true }),
+    page.getByRole("button", { name: "New Python template", exact: true }),
   ).toBeDisabled();
   await page.goto(`/projects/${worktree.project}/settings/python`);
   await expect(
@@ -41,7 +41,19 @@ export async function verifyPython(page: Page) {
     .toBe(true);
   await page.goto(`/worktrees/${worktree.id}/flow`);
   await page
-    .getByRole("button", { name: "New Python node", exact: true })
+    .getByRole("button", { name: "New Python template", exact: true })
+    .click();
+  const templateDialog = page.getByRole("dialog", {
+    name: "New Python template",
+  });
+  await templateDialog
+    .getByRole("button", { name: "Save changes", exact: true })
+    .click();
+  await expect(templateDialog).toHaveCount(0);
+  expect((await read()).bundle!.flow.nodes).toHaveLength(0);
+  await page
+    .locator(".palette")
+    .getByRole("button", { name: "Custom Python transform", exact: true })
     .click();
   const inspector = page.locator(".inspector");
   await inspector

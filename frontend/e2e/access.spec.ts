@@ -76,6 +76,15 @@ test("manage instance accounts, project users and live reader access", async ({
     readerPage.getByRole("button", { name: "New working branch", exact: true }),
   ).toBeDisabled();
   await expect(readerPage.locator(".palette-item").first()).toBeDisabled();
+  for (const name of [
+    "New SQL template",
+    "New Python template",
+    "Import from a project",
+  ]) {
+    await expect(
+      readerPage.getByRole("button", { name, exact: true }),
+    ).toBeDisabled();
+  }
   await readerPage
     .getByRole("link", { name: "Documentation", exact: true })
     .click();
