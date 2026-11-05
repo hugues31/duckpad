@@ -10,17 +10,16 @@ export default function ProjectsPage() {
   const workspace = useWorkspace();
   const { createExample } = useProjectCreation();
   const [busy, setBusy] = useState(false);
+  // Loaded per visit: dates cost a git call per project.
   const activity = useApiResource<Project[]>("/projects", {
-    interval: 10000,
     refresh: workspace.projects.map((item) => item.id).join(","),
   });
   return (
     <ProjectDashboard
-      projects={workspace.projects.map((project) => ({
-        ...project,
-        ...activity.data?.find((item) => item.id === project.id),
-        role: project.role,
-      }))}
+      projects={workspace.projects.map((project) => {
+        const item = activity.data?.find((item) => item.id === project.id);
+        return { ...project, updated: item?.updated, last_run: item?.last_run };
+      })}
       activityError={activity.error}
       busy={busy}
       onCreate={() => openModal({ kind: "newProject" })}

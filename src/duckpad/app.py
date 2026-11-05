@@ -506,10 +506,11 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
     def project_activity(request: Request) -> list[Record]:
         visible = store.visible_projects(request.state.user)
         latest = store.latest_project_runs([project["id"] for project in visible])
+        paths = {worktree["id"]: worktree["path"] for worktree in store.all("worktree")}
+        # One git call per project: the dashboard loads this once, without polling.
         for project in visible:
-            path = projects.get(project["main"])["path"]
             dates = projects.git(
-                path,
+                paths[project["main"]],
                 "for-each-ref",
                 "--sort=-committerdate",
                 "--count=1",
