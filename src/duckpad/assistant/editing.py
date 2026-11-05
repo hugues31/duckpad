@@ -24,6 +24,7 @@ class NodeEdit(BaseModel):
     template: str | None = None
     component: str | None = None
     sql: str | None = None
+    python: str | None = None
 
 
 class EdgeEdit(BaseModel):
@@ -84,7 +85,7 @@ def edit_flow(
 
     Read the flow and SQL first. IDs are stable. Update params merges the supplied keys;
     remove_parameters deletes overrides. Template/component links and SQL are only for added nodes.
-    A normal added node uses sql, defaulting to SELECT 1 with a result output. Include connections
+    A normal added node uses sql or python, defaulting to SELECT 1 with a result output. Include connections
     in the same call when a node has required inputs; the resulting bundle must be valid.
     Set component to edit a shared component definition; omit it for the root flow.
     """
@@ -96,16 +97,22 @@ def edit_flow(
         if edit.operation == "add":
             if node is not None:
                 raise Problem("A node with this ID already exists", 409)
-            if sum(bool(v) for v in (edit.template, edit.component, edit.sql)) > 1:
-                raise Problem("Choose node SQL, a template or a component", 422)
+            if sum(bool(v) for v in (edit.template, edit.component, edit.sql, edit.python)) > 1:
+                raise Problem("Choose SQL, Python, a template or a component", 422)
             node = {"id": edit.id, "params": {}, "position": {"x": 0, "y": 0}}
+            if edit.python is not None or (edit.template and edit.template.endswith(".py")):
+                node["language"] = "python"
             if edit.template:
                 node["template"] = edit.template
             elif edit.component:
                 node["component"] = edit.component
             else:
-                bundle.setdefault("node_sql", {})[code_path(edit.id, component)] = (
-                    edit.sql or "-- @output result\nSELECT 1 AS value;\n"
+                bundle.setdefault("node_sql", {})[
+                    code_path(edit.id, component, node.get("language", "sql"))
+                ] = (
+                    edit.python
+                    if edit.python is not None
+                    else edit.sql or "-- @output result\nSELECT 1 AS value;\n"
                 )
             graph["nodes"].append(node)
         elif node is None:
@@ -113,9 +120,9 @@ def edit_flow(
         elif edit.operation == "remove":
             graph["nodes"].remove(node)
             graph["edges"] = [e for e in graph["edges"] if edit.id not in (e["source"], e["target"])]
-            bundle.get("node_sql", {}).pop(code_path(edit.id, component), None)
+            bundle.get("node_sql", {}).pop(code_path(edit.id, component, node.get("language", "sql")), None)
             continue
-        elif any(v is not None for v in (edit.template, edit.component, edit.sql)):
+        elif any(v is not None for v in (edit.template, edit.component, edit.sql, edit.python)):
             raise Problem("Use write_sql to edit existing code; template links cannot be changed here", 422)
         if edit.label is not None:
             node["label"] = edit.label
@@ -148,7 +155,7 @@ def edit_flow(
 
 
 def write_sql(ctx: RunContext[Dependencies], sql: str, node: str = "", template: str = "") -> dict:
-    """Replace saved SQL for a normal node or a project template in one commit.
+    """Replace saved SQL or Python code for a normal node or a project template in one commit.
 
     Specify exactly one of node (expanded instance ID) or template (definition ID).
     To edit a linked node, explicitly choose its shared template instead. The result reports
@@ -169,7 +176,7 @@ def write_sql(ctx: RunContext[Dependencies], sql: str, node: str = "", template:
         found, parent = find_node(bundle, node)
         if found.get("template") or found.get("component"):
             raise Problem("Choose the shared template explicitly, or a normal SQL node", 422)
-        bundle["node_sql"][code_path(found["id"], parent)] = sql
+        bundle["node_sql"][code_path(found["id"], parent, found.get("language", "sql"))] = sql
     return save(ctx, snapshot, bundle, **details)
 
 

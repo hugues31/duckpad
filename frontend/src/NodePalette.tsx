@@ -26,7 +26,7 @@ export default function NodePalette({
   hidden: boolean;
   onClose: () => void;
   onAdd: (kind: NodeKind, id: string, linked?: boolean) => void;
-  onNewTemplate: () => void;
+  onNewTemplate: (language: "sql" | "python") => void;
   onLibrary: () => void;
 }) {
   const t = useT();
@@ -100,7 +100,13 @@ export default function NodePalette({
                   >
                     <span className={`palette-icon ${item.category}`}>
                       <NodeIcon
-                        kind={item.kind === "component" ? "component" : item.id}
+                        kind={
+                          item.kind === "component"
+                            ? "component"
+                            : item.id.endsWith(".py")
+                              ? "python"
+                              : item.id
+                        }
                         size={17}
                       />
                     </span>
@@ -136,10 +142,24 @@ export default function NodePalette({
             className="button secondary small"
             title={t("newTemplate")}
             aria-label={t("newTemplate")}
-            onClick={onNewTemplate}
+            onClick={() => onNewTemplate("sql")}
           >
             <Code2 size={15} aria-hidden="true" />
             {t("sql")}
+          </button>
+          <button
+            className="button secondary small"
+            disabled={!snapshot.python_enabled}
+            title={t(
+              snapshot.python_enabled
+                ? "newPythonTemplate"
+                : "pythonDisabledHint",
+            )}
+            aria-label={t("newPythonTemplate")}
+            onClick={() => onNewTemplate("python")}
+          >
+            <NodeIcon kind="python" size={15} aria-hidden="true" />
+            {t("python")}
           </button>
           <button
             className="button secondary small"

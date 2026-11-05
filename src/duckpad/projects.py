@@ -27,6 +27,7 @@ from .git.workspace import GitWorkspace, diagnose, require_valid
 from .merge import conflict_details, merge_files
 from .node_code import owned_paths
 from .node_names import node_names
+from .python_policy import get_policy
 from .store import Store
 from .templates import parse_template
 from .types import Files, Record
@@ -279,7 +280,11 @@ class Projects:
             p.relative_to(path).as_posix()
             for folder, pattern in [
                 ("templates", "*.sql"),
+                ("templates", "*.py"),
                 ("nodes", "*.sql"),
+                ("nodes", "*.py"),
+                ("modules", "**/*.py"),
+                ("components", "*/*.py"),
                 ("components", "*.json"),
                 ("components", "*/*.sql"),
             ]
@@ -444,10 +449,17 @@ class Projects:
         *,
         validate: bool = False,
         assistant: str | None = None,
+        relock: bool = True,
     ) -> Record:
+        """Save a proposal; `relock=False` keeps its uv.lock for changes that leave dependencies alone."""
         # A rejected save writes nothing, not even part of the proposal.
         if not all(is_declarative(name) for name in proposal):
             raise Problem("Only declarative project files can be edited here")
+        proposal = dict(proposal)
+        record = self.get(worktree_id)
+        self.writable(record)
+        if relock:
+            proposal = self._locked_dependencies(record, proposal)
         with self.locked(worktree_id) as worktree:
             self.writable(worktree)
             current = self.read_files(worktree)
@@ -455,6 +467,14 @@ class Projects:
             if base is None:
                 raise Problem("The editing revision is unavailable. Reload before saving.", 409)
             proposal = dict(proposal)
+            manifest_edited = proposal.get("pyproject.toml") != base.get("pyproject.toml")
+            if not manifest_edited and current.get("pyproject.toml") != base.get("pyproject.toml"):
+                # Another save changed the dependencies: this one keeps its base lock, so the
+                # merge takes that save's manifest together with the lock resolved for it.
+                if "uv.lock" in base:
+                    proposal["uv.lock"] = base["uv.lock"]
+                else:
+                    proposal.pop("uv.lock", None)
             try:
                 removed = owned_paths(files_to_bundle(base)) - owned_paths(files_to_bundle(proposal))
                 for name in removed:
@@ -482,6 +502,18 @@ class Projects:
                 }
                 self.store.put("conflict", conflict["id"], conflict)
                 raise Problem("Concurrent edits conflict. Both versions have been retained.", 409, conflict)
+            if (
+                manifest_edited
+                and merged.get("pyproject.toml") != proposal.get("pyproject.toml")
+                and any(name.endswith(".py") for name in merged)
+            ):
+                raise Problem(
+                    "Python dependencies changed concurrently. Reload and save to resolve the merged manifest.",
+                    409,
+                )
+            from .python_nodes import remember_contracts
+
+            merged = remember_contracts(merged)
             if validate:
                 # Problems already saved, such as an input not connected yet, do not block the change.
                 require_valid(merged, "The proposed changes are invalid", baseline=current)
@@ -494,6 +526,32 @@ class Projects:
             self.pending.pop(worktree_id, None)
             self.on_change(worktree_id)
             return self.snapshot(worktree_id)
+
+    def _locked_dependencies(self, record: Record, proposal: Files) -> Files:
+        """The proposal with a uv.lock resolved for its manifest; resolution runs before any lock."""
+        policy = get_policy(self.store, record["project"])
+        if not (policy.get("enabled") and any(name.endswith(".py") for name in proposal)):
+            return proposal
+        saved = self.read_files(record)
+        lock = saved.get("uv.lock")
+        if (
+            lock
+            and "<<<<<<<" not in lock
+            and all(proposal.get(n) == saved.get(n) for n in ("pyproject.toml", "uv.lock"))
+        ):
+            # Untouched dependencies keep their lock; a launch reports a manifest this server cannot use.
+            return proposal
+        from .python_environment import lock_files
+
+        return {
+            **proposal,
+            "uv.lock": lock_files(
+                proposal,
+                self.store.home,
+                allow_builds=policy.get("allow_builds", False),
+                project=record["project"],
+            ),
+        }
 
     def prune_column_documentation(
         self, worktree_id: str, node: str, columns: dict[str, list[str]], current: Callable[[Record], bool]
@@ -534,6 +592,7 @@ class Projects:
                     snapshot["revision"],
                     bundle_to_files(bundle),
                     "docs(schema): remove documentation for removed columns",
+                    relock=False,
                 )
 
     def _write_files(self, worktree: Record, files: Files, previous: Files) -> None:
@@ -553,7 +612,24 @@ class Projects:
         return cast(Record, conflict)
 
     def resolve(self, conflict_id: str, choice: str, files: Files | None = None) -> Record:
-        with self.locked(self.conflict(conflict_id)["worktree"]):
+        stored = self.conflict(conflict_id)
+        if choice in ("current", "proposal", "combined") and (choice != "combined" or files is not None):
+            # Resolve dependencies before the repository lock; the save below then reuses that lock.
+            with suppress(Problem):
+                self._locked_dependencies(
+                    self.get(stored["worktree"]),
+                    merge_files(
+                        stored["base"],
+                        stored["current"],
+                        stored["proposal"],
+                        choices=dict.fromkeys(
+                            stored["paths"], "incoming" if choice == "proposal" else choice
+                        ),
+                        evidence=[],
+                        resolutions=files if choice == "combined" else None,
+                    )[0],
+                )
+        with self.locked(stored["worktree"]):
             # Read it again: another request may have resolved it while this one waited.
             conflict = self.conflict(conflict_id)
             snapshot = self.snapshot(conflict["worktree"])
@@ -697,7 +773,9 @@ class Projects:
                 for identity, value in bundle[kind].items():
                     if kind == "templates":
                         try:
-                            name = parse_template(value)["label"]
+                            name = parse_template(value, "python" if identity.endswith(".py") else "sql")[
+                                "label"
+                            ]
                         except Problem:
                             continue
                     else:

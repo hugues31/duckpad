@@ -4,6 +4,7 @@ import {
   arrangeLineage,
   buildLineageGraph,
   cellId,
+  pythonCardHeight,
   requestId,
   type Cell,
   type Explanation,
@@ -411,5 +412,43 @@ describe("arrangeLineage", () => {
 
   it("returns nothing for an empty graph", () => {
     expect(arrangeLineage([], [])).toEqual([]);
+  });
+});
+
+describe("pythonCardHeight", () => {
+  const parent = (rows: number, count = rows) => ({
+    dataset: "orders",
+    node: "orders",
+    port: "result",
+    run: "run",
+    count,
+    columns: [{ name: "id", type: "INTEGER" }],
+    rows: Array.from({ length: rows }, (_, row) => ({ row, values: [row] })),
+  });
+  const python = (parents: ReturnType<typeof parent>[]) =>
+    explained(input(at("split", 0, "amount"), 1), [], {
+      kind: "python",
+      complete: false,
+      total: 0,
+      parents,
+    });
+
+  it("keeps a Python card without listed parents compact", () => {
+    expect(pythonCardHeight(python([]))).toBe(150);
+    expect(pythonCardHeight(python([parent(3)]), false)).toBe(150);
+  });
+
+  it("grows with the parent tables and rows it lists", () => {
+    // Each table: 46 pixels for its name and header, then 45 per row.
+    expect(pythonCardHeight(python([parent(2)]))).toBe(245 + 30 + 46 + 90);
+    expect(pythonCardHeight(python([parent(2), parent(1)]))).toBe(
+      245 + 30 + 46 + 90 + 46 + 45,
+    );
+  });
+
+  it("scrolls parent tables beyond 300 pixels and leaves room for their pages", () => {
+    expect(pythonCardHeight(python([parent(5, 8), parent(2)]))).toBe(
+      245 + 300 + 41,
+    );
   });
 });

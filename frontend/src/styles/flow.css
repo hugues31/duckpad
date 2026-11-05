@@ -336,7 +336,7 @@
 }
 .palette-bottom {
   flex-shrink: 0;
-  padding: 12px;
+  padding: 12px 8px;
   border-top: 1px solid var(--border);
   background: transparent;
 }
@@ -355,15 +355,17 @@ fieldset.palette-bottom {
   color: var(--muted);
 }
 .palette-actions {
-  display: flex;
-  gap: 6px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
 }
 .palette-actions .button {
-  flex: 1 0 auto;
   min-width: 0;
+  flex-direction: column;
   justify-content: center;
-  gap: 5px;
-  padding-inline: 4px;
+  gap: 4px;
+  padding: 6px 2px;
+  font-size: 10px;
 }
 .palette-actions svg {
   flex-shrink: 0;

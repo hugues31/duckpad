@@ -43,6 +43,24 @@
   border-right: 1px solid var(--border);
   padding: 10px 6px;
 }
+/* File creation actions stay above the tree, visible without scrolling. */
+.code-file-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 2px 8px 10px;
+  margin-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+}
+.code-file-actions .field {
+  align-self: stretch;
+  margin: 0;
+  font-size: 12px;
+}
+.code-file-actions .field p {
+  margin: 0;
+}
 .file-tree-row {
   display: flex;
   align-items: center;

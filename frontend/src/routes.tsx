@@ -52,10 +52,17 @@ export const pageRoutes: RouteObject[] = [
       InstanceSettingsPage,
     ),
   ),
-  page(
-    "projects/:projectId/settings",
-    { area: "projectSettings" },
-    ProjectSettingsPage,
+  {
+    path: "projects/:projectId/settings",
+    loader: ({ params }) =>
+      redirect(`/projects/${params.projectId}/settings/participants`),
+  },
+  ...["participants", "connections", "python", "general"].map((section) =>
+    page(
+      `projects/:projectId/settings/${section}`,
+      { area: "projectSettings", section },
+      ProjectSettingsPage,
+    ),
   ),
   page("projects/:projectId/jobs", { area: "jobs" }, JobsPage),
   // The tabs of a working branch share its toolbar and code editor.

@@ -68,6 +68,12 @@ class ProjectRole(BaseModel):
     role: Literal["reader", "operator", "editor", "admin"]
 
 
+class PythonPolicy(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    enabled: StrictBool = False
+    allow_builds: StrictBool = False
+
+
 class JobTarget(BaseModel):
     model_config = ConfigDict(extra="forbid")
     kind: Literal["tag", "branch"]

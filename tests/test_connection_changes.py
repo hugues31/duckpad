@@ -183,7 +183,7 @@ def test_a_failing_new_worker_keeps_the_results(isolated, tmp_path, request):
     broken.write_text("not a database")
     connection["environments"]["dev"]["database"] = str(broken)
     isolated.catalog.save("connection", copy.deepcopy(connection))
-    with pytest.raises(Problem, match="Cannot initialize isolated SQL execution") as refused:
+    with pytest.raises(Problem, match="Cannot initialize execution worker") as refused:
         isolated.engine.launch(worktree, "dev", "other")
     assert str(broken) not in str(refused.value)
     assert results(isolated, worktree) == before

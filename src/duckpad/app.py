@@ -34,7 +34,9 @@ from .example import create_example
 from .execution.samples import Sample
 from .git.identity import commit_author
 from .jobs import Jobs
+from .monitoring import Monitoring
 from .oidc import CALLBACK_PATH, OIDC, TRANSACTION_LIFETIME, OIDCSettings
+from .python_policy import get_policy
 from .resources import resource_usage
 from .search import search_instance
 from .services import Services
@@ -99,13 +101,17 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
     credentials = projects.remotes.credentials
     assistant = Assistant(services, auth)
     jobs = Jobs(services)
+    monitoring = Monitoring(store.paths.home)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-        if watch:
-            projects.start_watcher()
-        yield
-        services.close()
+        with monitoring.logs.capture():
+            try:
+                if watch:
+                    projects.start_watcher()
+                yield
+            finally:
+                services.close()
 
     app = FastAPI(
         title="Duckpad",
@@ -141,6 +147,7 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
             "environments",
             "catalog",
             "resources",
+            "monitoring",
             "sql-resources",
             "sso",
             "extensions",
@@ -149,7 +156,7 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
             access.instance_admin(user)
         elif route == "projects" and len(parts) >= 3 and parts[2:] != ["import"]:
             access.require(user, parts[2], "reader" if request.method == "GET" else "admin")
-            if len(parts) >= 4 and parts[3] == "connections" and request.method != "GET":
+            if len(parts) >= 4 and parts[3] in ("connections", "python") and request.method != "GET":
                 access.instance_admin(user)
         elif route == "worktrees" and len(parts) >= 3:
             # Explaining a value and computing column statistics read results without changing them.
@@ -326,6 +333,18 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
     @app.get("/api/resources", response_model=None)
     def resources() -> Record:
         return resource_usage()
+
+    @app.get("/api/monitoring", response_model=None)
+    def instance_monitoring() -> Record:
+        return monitoring.snapshot()
+
+    @app.get("/api/monitoring/logs", response_model=None)
+    def instance_logs(
+        level: Literal["debug", "info", "warning", "error", "critical"] = "debug",
+        q: Annotated[str, Query(max_length=200)] = "",
+        limit: Annotated[int, Query(ge=1, le=200)] = 200,
+    ) -> Record:
+        return monitoring.logs.snapshot(level, q, limit)
 
     # Instance
 
@@ -598,7 +617,21 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
             if role == "admin"
             else [],
             "connections": record["connections"],
+            "python": get_policy(store, project),
         }
+
+    @app.get("/api/projects/{project}/python/environment", response_model=None)
+    def python_environment_status(project: str) -> Record:
+        from .python_environment import environment_status
+
+        return environment_status(store.home, project)
+
+    @app.put("/api/projects/{project}/python", response_model=None)
+    def python_policy(project: str, data: schemas.PythonPolicy) -> Record:
+        with engine.exclusive(project):
+            engine.reset_project(project)
+            store.put("settings", "python:" + project, data.model_dump())
+        return data.model_dump()
 
     @app.put("/api/projects/{project}/members/{identity}", response_model=None)
     def set_member(project: str, identity: str, data: schemas.ProjectRole) -> Record:
@@ -638,6 +671,7 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
         result = projects.snapshot(worktree, committed=True)
         project = result["worktree"]["project"]
         result["role"] = access.role(request.state.user, project)
+        result["python_enabled"] = get_policy(store, project)["enabled"]
         granted_connections = access.record(project)["connections"]
         result["connections"] = []
         for c in store.all("connection"):
@@ -653,6 +687,39 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
                 )
         result["parsed_templates"] = parse_templates((result["bundle"] or {}).get("templates", {}))
         result["parsed_nodes"] = parse_templates((result["bundle"] or {}).get("node_sql", {}))
+        from .node_code import code_path
+
+        for parent, graph in [
+            (None, (result["bundle"] or {}).get("flow", {})),
+            *((result["bundle"] or {}).get("components", {})).items(),
+        ]:
+            for node in graph.get("nodes", []):
+                if node.get("language") == "python" and node.get("python_contract"):
+                    path = node.get("template") or code_path(node["id"], parent, "python")
+                    collection = (
+                        result["parsed_templates"] if node.get("template") else result["parsed_nodes"]
+                    )
+                    parsed = collection.get(path, {})
+                    from .python_nodes import retained_contract
+
+                    collection[path] = retained_contract(node, parsed, graph.get("edges", []))
+                    if collection[path].get("error"):
+                        file = "templates/" + path if node.get("template") else path
+                        located = {"node": node["id"], "code": "python_contract"}
+                        message = collection[path]["error"]
+                        # A syntax error is already reported for its file: locate it on the node.
+                        same = next(
+                            (
+                                d
+                                for d in result["diagnostics"]
+                                if d.get("file") == file and d.get("message") == message and "node" not in d
+                            ),
+                            None,
+                        )
+                        if same:
+                            same.update(located)
+                        else:
+                            result["diagnostics"].append({"file": file, "message": message, **located})
         result["variables"] = (
             variables.summary(
                 result["bundle"],

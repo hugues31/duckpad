@@ -268,7 +268,10 @@ export default function ResultsData({
                   sample={sample}
                   canEdit={canEdit}
                   canCreateTest={
-                    canEdit && !target.input && !inspected.node.component
+                    inspected.node.language !== "python" &&
+                    canEdit &&
+                    !target.input &&
+                    !inspected.node.component
                   }
                   onApply={(next) => {
                     change(next);
@@ -1023,6 +1026,8 @@ function CreateTestModal({
               const graph = nodeGraph(bundle, parent);
               const current = graph.nodes.find((item) => item.id === node.id);
               if (!current) throw new Error(t("nodeRemoved"));
+              if (current.language === "python")
+                throw new Error(t("pythonTestHint"));
               if (current.template && detach)
                 detachNode(bundle, current, parent);
               if (current.template)

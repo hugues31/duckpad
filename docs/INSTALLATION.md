@@ -52,6 +52,33 @@ snapshots, status, and generations) are logged at DEBUG. The default INFO level
 still shows other requests, including failed polling requests. Use
 `duckpad start --log-level debug` to include polling in the server logs.
 
+### Instance monitoring
+
+Instance administrators can open **Instance settings → Monitoring** to inspect
+the available space on the filesystem holding the instance directory, system
+memory visible to the backend, backend resident memory, uptime and version.
+The disk figure includes other applications on that filesystem; it does not
+measure remote connections, separate project mounts or directory sizes. System
+memory can reflect the host rather than a container's quota. Backend memory
+excludes SQL worker processes. Unavailable counters are reported independently.
+A warning appears when at most 10% of the data disk remains available.
+
+The same page shows recent Duckpad and Uvicorn logs, newest first, with minimum
+severity and case-insensitive text filters. While the page is open, it refreshes
+every 5 seconds by default; choose another interval or Manual next to the
+Refresh button. Capture follows the server's configured log level. Successful
+monitoring requests do not enter this history.
+
+This first version keeps up to 1,000 entries in backend memory, truncates each
+message to 4,000 characters, and returns up to 200 matches. Restarting clears
+the history. It does not read arbitrary server files or capture stdout, the
+initial admin password, reverse-proxy logs or historical container logs. Common
+credential fields, authorization headers and URL credentials are masked before
+retention, and access-log query strings and client addresses are omitted.
+Application messages and exception traces may still contain sensitive data;
+only instance administrators can access either monitoring endpoint. Use the
+deployment's existing log collection for durable history and alerting.
+
 Debug also logs complete tracebacks of assistant provider failures. Credentials
 are masked, but these traces can contain prompts, responses and project data:
 keep them private and use debug temporarily. See
@@ -309,3 +336,12 @@ language and theme.
 ![Language and theme choices in personal preferences](images/preferences.png)
 
 Results live in memory per worktree and environment. After a backend restart, history remains available but previews and lineage require another manual run. Editing or changing an external source does not launch a run automatically.
+
+## Python node environments
+
+Installing Duckpad also installs the `uv` executable used for project environments.
+An instance administrator enables Python in each project's **Python** settings.
+Activation gives Python access to the secrets of that project's authorized
+connections because SQL and Python share a worker. Source builds require a
+separate opt-in; wheels are the default. See [Python nodes](PYTHON.md) for
+operator indexes, offline wheel caches, runtime compatibility and memory limits.

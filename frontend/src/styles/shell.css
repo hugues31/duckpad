@@ -144,7 +144,6 @@
 .react-flow__controls,
 .canvas-layout-controls,
 .react-flow__minimap,
-.modal,
 .toast,
 .login-card {
   background: var(--glass);

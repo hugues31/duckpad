@@ -216,7 +216,9 @@ class Results:
         context = self.pool.get(worktree, environment)
         with context.lock:
             dataset = context.datasets.get(dataset_id)
-            return bool(dataset and dataset.status == "valid")
+            return bool(
+                dataset and (dataset.status == "valid" or dataset.historical or dataset.opaque_python)
+            )
 
     def find_dataset(
         self,
@@ -536,6 +538,10 @@ class Results:
             node = nodes[key]
             if node.get("error"):
                 raise Problem(node["error"], 422)
+            if node.get("language") == "python":
+                raise Problem(
+                    "Python has no compiled SQL; inspect its code and the opaque lineage boundary", 422
+                )
             captured, secrets = self.pool.capture(worktree, connection_references(node), environment)
             inputs = {
                 e["targetHandle"]: qi("input_" + e["source"].replace("::", "_") + "_" + e["sourceHandle"])

@@ -39,7 +39,7 @@ test("settings use desktop columns and remain usable on narrow screens in both l
   await openInstanceSettings(page);
   await expect(page).toHaveURL(/\/instance-settings\/users$/);
   const navigation = page.getByRole("navigation", {
-    name: "Instance settings",
+    name: "Settings sections",
     exact: true,
   });
   await expect(
@@ -90,9 +90,9 @@ test("settings use desktop columns and remain usable on narrow screens in both l
   ).toHaveAttribute("aria-current", "page");
   await expect(
     page
-      .getByRole("navigation", { name: fr.instanceSettings, exact: true })
+      .getByRole("navigation", { name: fr.settingsSections, exact: true })
       .getByRole("link"),
-  ).toHaveCount(8);
+  ).toHaveCount(9);
   await noPageOverflow(page);
   await page.getByRole("link", { name: fr.ssoSettings, exact: true }).click();
   await expect(page.getByLabel(fr.ssoEnabled, { exact: true })).toBeVisible();
@@ -100,7 +100,7 @@ test("settings use desktop columns and remain usable on narrow screens in both l
   await page.screenshot({ path: "test-results/settings-instance-mobile.png" });
 });
 
-test("project controls and extension policies have separate desktop columns", async ({
+test("project controls use sections and extension policies use desktop columns", async ({
   page,
 }) => {
   await signIn(page);
@@ -120,14 +120,26 @@ test("project controls and extension policies have separate desktop columns", as
         exact: true,
       }),
     });
+    await expect(participants).toBeVisible();
+    const navigation = page.getByRole("navigation", {
+      name: "Settings sections",
+      exact: true,
+    });
+    await expect(navigation.getByRole("link")).toHaveCount(4);
+    await beside(navigation, page.locator(".settings-content"));
+    await navigation
+      .getByRole("link", { name: "Connections", exact: true })
+      .click();
     await expect(connections).toBeVisible();
-    await beside(participants, connections);
     await noPageOverflow(page);
     await page.screenshot({
       path: "test-results/settings-project-desktop.png",
     });
     await page.setViewportSize({ width: 390, height: 844 });
     await noPageOverflow(page);
+    await navigation
+      .getByRole("link", { name: "General", exact: true })
+      .click();
     await page
       .getByRole("button", { name: "Delete project", exact: true })
       .click();

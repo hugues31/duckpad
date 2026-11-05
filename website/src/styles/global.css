@@ -887,6 +887,8 @@ pre {
   padding: 15px 22px;
   max-height: 55vh;
   overflow: auto;
+  /* Keyboard scrolling keeps the focused result inside the list padding. */
+  scroll-padding-block: 15px;
 }
 .search-results a {
   display: block;

@@ -74,6 +74,7 @@ export interface AssistantTool {
     node_count?: number;
     confirm_before_run?: boolean;
     variables?: import("./types").Run["variables"];
+    python_nodes?: { node: string; label: string }[];
     exports?: { node: string; label: string; connections: string[] }[];
   };
   run?: Pick<

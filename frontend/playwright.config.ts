@@ -39,6 +39,6 @@ export default defineConfig({
     command: "../.venv/bin/python ../scripts/e2e_server.py",
     url: testURL,
     reuseExistingServer: false,
-    timeout: 15000,
+    timeout: 60000,
   },
 });

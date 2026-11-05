@@ -1,12 +1,13 @@
 import copy
 import json
+import sys
 import tomllib
 from pathlib import Path
 
+import duckdb
 import pytest
 from helpers import example_bundle, wait_run, wait_until
 
-from duckpad import __version__
 from duckpad.bundle import bundle_to_files, files_to_bundle
 from duckpad.comparison import compare_files
 from duckpad.util import Problem
@@ -27,8 +28,8 @@ def test_new_project_has_a_dependency_manifest_and_separate_markdown(services, t
         "name": "duckpad-project-revenue-2026",
         "version": "0.1.0",
         "readme": "README.md",
-        "requires-python": ">=3.11",
-        "dependencies": [f"duckpad=={__version__}"],
+        "requires-python": f"=={sys.version_info.major}.{sys.version_info.minor}.*",
+        "dependencies": [f"duckdb=={duckdb.__version__}", "pytz>=2024.1"],
     }
     assert manifest["tool"]["uv"]["package"] is False
     assert snapshot["bundle"]["documentation"] == bundle["documentation"]
@@ -66,7 +67,7 @@ def test_raw_manifest_survives_bundle_saves_and_documentation_reconciliation(ser
     snapshot = projects.snapshot(worktree["id"])
     manifest = (
         snapshot["files"]["pyproject.toml"].replace(
-            f'"duckpad=={__version__}"', f'"duckpad=={__version__}", "pandas>=2"'
+            f'"duckdb=={duckdb.__version__}"', f'"duckdb=={duckdb.__version__}", "pandas>=2"'
         )
         + '\n# Preserve custom configuration.\n[tool.custom]\nvalue = "custom"\n'
     )

@@ -37,6 +37,7 @@ import {
   Sigma,
   FileOutput,
   Code2,
+  Braces,
   Link,
   Boxes,
   Check,
@@ -75,6 +76,7 @@ export function NodeIcon({ kind, ...props }: LucideProps & { kind: string }) {
     return <Sigma {...props} />;
   if (kind.startsWith("load_")) return <FileInput {...props} />;
   if (kind === "component") return <Boxes {...props} />;
+  if (kind === "python") return <Braces {...props} />;
   return <Code2 {...props} />;
 }
 function StatusIcon({ status, ...props }: LucideProps & { status: string }) {
@@ -424,7 +426,9 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
             ),
             icon: node.component
               ? "component"
-              : node.preset || node.template || node.origin || "",
+              : node.language === "python"
+                ? "python"
+                : node.preset || node.template || node.origin || "",
             linked: node.template
               ? templateLabel(
                   node.template,

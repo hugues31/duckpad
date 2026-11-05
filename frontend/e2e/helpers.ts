@@ -35,7 +35,7 @@ export async function openInstanceSettings(
     .getByRole("link", { name: "Instance settings", exact: true })
     .click();
   await page
-    .getByRole("navigation", { name: "Instance settings", exact: true })
+    .getByRole("navigation", { name: "Settings sections", exact: true })
     .getByRole("link", { name: section, exact: true })
     .click();
 }

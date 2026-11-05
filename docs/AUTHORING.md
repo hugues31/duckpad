@@ -33,6 +33,7 @@ JSON or non-UTF-8 declarative files are rejected. Non-project entries are ignore
 ```text
 README.md              Project overview
 pyproject.toml         Python version and dependencies
+uv.lock                Locked Python dependencies (when Python is enabled)
 flow.json              Pipeline graph and partition declarations
 documentation.json     Node, output and column descriptions
 variables.json         Ordinary and computed variable declarations (optional)
@@ -42,25 +43,27 @@ templates/*.sql        Shared SQL templates
 nodes/*.sql            Code owned by normal nodes
 components/*.json      Reusable sub-flows
 components/<id>/*.sql   Code owned by nodes inside a component
+nodes/*.py             Python node code
+templates/*.py         Shared Python templates
+components/<id>/*.py    Python code inside a component
+modules/**/*.py        Shared Python helper modules
 ```
 
 Project prose belongs in `README.md`; `documentation.json` rejects a `project`
 entry. A missing or empty README means no project overview.
 
-New projects declare Python `>=3.11` and the creating instance's Duckpad version
-in `pyproject.toml`. Edit `project.dependencies` to add packages; comments and
+New projects declare the server's Python ABI, DuckDB version and SDK contract
+in `pyproject.toml`. Edit `project.dependencies` to add business packages; comments and
 custom TOML tables survive UI saves. Malformed TOML remains editable with a
 diagnostic.
 
-After extracting a ZIP, `uv sync` installs its declared dependencies into `.venv`.
-The manifest sets `tool.uv.package = false` because the project is a pipeline,
-not a Python package. Duckpad does not export uv's lockfile, so the archive does
-not freeze transitive dependencies.
-
-Saving this manifest does not install packages or execute Python: Duckpad runs
-SQL pipelines. To open an extracted project in Duckpad, import its ZIP through
-the interface. Configure connections, extension binaries and source data on the
-destination instance separately.
+For enabled Python projects, saving resolves `uv.lock`, and execution prepares an
+immutable environment using the server's DuckDB binary and lightweight SDK.
+The manifest sets `tool.uv.package = false` because the project is a pipeline.
+Project ZIPs include the manifest and lock, without copying environments.
+Import them through the interface, then configure connections, extensions and
+source data on the destination. See [Python nodes](PYTHON.md) for activation,
+runtime compatibility, dependencies and authoring.
 
 ## Editing node code
 
@@ -70,8 +73,9 @@ input and `result` output. **Edit code** changes only that node. Its `-- @param`
 declarations generate the form; guided controls remain while their supporting
 parameters are present.
 
-The **SQL** button under **Add to palette** creates a reusable template instead.
-Save its SQL to make it available in the palette, then click or drag the entry
+The **SQL** and **Python** buttons under **Add to palette** create reusable templates.
+Python requires administrator activation in the project settings.
+Save the code to make it available in the palette, then click or drag the entry
 to create independent nodes. **Import** copies a reusable definition from another
 project into this palette.
 

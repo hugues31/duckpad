@@ -1,0 +1,19 @@
+name: Set up frontend dependencies
+description: Restore the exact locked dependencies for the runner and Node.js version.
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v7
+      id: node
+      with:
+        node-version: '22'
+        cache: npm
+        cache-dependency-path: frontend/package-lock.json
+    - uses: actions/cache@v5
+      id: dependencies
+      with:
+        path: frontend/node_modules
+        key: frontend-${{ runner.os }}-${{ runner.arch }}-node-${{ steps.node.outputs.node-version }}-${{ hashFiles('frontend/package-lock.json') }}
+    - if: steps.dependencies.outputs.cache-hit != 'true'
+      shell: bash
+      run: npm ci --prefix frontend

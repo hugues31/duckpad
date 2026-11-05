@@ -25,6 +25,15 @@ export type Query = Cell & {
   context?: boolean;
 };
 export type Explanation = Input & {
+  parents?: {
+    dataset: string;
+    node: string;
+    port: string;
+    run: string;
+    count: number;
+    columns: { name: string; type: string }[];
+    rows: { row: number; values: unknown[] }[];
+  }[];
   partition_groups?: { partition: PartitionEntry; run: string; rows: number }[];
   replay?: {
     node: string;
@@ -178,6 +187,22 @@ export async function buildLineageGraph(
     entries: [...entries.values()],
     edges: [...edges.values()],
   };
+}
+
+/**
+ * The height of a Python card. Listed parent tables take 46 pixels each, plus 45
+ * per row, and scroll beyond 300 pixels; the card fills this height, so the
+ * scrolling area absorbs longer translations of its hint.
+ */
+export function pythonCardHeight(result: Explanation, listParents = true) {
+  const parents = (listParents && result.parents) || [];
+  if (!parents.length) return 150;
+  const tables = parents.reduce(
+    (total, parent) => total + 46 + parent.rows.length * 45,
+    30,
+  );
+  const paged = parents.some((parent) => parent.count > result.page_size);
+  return 245 + Math.min(tables, 300) + (paged ? 41 : 0);
 }
 
 /** Lay out sources on the left and their calculations on the right, preserving shared inputs. */

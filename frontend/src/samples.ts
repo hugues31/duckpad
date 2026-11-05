@@ -130,6 +130,17 @@ export function testSource(code: string, name: string) {
   return lines.slice(start, end).join("\n").trim();
 }
 
+/** The line of Python node code that declares a `self.check`, as written. */
+export function pythonCheckSource(code: string, name: string) {
+  const calls = [`self.check("${name}"`, `self.check('${name}'`];
+  return (
+    code
+      .split("\n")
+      .find((line) => calls.some((call) => line.includes(call)))
+      ?.trim() ?? null
+  );
+}
+
 export const TEST_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
 /** A test name derived from a filter, such as `amount_above_300`. */

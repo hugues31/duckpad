@@ -231,8 +231,16 @@ credentials and network egress accordingly. This is not a tenant resource quota
 or a complete hostile-code hosting boundary.
 
 The explicit [trusted local mode](INSTALLATION.md#trusted-local-mode) runs DuckDB
-in-process with the user's OS permissions. It retains HTTP authorization but has
+in a worker with the user's OS permissions. It retains HTTP authorization but has
 no SQL filesystem isolation and must remain a single-user loopback installation.
+
+Enabled [Python nodes](PYTHON.md) share that worker and its DuckDB connection,
+using a locked project interpreter and a lightweight injected SDK. Only control
+messages, schemas and preview pages cross the process pipes; tabular relations
+stay in the worker. Native failures discard that context, and the next run
+recomputes it. Linux workers prefer OOM termination via `oom_score_adj=1000`;
+Python allocations have no separate quota. Network and same-user signals are
+unconfined. Python is an opaque lineage boundary retaining captured parents.
 
 Network Git uses the requesting account's key, trusted host configuration and
 URL-bound consent. It never borrows the server account's credentials; see

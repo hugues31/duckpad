@@ -1,7 +1,7 @@
 import type { PartitionLaunchOptions } from "./partitions";
 import { PartitionRunSummary } from "./PartitionRunMenu";
 import ConvertNodeDialog from "./ConvertNodeDialog";
-import { nodeCode, nodeCodePath, nodeGraph } from "./nodeCode";
+import { NEW_NODE_PYTHON, nodeCode, nodeCodePath, nodeGraph } from "./nodeCode";
 import { useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { Boxes } from "lucide-react";
@@ -289,27 +289,47 @@ function WorktreeDialog({
         <RevisionEditor
           snapshot={snapshot}
           title={t(node.template ? "viewNodeCode" : "editNodeCode")}
+          language={node.language || "sql"}
           readOnly={!canEdit || !!node.template}
           read={(bundle) => nodeCode(bundle, node, modal.parent)}
           write={(bundle, text) => {
-            (bundle.node_sql ||= {})[nodeCodePath(node.id, modal.parent)] =
-              text;
+            (bundle.node_sql ||= {})[
+              nodeCodePath(node.id, modal.parent, node.language)
+            ] = text;
           }}
           onClose={onClose}
         />
       );
     }
-    case "template":
+    case "template": {
+      const python = modal.template.endsWith(".py");
       return (
         <RevisionEditor
           snapshot={snapshot}
-          title={t(modal.create ? "newTemplate" : "editTemplate")}
+          title={t(
+            modal.create
+              ? python
+                ? "newPythonTemplate"
+                : "newTemplate"
+              : python
+                ? "editPythonTemplate"
+                : "editTemplate",
+          )}
+          language={python ? "python" : "sql"}
           description={t(
-            modal.create ? "newTemplateHint" : "sharedTemplateHint",
+            modal.create
+              ? python
+                ? "newPythonTemplateHint"
+                : "newTemplateHint"
+              : "sharedTemplateHint",
           )}
           readOnly={!canEdit}
           read={(bundle) =>
-            modal.create ? NEW_TEMPLATE : bundle.templates[modal.template]
+            modal.create
+              ? python
+                ? "# @label Custom Python transform\n" + NEW_NODE_PYTHON
+                : NEW_TEMPLATE
+              : bundle.templates[modal.template]
           }
           write={(bundle, text) => {
             bundle.templates[modal.template] = text;
@@ -317,6 +337,7 @@ function WorktreeDialog({
           onClose={onClose}
         />
       );
+    }
     case "componentDefinition":
       return (
         <RevisionEditor

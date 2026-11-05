@@ -1,5 +1,15 @@
 import { useCallback, useEffect, useState } from "react";
-import { Plus, Shield, Trash2 } from "lucide-react";
+import {
+  Plus,
+  Trash2,
+  Users,
+  Database,
+  Code2,
+  Settings as SettingsIcon,
+} from "lucide-react";
+import { NavLink } from "react-router";
+import PythonEnvironmentStatus from "./PythonEnvironmentStatus";
+import SettingsLayout from "./SettingsLayout";
 import { api, send } from "./api";
 import { useT } from "./i18n";
 import { Modal } from "./modals";
@@ -18,6 +28,7 @@ interface Member {
 }
 
 interface Settings {
+  python: { enabled: boolean; allow_builds: boolean };
   project: { name: string };
   /** The role of the signed-in user. */
   role: ProjectRole;
@@ -30,6 +41,7 @@ interface Settings {
 
 type Confirmation = { kind: "delete" } | { kind: "remove"; member: Member };
 
+const NO_PYTHON = { enabled: false, allow_builds: false };
 const NO_CONNECTIONS: string[] = [];
 /** Connection grants form a set: their order does not matter. */
 const sameConnections = (a: string[], b: string[]) =>
@@ -38,11 +50,13 @@ const sameConnections = (a: string[], b: string[]) =>
 /** A project's participants, authorized connections and deletion. */
 export default function ProjectSettings({
   project,
+  section = "participants",
   workspace,
   refresh,
   onDeleted,
 }: {
   project: string;
+  section?: string;
   workspace: Workspace;
   refresh: () => Promise<unknown>;
   onDeleted: () => void;
@@ -72,6 +86,18 @@ export default function ProjectSettings({
     },
     { equal: sameConnections },
   );
+  const python = useRevisionDraft(
+    settings?.python ?? NO_PYTHON,
+    settings,
+    async (policy, revision) => {
+      await api(`/projects/${project}/python`, send(policy, "PUT"));
+      return revision;
+    },
+    {
+      equal: (a, b) =>
+        a.enabled === b.enabled && a.allow_builds === b.allow_builds,
+    },
+  );
   const act = (action: () => Promise<unknown>) =>
     run(async () => {
       await action();
@@ -84,208 +110,304 @@ export default function ProjectSettings({
       await api(`/projects/${project}`, { method: "DELETE" });
       // Unsaved grants of a deleted project must not hold back leaving its page.
       grants.discard();
+      python.discard();
       await refresh();
       onDeleted();
     });
   const admin = settings?.role === "admin";
+  const instanceAdmin = workspace.user.role === "admin";
   const available =
     settings?.users.filter(
       (u) => !settings.members.some((m) => m.id === u.id),
     ) || [];
   return (
-    <section className="full-panel administration-page project-settings">
-      <div className="settings-container">
-        <div className="administration-heading">
-          <div>
-            <span className="eyebrow">
-              {settings?.project.name || t("project")}
-            </span>
-            <h1>
-              <Shield size={28} />
-              {t("projectSettings")}
-            </h1>
-            <p className="muted">{t("projectAccessHint")}</p>
-          </div>
-          {settings && (
+    <>
+      <SettingsLayout
+        className="project-settings"
+        title={t("projectSettings")}
+        eyebrow={settings?.project.name || t("project")}
+        description={t("projectAccessHint")}
+        badge={
+          settings && (
             <span className="access-badge active">
               {t(`role_${settings.role}`)}
             </span>
-          )}
-        </div>
+          )
+        }
+        navigation={(
+          [
+            ["participants", "participants", Users],
+            ["connections", "connections", Database],
+            ["python", "pythonExecution", Code2],
+            ["general", "generalSettings", SettingsIcon],
+          ] as const
+        ).map(([slug, label, Icon]) => (
+          <NavLink key={slug} to={`/projects/${project}/settings/${slug}`} end>
+            <Icon size={18} aria-hidden="true" />
+            <span>{t(label)}</span>
+          </NavLink>
+        ))}
+      >
         {error && (
           <div className="notice error" role="alert">
             {error}
           </div>
         )}
-        <div className="role-guide">
-          {PROJECT_ROLES.map((role) => (
-            <div key={role}>
-              <strong>{t(`role_${role}`)}</strong>
-              <p>{t(`project_${role}_hint`)}</p>
+        {section === "participants" && (
+          <>
+            <div className="role-guide">
+              {PROJECT_ROLES.map((role) => (
+                <div key={role}>
+                  <strong>{t(`role_${role}`)}</strong>
+                  <p>{t(`project_${role}_hint`)}</p>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
-        <div className="project-settings-grid">
-          <div className="settings-card">
-            <h2>{t("participants")}</h2>
-            {admin && (
-              <form
-                className="member-form"
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  const data = new FormData(e.currentTarget);
-                  void act(() =>
-                    api(
-                      `/projects/${project}/members/${data.get("user")}`,
-                      send({ role: data.get("role") }, "PUT"),
-                    ),
-                  );
-                }}
-              >
-                <label className="field">
-                  <span>{t("user")}</span>
-                  <Select
-                    aria-label={t("user")}
-                    name="user"
-                    value={selectedUser}
-                    onChange={(e) => setSelectedUser(e.target.value)}
-                    required
-                    disabled={!available.length}
-                  >
-                    <option value="">
-                      {t(available.length ? "chooseUser" : "noAvailableUsers")}
-                    </option>
-                    {available.map((u) => (
-                      <option key={u.id} value={u.id}>
-                        {u.username}
-                      </option>
-                    ))}
-                  </Select>
-                </label>
-                <label className="field">
-                  <span>{t("projectRole")}</span>
-                  <Select
-                    aria-label={t("projectRole")}
-                    name="role"
-                    key={selectedUser}
-                    defaultValue="reader"
-                  >
-                    {(available.find((u) => u.id === selectedUser)
-                      ?.auth_method === "service"
-                      ? (["reader", "operator"] as const)
-                      : PROJECT_ROLES
-                    ).map((role) => (
-                      <option key={role} value={role}>
-                        {t(`role_${role}`)}
-                      </option>
-                    ))}
-                  </Select>
-                </label>
-                <button
-                  className="button primary"
-                  disabled={pending || !available.length}
+            <div className="settings-card">
+              <h2>{t("participants")}</h2>
+              {admin && (
+                <form
+                  className="member-form"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    const data = new FormData(e.currentTarget);
+                    void act(() =>
+                      api(
+                        `/projects/${project}/members/${data.get("user")}`,
+                        send({ role: data.get("role") }, "PUT"),
+                      ),
+                    );
+                  }}
                 >
-                  <Plus size={16} />
-                  {t("addParticipant")}
-                </button>
-              </form>
-            )}
-            <div className="administration-table">
-              <table>
-                <thead>
-                  <tr>
-                    <th>{t("username")}</th>
-                    <th>{t("projectRole")}</th>
-                    <th>{t("actions")}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {settings?.members.map((member) => (
-                    <tr key={member.id}>
-                      <td>
-                        <strong>{member.username}</strong>
-                        {!member.active && (
-                          <small className="muted">
-                            {" "}
-                            · {t("accountInactive")}
-                          </small>
+                  <label className="field">
+                    <span>{t("user")}</span>
+                    <Select
+                      aria-label={t("user")}
+                      name="user"
+                      value={selectedUser}
+                      onChange={(e) => setSelectedUser(e.target.value)}
+                      required
+                      disabled={!available.length}
+                    >
+                      <option value="">
+                        {t(
+                          available.length ? "chooseUser" : "noAvailableUsers",
                         )}
-                      </td>
-                      <td>
-                        <RoleSelect
-                          label={`${t("projectRole")} · ${member.username}`}
-                          value={member.role}
-                          service={member.auth_method === "service"}
-                          disabled={!admin || pending || !member.active}
-                          onChange={(role) =>
-                            act(() =>
-                              api(
-                                `/projects/${project}/members/${member.id}`,
-                                send({ role }, "PUT"),
-                              ),
-                            )
-                          }
-                        />
-                      </td>
-                      <td>
-                        {admin && (
-                          <button
-                            className="text-button danger"
-                            disabled={pending}
-                            onClick={() =>
-                              setConfirmation({ kind: "remove", member })
-                            }
-                          >
-                            <Trash2 size={14} />
-                            {t("removeAccess")}
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <p className="muted small">{t("lastAdminHint")}</p>
-          </div>
-          <div className="project-settings-secondary">
-            {workspace.user.role === "admin" && (
-              <div className="settings-card">
-                <h2>{t("authorizedConnections")}</h2>
-                <p className="muted">{t("authorizedConnectionsHint")}</p>
-                <div className="connection-grants">
-                  {workspace.catalog.connections.map((c) => (
-                    <label key={c.id}>
-                      <input
-                        type="checkbox"
-                        checked={grants.draft.includes(c.id)}
-                        onChange={(e) => {
-                          const granted = e.target.checked;
-                          grants.update((ids) =>
-                            granted
-                              ? [...ids, c.id]
-                              : ids.filter((id) => id !== c.id),
-                          );
-                        }}
-                      />
-                      {c.name}
-                    </label>
-                  ))}
-                </div>
-                <div className="row gap">
+                      </option>
+                      {available.map((u) => (
+                        <option key={u.id} value={u.id}>
+                          {u.username}
+                        </option>
+                      ))}
+                    </Select>
+                  </label>
+                  <label className="field">
+                    <span>{t("projectRole")}</span>
+                    <Select
+                      aria-label={t("projectRole")}
+                      name="role"
+                      key={selectedUser}
+                      defaultValue="reader"
+                    >
+                      {(available.find((u) => u.id === selectedUser)
+                        ?.auth_method === "service"
+                        ? (["reader", "operator"] as const)
+                        : PROJECT_ROLES
+                      ).map((role) => (
+                        <option key={role} value={role}>
+                          {t(`role_${role}`)}
+                        </option>
+                      ))}
+                    </Select>
+                  </label>
                   <button
-                    className="button secondary"
-                    disabled={pending || !grants.dirty}
-                    onClick={() => act(grants.persist)}
+                    className="button primary"
+                    disabled={pending || !available.length}
                   >
-                    {t("saveConnections")}
+                    <Plus size={16} />
+                    {t("addParticipant")}
                   </button>
-                  {grants.dirty && (
-                    <span className="muted small">{t("unsavedChanges")}</span>
-                  )}
-                </div>
+                </form>
+              )}
+              <div className="administration-table">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>{t("username")}</th>
+                      <th>{t("projectRole")}</th>
+                      <th>{t("actions")}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {settings?.members.map((member) => (
+                      <tr key={member.id}>
+                        <td>
+                          <strong>{member.username}</strong>
+                          {!member.active && (
+                            <small className="muted">
+                              {" "}
+                              · {t("accountInactive")}
+                            </small>
+                          )}
+                        </td>
+                        <td>
+                          <RoleSelect
+                            label={`${t("projectRole")} · ${member.username}`}
+                            value={member.role}
+                            service={member.auth_method === "service"}
+                            disabled={!admin || pending || !member.active}
+                            onChange={(role) =>
+                              act(() =>
+                                api(
+                                  `/projects/${project}/members/${member.id}`,
+                                  send({ role }, "PUT"),
+                                ),
+                              )
+                            }
+                          />
+                        </td>
+                        <td>
+                          {admin && (
+                            <button
+                              className="text-button danger"
+                              disabled={pending}
+                              onClick={() =>
+                                setConfirmation({ kind: "remove", member })
+                              }
+                            >
+                              <Trash2 size={14} />
+                              {t("removeAccess")}
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
+              <p className="muted small">{t("lastAdminHint")}</p>
+            </div>
+          </>
+        )}
+        {/* Drafts start from the loaded settings, so an early edit cannot drop saved values. */}
+        {section === "connections" && settings && (
+          <div className="settings-card">
+            <h2>{t("authorizedConnections")}</h2>
+            <p className="muted">{t("authorizedConnectionsHint")}</p>
+            {!instanceAdmin && (
+              <p className="notice">{t("projectInstanceAdminHint")}</p>
             )}
+            <div className="connection-grants">
+              {workspace.catalog.connections.map((c) => (
+                <label key={c.id}>
+                  <input
+                    type="checkbox"
+                    checked={grants.draft.includes(c.id)}
+                    disabled={!instanceAdmin || pending}
+                    onChange={(e) => {
+                      const granted = e.target.checked;
+                      grants.update((ids) =>
+                        granted
+                          ? [...ids, c.id]
+                          : ids.filter((id) => id !== c.id),
+                      );
+                    }}
+                  />
+                  {c.name}
+                </label>
+              ))}
+            </div>
+            <div className="row gap">
+              <button
+                className="button secondary"
+                disabled={!instanceAdmin || pending || !grants.dirty}
+                onClick={() => act(grants.persist)}
+              >
+                {t("saveConnections")}
+              </button>
+              {grants.dirty && (
+                <span className="muted small">{t("unsavedChanges")}</span>
+              )}
+            </div>
+          </div>
+        )}
+        {section === "python" && settings && (
+          <>
+            <div className="settings-card">
+              <h2>{t("pythonExecution")}</h2>
+              <p className="muted">{t("pythonTrustHint")}</p>
+              {!instanceAdmin && (
+                <p className="notice">{t("projectInstanceAdminHint")}</p>
+              )}
+              <label className="check-row">
+                <input
+                  type="checkbox"
+                  aria-label={t("pythonPolicy_enabled")}
+                  aria-description={t("pythonSecretsHint")}
+                  checked={python.draft.enabled}
+                  disabled={!instanceAdmin || pending}
+                  onChange={(event) => {
+                    const enabled = event.target.checked;
+                    // Source builds only apply to enabled Python.
+                    python.update((value) => ({
+                      ...value,
+                      enabled,
+                      allow_builds: enabled && value.allow_builds,
+                    }));
+                  }}
+                />
+                <span>
+                  <strong>{t("pythonPolicy_enabled")}</strong>
+                  <small>{t("pythonSecretsHint")}</small>
+                </span>
+              </label>
+              <label className="check-row">
+                <input
+                  type="checkbox"
+                  aria-label={t("pythonPolicy_allow_builds")}
+                  aria-description={t("pythonBuildsHint")}
+                  checked={python.draft.allow_builds}
+                  disabled={!instanceAdmin || pending || !python.draft.enabled}
+                  onChange={(event) =>
+                    python.update((value) => ({
+                      ...value,
+                      allow_builds: event.target.checked,
+                    }))
+                  }
+                />
+                <span>
+                  <strong>{t("pythonPolicy_allow_builds")}</strong>
+                  <small>{t("pythonBuildsHint")}</small>
+                </span>
+              </label>
+              {/* Others read the policy only: saving does not concern them. */}
+              {instanceAdmin && (
+                <>
+                  <p className="notice">{t("pythonResetHint")}</p>
+                  <div className="row gap">
+                    <button
+                      className="button primary"
+                      disabled={pending || !python.dirty}
+                      onClick={() => act(python.persist)}
+                    >
+                      {t("save")}
+                    </button>
+                    {python.dirty && (
+                      <span className="muted small">{t("unsavedChanges")}</span>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+            <PythonEnvironmentStatus project={project} />
+          </>
+        )}
+        {section === "general" && (
+          <>
+            <div className="settings-card">
+              <h2>{t("project")}</h2>
+              <p>{settings?.project.name}</p>
+            </div>
             {admin && (
               <div className="settings-card danger-zone">
                 <h2>{t("deleteProject")}</h2>
@@ -298,9 +420,9 @@ export default function ProjectSettings({
                 </button>
               </div>
             )}
-          </div>
-        </div>
-      </div>
+          </>
+        )}
+      </SettingsLayout>
       {confirmation && (
         <Modal
           title={t(
@@ -353,6 +475,6 @@ export default function ProjectSettings({
           </footer>
         </Modal>
       )}
-    </section>
+    </>
   );
 }

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   connectInput,
+  containsPython,
   formatValue,
   graphAt,
   identifier,
@@ -351,6 +352,25 @@ describe("nodeChoices", () => {
   it("ignores references to removed components", () => {
     const components = { a: component("removed") };
     expect(ids(nodeChoices({}, components, ["b"]))).toEqual(["component:a"]);
+  });
+});
+
+describe("containsPython", () => {
+  it("finds Python nodes in nested components without looping on cycles", () => {
+    const components = {
+      outer: { nodes: [node("inner", { component: "inner" })], edges: [] },
+      inner: {
+        nodes: [node("split", { language: "python" })],
+        edges: [],
+      },
+      sql: {
+        nodes: [node("filter"), node("self", { component: "sql" })],
+        edges: [],
+      },
+    } as Record<string, ComponentDefinition>;
+    expect(containsPython(components, "outer")).toBe(true);
+    expect(containsPython(components, "sql")).toBe(false);
+    expect(containsPython(components, "missing")).toBe(false);
   });
 });
 

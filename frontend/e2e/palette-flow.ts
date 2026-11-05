@@ -2,7 +2,11 @@ import { expect, type Page } from "@playwright/test";
 import type { Snapshot } from "../src/types";
 
 /** Exercise palette authoring against a local instance or an authenticated preview. */
-export async function verifyPalette(page: Page) {
+export async function verifyPalette(
+  page: Page,
+  language: "sql" | "python" = "sql",
+) {
+  const python = language === "python";
   const createProject = async (name: string) => {
     const response = await page.request.post("/api/projects", {
       data: { name },
@@ -12,28 +16,61 @@ export async function verifyPalette(page: Page) {
   };
   const read = async (id: string): Promise<Snapshot> =>
     (await page.request.get(`/api/worktrees/${id}`)).json();
-  const project = await createProject("Reusable palette nodes");
+  const sourceName = `Reusable ${language} palette nodes ${Date.now()}`;
+  const project = await createProject(sourceName);
+  const enablePython = async (id: string) => {
+    const snapshot = await read(id);
+    const response = await page.request.put(
+      `/api/projects/${snapshot.worktree.project}/python`,
+      { data: { enabled: true, allow_builds: false } },
+    );
+    expect(response.ok()).toBe(true);
+  };
   await page.goto(`/worktrees/${project}/flow`);
   const palette = page.getByRole("complementary", { name: "Nodes" });
   const actions = palette.getByRole("group", { name: "Add to palette" });
-  await expect(actions.getByRole("button")).toHaveText(["SQL", "Import"]);
+  await expect(actions.getByRole("button")).toHaveText([
+    "SQL",
+    "Python",
+    "Import",
+  ]);
+  const pythonButton = actions.getByRole("button", {
+    name: "New Python template",
+  });
+  await expect(pythonButton).toBeDisabled();
+  await expect(pythonButton).toHaveAttribute(
+    "title",
+    /Python is disabled for this project/,
+  );
+  if (python) {
+    await enablePython(project);
+    await page.reload();
+    await expect(pythonButton).toBeEnabled();
+  }
   await expect(palette.getByText("Drag a node onto the canvas")).toHaveCount(0);
-  const create = actions.getByRole("button", { name: "New SQL template" });
+  const title = python ? "New Python template" : "New SQL template";
+  const create = actions.getByRole("button", { name: title });
   await create.focus();
   await page.keyboard.press("Enter");
-  const dialog = page.getByRole("dialog", { name: "New SQL template" });
-  await expect(dialog).toContainText("Save a reusable SQL template");
+  const dialog = page.getByRole("dialog", { name: title });
+  await expect(dialog).toContainText(
+    `Save a reusable ${python ? "Python" : "SQL"} template`,
+  );
   await page.keyboard.press("Escape");
   await expect(create).toBeFocused();
   const before = await read(project);
   expect(before.bundle!.flow.nodes).toHaveLength(0);
   await create.click();
-  const name = "Reusable answer";
-  const sql = `-- @label ${name}\n-- @output result\nSELECT 42 AS answer;\n`;
+  const name = `Reusable ${language} answer`;
+  const code = python
+    ? `# @label ${name}\nimport duckpad as dp\n\n\nclass Answer(dp.Node):\n    def run(self) -> dp.Relation:\n        return self.db.sql("SELECT 42 AS answer")\n`
+    : `-- @label ${name}\n-- @output result\nSELECT 42 AS answer;\n`;
   await expect(dialog.locator(".monaco-editor")).toBeVisible();
   await dialog.locator(".monaco-editor textarea").focus();
   await page.keyboard.press("ControlOrMeta+A");
-  await page.keyboard.insertText(sql);
+  await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
+  await page.evaluate((text) => navigator.clipboard.writeText(text), code);
+  await page.keyboard.press("ControlOrMeta+V");
   await dialog
     .getByRole("button", { name: "Save changes", exact: true })
     .click();
@@ -46,7 +83,8 @@ export async function verifyPalette(page: Page) {
     (id) => !(id in before.bundle!.templates),
   );
   expect(created).toHaveLength(1);
-  expect(snapshot.bundle!.templates[created[0]]).toBe(sql);
+  expect(snapshot.bundle!.templates[created[0]]).toBe(code);
+  expect(created[0].endsWith(".py")).toBe(python);
   await page.reload();
   await template.click();
   await expect(page.locator(".react-flow__node")).toHaveCount(1);
@@ -58,16 +96,37 @@ export async function verifyPalette(page: Page) {
   for (const node of snapshot.bundle!.flow.nodes) {
     expect(node.template).toBeUndefined();
     expect(node.origin).toBe(created[0]);
-    expect(snapshot.files[`nodes/${node.id}.sql`]).toBe(sql);
+    expect(node.language || "sql").toBe(language);
+    expect(snapshot.files[`nodes/${node.id}.${python ? "py" : "sql"}`]).toBe(
+      code,
+    );
   }
+  // Linked instances reopen the shared definition in the matching language editor.
+  await palette
+    .getByRole("button", { name: `Add linked: ${name}`, exact: true })
+    .click();
+  await expect(page.locator(".react-flow__node")).toHaveCount(3);
+  await page
+    .locator(".inspector")
+    .getByRole("button", { name: "Edit template (1 node)", exact: true })
+    .click();
+  await expect(
+    page.getByRole("dialog", {
+      name: python ? "Edit shared Python template" : "Edit shared SQL template",
+      exact: true,
+    }),
+  ).toBeVisible();
+  await page.keyboard.press("Escape");
   // Import adds a reusable definition to the destination palette, without a canvas node.
-  const destination = await createProject("Palette imports");
+  const destination = await createProject(`${language} palette imports`);
+  if (python) await enablePython(destination);
   await page.goto(`/worktrees/${destination}/flow`);
   await actions.getByRole("button", { name: "Import from a project" }).click();
   const library = page.getByRole("dialog", { name: "Import from a project" });
   await library
     .locator(".history-row")
     .filter({ has: page.getByText(name, { exact: true }) })
+    .filter({ hasText: sourceName })
     .getByRole("button", { name: "Import independent copy", exact: true })
     .click();
   await expect(page.locator(".toast")).toContainText(
@@ -77,7 +136,7 @@ export async function verifyPalette(page: Page) {
   await expect(template).toBeVisible();
   const imported = await read(destination);
   expect(imported.bundle!.flow.nodes).toHaveLength(0);
-  expect(Object.values(imported.bundle!.templates)).toContain(sql);
+  expect(Object.values(imported.bundle!.templates)).toContain(code);
   await template.click();
   await expect(page.locator(".react-flow__node")).toHaveCount(1);
   return { project, destination };

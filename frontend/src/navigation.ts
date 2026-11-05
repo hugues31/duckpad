@@ -18,6 +18,7 @@ export const settingsSections = [
   ["connections", "connections"],
   ["extensions", "extensions"],
   ["sql-resources", "sqlResources"],
+  ["monitoring", "monitoring"],
 ] as const;
 export type Area =
   | "home"
@@ -58,7 +59,7 @@ export function worktreeUrl(
   return `/worktrees/${encodeURIComponent(id)}/${tab}${query ? `?${query}` : ""}`;
 }
 
-export const projectSettingsUrl = (project: string) =>
-  `/projects/${encodeURIComponent(project)}/settings`;
+export const projectSettingsUrl = (project: string, section?: string) =>
+  `/projects/${encodeURIComponent(project)}/settings${section ? `/${section}` : ""}`;
 
 export const SSO_RETURN_KEY = "duckpad-sign-in-return";
