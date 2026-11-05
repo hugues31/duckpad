@@ -251,9 +251,9 @@ function ExtensionRequirements() {
                     />
                   </label>
                 )}
-                <h2>
+                <h3>
                   <code>{item.name}</code>
-                </h2>
+                </h3>
                 <span className="project-extension-source">
                   {t(extensionSourceKey(item.source))}
                 </span>
