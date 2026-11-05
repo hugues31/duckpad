@@ -184,7 +184,7 @@ test("missing functions link editors to extension setup in Project settings", as
   const error = page.getByRole("alert", { name: "Last run failed" });
   await expect(error).toContainText("If this function comes from an extension");
   await error
-    .getByRole("link", { name: "Activate for this project", exact: true })
+    .getByRole("link", { name: "Open extension settings", exact: true })
     .click();
   await expect(page).toHaveURL(/\/settings\/extensions/);
   await expect(

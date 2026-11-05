@@ -135,8 +135,16 @@ it("offers extension setup for missing functions without guessing an extension",
     ),
   ).toEqual({ name: "" });
   expect(
-    missingFunctionExtension("Function ST_Point is in the spatial extension"),
+    missingFunctionExtension(
+      'Catalog Error: Scalar Function with name "st_point" is not in the catalog, but it exists in the spatial extension.',
+    ),
   ).toEqual({ name: "spatial" });
   expect(missingFunctionExtension("Table orders does not exist")).toBeNull();
+  expect(
+    missingFunctionExtension('Referenced column "function_id" not found'),
+  ).toBeNull();
+  expect(
+    missingFunctionExtension("Table with name functions does not exist!"),
+  ).toBeNull();
   expect(missingFunctionExtension("Syntax error near SELECT")).toBeNull();
 });

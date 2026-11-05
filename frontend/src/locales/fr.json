@@ -1394,6 +1394,7 @@
   "documentationSchemaHint": "Exécutez cette sortie pour découvrir ses colonnes et types.",
   "noDeclaredTests": "Aucun test déclaré",
   "missingFunctionExtensionHint": "Si cette fonction provient d’une extension, activez-la dans les paramètres du projet.",
+  "openExtensionSettings": "Ouvrir les paramètres des extensions",
   "searchProjects": "Rechercher un projet",
   "sortProjects": "Trier les projets"
 }

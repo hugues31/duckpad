@@ -140,11 +140,13 @@ export default function HistoryPanel({
                 )}
               </span>
               <span className="grow">
-                <strong title={run.scope}>
-                  {run.scope === "project"
-                    ? t("fullRun")
-                    : displayNodeName(run.scope_name, t("node"), t)}
-                </strong>
+                {run.scope === "project" ? (
+                  <strong>{t("fullRun")}</strong>
+                ) : (
+                  <strong title={run.scope}>
+                    {displayNodeName(run.scope_name, run.scope, t)}
+                  </strong>
+                )}
                 <small>
                   {new Date(run.started).toLocaleString()} · {run.environment} ·{" "}
                   {run.job

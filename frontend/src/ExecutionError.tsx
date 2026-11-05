@@ -49,7 +49,8 @@ export default function ExecutionError({
       </pre>
       {extension && worktree?.canEdit && worktree.snapshot && (
         <p>
-          {t("missingFunctionExtensionHint")}{" "}
+          {/* A named extension is already explained by the server message. */}
+          {!extension.name && <>{t("missingFunctionExtensionHint")} </>}
           <Link
             to={
               projectPageUrl(
@@ -63,8 +64,7 @@ export default function ExecutionError({
                 : "")
             }
           >
-            {t("projectExtensionActivate")}
-            {extension.name ? `: ${extension.name}` : ""}
+            {t("openExtensionSettings")}
           </Link>
         </p>
       )}

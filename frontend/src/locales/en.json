@@ -1394,6 +1394,7 @@
   "documentationSchemaHint": "Run this output to discover its columns and types.",
   "noDeclaredTests": "No declared tests",
   "missingFunctionExtensionHint": "If this function comes from an extension, enable it in Project settings.",
+  "openExtensionSettings": "Open extension settings",
   "searchProjects": "Search projects",
   "sortProjects": "Sort projects"
 }
