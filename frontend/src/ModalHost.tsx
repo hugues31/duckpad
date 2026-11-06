@@ -1,0 +1,688 @@
+import type { PartitionLaunchOptions } from "./partitions";
+import { PartitionRunSummary, partitionRunLabels } from "./PartitionRunMenu";
+import ConvertNodeDialog from "./ConvertNodeDialog";
+import { nodeCode, nodeCodePath, nodeGraph } from "./nodeCode";
+import {
+  lazy,
+  Suspense,
+  useEffect,
+  useEffectEvent,
+  useRef,
+  useState,
+} from "react";
+import { useLocation, useNavigate } from "react-router";
+import { Boxes } from "lucide-react";
+import { api, errorDetail, importProjectArchive, send, withQuery } from "./api";
+import DuckMark from "./DuckMark";
+import GitWorkspace from "./GitWorkspace";
+import NewProjectModal from "./NewProjectModal";
+import NewBranchModal from "./NewBranchModal";
+import { useT } from "./i18n";
+import { ConfirmModal, EditorModal, FormModal, Modal } from "./modals";
+import { usePageRoute } from "./navigation";
+import { useShell } from "./shell";
+import type {
+  Bundle,
+  ConnectorEditor,
+  Environment,
+  Snapshot,
+  Worktree,
+} from "./types";
+import { useApiResource } from "./useApiResource";
+import { useAsyncAction } from "./useAsyncAction";
+import { useIdleSave, useRevisionDraft } from "./useRevisionDraft";
+import { ScopeVariables } from "./VariableFields";
+import { ConflictDialog, CombinedResolutionDialog } from "./ConflictDialog";
+import { useWorktree } from "./worktree";
+
+const CodeEditor = lazy(() => import("./Editor"));
+
+/** What the template editor starts from and says, per language. */
+const TEMPLATE_EDITOR = {
+  sql: {
+    code: `-- @label Custom transform
+-- @input source
+-- @output result
+SELECT * FROM {{ source }};
+`,
+    create: "newTemplate",
+    hint: "newTemplateHint",
+    edit: "editTemplate",
+  },
+  python: {
+    code: `# @label Custom Python transform
+import duckpad as dp
+
+
+class Transform(dp.Node):
+    def run(self, source: dp.Relation) -> dp.Relation:
+        return source
+`,
+    create: "newPythonTemplate",
+    hint: "newPythonTemplateHint",
+    edit: "editPythonTemplate",
+  },
+} as const;
+
+/** The code of a new template, saved before its editor opens. */
+export const newTemplateCode = (language: "sql" | "python") =>
+  TEMPLATE_EDITOR[language].code;
+
+/**
+ * The open dialog, as plain data. Its actions are built when it renders, so
+ * they always use the current session and working branch.
+ */
+export type ModalState =
+  | { kind: "about" }
+  | { kind: "newProject" }
+  | ({ kind: "connector" } & ConnectorEditor)
+  | WorktreeModal;
+
+/** Dialogs about one working branch; they never act on another one. */
+type WorktreeModal = { worktree: string } & (
+  | { kind: "newBranch"; revision?: string }
+  | {
+      kind: "git";
+      mode?: "compare" | "branches" | "sync";
+      commit?: string;
+      entity?: string;
+    }
+  | {
+      kind: "runConfirmation";
+      environment: Environment;
+      node?: string;
+      options?: PartitionLaunchOptions;
+    }
+  | { kind: "conflict"; conflict: string }
+  | { kind: "combinedResolution"; conflict: string }
+  | {
+      kind: "template";
+      template: string;
+      create?: boolean;
+      fullNode?: string;
+      line?: number;
+    }
+  | {
+      kind: "nodeCode" | "convertNode" | "relinkNode";
+      fullNode?: string;
+      line?: number;
+      node: string;
+      parent?: string;
+    }
+  | { kind: "componentDefinition"; component: string }
+  /** Group nodes of the graph at `prefix` into a component. */
+  | { kind: "group"; nodes: string[]; parent?: string; prefix: string }
+  | { kind: "library" }
+);
+
+export default function ModalHost({
+  modal,
+  onClose,
+}: {
+  modal: ModalState | null;
+  onClose: () => void;
+}) {
+  const { id, snapshot } = useWorktree();
+  if (!modal) return null;
+  switch (modal.kind) {
+    case "about":
+      return <AboutDialog onClose={onClose} />;
+    case "newProject":
+      return <NewProjectDialog onClose={onClose} />;
+    case "connector":
+      return <ConnectorDialog {...modal} onClose={onClose} />;
+  }
+  if (modal.worktree !== id || !snapshot) return null;
+  return <WorktreeDialog modal={modal} snapshot={snapshot} onClose={onClose} />;
+}
+
+/** Create a project, then open its main branch. */
+export function useProjectCreation() {
+  const { refreshWorkspace, openWorktree } = useShell();
+  const created = async <T,>(request: Promise<T>) => {
+    const result = await request;
+    await refreshWorkspace();
+    return result;
+  };
+  return {
+    createEmpty: async (name: string) =>
+      openWorktree(
+        (await created(api<Worktree>("/projects", send({ name })))).id,
+      ),
+    createExample: async (name?: string) =>
+      openWorktree(
+        (await created(api<Worktree>("/example", send({ name })))).id,
+      ),
+    importArchive: async (file: File, name: string) => {
+      const result = await created(importProjectArchive(file, name));
+      return {
+        warnings: result.warnings,
+        open: () => openWorktree(result.id),
+      };
+    },
+  };
+}
+
+function NewProjectDialog({ onClose }: { onClose: () => void }) {
+  const creation = useProjectCreation();
+  return <NewProjectModal {...creation} onClose={onClose} />;
+}
+
+function AboutDialog({ onClose }: { onClose: () => void }) {
+  const t = useT();
+  const { workspace } = useShell();
+  const session = useApiResource<{ version: string }>("/session");
+  return (
+    <Modal title="Duckpad" onClose={onClose}>
+      <div className="modal-content">
+        <DuckMark size={48} />
+        <p>{t("aboutText")}</p>
+        <code>
+          DuckDB {workspace?.catalog.duckdb_version || ""} · Duckpad{" "}
+          {session.data?.version || session.error}
+        </code>
+      </div>
+    </Modal>
+  );
+}
+
+function ConnectorDialog({
+  title,
+  value,
+  identity,
+  onClose,
+}: ConnectorEditor & { onClose: () => void }) {
+  const t = useT();
+  const { refreshWorkspace, notify } = useShell();
+  const save = async (text: string) => {
+    const definition = JSON.parse(text);
+    const create = definition?.id !== identity;
+    try {
+      await api(
+        withQuery("/catalog/connector", { create }),
+        send(definition, "PUT"),
+      );
+    } catch (error) {
+      if (errorDetail(error).code === "connector_exists")
+        throw new Error(t("connectorAlreadyExists"), { cause: error });
+      throw error;
+    }
+    await refreshWorkspace();
+    // A new definition is listed at the end of its family, often out of view.
+    if (create)
+      notify(
+        t("connectorCreated").replace(
+          "{name}",
+          definition.name ?? definition.id,
+        ),
+      );
+  };
+  return (
+    <EditorModal
+      title={title}
+      value={value}
+      language="json"
+      onClose={onClose}
+      onSave={save}
+    />
+  );
+}
+
+function WorktreeDialog({
+  modal,
+  snapshot,
+  onClose,
+}: {
+  modal: WorktreeModal;
+  snapshot: Snapshot;
+  onClose: () => void;
+}) {
+  const t = useT();
+  const { openModal, openWorktree } = useShell();
+  const { tab } = usePageRoute();
+  const { canEdit, gitChanged, runConfirmed } = useWorktree();
+  switch (modal.kind) {
+    case "newBranch":
+      return (
+        <NewBranchDialog
+          worktree={modal.worktree}
+          branch={snapshot.worktree.branch}
+          revision={modal.revision}
+          onClose={onClose}
+        />
+      );
+    case "git":
+      return (
+        <GitWorkspace
+          worktree={modal.worktree}
+          role={snapshot.worktree.read_only ? "reader" : snapshot.role}
+          mode={modal.mode}
+          commit={modal.commit}
+          entity={modal.entity}
+          onClose={onClose}
+          onChanged={gitChanged}
+          onOpen={(id) => openWorktree(id, tab)}
+          onNewBranch={() =>
+            openModal({ kind: "newBranch", worktree: modal.worktree })
+          }
+        />
+      );
+    case "runConfirmation":
+      return (
+        <ConfirmModal
+          title={t("confirmRun")}
+          confirmLabel={t("confirmAndRun")}
+          onConfirm={() =>
+            runConfirmed(modal.environment.id, modal.node, modal.options)
+          }
+          onClose={onClose}
+        >
+          <div className="row gap">
+            <span
+              className="env-dot"
+              style={{ background: modal.environment.color }}
+            />
+            <strong>{modal.environment.label}</strong>
+            <code>{modal.environment.id}</code>
+          </div>
+          <p>{t("confirmRunHint")}</p>
+          <p>
+            {snapshot.bundle?.flow.name || ""} · {snapshot.worktree.branch} ·{" "}
+            {modal.node ||
+              t(partitionRunLabels[modal.options?.partitions?.mode || "all"])}
+          </p>
+          <PartitionRunSummary options={modal.options} node={modal.node} />
+          <ScopeVariables
+            worktree={modal.worktree}
+            environment={modal.environment.id}
+            node={modal.node}
+          />
+        </ConfirmModal>
+      );
+    case "conflict":
+    case "combinedResolution": {
+      const conflict = snapshot.conflicts.find(
+        (item) => item.id === modal.conflict,
+      );
+      if (!conflict) return null;
+      return modal.kind === "conflict" ? (
+        <ConflictDialog conflict={conflict} onClose={onClose} />
+      ) : (
+        <CombinedResolutionDialog conflict={conflict} onClose={onClose} />
+      );
+    }
+    case "convertNode":
+    case "relinkNode":
+      return (
+        <ConvertNodeDialog
+          snapshot={snapshot}
+          node={modal.node}
+          parent={modal.parent}
+          relink={modal.kind === "relinkNode"}
+          onClose={onClose}
+        />
+      );
+    case "nodeCode": {
+      const node =
+        snapshot.bundle &&
+        nodeGraph(snapshot.bundle, modal.parent).nodes.find(
+          (n) => n.id === modal.node,
+        );
+      if (!node) return null;
+      return (
+        <RevisionEditor
+          snapshot={snapshot}
+          fullNode={modal.fullNode || modal.node}
+          revealLine={modal.line}
+          title={t(node.template ? "viewNodeCode" : "editNodeCode")}
+          language={node.language || "sql"}
+          readOnly={!canEdit || !!node.template}
+          read={(bundle) => nodeCode(bundle, node, modal.parent)}
+          write={(bundle, text) => {
+            (bundle.node_sql ||= {})[
+              nodeCodePath(node.id, modal.parent, node.language)
+            ] = text;
+          }}
+          onClose={onClose}
+        />
+      );
+    }
+    case "template": {
+      const language = modal.template.endsWith(".py") ? "python" : "sql";
+      const text = TEMPLATE_EDITOR[language];
+      return (
+        <RevisionEditor
+          snapshot={snapshot}
+          fullNode={modal.fullNode}
+          revealLine={modal.line}
+          title={t(modal.create ? text.create : text.edit)}
+          language={language}
+          description={t(modal.create ? text.hint : "sharedTemplateHint")}
+          readOnly={!canEdit}
+          read={(bundle) => bundle.templates[modal.template] ?? ""}
+          write={(bundle, text) => {
+            bundle.templates[modal.template] = text;
+          }}
+          onClose={onClose}
+        />
+      );
+    }
+    case "componentDefinition":
+      return (
+        <RevisionEditor
+          snapshot={snapshot}
+          title={t("definition")}
+          description={t("sharedTemplateHint")}
+          language="json"
+          readOnly={!canEdit}
+          read={(bundle) =>
+            JSON.stringify(bundle.components[modal.component], null, 2)
+          }
+          write={(bundle, text) => {
+            bundle.components[modal.component] = JSON.parse(text);
+          }}
+          onClose={onClose}
+        />
+      );
+    case "group":
+      return <GroupDialog {...modal} snapshot={snapshot} onClose={onClose} />;
+    case "library":
+      return <LibraryDialog snapshot={snapshot} onClose={onClose} />;
+  }
+}
+
+function NewBranchDialog({
+  worktree,
+  branch,
+  revision,
+  onClose,
+}: {
+  worktree: string;
+  branch: string;
+  revision?: string;
+  onClose: () => void;
+}) {
+  const t = useT();
+  const { refreshWorkspace, notify, openWorktree } = useShell();
+  const { tab } = usePageRoute();
+  const create = async (name: string, startingRevision?: string) => {
+    const next = await api<Worktree>(
+      `/worktrees/${worktree}/branches`,
+      send({ name, revision: startingRevision }),
+    ).catch((error) => {
+      if (errorDetail(error).code === "invalid_branch_name")
+        throw new Error(t("invalidBranchName"));
+      throw error;
+    });
+    await refreshWorkspace();
+    openWorktree(next.id, tab);
+    notify(t("branchCreated"));
+  };
+  return (
+    <NewBranchModal
+      worktree={worktree}
+      branch={branch}
+      revision={revision}
+      onClose={onClose}
+      submit={create}
+    />
+  );
+}
+
+/**
+ * Edit a text of the bundle. Edits are saved after a pause in typing, with
+ * Ctrl+S or ⌘S, and when the dialog closes; a failed save keeps it open once.
+ */
+function RevisionEditor({
+  snapshot,
+  fullNode,
+  read,
+  write,
+  title,
+  description,
+  language,
+  readOnly,
+  revealLine,
+  onClose,
+}: {
+  snapshot: Snapshot;
+  title: string;
+  description?: string;
+  language?: string;
+  readOnly: boolean;
+  fullNode?: string;
+  revealLine?: number;
+  read: (bundle: Bundle) => string;
+  write: (bundle: Bundle, text: string) => void;
+  onClose: () => void;
+}) {
+  const t = useT();
+  const { save, statuses } = useWorktree();
+  const { draft, dirty, pending, update, persist, rejected } = useRevisionDraft(
+    read(snapshot.bundle!),
+    snapshot,
+    (text: string, base: Snapshot) =>
+      save(base, (bundle) => write(bundle, text)),
+    { autosave: !readOnly },
+  );
+  const [error, setError] = useState("");
+  // The text whose save failed when closing; closing again leaves it unsaved.
+  const [unsavable, setUnsavable] = useState<string | null>(null);
+  const saveNow = async () => {
+    if (readOnly) return true;
+    setError("");
+    try {
+      await persist();
+      return true;
+    } catch (e) {
+      setError((e as Error).message);
+      return false;
+    }
+  };
+  useIdleSave(draft, dirty && !readOnly, () => {
+    if (!rejected()) void saveNow();
+  });
+  const saveShortcut = useEffectEvent((event: KeyboardEvent) => {
+    if (
+      !(event.ctrlKey || event.metaKey) ||
+      event.altKey ||
+      event.key.toLowerCase() !== "s"
+    )
+      return;
+    // The browser would otherwise save the page.
+    event.preventDefault();
+    void saveNow();
+  });
+  useEffect(() => {
+    // Capture the key before the code editor handles it.
+    window.addEventListener("keydown", saveShortcut, true);
+    return () => window.removeEventListener("keydown", saveShortcut, true);
+  }, []);
+  const close = async () => {
+    if (unsavable === draft || (await saveNow())) onClose();
+    else setUnsavable(draft);
+  };
+  const diagnostic = fullNode
+    ? statuses.nodes[fullNode]?.diagnostic
+    : undefined;
+  return (
+    <Modal title={title} onClose={close} wide>
+      {description && <p className="modal-description">{description}</p>}
+      <Suspense fallback={<p>{t("loading")}</p>}>
+        <CodeEditor
+          value={draft}
+          onChange={(text) => update(() => text)}
+          language={language}
+          readOnly={readOnly}
+          height="460px"
+          diagnostic={
+            diagnostic?.source === read(snapshot.bundle!)
+              ? diagnostic
+              : undefined
+          }
+          revealLine={revealLine}
+        />
+      </Suspense>
+      {error && <div className="notice error">{error}</div>}
+      <footer>
+        {!readOnly && (
+          <span
+            className="editor-save-state muted small"
+            role="status"
+            title={t("editorAutosaveHint")}
+          >
+            {t(
+              pending ? "saving" : dirty || error ? "unsavedChanges" : "saved",
+            )}
+          </span>
+        )}
+        <button className="button secondary" onClick={close}>
+          {t("close")}
+        </button>
+      </footer>
+    </Modal>
+  );
+}
+
+function GroupDialog({
+  nodes,
+  parent,
+  prefix,
+  snapshot,
+  onClose,
+}: {
+  nodes: string[];
+  parent?: string;
+  prefix: string;
+  snapshot: Snapshot;
+  onClose: () => void;
+}) {
+  const t = useT();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { id, refresh } = useWorktree();
+  const [base] = useState(snapshot);
+  const group = async (values: Record<string, string>) => {
+    const result = await api<Snapshot & { selected: string }>(
+      `/worktrees/${id}/group`,
+      send({
+        revision: base.revision,
+        nodes,
+        parent,
+        name: values.name,
+        parameters: JSON.parse(values.parameters || "{}"),
+      }),
+    );
+    await refresh();
+    // Select the new component the way the flow reveals search results.
+    const search = new URLSearchParams(location.search);
+    search.set("node", prefix + result.selected);
+    void navigate({ search: `?${search}` }, { replace: true });
+  };
+  return (
+    <FormModal
+      title={t("group")}
+      fields={[
+        { key: "name", label: t("groupName") },
+        {
+          key: "parameters",
+          label: t("exposedParameters"),
+          value: "{}",
+          multiline: true,
+          required: false,
+        },
+      ]}
+      description={t("exposedHint")}
+      onClose={onClose}
+      onSubmit={group}
+    />
+  );
+}
+
+/** A template or component of a project's main branch, available for import. */
+interface LibraryItem {
+  project: string;
+  project_name: string;
+  kind: "templates" | "components";
+  id: string;
+  name: string;
+  /** The main branch of the project. */
+  worktree: string;
+  commit: string;
+}
+
+function LibraryDialog({
+  snapshot,
+  onClose,
+}: {
+  snapshot: Snapshot;
+  onClose: () => void;
+}) {
+  const t = useT();
+  const { notify } = useShell();
+  const { id, refresh } = useWorktree();
+  const library = useApiResource<LibraryItem[]>("/library");
+  const { pending, error, run } = useAsyncAction();
+  // A double click must not import two copies.
+  const importing = useRef(false);
+  const items = (library.data || []).filter(
+    (item) => item.project !== snapshot.worktree.project,
+  );
+  const importItem = async (item: LibraryItem) => {
+    if (importing.current) return;
+    importing.current = true;
+    const imported = await run(async () => {
+      await api(
+        `/worktrees/${id}/import`,
+        send({
+          revision: snapshot.revision,
+          source_worktree: item.worktree,
+          kind: item.kind,
+          id: item.id,
+        }),
+      );
+      await refresh();
+    });
+    importing.current = false;
+    if (imported) notify(t("importComplete"));
+  };
+  return (
+    <Modal title={t("library")} onClose={onClose} wide>
+      <div className="modal-content">
+        <p className="muted">{t("importHint")}</p>
+        {library.pending ? (
+          <p>{t("loading")}</p>
+        ) : library.error ? (
+          <div className="notice error" role="alert">
+            {library.error}
+          </div>
+        ) : (
+          !items.length && <p>{t("emptyLibrary")}</p>
+        )}
+        {error && (
+          <div className="notice error" role="alert">
+            {error}
+          </div>
+        )}
+        {items.map((item) => (
+          <div className="history-row" key={item.project + item.kind + item.id}>
+            <Boxes size={18} />
+            <span className="grow">
+              <strong>{item.name}</strong>
+              <small>
+                {item.project_name} · {item.kind}
+              </small>
+            </span>
+            <button
+              className="button secondary small"
+              disabled={pending}
+              onClick={() => importItem(item)}
+            >
+              {t("import")}
+            </button>
+          </div>
+        ))}
+      </div>
+    </Modal>
+  );
+}
