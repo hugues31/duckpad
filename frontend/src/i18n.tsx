@@ -59,6 +59,7 @@ export function useTranslateValue() {
 
 const builtinLabels = {
   load_csv: "Load CSV",
+  load_json: "Load JSON",
   load_parquet: "Load Parquet",
   load_xlsx: "Load XLSX",
   load_table: "Load table",

@@ -1,3 +1,6 @@
+import { useWorkspace } from "./shell";
+import SourcePreview from "./SourcePreview";
+import { sourceFileName } from "./SourceFileField";
 import { PartitionInspector } from "./PartitionControls";
 import { useOptionalWorktree, usePartitionQuery } from "./worktree";
 import Select from "./Select";
@@ -135,6 +138,7 @@ export default function Inspector({
   onClose: () => void;
 }) {
   const t = useT();
+  const workspace = useWorkspace();
   const starting = useOptionalWorktree()?.starting;
   const partition = usePartitionQuery(fullNode);
   const [tab, setTab] = useState<(typeof TABS)[number][0]>("parameters");
@@ -320,6 +324,54 @@ export default function Inspector({
   const nodeProblems = snapshot.diagnostics.filter(
     (item) => item.file === "flow.json" && item.node === node.id,
   );
+  const sourceKind = node.preset || node.template || node.origin;
+  const csvSource = sourceKind === "load_csv";
+  const fileSource =
+    !!sourceKind &&
+    /^load_(csv|parquet|xlsx|json)$/.test(sourceKind) &&
+    !valueOf("connection");
+  const fileValue = valueOf("file");
+  const previewParams: Record<string, Json> | null =
+    fileSource && fileValue && !fileValue.includes("{{")
+      ? { file: fileValue }
+      : null;
+  if (previewParams)
+    for (const key of [
+      "delimiter",
+      "header",
+      "types",
+      "sheet",
+      "all_varchar",
+    ]) {
+      const value =
+        draft.params[key] ?? parameters.find((p) => p.name === key)?.default;
+      if (value !== undefined && !variableReference(value)) {
+        if (key === "types" && typeof value === "string") {
+          try {
+            previewParams[key] = JSON.parse(value);
+          } catch {
+            previewParams[key] = value;
+          }
+        } else previewParams[key] = value;
+      }
+    }
+  const listedTable = parameters.find((p) =>
+    p.type.startsWith("table_name("),
+  )?.name;
+  const tablePreviewUrl =
+    sourceKind === "load_table" &&
+    database &&
+    valueOf(listedSchema) &&
+    valueOf(listedTable)
+      ? withQuery(
+          `/worktrees/${worktree}/connections/${encodeURIComponent(database)}/preview`,
+          {
+            environment,
+            schema: valueOf(listedSchema),
+            table: valueOf(listedTable),
+          },
+        )
+      : null;
   const statements: Statement[] = compilation.data || [];
   return (
     <aside className="inspector">
@@ -490,90 +542,160 @@ export default function Inspector({
                 }))
               }
             />
-            {parameters.map((parameter) => {
-              const value = draft.params?.[parameter.name] ?? parameter.default;
-              const type = parameter.type || "text";
-              const reference = variableReference(value);
-              const variableType = bindable ? variableTypeFor(type) : null;
-              // Column parameters name the input port they choose from.
-              const port = parameter.type.match(/\((\w+)\)/)?.[1];
-              return (
-                <ParameterField
-                  key={parameter.name}
-                  worktree={snapshot.worktree.id}
-                  parameter={parameter}
-                  value={value}
-                  variable={
-                    variableType || reference
-                      ? {
-                          control: variableType && (
-                            <VariablePicker
-                              snapshot={snapshot}
-                              parameter={parameter.name}
-                              parameterType={type}
-                              variableType={variableType}
-                              value={reference ? undefined : value}
-                              disabled={readOnly}
-                              onBind={(name) => {
-                                setParameter(parameter.name, bindTo(name));
-                                void persist();
-                              }}
-                              onCreate={async (name, declaration) => {
-                                declared.current[name] = declaration;
-                                setParameter(parameter.name, bindTo(name));
-                                await saveDraft();
-                              }}
-                            />
-                          ),
-                          bound: reference && (
-                            <BoundVariable
-                              snapshot={snapshot}
-                              worktree={worktree}
-                              environment={environment}
-                              parameter={parameter.name}
-                              parameterType={type}
-                              name={reference}
-                              problem={
-                                nodeProblems.find((item) =>
-                                  String(item.message).includes(
-                                    `parameter ${parameter.name}`,
-                                  ),
-                                )?.message
-                              }
-                              disabled={readOnly}
-                              onUnbind={() => {
-                                // Keep computing the same value, now written in the node.
-                                const current = variableSummary(
-                                  snapshot,
-                                  reference,
-                                )?.values[environment];
-                                setParameter(parameter.name, current?.value);
-                                void persist();
-                              }}
-                            />
-                          ),
-                        }
-                      : undefined
-                  }
-                  onChange={(value) => setParameter(parameter.name, value)}
-                  onBlur={persist}
-                  expressionVariables={
-                    bindable
-                      ? { summary: snapshot.variables, environment }
-                      : undefined
-                  }
-                  connections={connections}
-                  location={
-                    type === "connection" && locations.has(parameter.name)
-                  }
-                  objects={objectNames(parameter)}
-                  columns={port ? inputColumns[port] : undefined}
-                  schemas={
-                    (port && schemas[port]) || Object.values(schemas).flat()
-                  }
-                />
-              );
-            })}
+            {sourceKind === "load_table" &&
+              !connections.some((c) => c.family === "database") && (
+                <div className="source-empty notice">
+                  <p>{t("noProjectConnections")}</p>
+                  {workspace.user.role === "admin" ? (
+                    <>
+                      <RouterLink
+                        className="button secondary"
+                        to={`/instance-settings/connections?project=${snapshot.worktree.project}&worktree=${worktree}&node=${encodeURIComponent(fullNode)}`}
+                      >
+                        {t("createSourceConnection")}
+                      </RouterLink>
+                      <RouterLink
+                        to={`/projects/${snapshot.worktree.project}/settings/connections?worktree=${worktree}`}
+                      >
+                        {t("authorizeSourceConnection")}
+                      </RouterLink>
+                    </>
+                  ) : (
+                    <>
+                      <p>{t("askAdministratorHint")}</p>
+                      <RouterLink
+                        className="button secondary"
+                        to={`/projects/${snapshot.worktree.project}/settings/participants?worktree=${worktree}`}
+                      >
+                        {t("askAdministrator")}
+                      </RouterLink>
+                    </>
+                  )}
+                </div>
+              )}
+            {parameters
+              .filter((p) => !(fileSource && csvSource && p.name === "types"))
+              .map((parameter) => {
+                const value =
+                  draft.params?.[parameter.name] ?? parameter.default;
+                const type = parameter.type || "text";
+                const reference = variableReference(value);
+                const variableType = bindable ? variableTypeFor(type) : null;
+                // Column parameters name the input port they choose from.
+                const port = parameter.type.match(/\((\w+)\)/)?.[1];
+                return (
+                  <ParameterField
+                    key={parameter.name}
+                    worktree={snapshot.worktree.id}
+                    parameter={parameter}
+                    value={value}
+                    variable={
+                      variableType || reference
+                        ? {
+                            control: variableType && (
+                              <VariablePicker
+                                snapshot={snapshot}
+                                parameter={parameter.name}
+                                parameterType={type}
+                                variableType={variableType}
+                                value={reference ? undefined : value}
+                                disabled={readOnly}
+                                onBind={(name) => {
+                                  setParameter(parameter.name, bindTo(name));
+                                  void persist();
+                                }}
+                                onCreate={async (name, declaration) => {
+                                  declared.current[name] = declaration;
+                                  setParameter(parameter.name, bindTo(name));
+                                  await saveDraft();
+                                }}
+                              />
+                            ),
+                            bound: reference && (
+                              <BoundVariable
+                                snapshot={snapshot}
+                                worktree={worktree}
+                                environment={environment}
+                                parameter={parameter.name}
+                                parameterType={type}
+                                name={reference}
+                                problem={
+                                  nodeProblems.find((item) =>
+                                    String(item.message).includes(
+                                      `parameter ${parameter.name}`,
+                                    ),
+                                  )?.message
+                                }
+                                disabled={readOnly}
+                                onUnbind={() => {
+                                  // Keep computing the same value, now written in the node.
+                                  const current = variableSummary(
+                                    snapshot,
+                                    reference,
+                                  )?.values[environment];
+                                  setParameter(parameter.name, current?.value);
+                                  void persist();
+                                }}
+                              />
+                            ),
+                          }
+                        : undefined
+                    }
+                    onChange={(value, settings) => {
+                      if (parameter.name === "file" && fileSource) {
+                        update((current) => ({
+                          ...current,
+                          label:
+                            !current.label ||
+                            current.label ===
+                              sourceFileName(String(current.params.file || ""))
+                              ? sourceFileName(String(value || "")) || undefined
+                              : current.label,
+                          params: {
+                            ...current.params,
+                            file: value ?? "",
+                            ...settings,
+                          },
+                        }));
+                      } else {
+                        setParameter(parameter.name, value);
+                        if (parameter.name === listedConnection) {
+                          if (listedSchema) setParameter(listedSchema, "");
+                          if (listedTable) setParameter(listedTable, "");
+                        } else if (
+                          parameter.name === listedSchema &&
+                          listedTable
+                        )
+                          setParameter(listedTable, "");
+                      }
+                    }}
+                    onBlur={persist}
+                    expressionVariables={
+                      bindable
+                        ? { summary: snapshot.variables, environment }
+                        : undefined
+                    }
+                    connections={connections}
+                    location={
+                      type === "connection" && locations.has(parameter.name)
+                    }
+                    projectFile={type.startsWith("file") && !valueOf(port)}
+                    csv={csvSource}
+                    objects={objectNames(parameter)}
+                    columns={port ? inputColumns[port] : undefined}
+                    schemas={
+                      (port && schemas[port]) || Object.values(schemas).flat()
+                    }
+                  />
+                );
+              })}
+            <SourcePreview
+              worktree={worktree}
+              params={previewParams}
+              csv={csvSource}
+              tableUrl={tablePreviewUrl}
+              onTypes={(types) => setParameter("types", types)}
+            />
             {!node.component && (
               <button
                 className="button secondary full"

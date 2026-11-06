@@ -45,10 +45,12 @@ export default function ConnectionsPanel({
   workspace,
   refresh,
   onEditor,
+  onCreated,
 }: {
   workspace: Workspace;
   refresh: () => Promise<void>;
   onEditor: (editor: ConnectorEditor) => void;
+  onCreated?: (connection: Connection) => Promise<void>;
 }) {
   const t = useT();
   const [creating, setCreating] = useState(false);
@@ -141,6 +143,7 @@ export default function ConnectionsPanel({
           {t("newConnection")}
         </button>
       </div>
+      {onCreated && <p className="notice">{t("sourceConnectionReturnHint")}</p>}
       {FAMILIES.map(({ family, label, icon: Icon }) => {
         const connections = catalog.connections.filter(
           (c) => familyOf(connectorOf(c.connector)) === family,
@@ -383,6 +386,7 @@ export default function ConnectionsPanel({
                 }
                 await refresh();
                 setSelected(null);
+                if (creating) await onCreated?.(data);
               });
             }}
           >

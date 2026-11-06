@@ -1,9 +1,8 @@
 import Select from "./Select";
+import SourceFileField from "./SourceFileField";
 import ColumnPreparation from "./ColumnPreparation";
 import ParameterInput from "./ParameterInput";
-import { useId, useState, type ReactNode } from "react";
-import { FileUp } from "lucide-react";
-import { uploadFile } from "./api";
+import { useId, type ReactNode } from "react";
 import { useT } from "./i18n";
 import { numberBounds } from "./numberBounds";
 import type { Column, Json, Parameter, Snapshot } from "./types";
@@ -20,6 +19,8 @@ export default function ParameterField({
   onBlur,
   connections,
   location,
+  projectFile,
+  csv,
   schemas,
   columns,
   objects,
@@ -31,7 +32,7 @@ export default function ParameterField({
   /** The value set on the node, or else the declared default. */
   value: Json | undefined;
   /** Receives undefined to fall back on the default. */
-  onChange: (value: Json | undefined) => void;
+  onChange: (value: Json | undefined, settings?: Record<string, Json>) => void;
   onBlur?: () => void;
   connections: Snapshot["connections"];
   /**
@@ -39,6 +40,8 @@ export default function ParameterField({
    * selects project files. It lists file storage connections only.
    */
   location?: boolean;
+  projectFile?: boolean;
+  csv?: boolean;
   schemas?: string[];
   columns?: Column[];
   /** Schema or table names listed from the database connection, for name parameters. */
@@ -51,9 +54,7 @@ export default function ParameterField({
 }) {
   const t = useT();
   const columnList = useId();
-  const objectList = useId();
   const id = useId();
-  const [uploadError, setUploadError] = useState("");
   const name = parameter.name;
   const type = parameter.type || "text";
   const base = type.split(/[<(]/)[0];
@@ -93,6 +94,32 @@ export default function ParameterField({
       </span>
       {variable?.bound ? (
         variable.bound
+      ) : base === "file" && projectFile && worktree ? (
+        <SourceFileField
+          id={id}
+          worktree={worktree}
+          value={text}
+          onChange={onChange}
+          onBlur={onBlur}
+          csv={csv}
+          expressionVariables={expressionVariables}
+        />
+      ) : objects ? (
+        <Select
+          id={id}
+          value={text}
+          disabled={objects.pending}
+          onChange={(e) => onChange(e.target.value)}
+          onBlur={onBlur}
+        >
+          <option value="">{t("chooseSourceObject")}</option>
+          {text && !objects.names.includes(text) && (
+            <option value={text}>{text}</option>
+          )}
+          {objects.names.map((name) => (
+            <option key={name}>{name}</option>
+          ))}
+        </Select>
       ) : base === "boolean" ? (
         <Select
           id={id}
@@ -178,22 +205,11 @@ export default function ParameterField({
           value={text}
           onChange={(e) => onChange(e.target.value)}
           onBlur={onBlur}
-          list={
-            base === "column" && schemas
-              ? columnList
-              : objects
-                ? objectList
-                : undefined
-          }
+          list={base === "column" && schemas ? columnList : undefined}
         />
       )}
       {objects && !variable?.bound && (
         <>
-          <datalist id={objectList}>
-            {objects.names.map((name) => (
-              <option key={name} value={name} />
-            ))}
-          </datalist>
           {objects.pending ? (
             <small className="muted">{t("listingDatabaseObjects")}</small>
           ) : (
@@ -205,38 +221,10 @@ export default function ParameterField({
           )}
         </>
       )}
-      {base === "file" && worktree && !variable?.bound && (
-        <span className="file-upload">
-          <FileUp size={13} />
-          {t("upload")}
-          <input
-            type="file"
-            accept=".csv,.parquet,.tsv,.xlsx"
-            aria-label={t("upload")}
-            onChange={async (e) => {
-              const input = e.currentTarget;
-              const file = input.files?.[0];
-              if (!file) return;
-              setUploadError("");
-              try {
-                onChange(await uploadFile(file, worktree));
-                // An upload is a complete edit: commit it like a blur.
-                onBlur?.();
-              } catch (error) {
-                setUploadError((error as Error).message);
-              } finally {
-                // Allow choosing the same file again.
-                input.value = "";
-              }
-            }}
-          />
-        </span>
-      )}
       {["expressions", "expression", "file", "destination"].includes(base) &&
         expressionVariables && (
           <ExpressionValues value={text} variables={expressionVariables} />
         )}
-      {uploadError && <span className="notice error">{uploadError}</span>}
       {parameter.description && (
         <small className="muted">{parameter.description}</small>
       )}

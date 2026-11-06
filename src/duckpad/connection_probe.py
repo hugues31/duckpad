@@ -16,9 +16,10 @@ import duckdb
 
 from .catalog import redact, setup_connections
 from .project_extensions import EXPLICIT_LOADING
+from .source_files import sample
 from .templates import URI
 from .types import Connections, Record, SQLCursor
-from .util import Problem
+from .util import Problem, qi
 
 TIMEOUT = 30
 # Loading extensions alone may first download them from their repository.
@@ -36,14 +37,20 @@ _verified_lock = threading.Lock()
 
 
 def run(
-    config: Record, captured: Connections, offline: Record, secrets: list[str], *, setup: bool = True
+    config: Record,
+    captured: Connections,
+    offline: Record,
+    secrets: list[str],
+    *,
+    setup: bool = True,
+    table: tuple[str, str] | None = None,
 ) -> Record:
     """Prepare one captured connection in a child process, or only load its extensions.
 
     After setup, a database connection lists its schemas and tables, and a storage connection
     checks that a folder root exists. Errors never contain the connection's secrets.
     """
-    payload = {"config": config, "captured": captured, "offline": offline, "setup": setup}
+    payload = {"config": config, "captured": captured, "offline": offline, "setup": setup, "table": table}
     timeout = TIMEOUT if setup else INSTALL_TIMEOUT
     try:
         result = subprocess.run(
@@ -126,6 +133,10 @@ def objects(db: SQLCursor, alias: str) -> Record:
     }
 
 
+def table_sample(db, alias, schema, table):
+    return sample(db, f"SELECT * FROM {qi(alias)}.{qi(schema)}.{qi(table)} LIMIT 20")
+
+
 def attached(db: SQLCursor, alias: str) -> bool:
     row = db.execute("SELECT count(*) FROM duckdb_databases() WHERE database_name = ?", [alias]).fetchone()
     return bool(row and row[0])
@@ -145,7 +156,11 @@ def main() -> None:
         elif connection["definition"].get("family") == "database":
             if not attached(db, connection["alias"]):
                 raise Problem("The connector setup does not attach a database as {{ alias }}.")
-            result = objects(db, connection["alias"])
+            result = (
+                table_sample(db, connection["alias"], *payload["table"])
+                if payload.get("table")
+                else objects(db, connection["alias"])
+            )
         else:
             root = connection["values"].get("root")
             if isinstance(root, str) and root and not URI.match(root) and not Path(root).is_dir():

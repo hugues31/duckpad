@@ -498,6 +498,8 @@ def render_parameter(
             template = None
         if template is not None:
             path = render_path(name, template, values)
+        if kind == "file" and not path.strip():
+            raise Problem(f"Choose or upload a file for {name}")
         relative = not URI.match(path) and not Path(path).is_absolute()
         if relative and not root:
             raise Problem(f"Connection {reference} has no root in this environment; use an absolute path")

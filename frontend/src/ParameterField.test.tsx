@@ -72,7 +72,7 @@ it("asks for a database connection that SQL uses directly", () => {
   ).toEqual(["Choose a source…", "Warehouse"]);
 });
 
-it("suggests table names listed from the database connection", () => {
+it("selects table names listed from the database connection", () => {
   const onChange = vi.fn();
   const { rerender } = render(
     <ParameterField
@@ -94,14 +94,13 @@ it("suggests table names listed from the database connection", () => {
     />,
   );
   const input = screen.getByRole("combobox", { name: "table" });
-  const list = document.getElementById(input.getAttribute("list")!);
-  expect(Array.from(list!.querySelectorAll("option"), (o) => o.value)).toEqual([
+  expect(Array.from(input.querySelectorAll("option"), (o) => o.value)).toEqual([
+    "",
     "order_totals",
     "orders",
   ]);
-  // A name typed by hand stays possible, for objects created after the listing.
-  fireEvent.change(input, { target: { value: "new_table" } });
-  expect(onChange).toHaveBeenLastCalledWith("new_table");
+  fireEvent.change(input, { target: { value: "orders" } });
+  expect(onChange).toHaveBeenLastCalledWith("orders");
   rerender(
     <ParameterField
       parameter={{ name: "table", type: "table_name(schema)", default: "" }}

@@ -1,0 +1,137 @@
+import {
+  ExpressionInput,
+  type ExpressionVariables,
+} from "./VariableExpression";
+import { useRef, useState } from "react";
+import { FileUp } from "lucide-react";
+import { uploadFile } from "./api";
+import { previewFile } from "./SourcePreview";
+import { useApiResource } from "./useApiResource";
+import { useT } from "./i18n";
+import Select from "./Select";
+import type { Json } from "./types";
+
+export const sourceFileName = (path: string) =>
+  path
+    .split(/[\\/]/)
+    .at(-1)
+    ?.replace(/^[a-f0-9]{16}_/, "") || "";
+
+export default function SourceFileField({
+  id,
+  worktree,
+  value,
+  onChange,
+  onBlur,
+  csv,
+  expressionVariables,
+}: {
+  id: string;
+  worktree: string;
+  value: string;
+  csv?: boolean;
+  expressionVariables?: ExpressionVariables;
+  onChange: (value: Json, settings?: Record<string, Json>) => void;
+  onBlur?: () => void;
+}) {
+  const t = useT();
+  const files = useApiResource<{ name: string; path: string }[]>(
+    `/worktrees/${worktree}/source-files`,
+  );
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState("");
+  const attempt = useRef(0);
+  const choose = async (path: string) => {
+    const request = ++attempt.current;
+    setPending(true);
+    setError("");
+    let settings: Record<string, Json> | undefined;
+    if (path && csv) {
+      try {
+        settings = {
+          ...(await previewFile(worktree, { file: path })).settings,
+          types: {},
+        };
+      } catch (e) {
+        if (request === attempt.current) setError((e as Error).message);
+      }
+    }
+    if (request !== attempt.current) return;
+    onChange(path, settings);
+    onBlur?.();
+    setPending(false);
+  };
+  return (
+    <>
+      <Select
+        id={id}
+        value={value}
+        disabled={pending}
+        onChange={(e) => void choose(e.target.value)}
+        onBlur={onBlur}
+      >
+        <option value="">{t("chooseProjectFile")}</option>
+        {value && !files.data?.some((file) => file.path === value) && (
+          <option value={value}>{sourceFileName(value)}</option>
+        )}
+        {files.data?.map((file, index) => (
+          <option key={file.path} value={file.path}>
+            {file.name}
+            {files.data!.filter((other) => other.name === file.name).length > 1
+              ? ` (${index + 1})`
+              : ""}
+          </option>
+        ))}
+      </Select>
+      {expressionVariables && (
+        <details open={value.includes("{{") || undefined}>
+          <summary>{t("sourcePathExpression")}</summary>
+          <ExpressionInput
+            id={`${id}-expression`}
+            value={value.startsWith("/") ? "" : value}
+            variables={expressionVariables}
+            singleLine
+            onChange={(path) => {
+              if (!String(path).startsWith("/")) onChange(path);
+            }}
+            onBlur={onBlur}
+          />
+        </details>
+      )}
+      {!value && <small className="muted">{t("dropFileHint")}</small>}
+      <label className="file-upload">
+        <FileUp size={13} />
+        {t("upload")}
+        <input
+          type="file"
+          accept=".csv,.tsv,.parquet,.xlsx,.json,.jsonl,.ndjson"
+          aria-label={t("upload")}
+          disabled={pending}
+          onChange={async (e) => {
+            const input = e.currentTarget;
+            const file = input.files?.[0];
+            if (!file) return;
+            setPending(true);
+            setError("");
+            try {
+              const path = await uploadFile(file, worktree);
+              files.reload();
+              await choose(path);
+            } catch (e) {
+              setError((e as Error).message);
+              setPending(false);
+            } finally {
+              input.value = "";
+            }
+          }}
+        />
+      </label>
+      {pending && <small role="status">{t("sourcePreviewLoading")}</small>}
+      {(error || files.error) && (
+        <small className="notice error" role="alert">
+          {error || files.error}
+        </small>
+      )}
+    </>
+  );
+}
