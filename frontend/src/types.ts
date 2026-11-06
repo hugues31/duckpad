@@ -1,10 +1,27 @@
-export type Json = Record<string, any>;
+import type { NodeName, NodeNames } from "./nodeNames";
+import type {
+  PartitionContext,
+  PartitionDefinition,
+  PartitionDescription,
+} from "./partitions";
+import type { ProjectExtension } from "./extensions";
+import type { MergeConflict } from "./gitTypes";
+/** A value that JSON can represent, such as a parameter set by a user. */
+export type Json =
+  string | number | boolean | null | Json[] | { [key: string]: Json };
+export type Theme = "light" | "dark";
 export interface FlowNode {
+  language?: "sql" | "python";
+  partitions?: "all";
+  outputs?: Record<string, { partition?: { by: string; column: string } }>;
   id: string;
   template?: string;
+  origin?: string;
+  /** Original palette appearance and guided form; never resolves executable code. */
+  preset?: string;
   component?: string;
   label?: string;
-  params: Json;
+  params: Record<string, Json>;
   position: { x: number; y: number };
 }
 export interface FlowEdge {
@@ -14,70 +31,510 @@ export interface FlowEdge {
   sourceHandle: string;
   targetHandle: string;
 }
+export interface Graph {
+  nodes: FlowNode[];
+  edges: FlowEdge[];
+}
+/** How a template node is shown, from its ports and writes. */
+export type TemplateKind = "source" | "transform" | "export";
+/** A parameter declared by a template or exposed by a component. */
+export interface Parameter {
+  label?: string;
+  description?: string;
+  python_type?: string;
+  ge?: number;
+  gt?: number;
+  lt?: number;
+  le?: number;
+  name: string;
+  type: string;
+  default?: Json;
+}
+/** A template's interface, or only the error that prevents parsing it. */
+export interface ParsedTemplate {
+  language?: "sql" | "python";
+  error?: string;
+  label?: string;
+  description?: string;
+  writes_external?: boolean;
+  inputs?: string[];
+  outputs?: string[];
+  parameters?: Parameter[];
+  /** The destination parameter and format of an export Duckpad can download. */
+  download?: { parameter: string; format: string } | null;
+  /** SQL blocks in declaration order; `-- @test` blocks carry their name. */
+  blocks?: { output: string | null; test_name?: string }[];
+}
+/** A port of a component, bound to a port of one of its nodes. */
+export interface ComponentPort {
+  node: string;
+  port: string;
+}
+export interface ComponentDefinition extends Graph {
+  name?: string;
+  description?: string;
+  inputs?: Record<string, ComponentPort>;
+  outputs?: Record<string, ComponentPort>;
+  parameters?: Record<
+    string,
+    Omit<Parameter, "name"> & { targets?: { node: string; param: string }[] }
+  >;
+}
+/** Descriptions of the project's nodes, datasets and columns. */
+export interface Documentation {
+  project?: string;
+  nodes?: Record<string, string>;
+  datasets?: Record<string, string>;
+  columns?: Record<string, Record<string, string>>;
+}
 export interface Bundle {
-  flow: {
+  flow: Graph & {
+    partitions?: Record<string, PartitionDefinition>;
     id: string;
     name: string;
     description?: string;
-    nodes: FlowNode[];
-    edges: FlowEdge[];
   };
   templates: Record<string, string>;
-  components: Record<string, Json>;
-  documentation: Json;
+  node_sql?: Record<string, string>;
+  components: Record<string, ComponentDefinition>;
+  documentation: Documentation;
+  pyproject?: string | null;
+  /** The declarations of variables.json, its raw text when malformed, or null without the file. */
+  variables?: Record<string, Json> | string | null;
+  /** Requirements from extensions.json, preserved as raw text when malformed. */
+  extensions?: Record<string, ProjectExtension> | string | null;
+  /** Shared result views of views.json by `node:port`, its raw text when malformed. */
+  views?: Record<string, Json> | string | null;
 }
+/** A root flow node parameter bound to a project variable. */
+export interface VariableUsage {
+  name?: NodeName;
+  node: string;
+  label: string;
+  param: string;
+  /** Whether the parameter references the variable inside its expression text. */
+  expression?: boolean;
+}
+/** A variable's value in one environment, or why it has none. */
+export interface VariableValue {
+  value?: Json;
+  source?: "default" | "environment" | "node";
+  from?: { node: string; port?: string; column: string };
+  state?: "pending" | "ready" | "unavailable";
+  resolution?: "calculated" | "retained";
+  producer_run?: string;
+  producer_commit?: string;
+  source_dataset?: string;
+  code?: string;
+  source_stale?: boolean;
+  last_error?: string;
+  error?: string;
+}
+export interface VariableSummary {
+  from?: { node: string; port?: string; column: string };
+  type: string;
+  description: string;
+  default?: Json;
+  environments: Record<string, Json>;
+  errors: string[];
+  warnings: string[];
+  values: Record<string, VariableValue>;
+  usages: VariableUsage[];
+}
+/** What the snapshot reports about variables.json, for the interface. */
+export interface VariablesSummary {
+  file_error: string | null;
+  declarations: Record<string, VariableSummary>;
+  /** References to variables that variables.json does not declare. */
+  undeclared: Record<string, VariableUsage[]>;
+  diagnostics: Json[];
+  warnings: Json[];
+}
+export type ProjectRole = "admin" | "editor" | "operator" | "reader";
+export interface Worktree {
+  read_only?: boolean;
+  id: string;
+  project: string;
+  branch: string;
+}
+/** A save that conflicted with concurrent edits, with both versions of the files. */
+export interface Conflict {
+  node_names?: NodeNames;
+  id: string;
+  revision: string;
+  paths: string[];
+  current: Record<string, string>;
+  proposal: Record<string, string>;
+  base: Record<string, string>;
+  fields: MergeConflict[];
+  /** Three-way merge with incoming conflict values and independent edits from both sides. */
+  merged: Record<string, string>;
+}
+export interface Diagnostic {
+  file: string;
+  message: string;
+  code?: string;
+  port?: string;
+  variable?: string;
+  node?: string;
+}
+export type Capability = "read" | "write";
+/** Databases are read as tables; file storage is a location for file nodes. */
+export type ConnectorFamily = "database" | "storage";
 export interface Snapshot {
-  worktree: Json;
+  python_enabled?: boolean;
+  node_names?: NodeNames;
+  partitions?: Record<string, PartitionDescription>;
+  role: ProjectRole;
+  /** The connections granted to the project. */
+  connections: {
+    id: string;
+    name: string;
+    family: ConnectorFamily | null;
+    capabilities: Capability[];
+  }[];
+  worktree: Worktree;
   revision: string;
   commit: string;
+  /** In the answer to a save: the commit it created, or null when nothing changed. */
+  change?: string | null;
   bundle: Bundle | null;
   files: Record<string, string>;
-  diagnostics: Json[];
-  conflicts: Json[];
-  parsed_templates: Record<string, Json>;
+  diagnostics: Diagnostic[];
+  conflicts: Conflict[];
+  parsed_templates: Record<string, ParsedTemplate>;
+  parsed_nodes?: Record<string, ParsedTemplate>;
+  /** Null while the project files cannot be read. */
+  variables: VariablesSummary | null;
+}
+export interface Project {
+  updated?: string;
+  last_run?: Pick<Run, "id" | "status" | "started" | "environment"> | null;
+  role: ProjectRole;
+  id: string;
+  name: string;
+  main: string;
+  created: string;
+}
+export interface ConnectorParameter {
+  name: string;
+  /** Text when omitted. */
+  type?: string;
+  default?: Json;
+  secret?: boolean;
+  /** Shown in the connection form instead of the name. */
+  label?: string;
+  description?: string;
+}
+/** A connection setup run outside execution sessions, for one environment. */
+export interface ConnectionTest {
+  /** Database connections list what they attached. */
+  schemas?: string[];
+  tables?: DatabaseObject[];
+  /** Storage connections report their root. */
+  root?: string | null;
+}
+/** A table or view of a database connection. */
+export interface DatabaseObject {
+  schema: string;
+  name: string;
+  view: boolean;
+}
+export interface DatabaseObjects {
+  schemas: string[];
+  tables: DatabaseObject[];
+  /** Only the first tables are listed. */
+  truncated: boolean;
+}
+/** A connector definition, as written by an administrator. */
+/** A connector definition opened in the JSON editor. */
+export interface ConnectorEditor {
+  title: string;
+  value: string;
+  /**
+   * The identifier being edited. New definitions and duplicates have none: like
+   * an edit that changes the identifier, saving them never replaces a connector.
+   */
+  identity?: string;
+}
+export interface Connector {
+  id: string;
+  name?: string;
+  family?: ConnectorFamily;
+  /**
+   * Added by the catalog listing, not part of the definition: shipped with the
+   * release, a built-in edited by an administrator, or an administrator's own type.
+   */
+  origin?: "built-in" | "customized" | "custom";
+  description?: string;
+  compatibility?: string;
+  capabilities?: Capability[];
+  parameters?: ConnectorParameter[];
+}
+export interface Connection {
+  id: string;
+  name: string;
+  connector: string;
+  /** Parameter values per environment; secrets are masked. */
+  environments: Record<string, Record<string, Json>>;
+}
+/** An instance account, as shown to administrators. */
+export interface User {
+  id: string;
+  username: string;
+  role: "admin" | "member";
+  active: boolean;
+  /** Present for SSO identities and accounts that authenticate only with API tokens. */
+  auth_method?: "oidc" | "service";
+  description?: string;
 }
 export interface Workspace {
-  projects: Json[];
-  worktrees: Json[];
-  catalog: Json;
-  identity: Json;
+  assistant?: import("./assistantTypes").AssistantOptions;
+  user: User;
+  projects: Project[];
+  worktrees: Worktree[];
+  catalog: {
+    environments: string[];
+    environment_details: Environment[];
+    connectors: Connector[];
+    connections: Connection[];
+    duckdb_version?: string;
+  };
 }
-export class ApiError extends Error {
-  constructor(
-    message: string,
-    public status: number,
-    public detail?: any,
-  ) {
-    super(message);
-  }
+export interface Environment {
+  id: string;
+  label: string;
+  color: string;
+  confirm_before_run: boolean;
 }
-export async function api<T = any>(
-  path: string,
-  options?: RequestInit,
-): Promise<T> {
-  const response = await fetch("/api" + path, {
-    credentials: "same-origin",
-    ...options,
-    headers: { "Content-Type": "application/json", ...options?.headers },
-  });
-  const result = await response.json();
-  if (!response.ok)
-    throw new ApiError(
-      result.error || result.detail || "Request failed",
-      response.status,
-      result.detail,
-    );
-  return result;
+export interface Column {
+  name: string;
+  type: string;
 }
-export const send = (data: unknown, method = "POST"): RequestInit => ({
-  method,
-  body: JSON.stringify(data),
-});
-export const identifier = (prefix = "node") =>
-  prefix + "_" + crypto.randomUUID().replaceAll("-", "").slice(0, 12);
-export const formatValue = (value: any) =>
-  value === null
-    ? "NULL"
-    : typeof value === "object"
-      ? JSON.stringify(value)
-      : String(value);
+/** A materialized output of a node. */
+export interface Dataset {
+  partition_context?: PartitionContext;
+  incomplete?: { available: number; total: number };
+  id: string;
+  node: string;
+  port: string;
+  columns: Column[];
+  count: number;
+  run: string;
+  status: "valid" | "stale";
+  created: string;
+}
+/** A SQL statement compiled from a template block. */
+export interface Statement {
+  output: string | null;
+  sql: string;
+  /** Parameter values bound to the statement's placeholders. */
+  bindings: Record<string, Json>;
+  /** What a run executed to store the statement's output. */
+  materialization_sql?: string[];
+  variables?: (VariableValue & {
+    name: string;
+    type: string | null;
+    parameter: string;
+    /** The named parameter binding a variable referenced inside an expression. */
+    binding?: string;
+  })[];
+}
+/** A page of rows of a node output, with the dataset holding them. */
+export interface PreviewPage extends Dataset {
+  results?: ExecutionResult[];
+  rows: { id: number; values: Json[] }[];
+  /** Rows to page through: the sample's rows, or every matching row. */
+  filtered_count: number;
+  /** Rows matching the sample filter and search, before the sample size. */
+  matched_count?: number;
+  offset: number;
+  /** The statements of the run that produced the dataset. */
+  executed_sql: Statement[];
+  commit: string;
+  environment: string;
+  /** The error of the node's latest run, if it failed after this result. */
+  error: string | null;
+}
+export type RunStatus =
+  | "preparing"
+  | "running"
+  | "canceling"
+  | "success"
+  | "partial_failure"
+  | "failed"
+  | "canceled"
+  | "interrupted";
+export type NodeRunStatus =
+  | "pending"
+  | "running"
+  | "success"
+  | "failed"
+  | "blocked"
+  | "canceled"
+  | "interrupted";
+/** A redacted result emitted by a message block or another execution check. */
+export interface ExecutionResult {
+  level: "info" | "warning" | "error";
+  message: string;
+  /** SQL messages name their code block; Python sends "Python" or "Python stdout/stderr". */
+  origin: { kind: string; block?: number | string; name?: string };
+  output?: string | null;
+  observed?: Json;
+  status?: "ok" | "warning" | "error";
+  /** A final summary preserves counts for results beyond the display limit. */
+  omitted?: number;
+  counts?: Partial<Record<ExecutionResult["level"], number>>;
+}
+export interface TestExecution {
+  run: string;
+  started: string;
+  results: ExecutionResult[];
+}
+export interface SqlDiagnostic {
+  phase?: "compilation" | "execution";
+  message: string;
+  source: string;
+  line: number;
+  column: number;
+  executed_sql: string;
+}
+
+/** What a run did with one node. */
+export interface NodeRun {
+  diagnostic?: SqlDiagnostic | null;
+  artifact?: { name?: string };
+  partitioned?: boolean;
+  results?: ExecutionResult[];
+  status: NodeRunStatus;
+  label: string;
+  writes_external: boolean;
+  /** Each output with the seconds its statement took. */
+  outputs?: Record<string, Dataset & { duration: number }>;
+  error?: string;
+  duration?: number;
+  external_outcome?: "completed" | "failed" | "partial or unknown" | "unknown";
+  started?: string;
+  finished?: string;
+  statements?: (Statement & {
+    test_name?: string;
+    test_severity?: "warning" | "error";
+    message_block?: number;
+    message_output?: string | null;
+  })[];
+  /** Parameter -> the variable bound to it. */
+  variables?: Record<string, string>;
+  /** Parameter -> the variables its expression references. */
+  references?: Record<string, string[]>;
+}
+export interface Run {
+  partitions?: {
+    manifest?: string;
+    total: number;
+    selected: number;
+    completed: number;
+    failed: number;
+    not_started: number;
+    active?: string[];
+    active_keys?: { type: string; value: string | number | boolean }[];
+    phase: string;
+    execution: { parallelism: number; on_error: string };
+  };
+  phase?: "values" | "consumers";
+  job?: {
+    slug: string;
+    name: string;
+    tag: string | null;
+    branch: string | null;
+    commit: string;
+  };
+  tag?: string | null;
+  requester?: {
+    id: string;
+    username: string;
+    token_name: string | null;
+  } | null;
+  warning_count?: number;
+  id: string;
+  project: string;
+  worktree: string;
+  branch: string;
+  environment: string;
+  commit: string;
+  /** The node whose subtree ran, or "project". */
+  scope: string;
+  scope_name: NodeName;
+  trigger: string;
+  entry_point: "ui" | "api" | "assistant";
+  status: RunStatus;
+  started: string;
+  finished?: string | null;
+  duration?: number | null;
+  /** Why the run stopped before running its nodes. */
+  error?: string;
+  nodes: Record<string, NodeRun>;
+  variables?: Record<string, VariableValue & { type: string | null }>;
+  /** The connections, templates and components the run used, without secrets. */
+  connections: Record<string, Json>;
+  node_sql?: Record<string, string>;
+  definitions: Record<string, string>;
+  components: Record<string, ComponentDefinition>;
+}
+/** The latest results of a node in an environment. */
+export interface NodeResult {
+  diagnostic?: SqlDiagnostic | null;
+  results?: ExecutionResult[];
+  result_run?: string;
+  /** The failed execution, which can differ from the last successful output generation. */
+  error_run?: string;
+  outputs: Record<string, Dataset>;
+  error: string | null;
+  execution_status?: NodeRunStatus | null;
+}
+export interface Statuses {
+  nodes: Record<string, NodeResult>;
+  active: Run | null;
+}
+/** Statistics of one column over a whole retained result. */
+export interface ColumnStatistics {
+  type: string;
+  nulls: number | null;
+  distinct: number;
+  count: number;
+  unique: boolean;
+  min?: string;
+  max?: string;
+  /** Row counts of equal-width bins between min and max. */
+  histogram?: number[];
+  top?: { value: string; rows: number }[];
+}
+/** Columns of a result, statistics when computed, and changes since the previous run. */
+export interface ResultStatistics {
+  dataset: string;
+  status: Dataset["status"];
+  count: number;
+  columns: Column[];
+  statistics: {
+    computed: string;
+    duration: number;
+    count: number;
+    columns: Record<string, ColumnStatistics>;
+  } | null;
+  schema: {
+    previous_run: string;
+    added: string[];
+    removed: string[];
+    retyped: { name: string; before: string; after: string }[];
+  } | null;
+}
+/** A page of the failing rows of a data test, recomputed from the retained result. */
+export interface TestRows {
+  test: string;
+  run: string;
+  severity: "warning" | "error";
+  output: string | null;
+  columns: Column[];
+  rows: { id: number; values: Json[] }[];
+  filtered_count: number;
+  offset: number;
+}
