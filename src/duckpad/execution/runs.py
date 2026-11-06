@@ -29,15 +29,17 @@ from ..materialize import (
     publish_view,
 )
 from ..node_names import node_name_parts
+from ..partition_filters import filter_statements
 from ..partition_runs import PartitionRun
 from ..partition_storage import PartitionStorage
 from ..projects import Projects
 from ..python_policy import get_policy
 from ..sql_errors import SqlSourceError
 from ..store import Store
-from ..templates import base_type, compile_template
+from ..templates import compile_template
 from ..types import Connections, Record, RunToken, SQLCursor
 from ..util import Problem, now, qi, uid
+from ..value_types import base_type
 from .contexts import ContextPool, cancel_lineage, interrupt, wait_for_readers
 from .exports import Exports
 from .fingerprints import Fingerprints
@@ -832,7 +834,7 @@ class Runner:
                     continue
                 table = statement["table"]
                 if execution.partition is not None:
-                    partitions.filter_statements([statement], node, execution.partition, cursor)
+                    filter_statements([statement], node, execution.partition, cursor)
                 if execution.schema_only:
                     statement["query"] = f"SELECT * FROM ({statement['query']}) AS empty_partition LIMIT 0"
                 output_start = time.monotonic()
@@ -1022,16 +1024,6 @@ class Runner:
             created_tables.extend((table, table + "_storage") for table in physical.values())
             for port, table in physical.items():
                 storage = table + "_storage"
-                # Partition filters operate after Python. The node also receives the requested key.
-                if execution.partition is not None:
-                    statement = {"output": port, "query": f"SELECT * FROM {qi(storage)}", "bindings": {}}
-                    partitions.filter_statements([statement], node, execution.partition, cursor)
-                    filtered = storage + "_filtered"
-                    cursor.execute(
-                        f"CREATE TABLE {qi(filtered)} AS {statement['query']}", statement["bindings"]
-                    )
-                    cursor.execute(f"DROP TABLE {qi(storage)}")
-                    cursor.execute(f"ALTER TABLE {qi(filtered)} RENAME TO {qi(storage)}")
                 columns, mapping, _ = publish_view(cursor, table, {"storage": storage, "columns": None})
                 count_row = cursor.execute(f"SELECT count(*) FROM {qi(table)}").fetchone()
                 assert count_row is not None

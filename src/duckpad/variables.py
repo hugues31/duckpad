@@ -13,14 +13,14 @@ DuckDB parameter holding the typed value, and fingerprints cover the type and va
 
 import copy
 import json
-import math
 import re
 from collections.abc import Iterable
 
 from .node_names import graph_names, name_text
-from .templates import VARIABLE_REFERENCE, base_type, directives, is_date, parse_parameter, type_argument
+from .templates import VARIABLE_REFERENCE, directives, parse_parameter
 from .types import Record
 from .util import Problem, dumps
+from .value_types import base_type, check_value, options
 
 FILE = "variables.json"
 KEY = "$var"
@@ -110,11 +110,6 @@ def write(value):
     return value if isinstance(value, str) else dumps(value)
 
 
-def options(type_name):
-    argument = type_argument(type_name)
-    return argument.split("|") if argument else []
-
-
 def normalized_type(type_name):
     """A declared variable type in canonical form, or None when it is not a variable type."""
     if not isinstance(type_name, str):
@@ -129,41 +124,6 @@ def normalized_type(type_name):
         if all(values) and len(set(values)) == len(values) and not any(c in match[1] for c in "()"):
             return f"choice({'|'.join(values)})"
     return None
-
-
-def check_value(type_name, value):
-    """Why a value does not match a variable type, or None."""
-    kind = base_type(type_name)
-    if kind == "text":
-        valid = isinstance(value, str)
-    elif kind == "identifier":
-        valid = isinstance(value, str) and value.strip() != ""
-    elif kind == "number":
-        # Integers are exact and always finite: math.isfinite would convert them to floats,
-        # which overflows beyond about 10**308.
-        valid = (isinstance(value, int) and not isinstance(value, bool)) or (
-            isinstance(value, float) and math.isfinite(value)
-        )
-    elif kind == "boolean":
-        valid = isinstance(value, bool)
-    elif kind == "date":
-        valid = is_date(value)
-    elif kind == "choice":
-        valid = isinstance(value, str) and value in options(type_name)
-    else:
-        item = "text" if type_name == "list<text>" else "number"
-        valid = isinstance(value, list) and all(check_value(item, x) is None for x in value)
-    if valid:
-        return None
-    expected = {
-        "text": "text",
-        "identifier": "a non-empty identifier",
-        "number": "a finite number",
-        "boolean": "true or false",
-        "date": "a date written YYYY-MM-DD",
-        "choice": "one of " + ", ".join(options(type_name)),
-    }.get(kind, "a list of " + ("text values" if type_name == "list<text>" else "numbers"))
-    return f"expected {expected}, got {json.dumps(value, ensure_ascii=False, default=str)}"
 
 
 def declarations(bundle):

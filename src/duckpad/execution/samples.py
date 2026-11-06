@@ -16,9 +16,10 @@ from sqlglot import exp
 from .. import variables
 from ..datasets import Context, Dataset
 from ..native import Cursor as NativeCursor
-from ..templates import VARIABLE_REFERENCE, base_type, bind_variables, check_variables, variable_placeholders
+from ..templates import VARIABLE_REFERENCE, bind_variables, check_variables, variable_placeholders
 from ..types import Record, SQLCursor
 from ..util import Problem, qi, uid
+from ..value_types import base_type
 from ..views import DIRECTIONS, MAX_FILTER_LENGTH, MAX_SAMPLE_ROWS, METHODS
 from .contexts import interrupt
 

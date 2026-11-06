@@ -3,8 +3,9 @@
 import json
 import math
 
-from .templates import base_type, check_scalar, connection_for, render_parameter, type_argument
+from .templates import check_scalar, connection_for, render_parameter
 from .util import Problem, dumps
+from .value_types import base_type, type_argument
 
 
 def port_error(node, contract, edges):

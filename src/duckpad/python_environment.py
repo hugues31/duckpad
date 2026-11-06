@@ -42,7 +42,8 @@ MODULES = (
     "extensions.py",
     "project_extensions.py",
     "python_execution.py",
-    "python_partitions.py",
+    "partition_filters.py",
+    "value_types.py",
 )
 
 

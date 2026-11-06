@@ -14,6 +14,7 @@ try:
 except ImportError:  # pragma: no cover - Windows has no POSIX resource limits
     resource = None
 
+from .partition_filters import filter_statements
 from .python_contract import parse_python
 from .python_sdk import Node, Outputs, Relation
 from .util import qi
@@ -169,7 +170,9 @@ def execute(cursor, payload):
                         "Returned relations must be built from the inputs or self.db, not another DuckDB database"
                     ) from error
                 try:
-                    db.execute(f"CREATE TABLE {qi(table)} AS SELECT * FROM {qi(view)}")
+                    statement = {"output": name, "query": f"SELECT * FROM {qi(view)}", "bindings": {}}
+                    filter_statements([statement], payload, payload.get("partition"), db)
+                    db.execute(f"CREATE TABLE {qi(table)} AS {statement['query']}", statement["bindings"])
                     created.append(table)
                 finally:
                     db.execute(f"DROP VIEW IF EXISTS {qi(view)}").complete()
@@ -181,10 +184,6 @@ def execute(cursor, payload):
                     failure = f"Python check {name} failed: {count} rows"
             if failure or any(m["level"] == "error" for m in instance._messages):
                 raise ValueError(failure or "A Python message reported an error")
-            # Validate partition boundaries before user-managed external writes.
-            from .python_partitions import validate_partitions
-
-            validate_partitions(db, payload)
             db.complete()
             instance.write()
             if any(m["level"] == "error" for m in instance._messages):
