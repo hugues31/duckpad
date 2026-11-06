@@ -116,7 +116,7 @@ See [XLSX limits](#xlsx-workbooks) and the raw reports in `docs/validation/`.
 
 ## Project files and storage locations
 
-Every file node (Load CSV, Load Parquet, Load XLSX, Load JSON, Export CSV and Export XLSX) has a **Location** field. It defaults to **Project files**: the project's uploads and its exports, available in every environment without a connection or a grant. Drop one or more CSV, Parquet, XLSX or JSON files onto the canvas to upload them: each becomes a configured reader node, named after its file, at the drop position. XLSX drops enable the project's `excel` extension; an instance administrator must have installed it first if it is not built in.
+Every file node (Load CSV, Load Parquet, Load XLSX, Load JSON, Export CSV and Export XLSX) has a **Location** field. It defaults to **Project files**: the project's uploads and its exports, available in every environment without a connection or a grant. Drop one or more CSV, Parquet, XLSX or JSON files onto the canvas to upload them: each becomes a configured reader node, named after its file, at the drop position. Other dropped files are skipped and named in a notice. XLSX drops enable the project's `excel` extension; an instance administrator must have installed it first if it is not built in.
 
 The `file` field selects one of the project's uploaded files, and **Upload file** adds one. New file readers start empty. Uploads are stored as project-relative references, so node parameters and project ZIP exports contain no server path. **Relative path or expression** accepts a resource path or a variable expression. Paths resolve as follows:
 
@@ -136,7 +136,7 @@ To read a shared folder, an instance admin creates a **Server folder** connectio
 
 ![Load XLSX reads inbox/budget.xlsx from the Finance share Server folder](images/server-folder-location.png)
 
-With project files, the inspector previews a reader's first 20 rows before any run; a preview neither runs the flow nor publishes results. Choosing or dropping a CSV fills its delimiter and header from DuckDB's `sniff_csv`. The preview's column table overrides CSV types, and **Auto** keeps the detected type; an invalid conversion shows an error and leaves the override editable. Without overrides, CSV keeps DuckDB's native inference. Parquet uses native types.
+With project files, the inspector previews a reader's first 20 rows before any run; a preview neither runs the flow nor publishes results. Choosing or dropping a CSV fills its delimiter and header from DuckDB's `sniff_csv`. The preview's column table overrides CSV types, and **Auto** keeps the detected type; an invalid conversion shows an error and leaves every column editable. Changing the delimiter or header clears the overrides, since the columns change. Without overrides, CSV keeps DuckDB's native inference. Parquet uses native types.
 
 Single-file CSV `COPY` follows DuckDB's native replacement behavior on a second run. Duckpad does not add an overwrite option, rename files, or ask for an existence-based confirmation.
 
