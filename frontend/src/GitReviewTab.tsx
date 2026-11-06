@@ -13,26 +13,26 @@ import {
 } from "./ConflictDiff";
 import { conflictPath, conflictTitle } from "./conflicts";
 import { useWorktree } from "./worktree";
+import { useShell } from "./shell";
 
 export default function GitReviewTab({
   review: proposal,
-  worktree,
-  base,
   canEdit,
   storageKey,
   onCancel,
   onChanged,
+  onOpenWorktree,
 }: {
   review: MergeReview;
-  worktree: string;
-  base: string;
   canEdit: boolean;
   storageKey: string;
   onCancel: () => void;
   onChanged: () => Promise<void>;
+  onOpenWorktree: (id: string) => boolean;
 }) {
   const t = useT();
-  const { snapshot, environment } = useWorktree();
+  const { snapshot, environment, settle } = useWorktree();
+  const { notify, refreshWorkspace } = useShell();
   const { pending, error, run, retry } = useTabAction();
   const [review, setReview] = useState(proposal);
   const [integrated, setIntegrated] = useState<MergeReview | null>(null);
@@ -186,30 +186,43 @@ export default function GitReviewTab({
       ) : (
         <div className="notice">
           <p>{t("mergeComplete")}</p>
-          {integrated.source_worktree &&
-            integrated.source_worktree !== worktree &&
-            integrated.source !== "main" && (
-              <button
-                className="button secondary"
-                disabled={pending}
-                onClick={() =>
-                  run(async () => {
+          {integrated.source_worktree && integrated.source !== "main" && (
+            <button
+              className="button secondary"
+              disabled={pending}
+              onClick={() =>
+                run(async () => {
+                  await settle();
+                  // Leave the source before deleting it, including its snapshot polling.
+                  if (!onOpenWorktree(integrated.worktree)) return;
+                  try {
                     await api(
-                      `${base}/cleanup`,
+                      `/worktrees/${integrated.worktree}/git/cleanup`,
                       send({
                         remove_worktree: integrated.source_worktree,
                         integrated_worktree: integrated.worktree,
                         expected_head: integrated.source_head,
                       }),
                     );
-                    setIntegrated({ ...integrated, source_worktree: null });
-                    await onChanged();
-                  })
-                }
-              >
-                {t("removeIntegratedBranch")} {integrated.source}
-              </button>
-            )}
+                    notify(
+                      t("branchDeleted").replace("{name}", integrated.source),
+                    );
+                    await refreshWorkspace();
+                  } catch (error) {
+                    // The dialog is now closed; keep failures visible on the destination.
+                    notify(
+                      t("branchKept")
+                        .replace("{name}", integrated.source)
+                        .replace("{reason}", (error as Error).message),
+                      true,
+                    );
+                  }
+                })
+              }
+            >
+              {t("deleteBranchNamed").replace("{name}", integrated.source)}
+            </button>
+          )}
         </div>
       )}
     </div>

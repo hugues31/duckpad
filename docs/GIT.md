@@ -142,10 +142,20 @@ rejected reviews leave local work intact. Successful integration retains both
 parents when the source was not already integrated. Execution remains a separate
 manual action; applying never pushes.
 
-After integration, an optional cleanup action removes an integrated source branch
-and its worktree. Main, the currently open worktree, the destination, dirty work,
-untracked files, active executions and unmerged commits are protected. Cleanup
-is explicit; no branch is deleted automatically.
+After integrating a branch other than main, **Delete branch <name>** opens the merge
+destination and removes the integrated local source branch, its worktree and retained
+results. A notification confirms deletion. If cleanup is refused, the branch is kept
+and the reason appears on the destination.
+
+To remove a branch later, open **Branches**, choose the destination containing its
+commits, and click **Delete** beside the local branch. Confirm the branch name and
+removal of its worktree and results. Disabled actions explain why main, the open
+branch, the selected destination, unsaved changes, untracked files, locked worktrees,
+active executions or unmerged commits prevent deletion. The server rechecks these
+protections when deleting, including the exact branch head shown in the list. If
+another session deletes the branch you have open, a notification says so and you
+return to the project's main branch. Cleanup is always explicit; no branch is deleted
+automatically and branches on origin are never deleted.
 
 ### Data impact
 

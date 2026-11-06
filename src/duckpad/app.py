@@ -833,8 +833,16 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
         return projects.versioning.compare(worktree, a, b)
 
     @app.get("/api/worktrees/{worktree}/git/branches", response_model=None)
-    def git_branches(worktree: str) -> list[Record]:
-        return projects.versioning.branches(worktree)
+    def git_branches(worktree: str, integrated_worktree: str | None = None) -> list[Record]:
+        branches = projects.versioning.branches(worktree, integrated_worktree)
+        if integrated_worktree:
+            for branch in branches:
+                if branch["worktree"] and not branch.get("cleanup_error"):
+                    try:
+                        engine.require_idle(branch["worktree"])
+                    except Problem as error:
+                        branch["cleanup_error"] = str(error)
+        return branches
 
     @app.post("/api/worktrees/{worktree}/git/open", response_model=None)
     def git_open(worktree: str, data: schemas.NewBranch) -> Record:

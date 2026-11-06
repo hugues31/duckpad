@@ -392,6 +392,62 @@ def integrated_feature(projects, main):
     return feature, review["source_head"]
 
 
+@pytest.mark.parametrize("state", ["unmerged", "pending", "tracked", "untracked", "locked"])
+def test_cleanup_availability_matches_removal_protections(project, state):
+    projects, main = project
+    feature, reviewed = integrated_feature(projects, main)
+    if state == "unmerged":
+        edit(projects, feature, lambda b: b["documentation"].update(project="New work"))
+    elif state == "pending":
+        projects.pending[feature["id"]] = 0
+    elif state == "tracked":
+        Path(feature["path"], "flow.json").write_text("{}")
+    elif state == "untracked":
+        Path(feature["path"], "notes.txt").write_text("Keep this file")
+    else:
+        projects.git(main["path"], "worktree", "lock", feature["path"])
+    branches = projects.versioning.branches(main["id"], main["id"])
+    row = next(b for b in branches if b["name"] == "feature")
+    assert row["cleanup_error"]
+    # The Branches tab removes the head it lists.
+    with pytest.raises(Problem) as rejected:
+        projects.versioning.cleanup(main["id"], feature["id"], main["id"], row["head"])
+    assert str(rejected.value) == row["cleanup_error"]
+    if state == "unmerged":
+        # The post-merge action removes the reviewed head, never commits added since.
+        with pytest.raises(Problem, match="branch changed"):
+            projects.versioning.cleanup(main["id"], feature["id"], main["id"], reviewed)
+    assert Path(feature["path"]).exists() and projects.store.get("worktree", feature["id"])
+
+
+def test_cleanup_availability_and_destination_context(project):
+    projects, main = project
+    target = projects.branch(main["id"], "release")
+    feature, head = integrated_feature(projects, target)
+    branches = {b["name"]: b for b in projects.versioning.branches(main["id"], target["id"])}
+    assert branches["feature"]["cleanup_error"] is None
+    assert "protected" in branches["main"]["cleanup_error"]
+    assert "protected" in branches["release"]["cleanup_error"]
+    current = projects.versioning.branches(feature["id"], target["id"])
+    assert "protected" in next(b for b in current if b["name"] == "feature")["cleanup_error"]
+    # The post-merge action leaves the source and calls cleanup from the destination.
+    projects.git(main["path"], "update-ref", "refs/remotes/origin/feature", head)
+    projects.versioning.cleanup(target["id"], feature["id"], target["id"], head)
+    assert not Path(feature["path"]).exists()
+    assert projects.store.get("worktree", feature["id"]) is None
+    assert projects.git(main["path"], "rev-parse", "refs/remotes/origin/feature") == head
+    assert not any(b["name"] == "feature" for b in projects.versioning.branches(target["id"]))
+    # A closed local branch can be opened and removed through the same protected endpoint.
+    projects.git(main["path"], "branch", "closed", head)
+    closed = next(b for b in projects.versioning.branches(main["id"], target["id"]) if b["name"] == "closed")
+    assert closed["worktree"] is None and closed["cleanup_error"] is None
+    reopened = projects.versioning.open_branch(main["id"], "closed")
+    projects.versioning.cleanup(main["id"], reopened["id"], target["id"], closed["head"])
+    other = projects.create("Other", bundle())
+    with pytest.raises(Problem, match="from this project"):
+        projects.versioning.branches(main["id"], other["id"])
+
+
 def test_cleanup_keeps_a_locked_worktree(project):
     projects, main = project
     feature, head = integrated_feature(projects, main)
@@ -523,8 +579,19 @@ def test_cleanup_releases_engine_contexts_and_catalog_remains_writable(tmp_path,
                 "canceled": canceled,
                 "cursor": cursor,
             }
+
+        def cleanup_error():
+            response = client.get(
+                f"/api/worktrees/{main['id']}/git/branches",
+                params={"integrated_worktree": main["id"]},
+            )
+            assert response.status_code == 200
+            return next(b for b in response.json() if b["name"] == "feature")["cleanup_error"]
+
+        assert cleanup_error() is None
         engine.active[feature["id"]] = {"id": "pending"}
         try:
+            assert "execution" in cleanup_error()
             response = client.post(f"/api/worktrees/{main['id']}/git/cleanup", json=cleanup)
             assert response.status_code == 409
             assert all(engine.pool.contexts[(c.worktree, c.environment)] is c for c in contexts)
