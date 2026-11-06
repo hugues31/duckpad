@@ -293,10 +293,13 @@ export default function Inspector({
     const base = parameter.type.split("(")[0];
     const argument = argumentOf(parameter.name);
     // The listing's progress and error show once, under the first schema field.
-    const status =
-      parameter.name === listedSchema
+    const status = {
+      ...(parameter.name === listedSchema
         ? { pending: objects.pending, error: objects.error }
-        : { pending: false, error: "" };
+        : { pending: false, error: "" }),
+      // Without a complete listing, names are typed instead of chosen.
+      complete: objects.pending || !!(objects.data && !objects.data.truncated),
+    };
     if (base === "schema_name" && argument === listedConnection)
       return { names: objects.data?.schemas ?? [], ...status };
     if (base === "table_name" && argumentOf(argument) === listedConnection)

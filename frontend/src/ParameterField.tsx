@@ -45,7 +45,13 @@ export default function ParameterField({
   schemas?: string[];
   columns?: Column[];
   /** Schema or table names listed from the database connection, for name parameters. */
-  objects?: { names: string[]; pending: boolean; error: string };
+  objects?: {
+    names: string[];
+    pending: boolean;
+    error: string;
+    /** Every name is listed, so the field is a select. */
+    complete: boolean;
+  };
   worktree?: string;
   /** The variable button shown next to the name, and the bound variable replacing the input. */
   variable?: { control: ReactNode; bound: ReactNode };
@@ -54,6 +60,7 @@ export default function ParameterField({
 }) {
   const t = useT();
   const columnList = useId();
+  const objectList = useId();
   const id = useId();
   const name = parameter.name;
   const type = parameter.type || "text";
@@ -104,7 +111,7 @@ export default function ParameterField({
           csv={csv}
           expressionVariables={expressionVariables}
         />
-      ) : objects ? (
+      ) : objects?.complete ? (
         <Select
           id={id}
           value={text}
@@ -205,11 +212,24 @@ export default function ParameterField({
           value={text}
           onChange={(e) => onChange(e.target.value)}
           onBlur={onBlur}
-          list={base === "column" && schemas ? columnList : undefined}
+          list={
+            base === "column" && schemas
+              ? columnList
+              : objects
+                ? objectList
+                : undefined
+          }
         />
       )}
       {objects && !variable?.bound && (
         <>
+          {!objects.complete && (
+            <datalist id={objectList}>
+              {objects.names.map((name) => (
+                <option key={name} value={name} />
+              ))}
+            </datalist>
+          )}
           {objects.pending ? (
             <small className="muted">{t("listingDatabaseObjects")}</small>
           ) : (

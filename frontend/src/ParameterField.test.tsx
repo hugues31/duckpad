@@ -80,7 +80,7 @@ it("selects table names listed from the database connection", () => {
       value=""
       onChange={onChange}
       connections={connections}
-      objects={{ names: [], pending: true, error: "" }}
+      objects={{ names: [], pending: true, error: "", complete: true }}
     />,
   );
   expect(screen.getByText("Listing schemas and tables…")).toBeTruthy();
@@ -90,7 +90,12 @@ it("selects table names listed from the database connection", () => {
       value=""
       onChange={onChange}
       connections={connections}
-      objects={{ names: ["order_totals", "orders"], pending: false, error: "" }}
+      objects={{
+        names: ["order_totals", "orders"],
+        pending: false,
+        error: "",
+        complete: true,
+      }}
     />,
   );
   const input = screen.getByRole("combobox", { name: "table" });
@@ -107,12 +112,45 @@ it("selects table names listed from the database connection", () => {
       value=""
       onChange={onChange}
       connections={connections}
-      objects={{ names: [], pending: false, error: "password failed" }}
+      objects={{
+        names: [],
+        pending: false,
+        error: "password failed",
+        complete: false,
+      }}
     />,
   );
   expect(
     screen.getByText("Cannot list schemas and tables: password failed"),
   ).toBeTruthy();
+  // Without a complete listing, a name typed by hand stays possible.
+  const typed = screen.getByRole("combobox", { name: "table" });
+  expect(typed.tagName).toBe("INPUT");
+  fireEvent.change(typed, { target: { value: "new_table" } });
+  expect(onChange).toHaveBeenLastCalledWith("new_table");
+});
+
+it("suggests the listed names while typing when the listing is truncated", () => {
+  render(
+    <ParameterField
+      parameter={{ name: "table", type: "table_name(schema)", default: "" }}
+      value=""
+      onChange={() => undefined}
+      connections={connections}
+      objects={{
+        names: ["order_totals", "orders"],
+        pending: false,
+        error: "",
+        complete: false,
+      }}
+    />,
+  );
+  const input = screen.getByRole("combobox", { name: "table" });
+  const list = document.getElementById(input.getAttribute("list")!);
+  expect(Array.from(list!.querySelectorAll("option"), (o) => o.value)).toEqual([
+    "order_totals",
+    "orders",
+  ]);
 });
 
 it("explains integer and bound errors on numeric Python fields", () => {
