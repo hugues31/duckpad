@@ -16,6 +16,8 @@ from .types import Record
 from .util import atomic_write
 
 LOG_LIMIT = 16000
+# A single server owns a home (instance.lock): an unfinished preparation from another process was interrupted.
+PROCESS = uuid.uuid4().hex
 
 
 def clean_output(text, *paths):
@@ -25,14 +27,23 @@ def clean_output(text, *paths):
     for name, value in os.environ.items():
         if name.startswith("UV_INDEX") and name.endswith(("_PASSWORD", "_USERNAME")) and value:
             text = text.replace(value, "<redacted>")
-    for path in (*paths, sys.prefix, Path.home()):
-        text = text.replace(str(path), "<environment>")
+    # Longest first, so a parent path does not split a nested one; "/" alone would mask every separator.
+    for path in sorted(
+        {str(path) for path in (*paths, sys.prefix, Path.home())} - {"/", ""}, key=len, reverse=True
+    ):
+        text = text.replace(path, "<environment>")
     return redact_log(text)
 
 
 def environment_status(home, project):
     path = Path(home) / "python" / "status" / (project + ".json")
     status: Record = json.loads(path.read_text()) if path.exists() else {"state": "unprepared"}
+    if status["state"] in ("resolving", "installing") and status.get("process") != PROCESS:
+        status.update(
+            state="error",
+            finished_at=path.stat().st_mtime,
+            error="Python environment preparation was interrupted when the server stopped",
+        )
     if status.get("started_at"):
         status["elapsed_seconds"] = round(
             max(0, (status.get("finished_at") or time.time()) - status["started_at"]), 1
@@ -46,6 +57,7 @@ class Preparation:
         self.path = Path(home) / "python" / "status" / (project + ".json") if project else None
         self.status = {
             "operation": uuid.uuid4().hex,
+            "process": PROCESS,
             "state": state,
             "stage": "waiting",
             "started_at": time.time(),

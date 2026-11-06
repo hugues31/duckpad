@@ -18,87 +18,97 @@ test("Python preparation is visible in the workspace and retained in settings", 
       })
     ).ok(),
   ).toBeTruthy();
-  let status = {
-    state: "unprepared",
-    stage: "waiting",
-    operation: "",
-    started_at: 0,
-    elapsed_seconds: 0,
+  let status: Record<string, unknown> = {
+    state: "error",
+    stage: "resolving",
+    operation: "before-opening",
+    elapsed_seconds: 1,
     python: "3.12.12",
     duckdb: "2.0.0",
-    log: "",
-    error: "",
+    log: "Old failure",
+    error: "Old failure",
   };
   await page.route(`**/projects/${tree.project}/python/environment`, (route) =>
     route.fulfill({ json: status }),
   );
   await page.goto(`/worktrees/${tree.id}/flow`);
-  const panel = page.getByRole("region", { name: "Python environments" });
-  await expect(panel).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Run all", exact: true }),
+  ).toBeVisible();
+  const notice = page.getByRole("region", {
+    name: "Python environment",
+    exact: true,
+  });
+  // Results from before the page opened stay in settings.
+  await expect(notice).toHaveCount(0);
+
   status = {
     ...status,
     state: "resolving",
-    stage: "resolving",
     operation: "resolution",
-    started_at: Date.now() / 1000,
     elapsed_seconds: 2,
     log: "Resolving 3 dependencies",
+    error: null,
   };
-  await expect(panel).toBeVisible();
-  await expect(panel.getByRole("status")).toContainText(
+  await expect(notice.getByRole("status")).toContainText(
     "Resolving dependencies",
   );
-  await expect(panel.getByRole("progressbar")).toBeVisible();
-  await expect(panel.getByRole("progressbar")).not.toHaveAttribute("value");
-  await panel.getByText("Preparation log", { exact: true }).click();
-  await expect(panel.getByRole("log")).toContainText(
+  await expect(notice.getByRole("progressbar")).not.toHaveAttribute("value");
+  await expect(notice.getByRole("button", { name: "Close" })).toHaveCount(0);
+  await notice.getByText("Preparation log", { exact: true }).click();
+  await expect(notice.getByRole("log")).toContainText(
     "Resolving 3 dependencies",
   );
   status = {
     ...status,
     state: "installing",
     stage: "installing",
-    operation: "installation",
     log: "Downloading package\nInstalling dependencies",
     elapsed_seconds: 5,
   };
-  await expect(panel.getByRole("log")).toContainText("Installing dependencies");
-  await expect(panel).toContainText("Elapsed: 5s");
-  // Joining an existing preparation must still show its eventual result.
+  await expect(notice.getByRole("log")).toContainText(
+    "Installing dependencies",
+  );
+  await expect(notice).toContainText("5.0 s");
+  // Joining a running preparation still shows its outcome.
   await page.reload();
-  await expect(panel.getByRole("progressbar")).toBeVisible();
+  await expect(notice.getByRole("progressbar")).toBeVisible();
   status = { ...status, state: "ready", log: "Installed 3 packages" };
-  await expect(panel.getByRole("status")).toContainText("Environment ready");
-  await expect(panel.getByRole("progressbar")).toHaveCount(0);
-  await panel.getByRole("button", { name: "Close", exact: true }).click();
-  await expect(panel).toHaveCount(0);
+  await expect(notice.getByRole("status")).toContainText("Environment ready");
+  await expect(notice.getByRole("progressbar")).toHaveCount(0);
+  // A success closes by itself.
+  await expect(notice).toHaveCount(0, { timeout: 15000 });
+
+  // Reusing a cached environment installs nothing, so the workspace stays quiet.
+  status = { ...status, operation: "cache-hit", stage: "cached", log: "" };
+  await page.waitForTimeout(2500);
+  await expect(notice).toHaveCount(0);
 
   status = {
     ...status,
     state: "error",
-    operation: "failed-installation",
-    started_at: Date.now() / 1000,
+    stage: "resolving",
+    operation: "failed-resolution",
     log: "No matching distribution",
     error: "Python environment preparation failed: No matching distribution",
   };
-  await expect(panel.getByRole("status")).toHaveText("Preparation failed");
-  await expect(panel.locator(".error")).toContainText(
+  await expect(notice.getByRole("status")).toContainText("Preparation failed");
+  await expect(notice.locator(".notice.error")).toContainText(
     "No matching distribution",
   );
-  await panel.getByText("Preparation log", { exact: true }).click();
-  await expect(panel.getByRole("log")).toContainText(
-    "No matching distribution",
-  );
-  await page.goto(`/projects/${tree.project}/settings/python`);
-  await expect(panel.locator(".error")).toContainText(
-    "No matching distribution",
-  );
-  await panel.getByText("Preparation log", { exact: true }).click();
-  await expect(panel.getByRole("log")).toContainText(
-    "No matching distribution",
-  );
+  await notice.getByRole("button", { name: "Close", exact: true }).click();
+  await expect(notice).toHaveCount(0);
 
-  await page.goto(`/worktrees/${tree.id}/flow`);
-  // Historical errors stay in settings, not as a new workspace notification.
-  await expect(panel).toHaveCount(0);
+  await page.goto(`/projects/${tree.project}/settings/python`);
+  const settings = page.getByRole("region", {
+    name: "Python environments",
+    exact: true,
+  });
+  await expect(settings.locator(".notice.error")).toContainText(
+    "No matching distribution",
+  );
+  await settings.getByText("Preparation log", { exact: true }).click();
+  await expect(settings.getByRole("log")).toContainText(
+    "No matching distribution",
+  );
 });

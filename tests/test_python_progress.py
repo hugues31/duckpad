@@ -8,7 +8,8 @@ from helpers import wait_until
 from test_python_nodes import flow
 
 from duckpad import python_environment as environment
-from duckpad.python_progress import LOG_LIMIT, Preparation, environment_status
+from duckpad import python_progress as progress_module
+from duckpad.python_progress import LOG_LIMIT, Preparation, clean_output, environment_status
 from duckpad.util import Problem
 
 
@@ -104,6 +105,20 @@ def test_older_preparation_cannot_replace_latest_status(tmp_path):
     assert environment_status(tmp_path, "other")["state"] == "unprepared"
 
 
+def test_preparation_interrupted_by_a_server_stop_is_reported(tmp_path, monkeypatch):
+    Preparation(tmp_path, "project", "installing").output("Downloading package")
+    assert environment_status(tmp_path, "project")["state"] == "installing"
+    monkeypatch.setattr(progress_module, "PROCESS", "restarted-server")
+    status = environment_status(tmp_path, "project")
+    assert status["state"] == "error" and "interrupted" in status["error"]
+    assert status["log"] == "Downloading package" and status["finished_at"]
+
+
+def test_root_home_does_not_mask_path_separators(monkeypatch):
+    monkeypatch.setenv("HOME", "/")
+    assert clean_output("Installed into .venv/lib/site-packages") == "Installed into .venv/lib/site-packages"
+
+
 def test_real_preparation_and_cache_reuse_replace_previous_errors(services, monkeypatch):
     store, projects, _, _ = services
     tree = flow(services)
@@ -114,6 +129,9 @@ def test_real_preparation_and_cache_reuse_replace_previous_errors(services, monk
     first = environment.prepare(files, store.home, project)
     status = environment_status(store.home, project)
     assert status["state"] == "ready" and "Installed" in status["log"]
+    # Starting another worker on a ready environment is not a new preparation.
+    assert environment.prepare(files, store.home, project) == first
+    assert environment_status(store.home, project) == status
     environment.lock_files(files, store.home, project=project)
     # A run reusing its existing worker does not prepare again after this cache hit.
     assert environment_status(store.home, project) == status

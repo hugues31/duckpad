@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { X } from "lucide-react";
+import { CircleAlert, CircleCheck, Loader2, X } from "lucide-react";
 import { useT } from "./i18n";
+import { seconds } from "./ResultsPanel";
 import { useApiResource } from "./useApiResource";
 
 const states = {
@@ -21,111 +22,80 @@ const stages = {
   cached: "pythonEnvironmentCached",
 } as const;
 
+/** The workspace notice names the outcome briefly; settings explain it. */
+const outcomes = {
+  locked: "pythonEnvironmentResolved",
+  ready: "pythonEnvironmentPrepared",
+  error: "pythonEnvironmentError",
+} as const;
+
 interface PreparationStatus {
   state: keyof typeof states;
   stage?: keyof typeof stages;
   operation?: string;
-  started_at?: number;
   elapsed_seconds?: number;
   python: string;
   duckdb: string;
-  error?: string;
+  error?: string | null;
   log?: string;
   log_truncated?: boolean;
 }
 
-export default function PythonEnvironmentStatus({
-  project,
-  compact = false,
-  active = false,
-}: {
-  project: string;
-  compact?: boolean;
-  active?: boolean;
-}) {
-  const t = useT();
-  const [openedAt] = useState(() => Date.now() / 1000);
-  const [dismissed, setDismissed] = useState<string>();
-  const [observed, setObserved] = useState<string>();
+const toEnd = (element: HTMLElement | null) => {
+  if (element) element.scrollTop = element.scrollHeight;
+};
+
+/** The latest preparation, polled every second while it runs or while `active`. */
+function usePreparation(project: string, active = false) {
   const [busy, setBusy] = useState(false);
-  const { data: status, error } = useApiResource<PreparationStatus>(
+  const resource = useApiResource<PreparationStatus>(
     `/projects/${project}/python/environment`,
     { interval: busy || active ? 1000 : 5000, refresh: Number(active) },
   );
   const preparing =
-    status?.state === "resolving" || status?.state === "installing";
+    resource.data?.state === "resolving" ||
+    resource.data?.state === "installing";
   if (preparing !== busy) setBusy(preparing);
-  if (preparing && status?.operation !== observed)
-    setObserved(status?.operation);
+  return { ...resource, preparing };
+}
+
+/** Progress, error and live installer output, following the end of the log. */
+function PreparationDetails({
+  status,
+  preparing,
+  open,
+  onToggle,
+}: {
+  status: PreparationStatus;
+  preparing: boolean;
+  open?: boolean;
+  onToggle?: (open: boolean) => void;
+}) {
+  const t = useT();
   const log = useRef<HTMLPreElement>(null);
   const follow = useRef(true);
   useEffect(() => {
-    if (log.current && follow.current)
-      log.current.scrollTop = log.current.scrollHeight;
-  }, [status?.log]);
-  // Keep the result visible until dismissed, without resurfacing old builds on every visit.
-  if (
-    compact &&
-    (!status ||
-      status.state === "unprepared" ||
-      (!preparing &&
-        (status.operation === dismissed ||
-          (status.operation !== observed &&
-            (status.started_at || 0) < openedAt))))
-  )
-    return null;
-  const label = status
-    ? t(preparing && status.stage ? stages[status.stage] : states[status.state])
-    : t("loading");
+    if (follow.current) toEnd(log.current);
+  }, [status.log]);
   return (
-    <section
-      className={`settings-card python-preparation${compact ? " floating" : ""}`}
-      aria-label={t("pythonEnvironments")}
-    >
-      <header>
-        <h2>{t("pythonEnvironments")}</h2>
-        {compact && !preparing && (
-          <button
-            className="icon-button"
-            aria-label={t("close")}
-            onClick={() => setDismissed(status?.operation)}
-          >
-            <X size={16} />
-          </button>
-        )}
-      </header>
-      {!compact && <p className="muted">{t("pythonEnvironmentHint")}</p>}
-      <p role="status">{label}</p>
+    <>
       {preparing && <progress aria-label={t("pythonEnvironmentProgress")} />}
-      {status?.elapsed_seconds !== undefined && (
-        <p className="muted">
-          {t("pythonEnvironmentElapsed").replace(
-            "{seconds}",
-            String(Math.floor(status.elapsed_seconds)),
-          )}
-        </p>
-      )}
-      {status?.stage === "cached" && !preparing && (
-        <p className="muted">{t("pythonEnvironmentCached")}</p>
-      )}
-      {!compact && status && (
-        <p>
-          Python {status.python} · DuckDB {status.duckdb}
-        </p>
-      )}
-      {(error || status?.error) && (
-        <pre className="notice error">{error || status?.error}</pre>
-      )}
-      {(preparing || status?.log) && (
-        <details>
+      {status.error && <pre className="notice error">{status.error}</pre>}
+      {(preparing || status.log) && (
+        <details
+          open={open}
+          onToggle={(event) => {
+            if (follow.current) toEnd(log.current);
+            onToggle?.(event.currentTarget.open);
+          }}
+        >
           <summary>{t("pythonEnvironmentLogs")}</summary>
-          {status?.log_truncated && (
+          {status.log_truncated && (
             <p className="muted">{t("pythonEnvironmentLogTail")}</p>
           )}
           <pre
             ref={log}
             role="log"
-            aria-live="off"
             aria-label={t("pythonEnvironmentLogs")}
             onScroll={() => {
               const element = log.current;
@@ -137,10 +107,134 @@ export default function PythonEnvironmentStatus({
                   40;
             }}
           >
-            {status?.log || t("pythonEnvironmentLogWaiting")}
+            {status.log || t("pythonEnvironmentLogWaiting")}
           </pre>
         </details>
       )}
+    </>
+  );
+}
+
+/** The project's latest preparation, with its log, in Python settings. */
+export default function PythonEnvironmentStatus({
+  project,
+}: {
+  project: string;
+}) {
+  const t = useT();
+  const { data: status, error, preparing } = usePreparation(project);
+  const label = status
+    ? t(preparing && status.stage ? stages[status.stage] : states[status.state])
+    : t("loading");
+  return (
+    <section
+      className="settings-card python-preparation"
+      aria-label={t("pythonEnvironments")}
+    >
+      <h2>{t("pythonEnvironments")}</h2>
+      <p className="muted">{t("pythonEnvironmentHint")}</p>
+      {error ? (
+        <pre className="notice error">{error}</pre>
+      ) : (
+        <p role="status">{label}</p>
+      )}
+      {status && (
+        <>
+          <p>
+            Python {status.python} · DuckDB {status.duckdb}
+            {status.elapsed_seconds !== undefined &&
+              ` · ${t("pythonEnvironmentDuration").replace(
+                "{duration}",
+                seconds(status.elapsed_seconds),
+              )}`}
+          </p>
+          {status.stage === "cached" && !preparing && (
+            <p className="muted">{t("pythonEnvironmentCached")}</p>
+          )}
+          <PreparationDetails status={status} preparing={preparing} />
+        </>
+      )}
+    </section>
+  );
+}
+
+/**
+ * A floating notice while the workspace waits for a preparation, then its
+ * outcome. Successes close by themselves unless the log is open; failures stay
+ * until closed. Results from before the page opened, and cache hits, stay in
+ * Python settings.
+ */
+export function PythonPreparationNotice({
+  project,
+  active,
+}: {
+  project: string;
+  active: boolean;
+}) {
+  const t = useT();
+  const { data: status, preparing } = usePreparation(project, active);
+  const [hidden, setHidden] = useState<string>();
+  const [loaded, setLoaded] = useState(false);
+  const [reading, setReading] = useState(false);
+  const operation = status?.operation ?? "";
+  if (status && !loaded) {
+    setLoaded(true);
+    if (!preparing) setHidden(operation);
+  }
+  const visible =
+    !!status &&
+    status.state !== "unprepared" &&
+    operation !== hidden &&
+    (preparing || status.stage !== "cached");
+  const succeeded = visible && !preparing && status.state !== "error";
+  useEffect(() => {
+    if (!succeeded || reading) return;
+    const timer = setTimeout(() => setHidden(operation), 5000);
+    return () => clearTimeout(timer);
+  }, [succeeded, reading, operation]);
+  if (!visible) return null;
+  const failed = status.state === "error";
+  const label =
+    preparing && status.stage
+      ? stages[status.stage]
+      : outcomes[status.state as keyof typeof outcomes] || states[status.state];
+  return (
+    <section
+      className={`python-preparation floating${failed ? " failed" : ""}`}
+      aria-label={t("pythonEnvironment")}
+    >
+      <header>
+        {preparing ? (
+          <Loader2 className="spin" size={16} aria-hidden="true" />
+        ) : failed ? (
+          <CircleAlert size={16} aria-hidden="true" />
+        ) : (
+          <CircleCheck size={16} aria-hidden="true" />
+        )}
+        <p role="status">
+          <strong>{t("pythonEnvironment")}</strong>
+          <span>{t(label)}</span>
+        </p>
+        {status.elapsed_seconds !== undefined && (
+          <span className="muted">{seconds(status.elapsed_seconds)}</span>
+        )}
+        {!preparing && (
+          <button
+            className="icon"
+            aria-label={t("close")}
+            title={t("close")}
+            onClick={() => setHidden(operation)}
+          >
+            <X size={16} />
+          </button>
+        )}
+      </header>
+      <PreparationDetails
+        status={status}
+        preparing={preparing}
+        open={reading}
+        onToggle={setReading}
+      />
     </section>
   );
 }

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Outlet, useNavigate } from "react-router";
 import CodePanel from "../CodePanel";
-import PythonEnvironmentStatus from "../PythonEnvironmentStatus";
+import { PythonPreparationNotice } from "../PythonEnvironmentStatus";
 import { FlowToolbar, WorkspaceNotices } from "../FlowToolbar";
 import { usePageRoute, worktreeUrl } from "../navigation";
 import { useT } from "../i18n";
@@ -55,14 +55,6 @@ export default function WorktreePage() {
   return (
     <>
       <FlowToolbar />
-      {snapshot.python_enabled && (
-        <PythonEnvironmentStatus
-          key={tree.project}
-          project={tree.project}
-          compact
-          active={saving || starting}
-        />
-      )}
       <WorkspaceNotices
         snapshot={snapshot}
         active={statuses.active}
@@ -85,13 +77,20 @@ export default function WorktreePage() {
       />
       <CodePanel
         selectedNode={assistantNode}
-        key={id}
+        key={`code:${id}`}
         hidden={tab !== "code"}
         readOnly={!canEdit}
         snapshot={snapshot}
         onSave={saveFiles}
       />
       <Outlet key={id} context={flowView} />
+      {snapshot.python_enabled && (
+        <PythonPreparationNotice
+          key={`python:${tree.project}`}
+          project={tree.project}
+          active={saving || starting || !!statuses.active}
+        />
+      )}
     </>
   );
 }

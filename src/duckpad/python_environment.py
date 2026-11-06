@@ -478,9 +478,16 @@ def resolve_lock(files, home, *, read_only=False, allow_builds=False, progress=N
 
 
 def prepare(files, home, project, *, allow_builds=False):
-    progress = Preparation(home, project, "installing")
+    progress = Preparation(home, project, "installing", start=False)
     try:
         result = prepare_environment(files, home, project, allow_builds=allow_builds, progress=progress)
+        # A cached environment starts no preparation; it only replaces a settled state other than ready.
+        if (
+            not progress.active
+            and project
+            and environment_status(home, project)["state"] in ("unprepared", "locked", "error")
+        ):
+            progress.step("cached")
         progress.finish("ready")
         try:
             prune_environments(Path(home) / "python")
@@ -552,6 +559,8 @@ def prepare_environment(files, home, project, *, allow_builds=False, progress=No
     root.mkdir(parents=True, exist_ok=True)
     signature = digest([project, files["pyproject.toml"], files["uv.lock"], runtime_signature()])
     directory = root / signature
+    if progress and not (directory / "ready.json").exists():
+        progress.start()
     with FileLock(str(root / (signature + ".lock"))):
         if not (directory / "ready.json").exists():
             if progress:
@@ -595,7 +604,7 @@ def prepare_environment(files, home, project, *, allow_builds=False, progress=No
             except BaseException:
                 shutil.rmtree(directory, ignore_errors=True)
                 raise
-        elif progress:
+        elif progress and progress.active:
             progress.step("cached")
         (directory / "ready.json").touch()
     interpreter = directory / ".venv" / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
