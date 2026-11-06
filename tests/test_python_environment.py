@@ -79,11 +79,19 @@ def test_resolver_uses_only_operator_configuration_and_wheels(tmp_path, monkeypa
 
     monkeypatch.setattr(environment.subprocess, "run", run)
     monkeypatch.setenv("UV_CONFIG_FILE", "/unapproved/config.toml")
+    monkeypatch.setenv("UV_NO_CONFIG", "true")
     monkeypatch.setenv("UV_NO_BUILD", "false")
+    for name in ("XDG_CONFIG_HOME", "XDG_CONFIG_DIRS", "APPDATA", "SYSTEMDRIVE", "USERPROFILE"):
+        monkeypatch.setenv(name, str(tmp_path))
     environment.command(["sync", "--locked"], tmp_path)
     arguments, options = observed[0]
-    assert "--no-config" in arguments and "--no-build" in arguments
+    assert "--no-config" not in arguments and "--no-build" in arguments
     assert "UV_CONFIG_FILE" not in options["env"] and "UV_NO_BUILD" not in options["env"]
+    assert "UV_NO_CONFIG" not in options["env"]
+    for name in ("XDG_CONFIG_HOME", "XDG_CONFIG_DIRS", "APPDATA", "SYSTEMDRIVE", "USERPROFILE"):
+        assert options["env"][name] == str(tmp_path)
+    assert options["env"]["UV_PYTHON_DOWNLOADS"] == "never"
+    assert options["env"]["UV_LINK_MODE"] == "copy"
 
 
 def test_sql_only_launch_never_resolves_python_dependencies(services, monkeypatch):

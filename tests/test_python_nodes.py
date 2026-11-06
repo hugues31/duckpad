@@ -334,13 +334,19 @@ def test_python_isolated_filesystem_and_environment(tmp_path, monkeypatch):
     monkeypatch.setenv("DUCKPAD_TEST_API_CREDENTIAL", "must-not-reach-python")
     forbidden = tmp_path / "private.txt"
     forbidden.write_text("synthetic secret")
+    configs = [tmp_path / ".config" / "uv" / "uv.toml", tmp_path / "etc" / "uv" / "uv.toml"]
+    for config in configs:
+        config.parent.mkdir(parents=True)
+        config.write_text("")
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(configs[0].parent.parent))
+    monkeypatch.setenv("XDG_CONFIG_DIRS", str(configs[1].parent.parent))
     instance = Services.open(tmp_path / "instance", enforce_access=True)
     try:
         services = instance.store, instance.projects, instance.catalog, instance.engine
         other = instance.projects.create("Other project")
         other_file = Path(other["path"]) / "pyproject.toml"
         metadata = instance.store.home / "instance.sqlite"
-        protected = [str(forbidden), str(other_file), str(metadata)]
+        protected = [str(forbidden), str(other_file), str(metadata), *(str(config) for config in configs)]
         code = f"""import duckpad as dp
 import os
 from pathlib import Path
