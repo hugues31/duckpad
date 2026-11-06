@@ -595,23 +595,35 @@ class Projects:
             # The commit of this save, which an undo reverts; None when it changed nothing.
             return {**self.snapshot(worktree_id), "change": commit if commit != previous else None}
 
-    def revert(self, worktree_id: str, commit: str) -> Record:
-        """Save the three-way inverse of one commit of the branch, keeping later independent edits.
+    def revert(
+        self,
+        worktree_id: str,
+        commit: str,
+        before: str | None = None,
+        *,
+        validate: bool = False,
+        assistant: str | None = None,
+    ) -> Record:
+        """Save the three-way inverse of a change, keeping later independent edits.
 
-        Reverting the commit of a revert redoes the original change.
+        The change goes from `before` (by default the parent of a commit of the branch)
+        to `commit`. Reverting the commit of a revert redoes the original change.
         """
         path = self.get(worktree_id)["path"]
-        # Only commits of the branch itself are undone.
-        if self.git(path, "merge-base", commit, "HEAD", check=False) != commit:
-            raise Problem("This change is no longer part of the branch history", 409)
-        parent = self.git(path, "rev-parse", "--verify", "--quiet", commit + "^", check=False)
-        if not parent:
-            raise Problem("The first commit of a project cannot be undone", 409)
+        if before is None:
+            # Only commits of the branch itself are undone.
+            if self.git(path, "merge-base", commit, "HEAD", check=False) != commit:
+                raise Problem("This change is no longer part of the branch history", 409)
+            before = self.git(path, "rev-parse", "--verify", "--quiet", commit + "^", check=False)
+            if not before:
+                raise Problem("The first commit of a project cannot be undone", 409)
         after = self.revision_files(path, commit)
         revision = digest(after)
         # The base of the inverse save, even when the commit is older than the revision cache.
         self.cached(self.revisions, (worktree_id, revision), after)
-        return self.write(worktree_id, revision, self.revision_files(path, parent))
+        return self.write(
+            worktree_id, revision, self.revision_files(path, before), validate=validate, assistant=assistant
+        )
 
     def _locked_dependencies(self, record: Record, proposal: Files) -> Files:
         """The proposal with a uv.lock resolved for its manifest; resolution runs before any lock."""
