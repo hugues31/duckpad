@@ -2,6 +2,7 @@
 
 import os
 import subprocess
+import sys
 import time
 from pathlib import Path
 
@@ -73,11 +74,13 @@ def test_resolver_uses_only_operator_configuration_and_wheels(tmp_path, monkeypa
 
     observed = []
 
+    popen = subprocess.Popen
+
     def run(arguments, **options):
         observed.append((arguments, options))
-        return subprocess.CompletedProcess(arguments, 0, "", "")
+        return popen([sys.executable, "-c", "pass"], **options)
 
-    monkeypatch.setattr(environment.subprocess, "run", run)
+    monkeypatch.setattr(environment.subprocess, "Popen", run)
     monkeypatch.setenv("UV_CONFIG_FILE", "/unapproved/config.toml")
     monkeypatch.setenv("UV_NO_CONFIG", "true")
     monkeypatch.setenv("UV_NO_BUILD", "false")
