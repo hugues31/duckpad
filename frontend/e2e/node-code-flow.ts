@@ -1,11 +1,5 @@
 import { expect, type Page } from "@playwright/test";
-import {
-  closeCode,
-  codePanel,
-  nodeMenuAction,
-  openCode,
-  replaceCode,
-} from "./helpers";
+import { closeCode, nodeMenuAction, openCode, replaceCode } from "./helpers";
 import type { Snapshot } from "../src/types";
 
 /** Exercise the real UI on a local instance or an authenticated deployed preview. */
@@ -90,8 +84,7 @@ export async function verifyNodeCode(page: Page) {
   await select(second.id);
   await expect(inspector.getByLabel(/shared_flag/)).toBeVisible();
   // The linked node's code is its shared template, docked like its own code.
-  await nodeMenuAction(page, "View code");
-  const linkedCode = codePanel(page);
+  const linkedCode = await openCode(page, "Edit template (2 nodes)");
   await expect(linkedCode).toContainText("Shared template, 2 nodes");
   await expect(linkedCode.locator(".monaco-editor")).toContainText(
     "shared_flag",
@@ -150,6 +143,10 @@ export async function verifyNodeCode(page: Page) {
   await expect(
     inspector.getByRole("button", { name: "Edit code", exact: true }),
   ).toBeVisible();
+  // The canvas shows the node before its save lands.
+  await expect
+    .poll(async () => (await read()).bundle!.flow.nodes.length)
+    .toBe(4);
   snapshot = await read();
   const fresh = snapshot.bundle!.flow.nodes.at(-1)!;
   expect(fresh.template).toBeUndefined();

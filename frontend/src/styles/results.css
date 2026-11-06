@@ -653,13 +653,3 @@
   padding: 4px 14px;
   font-size: 10px;
 }
-.column-heading {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 4px;
-  min-width: 100px;
-  padding: 10px 13px;
-  font-size: 12px;
-  font-weight: 550;
-}

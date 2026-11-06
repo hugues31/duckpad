@@ -953,8 +953,10 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
             return projects.write(worktree, data.revision, bundle_to_files(bundle))
 
     @app.get("/api/worktrees/{worktree}/variables/scope", response_model=None)
-    def scope_variables(worktree: str, environment: str, node: str | None = None) -> Record:
-        return engine.scope_variables(worktree, environment, node)
+    def scope_variables(
+        worktree: str, environment: str, node: str | None = None, ancestors: bool = False
+    ) -> Record:
+        return engine.scope_variables(worktree, environment, node, ancestors)
 
     @app.post("/api/worktrees/{worktree}/import", response_model=None)
     def import_item(worktree: str, data: schemas.Import, request: Request) -> Record:
@@ -1045,7 +1047,7 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
         # The interface asks before running in a protected environment; API clients run directly.
         if entry_point == "ui" and settings["confirm_before_run"] and not data.confirmed:
             try:
-                used = engine.scope_variables(worktree, data.environment, data.node)
+                used = engine.scope_variables(worktree, data.environment, data.node, data.ancestors)
             except Problem:
                 used = {}
             raise Problem(

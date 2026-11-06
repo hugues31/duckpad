@@ -21,7 +21,7 @@ TARGET_TYPES = {
 }
 
 
-def failure_hint(types):
+def failure_hint(types: set[str]) -> str:
     """Guidance appended to the SQL error of a node whose parameters of these types prepare data."""
     preparation = set(types) & PREPARATION_TYPES
     if not preparation:

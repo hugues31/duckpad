@@ -65,21 +65,3 @@ export interface InputColumns {
     reason?: "not_connected" | "not_materialized" | null;
   }[];
 }
-
-// Reserved SQL words that a column name must quote.
-const RESERVED = new Set(
-  (
-    "all and any array as asc between both by case cast check collate column " +
-    "constraint create cross default desc distinct do else end except false " +
-    "fetch for foreign from full group having in inner intersect into is join " +
-    "lateral left like limit natural not null offset on only or order outer " +
-    "primary qualify references right select some table then to true union " +
-    "unique using when where window with"
-  ).split(" "),
-);
-
-/** A column name as SQL can write it: quoted unless it is a plain lowercase name. */
-export const quotedIdentifier = (name: string) =>
-  /^[a-z_][a-z0-9_]*$/.test(name) && !RESERVED.has(name)
-    ? name
-    : `"${name.replaceAll('"', '""')}"`;

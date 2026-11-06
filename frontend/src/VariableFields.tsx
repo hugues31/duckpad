@@ -321,14 +321,21 @@ export function ScopeVariables({
   worktree,
   environment,
   node,
+  ancestors,
 }: {
   worktree: string;
   environment: string;
   node?: string;
+  /** Only the upstream nodes of `node` run. */
+  ancestors?: boolean;
 }) {
   const t = useT();
   const scope = useApiResource<Record<string, VariableValue>>(
-    withQuery(`/worktrees/${worktree}/variables/scope`, { environment, node }),
+    withQuery(`/worktrees/${worktree}/variables/scope`, {
+      environment,
+      node,
+      ancestors,
+    }),
   );
   if (scope.error)
     return (

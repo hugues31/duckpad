@@ -83,9 +83,8 @@ To share a template, Alt+click its palette entry, or right-click it and choose
 **Add linked**. Linked nodes show a badge and template name. **Edit template
 (N nodes)** opens the shared template in the code editor; editing it changes
 every linked instance in the branch. The other actions below are in **Node
-actions**: **⋯** in the inspector title, or a right-click on the node. **View
-code** opens the same editor. **Detach from template** copies the SQL while
-retaining parameters and connections.
+actions**: **⋯** in the inspector title, or a right-click on the node. **Detach
+from template** copies the SQL while retaining parameters and connections.
 
 **Convert to template** names a new shared definition and links the node to it.
 **Link to original template**, offered for nodes that come from a project

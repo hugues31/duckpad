@@ -89,6 +89,12 @@ def run_outcome(statuses: set[str], canceled: bool) -> str:
     return "failed" if failed else "success"
 
 
+def failure_message(error: BaseException, node: Record, secrets: list[str]) -> str:
+    """The error of a node's code as displayed: secrets masked, with guidance for its parameters."""
+    types = {base_type(p["type"]) for p in node["parsed"]["parameters"]}
+    return project_extensions.explain_missing(redact(str(error), secrets)) + failure_hint(types)
+
+
 def launch_scope(
     nodes: dict[str, Record], edges: list[Record], target: str | None = None, ancestors: bool = False
 ) -> set[str]:
@@ -405,7 +411,9 @@ class Runner:
             partition_plan=partition_plan,
         )
 
-    def scope_variables(self, worktree: str, environment: str, target: str | None = None) -> Record:
+    def scope_variables(
+        self, worktree: str, environment: str, target: str | None = None, ancestors: bool = False
+    ) -> Record:
         """Variables a launch would use, with their values and sources in this environment."""
         self.catalog.environment(environment)
         snapshot = self.projects.snapshot(worktree)
@@ -416,7 +424,7 @@ class Runner:
         nodes, edges, boundaries = expand_for(bundle, environment, computed=values)
         plan = partitions.plan(bundle, nodes, edges, boundaries)
         scope = self._partition_scope(
-            worktree, environment, nodes, edges, launch_scope(nodes, edges, target), plan
+            worktree, environment, nodes, edges, launch_scope(nodes, edges, target, ancestors), plan
         )
         result = variables.used(bundle, nodes, scope, environment, values)
         for name, source in value_sources.sources(bundle, nodes, boundaries).items():
@@ -745,8 +753,7 @@ class Runner:
                 self.store.delete("artifact", artifact)
                 self.exports.discard([artifact])
             self._drop_staged(context, created_tables)
-            types = {base_type(p["type"]) for p in node["parsed"]["parameters"]}
-            message = project_extensions.explain_missing(redact(str(error), secrets)) + failure_hint(types)
+            message = failure_message(error, node, secrets)
             if isinstance(error, SqlSourceError) and not execution.canceled:
                 state["diagnostic"] = {**error.diagnostic, "message": message, "source": node["template_sql"]}
             state.update(status="canceled" if execution.canceled else "failed", error=message)

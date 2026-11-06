@@ -93,8 +93,10 @@ class Engine:
             ancestors=ancestors,
         )
 
-    def scope_variables(self, worktree: str, environment: str, target: str | None = None) -> Record:
-        return self.runs.scope_variables(worktree, environment, target)
+    def scope_variables(
+        self, worktree: str, environment: str, target: str | None = None, ancestors: bool = False
+    ) -> Record:
+        return self.runs.scope_variables(worktree, environment, target, ancestors)
 
     def cancel(self, run_id: str) -> Record:
         return self.runs.cancel(run_id)

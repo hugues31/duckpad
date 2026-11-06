@@ -91,9 +91,27 @@ export function sampleSql(port: string, sample: Sample) {
   return lines.join("\n") + ";";
 }
 
+// DuckDB keywords that a column reference must quote: duckdb_keywords() of the
+// "reserved" and "type_function" categories.
+const KEYWORDS = new Set(
+  (
+    "all analyse analyze and anti any array as asc asof asymmetric at " +
+    "authorization binary both by case cast check collate collation column " +
+    "concurrently constraint create cross default deferrable desc describe " +
+    "distinct do else end except false fetch for foreign freeze from full " +
+    "glob group having ilike in initially inner intersect into is isnull join " +
+    "lambda lateral leading left like limit natural not notnull null offset " +
+    "on only or order outer overlaps pivot pivot_longer pivot_wider placing " +
+    "positional primary qualify references returning right select semi show " +
+    "similar some summarize symmetric table tablesample then to trailing true " +
+    "union unique unpack unpivot using variadic verbose when where window with"
+  ).split(" "),
+);
+
 /** A DuckDB identifier, quoted only when it needs to be. */
 export function quoteIdentifier(name: string) {
-  return /^[A-Za-z_][A-Za-z0-9_]*$/.test(name)
+  return /^[A-Za-z_][A-Za-z0-9_]*$/.test(name) &&
+    !KEYWORDS.has(name.toLowerCase())
     ? name
     : `"${name.replaceAll('"', '""')}"`;
 }

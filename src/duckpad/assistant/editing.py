@@ -8,7 +8,7 @@ from pydantic_ai import RunContext
 from .. import variables
 from ..bundle import bundle_to_files
 from ..components import expand, group
-from ..node_code import code_path
+from ..node_code import code_path, find_node
 from ..util import Problem
 from .tools import Dependencies, variable_usages
 
@@ -57,22 +57,6 @@ def graph_for(bundle, component):
     if component not in bundle["components"]:
         raise Problem("Component not found", 404)
     return bundle["components"][component]
-
-
-def find_node(bundle, identity):
-    parts = identity.split("::")
-    graph, parent = bundle["flow"], None
-    for index, part in enumerate(parts):
-        node = next((n for n in graph.get("nodes", []) if n["id"] == part), None)
-        if node is None:
-            raise Problem("Node not found", 404)
-        if index == len(parts) - 1:
-            return node, parent
-        parent = node.get("component")
-        if not parent:
-            raise Problem("Node is not a component", 422)
-        graph = graph_for(bundle, parent)
-    raise Problem("Choose a node", 422)
 
 
 def edit_flow(

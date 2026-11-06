@@ -12,6 +12,25 @@ def template_path(identity):
     return f"templates/{identity}" if identity.endswith(".py") else f"templates/{identity}.sql"
 
 
+def find_node(bundle, identity):
+    """The authored definition of a node and the component holding it, from its instance path."""
+    parts = identity.split("::")
+    graph, parent = bundle["flow"], None
+    for index, part in enumerate(parts):
+        node = next((n for n in graph.get("nodes", []) if n["id"] == part), None)
+        if node is None:
+            raise Problem("Node not found", 404)
+        if index == len(parts) - 1:
+            return node, parent
+        parent = node.get("component")
+        if not parent:
+            raise Problem("Node is not a component", 422)
+        if parent not in bundle["components"]:
+            raise Problem("Component not found", 404)
+        graph = bundle["components"][parent]
+    raise Problem("Choose a node", 422)
+
+
 def node_sql(bundle, node, parent=None):
     if node.get("template"):
         identity = node["template"]

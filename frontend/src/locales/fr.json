@@ -1477,7 +1477,7 @@
   "previewRunning": "Calcul de l’aperçu…",
   "previewSummary": "Calculé sur les {rows} premières lignes de chaque entrée",
   "previewSummaryAll": "Calculé sur toutes les lignes des entrées",
-  "previewMissingInputs": "Ces entrées n’ont pas encore de résultat : {inputs}. Exécutez les ancêtres de ce nœud, puis relancez l’aperçu.",
+  "previewMissingInputs": "Ces entrées n’ont pas encore de résultat : {inputs}. Exécutez les ancêtres de ce nœud : l’aperçu se met à jour une fois qu’ils ont fini.",
   "previewErrorAt": "Ligne {line} : {message}",
   "runAncestors": "Exécuter les ancêtres",
   "previewStaleInputs": "Calculé à partir de résultats obsolètes de {inputs}. Exécutez les ancêtres pour les mettre à jour.",

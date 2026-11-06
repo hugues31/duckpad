@@ -299,7 +299,7 @@ export default function FlowPage() {
   }, [bundle, view.revealed, location.key, location.search, location.state]);
 
   /** Compute the selected node's code, or its draft, on samples of its inputs. */
-  async function requestPreview(code?: string) {
+  async function requestPreview(code?: string, rows: SampleSize = sample) {
     if (!node || !canEdit) return;
     const target = fullNode;
     const draft =
@@ -320,7 +320,7 @@ export default function FlowPage() {
       const result = await api<DraftPreview>(
         `/worktrees/${worktree}/draft-preview/${encodeURIComponent(target)}`,
         {
-          ...send({ environment, code: draft, rows: sample }),
+          ...send({ environment, code: draft, rows }),
           signal: request.signal,
         },
       );
@@ -350,9 +350,11 @@ export default function FlowPage() {
   const previewAgain = useEffectEvent((active: string | null) => {
     const waiting = previewAfterRun.current;
     if (waiting?.node !== fullNode) return;
-    // The first run to start after the request computes the ancestors.
-    if (active) waiting.run ??= active;
-    else if (waiting.run) {
+    // The run of these ancestors, once it starts; a run that fails to start leaves none.
+    if (active) {
+      if (statuses.active?.ancestors && statuses.active.scope === waiting.node)
+        waiting.run ??= active;
+    } else if (waiting.run) {
       previewAfterRun.current = null;
       void requestPreview();
     }
@@ -705,11 +707,6 @@ export default function FlowPage() {
     if (!target.component) {
       if (target.template) {
         actions.push(
-          item("view", t("viewNodeCode"), () =>
-            editCode(undefined, prefix + target.id),
-          ),
-        );
-        actions.push(
           item("detach", t("detachTemplate"), () =>
             safe(() =>
               save(snapshot, (value) =>
@@ -956,13 +953,21 @@ export default function FlowPage() {
             }
             reveal={codeReveal}
             sample={sample}
-            onSample={setSample}
+            onSample={(size) => {
+              setSample(size);
+              // A shown preview follows the sample size.
+              if (preview?.node === fullNode && !preview.missing?.length)
+                void requestPreview(undefined, size);
+            }}
             onPreview={(code) => void requestPreview(code)}
             onDraft={(code) => {
               codeDraft.current =
                 code === null ? null : { node: fullNode, code };
             }}
-            onClose={() => view.change({ code: false })}
+            onClose={() => {
+              view.change({ code: false });
+              setCodeReveal(null);
+            }}
           />
         ) : node && definition ? (
           <Inspector

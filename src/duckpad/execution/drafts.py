@@ -15,12 +15,12 @@ from typing import Any
 
 import duckdb
 
-from .. import connection_probe, project_extensions, variables
+from .. import connection_probe, variables
 from ..catalog import Catalog, redact
 from ..components import expand_for
 from ..datasets import Context, Dataset
 from ..graph import connection_references, reachable
-from ..node_code import code_path
+from ..node_code import code_path, find_node
 from ..projects import Projects
 from ..sql_errors import SqlSourceError
 from ..store import Store
@@ -28,17 +28,16 @@ from ..templates import compile_template
 from ..types import Connections, Record, RunToken, SQLCursor
 from ..util import Problem, clean, qi, uid
 from .contexts import ContextPool, interrupt
+from .runs import failure_message
 from .samples import reading
 
 # Rows read from each input; None reads every row.
 SAMPLE_SIZES = (100, 1_000, 10_000)
 DEFAULT_SAMPLE = 1_000
-# Rows kept of each output: later blocks of the node read at most these.
+# Rows kept of an output that no later block of the node reads.
 OUTPUT_ROWS = 10_000
 # Rows returned for each output.
 SHOWN_ROWS = 1_000
-# A preview stops after this many seconds.
-PREVIEW_TIMEOUT = 30.0
 
 
 @dataclass
@@ -58,26 +57,10 @@ class Located:
     nodes: dict[str, Record]
 
 
-def locate(bundle: Record, full_node: str) -> tuple[Record, str | None]:
-    """The authored definition of a node, inside the component instances its ID names."""
-    graph, parent = bundle["flow"], None
-    ids = full_node.split("::")
-    for instance in ids[:-1]:
-        found = next((n for n in graph.get("nodes", []) if n["id"] == instance), None)
-        if not found or not found.get("component") or found["component"] not in bundle["components"]:
-            raise Problem("Node not found", 404)
-        parent = found["component"]
-        graph = bundle["components"][parent]
-    node = next((n for n in graph.get("nodes", []) if n["id"] == ids[-1]), None)
-    if node is None:
-        raise Problem("Node not found", 404)
-    return node, parent
-
-
 def with_code(bundle: Record, full_node: str, code: str) -> Record:
     """A copy of the bundle where the node runs `code`: its own file or its shared template."""
     bundle = copy.deepcopy(bundle)
-    node, parent = locate(bundle, full_node)
+    node, parent = find_node(bundle, full_node)
     if node.get("component"):
         raise Problem("A component instance has no code; open the component to edit its nodes", 422)
     if node.get("template"):
@@ -123,21 +106,7 @@ class DraftPreviews:
             raise Problem("Choose a sample of 100, 1,000 or 10,000 rows, or every row", 422)
         self.catalog.environment(environment)
         self._require_idle(worktree)
-        located = self._locate(worktree, environment, full_node, code)
-        node = located.node
-        self._previewable(node)
-        context = self.pool.find(worktree, environment)
-        inputs, missing = self._inputs(context, located)
-        if missing:
-            raise Problem(
-                "Run the ancestors of this node: "
-                + ", ".join(item["input"] for item in missing)
-                + (" has" if len(missing) == 1 else " have")
-                + " no results yet",
-                409,
-                {"code": "inputs_not_materialized", "missing": missing},
-            )
-        context = self._started(context, worktree, environment)
+        # Registered first: an older preview still starting its database must not replace this one.
         request = Request()
         key = (worktree, environment, full_node, requester)
         with self.requests_lock:
@@ -147,10 +116,25 @@ class DraftPreviews:
             previous.replaced.set()
             if previous.cursor is not None:
                 interrupt(previous.cursor)
-        started = time.monotonic()
-        secrets: list[str] = list(context.secrets)
         try:
-            with reading(context, inputs.values(), PREVIEW_TIMEOUT) as cursor:
+            located = self._locate(worktree, environment, full_node, code)
+            node = located.node
+            self._previewable(node)
+            context = self.pool.find(worktree, environment)
+            inputs, missing = self._inputs(context, located)
+            if missing:
+                raise Problem(
+                    "Run the ancestors of this node: "
+                    + ", ".join(item["input"] for item in missing)
+                    + (" has" if len(missing) == 1 else " have")
+                    + " no results yet",
+                    409,
+                    {"code": "inputs_not_materialized", "missing": missing},
+                )
+            context = self._started(context, worktree, environment)
+            secrets: list[str] = list(context.secrets)
+            started = time.monotonic()
+            with reading(context, inputs.values()) as cursor:
                 request.cursor = cursor
                 if request.replaced.is_set():
                     raise Problem("A newer preview of this node replaced this one", 409)
@@ -426,21 +410,24 @@ class DraftPreviews:
                 raise
             raise Problem(redact(str(error), secrets), 422, {"code": "preview_failed"}) from None
         skipped = {"exports": 0, "tests": 0, "messages": 0}
-        outputs = []
+        computed = []
         for statement, location in zip(statements, locations, strict=True):
             if statement.get("test_name"):
                 skipped["tests"] += 1
-                continue
-            if statement.get("message_block"):
+            elif statement.get("message_block"):
                 skipped["messages"] += 1
-                continue
-            if not statement["output"]:
+            elif not statement["output"]:
                 skipped["exports"] += 1
-                continue
+            else:
+                computed.append((statement, location))
+        outputs = []
+        for index, (statement, location) in enumerate(computed):
             table = qi(statement["table"])
+            # A later block reads this output whole, as in a run; others stop past the rows kept.
+            read_later = any(statement["table"] in later["query"] for later, _ in computed[index + 1 :])
             executed = (
-                f"CREATE TEMPORARY TABLE {table} AS SELECT * FROM ({statement['query']}) AS preview "
-                f"LIMIT {OUTPUT_ROWS + 1}"
+                f"CREATE TEMPORARY TABLE {table} AS SELECT * FROM ({statement['query']}) AS preview"
+                + ("" if read_later else f" LIMIT {OUTPUT_ROWS + 1}")
             )
             try:
                 cursor.execute(executed, statement["bindings"])
@@ -452,13 +439,14 @@ class DraftPreviews:
             except duckdb.Error as error:
                 raise self._failure(SqlSourceError(error, location, executed), node, secrets) from None
             assert count_row is not None
+            truncated = not read_later and count_row[0] > OUTPUT_ROWS
             outputs.append(
                 {
                     "port": statement["output"],
                     "columns": [{"name": c[0], "type": c[1]} for c in described],
                     "rows": clean(shown),
-                    "count": min(count_row[0], OUTPUT_ROWS),
-                    "truncated": count_row[0] > OUTPUT_ROWS,
+                    "count": OUTPUT_ROWS if truncated else count_row[0],
+                    "truncated": truncated,
                 }
             )
         return outputs, skipped
@@ -466,8 +454,13 @@ class DraftPreviews:
     @staticmethod
     def _failure(error: SqlSourceError, node: Record, secrets: list[str]) -> Problem:
         """A preview error, located in the code it previewed."""
-        message = project_extensions.explain_missing(redact(str(error), secrets))
-        diagnostic = {**error.diagnostic, "message": message, "source": node["template_sql"]}
+        message = failure_message(error, node, secrets)
+        diagnostic = {
+            **error.diagnostic,
+            "message": message,
+            "executed_sql": redact(error.diagnostic["executed_sql"], secrets),
+            "source": node["template_sql"],
+        }
         return Problem(message, 422, {"code": "preview_failed", "diagnostic": diagnostic})
 
     def _describe(
@@ -543,7 +536,7 @@ class DraftPreviews:
         with context.lock:
             retained = [d for n in upstream for d in context.outputs.get(n, {}).values()]
         try:
-            with reading(context, retained, PREVIEW_TIMEOUT) as cursor:
+            with reading(context, retained) as cursor:
                 for port, edge in wanted.items():
                     found = relation(cursor, edge["source"], edge["sourceHandle"], ())
                     result[port] = found[1] if found else None

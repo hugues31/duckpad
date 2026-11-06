@@ -294,6 +294,7 @@ function WorktreeDialog({
             worktree={modal.worktree}
             environment={modal.environment.id}
             node={modal.node}
+            ancestors={modal.options?.ancestors}
           />
         </ConfirmModal>
       );

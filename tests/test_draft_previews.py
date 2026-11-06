@@ -175,6 +175,26 @@ SELECT 'info' AS level, 'hello' AS message;
     ]
 
 
+def test_preview_blocks_read_earlier_outputs_whole(services, project):
+    _, _, _, engine = services
+    draft = """-- @input source
+-- @output repeated
+SELECT s.* FROM {{ source }} AS s, range(100);
+-- @output summary
+SELECT count(*) AS orders, sum(amount) AS amount FROM {{ repeated }};
+-- @output large
+SELECT * FROM {{ repeated }} WHERE amount > 1000;
+"""
+    preview = engine.draft_preview(project, "dev", "checked", draft, None)
+    repeated, summary, large = preview["outputs"]
+    # The output that later blocks read is kept whole, as in a run.
+    assert (repeated["count"], repeated["truncated"]) == (30_000, False)
+    assert summary["rows"] == [[30_000, 100 * sum(range(10, 3001, 10))]]
+    # An output that no block reads stops past the rows a preview keeps.
+    assert (large["count"], large["truncated"]) == (10_000, True)
+    assert len(large["rows"]) == 1_000
+
+
 def test_preview_asks_to_run_ancestors_without_results(services, tmp_path):
     store, projects, _, engine = services
     worktree = projects.create("Fresh", bundle(tmp_path / "orders.csv"))["id"]

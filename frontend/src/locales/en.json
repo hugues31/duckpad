@@ -1477,7 +1477,7 @@
   "previewRunning": "Computing the preview…",
   "previewSummary": "Computed from the first {rows} rows of each input",
   "previewSummaryAll": "Computed from every row of the inputs",
-  "previewMissingInputs": "These inputs have no results yet: {inputs}. Run the ancestors of this node, then preview again.",
+  "previewMissingInputs": "These inputs have no results yet: {inputs}. Run the ancestors of this node: the preview updates once they finish.",
   "previewErrorAt": "Line {line}: {message}",
   "runAncestors": "Run ancestors",
   "previewStaleInputs": "Computed from stale results of {inputs}. Run the ancestors to refresh them.",

@@ -129,10 +129,12 @@ test("edit a node's code, preview it on input samples, fix it and preview again"
   for (let index = 0; index < "count(*) AS orders".length + 2; index++)
     await page.keyboard.press("ArrowLeft");
   await country.click();
+  await panel.getByRole("button", { name: "Preview", exact: true }).click();
+  await expect(preview.getByRole("alert")).toHaveCount(0);
+  // A shown preview follows the sample size.
   await panel
     .getByRole("combobox", { name: "Rows read from each input" })
     .selectOption("100");
-  await panel.getByRole("button", { name: "Preview", exact: true }).click();
   await expect(preview).toContainText(
     "Computed from the first 100 rows of each input",
   );

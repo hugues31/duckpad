@@ -14,14 +14,14 @@ import {
   type CodeEditorInstance,
 } from "./codeEditing";
 import {
-  quotedIdentifier,
   SAMPLE_SIZES,
   type InputColumns,
   type PreviewState,
   type SampleSize,
 } from "./draftPreview";
 import { useT } from "./i18n";
-import { nodeCode, nodeCodePath, templateUsage } from "./nodeCode";
+import { nodeCode, nodeCodePath, nodeGraph, templateUsage } from "./nodeCode";
+import { quoteIdentifier } from "./samples";
 import Select from "./Select";
 import type { Bundle, FlowNode, Snapshot, Statuses } from "./types";
 import { useShell } from "./shell";
@@ -183,6 +183,19 @@ export default function NodeCodePanel({
   const linked = node.template
     ? templateUsage(snapshot.bundle!, node.template)
     : 0;
+  // Input columns follow the declared inputs, their edges and upstream
+  // results, not each save of this code.
+  const declared = node.template
+    ? snapshot.parsed_templates[node.template]
+    : snapshot.parsed_nodes?.[nodeCodePath(node.id, parent, node.language)];
+  const prefix = fullNode.slice(0, -node.id.length);
+  const upstream = (nodeGraph(snapshot.bundle!, parent)?.edges || [])
+    .filter((edge) => edge.target === node.id)
+    .map((edge) => [
+      edge.targetHandle,
+      edge.source,
+      statuses.nodes[prefix + edge.source]?.outputs[edge.sourceHandle] ?? null,
+    ]);
   return (
     <aside className="code-panel" ref={panel} aria-label={t("codePanel")}>
       <div className="inspector-title">
@@ -278,7 +291,8 @@ export default function NodeCodePanel({
         fullNode={fullNode}
         environment={environment}
         refresh={JSON.stringify([
-          snapshot.revision,
+          declared?.inputs,
+          upstream,
           statuses.active?.id ?? null,
         ])}
         python={python}
@@ -386,7 +400,7 @@ function InputColumnList({
                     {input.columns.map((column) => {
                       const text = python
                         ? column.name
-                        : quotedIdentifier(column.name);
+                        : quoteIdentifier(column.name);
                       return (
                         <li key={column.name}>
                           <button

@@ -1477,7 +1477,7 @@
   "previewRunning": "Calculando a pré-visualização…",
   "previewSummary": "Calculado com as primeiras {rows} linhas de cada entrada",
   "previewSummaryAll": "Calculado com todas as linhas das entradas",
-  "previewMissingInputs": "Estas entradas ainda não têm resultados: {inputs}. Execute os ancestrais deste nó e pré-visualize novamente.",
+  "previewMissingInputs": "Estas entradas ainda não têm resultados: {inputs}. Execute os ancestrais deste nó: a pré-visualização é atualizada quando terminarem.",
   "previewErrorAt": "Linha {line}: {message}",
   "runAncestors": "Executar os ancestrais",
   "previewStaleInputs": "Calculado a partir de resultados desatualizados de {inputs}. Execute os ancestrais para atualizá-los.",

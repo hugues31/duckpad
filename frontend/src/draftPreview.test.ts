@@ -1,24 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { quotedIdentifier } from "./draftPreview";
 import { freshNodeCode } from "./nodeCode";
 import type { Bundle, FlowNode } from "./types";
-
-describe("quotedIdentifier", () => {
-  it("keeps plain lowercase names and quotes the others", () => {
-    expect(quotedIdentifier("country")).toBe("country");
-    expect(quotedIdentifier("order_id")).toBe("order_id");
-    expect(quotedIdentifier("Country")).toBe('"Country"');
-    expect(quotedIdentifier("unit price")).toBe('"unit price"');
-    expect(quotedIdentifier('say "hi"')).toBe('"say ""hi"""');
-    expect(quotedIdentifier("1st")).toBe('"1st"');
-  });
-
-  it("quotes reserved words", () => {
-    expect(quotedIdentifier("order")).toBe('"order"');
-    expect(quotedIdentifier("group")).toBe('"group"');
-    expect(quotedIdentifier("ordered")).toBe("ordered");
-  });
-});
 
 describe("freshNodeCode", () => {
   const bundle = (code: string): Bundle =>
