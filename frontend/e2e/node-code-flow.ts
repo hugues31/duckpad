@@ -1,6 +1,5 @@
-import { nodeMenuAction } from "./helpers";
 import { expect, type Page } from "@playwright/test";
-import { closeEditor } from "./helpers";
+import { closeEditor, nodeMenuAction } from "./helpers";
 import type { Snapshot } from "../src/types";
 
 /** Exercise the real UI on a local instance or an authenticated deployed preview. */

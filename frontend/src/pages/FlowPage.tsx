@@ -751,9 +751,7 @@ export default function FlowPage() {
               actionsFor(graph.nodes.find((node) => node.id === id)!)
             }
             exposedInputs={
-              parent
-                ? Object.values(bundle.components[parent].inputs || {})
-                : []
+              parent ? bundle.components[parent]?.inputs : undefined
             }
             onSelection={updateSelection}
             onWarnings={() => showResults("log")}

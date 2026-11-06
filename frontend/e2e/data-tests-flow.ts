@@ -1,6 +1,5 @@
-import { nodeMenuAction } from "./helpers";
 import { expect, type Page } from "@playwright/test";
-import { closeEditor } from "./helpers";
+import { closeEditor, nodeMenuAction } from "./helpers";
 import type { Run, Snapshot } from "../src/types";
 
 /** Exercise data tests in normal node code on Northstar, locally or in a preview. */

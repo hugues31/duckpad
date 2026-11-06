@@ -62,6 +62,7 @@ import { SearchField } from "./Search";
 import type { NodeKind } from "./NodePalette";
 import type {
   ComponentDefinition,
+  ComponentPort,
   FlowEdge,
   FlowNode,
   ParsedTemplate,
@@ -278,7 +279,8 @@ interface CanvasProps {
     connection?: NodeConnection,
   ) => void;
   actionsFor: (id: string) => ActionItem[];
-  exposedInputs: { node: string; port: string }[];
+  /** Inputs of the opened component definition, connected from outside it. */
+  exposedInputs?: Record<string, ComponentPort>;
   onOpen: (id: string) => void;
   onSelection: (ids: string[]) => void;
   /** Show the results log of a node whose warning badge was clicked. */
@@ -390,6 +392,16 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
     },
     [initialized, frame, getNodes, setViewport],
   );
+  const connectedInputs = useMemo(
+    () =>
+      new Set([
+        ...props.edges.map((edge) => `${edge.target}\0${edge.targetHandle}`),
+        ...Object.values(props.exposedInputs || {}).map(
+          (input) => `${input.node}\0${input.port}`,
+        ),
+      ]),
+    [props.edges, props.exposedInputs],
+  );
   const displayNodes = useMemo(
     () =>
       props.nodes.map((node): PipelineNode => {
@@ -454,14 +466,7 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
             kind,
             inputs,
             missingInputs: inputs.filter(
-              (port) =>
-                !props.edges.some(
-                  (edge) =>
-                    edge.target === node.id && edge.targetHandle === port,
-                ) &&
-                !props.exposedInputs.some(
-                  (input) => input.node === node.id && input.port === port,
-                ),
+              (port) => !connectedInputs.has(`${node.id}\0${port}`),
             ),
             outputs,
             status,
@@ -493,8 +498,7 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
       }),
     [
       props.nodes,
-      props.edges,
-      props.exposedInputs,
+      connectedInputs,
       props.valueProducers,
       props.parsed,
       props.names,

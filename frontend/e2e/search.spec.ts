@@ -463,7 +463,7 @@ test("search shortcuts preserve editor, form and dialog keyboard behavior", asyn
     exact: true,
   });
   const paletteInput = page.getByRole("textbox", {
-    name: "Find a node…",
+    name: "Search node types…",
     exact: true,
   });
   await paletteInput.focus();

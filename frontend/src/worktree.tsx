@@ -98,6 +98,16 @@ export interface Worktree {
 
 const WorktreeContext = createContext<Worktree | null>(null);
 
+/** Unconnected inputs that made the server refuse a run started from the UI. */
+const refusedInputs = (error: unknown): Diagnostic[] =>
+  error instanceof ApiError &&
+  error.status === 422 &&
+  Array.isArray(error.detail)
+    ? (error.detail as Diagnostic[]).filter(
+        (item) => item.code === "missing_input",
+      )
+    : [];
+
 export function WorktreeProvider({
   worktree: id,
   children,
@@ -326,18 +336,13 @@ export function WorktreeProvider({
       setActive(id, run);
       setValidation({ worktree: id, diagnostics: [] });
     } catch (error) {
-      if (
-        error instanceof ApiError &&
-        error.status === 422 &&
-        Array.isArray(error.detail)
-      ) {
-        const diagnostics = error.detail as Diagnostic[];
-        setValidation({ worktree: id, diagnostics });
-        const problem = diagnostics.find((item) => item.node);
-        if (problem?.node)
-          void navigate(
-            worktreeUrl(id, "flow", environment, { node: problem.node }),
-          );
+      const missing = refusedInputs(error);
+      if (missing.length) {
+        // The banner now shows these inputs; select the first node to connect.
+        setValidation({ worktree: id, diagnostics: missing });
+        void navigate(
+          worktreeUrl(id, "flow", environment, { node: missing[0].node! }),
+        );
       }
       throw error;
     } finally {
@@ -425,7 +430,7 @@ export function WorktreeProvider({
         const required = errorDetail(e).confirmation_required as
           Environment | undefined;
         if (required) confirmRun(required, node, options);
-        else notify((e as Error).message, true);
+        else if (!refusedInputs(e).length) notify((e as Error).message, true);
       }
     },
     runConfirmed: (environment, node, options) =>

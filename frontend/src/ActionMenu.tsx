@@ -3,6 +3,7 @@ import {
   useLayoutEffect,
   useRef,
   useState,
+  type KeyboardEvent,
   type RefObject,
 } from "react";
 import { createPortal } from "react-dom";
@@ -14,6 +15,21 @@ export interface ActionItem {
   run: () => void;
   disabled?: boolean;
   danger?: boolean;
+}
+
+/** Move focus between menu items with the arrow, Home and End keys. */
+export function moveMenuFocus(event: KeyboardEvent, items: HTMLElement[]) {
+  if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+  event.preventDefault();
+  const current = items.indexOf(document.activeElement as HTMLElement);
+  const index =
+    event.key === "Home"
+      ? 0
+      : event.key === "End"
+        ? items.length - 1
+        : (current + (event.key === "ArrowDown" ? 1 : -1) + items.length) %
+          items.length;
+  items[index]?.focus();
 }
 
 /** Shared keyboard and pointer actions for an overflow button or a context menu. */
@@ -88,27 +104,11 @@ export function ActionMenu({
           if (event.key === "Escape") event.preventDefault();
           onClose();
         }
-        if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key))
-          return;
-        event.preventDefault();
-        const buttons = [
-          ...menu.current!.querySelectorAll<HTMLButtonElement>(
+        moveMenuFocus(event, [
+          ...menu.current!.querySelectorAll<HTMLElement>(
             "button:not(:disabled)",
           ),
-        ];
-        const current = buttons.indexOf(
-          document.activeElement as HTMLButtonElement,
-        );
-        const index =
-          event.key === "Home"
-            ? 0
-            : event.key === "End"
-              ? buttons.length - 1
-              : (current +
-                  (event.key === "ArrowDown" ? 1 : -1) +
-                  buttons.length) %
-                buttons.length;
-        buttons[index]?.focus();
+        ]);
       }}
     >
       {items.map((item) => (

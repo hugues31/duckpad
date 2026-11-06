@@ -1,6 +1,5 @@
-import { nodeMenuAction } from "./helpers";
 import { expect, type Page } from "@playwright/test";
-import { closeEditor } from "./helpers";
+import { closeEditor, nodeMenuAction } from "./helpers";
 import type { Run, Snapshot } from "../src/types";
 
 /** Verify message editing, publication and history on Northstar, locally or in a preview. */
