@@ -456,7 +456,7 @@ class GitWorkspace:
             raise Problem("Resolve concurrent editing conflicts before integration.", 409)
         return head, files
 
-    def branches(self, worktree_id):
+    def branches(self, worktree_id, integrated_id=None):
         worktree = self.projects.get(worktree_id)
         trees = {w["branch"]: w for w in self.store.worktrees(worktree["project"])}
         rows = self.git(
@@ -466,6 +466,9 @@ class GitWorkspace:
             "refs/heads",
             "refs/remotes/origin",
         ).splitlines()
+        target = self.projects.get(integrated_id) if integrated_id else None
+        if target and target["project"] != worktree["project"]:
+            raise Problem("Choose worktrees from this project", 404)
         result = []
         for row in rows:
             ref, head = row.split("\t")
@@ -492,6 +495,18 @@ class GitWorkspace:
                     "sync_state": tracking["state"] if tracking else None,
                 }
             )
+            if target and not remote:
+                try:
+                    if tree:
+                        self.check_cleanup(worktree, tree, target, head)
+                    else:
+                        # Closed local branches are opened before cleanup by the client.
+                        target_head, _ = self.clean(target)
+                        if not self.ancestor(worktree["path"], head, target_head):
+                            raise Problem("The branch has unmerged commits in the destination.", 409)
+                    result[-1]["cleanup_error"] = None
+                except Problem as error:
+                    result[-1]["cleanup_error"] = str(error)
         return result
 
     def open_branch(self, worktree_id, name):
@@ -503,28 +518,32 @@ class GitWorkspace:
             self.resolve(worktree["path"], "refs/heads/" + name)
             return self.projects.open_worktree(worktree, name)
 
+    def check_cleanup(self, current, remove, target, expected_head):
+        """Validate removal without changing files, also explaining disabled branch actions."""
+        current_id, remove_id, integrated_id = (w["id"] for w in (current, remove, target))
+        if len({w["project"] for w in (current, remove, target)}) != 1:
+            raise Problem("Choose worktrees from this project", 404)
+        project = self.store.get("project", current["project"])
+        if remove_id in (current_id, integrated_id, project["main"]):
+            raise Problem("Main, current and destination worktrees are protected", 409)
+        head, _ = self.clean(remove)
+        target_head, _ = self.clean(target)
+        if head != expected_head or not self.ancestor(remove["path"], head, target_head):
+            raise Problem("The branch changed or has unmerged commits. Review it again.", 409)
+        # Like `git worktree remove` without --force, keep untracked files and locked worktrees.
+        gitdir = Path(self.git(remove["path"], "rev-parse", "--absolute-git-dir"))
+        if (gitdir / "locked").exists() or self.git(
+            remove["path"], "status", "--porcelain", "--untracked-files=normal"
+        ):
+            raise Problem("Duckpad kept this worktree because it contains untracked files or is locked.", 409)
+        return head
+
     def cleanup(self, current_id, remove_id, integrated_id, expected_head):
         with self.projects.locked(current_id):
             current, remove, target = (
                 self.projects.get(key) for key in (current_id, remove_id, integrated_id)
             )
-            if len({w["project"] for w in (current, remove, target)}) != 1:
-                raise Problem("Choose worktrees from this project", 404)
-            project = self.store.get("project", current["project"])
-            if remove_id in (current_id, integrated_id, project["main"]):
-                raise Problem("Main, current and destination worktrees are protected", 409)
-            head, _ = self.clean(remove)
-            target_head, _ = self.clean(target)
-            if head != expected_head or not self.ancestor(remove["path"], head, target_head):
-                raise Problem("The branch changed or has unmerged commits. Review it again.", 409)
-            # Like `git worktree remove` without --force, keep untracked files and locked worktrees.
-            gitdir = Path(self.git(remove["path"], "rev-parse", "--absolute-git-dir"))
-            if (gitdir / "locked").exists() or self.git(
-                remove["path"], "status", "--porcelain", "--untracked-files=normal"
-            ):
-                raise Problem(
-                    "Duckpad kept this worktree because it contains untracked files or is locked.", 409
-                )
+            head = self.check_cleanup(current, remove, target, expected_head)
             # The record goes first: an interrupted cleanup leaves files to remove again, never a
             # record whose directory is gone.
             with self.store.transaction():

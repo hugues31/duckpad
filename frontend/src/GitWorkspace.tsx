@@ -168,9 +168,10 @@ export default function GitWorkspace({
   };
   /** Actions finishing after the dialog closed must not navigate or close another dialog. */
   const openWorktree = (id: string) => {
-    if (!open.current) return;
+    if (!open.current) return false;
     onOpen(id);
     onClose();
+    return true;
   };
   const panel = (value: Mode, content: React.ReactNode) =>
     visited.includes(value) && <div hidden={tab !== value}>{content}</div>;
@@ -245,8 +246,6 @@ export default function GitWorkspace({
               <GitReviewTab
                 key={review.id}
                 review={review}
-                worktree={worktree}
-                base={base}
                 canEdit={canEdit}
                 storageKey={storageKey}
                 onCancel={() => {
@@ -254,6 +253,7 @@ export default function GitWorkspace({
                   show("branches");
                 }}
                 onChanged={changed}
+                onOpenWorktree={openWorktree}
               />,
             )}
         </div>

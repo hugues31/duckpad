@@ -143,12 +143,131 @@ test("new branch explains missing results and reviews a parameter change into it
     await page.request.get(`/api/worktrees/${main.id}`)
   ).json();
   expect(merged.bundle.flow.nodes[0].params.minimum).toBe(10);
+  const source = (
+    await (await page.request.get("/api/workspace")).json()
+  ).worktrees.find(
+    (w: any) =>
+      w.project === main.project && w.branch === "experiment/quick-review",
+  );
+  await review
+    .getByRole("button", {
+      name: "Delete branch experiment/quick-review",
+      exact: true,
+    })
+    .click();
+  await expect(page).toHaveURL(new RegExp(`/worktrees/${main.id}/flow`));
+  await expect(
+    page
+      .getByRole("status")
+      .filter({ hasText: "Branch experiment/quick-review deleted" }),
+  ).toBeVisible();
+  expect((await page.request.get(`/api/worktrees/${source.id}`)).status()).toBe(
+    404,
+  );
+  expect(
+    (
+      await (
+        await page.request.get(`/api/worktrees/${main.id}/git/branches`)
+      ).json()
+    ).some((b: any) => b.name === "experiment/quick-review"),
+  ).toBe(false);
+  await expect(
+    page.getByRole("option", { name: "experiment/quick-review", exact: true }),
+  ).toHaveCount(0);
+  const branches = await openGit(page, "Branches");
+  await expect(branches.locator(".git-branch-panel .git-commit")).toHaveCount(
+    1,
+  );
   await page.keyboard.press("Escape");
   await page.goto(`/projects/${main.project}/settings/general`);
   await page
     .getByRole("button", { name: "Connect or configure a Git repository" })
     .click();
   await expect(page.getByLabel("Repository URL")).toBeVisible();
+});
+
+test("Branches confirms deletion, explains protections and redirects another session", async ({
+  page,
+}) => {
+  const main = await createProject(page);
+  const branch = async (name: string) =>
+    (
+      await page.request.post(`/api/worktrees/${main.id}/branches`, {
+        data: { name },
+      })
+    ).json();
+  const merged = await branch("already-merged");
+  await change(page, merged.id, (b) => {
+    b.flow.nodes[0].params.minimum = 4;
+  });
+  const proposal = await (
+    await page.request.post(`/api/worktrees/${main.id}/git/reviews`, {
+      data: { source: "refs/heads/already-merged" },
+    })
+  ).json();
+  expect(
+    (
+      await page.request.post(
+        `/api/worktrees/${main.id}/git/reviews/${proposal.id}/apply`,
+        {
+          data: {
+            choices: proposal.choices,
+            proposal_revision: proposal.proposal_revision,
+          },
+        },
+      )
+    ).ok(),
+  ).toBeTruthy();
+  const unmerged = await branch("unmerged");
+  await change(page, unmerged.id, (b) => {
+    b.flow.nodes[0].params.minimum = 8;
+  });
+  const destination = await branch("release");
+  const current = await branch("open-branch");
+  await page.goto(`/worktrees/${current.id}/flow`);
+  const observer = await page.context().newPage();
+  await observer.goto(`/worktrees/${merged.id}/flow`);
+  await expect(observer.locator(".react-flow__node")).toHaveCount(1);
+  const dialog = await openGit(page, "Branches");
+  await dialog.getByLabel("Destination branch").selectOption(destination.id);
+  const row = (name: string) =>
+    dialog.locator(".git-branch-panel .git-commit").filter({
+      has: page
+        .locator("strong")
+        .filter({ hasText: new RegExp(`^${name}\\s*(· Current)?$`, "i") }),
+    });
+  for (const [name, reason] of [
+    ["main", "The main branch is protected."],
+    ["open-branch", "Open another branch"],
+    ["release", "The destination branch is protected."],
+    ["unmerged", "unmerged commits"],
+  ]) {
+    await expect(
+      row(name).getByRole("button", { name: "Delete", exact: true }),
+    ).toBeDisabled();
+    await expect(row(name)).toContainText(reason);
+  }
+  const remove = row("already-merged").getByRole("button", {
+    name: "Delete",
+    exact: true,
+  });
+  await expect(remove).toBeEnabled();
+  await remove.click();
+  const confirm = page.getByRole("dialog", {
+    name: "Delete branch already-merged",
+    exact: true,
+  });
+  await expect(confirm).toContainText("The remote branch will be kept");
+  await confirm.getByRole("button", { name: "Cancel", exact: true }).click();
+  expect(
+    (await page.request.get(`/api/worktrees/${merged.id}`)).ok(),
+  ).toBeTruthy();
+  await remove.click();
+  await confirm.getByRole("button", { name: "Delete", exact: true }).click();
+  await expect(confirm).toBeHidden();
+  await expect(row("already-merged")).toHaveCount(0);
+  await expect(observer).toHaveURL(new RegExp(`/worktrees/${main.id}/flow`));
+  await observer.close();
 });
 
 for (const language of ["en", "fr"] as const) {

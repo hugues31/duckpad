@@ -169,6 +169,8 @@ export interface Branch {
   ahead: number | null;
   behind: number | null;
   sync_state: SyncState | null;
+  /** Present when cleanup was checked against a selected destination. */
+  cleanup_error?: string | null;
 }
 
 /** The origin of a project and its synchronization with a worktree's branch. */

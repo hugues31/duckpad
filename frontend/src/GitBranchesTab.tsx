@@ -1,10 +1,13 @@
 import { useState } from "react";
-import { api, send } from "./api";
+import { api, send, withQuery } from "./api";
 import { TabStatus, useTabAction, type Repository } from "./gitTabs";
 import type { Branch, MergeReview } from "./gitTypes";
 import { useT } from "./i18n";
 import Select from "./Select";
 import type { Worktree } from "./types";
+import { useApiResource } from "./useApiResource";
+import { useShell } from "./shell";
+import { ConfirmModal } from "./modals";
 
 export default function GitBranchesTab({
   worktree,
@@ -31,10 +34,12 @@ export default function GitBranchesTab({
   onNewBranch: () => void;
 }) {
   const t = useT();
+  const { notify } = useShell();
   const { pending, error, run, retry } = useTabAction();
   const { branches } = repository;
   const [source, setSource] = useState("");
   const [destination, setDestination] = useState("");
+  const [removing, setRemoving] = useState<Branch | null>(null);
   const sourceRef = source || branches.find((v) => v.current)?.ref || "";
   const destinationId =
     destination ||
@@ -42,6 +47,18 @@ export default function GitBranchesTab({
     worktree;
   const sourceBranch = branches.find((v) => v.ref === sourceRef);
   const destinationBranch = branches.find((v) => v.worktree === destinationId);
+  const cleanup = useApiResource<Branch[]>(
+    canEdit
+      ? withQuery(`${base}/branches`, { integrated_worktree: destinationId })
+      : null,
+    { interval: 5000, refresh: JSON.stringify(branches) },
+  );
+  const cleanupReason = (item: Branch) => {
+    if (item.name === "main") return t("branchCleanupMain");
+    if (item.current) return t("branchCleanupCurrent");
+    if (item.worktree === destinationId) return t("branchCleanupDestination");
+    return item.cleanup_error;
+  };
 
   return (
     <div className="git-branch-panel">
@@ -50,6 +67,7 @@ export default function GitBranchesTab({
         onRetry={repository.failure?.retry}
       />
       <TabStatus error={error} pending={pending} onRetry={retry} />
+      <TabStatus error={cleanup.error} onRetry={cleanup.reload} />
       {!canEdit && <p className="notice">{t("gitReaderHint")}</p>}
       <div className="git-controls">
         <label>
@@ -112,7 +130,7 @@ export default function GitBranchesTab({
         </button>
       </div>
       <p className="muted">{t("reviewMergeHint")}</p>
-      {branches.map((item) => (
+      {(cleanup.data || branches).map((item) => (
         <div className="git-commit" key={item.ref}>
           <div>
             <strong>
@@ -124,6 +142,9 @@ export default function GitBranchesTab({
               {item.upstream &&
                 ` · origin/${item.upstream} · ${item.ahead ?? "—"} ↑ / ${item.behind ?? "—"} ↓`}
             </small>
+            {!item.remote && canEdit && cleanupReason(item) && (
+              <small>{cleanupReason(item)}</small>
+            )}
           </div>
           <button
             className="button secondary small"
@@ -151,8 +172,54 @@ export default function GitBranchesTab({
               {t("openBranch")}
             </button>
           )}
+          {!item.remote && (
+            <button
+              className="button secondary small"
+              disabled={
+                !canEdit ||
+                pending ||
+                cleanup.pending ||
+                !!cleanup.error ||
+                item.cleanup_error === undefined ||
+                !!cleanupReason(item)
+              }
+              onClick={() => setRemoving(item)}
+            >
+              {t("delete")}
+            </button>
+          )}
         </div>
       ))}
+      {removing && (
+        <ConfirmModal
+          title={t("deleteBranchNamed").replace("{name}", removing.name)}
+          confirmLabel={t("delete")}
+          onClose={() => setRemoving(null)}
+          onConfirm={async () => {
+            const tree = removing.worktree
+              ? { id: removing.worktree }
+              : await api<Worktree>(
+                  `${base}/open`,
+                  send({ name: removing.name }),
+                );
+            await api(
+              `${base}/cleanup`,
+              send({
+                remove_worktree: tree.id,
+                integrated_worktree: destinationId,
+                expected_head: removing.head,
+              }),
+            );
+            setRemoving(null);
+            if (source === removing.ref) setSource("");
+            notify(t("branchDeleted").replace("{name}", removing.name));
+            cleanup.reload();
+            await onChanged();
+          }}
+        >
+          <p>{t("confirmDeleteBranch").replace("{name}", removing.name)}</p>
+        </ConfirmModal>
+      )}
       <div className="git-controls">
         <button
           className="button primary"
