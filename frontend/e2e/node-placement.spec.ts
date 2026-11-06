@@ -27,8 +27,11 @@ async function addNode(page: Page, label = "SQL") {
   );
   await page
     .locator(".palette")
-    .getByRole("button", { name: label, exact: true })
-    .click();
+    .getByRole("button", {
+      name: label.replace("Add linked: ", ""),
+      exact: true,
+    })
+    .click({ modifiers: label.startsWith("Add linked:") ? ["Alt"] : [] });
   expect((await saved).ok()).toBe(true);
   await expect(page.locator(".react-flow__node")).toHaveCount(before + 1);
   const created = page.locator(".react-flow__node").last();

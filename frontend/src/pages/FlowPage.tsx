@@ -1,3 +1,4 @@
+import type { ActionItem } from "../ActionMenu";
 import {
   useCallback,
   useEffect,
@@ -50,6 +51,7 @@ import {
   nodeLocation,
   nodeEntity,
   nodeGraph,
+  templateUsage,
 } from "../nodeCode";
 import LineagePanel from "../LineagePanel";
 import type { Cell } from "../lineageGraph";
@@ -64,7 +66,7 @@ import type {
   Snapshot,
   SqlDiagnostic,
 } from "../types";
-import { nodeLabel, useT } from "../i18n";
+import { countLabel, isBuiltinTemplate, nodeLabel, useT } from "../i18n";
 import {
   isWideLayout,
   PanelResizeHandles,
@@ -149,6 +151,7 @@ export default function FlowPage() {
     environment,
     snapshot,
     statuses,
+    runDiagnostics,
     canEdit,
     saving,
     settle,
@@ -617,11 +620,15 @@ export default function FlowPage() {
     code: panels.open.inspector && codeShown,
   };
   const editCode = (line?: number, target = fullNode) => {
-    // The selected node's code docks beside the canvas, in the inspector's place.
-    if (target === fullNode && hasCode) {
+    // The code of a node of this graph docks beside the canvas, in the inspector's place.
+    const shown = graph.nodes.find((item) => prefix + item.id === target);
+    if (shown && !shown.component) {
+      if (shown.id !== selected) select(shown.id);
       view.change({ code: true });
       panels.set({ inspector: true });
-      if (line) setCodeReveal({ line, key: Date.now() });
+      // A new key reveals the line again, even when the panel already shows it.
+      if (line)
+        setCodeReveal((current) => ({ line, key: (current?.key ?? 0) + 1 }));
       return;
     }
     const location = nodeLocation(bundle, target);
@@ -646,12 +653,120 @@ export default function FlowPage() {
           },
     );
   };
+  const actionsFor = (target: FlowNode): ActionItem[] => {
+    const item = (id: string, label: string, run: () => void): ActionItem => ({
+      id,
+      label,
+      run,
+      disabled: !canEdit || busy,
+    });
+    const actions = [
+      item(
+        "edit",
+        target.component
+          ? t("openComponent")
+          : target.template
+            ? countLabel(
+                t,
+                templateUsage(bundle, target.template),
+                "editTemplateOne",
+                "editTemplateCount",
+              )
+            : t("editNodeCode"),
+        () =>
+          target.component
+            ? openComponent(target.id)
+            : editCode(undefined, prefix + target.id),
+      ),
+    ];
+    actions.push(
+      item("duplicate", t("duplicateNode"), () =>
+        safe(() => {
+          const duplicate = {
+            ...structuredClone(target),
+            id: identifier(),
+            position: { x: target.position.x + 40, y: target.position.y + 40 },
+          };
+          return insertNode((value) => {
+            if (!duplicate.component) {
+              const sql = nodeCode(value, target, parent);
+              duplicate.origin = target.template || target.origin;
+              delete duplicate.template;
+              (value.node_sql ||= {})[
+                nodeCodePath(duplicate.id, parent, duplicate.language)
+              ] = sql;
+            }
+            nodeGraph(value, parent).nodes.push(duplicate);
+            return duplicate.id;
+          });
+        }),
+      ),
+    );
+    if (!target.component) {
+      if (target.template) {
+        actions.push(
+          item("view", t("viewNodeCode"), () =>
+            editCode(undefined, prefix + target.id),
+          ),
+        );
+        actions.push(
+          item("detach", t("detachTemplate"), () =>
+            safe(() =>
+              save(snapshot, (value) =>
+                detachNode(
+                  value,
+                  nodeGraph(value, parent).nodes.find(
+                    (n) => n.id === target.id,
+                  )!,
+                  parent,
+                ),
+              ),
+            ),
+          ),
+        );
+      } else {
+        actions.push(
+          item("convert", t("convertTemplate"), () =>
+            openModal({
+              kind: "convertNode",
+              worktree,
+              node: target.id,
+              parent,
+            }),
+          ),
+        );
+        // Built-in templates are starting points: relinking would only drop the code.
+        if (
+          target.origin &&
+          !isBuiltinTemplate(target.origin) &&
+          bundle.templates[target.origin] !== undefined
+        )
+          actions.push(
+            item("relink", t("relinkTemplate"), () =>
+              openModal({
+                kind: "relinkNode",
+                worktree,
+                node: target.id,
+                parent,
+              }),
+            ),
+          );
+      }
+    }
+    actions.push({
+      ...item("remove", t("deleteNode"), () =>
+        safe(() => removeNodes([target.id])),
+      ),
+      danger: true,
+    });
+    return actions;
+  };
   return (
     <div
       className={`flow-layout ${shown.palette ? "palette-open" : ""} ${shown.inspector || shown.code ? "inspector-open" : ""} ${shown.preview ? "preview-open" : ""} ${path.length ? "nested-flow" : ""}`}
       style={
         {
-          "--notice-height": `${NOTICE_HEIGHT * noticeCount(snapshot, statuses.active)}px`,
+          "--notice-height": `${NOTICE_HEIGHT * noticeCount(snapshot, statuses.active, runDiagnostics)}px`,
           "--palette-width": `${sizes.sizes.palette}px`,
           "--inspector-width": `${codeShown ? sizes.sizes.code : sizes.sizes.inspector}px`,
           "--preview-height": `${sizes.sizes.preview}px`,
@@ -758,6 +873,12 @@ export default function FlowPage() {
               safe(() => addNode(kind, id, position, connection))
             }
             onOpen={openComponent}
+            actionsFor={(id) =>
+              actionsFor(graph.nodes.find((node) => node.id === id)!)
+            }
+            exposedInputs={
+              parent ? bundle.components[parent]?.inputs : undefined
+            }
             onSelection={updateSelection}
             onWarnings={() => showResults("log")}
             onFailure={() => {
@@ -903,54 +1024,10 @@ export default function FlowPage() {
             onRun={() => run(fullNode)}
             onOpen={() => openComponent(node.id)}
             onEditTemplate={() => editCode()}
-            onViewCode={() => editCode()}
-            onDetach={() =>
-              safe(() =>
-                save(snapshot, (value) => {
-                  detachNode(
-                    value,
-                    nodeGraph(value, parent).nodes.find(
-                      (n) => n.id === node.id,
-                    )!,
-                    parent,
-                  );
-                }),
+            actions={() =>
+              actionsFor(node).filter(
+                (action) => !["edit", "remove"].includes(action.id),
               )
-            }
-            onConvert={() =>
-              openModal({
-                kind: "convertNode",
-                worktree,
-                node: node.id,
-                parent,
-              })
-            }
-            onRelink={() =>
-              openModal({ kind: "relinkNode", worktree, node: node.id, parent })
-            }
-            onDuplicate={() =>
-              safe(() => {
-                const duplicate = {
-                  ...structuredClone(node),
-                  id: identifier(),
-                  position: {
-                    x: node.position.x + 40,
-                    y: node.position.y + 40,
-                  },
-                };
-                return insertNode((value) => {
-                  if (!duplicate.component) {
-                    const sql = nodeCode(value, node, parent);
-                    duplicate.origin = node.template || node.origin;
-                    delete duplicate.template;
-                    (value.node_sql ||= {})[
-                      nodeCodePath(duplicate.id, parent, duplicate.language)
-                    ] = sql;
-                  }
-                  nodeGraph(value, parent).nodes.push(duplicate);
-                  return duplicate.id;
-                });
-              })
             }
             onHistory={() =>
               openModal({

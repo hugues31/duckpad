@@ -12,8 +12,9 @@ Click or drag **SQL** from the palette list onto the canvas, then use
 saves as you type; select another node to edit its code, or close the editor to
 return to the inspector. This changes only that node. Normal palette nodes also
 receive their own copy of the SQL, without the palette entry's `-- @description`.
-To share code, use **Convert to template** or **Add linked**; editing a shared
-template affects all of its linked nodes in that branch. See
+To share code, use **Convert to template** in the node's actions, or Alt+click a
+template in the palette (**Add linked**); editing a shared template affects all of
+its linked nodes in that branch. See
 [code ownership](AUTHORING.md#editing-node-code).
 
 **Input columns**, above the code, list the name and type of each input's

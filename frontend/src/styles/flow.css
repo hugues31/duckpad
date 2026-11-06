@@ -198,6 +198,8 @@
   font-size: 11px;
   min-width: 0;
   width: 100%;
+  /* A narrow palette shortens long translated placeholders visibly. */
+  text-overflow: ellipsis;
 }
 .search input:focus-visible {
   outline: none;
@@ -302,9 +304,9 @@
 .palette-item > span:nth-child(2) {
   flex: 1;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.4;
 }
 .palette-icon {
   width: 29px;
@@ -798,10 +800,6 @@ fieldset.palette-bottom {
   min-width: 0;
 }
 
-.palette-link {
-  flex-shrink: 0;
-}
-
 .node-link-badge {
   display: flex;
   justify-content: center;
@@ -813,4 +811,35 @@ fieldset.palette-bottom {
   max-width: 160px;
   overflow: hidden;
   white-space: nowrap;
+}
+
+/* A new node is incomplete until its inputs are connected. */
+.react-flow__handle.missing-input {
+  background: light-dark(#c45c0a, #ffa654);
+  border-color: light-dark(#8b3b00, #ffd2a6);
+  box-shadow: 0 0 0 3px light-dark(#c45c0a26, #ffa65430);
+}
+.node-action-menu {
+  position: fixed;
+  z-index: 150;
+  min-width: 190px;
+  max-width: min(320px, calc(100vw - 16px));
+  max-height: calc(100vh - 16px);
+  overflow: auto;
+  padding: 5px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+.node-action-menu button {
+  display: block;
+  width: 100%;
+  padding: 9px 12px;
+  border-radius: 4px;
+  text-align: left;
+}
+.node-action-menu button:hover,
+.node-action-menu button:focus-visible {
+  background: var(--surface-alt);
 }

@@ -374,7 +374,15 @@ test("capture parameters, node documentation and nested components", async ({
   await expect(
     inspector.getByRole("button", { name: "Edit code", exact: true }),
   ).toBeVisible();
+  // Template conversions and duplication are secondary node actions.
+  await inspector
+    .getByRole("button", { name: "Node actions", exact: true })
+    .click();
+  await expect(
+    page.getByRole("menuitem", { name: "Convert to template", exact: true }),
+  ).toBeVisible();
   await capture(page, "node-code");
+  await page.keyboard.press("Escape");
   await node(page, "Regional revenue").dblclick();
   await expect(
     page.getByText(

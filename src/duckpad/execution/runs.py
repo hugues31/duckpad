@@ -276,6 +276,16 @@ class Runner:
             launch_scope(structural, edges, target, ancestors),
             partition_plan,
         )
+        missing_inputs = []
+        for diagnostic in snapshot["diagnostics"]:
+            if diagnostic.get("code") != "missing_input":
+                continue
+            # A component input names its instance; the run needs the node behind it.
+            exposed = boundaries.get(diagnostic["node"], {}).get("inputs", {}).get(diagnostic["port"])
+            if (exposed[0] if exposed else diagnostic["node"]) in selected_scope:
+                missing_inputs.append(diagnostic)
+        if entry_point == "ui" and missing_inputs:
+            raise Problem(missing_inputs[0]["message"], 422, missing_inputs)
         needs_python = any(structural[key].get("language") == "python" for key in selected_scope)
         if needs_python and not settings.get("enabled"):
             raise Problem("Python execution is disabled; ask an instance administrator to enable it", 403)

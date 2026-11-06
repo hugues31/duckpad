@@ -200,3 +200,12 @@ export function withoutExampleVariables(
   delete bundle.variables;
   delete bundle.views;
 }
+
+/** Choose an inspector action from the same menu used by the canvas. */
+export async function nodeMenuAction(page: Page, name: string) {
+  await page
+    .locator(".inspector")
+    .getByRole("button", { name: "Node actions", exact: true })
+    .click();
+  await page.getByRole("menuitem", { name, exact: true }).click();
+}

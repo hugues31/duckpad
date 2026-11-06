@@ -4,8 +4,8 @@ An administrator enables **Python execution** in project settings. An editor can
 then click the **Python** button at the bottom of the palette and edit the new
 template; the editor saves as you type. Click or drag its new palette entry onto
 the flow and connect its tabular ports to SQL nodes. Each ordinary insertion owns
-an independent copy of the code; **Add linked** creates instances that share the
-template. Results, parameters, messages and downloads use the same panels.
+an independent copy of the code; **Add linked** (Alt+click or right-click the
+palette entry) creates instances that share the template. Results, parameters, messages and downloads use the same panels.
 Operators run reviewed jobs; they cannot activate Python or edit its code.
 Assistant run approvals list the Python nodes that will execute.
 

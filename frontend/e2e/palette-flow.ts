@@ -114,8 +114,8 @@ export async function verifyPalette(
   }
   // Linked instances reopen the shared definition in the matching language editor.
   await palette
-    .getByRole("button", { name: `Add linked: ${name}`, exact: true })
-    .click();
+    .getByRole("button", { name, exact: true })
+    .click({ modifiers: ["Alt"] });
   await expect(page.locator(".react-flow__node")).toHaveCount(3);
   const shared = await openCode(page, "Edit template (1 node)");
   await expect(shared).toContainText("Shared template, 1 node");
