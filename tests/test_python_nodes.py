@@ -471,6 +471,7 @@ class Adapters(dp.Node):
 
 @pytest.mark.parametrize("timeout", [False, True])
 def test_cancel_or_timeout_stops_python_and_preserves_other_contexts(services, monkeypatch, timeout):
+    monkeypatch.delenv("DUCKPAD_PYTHON_TIMEOUT_SECONDS", raising=False)
     store, projects, _, engine = services
     other = projects.create("Unaffected SQL")
     other_context = engine.context(other["id"], "dev", create=True)
@@ -489,6 +490,8 @@ def test_cancel_or_timeout_stops_python_and_preserves_other_contexts(services, m
     result = wait_run(store, run, timeout=10)
     assert result["status"] == ("failed" if timeout else "canceled")
     assert result["nodes"]["python"]["external_outcome"] == "partial or unknown"
+    if timeout:
+        assert "Python execution timed out" in result["nodes"]["python"]["error"]
     assert engine.context(other["id"], "dev") is other_context
     assert other_context.db.execute("select 7").fetchone() == (7,)
 
