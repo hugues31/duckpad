@@ -45,13 +45,16 @@ export async function autosaved(page: Page, edit: () => Promise<unknown>) {
   await expect(page.locator(".save-status")).toHaveText("All changes saved");
 }
 
-/** Close a code editor dialog, which saves its pending edits before closing. */
+/**
+ * Close a code editor dialog, which saves its pending edits before closing.
+ * A Python save also resolves the project's lock, which takes longer.
+ */
 export async function closeEditor(dialog: Locator) {
   await dialog
     .locator("footer")
     .getByRole("button", { name: "Close", exact: true })
     .click();
-  await expect(dialog).toHaveCount(0);
+  await expect(dialog).toHaveCount(0, { timeout: 30000 });
 }
 
 export async function openInstanceSettings(
