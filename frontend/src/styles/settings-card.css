@@ -16,3 +16,43 @@
 .settings-card p {
   font-size: 12px;
 }
+.python-preparation header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.python-preparation h2 {
+  margin: 0;
+}
+.python-preparation progress {
+  display: block;
+  width: 100%;
+  height: 6px;
+  accent-color: var(--accent);
+}
+.python-preparation pre {
+  max-height: 220px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 11px;
+  padding: 12px;
+  border-radius: 6px;
+  background: var(--surface-alt);
+}
+.python-preparation summary {
+  cursor: pointer;
+  font-size: 12px;
+}
+.python-preparation.floating {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 110;
+  width: min(420px, calc(100vw - 40px));
+  max-height: 50vh;
+  overflow: auto;
+  padding: 18px;
+  box-shadow: var(--shadow);
+}

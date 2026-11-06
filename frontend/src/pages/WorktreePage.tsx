@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Outlet, useNavigate } from "react-router";
 import CodePanel from "../CodePanel";
+import PythonEnvironmentStatus from "../PythonEnvironmentStatus";
 import { FlowToolbar, WorkspaceNotices } from "../FlowToolbar";
 import { usePageRoute, worktreeUrl } from "../navigation";
 import { useT } from "../i18n";
@@ -26,6 +27,8 @@ export default function WorktreePage() {
     canEdit,
     saveFiles,
     setAssistantNode,
+    saving,
+    starting,
   } = useWorktree();
   const flowView = useFlowView(id, environment);
   // Another session deleted the open branch: return to the project's main branch.
@@ -52,6 +55,14 @@ export default function WorktreePage() {
   return (
     <>
       <FlowToolbar />
+      {snapshot.python_enabled && (
+        <PythonEnvironmentStatus
+          key={tree.project}
+          project={tree.project}
+          compact
+          active={saving || starting}
+        />
+      )}
       <WorkspaceNotices
         snapshot={snapshot}
         active={statuses.active}
