@@ -140,7 +140,8 @@ export default function GitReviewTab({
         report={review.comparison}
         storageKey={storageKey + ".reviewFilters"}
       />
-      {!integrated && (
+      {/* Only local branches have retained results to compare. */}
+      {!integrated && review.source_worktree && (
         <GitDataImpact review={review} environment={environment} />
       )}
       {!integrated ? (

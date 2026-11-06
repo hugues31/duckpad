@@ -4,9 +4,11 @@ import { useLoadedWorktree } from "./worktree";
 /** Results are local to a worktree, so a new branch needs its first run. */
 export default function BranchResultsNotice() {
   const t = useT();
-  const { snapshot, statuses, canEdit, starting, run } = useLoadedWorktree();
+  const { snapshot, statuses, statusesLoaded, canEdit, starting, run } =
+    useLoadedWorktree();
   const count = snapshot.bundle?.flow.nodes.length || 0;
   if (
+    !statusesLoaded ||
     snapshot.worktree.branch === "main" ||
     snapshot.worktree.read_only ||
     !count ||

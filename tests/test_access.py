@@ -455,7 +455,11 @@ def test_project_role_matrix_and_cross_project_import(instance, role):
     # The data impact of a review only reads retained results, so readers may calculate it.
     for method in ("GET", "POST"):
         response = request(
-            client, headers, method, f"/worktrees/{worktree}/git/reviews/missing/data?environment=dev", json={}
+            client,
+            headers,
+            method,
+            f"/worktrees/{worktree}/git/reviews/missing/data?environment=dev",
+            json={},
         )
         assert response.status_code in (409, 422)
     remote = request(client, headers, "GET", f"/worktrees/{worktree}/git/remote").json()

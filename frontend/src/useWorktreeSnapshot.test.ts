@@ -101,10 +101,12 @@ describe("useWorktreeSnapshot", () => {
     );
     const { result } = watch({ worktree: "main", environment: "dev" });
     expect(result.current.snapshot).toBeNull();
+    expect(result.current.statusesLoaded).toBe(false);
     await advance();
     expect(result.current).toMatchObject({
       snapshot: snapshot("main", "r1"),
       statuses,
+      statusesLoaded: true,
       loadError: "",
     });
     expect(fetch.mock.calls.map(([url]) => url).sort()).toEqual([
@@ -113,12 +115,25 @@ describe("useWorktreeSnapshot", () => {
     ]);
   });
 
+  it("knows when a branch has no results yet", async () => {
+    serve((path) =>
+      path === "/worktrees/main"
+        ? json(snapshot("main", "r1"))
+        : json({ nodes: {}, active: null }),
+    );
+    const { result } = watch({ worktree: "main", environment: "dev" });
+    await advance();
+    expect(result.current.statuses).toEqual({ nodes: {}, active: null });
+    expect(result.current.statusesLoaded).toBe(true);
+  });
+
   it("reads only the snapshot without an environment", async () => {
     const fetch = serve(() => json(snapshot("main", "r1")));
     const { result } = watch({ worktree: "main", environment: "" });
     await advance();
     expect(result.current.snapshot?.revision).toBe("r1");
     expect(result.current.statuses).toEqual({ nodes: {}, active: null });
+    expect(result.current.statusesLoaded).toBe(false);
     expect(fetch).toHaveBeenCalledTimes(1);
   });
 

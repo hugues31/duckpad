@@ -23,6 +23,7 @@ const worktree = vi.hoisted(() => ({
     bundle: { flow: { nodes: [{ id: "filter" }] } },
   },
   statuses: { nodes: {} as Record<string, unknown>, active: null as unknown },
+  statusesLoaded: false,
   canEdit: true,
   starting: false,
   run: vi.fn(),
@@ -50,7 +51,11 @@ afterEach(() => {
 });
 
 it("explains the empty branch and uses the existing run action until execution starts", () => {
+  // Until statuses are read, the branch may have results: nothing flashes.
   const view = render(<BranchResultsNotice />);
+  expect(screen.queryByRole("status")).toBeNull();
+  worktree.statusesLoaded = true;
+  view.rerender(<BranchResultsNotice />);
   expect(screen.getByRole("status").textContent).toContain(
     "No results on this branch · 1 node",
   );

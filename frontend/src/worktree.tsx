@@ -43,6 +43,8 @@ export interface Worktree {
   environment: string;
   snapshot: Snapshot | null;
   statuses: Statuses;
+  /** Whether statuses were read since the branch opened; before that, it has none. */
+  statusesLoaded: boolean;
   /** Why the latest read of the snapshot failed. */
   loadError: string;
   canEdit: boolean;
@@ -137,6 +139,7 @@ export function WorktreeProvider({
   const {
     snapshot,
     statuses,
+    statusesLoaded,
     loadError,
     refresh: reload,
     setActive,
@@ -339,6 +342,7 @@ export function WorktreeProvider({
     environment,
     snapshot,
     statuses,
+    statusesLoaded,
     loadError,
     canEdit,
     saving: saves > 0,
