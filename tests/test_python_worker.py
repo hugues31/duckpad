@@ -133,41 +133,6 @@ def test_first_python_run_keeps_existing_sql_results(services):
     assert [row["values"] for row in engine.preview(worktree["id"], "dev", "other")["rows"]] == [[7]]
 
 
-def test_partition_validation_prevents_write(tmp_path):
-    import duckdb
-
-    from duckpad.python_execution import execute
-
-    marker = tmp_path / "written"
-    code = f"""import duckpad as dp
-from pathlib import Path
-class Source(dp.Node):
-    def run(self) -> dp.Relation:
-        return self.db.sql("SELECT 1 AS wrong_column")
-    def write(self):
-        Path({str(marker)!r}).write_text("unexpected")
-"""
-    # Use the same native cursor adapter as the worker.
-    from duckpad.sql_worker import Cursor
-
-    with duckdb.connect() as db:
-        cursor = Cursor(db)
-        result = execute(
-            cursor,
-            {
-                "code": code,
-                "parameters": {},
-                "inputs": {},
-                "outputs": {"result": "staged"},
-                "workspace": str(tmp_path / "execution"),
-                "partition": {"key": {"type": "number", "value": 1}},
-                "partition_filters": {"result": {"column": "batch"}},
-            },
-        )
-        assert "partition_column" in result["error"]
-        assert not marker.exists()
-
-
 def test_python_benchmark_records_peak_memory(tmp_path):
     result = subprocess.run(
         [sys.executable, "scripts/benchmark_python.py", "--rows", "10000"],

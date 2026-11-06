@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { readFile } from "node:fs/promises";
-import { signIn } from "./helpers";
+import { autosaved, signIn } from "./helpers";
 
 test("download a full CSV export and keep project ZIP separate", async ({
   page,
@@ -128,14 +128,12 @@ test("download a full CSV export and keep project ZIP separate", async ({
     await expect(panel).toHaveCount(0);
     await page.locator('.react-flow__node[data-id="export"]').click();
     await expect(downloadButton).toBeEnabled();
-    await page
-      .locator(".inspector")
-      .getByRole("textbox", { name: /delimiter/ })
-      .fill(",");
-    await page
-      .locator(".inspector")
-      .getByRole("button", { name: "Save changes", exact: true })
-      .click();
+    await autosaved(page, () =>
+      page
+        .locator(".inspector")
+        .getByRole("textbox", { name: /delimiter/ })
+        .fill(","),
+    );
     await expect(panel).toContainText("Inputs or settings have changed");
     await expect(downloadButton).toBeDisabled();
 

@@ -11,11 +11,12 @@ import duckdb
 import sqlglot
 from sqlglot import exp
 
-from .. import partitions, variables
+from .. import variables
 from ..catalog import Catalog, redact
 from ..components import expand, expand_for, in_subtree
 from ..datasets import Context, Dataset
 from ..graph import connection_references
+from ..partition_filters import filter_statements
 from ..partition_lineage import PartitionLineage
 from ..partition_results import PartitionResults
 from ..projects import Projects
@@ -578,7 +579,7 @@ class Results:
                 variables=variables.expression_values(node),
                 bound=node.get("variables"),
             )
-            partitions.filter_statements(statements, node, partition)
+            filter_statements(statements, node, partition)
             for statement in statements:
                 # Source substitution values are private execution metadata.
                 statement.pop("source_location", None)

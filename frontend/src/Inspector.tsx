@@ -33,7 +33,7 @@ import ParameterField from "./ParameterField";
 import QueryBuilder from "./QueryBuilder";
 import type { ResultsTab } from "./ResultsPanel";
 import ResultSummary from "./ResultSummary";
-import { useRevisionDraft } from "./useRevisionDraft";
+import { useIdleSave, useRevisionDraft } from "./useRevisionDraft";
 import type {
   Column,
   DatabaseObjects,
@@ -140,11 +140,13 @@ export default function Inspector({
   const [tab, setTab] = useState<(typeof TABS)[number][0]>("parameters");
   // Variables created from a parameter, declared by the save that binds it.
   const declared = useRef<Record<string, Declaration>>({});
-  // Pending edits are saved when another node is selected or the panel closes.
+  // Edits are saved after a pause, on blur, and when the panel closes.
   const {
     draft,
+    dirty,
     update,
     persist: saveDraft,
+    rejected,
   } = useRevisionDraft(
     node,
     snapshot,
@@ -250,6 +252,9 @@ export default function Inspector({
       setError((e as Error).message);
     }
   };
+  useIdleSave(draft, dirty && !readOnly, () => {
+    if (!rejected()) void persist();
+  });
   const { kind, parameters, inputs } = signature;
   const linkedCount = node.template
     ? templateUsage(snapshot.bundle!, node.template)
@@ -478,13 +483,12 @@ export default function Inspector({
               schemas={inputColumns}
               variables={bindable ? snapshot.variables : null}
               environment={environment}
-              onApply={(values) => {
+              onChange={(values) =>
                 update((current) => ({
                   ...current,
                   params: { ...current.params, ...values },
-                }));
-                void persist();
-              }}
+                }))
+              }
             />
             {parameters.map((parameter) => {
               const value = draft.params?.[parameter.name] ?? parameter.default;
@@ -570,9 +574,6 @@ export default function Inspector({
                 />
               );
             })}
-            <button className="button primary full" onClick={persist}>
-              {t("save")}
-            </button>
             {!node.component && (
               <button
                 className="button secondary full"

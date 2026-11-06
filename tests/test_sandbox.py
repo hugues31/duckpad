@@ -22,6 +22,35 @@ def transport():
     return database
 
 
+@pytest.mark.parametrize(
+    ("operation", "configured", "deadline"),
+    [("python", None, None), ("python", " ", None), ("python", "600", 600.0), ("execute", "0.25", None)],
+)
+def test_python_deadline_is_opt_in_and_never_applies_to_sql(
+    transport, monkeypatch, operation, configured, deadline
+):
+    monkeypatch.delenv("DUCKPAD_PYTHON_TIMEOUT_SECONDS", raising=False)
+    if configured is not None:
+        monkeypatch.setenv("DUCKPAD_PYTHON_TIMEOUT_SECONDS", configured)
+    response = Mock()
+    response.get.return_value = {"value": "completed"}
+    monkeypatch.setattr("duckpad.sandbox.queue.Queue", lambda: response)
+
+    assert transport.call(operation) == "completed"
+    response.get.assert_called_once_with(timeout=deadline)
+    assert transport.pending == {}
+
+
+@pytest.mark.parametrize("configured", ["10m", "0", "-1", "nan", "inf"])
+def test_invalid_python_deadline_fails_before_the_worker_starts_the_call(transport, monkeypatch, configured):
+    monkeypatch.setenv("DUCKPAD_PYTHON_TIMEOUT_SECONDS", configured)
+
+    with pytest.raises(Problem, match="DUCKPAD_PYTHON_TIMEOUT_SECONDS must be a positive number"):
+        transport.call("python")
+    transport.socket.sendall.assert_not_called()
+    assert transport.pending == {}
+
+
 @pytest.mark.parametrize("failure", [ConnectionResetError, OSError])
 def test_reader_disconnect_releases_all_waiting_calls(transport, failure):
     waiting = [queue.Queue(), queue.Queue()]

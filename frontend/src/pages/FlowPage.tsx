@@ -26,6 +26,14 @@ import {
 } from "../graph";
 import Inspector from "../Inspector";
 import {
+  copiedNodes,
+  copyNodes,
+  pastableNodes,
+  pasteNodes,
+  type CopiedNodes,
+} from "../nodeClipboard";
+import { blockingDialogShown, typingTarget } from "../searchShortcuts";
+import {
   detachNode,
   localDefinitions,
   nodeCode,
@@ -38,8 +46,9 @@ import LineagePanel from "../LineagePanel";
 import type { Cell } from "../lineageGraph";
 import NodePalette, { type NodeKind } from "../NodePalette";
 import ResultsPanel, { type ResultsTab } from "../ResultsPanel";
+import { api } from "../api";
 import { useShell, useWorkspace } from "../shell";
-import type { Bundle, FlowNode, Graph } from "../types";
+import type { Bundle, FlowNode, Graph, Snapshot } from "../types";
 import { nodeLabel, useT } from "../i18n";
 import {
   isWideLayout,
@@ -115,7 +124,7 @@ function locate(bundle: Bundle, target: string) {
 
 export default function FlowPage() {
   const t = useT();
-  const { notify, openModal, flowPanels: panels } = useShell();
+  const { notify, openModal, flowPanels: panels, drafts } = useShell();
   const workspace = useWorkspace();
   const {
     id: worktree,
@@ -123,8 +132,12 @@ export default function FlowPage() {
     snapshot,
     statuses,
     canEdit,
+    saving,
+    settle,
     save,
     run,
+    undo,
+    redo,
   } = useLoadedWorktree();
   const view = useOutletContext<FlowView>();
   const { path, selected, cell } = view;
@@ -134,6 +147,9 @@ export default function FlowPage() {
   const [selection, setSelection] = useState<string[]>([]);
   const [addingNode, setAddingNode] = useState(false);
   const additionPending = useRef(false);
+  // Undos and redos in flight; editors stay inert so no edit races them.
+  const [reverting, setReverting] = useState(0);
+  const busy = addingNode || reverting > 0;
   const [resultsTab, setResultsTab] = useState<ResultsTab>("data");
   const [failureFocus, setFailureFocus] = useState(0);
   // Badges and summary links open their results tab, even when the panel is hidden.
@@ -247,15 +263,18 @@ export default function FlowPage() {
     await save(snapshot, (value) => change(graphAt(value, path)));
   }
   /**
-   * Save a new node, then select it. Editors stay inert meanwhile, so an edit
-   * cannot land on the node the inspector still shows.
+   * Save new nodes, then select the one `change` returns. Editors stay inert
+   * meanwhile, so an edit cannot land on the node the inspector still shows.
    */
-  async function insertNode(id: string, change: (value: Bundle) => void) {
+  async function insertNode(change: (value: Bundle) => string) {
     if (!canEdit || additionPending.current) return false;
     additionPending.current = true;
     setAddingNode(true);
     try {
-      await save(snapshot, change);
+      let id = "";
+      await save(snapshot, (value) => {
+        id = change(value);
+      });
       select(id);
       return true;
     } finally {
@@ -283,7 +302,7 @@ export default function FlowPage() {
         canvas.current?.newNodePosition(graph?.nodes || []) ??
         findNodePosition(graph?.nodes || []),
     };
-    const added = await insertNode(created.id, (value) => {
+    const added = await insertNode((value) => {
       const g = graphAt(value, path);
       if (kind === "template" && !linked) detachNode(value, created, parent);
       g.nodes.push(created);
@@ -304,12 +323,13 @@ export default function FlowPage() {
                 targetHandle: connection.handleId,
               },
         );
+      return created.id;
     });
     if (added && !position)
       setFocusRequest({ id: created.id, key: created.id, reveal: true });
   }
   async function removeNodes(ids: string[], edges: string[] = []) {
-    await save(snapshot, (value) => {
+    const { change } = await save(snapshot, (value) => {
       const g = graphAt(value, path);
       g.nodes
         .filter((node) => ids.includes(node.id))
@@ -328,7 +348,102 @@ export default function FlowPage() {
       );
     });
     if (selected && ids.includes(selected)) select(null);
+    if (change && ids.length)
+      notify(
+        ids.length === 1
+          ? t("nodeDeleted")
+          : t("nodesDeleted").replace("{count}", String(ids.length)),
+        false,
+        { label: t("undo"), run: () => revert("undo", change) },
+      );
   }
+  /** Undo or redo a change, from a shortcut or a toast, and report it. */
+  function revert(direction: "undo" | "redo", change?: string) {
+    setReverting((count) => count + 1);
+    safe(async () => {
+      try {
+        const done = await (direction === "undo" ? undo(change) : redo());
+        notify(
+          t(
+            direction === "undo"
+              ? done
+                ? "changeUndone"
+                : "nothingToUndo"
+              : done
+                ? "changeRedone"
+                : "nothingToRedo",
+          ),
+        );
+      } finally {
+        setReverting((count) => count - 1);
+      }
+    });
+  }
+  /** Copy nodes of the opened graph, with the edits still being saved. */
+  async function copy(ids: string[]) {
+    let source = bundle!;
+    if (canEdit && (saving || drafts.dirty())) {
+      await settle();
+      source = (await api<Snapshot>(`/worktrees/${worktree}`)).bundle!;
+    }
+    const copied = copyNodes(source, parent, ids);
+    if (copied)
+      notify(
+        copied.nodes.length === 1
+          ? t("nodeCopied")
+          : t("nodesCopied").replace("{count}", String(copied.nodes.length)),
+      );
+  }
+  /** Paste the copied nodes into the opened graph and select the first one. */
+  async function paste(copied: CopiedNodes) {
+    const opened = path.map((part) => part.definition);
+    if (!pastableNodes(bundle!, copied, opened).length) {
+      notify(t("nothingPasted"), true);
+      return;
+    }
+    let ids: string[] = [];
+    const added = await insertNode((value) => {
+      ids = pasteNodes(value, parent, copied, opened);
+      return ids[0];
+    });
+    if (added) setFocusRequest({ id: ids[0], key: ids[0], reveal: true });
+  }
+  // Undo, redo, copy and paste yield to typing and to blocking dialogs.
+  const shortcut = useEffectEvent((event: KeyboardEvent) => {
+    if (
+      event.defaultPrevented ||
+      event.isComposing ||
+      event.altKey ||
+      !(event.ctrlKey || event.metaKey) ||
+      typingTarget(event.target) ||
+      blockingDialogShown()
+    )
+      return;
+    const key = event.key.toLowerCase();
+    if (key === "z" || key === "y") {
+      // Repeated undos queue up behind the one in flight.
+      if (!canEdit || addingNode || !bundle) return;
+      event.preventDefault();
+      if (!event.repeat)
+        revert(key === "y" || event.shiftKey ? "redo" : "undo");
+    } else if (key === "c" && !event.shiftKey && graph) {
+      // Selected text is copied as usual.
+      if (window.getSelection()?.toString()) return;
+      const ids = selection.length ? selection : selected ? [selected] : [];
+      if (!graph.nodes.some((item) => ids.includes(item.id))) return;
+      event.preventDefault();
+      if (!event.repeat) safe(() => copy(ids));
+    } else if (key === "v" && !event.shiftKey) {
+      const copied = copiedNodes();
+      if (!canEdit || busy || !bundle || !copied) return;
+      event.preventDefault();
+      if (!event.repeat) safe(() => paste(copied));
+    }
+  });
+  useEffect(() => {
+    document.addEventListener("keydown", shortcut);
+    return () => document.removeEventListener("keydown", shortcut);
+  }, []);
   /** Insert a Filter node reading one output of the selected node, with a sample's condition. */
   async function addFilterNode(port: string, condition: string) {
     if (!node) return;
@@ -342,7 +457,7 @@ export default function FlowPage() {
       bundle?.templates.filter !== undefined &&
       filter?.inputs?.length === 1 &&
       filter.parameters?.some((p) => p.name === "condition");
-    const added = await insertNode(created.id, (value) => {
+    const added = await insertNode((value) => {
       const g = graphAt(value, path);
       if (reusable) {
         created.template = "filter";
@@ -358,6 +473,7 @@ export default function FlowPage() {
         target: created.id,
         targetHandle: reusable ? filter!.inputs![0] : "source",
       });
+      return created.id;
     });
     if (added) notify(t("filterNodeAdded"));
   }
@@ -424,7 +540,7 @@ export default function FlowPage() {
       }
     >
       <NodePalette
-        readOnly={!canEdit || addingNode}
+        readOnly={!canEdit || busy}
         snapshot={snapshot}
         excludedComponents={path.map((part) => part.definition)}
         hidden={!panels.open.palette}
@@ -449,7 +565,7 @@ export default function FlowPage() {
           {t("addingNode")}
         </div>
       )}
-      <main className="canvas-column" inert={addingNode}>
+      <main className="canvas-column" inert={busy}>
         <BranchResultsNotice />
         <CanvasHeader
           projectName={project?.name || bundle.flow.name}
@@ -487,7 +603,7 @@ export default function FlowPage() {
             ref={canvas}
             valueProducers={valueProducers}
             // Its delete keys listen on the document, which inert does not cover.
-            readOnly={!canEdit || addingNode}
+            readOnly={!canEdit || busy}
             nodes={graph.nodes}
             edges={graph.edges}
             parsed={snapshot.parsed_templates}
@@ -573,7 +689,7 @@ export default function FlowPage() {
         className="inspector-layer"
         id="node-inspector"
         hidden={!panels.open.inspector}
-        inert={addingNode}
+        inert={busy}
       >
         {node && definition ? (
           <Inspector
@@ -678,7 +794,7 @@ export default function FlowPage() {
                     y: node.position.y + 40,
                   },
                 };
-                return insertNode(duplicate.id, (value) => {
+                return insertNode((value) => {
                   if (!duplicate.component) {
                     const sql = nodeCode(value, node, parent);
                     duplicate.origin = node.template || node.origin;
@@ -688,6 +804,7 @@ export default function FlowPage() {
                     ] = sql;
                   }
                   nodeGraph(value, parent).nodes.push(duplicate);
+                  return duplicate.id;
                 });
               })
             }

@@ -1,5 +1,5 @@
 import fr from "../src/locales/fr.json" with { type: "json" };
-import { signIn } from "./helpers";
+import { autosaved, signIn } from "./helpers";
 import { test, expect, type Page } from "@playwright/test";
 
 async function choosePreference(page: Page, name: string) {
@@ -222,13 +222,10 @@ test("drag a filter, configure it without SQL, and group it into a reusable comp
   );
   await inspector.getByLabel("Column", { exact: true }).selectOption("amount");
   await inspector.getByLabel("Operator", { exact: true }).selectOption(">");
-  await inspector.getByLabel("Value", { exact: true }).fill("100");
-  await inspector
-    .getByRole("button", { name: "Apply to parameters", exact: true })
-    .click();
-  await inspector
-    .getByRole("button", { name: "Save changes", exact: true })
-    .click();
+  // The guided form writes the condition, saved without a button.
+  await autosaved(page, () =>
+    inspector.getByLabel("Value", { exact: true }).fill("100"),
+  );
   await run(page);
   await expect(page.locator(".preview-header .badge")).toHaveText("Valid");
   await expect(
@@ -267,12 +264,6 @@ test("guided filters format fixed values from the input column type", async ({
   await page.goto(`/worktrees/${worktree.id}/flow`);
   const inspector = page.locator(".inspector");
   const nodes = page.locator(".react-flow__node");
-  const save = async () => {
-    await inspector
-      .getByRole("button", { name: "Save changes", exact: true })
-      .click();
-    await expect(page.locator(".save-status")).toHaveText("All changes saved");
-  };
   await page.getByRole("button", { name: "Load CSV", exact: true }).click();
   const source = await nodes.getAttribute("data-id");
   await inspector.getByLabel("Upload file", { exact: true }).setInputFiles({
@@ -286,10 +277,11 @@ test("guided filters format fixed values from the input column type", async ({
     /codes\.csv$/,
   );
   // Without a declared type, CSV detection reads these codes as numbers.
-  await inspector
-    .getByRole("textbox", { name: /types/ })
-    .fill('{"code":"VARCHAR"}');
-  await save();
+  await autosaved(page, () =>
+    inspector
+      .getByRole("textbox", { name: /types/ })
+      .fill('{"code":"VARCHAR"}'),
+  );
   await run(page);
 
   await page.getByRole("button", { name: "Filter", exact: true }).click();
@@ -308,15 +300,11 @@ test("guided filters format fixed values from the input column type", async ({
       .getByLabel("Operator", { exact: true })
       .selectOption(operator);
     await inspector.getByLabel("Value", { exact: true }).fill(value);
-    await inspector
-      .getByRole("button", { name: "Apply to parameters", exact: true })
-      .click();
   };
   // An unquoted 001 also matched 1, and failed to cast ABC in mixed codes.
   for (const name of ["code", "mixed"]) {
-    await apply(name, "=", "001");
+    await autosaved(page, () => apply(name, "=", "001"));
     await expect(condition).toHaveValue(`"${name}" = '001'`);
-    await save();
     await run(page);
     const preview = await (
       await page.request.get(
@@ -344,8 +332,15 @@ test("conflicting parameter edits survive reload and can be resolved explicitly"
   const status = page
     .locator(".inspector")
     .getByRole("textbox", { name: /status/ });
-  await status.fill("refunded");
   const worktree = new URL(page.url()).pathname.split("/")[2];
+  // Hold the page's save until a collaborator saved the same parameter.
+  let release!: () => void;
+  const released = new Promise<void>((resolve) => (release = resolve));
+  await page.route(`**/api/worktrees/${worktree}`, async (route) => {
+    if (route.request().method() === "PUT") await released;
+    await route.continue();
+  });
+  await status.fill("refunded");
   const snapshot = await (
     await page.request.get("/api/worktrees/" + worktree)
   ).json();
@@ -359,10 +354,12 @@ test("conflicting parameter edits survive reload and can be resolved explicitly"
       })
     ).ok(),
   ).toBeTruthy();
+  release();
   await status.blur();
   await expect(
     page.getByRole("button", { name: "Save resolution", exact: true }),
   ).toBeVisible();
+  await page.unrouteAll({ behavior: "wait" });
   await page.reload();
   await page
     .getByRole("button", { name: "Save resolution", exact: true })

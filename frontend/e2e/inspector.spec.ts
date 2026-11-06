@@ -23,7 +23,6 @@ async function openInspector(page: Page) {
       exact: true,
     }),
     status: inspector.getByRole("textbox", { name: /status/ }),
-    save: inspector.getByRole("button", { name: "Save changes", exact: true }),
   };
 }
 
@@ -67,25 +66,26 @@ async function delayFirstSave(page: Page, endpoint: string, fail = false) {
   };
 }
 
-test("Inspector keeps edits typed during a save and saves them on the next blur", async ({
+test("Inspector saves edits after a pause, then edits typed during that save", async ({
   page,
 }) => {
   const { endpoint, inspector, label, status } = await openInspector(page);
+  await expect(
+    inspector.getByRole("button", { name: "Save changes", exact: true }),
+  ).toHaveCount(0);
   const pending = await delayFirstSave(page, endpoint);
+  // No blur: the pause in typing saves the label.
   await label.fill("Reviewed orders");
-  await label.press("Tab");
   await pending.started;
+  await expect(page.locator(".save-status")).toHaveText("Saving…");
   await status.fill("refunded");
   pending.release();
   await expect(inspector.locator(".inspector-title")).toContainText(
     "Reviewed orders",
   );
-  await expect(status).toHaveValue("refunded");
-  expect(pending.requests).toHaveLength(1);
-
-  await status.blur();
   await expect.poll(() => pending.responses.length).toBe(2);
   expect(pending.requests[1].revision).toBe(pending.responses[0].revision);
+  await expect(page.locator(".save-status")).toHaveText("All changes saved");
   await page.reload();
   await page
     .locator(".react-flow__node")
@@ -98,15 +98,14 @@ test("Inspector keeps edits typed during a save and saves them on the next blur"
 test("Inspector queues a save requested during an earlier save using its new revision", async ({
   page,
 }) => {
-  const { endpoint, inspector, label, status, save } =
-    await openInspector(page);
+  const { endpoint, inspector, label, status } = await openInspector(page);
   const pending = await delayFirstSave(page, endpoint);
   await label.fill("First label");
   await label.blur();
   await pending.started;
   // Editing the same field again would conflict if the next save used the old revision.
   await label.fill("Latest label");
-  await save.click();
+  await label.blur();
   expect(pending.requests).toHaveLength(1);
   pending.release();
   await expect(inspector.locator(".inspector-title")).toContainText(
@@ -128,19 +127,19 @@ test("Inspector queues a save requested during an earlier save using its new rev
   await expect(inspector.locator(".notice.error")).toHaveCount(0);
 });
 
-test("Inspector sends one PUT when Save changes blurs the edited field", async ({
+test("Inspector sends one PUT when a field blurs during its pause save", async ({
   page,
 }) => {
-  const { endpoint, inspector, label, save } = await openInspector(page);
+  const { endpoint, inspector, label } = await openInspector(page);
   const pending = await delayFirstSave(page, endpoint);
   await label.fill("Saved once");
-  await save.click();
   await pending.started;
+  await label.blur();
   pending.release();
   await expect(inspector.locator(".inspector-title")).toContainText(
     "Saved once",
   );
-  await save.click();
+  await expect(page.locator(".save-status")).toHaveText("All changes saved");
   expect(pending.requests).toHaveLength(1);
   await expect(inspector.locator(".notice.error")).toHaveCount(0);
 });
@@ -148,18 +147,22 @@ test("Inspector sends one PUT when Save changes blurs the edited field", async (
 test("Inspector preserves the latest draft after a failed save and allows retry", async ({
   page,
 }) => {
-  const { endpoint, inspector, label, save } = await openInspector(page);
+  const { endpoint, inspector, label } = await openInspector(page);
   const pending = await delayFirstSave(page, endpoint, true);
   await label.fill("First attempt");
   await label.blur();
   await pending.started;
   await label.fill("Retry with latest edits");
+  // Let the pause save of the new text join the failing save first.
+  await page.waitForTimeout(1500);
   pending.release();
   await expect(inspector.locator(".notice.error")).toHaveText(
     "Temporary save failure",
   );
+  await expect(page.locator(".save-status")).toHaveText("Unsaved changes");
   await expect(label).toHaveValue("Retry with latest edits");
-  await save.click();
+  expect(pending.requests).toHaveLength(1);
+  await label.blur();
   await expect(inspector.locator(".inspector-title")).toContainText(
     "Retry with latest edits",
   );
@@ -171,34 +174,6 @@ test("Inspector preserves the latest draft after a failed save and allows retry"
     .filter({ hasText: "Retry with latest edits" })
     .click();
   await expect(label).toHaveValue("Retry with latest edits");
-});
-
-test("Inspector does not queue later edits for a duplicate blur and click save", async ({
-  page,
-}) => {
-  const { endpoint, inspector, label, status, save } =
-    await openInspector(page);
-  const pending = await delayFirstSave(page, endpoint);
-  await label.fill("Saved before more typing");
-  await save.click();
-  await pending.started;
-  await status.fill("refunded");
-  pending.release();
-  await expect(inspector.locator(".inspector-title")).toContainText(
-    "Saved before more typing",
-  );
-  await expect(page.locator(".save-status")).toHaveText("Unsaved changes");
-  await expect(status).toHaveValue("refunded");
-  expect(pending.requests).toHaveLength(1);
-  await status.blur();
-  await expect.poll(() => pending.responses.length).toBe(2);
-  expect(pending.requests[1].revision).toBe(pending.responses[0].revision);
-  await page.reload();
-  await page
-    .locator(".react-flow__node")
-    .filter({ hasText: "Saved before more typing" })
-    .click();
-  await expect(status).toHaveValue("refunded");
 });
 
 test("Info tab tells who changed the node and opens its history", async ({

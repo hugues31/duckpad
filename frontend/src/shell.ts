@@ -2,6 +2,7 @@ import { createContext, useContext } from "react";
 import type { ModalState } from "./ModalHost";
 import type { WorkspaceTab } from "./navigation";
 import type { Preferences } from "./preferences";
+import type { ToastAction } from "./Toast";
 import type { Workspace } from "./types";
 import type { DraftRegistry } from "./useRevisionDraft";
 import type { PanelVisibility } from "./WorkspacePanels";
@@ -19,7 +20,7 @@ export interface Shell {
   flowPanels: PanelVisibility;
   /** Where `/` leads after signing in: a validated SSO return, if any. */
   signInDestination: string | null;
-  notify: (text: string, error?: boolean) => void;
+  notify: (text: string, error?: boolean, action?: ToastAction) => void;
   openModal: (modal: ModalState) => void;
   closeModal: () => void;
   /** Open a working branch in the selected environment. */

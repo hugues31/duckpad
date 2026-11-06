@@ -3,6 +3,8 @@ import { mkdir } from "node:fs/promises";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import {
+  autosaved,
+  closeEditor,
   openInstanceSettings,
   openUserSettings,
   PASSWORD,
@@ -204,10 +206,7 @@ test("capture the quickstart using the SQL printed in the guide", async ({
     await editor.locator(".monaco-editor textarea").focus();
     await page.keyboard.press("ControlOrMeta+A");
     await page.keyboard.insertText(code);
-    await editor
-      .getByRole("button", { name: "Save changes", exact: true })
-      .click();
-    await expect(editor).toHaveCount(0);
+    await closeEditor(editor);
   };
   const add = async (label: string, code: string, count: number) => {
     await page
@@ -216,10 +215,9 @@ test("capture the quickstart using the SQL printed in the guide", async ({
       .click();
     await expect(page.locator(".react-flow__node")).toHaveCount(count);
     await expect(inspector.getByLabel("Display name")).toHaveValue("");
-    await inspector.getByLabel("Display name").fill(label);
-    await inspector
-      .getByRole("button", { name: "Save changes", exact: true })
-      .click();
+    await autosaved(page, () =>
+      inspector.getByLabel("Display name").fill(label),
+    );
     await expect(inspector.locator(".inspector-title")).toContainText(label);
     await edit(code);
   };
@@ -271,12 +269,11 @@ test("capture the quickstart using the SQL printed in the guide", async ({
   await expect(results).toContainText("OK");
   await results.getByRole("tab", { name: "Log", exact: true }).click();
   await expect(results).toContainText("3 paid orders checked");
-  await inspector
-    .getByRole("textbox", { name: "status", exact: true })
-    .fill("pending");
-  await inspector
-    .getByRole("button", { name: "Save changes", exact: true })
-    .click();
+  await autosaved(page, () =>
+    inspector
+      .getByRole("textbox", { name: "status", exact: true })
+      .fill("pending"),
+  );
   await expect(
     inspector.getByRole("button", { name: "Stale", exact: true }),
   ).toBeVisible();
@@ -504,9 +501,7 @@ test("capture project variables, a parameter binding and a run confirmation", as
   await expect(
     inspector.getByRole("list", { name: "Variables used by this expression" }),
   ).toContainText("prod 900");
-  await inspector
-    .getByRole("button", { name: "Save changes", exact: true })
-    .click();
+  await condition.blur();
   await expect(
     page.getByText("All changes saved", { exact: true }),
   ).toBeVisible();
@@ -525,11 +520,10 @@ test("capture a file node reading project files", async ({ page }) => {
   await expect(
     inspector.getByRole("combobox", { name: "Location", exact: true }),
   ).toHaveValue("");
-  await inspector.getByRole("textbox", { name: /file/ }).fill("budget.xlsx");
-  await inspector.getByRole("textbox", { name: /sheet/ }).fill("Orders");
-  await inspector
-    .getByRole("button", { name: "Save changes", exact: true })
-    .click();
+  await autosaved(page, async () => {
+    await inspector.getByRole("textbox", { name: /file/ }).fill("budget.xlsx");
+    await inspector.getByRole("textbox", { name: /sheet/ }).fill("Orders");
+  });
   await expect
     .poll(
       async () =>
@@ -636,12 +630,11 @@ test("capture connection setup and environment policies", async ({ page }) => {
     await inspector
       .getByRole("combobox", { name: "Location", exact: true })
       .selectOption("finance_share");
-    await inspector
-      .getByRole("textbox", { name: /file/ })
-      .fill("inbox/budget.xlsx");
-    await inspector
-      .getByRole("button", { name: "Save changes", exact: true })
-      .click();
+    await autosaved(page, () =>
+      inspector
+        .getByRole("textbox", { name: /file/ })
+        .fill("inbox/budget.xlsx"),
+    );
     await expect
       .poll(
         async () =>
@@ -736,10 +729,7 @@ test("capture a PostgreSQL connection test and Load table", async ({
     await expect(
       page.locator(`datalist[id="${await table.getAttribute("list")}"] option`),
     ).not.toHaveCount(0);
-    await table.fill("orders");
-    await inspector
-      .getByRole("button", { name: "Save changes", exact: true })
-      .click();
+    await autosaved(page, () => table.fill("orders"));
     await expect
       .poll(
         async () =>
