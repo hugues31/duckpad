@@ -96,6 +96,51 @@ def test_ui_run_reports_missing_inputs_only_in_its_scope(named_bundle, services)
     assert join_run(store, engine.launch(connected, "dev", entry_point="ui")["id"])["status"] == "success"
 
 
+def test_missing_component_input_is_reported_on_its_instance(named_bundle, services):
+    store, projects, _, engine = services
+    named_bundle["flow"]["nodes"] = [
+        {"id": "outer", "component": "wrapper", "params": {}, "position": {"x": 0, "y": 0}}
+    ]
+    named_bundle["node_sql"] = {
+        "components/branch/other.sql": "-- @label Constant\n-- @output result\nSELECT 1 AS amount;"
+    }
+    named_bundle["components"] = {
+        "branch": {
+            "name": "Branch",
+            "nodes": [
+                {"id": "inner", "template": "filter", "params": {"condition": "amount > 0"}},
+                {"id": "other", "params": {}},
+            ],
+            "edges": [],
+            "inputs": {"rows": {"node": "inner", "port": "source"}},
+            "outputs": {},
+        },
+        # Nested exposure: the outermost instance is where the input is connected.
+        "wrapper": {
+            "name": "Wrapper",
+            "nodes": [{"id": "middle", "component": "branch", "params": {}}],
+            "edges": [],
+            "inputs": {"orders": {"node": "middle", "port": "rows"}},
+            "outputs": {},
+        },
+    }
+    assert validate(named_bundle) == [
+        {
+            "file": "flow.json",
+            "node": "outer",
+            "code": "missing_input",
+            "port": "orders",
+            "message": "Connect input 'orders' on Wrapper",
+        }
+    ]
+    worktree = projects.create("Component input", named_bundle)["id"]
+    unrelated = engine.launch(worktree, "dev", "outer::middle::other", entry_point="ui")
+    assert join_run(store, unrelated["id"])["status"] == "success"
+    for target in (None, "outer::middle::inner"):
+        with pytest.raises(Problem, match="Connect input 'orders' on Wrapper"):
+            engine.launch(worktree, "dev", target, entry_point="ui")
+
+
 def test_commit_messages_name_added_removed_and_connected_nodes(named_bundle):
     before = copy.deepcopy(named_bundle)
     before["flow"]["nodes"] = []
