@@ -1403,7 +1403,7 @@
   "gitPush": "Push",
   "gitDataImpact": "Impact sur les données",
   "gitDataImpactHint": "Résultats conservés : {destination} → {source}. Cette comparaison porte sur les sorties des branches, pas sur la proposition de merge non exécutée.",
-  "gitNoComparableResults": "Exécutez les nœuds modifiés sur les deux branches dans cet environnement pour comparer leurs résultats. Les branches distantes et les sorties partitionnées ne sont pas disponibles ici.",
+  "gitNoComparableResults": "Exécutez les nœuds modifiés sur les deux branches dans cet environnement pour comparer leurs résultats. Les sorties partitionnées ne sont pas comparables.",
   "gitDataImpactMethod": "Les lignes sont comparées sur les colonnes communes de même type, jusqu’à 50 000 lignes par sortie. Sans clé, les lignes modifiées comptent comme des suppressions et des ajouts ; les doublons sont comptés. Choisissez une clé unique et sans valeur nulle pour compter les lignes modifiées séparément. Les colonnes ajoutées et supprimées sont indiquées séparément. Les résultats obsolètes ou incomplets sont exclus. Aucun flow n’est exécuté.",
   "gitComparisonKey": "Clé de comparaison",
   "gitNoKey": "Sans clé (lignes entières)",
