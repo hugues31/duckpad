@@ -97,51 +97,45 @@ for (const [node, defaultAmount] of [
     const params = (snapshot: Snapshot) =>
       snapshot.bundle!.flow.nodes.find((item) => item.id === node)!.params;
 
-    await amount.fill("");
-    await expect(amount).toHaveValue("");
-    await expect(page.locator(".save-status")).toHaveText("Unsaved changes");
-    expect(params(await (await page.request.get(url)).json()).amount).toBe(7);
-    let snapshot = await save(page, url, () => amount.blur());
+    // Edits are saved after a pause in typing; the field shows the default once left.
+    let snapshot = await save(page, url, () => amount.fill(""));
     expect(params(snapshot)).not.toHaveProperty("amount");
+    await expect(amount).toHaveValue("");
+    await amount.blur();
     await expect(amount).toHaveValue(String(defaultAmount));
     const compiled = await (
       await page.request.get(`${url}/compile/${node}?environment=dev`)
     ).json();
     expect(compiled[0].bindings.amount).toBe(defaultAmount);
 
-    await amount.fill("");
-    await amount.pressSequentially("-");
-    await expect(amount).toHaveValue("-");
-    await amount.pressSequentially("12.50");
-    await expect(amount).toHaveValue("-12.50");
-    snapshot = await save(page, url, () => amount.blur());
+    snapshot = await save(page, url, async () => {
+      await amount.fill("");
+      await amount.pressSequentially("-");
+      await expect(amount).toHaveValue("-");
+      await amount.pressSequentially("12.50");
+      await expect(amount).toHaveValue("-12.50");
+      await amount.blur();
+    });
     expect(params(snapshot).amount).toBe(-12.5);
 
-    await amount.fill("");
-    await amount.pressSequentially("1e-3");
-    await expect(amount).toHaveValue("1e-3");
-    snapshot = await save(page, url, () => amount.blur());
+    snapshot = await save(page, url, async () => {
+      await amount.fill("");
+      await amount.pressSequentially("1e-3");
+      await expect(amount).toHaveValue("1e-3");
+      await amount.blur();
+    });
     expect(params(snapshot).amount).toBe(0.001);
 
-    await amount.fill("0");
-    snapshot = await save(page, url, () => amount.blur());
+    snapshot = await save(page, url, () => amount.fill("0"));
     expect(params(snapshot).amount).toBe(0);
-    await amount.fill("");
-    snapshot = await save(page, url, () => amount.blur());
+    snapshot = await save(page, url, () => amount.fill(""));
     expect(params(snapshot)).not.toHaveProperty("amount");
 
-    await cities.fill("");
-    await cities.pressSequentially("New York, Paris");
-    await expect(cities).toHaveValue("New York, Paris");
-    await expect(page.locator(".save-status")).toHaveText("Unsaved changes");
-    expect(
-      params(await (await page.request.get(url)).json()),
-    ).not.toHaveProperty("cities");
-    snapshot = await save(page, url, () =>
-      inspector
-        .getByRole("button", { name: "Save changes", exact: true })
-        .click(),
-    );
+    snapshot = await save(page, url, async () => {
+      await cities.fill("");
+      await cities.pressSequentially("New York, Paris");
+      await expect(cities).toHaveValue("New York, Paris");
+    });
     expect(params(snapshot).cities).toEqual(["New York", "Paris"]);
     await page.reload();
     await page.locator(`.react-flow__node[data-id="${node}"]`).click();
@@ -238,8 +232,7 @@ test("clearing a required number does not save zero and invalid drafts stay edit
     const stored: Snapshot = await (await page.request.get(url)).json();
     expect(stored.bundle!.flow.nodes[0].params.amount).toBe(7);
   }
-  await amount.fill("");
-  const stored = await save(page, url, () => amount.blur());
+  const stored = await save(page, url, () => amount.fill(""));
   expect(stored.bundle!.flow.nodes[0].params).not.toHaveProperty("amount");
   await expect(amount).toHaveValue("");
   const compiled = await page.request.get(

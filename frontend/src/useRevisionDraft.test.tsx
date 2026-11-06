@@ -8,8 +8,10 @@ import {
 } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  AUTOSAVE_DELAY,
   DraftContext,
   useDraftRegistry,
+  useIdleSave,
   useRevisionDraft,
   type DraftRegistry,
   type DraftScope,
@@ -507,6 +509,29 @@ describe("useDraftRegistry", () => {
     expect(save).toHaveBeenCalledTimes(1);
   });
 
+  it("reports a draft whose navigation save failed as rejected until it changes", async () => {
+    const automatic = createRef<Draft>();
+    const save = vi.fn(async () => {
+      throw new Error("Save failed");
+    });
+    render(
+      <Registry>
+        <Editor handle={automatic} scope="page" save={save} autosave />
+      </Registry>,
+    );
+    act(() => automatic.current!.update(() => "unsaved"));
+    expect(automatic.current!.rejected()).toBe(false);
+    await act(async () => {
+      await expect(registry.current!.autosave("page")).rejects.toThrow(
+        "Save failed",
+      );
+    });
+    // A pause in typing must not resend it behind the navigation guard.
+    expect(automatic.current!.rejected()).toBe(true);
+    act(() => automatic.current!.update(() => "unsaved, then edited"));
+    expect(automatic.current!.rejected()).toBe(false);
+  });
+
   it("saves pending page and worktree drafts before continuing", async () => {
     const page = createRef<Draft>();
     const branch = createRef<Draft>();
@@ -638,5 +663,29 @@ describe("useDraftRegistry", () => {
 
     rerender(<Registry />);
     expect(registry.current!.dirty()).toBe(false);
+  });
+});
+
+describe("useIdleSave", () => {
+  it("saves once edits pause, never while disabled", () => {
+    vi.useFakeTimers();
+    try {
+      const save = vi.fn();
+      const { rerender } = renderHook(
+        ({ value, enabled }) => useIdleSave(value, enabled, save),
+        { initialProps: { value: "a", enabled: true } },
+      );
+      act(() => vi.advanceTimersByTime(AUTOSAVE_DELAY - 1));
+      rerender({ value: "ab", enabled: true });
+      act(() => vi.advanceTimersByTime(AUTOSAVE_DELAY - 1));
+      expect(save).not.toHaveBeenCalled();
+      act(() => vi.advanceTimersByTime(1));
+      expect(save).toHaveBeenCalledTimes(1);
+      rerender({ value: "abc", enabled: false });
+      act(() => vi.advanceTimersByTime(AUTOSAVE_DELAY * 2));
+      expect(save).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

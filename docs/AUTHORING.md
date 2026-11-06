@@ -75,8 +75,8 @@ parameters are present.
 
 The **SQL** and **Python** buttons at the bottom of the palette create reusable
 templates. Python requires administrator activation in the project settings.
-Save the code to make it available in the palette, then click or drag the entry
-to create independent nodes. **Import** copies a reusable definition from
+The template is saved as you edit it and appears in the palette; click or drag
+the entry to create independent nodes. **Import** copies a reusable definition from
 another project into this palette.
 
 Use **Add linked** to share a template. Linked nodes show a badge and template

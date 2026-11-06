@@ -93,3 +93,8 @@
 .modal > .notice {
   margin: 12px 25px;
 }
+/* The autosave state of an editor dialog, before its buttons. */
+.editor-save-state {
+  margin-right: auto;
+  align-self: center;
+}

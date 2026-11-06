@@ -215,6 +215,14 @@ class Save(BaseModel):
         return self
 
 
+class Revert(BaseModel):
+    """A commit of the branch to undo with its inverse change."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    commit: str = Field(pattern=r"^(?:[0-9a-f]{40}|[0-9a-f]{64})$")
+
+
 class Resolution(BaseModel):
     choice: Literal["current", "proposal", "combined"]
     files: dict[str, str] | None = None

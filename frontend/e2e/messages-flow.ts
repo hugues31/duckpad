@@ -1,4 +1,5 @@
 import { expect, type Page } from "@playwright/test";
+import { closeEditor } from "./helpers";
 import type { Run, Snapshot } from "../src/types";
 
 /** Verify message editing, publication and history on Northstar, locally or in a preview. */
@@ -43,10 +44,7 @@ export async function verifyMessages(page: Page) {
     await dialog.locator(".monaco-editor textarea").focus();
     await page.keyboard.press("ControlOrMeta+A");
     await page.keyboard.insertText(sql);
-    await dialog
-      .getByRole("button", { name: "Save changes", exact: true })
-      .click();
-    await expect(dialog).toHaveCount(0);
+    await closeEditor(dialog);
   };
   const launch = async () => {
     const response = page.waitForResponse(

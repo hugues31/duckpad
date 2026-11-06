@@ -20,3 +20,10 @@
 .toast > span {
   overflow-wrap: anywhere;
 }
+/* An action offered by the message, such as undoing what it reports. */
+.toast-action {
+  font-weight: 650;
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: color-mix(in srgb, currentColor 12%, transparent);
+}

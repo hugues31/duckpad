@@ -49,6 +49,13 @@ shortcuts.
 
 ## Save and run
 
+The flow has no Save button. The inspector saves a parameter, the guided forms
+and the node documentation after a short pause in typing, or when you leave the
+field; the code editor does the same, saves at once with **Ctrl+S** (**⌘S**), and
+saves before it closes. The top bar shows **Saving…**, **All changes saved** or
+**Unsaved changes**; a failed save shows its error where you typed and is retried
+when you edit again or leave the field.
+
 A save applies its project files and Git commit together. If writing a file or
 committing fails, the previous files, staged changes and branch commit are
 restored before the file watcher resumes. Failed assistant edits follow the same
@@ -66,6 +73,18 @@ remain visible; the minimap hides when panels leave little canvas space. After a
 backend restart, run again to restore previews and lineage. **History** retains execution
 records; the node's **Log** connects the displayed data to its recorded run.
 See [results and logs](RESULTS.md) and [environments](ENVIRONMENTS.md).
+
+## Undo, copy and paste
+
+On the canvas, **Ctrl+Z** (**⌘Z**) undoes your latest change of this session and
+**Ctrl+Shift+Z** or **Ctrl+Y** (**⌘⇧Z**) redoes it, including parameters, code and
+deleted nodes; deleting nodes also offers **Undo** in its message. An undo saves
+the inverse of that change as a new commit: later edits to other nodes, yours or a
+collaborator's, are kept, and a conflicting one is reported like any concurrent
+edit. **Ctrl+C** and **Ctrl+V** (**⌘C**, **⌘V**) copy the selected nodes and paste
+them, with the connections between them, into this flow, a component or another
+branch opened in the same browser tab; copies get new IDs and are offset. These
+shortcuts do nothing while you type in a field or editor, or while a dialog is open.
 
 ## Preferences and access
 
