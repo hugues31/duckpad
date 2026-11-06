@@ -24,6 +24,7 @@ import { useT } from "./i18n";
 import { nodeCode, nodeCodePath, templateUsage } from "./nodeCode";
 import Select from "./Select";
 import type { Bundle, FlowNode, Snapshot, Statuses } from "./types";
+import { useShell } from "./shell";
 import { useApiResource } from "./useApiResource";
 import { useIdleSave, useRevisionDraft } from "./useRevisionDraft";
 import { useWorktree } from "./worktree";
@@ -86,8 +87,17 @@ export default function NodeCodePanel({
   onClose: () => void;
 }) {
   const t = useT();
+  const { notify } = useShell();
   const { save, starting } = useWorktree();
   const read = (bundle: Bundle) => nodeCode(bundle, node, parent) ?? "";
+  // Closing the panel or selecting another node saves the last edits without it.
+  const mounted = useRef(true);
+  useEffect(
+    () => () => {
+      mounted.current = false;
+    },
+    [],
+  );
   const { draft, dirty, pending, update, persist, rejected } = useRevisionDraft(
     read(snapshot.bundle!),
     snapshot,
@@ -98,6 +108,10 @@ export default function NodeCodePanel({
           (bundle.node_sql ||= {})[
             nodeCodePath(node.id, parent, node.language)
           ] = text;
+      }).catch((error) => {
+        // Nothing is left here to show the error of the last save.
+        if (!mounted.current) notify((error as Error).message, true);
+        throw error;
       }),
     { autosave: !readOnly },
   );
@@ -263,7 +277,10 @@ export default function NodeCodePanel({
         worktree={snapshot.worktree.id}
         fullNode={fullNode}
         environment={environment}
-        refresh={JSON.stringify([snapshot.revision, statuses.nodes])}
+        refresh={JSON.stringify([
+          snapshot.revision,
+          statuses.active?.id ?? null,
+        ])}
         python={python}
         disabled={readOnly || !editor}
         onInsert={(text) => editor && insertText(editor, text)}

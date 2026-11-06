@@ -17,9 +17,9 @@ template affects all of its linked nodes in that branch. See
 [code ownership](AUTHORING.md#editing-node-code).
 
 **Input columns**, above the code, list the name and type of each input's
-columns: from the upstream node's last result, or described from the upstream
-code when it has none. Click a column or an input to insert its name at the
-cursor.
+columns: from the upstream node's last result or, when it has none but the branch
+already ran in this environment, described from the upstream code. Click a column
+or an input to insert its name at the cursor.
 
 ## Preview while you edit
 

@@ -71,11 +71,12 @@ test("edit a node's code, preview it on input samples, fix it and preview again"
     page.locator('.react-flow__node[data-id="orders"]'),
   ).toBeVisible();
   const columns = panel.getByRole("region", { name: "Input columns" });
-  // Without results, the columns are described from the upstream code.
-  await expect(columns).toContainText("Described from the upstream code");
-  await expect(
-    columns.getByRole("button", { name: "country VARCHAR", exact: true }),
-  ).toBeVisible();
+  const country = columns.getByRole("button", {
+    name: "country VARCHAR",
+    exact: true,
+  });
+  // Nothing ran on this branch yet: the columns come with the first results.
+  await expect(columns).toContainText("Run the ancestors to see its columns");
 
   // The input has no result yet: the preview asks to run the ancestors.
   await panel.locator(".monaco-editor textarea").focus();
@@ -94,6 +95,7 @@ test("edit a node's code, preview it on input samples, fix it and preview again"
     "Computed from the first 1,000 rows of each input",
   );
   await expect(columns).toContainText("Last result");
+  await expect(country).toBeVisible();
   const recorded = await runs();
   expect(recorded).toBe(1);
   const before = await statuses();
@@ -126,9 +128,7 @@ test("edit a node's code, preview it on input samples, fix it and preview again"
   await page.keyboard.press("End");
   for (let index = 0; index < "count(*) AS orders".length + 2; index++)
     await page.keyboard.press("ArrowLeft");
-  await columns
-    .getByRole("button", { name: "country VARCHAR", exact: true })
-    .click();
+  await country.click();
   await panel
     .getByRole("combobox", { name: "Rows read from each input" })
     .selectOption("100");

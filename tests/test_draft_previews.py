@@ -256,6 +256,11 @@ def test_preview_over_http(tmp_path):
             worktree["id"], snapshot["revision"], bundle_to_files(bundle(folder / "orders.csv"))
         )
         path = f"/api/worktrees/{worktree['id']}"
+        # Reading columns never starts the branch's SQL worker.
+        columns = client.get(f"{path}/input-columns/report", params={"environment": "dev"})
+        assert columns.json()["inputs"][0]["reason"] == "not_materialized"
+        context = services.engine.pool.find(worktree["id"], "dev")
+        assert context is None or context.db is None
         missing = client.post(f"{path}/draft-preview/report", json={"environment": "dev"})
         assert missing.status_code == 409
         assert missing.json()["detail"]["missing"][0]["input"] == "source"

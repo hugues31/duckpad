@@ -19,7 +19,7 @@ from .. import connection_probe, project_extensions, variables
 from ..catalog import Catalog, redact
 from ..components import expand_for
 from ..datasets import Context, Dataset
-from ..graph import connection_references
+from ..graph import connection_references, reachable
 from ..node_code import code_path
 from ..projects import Projects
 from ..sql_errors import SqlSourceError
@@ -160,9 +160,12 @@ class DraftPreviews:
                     outputs, skipped = self._compute(
                         cursor, context, worktree, environment, node, inputs, rows, secrets
                     )
-                except Exception:
+                except Exception as error:
                     if request.replaced.is_set():
                         raise Problem("A newer preview of this node replaced this one", 409) from None
+                    if isinstance(error, duckdb.Error):
+                        # A stopped worker or interrupted setup; a timeout is reported by `reading`.
+                        raise Problem(redact(str(error), secrets), 422, {"code": "preview_failed"}) from None
                     raise
         finally:
             with self.requests_lock:
@@ -217,9 +220,11 @@ class DraftPreviews:
         with self.lock:
             idle = worktree not in self.active
         if described and idle:
+            # Reading columns never starts a database where reads do not open one.
+            context = self.pool.get(worktree, environment)
+            live = context.db is not None and not getattr(context.db, "closed", False)
             try:
-                context = self._started(context, worktree, environment)
-                columns = self._describe(context, worktree, environment, located, described)
+                columns = self._describe(context, worktree, environment, located, described) if live else {}
             except Problem:
                 columns = {}
             for port, value in columns.items():
@@ -313,8 +318,13 @@ class DraftPreviews:
         environment: str,
         node: Record,
         secrets: list[str],
+        setup: bool = True,
     ) -> Connections:
-        """The connections a node reads, attached the way a run attaches them."""
+        """The connections a node reads, set up the way a run sets them up.
+
+        An attached database is used as it is: setting it up again would detach it from the
+        run that may be reading it. Without `setup`, a connection that is not attached fails.
+        """
         references = connection_references(node)
         if not references:
             return {}
@@ -329,13 +339,17 @@ class DraftPreviews:
         secrets.extend(hidden)
         offline = self.store.get("settings", "offline_extensions", {})
         for reference, connection in captured.items():
+            if connection_probe.attached(cursor, connection["alias"]):
+                continue
+            if not setup:
+                raise Problem("Run this node once to attach its connection, then preview it again", 409)
             try:
                 connection_probe.check_extensions(self.pool.probe_config(), connection, offline, secrets)
-            except Problem as error:
+                self.catalog.prepare(cursor, {reference: connection})
+            except (Problem, duckdb.Error) as error:
                 raise Problem(
-                    f"Cannot load the extensions of connection {connection['name']}: {error}", 422
+                    f"Cannot set up connection {connection['name']}: {redact(str(error), secrets)}", 422
                 ) from None
-            self.catalog.prepare(cursor, {reference: connection})
         return captured
 
     def _statements(
@@ -348,9 +362,10 @@ class DraftPreviews:
         relations: dict[str, str],
         columns: dict[str, list[dict[str, str]]],
         secrets: list[str],
+        setup: bool = True,
     ) -> tuple[list[Record], list[Record]]:
         """Compile a node against temporary relations; return its statements and source locations."""
-        captured = self._connections(cursor, context, worktree, environment, node, secrets)
+        captured = self._connections(cursor, context, worktree, environment, node, secrets, setup)
         project = self.projects.get(worktree)["project"]
         statements = compile_template(
             node["parsed"],
@@ -500,7 +515,7 @@ class DraftPreviews:
                 return None
             try:
                 statements, _ = self._statements(
-                    cursor, context, worktree, environment, node, inputs, columns, secrets
+                    cursor, context, worktree, environment, node, inputs, columns, secrets, setup=False
                 )
                 for statement in statements:
                     if (
@@ -523,8 +538,12 @@ class DraftPreviews:
             return relations.get(key)
 
         result: dict[str, list[dict[str, str]] | None] = {}
+        # Runs that replace the upstream results stop this reader first.
+        upstream = reachable({located.node["id"]}, located.edges, upstream=True)
+        with context.lock:
+            retained = [d for n in upstream for d in context.outputs.get(n, {}).values()]
         try:
-            with reading(context, [], PREVIEW_TIMEOUT) as cursor:
+            with reading(context, retained, PREVIEW_TIMEOUT) as cursor:
                 for port, edge in wanted.items():
                     found = relation(cursor, edge["source"], edge["sourceHandle"], ())
                     result[port] = found[1] if found else None

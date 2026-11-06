@@ -156,7 +156,6 @@ export default function FlowPage() {
     run,
     undo,
     redo,
-    starting,
   } = useLoadedWorktree();
   const view = useOutletContext<FlowView>();
   const { path, selected, cell } = view;
@@ -184,8 +183,10 @@ export default function FlowPage() {
   const previewRequest = useRef<AbortController | null>(null);
   // The code being edited in the code panel, which previews compute.
   const codeDraft = useRef<{ node: string; code: string } | null>(null);
-  // The node to preview again once the ancestors it is waiting for have run.
-  const previewAfterRun = useRef<string | null>(null);
+  // The node to preview again once the run of its ancestors, when it starts, ends.
+  const previewAfterRun = useRef<{ node: string; run: string | null } | null>(
+    null,
+  );
   const bundle = snapshot.bundle;
   const declared = snapshot.variables?.declarations;
   const valueProducers = useMemo(
@@ -253,6 +254,7 @@ export default function FlowPage() {
     if (prefix + (id || "") !== fullNode || nextPath) {
       // A preview belongs to the node it computed.
       previewRequest.current?.abort();
+      previewAfterRun.current = null;
       setPreview(null);
       setCodeReveal(null);
       if (resultsTab === "preview") setResultsTab("data");
@@ -342,17 +344,21 @@ export default function FlowPage() {
       });
     }
   }
-  const previewAgain = useEffectEvent(() => {
-    if (previewAfterRun.current !== fullNode) return;
-    previewAfterRun.current = null;
-    void requestPreview();
+  const previewAgain = useEffectEvent((active: string | null) => {
+    const waiting = previewAfterRun.current;
+    if (waiting?.node !== fullNode) return;
+    // The first run to start after the request computes the ancestors.
+    if (active) waiting.run ??= active;
+    else if (waiting.run) {
+      previewAfterRun.current = null;
+      void requestPreview();
+    }
   });
   // Once the ancestors have run, preview again what they were computed for.
-  useEffect(() => {
-    if (!statuses.active && !starting) previewAgain();
-  }, [statuses.active, starting]);
+  const activeRun = statuses.active?.id ?? null;
+  useEffect(() => previewAgain(activeRun), [activeRun]);
   const runAncestors = () => {
-    previewAfterRun.current = fullNode;
+    previewAfterRun.current = { node: fullNode, run: null };
     void run(fullNode, { ancestors: true });
   };
 
