@@ -395,7 +395,7 @@ def integrated_feature(projects, main):
 @pytest.mark.parametrize("state", ["unmerged", "pending", "tracked", "untracked", "locked"])
 def test_cleanup_availability_matches_removal_protections(project, state):
     projects, main = project
-    feature, head = integrated_feature(projects, main)
+    feature, reviewed = integrated_feature(projects, main)
     if state == "unmerged":
         edit(projects, feature, lambda b: b["documentation"].update(project="New work"))
     elif state == "pending":
@@ -407,11 +407,16 @@ def test_cleanup_availability_matches_removal_protections(project, state):
     else:
         projects.git(main["path"], "worktree", "lock", feature["path"])
     branches = projects.versioning.branches(main["id"], main["id"])
-    reason = next(b for b in branches if b["name"] == "feature")["cleanup_error"]
-    assert reason
+    row = next(b for b in branches if b["name"] == "feature")
+    assert row["cleanup_error"]
+    # The Branches tab removes the head it lists.
     with pytest.raises(Problem) as rejected:
-        projects.versioning.cleanup(main["id"], feature["id"], main["id"], head)
-    assert str(rejected.value) == reason
+        projects.versioning.cleanup(main["id"], feature["id"], main["id"], row["head"])
+    assert str(rejected.value) == row["cleanup_error"]
+    if state == "unmerged":
+        # The post-merge action removes the reviewed head, never commits added since.
+        with pytest.raises(Problem, match="branch changed"):
+            projects.versioning.cleanup(main["id"], feature["id"], main["id"], reviewed)
     assert Path(feature["path"]).exists() and projects.store.get("worktree", feature["id"])
 
 

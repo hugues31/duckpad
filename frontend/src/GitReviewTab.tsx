@@ -186,40 +186,37 @@ export default function GitReviewTab({
       ) : (
         <div className="notice">
           <p>{t("mergeComplete")}</p>
-          {integrated.source_worktree && (
-            <>
-              <button
-                className="button secondary"
-                disabled={pending || !canEdit || integrated.source === "main"}
-                onClick={() =>
-                  run(async () => {
-                    await settle();
-                    // Leave the source before deleting it, including its snapshot polling.
-                    if (!onOpenWorktree(integrated.worktree)) return;
-                    try {
-                      await api(
-                        `/worktrees/${integrated.worktree}/git/cleanup`,
-                        send({
-                          remove_worktree: integrated.source_worktree,
-                          integrated_worktree: integrated.worktree,
-                          expected_head: integrated.source_head,
-                        }),
-                      );
-                      notify(
-                        t("branchDeleted").replace("{name}", integrated.source),
-                      );
-                      await refreshWorkspace();
-                    } catch (error) {
-                      // The dialog is now closed; keep failures visible on the destination.
-                      notify((error as Error).message, true);
-                    }
-                  })
-                }
-              >
-                {t("deleteBranchNamed").replace("{name}", integrated.source)}
-              </button>
-              {integrated.source === "main" && <p>{t("branchCleanupMain")}</p>}
-            </>
+          {integrated.source_worktree && integrated.source !== "main" && (
+            <button
+              className="button secondary"
+              disabled={pending}
+              onClick={() =>
+                run(async () => {
+                  await settle();
+                  // Leave the source before deleting it, including its snapshot polling.
+                  if (!onOpenWorktree(integrated.worktree)) return;
+                  try {
+                    await api(
+                      `/worktrees/${integrated.worktree}/git/cleanup`,
+                      send({
+                        remove_worktree: integrated.source_worktree,
+                        integrated_worktree: integrated.worktree,
+                        expected_head: integrated.source_head,
+                      }),
+                    );
+                    notify(
+                      t("branchDeleted").replace("{name}", integrated.source),
+                    );
+                    await refreshWorkspace();
+                  } catch (error) {
+                    // The dialog is now closed; keep failures visible on the destination.
+                    notify((error as Error).message, true);
+                  }
+                })
+              }
+            >
+              {t("deleteBranchNamed").replace("{name}", integrated.source)}
+            </button>
           )}
         </div>
       )}

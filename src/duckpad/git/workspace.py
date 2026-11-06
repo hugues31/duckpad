@@ -21,6 +21,7 @@ MAX_HISTORY = 10000
 BLOB_BATCH = 256
 # A version that cannot be parsed: compared with nothing, like a malformed revision in a comparison.
 UNREADABLE = object()
+UNMERGED = "The branch has commits that are not merged into the destination."
 
 
 def origin_key(branch):
@@ -503,7 +504,7 @@ class GitWorkspace:
                         # Closed local branches are opened before cleanup by the client.
                         target_head, _ = self.clean(target)
                         if not self.ancestor(worktree["path"], head, target_head):
-                            raise Problem("The branch has unmerged commits in the destination.", 409)
+                            raise Problem(UNMERGED, 409)
                     result[-1]["cleanup_error"] = None
                 except Problem as error:
                     result[-1]["cleanup_error"] = str(error)
@@ -528,8 +529,10 @@ class GitWorkspace:
             raise Problem("Main, current and destination worktrees are protected", 409)
         head, _ = self.clean(remove)
         target_head, _ = self.clean(target)
-        if head != expected_head or not self.ancestor(remove["path"], head, target_head):
-            raise Problem("The branch changed or has unmerged commits. Review it again.", 409)
+        if head != expected_head:
+            raise Problem("The branch changed. Review it again.", 409)
+        if not self.ancestor(remove["path"], head, target_head):
+            raise Problem(UNMERGED, 409)
         # Like `git worktree remove` without --force, keep untracked files and locked worktrees.
         gitdir = Path(self.git(remove["path"], "rev-parse", "--absolute-git-dir"))
         if (gitdir / "locked").exists() or self.git(

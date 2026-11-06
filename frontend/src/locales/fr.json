@@ -394,7 +394,7 @@
   "branchCreated": "Branche de travail créée",
   "deleteBranchNamed": "Supprimer la branche {name}",
   "branchDeleted": "Branche {name} supprimée",
-  "confirmDeleteBranch": "Supprimer la branche locale {name} et son worktree, y compris les résultats conservés ? La branche distante sera conservée.",
+  "confirmDeleteBranch": "Supprimer la branche locale {name} et son espace isolé, y compris les résultats conservés ? La branche distante sera conservée.",
   "branchCleanupMain": "La branche main est protégée.",
   "branchCleanupCurrent": "Ouvrez une autre branche avant de supprimer celle-ci.",
   "branchCleanupDestination": "La branche de destination est protégée.",

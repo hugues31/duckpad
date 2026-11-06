@@ -13,6 +13,7 @@ export default function GitBranchesTab({
   worktree,
   base,
   canEdit,
+  active,
   preferMain,
   repository,
   onCompare,
@@ -24,6 +25,8 @@ export default function GitBranchesTab({
   worktree: string;
   base: string;
   canEdit: boolean;
+  /** Whether the tab is shown: deletion checks only refresh while it is. */
+  active: boolean;
   /** Propose the main branch as the merge destination. */
   preferMain: boolean;
   repository: Repository;
@@ -51,7 +54,7 @@ export default function GitBranchesTab({
     canEdit
       ? withQuery(`${base}/branches`, { integrated_worktree: destinationId })
       : null,
-    { interval: 5000, refresh: JSON.stringify(branches) },
+    { interval: 5000, enabled: active, refresh: JSON.stringify(branches) },
   );
   const cleanupReason = (item: Branch) => {
     if (item.name === "main") return t("branchCleanupMain");

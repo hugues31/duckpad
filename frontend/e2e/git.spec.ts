@@ -240,7 +240,7 @@ test("Branches confirms deletion, explains protections and redirects another ses
     ["main", "The main branch is protected."],
     ["open-branch", "Open another branch"],
     ["release", "The destination branch is protected."],
-    ["unmerged", "unmerged commits"],
+    ["unmerged", "not merged into the destination"],
   ]) {
     await expect(
       row(name).getByRole("button", { name: "Delete", exact: true }),
