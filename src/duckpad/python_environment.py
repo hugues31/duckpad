@@ -1,6 +1,7 @@
 """Immutable project interpreters with a locked, operator-owned DuckDB runtime."""
 
 import base64
+import contextlib
 import csv
 import hashlib
 import importlib.metadata
@@ -24,6 +25,7 @@ import _duckdb
 import duckdb
 from filelock import FileLock
 
+from .python_progress import LOG_LIMIT, Preparation, clean_output, environment_status
 from .python_sdk import SDK_CONTRACT
 from .util import Problem, atomic_write, digest
 
@@ -328,7 +330,10 @@ def uv_executable():
         return shutil.which("uv")
 
 
-def command(arguments, directory, *, allow_builds=False):
+COMMAND_TIMEOUT = 300
+
+
+def command(arguments, directory, *, allow_builds=False, progress=None):
     executable = uv_executable()
     if not executable:
         raise Problem("Python environment setup requires the uv executable on the server", 503)
@@ -338,56 +343,73 @@ def command(arguments, directory, *, allow_builds=False):
         # UV_INDEX also covers named indexes and their UV_INDEX_<NAME>_USERNAME/PASSWORD.
         if k.upper() in UV_ENVIRONMENT or k.startswith("UV_INDEX")
     }
-    environment.update(UV_PYTHON_DOWNLOADS="never", UV_LINK_MODE="copy")
+    environment.update(UV_PYTHON_DOWNLOADS="never", UV_LINK_MODE="copy", UV_NO_PROGRESS="1", NO_COLOR="1")
     options = [] if allow_builds else ["--no-build"]
-    try:
-        result = subprocess.run(
-            # The validated [tool.uv] in this directory stops discovery of parent uv.toml files.
-            [executable, *arguments, *options],
-            cwd=directory,
-            env=environment,
-            capture_output=True,
-            text=True,
-            timeout=300,
-        )
-    except subprocess.TimeoutExpired:
-        raise Problem("Python environment preparation timed out", 503) from None
-    if result.returncode:
-        detail = result.stderr[-8000:].replace(str(directory), "<project>")
-        detail = re.sub(r"(https?://)[^/@\s]+@", r"\1<redacted>@", detail)
-        raise Problem(
-            "Python environment preparation failed (DuckDB is pinned to the server runtime):\n" + detail, 422
-        )
-
-
-def environment_status(home, project):
-    path = Path(home) / "python" / "status" / (project + ".json")
-    status = json.loads(path.read_text()) if path.exists() else {"state": "unprepared"}
-    return {**status, "python": sys.version.split()[0], "duckdb": duckdb.__version__}
-
-
-def set_status(home, project, state, error=None):
-    if project:
-        atomic_write(
-            Path(home) / "python" / "status" / (project + ".json"),
-            json.dumps(
-                {
-                    "state": state,
-                    "error": str(error).replace(str(home), "<instance>") if error else None,
-                }
-            ),
-        )
+    # Separate file handles avoid pipe deadlocks and keep only a bounded tail in memory.
+    with tempfile.TemporaryDirectory() as temporary:
+        output = Path(temporary) / "uv.log"
+        with (
+            output.open("wb") as writer,
+            output.open("rb") as reader,
+            subprocess.Popen(
+                [executable, *arguments, *options],
+                cwd=directory,
+                env=environment,
+                stdout=writer,
+                stderr=subprocess.STDOUT,
+            ) as process,
+        ):
+            deadline = time.monotonic() + COMMAND_TIMEOUT
+            previous = None
+            detail = ""
+            try:
+                while True:
+                    timed_out = process.poll() is None and time.monotonic() >= deadline
+                    if timed_out:
+                        process.kill()
+                        process.wait()
+                    with contextlib.suppress(subprocess.TimeoutExpired):
+                        process.wait(timeout=0.2)
+                    size = reader.seek(0, os.SEEK_END)
+                    reader.seek(max(0, size - LOG_LIMIT * 2))
+                    raw = reader.read(LOG_LIMIT * 2).decode("utf-8", errors="replace")
+                    if size > LOG_LIMIT * 2:
+                        # Do not expose fragments of a credential at the truncation boundary.
+                        raw = raw.partition("\n")[2]
+                    detail = clean_output(raw, directory)[-LOG_LIMIT:]
+                    if progress and detail != previous:
+                        progress.output(detail, truncated=size > LOG_LIMIT)
+                        previous = detail
+                    if timed_out:
+                        raise Problem("Python environment preparation timed out", 503)
+                    if process.returncode is not None:
+                        break
+            finally:
+                if process.poll() is None:
+                    process.kill()
+                    process.wait()
+            if process.returncode:
+                raise Problem(
+                    "Python environment preparation failed (DuckDB is pinned to the server runtime):\n"
+                    + detail,
+                    422,
+                )
 
 
 def lock_files(files, home, *, read_only=False, allow_builds=False, project=None):
+    progress = Preparation(home, project, "resolving", start=False)
     try:
-        return cached_lock(files, home, read_only=read_only, allow_builds=allow_builds, project=project)
+        locked = cached_lock(files, home, read_only=read_only, allow_builds=allow_builds, progress=progress)
+        if not progress.active and project and environment_status(home, project)["state"] == "error":
+            progress.step("cached")
+        progress.finish("locked")
+        return locked
     except Exception as error:
-        set_status(home, project, "error", error)
+        progress.finish("error", error)
         raise
 
 
-def cached_lock(files, home, *, read_only=False, allow_builds=False, project=None):
+def cached_lock(files, home, *, read_only=False, allow_builds=False, progress=None):
     validate_manifest(files["pyproject.toml"])
     root = Path(home) / "python" / "locks"
     root.mkdir(parents=True, exist_ok=True)
@@ -398,25 +420,27 @@ def cached_lock(files, home, *, read_only=False, allow_builds=False, project=Non
         )
 
     cached = root / (key(files.get("uv.lock")) + ".json")
+    if progress and not cached.exists():
+        progress.start()
     with FileLock(str(cached.with_suffix(".lock"))):
         if cached.exists():
             locked = json.loads(cached.read_text())["lock"]
             if not read_only or locked == files.get("uv.lock"):
                 return locked
-        set_status(home, project, "resolving")
-        locked = resolve_lock(files, home, read_only=read_only, allow_builds=allow_builds)
-        set_status(home, project, "locked")
+        locked = resolve_lock(files, home, read_only=read_only, allow_builds=allow_builds, progress=progress)
         value = json.dumps({"lock": locked})
         atomic_write(cached, value)
         atomic_write(root / (key(locked) + ".json"), value)
         return locked
 
 
-def resolve_lock(files, home, *, read_only=False, allow_builds=False):
+def resolve_lock(files, home, *, read_only=False, allow_builds=False, progress=None):
     """Resolve in scratch space; tagged worktrees are never written."""
     validate_manifest(files["pyproject.toml"])
     root = Path(home) / "python"
     root.mkdir(parents=True, exist_ok=True)
+    if progress:
+        progress.step("runtime")
     with FileLock(str(root / "runtime.lock")):
         wheel = runtime_wheel(root / "wheels")
     with tempfile.TemporaryDirectory(dir=root) as temporary:
@@ -440,10 +464,13 @@ def resolve_lock(files, home, *, read_only=False, allow_builds=False):
             raise Problem(
                 "This tagged Python project needs a valid uv.lock; update and tag its editable branch", 422
             )
+        if progress:
+            progress.step("resolving")
         command(
             ["lock", "--python", sys.executable, *(["--locked"] if read_only else [])],
             directory,
             allow_builds=allow_builds,
+            progress=progress,
         )
         locked = (directory / "uv.lock").read_bytes().decode("utf-8")
         check_lock_sources(locked)
@@ -451,16 +478,24 @@ def resolve_lock(files, home, *, read_only=False, allow_builds=False):
 
 
 def prepare(files, home, project, *, allow_builds=False):
+    progress = Preparation(home, project, "installing", start=False)
     try:
-        result = prepare_environment(files, home, project, allow_builds=allow_builds)
-        set_status(home, project, "ready")
+        result = prepare_environment(files, home, project, allow_builds=allow_builds, progress=progress)
+        # A cached environment starts no preparation; it only replaces a settled state other than ready.
+        if (
+            not progress.active
+            and project
+            and environment_status(home, project)["state"] in ("unprepared", "locked", "error")
+        ):
+            progress.step("cached")
+        progress.finish("ready")
         try:
             prune_environments(Path(home) / "python")
         except Exception:  # Housekeeping must not fail a prepared run.
             logger.warning("Python environment cleanup failed", exc_info=True)
         return result
     except Exception as error:
-        set_status(home, project, "error", error)
+        progress.finish("error", error)
         raise
 
 
@@ -515,7 +550,7 @@ def prune_environments(root):
                 logger.warning("Could not remove an old Python runtime wheel: %s", error)
 
 
-def prepare_environment(files, home, project, *, allow_builds=False):
+def prepare_environment(files, home, project, *, allow_builds=False, progress=None):
     validate_manifest(files["pyproject.toml"])
     if not files.get("uv.lock"):
         raise Problem("Save the Python project to generate uv.lock before execution", 422)
@@ -524,9 +559,12 @@ def prepare_environment(files, home, project, *, allow_builds=False):
     root.mkdir(parents=True, exist_ok=True)
     signature = digest([project, files["pyproject.toml"], files["uv.lock"], runtime_signature()])
     directory = root / signature
+    if progress and not (directory / "ready.json").exists():
+        progress.start()
     with FileLock(str(root / (signature + ".lock"))):
         if not (directory / "ready.json").exists():
-            set_status(home, project, "installing")
+            if progress:
+                progress.step("runtime")
             shutil.rmtree(directory, ignore_errors=True)
             directory.mkdir()
             try:
@@ -537,11 +575,16 @@ def prepare_environment(files, home, project, *, allow_builds=False):
                     wheel = runtime_wheel(root / "wheels")
                 (directory / ".duckpad-runtime").mkdir()
                 shutil.copyfile(wheel, directory / ".duckpad-runtime" / wheel.name)
+                if progress:
+                    progress.step("installing")
                 command(
                     ["sync", "--locked", "--no-install-project", "--python", sys.executable],
                     directory,
                     allow_builds=allow_builds,
+                    progress=progress,
                 )
+                if progress:
+                    progress.step("sdk")
                 package = directory / "sdk" / "duckpad"
                 package.mkdir(parents=True)
                 for name in MODULES:
@@ -561,6 +604,8 @@ def prepare_environment(files, home, project, *, allow_builds=False):
             except BaseException:
                 shutil.rmtree(directory, ignore_errors=True)
                 raise
+        elif progress and progress.active:
+            progress.step("cached")
         (directory / "ready.json").touch()
     interpreter = directory / ".venv" / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
     site = (
