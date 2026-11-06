@@ -149,9 +149,10 @@ is explicit; no branch is deleted automatically.
 
 ### Data impact
 
-For modified nodes with current, complete results on both local branches,
-**Data impact** lists output row counts and column additions, removals and type
-changes in the selected environment. **Calculate row changes** reads those stored
+For nodes whose processing the source branch changed since the common base, with
+current, complete results on both local branches, **Data impact** lists output
+row counts and column additions, removals and type changes in the selected
+environment. **Calculate row changes** reads those stored
 outputs only when requested. It compares the destination's output with the source
 branch's output; it does not predict the unexecuted merge proposal or run SQL nodes.
 

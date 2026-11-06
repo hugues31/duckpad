@@ -218,7 +218,7 @@ export default function GitWorkspace({
               worktree={worktree}
               base={base}
               canEdit={canEdit}
-              preferMain={mode === "branches"}
+              preferMain={mode === "branches" || mode === "review"}
               repository={repository}
               onCompare={compare}
               onReview={openReview}

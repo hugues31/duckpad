@@ -566,7 +566,8 @@ export default function FlowPage() {
         </div>
       )}
       <main className="canvas-column" inert={busy}>
-        <BranchResultsNotice />
+        {/* Components show their own notice in this place. */}
+        {!path.length && <BranchResultsNotice />}
         <CanvasHeader
           projectName={project?.name || bundle.flow.name}
           path={path}

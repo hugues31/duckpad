@@ -66,10 +66,12 @@ function OutputImpact({
         {pair.before.count.toLocaleString()} →{" "}
         {pair.after.count.toLocaleString()} {t("rows")}
       </p>
-      <p>
-        {t("gitColumnsAdded")}: {pair.columns.added.join(", ") || "—"} ·{" "}
-        {t("gitColumnsRemoved")}: {pair.columns.removed.join(", ") || "—"}
-      </p>
+      {(pair.columns.added.length > 0 || pair.columns.removed.length > 0) && (
+        <p>
+          {t("gitColumnsAdded")}: {pair.columns.added.join(", ") || "—"} ·{" "}
+          {t("gitColumnsRemoved")}: {pair.columns.removed.join(", ") || "—"}
+        </p>
+      )}
       {pair.columns.retyped.map((column) => (
         <p key={column.name}>
           {column.name}: {column.before} → {column.after}
@@ -101,7 +103,8 @@ function OutputImpact({
           {t("gitComputeImpact")}
         </button>
       </div>
-      <TabStatus pending={pending} error={error} onRetry={calculate} />
+      {/* Retrying cannot help: the key or the results must change first. */}
+      <TabStatus pending={pending} error={error} />
       {changes && (
         <p role="status">
           {t("gitRowsAdded")}: {changes.added} · {t("gitRowsRemoved")}:{" "}

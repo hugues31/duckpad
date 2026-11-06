@@ -48,6 +48,30 @@ const valueText = (value: unknown) =>
       ? value
       : JSON.stringify(value, null, 2);
 
+/** "params.condition: a → b" for one changed value; texts and objects stay in the detail. */
+function ChangeSummary({ entity }: { entity: EntityChange }) {
+  if (entity.status !== "modified" || entity.fields.length !== 1) return null;
+  const [field] = entity.fields;
+  const values = [entity.before, entity.after].map((value) =>
+    pathValue(value, field),
+  );
+  if (
+    field === "sql" ||
+    values.some(
+      (value) =>
+        (typeof value === "object" && value !== null) ||
+        (typeof value === "string" && value.includes("\n")),
+    )
+  )
+    return null;
+  const text = `${field.replaceAll("/", ".")}: ${values.map(valueText).join(" → ")}`;
+  return (
+    <small className="change-summary" title={text}>
+      {text}
+    </small>
+  );
+}
+
 function visibleFields(entity: EntityChange) {
   if (entity.status === "modified") return entity.fields;
   const value = entity.after ?? entity.before;
@@ -325,15 +349,7 @@ export default function ComparisonView({
                 {e.categories.map(translateValue).join(", ")}
               </small>
               <small>{e.scope || e.file}</small>
-              {e.status === "modified" &&
-                e.fields.length === 1 &&
-                e.fields[0] !== "sql" && (
-                  <small className="change-summary">
-                    {e.fields[0].replaceAll("/", ".")}:{" "}
-                    {valueText(pathValue(e.before, e.fields[0]))} →{" "}
-                    {valueText(pathValue(e.after, e.fields[0]))}
-                  </small>
-                )}
+              <ChangeSummary entity={e} />
             </button>
           ))}
         </nav>
@@ -434,16 +450,19 @@ export default function ComparisonView({
                 <p className="muted">
                   {active.id} · {active.file}
                 </p>
-                <div className="git-wiring">
-                  <section>
-                    <h4>{t("before")}</h4>
-                    <pre>{valueText(active.before)}</pre>
-                  </section>
-                  <section>
-                    <h4>{t("after")}</h4>
-                    <pre>{valueText(active.after)}</pre>
-                  </section>
-                </div>
+                {/* Code is already shown whole in its diff. */}
+                {active.kind !== "template" && active.kind !== "file" && (
+                  <div className="git-wiring">
+                    <section>
+                      <h4>{t("before")}</h4>
+                      <pre>{valueText(active.before)}</pre>
+                    </section>
+                    <section>
+                      <h4>{t("after")}</h4>
+                      <pre>{valueText(active.after)}</pre>
+                    </section>
+                  </div>
+                )}
               </details>
               {active.kind === "variable" && (
                 <p className="comparison-usages">

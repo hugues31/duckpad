@@ -112,6 +112,14 @@ test("new branch explains missing results and reviews a parameter change into it
   await expect(
     review.getByRole("heading", { name: "experiment/quick-review → main" }),
   ).toBeVisible();
+  // Branches still proposes main as the destination of another review.
+  await review.getByRole("button", { name: "Branches", exact: true }).click();
+  await expect(
+    review.getByRole("button", { name: "Review merge", exact: true }),
+  ).toBeEnabled();
+  await review
+    .getByRole("button", { name: "Merge review", exact: true })
+    .click();
   await expect(review.locator(".comparison-values tbody tr")).toHaveCount(1);
   await expect(review.locator(".comparison-values")).toContainText(
     "params.minimum",
@@ -440,6 +448,14 @@ test("configure origin, fetch, review first publication, integrate incoming chan
     .getByRole("button", { name: "Publish reviewed commit", exact: true })
     .click();
   await expect(dialog.locator(".git-sync-summary")).toContainText("Up to date");
+  // Pull fetches first and opens no empty review when nothing is incoming.
+  await dialog.getByRole("button", { name: "Pull" }).click();
+  await expect(dialog.getByRole("status")).toHaveText(
+    "No incoming changes on origin.",
+  );
+  await expect(
+    dialog.getByRole("button", { name: "Apply reviewed merge" }),
+  ).toBeHidden();
   await page.keyboard.press("Escape");
   await expect(
     page.getByRole("button", { name: "Git synchronization", exact: true }),

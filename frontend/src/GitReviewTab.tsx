@@ -140,10 +140,12 @@ export default function GitReviewTab({
         report={review.comparison}
         storageKey={storageKey + ".reviewFilters"}
       />
-      {/* Only local branches have retained results to compare. */}
-      {!integrated && review.source_worktree && (
-        <GitDataImpact review={review} environment={environment} />
-      )}
+      {/* Only processing changes on local branches have retained results to compare. */}
+      {!integrated &&
+        review.source_worktree &&
+        review.comparison.impact.direct.length > 0 && (
+          <GitDataImpact review={review} environment={environment} />
+        )}
       {!integrated ? (
         <div className="git-controls">
           <button className="button secondary" onClick={onCancel}>

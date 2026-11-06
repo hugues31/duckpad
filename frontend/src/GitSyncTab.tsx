@@ -53,9 +53,12 @@ export default function GitSyncTab({
   } | null>(null);
   // A new origin state resets the form and invalidates the reviewed publication.
   const revision = remoteRevision(remote);
+  // Set when a pull found nothing incoming, until the origin state changes.
+  const [upToDate, setUpToDate] = useState(false);
   const [formRemote, setFormRemote] = useState(revision);
   if (revision !== formRemote) {
     setFormRemote(revision);
+    setUpToDate(false);
     setUrl(remote?.url || "");
     setMapping(remote?.remote_branch || remote?.local_branch || "");
     setPublication(null);
@@ -235,6 +238,13 @@ export default function GitSyncTab({
                     send({ config_revision: remote.config_revision }),
                   );
                   await onChanged(fresh);
+                  if (fresh.state === "unrelated")
+                    throw new Error(translateValue("recovery_unrelated"));
+                  if (!fresh.remote_head || !fresh.behind) {
+                    setFormRemote(remoteRevision(fresh));
+                    setUpToDate(true);
+                    return;
+                  }
                   onReview(
                     await api<MergeReview>(
                       `${base}/pull`,
@@ -281,6 +291,11 @@ export default function GitSyncTab({
               {t("gitPush")}
             </button>
           </div>
+          {upToDate && (
+            <p role="status" className="muted">
+              {t("gitNothingToPull")}
+            </p>
+          )}
           <details className="git-sync-details">
             <summary>{t("gitDetails")}</summary>
             <p>

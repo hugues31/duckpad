@@ -1402,9 +1402,9 @@
   "gitPull": "Pull",
   "gitPush": "Push",
   "gitDataImpact": "Data impact",
-  "gitDataImpactHint": "Stored results: {destination} → {source}. These compare branch outputs, not the unexecuted merge proposal.",
+  "gitDataImpactHint": "Compares the stored results of {source} and {destination} in this environment. Nothing is run.",
   "gitNoComparableResults": "Run the modified nodes on both branches in this environment to compare their results. Partitioned outputs cannot be compared.",
-  "gitDataImpactMethod": "Rows are compared on common columns with matching types, up to 50,000 rows per output. Without a key, changed rows count as removals and additions; duplicates are counted. Choose a unique, non-null key to count modified rows separately. Added and removed columns are reported separately. Stale or incomplete results are excluded. No pipeline is executed.",
+  "gitDataImpactMethod": "Rows are compared on the common columns of the same type, up to 50,000 per output. Without a key, a changed row counts as one removal and one addition; a unique, non-null key counts it as modified. Stale, incomplete and partitioned results are excluded.",
   "gitComparisonKey": "Comparison key",
   "gitNoKey": "No key (whole rows)",
   "gitComputeImpact": "Calculate row changes",
@@ -1424,5 +1424,6 @@
   "nothingToRedo": "Nothing to redo",
   "nodesDeleted": "{count} nodes deleted",
   "nodesCopied": "{count} nodes copied",
-  "undo": "Undo"
+  "undo": "Undo",
+  "gitNothingToPull": "No incoming changes on origin."
 }

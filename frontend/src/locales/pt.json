@@ -1402,9 +1402,9 @@
   "gitPull": "Pull",
   "gitPush": "Push",
   "gitDataImpact": "Impacto nos dados",
-  "gitDataImpactHint": "Resultados armazenados: {destination} → {source}. A comparação usa as saídas dos branches, não a proposta de mesclagem não executada.",
+  "gitDataImpactHint": "Compara os resultados armazenados de {source} e {destination} neste ambiente. Nada é executado.",
   "gitNoComparableResults": "Execute os nós modificados nos dois branches neste ambiente para comparar os resultados. Saídas particionadas não podem ser comparadas.",
-  "gitDataImpactMethod": "As linhas são comparadas nas colunas comuns de mesmo tipo, até 50.000 linhas por saída. Sem chave, linhas alteradas contam como remoções e adições; duplicatas são contadas. Escolha uma chave única e sem valores nulos para contar as linhas modificadas separadamente. Colunas adicionadas e removidas são indicadas separadamente. Resultados desatualizados ou incompletos são excluídos. Nenhum pipeline é executado.",
+  "gitDataImpactMethod": "As linhas são comparadas nas colunas comuns de mesmo tipo, até 50.000 por saída. Sem chave, uma linha alterada conta como uma remoção e uma adição; uma chave única e sem valores nulos a conta como modificada. Resultados desatualizados, incompletos e particionados são excluídos.",
   "gitComparisonKey": "Chave de comparação",
   "gitNoKey": "Sem chave (linhas inteiras)",
   "gitComputeImpact": "Calcular diferenças de linhas",
@@ -1424,5 +1424,6 @@
   "nothingToRedo": "Nada para refazer",
   "nodesDeleted": "{count} nós removidos",
   "nodesCopied": "{count} nós copiados",
-  "undo": "Desfazer"
+  "undo": "Desfazer",
+  "gitNothingToPull": "Nenhuma alteração a receber da origin."
 }
