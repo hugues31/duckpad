@@ -17,6 +17,18 @@ export type CoreExtension = Omit<CatalogEntry, "source">;
 
 const NAME = /^[a-z][a-z0-9_]{0,63}$/;
 
+/** The extension a DuckDB catalog error names, or "" for an unknown function
+ * that a community or custom extension may provide; never guessed from a prefix. */
+export function missingFunctionExtension(message: string) {
+  const named = message.match(
+    /\bexists in the ([a-z][a-z0-9_]{0,63}) extension\b/,
+  );
+  if (named) return { name: named[1] };
+  return /\bFunction with name \S+ does not exist\b/.test(message)
+    ? { name: "" }
+    : null;
+}
+
 /** DuckDB's official lists, to browse in a new tab. */
 export const extensionLists = {
   core: "https://duckdb.org/docs/stable/core_extensions/overview",

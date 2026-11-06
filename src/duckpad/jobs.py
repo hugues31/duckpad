@@ -13,6 +13,7 @@ from .components import expand_for
 from .execution.runs import launch_scope
 from .git.command import check_branch_name
 from .git.workspace import require_valid
+from .node_names import node_names
 from .util import Problem, now, uid
 
 logger = logging.getLogger("duckpad.execution")
@@ -64,6 +65,11 @@ class Jobs:
         bundle = files_to_bundle(files)
         nodes, edges, _ = expand_for(bundle, environment)
         launch_scope(nodes, edges, scope)
+
+    def scope_nodes(self, project, commit):
+        """Selectable instance paths from the exact Job version, including components."""
+        bundle = files_to_bundle(self.projects.revision_files(self.path(project), commit))
+        return {key: name for key, name in node_names(bundle).items() if not key.startswith("components/")}
 
     @staticmethod
     def event(previous, target, before, commit, actor):

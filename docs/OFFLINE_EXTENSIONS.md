@@ -14,7 +14,7 @@ does not need DuckDB, Python, Linux, or a prepared extension cache.
 2. Transfer the downloaded file if necessary. In the same settings panel, choose
    the matching source, select the `.duckdb_extension.gz` or `.duckdb_extension`
    file, and click **Import extension**. Keep the original filename.
-3. Open your project's **Extensions** tab. Add the same name and origin, then
+3. Open **Project settings → Extensions**. Add the same name and origin, then
    tick its **Activate for this project** checkbox once it shows
    **Ready to activate**.
    Its functions can now be used directly in SQL models. For a data-source
@@ -45,7 +45,7 @@ enter the exact name, as before.
 
 ## Activate a project capability
 
-The project's **Extensions** tab separates installing a server binary from
+The **Project settings → Extensions** section separates installing a server binary from
 enabling it in a project. An editor can pick an extension under **Available
 extensions**, or enter a name and select **DuckDB core**, **DuckDB community** or
 **Custom / unsigned builds**, then enable an already installed binary. A reader can inspect the requirements. Only an
@@ -99,7 +99,7 @@ This file follows the project's Git branch, revisions, ZIP export/import and
 sharing. Binary files and instance trust settings remain on the server and are
 never exported with the project. On another instance, the requirement is retained
 even when its binary is missing. The import dialog lists required extensions;
-open **Extensions** to check availability before running.
+open **Project settings → Extensions** to check availability before running.
 
 New execution sessions load enabled requirements, including Jobs and isolated
 workers. Compatible imported binaries remain available after a restart.

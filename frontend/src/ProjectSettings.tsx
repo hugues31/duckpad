@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   Plus,
+  Puzzle,
   Trash2,
   Users,
   Database,
@@ -12,6 +13,7 @@ import { NavLink, useLocation } from "react-router";
 import { PartitionSettings } from "./PartitionControls";
 import PythonEnvironmentStatus from "./PythonEnvironmentStatus";
 import SettingsLayout from "./SettingsLayout";
+import ExtensionsPage from "./pages/ExtensionsPage";
 import { api, send } from "./api";
 import { useT } from "./i18n";
 import { Modal } from "./modals";
@@ -19,7 +21,17 @@ import RoleSelect, { PROJECT_ROLES } from "./RoleSelect";
 import Select from "./Select";
 import type { ProjectRole, Workspace } from "./types";
 import { useAsyncAction } from "./useAsyncAction";
+import { projectSettingsSections } from "./navigation";
 import { useRevisionDraft } from "./useRevisionDraft";
+
+const sectionIcons = {
+  participants: Users,
+  connections: Database,
+  python: Code2,
+  partitions: Layers,
+  extensions: Puzzle,
+  general: SettingsIcon,
+};
 
 interface Member {
   id: string;
@@ -137,24 +149,19 @@ export default function ProjectSettings({
             </span>
           )
         }
-        navigation={(
-          [
-            ["participants", "participants", Users],
-            ["connections", "connections", Database],
-            ["python", "pythonExecution", Code2],
-            ["partitions", "partitions", Layers],
-            ["general", "generalSettings", SettingsIcon],
-          ] as const
-        ).map(([slug, label, Icon]) => (
-          <NavLink
-            key={slug}
-            to={`/projects/${project}/settings/${slug}${search}`}
-            end
-          >
-            <Icon size={18} aria-hidden="true" />
-            <span>{t(label)}</span>
-          </NavLink>
-        ))}
+        navigation={projectSettingsSections.map(([slug, label]) => {
+          const Icon = sectionIcons[slug];
+          return (
+            <NavLink
+              key={slug}
+              to={`/projects/${project}/settings/${slug}${search}`}
+              end
+            >
+              <Icon size={18} aria-hidden="true" />
+              <span>{t(label)}</span>
+            </NavLink>
+          );
+        })}
       >
         {error && (
           <div className="notice error" role="alert">
@@ -162,6 +169,7 @@ export default function ProjectSettings({
           </div>
         )}
         {section === "partitions" && <PartitionSettings />}
+        {section === "extensions" && <ExtensionsPage />}
         {section === "participants" && (
           <>
             <div className="role-guide">

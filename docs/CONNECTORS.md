@@ -146,9 +146,9 @@ and JSON are built into every DuckDB build Duckpad supports. XLSX needs DuckDB's
 `excel` extension, which Duckpad's container image links but the PyPI wheel
 installed by `pip install duckpad` does not. Formats whose extension the runtime
 does not link, such as XLSX on a `pip` installation, Avro or spatial files, need
-their extension enabled in the project's **Extensions** tab.
+their extension enabled in the **Project settings → Extensions** section.
 
-The **Extensions** tab is the only way a project loads a format's extension.
+The **Project settings → Extensions** section is the only way a project loads a format's extension.
 Built-in templates do not declare the extensions they need, and execution never
 downloads or loads an extension on demand, in embedded or isolated mode. The
 project's `extensions.json` therefore lists every extension it needs beyond the
@@ -161,10 +161,10 @@ extension to enable:
 
 ```text
 Catalog Error: Table Function with name "read_xlsx" is not in the catalog, but it exists in the excel extension.
-Enable the excel extension in the project's Extensions tab; an instance administrator may need to import it first.
+Enable the excel extension in the Project settings → Extensions section; an instance administrator may need to import it first.
 ```
 
-Add the extension with origin **DuckDB core** in the **Extensions** tab and tick
+Add the extension with origin **DuckDB core** in **Project settings → Extensions** and tick
 **Activate for this project**. If it shows **Import required**, an instance
 administrator imports its binary first; see the
 [extension activation guide](OFFLINE_EXTENSIONS.md#activate-a-project-capability).

@@ -2,6 +2,10 @@ import { AlertCircle, Code2 } from "lucide-react";
 import AskAssistant from "./AskAssistant";
 import { useT } from "./i18n";
 import type { NodeResult } from "./types";
+import { Link } from "react-router";
+import { missingFunctionExtension } from "./extensions";
+import { useOptionalWorktree } from "./worktree";
+import { projectPageUrl } from "./navigation";
 
 export default function ExecutionError({
   failure,
@@ -21,6 +25,10 @@ export default function ExecutionError({
   const t = useT();
   const diagnostic = failure.diagnostic;
   const current = diagnostic?.source === currentSource;
+  const worktree = useOptionalWorktree();
+  const extension = missingFunctionExtension(
+    diagnostic?.message || failure.error || "",
+  );
   return (
     <section
       className="execution-error"
@@ -39,6 +47,27 @@ export default function ExecutionError({
       <pre className="execution-error-message">
         {diagnostic?.message || failure.error}
       </pre>
+      {extension && worktree?.canEdit && worktree.snapshot && (
+        <p>
+          {/* A named extension is already explained by the server message. */}
+          {!extension.name && <>{t("missingFunctionExtensionHint")} </>}
+          <Link
+            to={
+              projectPageUrl(
+                worktree.snapshot.worktree.project,
+                "settings/extensions",
+                worktree.id,
+                environment,
+              ) +
+              (extension.name
+                ? `&extension=${encodeURIComponent(extension.name)}`
+                : "")
+            }
+          >
+            {t("openExtensionSettings")}
+          </Link>
+        </p>
+      )}
       {diagnostic && !current && (
         <p className="muted">{t("errorCodeChanged")}</p>
       )}

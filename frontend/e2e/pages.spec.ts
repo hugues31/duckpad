@@ -222,7 +222,8 @@ async function openRunExample(page: Page) {
     .locator(".react-flow__node")
     .filter({ has: page.getByText("Paid orders", { exact: true }) });
   // Results loaded later would legitimately refresh the preview.
-  await expect(node.locator(".node-status.valid")).toBeVisible();
+  await expect(node.locator(".node-row-count")).toContainText("rows");
+  await expect(node.locator(".node-status.valid")).toHaveCount(0);
   return { worktree: example.id as string, node };
 }
 
@@ -239,6 +240,9 @@ test("the results panel loads the node's rows once", async ({ page }) => {
   });
   await node.click();
   await expect(page.locator(".preview-header .badge")).toHaveText("Valid");
+  await page.setViewportSize({ width: 1000, height: 700 });
+  await expect(page.locator(".react-flow__minimap")).toHaveCount(0);
+  await page.setViewportSize({ width: 1512, height: 982 });
   // The executed SQL comes with the run in the Log, not with the rows.
   const results = page.getByRole("region", { name: "Results", exact: true });
   await results.getByRole("tab", { name: /^Log/ }).click();

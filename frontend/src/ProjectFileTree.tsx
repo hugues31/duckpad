@@ -7,6 +7,8 @@ import {
   FolderOpen,
 } from "lucide-react";
 import { useT } from "./i18n";
+import { nodeFileLabel } from "./projectFiles";
+import type { NodeNames } from "./nodeNames";
 
 interface Entry {
   name: string;
@@ -43,18 +45,40 @@ function fileTree(paths: string[]) {
   return root.children;
 }
 
+/** Unfold the folders that contain a path, keeping the same set if none is folded. */
+function reveal(collapsed: Set<string>, path: string) {
+  const parts = path.split("/");
+  const folders = parts.slice(1).map((_, i) => parts.slice(0, i + 1).join("/"));
+  if (!folders.some((folder) => collapsed.has(folder))) return collapsed;
+  const next = new Set(collapsed);
+  for (const folder of folders) next.delete(folder);
+  return next;
+}
+
 export default function ProjectFileTree({
   files,
   selected,
   onSelect,
+  names = {},
 }: {
   files: Record<string, string>;
   selected: string;
   onSelect: (path: string) => void;
+  names?: NodeNames;
 }) {
   const t = useT();
   const entries = useMemo(() => fileTree(Object.keys(files)), [files]);
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  // Built-in templates start folded, except around the opened file.
+  const [collapsed, setCollapsed] = useState<Set<string>>(() =>
+    reveal(new Set(["templates"]), selected),
+  );
+  // A file opened from elsewhere, such as the canvas, unfolds its folders once;
+  // folding them again afterwards is the user's choice.
+  const [revealed, setRevealed] = useState(selected);
+  if (revealed !== selected && reveal(collapsed, selected) !== collapsed) {
+    setRevealed(selected);
+    setCollapsed(reveal(collapsed, selected));
+  }
   const [focused, setFocused] = useState(selected);
   const tree = useRef<HTMLDivElement>(null);
   const visible: Entry[] = [];
@@ -76,13 +100,15 @@ export default function ProjectFileTree({
       .find((item) => item.dataset.path === path)
       ?.focus();
   };
-  const toggle = (path: string) =>
+  const toggle = (path: string) => {
+    setRevealed(selected);
     setCollapsed((previous) => {
       const next = new Set(previous);
       if (next.has(path)) next.delete(path);
       else next.add(path);
       return next;
     });
+  };
   const keyDown = (event: KeyboardEvent, entry: Entry) => {
     if (event.target !== event.currentTarget) return;
     const index = visible.indexOf(entry);
@@ -125,11 +151,12 @@ export default function ProjectFileTree({
       const expanded = !collapsed.has(entry.path);
       const Icon = folder ? (expanded ? FolderOpen : Folder) : FileCode2;
       const Chevron = expanded ? ChevronDown : ChevronRight;
+      const label = folder ? null : nodeFileLabel(entry.path, names, t);
       return (
         <div
           key={entry.path}
           role="treeitem"
-          aria-label={entry.path}
+          aria-label={label ?? entry.path}
           aria-level={level}
           aria-expanded={folder ? expanded : undefined}
           aria-selected={!folder && selected === entry.path}
@@ -156,7 +183,7 @@ export default function ProjectFileTree({
               <span className="file-tree-indent" />
             )}
             <Icon size={15} />
-            <span>{entry.name}</span>
+            <span>{label ?? entry.name}</span>
           </div>
           {folder && expanded && (
             <div role="group">{render(entry.children, level + 1)}</div>

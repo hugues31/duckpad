@@ -68,6 +68,23 @@ def create(instance, slug="daily", kind="tag", ref="v1", **changes):
     return response.json()
 
 
+def test_job_scope_choices_use_the_target_version_and_require_project_access(instance):
+    app, tree, call, _, _ = instance
+    path = f"/projects/{tree['project']}/job-nodes?kind=tag&ref=v1"
+    expected = {"source": [{"label": "SQL template", "template": "source"}]}
+    assert call("GET", path).json() == expected
+    assert call("GET", path, actor="outsider").status_code == 404
+    create(instance)
+    snapshot = app.state.services.projects.snapshot(tree["id"])
+    files = {**snapshot["files"], "templates/source.sql": "-- @label New name\n-- @output result\nSELECT 2;"}
+    app.state.services.projects.write(tree["id"], snapshot["revision"], files)
+    assert call("GET", path).json() == expected
+    assert call("GET", "/jobs/daily/nodes").json() == expected
+    branch = call("GET", f"/projects/{tree['project']}/job-nodes?kind=branch&ref=main").json()
+    assert branch["source"][0]["label"] == "New name"
+    assert call("GET", "/jobs/daily/nodes", actor="outsider").status_code == 404
+
+
 def advance(instance, tag="v2"):
     app, tree, _, _, _ = instance
     projects = app.state.services.projects

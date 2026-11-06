@@ -76,7 +76,7 @@ Project roles and permissions are listed in the
 | `/user-settings` | Account settings |
 | `/projects/:projectId/jobs` | Jobs |
 | `/projects/:projectId/settings` | Project settings |
-| `/worktrees/:worktreeId/:tab` | Flow, Code, Documentation, Variables, Extensions or History |
+| `/worktrees/:worktreeId/:tab` | Flow, Code, Documentation, Variables or History |
 
 Worktree IDs avoid putting branch names or paths in URLs. The optional
 `?environment=dev` selects a configured environment. Unknown routes show a
