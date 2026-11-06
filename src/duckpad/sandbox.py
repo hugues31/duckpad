@@ -21,6 +21,17 @@ from .types import Record
 from .util import Problem, clean, uid
 
 
+def python_timeout() -> float | None:
+    """The operator's deadline for each Python worker call; unset or blank means none."""
+    configured = os.environ.get("DUCKPAD_PYTHON_TIMEOUT_SECONDS", "").strip()
+    if not configured:
+        return None
+    with suppress(ValueError):
+        if 0 < (seconds := float(configured)) <= threading.TIMEOUT_MAX:
+            return seconds
+    raise Problem("DUCKPAD_PYTHON_TIMEOUT_SECONDS must be a positive number of seconds", 500)
+
+
 class Database:
     def __init__(self, policy: Record) -> None:
         environment = {
@@ -133,6 +144,8 @@ class Database:
                 target.put({"error": message, "type": "Error"})
 
     def call(self, operation: str, **arguments: Any) -> Any:
+        # Validate before sending: a call the worker already started cannot be abandoned safely.
+        timeout = python_timeout() if operation == "python" else None
         target: queue.Queue[Record] = queue.Queue()
         identity = None
         try:
@@ -146,8 +159,7 @@ class Database:
                     (json.dumps(clean({"id": identity, "operation": operation, **arguments})) + "\n").encode()
                 )
             try:
-                timeout = os.environ.get("DUCKPAD_PYTHON_TIMEOUT_SECONDS") if operation == "python" else None
-                result = target.get(timeout=float(timeout) if timeout is not None else None)
+                result = target.get(timeout=timeout)
             except queue.Empty:
                 self.stop_worker()
                 raise Problem(

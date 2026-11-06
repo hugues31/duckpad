@@ -249,24 +249,21 @@ invalidates that context; the next run recomputes it. Other contexts remain usab
 
 ## Execution timeout and cancellation
 
-Python nodes have no execution timeout by default, like SQL nodes. Long-running
-API pagination or data transformations can finish without an automatic cutoff.
-Users can still cancel a run.
+Python nodes have no execution timeout by default, like SQL nodes: long API
+pagination or pandas transformations run until they finish or a user cancels
+the run.
 
-Operators can set `DUCKPAD_PYTHON_TIMEOUT_SECONDS` to a positive number of seconds
-(for example, `600`) to limit each Python worker call. Leave the variable unset
-to keep execution unlimited. The deadline covers the entire call, including
-`run()`, DuckDB output materialization (`CREATE TABLE … AS`), `self.check`
-validation and `write()`; it is not limited to time spent in user Python code.
-It does not impose a timeout on SQL nodes.
+Operators can set `DUCKPAD_PYTHON_TIMEOUT_SECONDS` to a positive number of
+seconds (for example, `600`); unset or blank means no limit. The deadline applies
+to each Python node's whole worker call: `run()`, DuckDB output materialization
+(`CREATE TABLE … AS`), `self.check` validation and `write()`, not only time spent
+in user code. It never applies to SQL nodes.
 
-When the deadline expires, Duckpad fails the node and terminates the worker for
-that worktree and environment. All in-memory results in that context are lost,
-including results from SQL nodes; the next run recomputes the context. Other
-worktrees and environments remain available. Canceling active Python can also
-terminate the worker. External writes may already have completed or have a
-partial or unknown outcome; Duckpad does not roll them back or retry them
-automatically.
+When it expires, the node fails and Duckpad stops the worker of that worktree and
+environment. Every in-memory result of that context is lost, SQL results
+included, and the next run recomputes them. External writes already started have
+a partial or unknown outcome (see
+[Checks, writes and artifacts](#checks-writes-and-artifacts)).
 
 ## Trust boundary
 

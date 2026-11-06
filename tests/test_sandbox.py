@@ -23,29 +23,31 @@ def transport():
 
 
 @pytest.mark.parametrize(
-    ("operation", "configured_timeout"),
-    [("python", None), ("python", "600"), ("execute", "0.25")],
+    ("operation", "configured", "deadline"),
+    [("python", None, None), ("python", " ", None), ("python", "600", 600.0), ("execute", "0.25", None)],
 )
-def test_worker_reply_after_five_minutes_without_an_expired_deadline(
-    transport, monkeypatch, operation, configured_timeout
+def test_python_deadline_is_opt_in_and_never_applies_to_sql(
+    transport, monkeypatch, operation, configured, deadline
 ):
     monkeypatch.delenv("DUCKPAD_PYTHON_TIMEOUT_SECONDS", raising=False)
-    if configured_timeout is not None:
-        monkeypatch.setenv("DUCKPAD_PYTHON_TIMEOUT_SECONDS", configured_timeout)
-
-    def delayed_reply(*, timeout):
-        # Simulate a reply after the old default deadline without a five-minute test.
-        if timeout is not None and timeout < 301:
-            raise queue.Empty
-        return {"value": "completed"}
-
+    if configured is not None:
+        monkeypatch.setenv("DUCKPAD_PYTHON_TIMEOUT_SECONDS", configured)
     response = Mock()
-    response.get.side_effect = delayed_reply
+    response.get.return_value = {"value": "completed"}
     monkeypatch.setattr("duckpad.sandbox.queue.Queue", lambda: response)
-    transport.stop_worker = Mock()
 
     assert transport.call(operation) == "completed"
-    transport.stop_worker.assert_not_called()
+    response.get.assert_called_once_with(timeout=deadline)
+    assert transport.pending == {}
+
+
+@pytest.mark.parametrize("configured", ["10m", "0", "-1", "nan", "inf"])
+def test_invalid_python_deadline_fails_before_the_worker_starts_the_call(transport, monkeypatch, configured):
+    monkeypatch.setenv("DUCKPAD_PYTHON_TIMEOUT_SECONDS", configured)
+
+    with pytest.raises(Problem, match="DUCKPAD_PYTHON_TIMEOUT_SECONDS must be a positive number"):
+        transport.call("python")
+    transport.socket.sendall.assert_not_called()
     assert transport.pending == {}
 
 
