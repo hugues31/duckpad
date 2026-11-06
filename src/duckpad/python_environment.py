@@ -203,6 +203,11 @@ UV_ENVIRONMENT = {
     "LANG",
     "LC_ALL",
     "HOME",
+    "USERPROFILE",
+    "APPDATA",
+    "SYSTEMDRIVE",
+    "XDG_CONFIG_HOME",
+    "XDG_CONFIG_DIRS",
     "TEMP",
     "TMP",
     "UV_DEFAULT_INDEX",
@@ -223,13 +228,60 @@ PYPI = "https://pypi.org/simple"
 PYPI_FILES = "files.pythonhosted.org"
 
 
+def operator_config_paths():
+    """Discover user and first system uv.toml, in uv's precedence order."""
+    if sys.platform == "win32":
+        user = Path(os.environ.get("APPDATA") or Path.home() / "AppData" / "Roaming")
+        drive = os.environ.get("SYSTEMDRIVE")
+        system = [Path(drive + "\\") / "ProgramData" / "uv" / "uv.toml"] if drive else []
+    else:
+        user = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config")
+        if not user.is_absolute():
+            user = Path.home() / ".config"
+        directories = (os.environ.get("XDG_CONFIG_DIRS") or "/etc/xdg").split(":")
+        system = [Path(directory) / "uv" / "uv.toml" for directory in directories if directory]
+        system.append(Path("/etc/uv/uv.toml"))
+    first = next((path for path in system if path.is_file()), None)
+    return [user / "uv" / "uv.toml", *([first] if first else [])]
+
+
+def operator_config():
+    """Merge operator files: user scalars win, and user arrays precede system arrays."""
+    settings = {}
+    for path in reversed(operator_config_paths()):
+        try:
+            with path.open("rb") as stream:
+                values = tomllib.load(stream)
+        except FileNotFoundError:
+            continue
+        except (OSError, ValueError):
+            raise Problem(
+                "Cannot read operator uv.toml; check its permissions and TOML syntax", 503
+            ) from None
+        for key, value in values.items():
+            settings[key] = value + settings.get(key, []) if isinstance(value, list) else value
+    return settings
+
+
 def operator_sources():
     """Package sources the operator configured; PyPI unless a default index replaces it."""
     names = ("UV_DEFAULT_INDEX", "UV_INDEX_URL", "UV_INDEX", "UV_EXTRA_INDEX_URL", "UV_FIND_LINKS")
     entries = [e for name in names for e in re.split(r"[\s,]+", os.environ.get(name, "")) if e]
     # Named indexes are written `name=url`.
     sources = {re.sub(r"^[\w.-]+=(?=\S)", "", entry).rstrip("/") for entry in entries}
-    if not (os.environ.get("UV_DEFAULT_INDEX") or os.environ.get("UV_INDEX_URL")):
+    config = operator_config()
+    indexes = config.get("index", [])
+    configured = [*config.get("extra-index-url", []), *config.get("find-links", [])]
+    configured.extend(index["url"] for index in indexes if "url" in index)
+    if config.get("index-url"):
+        configured.append(config["index-url"])
+    sources.update(entry.rstrip("/") for entry in configured)
+    if not (
+        os.environ.get("UV_DEFAULT_INDEX")
+        or os.environ.get("UV_INDEX_URL")
+        or config.get("index-url")
+        or any(index.get("default") for index in indexes)
+    ):
         sources.add(PYPI)
     return sources
 
@@ -289,7 +341,8 @@ def command(arguments, directory, *, allow_builds=False):
     options = [] if allow_builds else ["--no-build"]
     try:
         result = subprocess.run(
-            [executable, "--no-config", *arguments, *options],
+            # The validated [tool.uv] in this scratch directory stops parent discovery.
+            [executable, *arguments, *options],
             cwd=directory,
             env=environment,
             capture_output=True,

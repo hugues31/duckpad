@@ -99,7 +99,8 @@ server account's permissions. This opt-in requires trust in those dependencies.
 An offline installation can provide `UV_OFFLINE`, `UV_CACHE_DIR`, `UV_FIND_LINKS`
 or an operator index via `UV_INDEX` / `UV_DEFAULT_INDEX` / `UV_EXTRA_INDEX_URL`,
 with `UV_INDEX_<NAME>_USERNAME` / `_PASSWORD` for an authenticated index and the
-standard `HTTP_PROXY` / `HTTPS_PROXY` / `NO_PROXY` variables. Cache the locked wheels
+standard `HTTP_PROXY` / `HTTPS_PROXY` / `NO_PROXY` variables. User and system
+`uv.toml` files can also supply these settings (see below). Cache the locked wheels
 in advance. Project manifests cannot override the operator index, cache, or build policy, including through optional dependencies or dependency groups. A `uv.lock` that takes packages from another index or file host is resolved again on an editable branch and refused for tags. Validated manifest/lock pairs are cached, so unchanged executions do not relock or contact the index. A missing offline dependency produces a preparation error. The
 operator can supply `DUCKPAD_RUNTIME_WHEEL` matching the installed runtime.
 The project’s Python settings show resolution, installation, readiness and the
@@ -149,9 +150,21 @@ URLs; the named index lets `uv.lock` record the repository without credentials.
 `UV_EXTRA_INDEX_URL` adds an index while retaining PyPI as a fallback. Remove
 unwanted additional indexes when the server must use Artifactory exclusively.
 See [uv's index selection rules](https://docs.astral.sh/uv/concepts/indexes/).
-Duckpad runs uv with `--no-config`: `pip.conf`, `PIP_INDEX_URL`, user `uv.toml`
-and a project's `[[tool.uv.index]]` are not configuration routes for these
-environments. Project index overrides are rejected.
+You can also configure the index in the service account's user or system
+`uv.toml`, keeping credentials in the environment variables above:
+
+```toml
+[[index]]
+name = "artifactory"
+url = "https://artifactory.example.com/artifactory/api/pypi/python/simple"
+default = true
+```
+
+`default = true` (or `index-url`) replaces PyPI; additional indexes retain it.
+Duckpad accepts sources declared in these operator files when validating
+`uv.lock`. `pip.conf` and `PIP_INDEX_URL` do not configure uv. Project index
+overrides are still rejected: only `tool.uv.package` and the server's DuckDB
+source may appear in the project manifest.
 
 If Artifactory uses a private certificate authority, set `SSL_CERT_FILE` to a
 PEM CA bundle readable by the Duckpad service account, and mount it into the
@@ -159,7 +172,8 @@ container when applicable. For example, set
 `SSL_CERT_FILE=/path/to/company-ca-bundle.pem` in that service's environment.
 The bundle replaces uv's default CA bundle, so include every CA needed by the
 configured sources. Keep TLS verification enabled. Proxy settings, when needed,
-also belong in the server environment (`HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY`).
+also belong in the server environment (`HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY`)
+or its user/system `uv.toml` as shown below.
 See [uv's custom CA configuration](https://docs.astral.sh/uv/concepts/authentication/certificates/#custom-certificates).
 
 After restarting the server, run the Python node on an editable branch. Its
@@ -172,7 +186,8 @@ If preparation still fails:
 
 - A request to `https://pypi.org/simple/pytz/` means the resolver is still using
   PyPI. Check the environment of the actual server process, its restart, and that
-  `UV_DEFAULT_INDEX` was used instead of an additional index variable.
+  a default index was configured with `UV_DEFAULT_INDEX`, `index-url` or
+  `[[index]]` with `default = true`, rather than an additional index alone.
 - A request to `files.pythonhosted.org` can come from upstream download links
   returned by a mirror. For an installation without public internet access,
   Artifactory must serve the wheel files itself as well as the simple index.
@@ -183,6 +198,39 @@ If preparation still fails:
 - A missing package or compatible wheel must be made available in Artifactory.
   Setting `UV_OFFLINE=1` disables network access to Artifactory too; use it only
   when the required packages are already cached or available locally.
+
+### User and system uv configuration
+
+Duckpad reads uv configuration for the account running the **server**. On Linux
+and macOS, user settings come from `$XDG_CONFIG_HOME/uv/uv.toml`, or
+`~/.config/uv/uv.toml`. System settings come from the first `uv/uv.toml` found
+in `$XDG_CONFIG_DIRS` (default `/etc/xdg`), falling back to `/etc/uv/uv.toml`.
+On Windows, uv uses `%APPDATA%\uv\uv.toml` and
+`%SYSTEMDRIVE%\ProgramData\uv\uv.toml`.
+
+User settings override system settings; lists are combined with user entries
+first. Environment variables override file settings. Proxy, certificates,
+indexes and cache settings can all be configured in these files. For example:
+
+```toml
+https-proxy = "http://proxy.example.com:8080"
+no-proxy = ["localhost", "127.0.0.1", ".example.com"]
+system-certs = true
+```
+
+In Docker, the file must exist **inside the container**, for example by mounting
+an operator-owned file read-only at `/etc/uv/uv.toml`. Install the company CA
+certificates in the container's trust store when using `system-certs = true`.
+The host account's configuration is not automatically available to the service.
+See [uv configuration discovery](https://docs.astral.sh/uv/concepts/configuration-files/).
+
+Duckpad's generated manifest stops discovery of project and parent-directory
+configuration. `UV_CONFIG_FILE` and `UV_NO_CONFIG` are not forwarded. The server
+still selects its own Python interpreter, disables Python downloads, copies
+installed files and passes `--no-build` unless an administrator explicitly
+allows source builds. Setting `no-build = false` in `uv.toml` cannot bypass that
+policy. Isolated Linux workers cannot write the operator's configuration files;
+keep those files outside writable project and connection directories.
 
 ## Checks, writes and artifacts
 
