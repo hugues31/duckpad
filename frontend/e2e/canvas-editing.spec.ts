@@ -271,6 +271,59 @@ test("copied connected nodes paste as new connected nodes, here and in a compone
   expect(box.edges).toHaveLength(1);
 });
 
+const zoom = (page: Page) =>
+  page
+    .locator(".react-flow__viewport")
+    .evaluate(
+      (viewport) => new DOMMatrix(getComputedStyle(viewport).transform).a,
+    );
+/**
+ * Double-click a node at human speed: the first click selects it, which opens
+ * the inspector and the preview and refits the graph, so the second click lands
+ * on whatever has moved under the pointer. Returns the zoom between the clicks.
+ */
+async function slowDoubleClick(page: Page, id: string) {
+  const shape = node(page, id).locator(".node-shape");
+  const before = (await shape.boundingBox())!;
+  const x = before.x + before.width / 2;
+  const y = before.y + before.height / 2;
+  await page.mouse.click(x, y);
+  await expect(node(page, id)).toHaveClass(/selected/);
+  await expect
+    .poll(async () => {
+      const after = (await shape.boundingBox())!;
+      return Math.hypot(after.x - before.x, after.y - before.y);
+    })
+    .toBeGreaterThan(before.height);
+  const refitted = await zoom(page);
+  await page.mouse.down({ clickCount: 2 });
+  await page.mouse.up({ clickCount: 2 });
+  return refitted;
+}
+
+test("a double-click acts on the node its first click selected, even after the graph moved", async ({
+  page,
+}) => {
+  await prepare(page);
+  await slowDoubleClick(page, "boxed");
+  await expect(page.locator(".component-notice")).toBeVisible();
+  await expect(page.locator(".react-flow__node")).toHaveCount(1);
+  await expect(node(page, "inner")).toBeVisible();
+
+  await page
+    .locator(".canvas-breadcrumb")
+    .getByRole("button", { name: "Canvas editing", exact: true })
+    .click();
+  await expect(page.locator(".react-flow__node")).toHaveCount(4);
+  const refitted = await slowDoubleClick(page, "filtered");
+  await page.waitForTimeout(500);
+  // Neither the pane nor another node takes the second click.
+  expect(await zoom(page)).toBe(refitted);
+  await expect(page.locator(".react-flow__node.selected")).toHaveCount(1);
+  await expect(node(page, "filtered")).toHaveClass(/selected/);
+  await expect(page.locator(".component-notice")).toHaveCount(0);
+});
+
 test("canvas shortcuts yield to fields, editors and dialogs", async ({
   page,
 }) => {
