@@ -87,9 +87,10 @@ node. **View code** is read-only. **Detach from template** copies the SQL while
 retaining parameters and connections.
 
 **Convert to template** names a new shared definition and links the node to it.
-**Link to original template** asks before discarding local code. Detaching or
-converting preserves valid results; relinking to different executable SQL makes
-results stale. Linked code has no partial overrides.
+**Link to original template**, offered for nodes that come from a project
+template, asks before discarding local code. Detaching or converting preserves
+valid results; relinking to different executable SQL makes results stale.
+Linked code has no partial overrides.
 
 ![A normal node owns its code and offers explicit template conversions](images/node-code.png)
 

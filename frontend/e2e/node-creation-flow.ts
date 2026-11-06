@@ -91,8 +91,9 @@ export async function verifyNodeCreation(page: Page) {
   await expect(sql.locator(".missing-input")).toHaveCount(0);
   await expect(page.locator(".banner.error")).toHaveCount(0);
 
+  // A palette copy of a built-in template has nothing to relink to.
   await page.getByRole("button", { name: "Fit view", exact: true }).click();
-  await source.locator(".node-shape").click({ button: "right" });
+  await sql.locator(".node-shape").click({ button: "right" });
   const menu = page.getByRole("menu", { name: "Node actions", exact: true });
   await expect(menu).toBeVisible();
   await expect(

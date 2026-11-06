@@ -50,7 +50,7 @@ import ResultsPanel, { type ResultsTab } from "../ResultsPanel";
 import { api } from "../api";
 import { useShell, useWorkspace } from "../shell";
 import type { Bundle, FlowNode, Graph, Snapshot } from "../types";
-import { nodeLabel, useT } from "../i18n";
+import { isBuiltinTemplate, nodeLabel, useT } from "../i18n";
 import {
   isWideLayout,
   PanelResizeHandles,
@@ -614,7 +614,12 @@ export default function FlowPage() {
             }),
           ),
         );
-        if (target.origin && bundle.templates[target.origin] !== undefined)
+        // Built-in templates are starting points: relinking would only drop the code.
+        if (
+          target.origin &&
+          !isBuiltinTemplate(target.origin) &&
+          bundle.templates[target.origin] !== undefined
+        )
           actions.push(
             item("relink", t("relinkTemplate"), () =>
               openModal({
