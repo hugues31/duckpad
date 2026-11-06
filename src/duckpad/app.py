@@ -1068,7 +1068,19 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
             partition_execution=data.partition_execution.model_dump(exclude_none=True)
             if data.partition_execution
             else None,
+            ancestors=data.ancestors,
         )
+
+    @app.post("/api/worktrees/{worktree}/draft-preview/{node}", response_model=None)
+    def draft_preview(worktree: str, node: str, data: schemas.DraftPreview, request: Request) -> Record:
+        """Compute a node's code on samples of its inputs without recording or publishing anything."""
+        return engine.draft_preview(
+            worktree, data.environment, node, data.code, data.rows, request.state.user["id"]
+        )
+
+    @app.get("/api/worktrees/{worktree}/input-columns/{node}", response_model=None)
+    def input_columns(worktree: str, node: str, environment: str) -> Record:
+        return engine.input_columns(worktree, environment, node)
 
     @app.get("/api/runs", response_model=None)
     def runs(request: Request, worktree: str | None = None, include_jobs: bool = False) -> list[Record]:

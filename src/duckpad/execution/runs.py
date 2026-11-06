@@ -89,14 +89,26 @@ def run_outcome(statuses: set[str], canceled: bool) -> str:
     return "failed" if failed else "success"
 
 
-def launch_scope(nodes: dict[str, Record], edges: list[Record], target: str | None = None) -> set[str]:
-    """The nodes a launch computes: the whole project, or a node subtree and its upstream nodes."""
+def launch_scope(
+    nodes: dict[str, Record], edges: list[Record], target: str | None = None, ancestors: bool = False
+) -> set[str]:
+    """The nodes a launch computes: the whole project, or a node subtree and its upstream nodes.
+
+    `ancestors` computes only the upstream nodes, which a node's preview reads.
+    """
     if not target:
+        if ancestors:
+            raise Problem("Choose the node whose ancestors to run", 422)
         return set(nodes)
     scope = {n for n in nodes if in_subtree(n, target)}
     if not scope:
         raise Problem("Node not found", 404)
-    return reachable(scope, edges, upstream=True)
+    upstream = reachable(scope, edges, upstream=True)
+    if not ancestors:
+        return upstream
+    if not upstream - scope:
+        raise Problem("This node has no upstream nodes to run", 422)
+    return upstream - scope
 
 
 class Runner:
@@ -160,6 +172,7 @@ class Runner:
         idempotency: Record | None = None,
         partition_selection: Record | None = None,
         partition_execution: Record | None = None,
+        ancestors: bool = False,
     ) -> Record:
         record = self.projects.get(worktree)
         if record.get("read_only") and job is None:
@@ -168,7 +181,14 @@ class Runner:
         self._admit(worktree, environment, token)
         try:
             execution = self._prepare(
-                token, worktree, environment, target, entry_point, partition_selection, partition_execution
+                token,
+                worktree,
+                environment,
+                target,
+                entry_point,
+                partition_selection,
+                partition_execution,
+                ancestors,
             )
             execution.run["requester"] = copy.deepcopy(requester)
             if job is not None:
@@ -229,6 +249,7 @@ class Runner:
         entry_point: str,
         partition_selection: Record | None = None,
         partition_execution: Record | None = None,
+        ancestors: bool = False,
     ) -> Execution:
         """Capture the committed definitions and connection settings the run will use."""
         snapshot = self.projects.flush(worktree)
@@ -248,7 +269,12 @@ class Runner:
         )
         phase |= partition_plan["value_phase"]
         selected_scope = self._partition_scope(
-            worktree, environment, structural, edges, launch_scope(structural, edges, target), partition_plan
+            worktree,
+            environment,
+            structural,
+            edges,
+            launch_scope(structural, edges, target, ancestors),
+            partition_plan,
         )
         needs_python = any(structural[key].get("language") == "python" for key in selected_scope)
         if needs_python and not settings.get("enabled"):
@@ -286,7 +312,7 @@ class Runner:
         values = self.pool.computed(worktree, environment, bundle)
         nodes, edges, _ = expand_for(bundle, environment, computed=values)
         scope = self._partition_scope(
-            worktree, environment, nodes, edges, launch_scope(nodes, edges, target), partition_plan
+            worktree, environment, nodes, edges, launch_scope(nodes, edges, target, ancestors), partition_plan
         )
         order = [n for n in topological(nodes, edges, tolerant=True) if n in scope]
         self._check_conflicts(snapshot["conflicts"], scope, environment)
@@ -310,6 +336,7 @@ class Runner:
             "revision": snapshot["revision"],
             "scope": target or "project",
             "scope_name": node_name_parts(bundle, target) if target else [],
+            **({"ancestors": True} if ancestors else {}),
             "trigger": "manual",
             "entry_point": entry_point,
             "status": "preparing",

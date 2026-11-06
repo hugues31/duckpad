@@ -315,8 +315,19 @@ class Import(BaseModel):
 class Launch(PartitionLaunch):
     environment: str
     node: str | None = None
+    # Run only the upstream nodes of `node`, which its preview reads.
+    ancestors: StrictBool = False
     entry_point: str | None = None
     confirmed: StrictBool = False
+
+
+class DraftPreview(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    environment: str
+    # The code to preview instead of the saved code of the node or its template.
+    code: str | None = Field(default=None, max_length=1_000_000)
+    # Rows read from each input; null reads every row.
+    rows: StrictInt | None = 1000
 
 
 class EnvironmentSettings(BaseModel):
