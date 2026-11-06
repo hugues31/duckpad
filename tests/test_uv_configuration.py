@@ -78,7 +78,7 @@ def test_named_config_indexes_and_pypi(config_files, location, default):
 
 def test_environment_indexes_combine_with_files(config_files, monkeypatch):
     config_files["system"].write_text('extra-index-url = ["https://system.example/simple"]\n')
-    monkeypatch.setenv("UV_DEFAULT_INDEX", "internal=https://environment.example/simple")
+    monkeypatch.setenv("UV_DEFAULT_INDEX", "internal=https://user:token@environment.example/simple")
     assert environment.operator_sources() == {
         "https://system.example/simple",
         "https://environment.example/simple",
@@ -178,11 +178,12 @@ def project(tmp_path, dependency="operator-probe==1.0"):
 
 @pytest.mark.parametrize("location", ["user", "system"])
 def test_real_uv_locks_and_installs_from_operator_index(config_files, wheel_index, tmp_path, location):
-    config_files[location].write_text(f'index-url = "{wheel_index}"\nno-build = false\n')
+    authenticated = wheel_index.replace("://", "://user:token@")
+    config_files[location].write_text(f'index-url = "{authenticated}"\nno-build = false\n')
     directory = project(tmp_path)
     environment.command(["lock", "--python", sys.executable], directory)
     locked = (directory / "uv.lock").read_text()
-    assert wheel_index in locked
+    assert wheel_index in locked and "token" not in locked
     environment.check_lock_sources(locked)
     environment.command(["sync", "--locked", "--python", sys.executable], directory)
     interpreter = directory / ".venv" / ("Scripts/python.exe" if sys.platform == "win32" else "bin/python")

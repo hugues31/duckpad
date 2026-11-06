@@ -268,14 +268,15 @@ def operator_sources():
     names = ("UV_DEFAULT_INDEX", "UV_INDEX_URL", "UV_INDEX", "UV_EXTRA_INDEX_URL", "UV_FIND_LINKS")
     entries = [e for name in names for e in re.split(r"[\s,]+", os.environ.get(name, "")) if e]
     # Named indexes are written `name=url`.
-    sources = {re.sub(r"^[\w.-]+=(?=\S)", "", entry).rstrip("/") for entry in entries}
+    entries = [re.sub(r"^[\w.-]+=(?=\S)", "", entry) for entry in entries]
     config = operator_config()
     indexes = config.get("index", [])
-    configured = [*config.get("extra-index-url", []), *config.get("find-links", [])]
-    configured.extend(index["url"] for index in indexes if "url" in index)
+    entries += [*config.get("extra-index-url", []), *config.get("find-links", [])]
+    entries += [index["url"] for index in indexes if "url" in index]
     if config.get("index-url"):
-        configured.append(config["index-url"])
-    sources.update(entry.rstrip("/") for entry in configured)
+        entries.append(config["index-url"])
+    # uv.lock records index URLs without their credentials.
+    sources = {re.sub(r"^(\w[\w+.-]*://)[^/@\s]*@", r"\1", entry).rstrip("/") for entry in entries}
     if not (
         os.environ.get("UV_DEFAULT_INDEX")
         or os.environ.get("UV_INDEX_URL")
@@ -341,7 +342,7 @@ def command(arguments, directory, *, allow_builds=False):
     options = [] if allow_builds else ["--no-build"]
     try:
         result = subprocess.run(
-            # The validated [tool.uv] in this scratch directory stops parent discovery.
+            # The validated [tool.uv] in this directory stops discovery of parent uv.toml files.
             [executable, *arguments, *options],
             cwd=directory,
             env=environment,
