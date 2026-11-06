@@ -594,9 +594,16 @@ class GitWorkspace:
         """
         source = self.projects.get(worktree_id)
         origin = self.git(source["path"], "config", "--get", origin_key(source["branch"]), check=False)
-        destination = self.store.find_worktree(source["project"], origin or "main")
+        # A deleted origin, typically merged then cleaned up, falls back to main as well.
+        if not origin or not self.git(
+            source["path"], "rev-parse", "--verify", "--quiet", "refs/heads/" + origin, check=False
+        ):
+            origin = "main"
+        destination = self.store.find_worktree(source["project"], origin)
         if not destination or destination["id"] == worktree_id:
-            raise Problem("Open the origin branch or choose a destination in Branches.", 409)
+            raise Problem(
+                f"Open {origin} to review a merge into it, or choose a destination in Branches.", 409
+            )
         return self.prepare(destination["id"], "refs/heads/" + source["branch"])
 
     def prepare(self, destination, source_ref, remote_guard=None):

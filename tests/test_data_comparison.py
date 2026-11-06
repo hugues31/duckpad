@@ -109,6 +109,28 @@ def test_key_validation_limits_and_column_changes(branches, monkeypatch):
         compare(results, review)
 
 
+def test_only_processing_changes_of_the_source_branch_are_compared(branches, services):
+    results, _, _, main = branches
+    store, projects, _, engine = services
+    moved = projects.branch(main["id"], "experiment/moved")
+    snapshot = projects.snapshot(moved["id"])
+    bundle = copy.deepcopy(snapshot["bundle"])
+    bundle["flow"]["nodes"][0].update(position={"x": 300, "y": 40}, label="Renamed rows")
+    projects.write(moved["id"], snapshot["revision"], bundle_to_files(bundle))
+    run = engine.launch(moved["id"], "dev")
+    assert join_run(store, run["id"], timeout=120)["status"] == "success"
+    # The destination changes the node meanwhile: the merge keeps that change, not the branch's.
+    snapshot = projects.snapshot(main["id"])
+    bundle = copy.deepcopy(snapshot["bundle"])
+    bundle["templates"]["rows"] = bundle["templates"]["rows"].replace("'same'", "'main'")
+    projects.write(main["id"], snapshot["revision"], bundle_to_files(bundle))
+    run = engine.launch(main["id"], "dev")
+    assert join_run(store, run["id"], timeout=120)["status"] == "success"
+    proposal = projects.versioning.prepare_origin(moved["id"])
+    review = projects.versioning.review(main["id"], proposal["id"])
+    assert data_comparison.available_results(results, review, "dev") == []
+
+
 def test_origin_is_persistent_and_nested_branches_review_their_parent(branches, services):
     _, _, feature, main = branches
     _, projects, _, _ = services
@@ -116,9 +138,14 @@ def test_origin_is_persistent_and_nested_branches_review_their_parent(branches, 
     proposal = projects.versioning.prepare_origin(nested["id"])
     assert proposal["worktree"] == feature["id"]
     assert proposal["source"] == nested["branch"]
-    projects.git(main["path"], "config", origin_key(nested["branch"]), "missing")
-    with pytest.raises(Problem, match="choose a destination"):
+    # An origin that exists without an open worktree must be opened first.
+    projects.git(main["path"], "branch", "experiment/closed", "main")
+    projects.git(main["path"], "config", origin_key(nested["branch"]), "experiment/closed")
+    with pytest.raises(Problem, match="Open experiment/closed"):
         projects.versioning.prepare_origin(nested["id"])
+    # A deleted origin, such as a parent merged and cleaned up, falls back to main.
+    projects.git(main["path"], "config", origin_key(nested["branch"]), "missing")
+    assert projects.versioning.prepare_origin(nested["id"])["worktree"] == main["id"]
     # Deleting a merged branch forgets its origin, so a branch reusing the name starts afresh.
     head = projects.git(nested["path"], "rev-parse", "HEAD")
     projects.versioning.cleanup(main["id"], nested["id"], feature["id"], head)

@@ -15,23 +15,21 @@ MAX_ROWS = 50_000
 
 
 def available_results(results, review, environment):
-    """Only current, complete outputs from both local branches are comparable."""
+    """Outputs of the nodes whose processing the source branch changed since the common base.
+
+    Only current, complete outputs from both local branches are comparable. Changes made on the
+    destination meanwhile, labels and layout do not belong to the merge's data impact.
+    """
     if not review["source_worktree"]:
         return []
-    report = compare_files(review["current"], review["incoming"])
-    nodes = set(report["impact"]["direct"])
-    nodes.update(
-        entity["id"].removeprefix("node/")
-        for entity in report["entities"]
-        if entity["kind"] == "node" and not entity["scope"] and entity["status"] == "modified"
-    )
+    nodes = compare_files(review["base"], review["incoming"])["impact"]["direct"]
     bundle = files_to_bundle(review["incoming"])
     contexts = [results.pool.get(review[key], environment) for key in ("worktree", "source_worktree")]
     entries = []
     with ExitStack() as locks:
         for context in sorted(contexts, key=lambda value: value.worktree):
             locks.enter_context(context.lock)
-        for node in sorted(nodes):
+        for node in nodes:
             before, after = (context.outputs.get(node, {}) for context in contexts)
             for port in sorted(before.keys() & after.keys()):
                 old, new = before[port], after[port]
