@@ -149,6 +149,42 @@ describe("useWorktreeSnapshot", () => {
     expect(result.current.snapshot?.revision).toBe("r2");
   });
 
+  it.each([
+    ["python_enabled", false, true],
+    ["python_enabled", true, false],
+    ["commit", "old-commit", "new-commit"],
+    [
+      "worktree",
+      { id: "main", project: "project", branch: "main" },
+      { id: "main", project: "project", branch: "renamed", read_only: true },
+    ],
+    ["future_field", undefined, { enabled: true }],
+    ["future_field", { enabled: true }, { enabled: false }],
+    ["future_field", { enabled: true }, undefined],
+  ])(
+    "updates %s from %j to %j with unchanged project files",
+    async (field, before, after) => {
+      let value = before;
+      serve(() => json({ ...snapshot("main", "r1"), [field]: value }));
+      const { result } = watch({ worktree: "main", environment: "" });
+      await advance();
+      const first = result.current.snapshot;
+      if (before === undefined) expect(first).not.toHaveProperty(field);
+      else expect(first).toHaveProperty(field, before);
+
+      value = after;
+      await advance(1000);
+      const updated = result.current.snapshot;
+      expect(updated).not.toBe(first);
+      expect(updated).toMatchObject({ revision: "r1" });
+      if (after === undefined) expect(updated).not.toHaveProperty(field);
+      else expect(updated).toHaveProperty(field, after);
+
+      await advance(1000);
+      expect(result.current.snapshot).toBe(updated);
+    },
+  );
+
   it("reports a failed read until the next one succeeds", async () => {
     let failing = true;
     serve(() =>

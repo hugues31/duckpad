@@ -6,16 +6,18 @@ import { usePolling } from "./usePolling";
 const POLL_INTERVAL = 1000;
 const EMPTY_STATUSES: Statuses = { nodes: {}, active: null };
 
+function snapshotVersion(snapshot: Snapshot) {
+  // revision hashes files. The server derives these other fields only from
+  // those files; avoid serializing their potentially large contents each poll.
+  // Compare everything else by default, including fields added to the API later.
+  const { files, bundle, parsed_templates, parsed_nodes, node_names, ...rest } =
+    snapshot;
+  return JSON.stringify(rest);
+}
+
 /** Keep the previous object when nothing changed, so dependents do not refetch. */
 const unchanged = (old: Snapshot | null, value: Snapshot) =>
-  old?.worktree.id === value.worktree.id &&
-  old?.revision === value.revision &&
-  old?.role === value.role &&
-  JSON.stringify(old.connections) === JSON.stringify(value.connections) &&
-  JSON.stringify(old.conflicts) === JSON.stringify(value.conflicts) &&
-  // Variable values per environment also follow the instance's environments.
-  JSON.stringify(old.variables) === JSON.stringify(value.variables) &&
-  JSON.stringify(old.partitions) === JSON.stringify(value.partitions);
+  old !== null && snapshotVersion(old) === snapshotVersion(value);
 
 /**
  * The saved state of a working branch and the result statuses of an
