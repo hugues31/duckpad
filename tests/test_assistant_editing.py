@@ -597,7 +597,13 @@ def test_saved_problems_block_neither_unrelated_edits_nor_undo(instance):
     )
     # Only the problem the edit introduces is reported, and it is still rejected.
     assert json.loads(invalid["tools"][0]["summary"])["diagnostics"] == [
-        {"file": "flow.json", "node": "other", "message": "Connect input 'source' on Filter"}
+        {
+            "file": "flow.json",
+            "node": "other",
+            "code": "missing_input",
+            "port": "source",
+            "message": "Connect input 'source' on Filter",
+        }
     ]
     assert projects.snapshot(worktree["id"])["commit"] == before
 

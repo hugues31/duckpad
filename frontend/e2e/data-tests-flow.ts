@@ -1,3 +1,4 @@
+import { nodeMenuAction } from "./helpers";
 import { expect, type Page } from "@playwright/test";
 import { closeEditor } from "./helpers";
 import type { Run, Snapshot } from "../src/types";
@@ -16,9 +17,7 @@ export async function verifyDataTests(page: Page) {
   const inspector = page.locator(".inspector");
   await page.getByRole("button", { name: "Fit view", exact: true }).click();
   await node("validated").locator(".node-shape").click();
-  await inspector
-    .getByRole("button", { name: "Detach from template", exact: true })
-    .click();
+  await nodeMenuAction(page, "Detach from template");
   await expect(
     inspector.getByRole("button", { name: "Edit code", exact: true }),
   ).toBeVisible();

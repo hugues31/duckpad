@@ -251,6 +251,8 @@ def validate(bundle):
             {
                 "file": "flow.json",
                 "node": node["id"],
+                "code": "missing_input",
+                "port": port,
                 "message": f"Connect input '{port}' on {node['display_name']}",
             }
             for node in nodes.values()

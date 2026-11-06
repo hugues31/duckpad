@@ -1,14 +1,21 @@
+import { ActionMenu } from "./ActionMenu";
 import { useMemo, useState } from "react";
-import { Link, Plus, Search, X } from "lucide-react";
+import { Plus, Search, X } from "lucide-react";
 import AddIcon from "./AddIcon";
 import { NodeIcon } from "./Canvas";
 import { DRAG_TYPE, nodeChoices, type NodeKind } from "./graph";
-import { templateLabel, useT } from "./i18n";
+import { isBuiltinTemplate, templateLabel, useT } from "./i18n";
 import type { Snapshot } from "./types";
 
 export type { NodeKind } from "./graph";
 
-const CATEGORIES = ["sources", "transforms", "components", "exports"] as const;
+const CATEGORIES = [
+  "sources",
+  "transforms",
+  "components",
+  "exports",
+  "projectTemplates",
+] as const;
 
 export default function NodePalette({
   readOnly,
@@ -32,6 +39,11 @@ export default function NodePalette({
 }) {
   const t = useT();
   const [search, setSearch] = useState("");
+  const [context, setContext] = useState<{
+    id: string;
+    position: { x: number; y: number };
+    trigger: HTMLButtonElement;
+  } | null>(null);
   const items = useMemo(() => {
     const query = search.toLowerCase();
     return nodeChoices(
@@ -47,9 +59,11 @@ export default function NodePalette({
             ? choice.definition.name
             : templateLabel(choice.id, choice.definition.label, t),
         category:
-          CATEGORIES.find(
-            (category) => category === choice.signature.kind + "s",
-          ) || "transforms",
+          choice.kind === "template" && !isBuiltinTemplate(choice.id)
+            ? "projectTemplates"
+            : CATEGORIES.find(
+                (category) => category === choice.signature.kind + "s",
+              ) || "transforms",
         description: choice.definition.description,
       }))
       .filter((item) => item.label?.toLowerCase().includes(query));
@@ -71,14 +85,16 @@ export default function NodePalette({
       <div className="search">
         <Search size={14} />
         <input
-          placeholder={t("searchNodes")}
-          aria-label={t("searchNodes")}
+          placeholder={t("searchNodeTypes")}
+          aria-label={t("searchNodeTypes")}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
       </div>
       <div className="palette-list">
-        {CATEGORIES.map((category) => (
+        {CATEGORIES.filter((category) =>
+          items.some((item) => item.category === category),
+        ).map((category) => (
           <section key={category}>
             <h4>{t(category)}</h4>
             {items
@@ -96,8 +112,28 @@ export default function NodePalette({
                       );
                       e.dataTransfer.effectAllowed = "move";
                     }}
-                    onClick={() => onAdd(item.kind, item.id)}
-                    title={item.description}
+                    onClick={(event) =>
+                      onAdd(
+                        item.kind,
+                        item.id,
+                        item.kind === "template" && event.altKey,
+                      )
+                    }
+                    onContextMenu={(event) => {
+                      if (readOnly || item.kind !== "template") return;
+                      event.preventDefault();
+                      setContext({
+                        id: item.id,
+                        position: { x: event.clientX, y: event.clientY },
+                        trigger: event.currentTarget,
+                      });
+                    }}
+                    title={[
+                      item.description,
+                      item.kind === "template" ? t("addLinkedHint") : "",
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
                   >
                     <span className={`palette-icon ${item.category}`}>
                       <NodeIcon
@@ -108,22 +144,28 @@ export default function NodePalette({
                     <span>{item.label}</span>
                     <Plus size={12} className="palette-plus" />
                   </button>
-                  {item.kind === "template" && (
-                    <button
-                      className="icon palette-link"
-                      disabled={readOnly}
-                      title={t("addLinked")}
-                      aria-label={`${t("addLinked")}: ${item.label}`}
-                      onClick={() => onAdd(item.kind, item.id, true)}
-                    >
-                      <Link size={14} />
-                    </button>
-                  )}
                 </div>
               ))}
           </section>
         ))}
       </div>
+      {context && !readOnly && (
+        <ActionMenu
+          label={t("addLinked")}
+          position={context.position}
+          items={[
+            {
+              id: "linked",
+              label: t("addLinked"),
+              run: () => onAdd("template", context.id, true),
+            },
+          ]}
+          onClose={() => {
+            setContext(null);
+            context.trigger.focus();
+          }}
+        />
+      )}
       <fieldset
         className="palette-bottom"
         disabled={readOnly}

@@ -586,7 +586,7 @@ test("glass panels overlay the full canvas and fitting keeps nodes reachable", a
     .getByRole("button", { name: "Toggle node library", exact: true })
     .click();
   await page
-    .getByRole("textbox", { name: "Find a node…", exact: true })
+    .getByRole("textbox", { name: "Search node types…", exact: true })
     .fill("Filter");
   await expect(page.locator(".palette-item")).toHaveCount(1);
   await page

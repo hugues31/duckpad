@@ -1,3 +1,4 @@
+import { ActionMenu, type ActionItem } from "./ActionMenu";
 import { PythonIcon } from "./AddIcon";
 import { primaryOutputCount, showMinimap } from "./canvasResults";
 import { displayNodeName, type NodeNames } from "./nodeNames";
@@ -100,6 +101,7 @@ type PipelineData = {
   label: string;
   kind: TemplateKind | "component";
   inputs: string[];
+  missingInputs: string[];
   outputs: string[];
   /** The run or result state shown on the node, if any. */
   status:
@@ -206,8 +208,15 @@ function PipelineNode({ id, data, selected }: NodeProps<PipelineNode>) {
             top: portPosition(i, data.inputs.length).top,
             left: portPosition(i, data.inputs.length).inset,
           }}
-          title={port}
-          aria-label={`${t("inputs")}: ${port}`}
+          className={
+            data.missingInputs.includes(port) ? "missing-input" : undefined
+          }
+          title={
+            data.missingInputs.includes(port)
+              ? `${t("connectSource")}: ${port}`
+              : port
+          }
+          aria-label={`${t("inputs")}: ${port}${data.missingInputs.includes(port) ? ` · ${t("connectSource")}` : ""}`}
         >
           <span className="handle-label in">{port}</span>
         </Handle>
@@ -268,6 +277,8 @@ interface CanvasProps {
     position?: { x: number; y: number },
     connection?: NodeConnection,
   ) => void;
+  actionsFor: (id: string) => ActionItem[];
+  exposedInputs: { node: string; port: string }[];
   onOpen: (id: string) => void;
   onSelection: (ids: string[]) => void;
   /** Show the results log of a node whose warning badge was clicked. */
@@ -277,6 +288,11 @@ interface CanvasProps {
 }
 function CanvasInner({ ref, ...props }: CanvasProps) {
   const t = useT();
+  const [context, setContext] = useState<{
+    id: string;
+    position: { x: number; y: number };
+    trigger: HTMLElement;
+  } | null>(null);
   const { getNodes, getViewport, setViewport, screenToFlowPosition } =
     useReactFlow();
   const initialized = useNodesInitialized();
@@ -437,6 +453,16 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
             ),
             kind,
             inputs,
+            missingInputs: inputs.filter(
+              (port) =>
+                !props.edges.some(
+                  (edge) =>
+                    edge.target === node.id && edge.targetHandle === port,
+                ) &&
+                !props.exposedInputs.some(
+                  (input) => input.node === node.id && input.port === port,
+                ),
+            ),
             outputs,
             status,
             count: primaryOutputCount(
@@ -467,6 +493,8 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
       }),
     [
       props.nodes,
+      props.edges,
+      props.exposedInputs,
       props.valueProducers,
       props.parsed,
       props.names,
@@ -715,6 +743,15 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
           setFocus(null);
           props.onSelect(null);
         }}
+        onNodeContextMenu={(event, node) => {
+          event.preventDefault();
+          props.onSelect(node.id);
+          setContext({
+            id: node.id,
+            position: { x: event.clientX, y: event.clientY },
+            trigger: event.currentTarget as HTMLElement,
+          });
+        }}
         onNodeDoubleClick={(_, node) => props.onOpen(node.id)}
         onConnect={
           props.readOnly
@@ -796,7 +833,9 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
         maxZoom={1.8}
         connectionRadius={28}
         deleteKeyCode={
-          props.readOnly || pendingConnection ? null : ["Backspace", "Delete"]
+          props.readOnly || pendingConnection || context
+            ? null
+            : ["Backspace", "Delete"]
         }
         selectionKeyCode="Shift"
         multiSelectionKeyCode="Shift"
@@ -861,6 +900,17 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
           </div>
         )}
       </ReactFlow>
+      {context && props.nodes.some((node) => node.id === context.id) && (
+        <ActionMenu
+          label={t("nodeActions")}
+          items={props.actionsFor(context.id)}
+          position={context.position}
+          onClose={() => {
+            setContext(null);
+            context.trigger.focus();
+          }}
+        />
+      )}
       {pendingConnection && !props.readOnly && (
         <ConnectionPalette
           parsed={props.parsed}

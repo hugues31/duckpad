@@ -1,3 +1,4 @@
+import type { ActionItem } from "../ActionMenu";
 import {
   useCallback,
   useEffect,
@@ -131,6 +132,7 @@ export default function FlowPage() {
     environment,
     snapshot,
     statuses,
+    runDiagnostics,
     canEdit,
     saving,
     settle,
@@ -527,12 +529,118 @@ export default function FlowPage() {
           },
     );
   };
+  const actionsFor = (target: FlowNode): ActionItem[] => {
+    const item = (id: string, label: string, run: () => void): ActionItem => ({
+      id,
+      label,
+      run,
+      disabled: !canEdit || busy,
+    });
+    const actions = [
+      item(
+        "edit",
+        t(
+          target.component
+            ? "openComponent"
+            : target.template
+              ? "editTemplate"
+              : "editNodeCode",
+        ),
+        () =>
+          target.component
+            ? openComponent(target.id)
+            : editCode(undefined, prefix + target.id),
+      ),
+    ];
+    actions.push(
+      item("duplicate", t("duplicateNode"), () =>
+        safe(() => {
+          const duplicate = {
+            ...structuredClone(target),
+            id: identifier(),
+            position: { x: target.position.x + 40, y: target.position.y + 40 },
+          };
+          return insertNode((value) => {
+            if (!duplicate.component) {
+              const sql = nodeCode(value, target, parent);
+              duplicate.origin = target.template || target.origin;
+              delete duplicate.template;
+              (value.node_sql ||= {})[
+                nodeCodePath(duplicate.id, parent, duplicate.language)
+              ] = sql;
+            }
+            nodeGraph(value, parent).nodes.push(duplicate);
+            return duplicate.id;
+          });
+        }),
+      ),
+    );
+    if (!target.component) {
+      if (target.template) {
+        actions.push(
+          item("view", t("viewNodeCode"), () =>
+            openModal({
+              kind: "nodeCode",
+              worktree,
+              node: target.id,
+              parent,
+              fullNode: prefix + target.id,
+            }),
+          ),
+        );
+        actions.push(
+          item("detach", t("detachTemplate"), () =>
+            safe(() =>
+              save(snapshot, (value) =>
+                detachNode(
+                  value,
+                  nodeGraph(value, parent).nodes.find(
+                    (n) => n.id === target.id,
+                  )!,
+                  parent,
+                ),
+              ),
+            ),
+          ),
+        );
+      } else {
+        actions.push(
+          item("convert", t("convertTemplate"), () =>
+            openModal({
+              kind: "convertNode",
+              worktree,
+              node: target.id,
+              parent,
+            }),
+          ),
+        );
+        if (target.origin && bundle.templates[target.origin] !== undefined)
+          actions.push(
+            item("relink", t("relinkTemplate"), () =>
+              openModal({
+                kind: "relinkNode",
+                worktree,
+                node: target.id,
+                parent,
+              }),
+            ),
+          );
+      }
+    }
+    actions.push({
+      ...item("remove", t("deleteNode"), () =>
+        safe(() => removeNodes([target.id])),
+      ),
+      danger: true,
+    });
+    return actions;
+  };
   return (
     <div
       className={`flow-layout ${shown.palette ? "palette-open" : ""} ${shown.inspector ? "inspector-open" : ""} ${shown.preview ? "preview-open" : ""} ${path.length ? "nested-flow" : ""}`}
       style={
         {
-          "--notice-height": `${NOTICE_HEIGHT * noticeCount(snapshot, statuses.active)}px`,
+          "--notice-height": `${NOTICE_HEIGHT * noticeCount(snapshot, statuses.active, runDiagnostics)}px`,
           "--palette-width": `${sizes.sizes.palette}px`,
           "--inspector-width": `${sizes.sizes.inspector}px`,
           "--preview-height": `${sizes.sizes.preview}px`,
@@ -639,6 +747,14 @@ export default function FlowPage() {
               safe(() => addNode(kind, id, position, connection))
             }
             onOpen={openComponent}
+            actionsFor={(id) =>
+              actionsFor(graph.nodes.find((node) => node.id === id)!)
+            }
+            exposedInputs={
+              parent
+                ? Object.values(bundle.components[parent].inputs || {})
+                : []
+            }
             onSelection={updateSelection}
             onWarnings={() => showResults("log")}
             onFailure={() => {
@@ -752,62 +868,10 @@ export default function FlowPage() {
             onRun={() => run(fullNode)}
             onOpen={() => openComponent(node.id)}
             onEditTemplate={() => editCode()}
-            onViewCode={() =>
-              openModal({
-                kind: "nodeCode",
-                worktree,
-                node: node.id,
-                parent,
-                fullNode,
-              })
-            }
-            onDetach={() =>
-              safe(() =>
-                save(snapshot, (value) => {
-                  detachNode(
-                    value,
-                    nodeGraph(value, parent).nodes.find(
-                      (n) => n.id === node.id,
-                    )!,
-                    parent,
-                  );
-                }),
+            actions={() =>
+              actionsFor(node).filter(
+                (action) => !["edit", "remove"].includes(action.id),
               )
-            }
-            onConvert={() =>
-              openModal({
-                kind: "convertNode",
-                worktree,
-                node: node.id,
-                parent,
-              })
-            }
-            onRelink={() =>
-              openModal({ kind: "relinkNode", worktree, node: node.id, parent })
-            }
-            onDuplicate={() =>
-              safe(() => {
-                const duplicate = {
-                  ...structuredClone(node),
-                  id: identifier(),
-                  position: {
-                    x: node.position.x + 40,
-                    y: node.position.y + 40,
-                  },
-                };
-                return insertNode((value) => {
-                  if (!duplicate.component) {
-                    const sql = nodeCode(value, node, parent);
-                    duplicate.origin = node.template || node.origin;
-                    delete duplicate.template;
-                    (value.node_sql ||= {})[
-                      nodeCodePath(duplicate.id, parent, duplicate.language)
-                    ] = sql;
-                  }
-                  nodeGraph(value, parent).nodes.push(duplicate);
-                  return duplicate.id;
-                });
-              })
             }
             onHistory={() =>
               openModal({

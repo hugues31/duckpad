@@ -105,7 +105,7 @@ async function expectPending(page: Page) {
 const additions = [
   { name: "SQL node", button: "SQL" },
   { name: "template copy", button: "Filter" },
-  { name: "linked node", button: "Add linked: Filter" },
+  { name: "linked node", button: "Filter", linked: true },
   { name: "component", button: "Reusable branch" },
   { name: "dropped template", button: "Filter", drop: true },
   {
@@ -122,9 +122,14 @@ for (const addition of additions) {
   }) => {
     const { endpoint, existing } = await prepare(page);
     const { writes, release } = await delaySave(page, endpoint);
+    if (addition.panel)
+      await page
+        .locator(".inspector")
+        .getByRole("button", { name: "Node actions", exact: true })
+        .click();
     const button = page
-      .locator(addition.panel ?? ".palette")
-      .getByRole("button", {
+      .locator(addition.panel ? ".node-action-menu" : ".palette")
+      .getByRole(addition.panel ? "menuitem" : "button", {
         name: addition.button,
         exact: true,
       });
@@ -132,7 +137,7 @@ for (const addition of additions) {
       await button.dragTo(page.locator(".react-flow__pane"), {
         targetPosition: { x: 650, y: 350 },
       });
-    else await button.click();
+    else await button.click({ modifiers: addition.linked ? ["Alt"] : [] });
     try {
       await expectPending(page);
     } finally {

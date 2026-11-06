@@ -1433,5 +1433,11 @@
   "nodesDeleted": "{count} nœuds supprimés",
   "nodesCopied": "{count} nœuds copiés",
   "undo": "Annuler",
-  "gitNothingToPull": "Aucune modification à récupérer sur origin."
+  "gitNothingToPull": "Aucune modification à récupérer sur origin.",
+  "searchNodeTypes": "Rechercher un type de nœud…",
+  "projectTemplates": "Modèles du projet",
+  "addLinkedHint": "Alt+clic ou clic droit pour ajouter un nœud lié",
+  "nodeActions": "Actions du nœud",
+  "connectSource": "Brancher une source",
+  "showNode": "Afficher le nœud"
 }

@@ -1,3 +1,5 @@
+import { useNavigate } from "react-router";
+import { worktreeUrl } from "./navigation";
 import { useApiResource } from "./useApiResource";
 import {
   createContext,
@@ -17,7 +19,14 @@ import { api, ApiError, errorDetail, send, withQuery } from "./api";
 import { outputSource } from "./graph";
 import { useT } from "./i18n";
 import { useShell } from "./shell";
-import type { Bundle, Environment, Run, Snapshot, Statuses } from "./types";
+import type {
+  Bundle,
+  Diagnostic,
+  Environment,
+  Run,
+  Snapshot,
+  Statuses,
+} from "./types";
 import { useWorktreeSnapshot } from "./useWorktreeSnapshot";
 
 /** How many saves of a working branch can be undone. */
@@ -51,6 +60,8 @@ export interface Worktree {
   saving: boolean;
   /** A run is being started. */
   starting: boolean;
+  /** Diagnostics revealed by the latest rejected run, scoped to this branch. */
+  runDiagnostics: Diagnostic[];
   /** Changes after Git operations, so Git indicators reload. */
   gitVersion: number;
   /** Reload the snapshot after a change; a failed read is left to polling. */
@@ -95,6 +106,11 @@ export function WorktreeProvider({
   children: ReactNode;
 }) {
   const t = useT();
+  const navigate = useNavigate();
+  const [validation, setValidation] = useState<{
+    worktree: string;
+    diagnostics: Diagnostic[];
+  }>({ worktree: id, diagnostics: [] });
   const {
     workspace,
     environment,
@@ -308,6 +324,22 @@ export function WorktreeProvider({
         send({ environment, node, entry_point: "ui", confirmed, ...options }),
       );
       setActive(id, run);
+      setValidation({ worktree: id, diagnostics: [] });
+    } catch (error) {
+      if (
+        error instanceof ApiError &&
+        error.status === 422 &&
+        Array.isArray(error.detail)
+      ) {
+        const diagnostics = error.detail as Diagnostic[];
+        setValidation({ worktree: id, diagnostics });
+        const problem = diagnostics.find((item) => item.node);
+        if (problem?.node)
+          void navigate(
+            worktreeUrl(id, "flow", environment, { node: problem.node }),
+          );
+      }
+      throw error;
     } finally {
       launching.current = false;
       setStarting(false);
@@ -344,6 +376,7 @@ export function WorktreeProvider({
     statuses,
     statusesLoaded,
     loadError,
+    runDiagnostics: validation.worktree === id ? validation.diagnostics : [],
     canEdit,
     saving: saves > 0,
     starting,

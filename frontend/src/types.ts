@@ -173,6 +173,8 @@ export interface Conflict {
 export interface Diagnostic {
   file: string;
   message: string;
+  code?: string;
+  port?: string;
   variable?: string;
   node?: string;
 }

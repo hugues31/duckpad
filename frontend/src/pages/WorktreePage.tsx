@@ -22,6 +22,7 @@ export default function WorktreePage() {
     environment,
     snapshot,
     statuses,
+    runDiagnostics,
     loadError,
     canEdit,
     saveFiles,
@@ -54,6 +55,7 @@ export default function WorktreePage() {
       <FlowToolbar />
       <WorkspaceNotices
         snapshot={snapshot}
+        runDiagnostics={runDiagnostics}
         active={statuses.active}
         onResolve={() =>
           openModal({
@@ -63,13 +65,17 @@ export default function WorktreePage() {
           })
         }
         onViewFiles={(diagnostic) =>
-          diagnostic.variable
+          diagnostic.node
             ? void navigate(
-                worktreeUrl(id, "variables", environment, {
-                  variable: diagnostic.variable,
-                }),
+                worktreeUrl(id, "flow", environment, { node: diagnostic.node }),
               )
-            : openWorktree(id, "code")
+            : diagnostic.variable
+              ? void navigate(
+                  worktreeUrl(id, "variables", environment, {
+                    variable: diagnostic.variable,
+                  }),
+                )
+              : openWorktree(id, "code")
         }
       />
       <CodePanel

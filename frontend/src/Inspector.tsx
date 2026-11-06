@@ -1,3 +1,4 @@
+import { ActionMenuButton, type ActionItem } from "./ActionMenu";
 import { PartitionInspector } from "./PartitionControls";
 import { useOptionalWorktree, usePartitionQuery } from "./worktree";
 import Select from "./Select";
@@ -83,15 +84,11 @@ export default function Inspector({
   onSave,
   onSaveDocumentation,
   onInput,
+  actions,
   onDelete,
   onRun,
   onOpen,
   onEditTemplate,
-  onViewCode,
-  onDetach,
-  onConvert,
-  onRelink,
-  onDuplicate,
   onHistory,
   onResults,
   onClose,
@@ -120,15 +117,11 @@ export default function Inspector({
     base: Snapshot,
   ) => Promise<Snapshot>;
   onInput: (port: string, source: string) => void;
+  actions: () => ActionItem[];
   onDelete: () => void;
   onRun: () => void;
   onOpen: () => void;
   onEditTemplate: () => void;
-  onViewCode: () => void;
-  onDetach: () => void;
-  onConvert: () => void;
-  onRelink: () => void;
-  onDuplicate: () => void;
   onHistory: () => void;
   /** Open the results panel on one of its tabs. */
   onResults: (tab: ResultsTab) => void;
@@ -330,6 +323,11 @@ export default function Inspector({
               ? signature.definition?.name
               : signature.definition?.label)}
         </span>
+        <ActionMenuButton
+          label={t("nodeActions")}
+          items={actions}
+          disabled={readOnly}
+        />
         <button className="icon" onClick={onClose} title={t("close")}>
           <X size={18} />
         </button>
@@ -589,38 +587,6 @@ export default function Inspector({
                   : t("editNodeCode")}
               </button>
             )}
-            {!node.component &&
-              (node.template ? (
-                <>
-                  <button
-                    className="button secondary full"
-                    onClick={onViewCode}
-                  >
-                    {t("viewNodeCode")}
-                  </button>
-                  <button className="button secondary full" onClick={onDetach}>
-                    {t("detachTemplate")}
-                  </button>
-                </>
-              ) : (
-                <>
-                  <button className="button secondary full" onClick={onConvert}>
-                    {t("convertTemplate")}
-                  </button>
-                  {node.origin &&
-                    snapshot.bundle?.templates[node.origin] !== undefined && (
-                      <button
-                        className="button secondary full"
-                        onClick={onRelink}
-                      >
-                        {t("relinkTemplate")}
-                      </button>
-                    )}
-                </>
-              ))}
-            <button className="button secondary full" onClick={onDuplicate}>
-              {t("duplicateNode")}
-            </button>
             <div className="inspector-danger">
               <button className="text-button danger" onClick={onDelete}>
                 <Trash2 size={14} />
