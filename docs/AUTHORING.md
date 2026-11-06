@@ -80,8 +80,8 @@ the entry to create independent nodes. **Import** copies a reusable definition f
 another project into this palette.
 
 Use **Add linked** to share a template. Linked nodes show a badge and template
-name. **View code** is read-only; **Edit template (N nodes)** edits every linked
-instance in the branch. **Detach from template** copies the SQL while retaining
+name. **View code** and **Edit template (N nodes)** open the shared template in
+the code editor; editing it changes every linked instance in the branch. **Detach from template** copies the SQL while retaining
 parameters and connections.
 
 **Convert to template** names a new shared definition and links the node to it.

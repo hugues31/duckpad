@@ -125,6 +125,7 @@ class DraftPreviews:
         self._require_idle(worktree)
         located = self._locate(worktree, environment, full_node, code)
         node = located.node
+        self._previewable(node)
         context = self.pool.find(worktree, environment)
         inputs, missing = self._inputs(context, located)
         if missing:
@@ -251,6 +252,11 @@ class DraftPreviews:
         node = nodes.get(full_node)
         if node is None:
             raise Problem("Node not found", 404)
+        return Located(node, edges, nodes)
+
+    @staticmethod
+    def _previewable(node: Record) -> None:
+        """Refuse a node whose preview would not compute what its run computes."""
         if node.get("language") == "python":
             raise Problem(
                 "Previews run SQL nodes; run this Python node to see its output",
@@ -265,7 +271,6 @@ class DraftPreviews:
                 422,
                 {"code": "partitioned_preview"},
             )
-        return Located(node, edges, nodes)
 
     @staticmethod
     def _retained(context: Context | None, node: str, port: str) -> Dataset | None:
@@ -447,11 +452,7 @@ class DraftPreviews:
     def _failure(error: SqlSourceError, node: Record, secrets: list[str]) -> Problem:
         """A preview error, located in the code it previewed."""
         message = project_extensions.explain_missing(redact(str(error), secrets))
-        diagnostic = {
-            **{k: v for k, v in error.diagnostic.items() if k != "executed_sql"},
-            "message": message,
-            "source": node["template_sql"],
-        }
+        diagnostic = {**error.diagnostic, "message": message, "source": node["template_sql"]}
         return Problem(message, 422, {"code": "preview_failed", "diagnostic": diagnostic})
 
     def _describe(

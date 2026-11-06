@@ -392,7 +392,8 @@ fieldset.palette-bottom {
     opacity: 0;
   }
 }
-.inspector-layer[inert] .inspector {
+.inspector-layer[inert] .inspector,
+.inspector-layer[inert] .code-panel {
   opacity: 0.5;
   transition: opacity 150ms ease 300ms;
 }

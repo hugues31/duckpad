@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import type { SqlDiagnostic } from "./types";
+import { revealPosition, type CodeEditorInstance } from "./codeEditing";
 import Editor, { loader } from "@monaco-editor/react";
 import * as monaco from "monaco-editor/esm/vs/editor/editor.api";
 import "monaco-editor/esm/vs/basic-languages/sql/sql.contribution";
@@ -104,6 +105,8 @@ export default function CodeEditor({
   height = "380px",
   diagnostic,
   revealLine,
+  onEditor,
+  label,
 }: {
   value: string;
   onChange?: (v: string) => void;
@@ -112,6 +115,10 @@ export default function CodeEditor({
   height?: string;
   diagnostic?: SqlDiagnostic | null;
   revealLine?: number;
+  /** Receives the editor once mounted. */
+  onEditor?: (instance: CodeEditorInstance) => void;
+  /** The accessible name of the text area. */
+  label?: string;
 }) {
   const editor = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
   const mark = () => {
@@ -141,14 +148,9 @@ export default function CodeEditor({
       onMount={(instance) => {
         editor.current = instance;
         mark();
-        if (revealLine) {
-          instance.setPosition({
-            lineNumber: revealLine,
-            column: diagnostic?.column || 1,
-          });
-          instance.revealLineInCenter(revealLine);
-          instance.focus();
-        }
+        if (revealLine)
+          revealPosition(instance, revealLine, diagnostic?.column || 1);
+        onEditor?.(instance);
       }}
       height={height}
       language={language}
@@ -167,6 +169,7 @@ export default function CodeEditor({
         automaticLayout: true,
         padding: { top: 16 },
         tabSize: 2,
+        ...(label ? { ariaLabel: label } : {}),
       }}
     />
   );

@@ -1,5 +1,11 @@
 import { expect, type Page } from "@playwright/test";
-import { closeEditor } from "./helpers";
+import {
+  closeCode,
+  closeEditor,
+  codePanel,
+  codeSaved,
+  openCode,
+} from "./helpers";
 import type { Snapshot } from "../src/types";
 
 /** Real Python authoring, mixed execution, captured parents and managed downloads. */
@@ -56,13 +62,11 @@ export async function verifyPython(page: Page) {
     .getByRole("button", { name: "Custom Python transform", exact: true })
     .click();
   const inspector = page.locator(".inspector");
-  await inspector
-    .getByRole("button", { name: "Edit code", exact: true })
-    .click();
-  const dialog = page.getByRole("dialog");
-  await expect(dialog.locator(".monaco-editor")).toBeVisible();
-  await dialog.locator(".monaco-editor textarea").focus();
-  await page.keyboard.press("ControlOrMeta+A");
+  const panel = await openCode(page);
+  // Previews compute SQL only.
+  await expect(
+    panel.getByRole("button", { name: "Preview", exact: true }),
+  ).toBeDisabled();
   const code = `import duckpad as dp
 class Filter(dp.Node):
     minimum: int = dp.param(default=2, ge=0)
@@ -74,8 +78,12 @@ class Filter(dp.Node):
 `;
   await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
   await page.evaluate((text) => navigator.clipboard.writeText(text), code);
-  await page.keyboard.press("ControlOrMeta+V");
-  await closeEditor(dialog);
+  await codeSaved(page, async () => {
+    await codePanel(page).locator(".monaco-editor textarea").focus();
+    await page.keyboard.press("ControlOrMeta+A");
+    await page.keyboard.press("ControlOrMeta+V");
+  });
+  await closeCode(page);
   await expect(inspector.getByRole("textbox", { name: /minimum/ })).toHaveValue(
     "2",
   );

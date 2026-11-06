@@ -8,11 +8,36 @@ node's own code and a shared SQL template. Start with the
 ## Create and edit code
 
 Click or drag **SQL** from the palette list onto the canvas, then use
-**Edit code**; the editor saves as you type. This changes only that node. Normal
-palette nodes also receive their own copy of the SQL. To share code, use
-**Convert to template** or **Add linked**; editing a shared template affects all
-of its linked nodes in that branch. See
+**Edit code**. The code opens beside the canvas, in place of the inspector, and
+saves as you type; select another node to edit its code, or close the editor to
+return to the inspector. This changes only that node. Normal palette nodes also
+receive their own copy of the SQL, without the palette entry's `-- @description`.
+To share code, use **Convert to template** or **Add linked**; editing a shared
+template affects all of its linked nodes in that branch. See
 [code ownership](AUTHORING.md#editing-node-code).
+
+**Input columns**, above the code, list the name and type of each input's
+columns: from the upstream node's last result, or described from the upstream
+code when it has none. Click a column or an input to insert its name at the
+cursor.
+
+## Preview while you edit
+
+**Preview** (**Ctrl+Enter**, **⌘Enter** on macOS) computes the code you are
+typing, saved or not, on the first 1,000 rows of each input's last result, and
+shows its outputs in the **Preview** tab of the results panel. The editor's
+selector reads 100 or 10,000 rows, or every row, instead. Fix an error at the line
+it points to, then preview again.
+
+![The docked code editor with its input columns and a preview under the canvas](images/code-preview.png)
+
+A preview keeps nothing: it records no run in History, publishes no result,
+leaves **Valid** and **Stale** unchanged and skips tests, messages and exports.
+Its inputs need results: otherwise it lists the missing ones and offers **Run
+ancestors**, which runs only the upstream nodes, then previews again. It says
+when an input result is stale. Previews need edit access, wait for an active run
+of the branch to finish, compute SQL nodes only, not Python or partitioned ones,
+and stop after 30 seconds.
 
 To create a reusable definition directly, click the **SQL** button at the bottom
 of the palette. It is created at once, without adding a node to the canvas;

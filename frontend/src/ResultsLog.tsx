@@ -351,7 +351,9 @@ export default function ResultsLog({
                       : "triggerManual",
                 )}
                 {" · "}
-                {run.scope === "project" ? t("wholeProject") : t("nodeScope")}
+                {run.scope === "project"
+                  ? t("wholeProject")
+                  : t(run.ancestors ? "ancestorsScope" : "nodeScope")}
               </span>
             </span>
           )}

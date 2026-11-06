@@ -1,5 +1,5 @@
 import { expect, type Page } from "@playwright/test";
-import { closeEditor } from "./helpers";
+import { closeCode, openCode, replaceCode } from "./helpers";
 import type { Run, Snapshot } from "../src/types";
 
 /** Verify message editing, publication and history on Northstar, locally or in a preview. */
@@ -36,15 +36,9 @@ export async function verifyMessages(page: Page) {
   const warning =
     "\n-- @message\nSELECT 'warning' AS level, count(*) || ' paid orders checked' AS message FROM {{ orders }};";
   const edit = async (sql: string) => {
-    await inspector
-      .getByRole("button", { name: "Edit code", exact: true })
-      .click();
-    const dialog = page.getByRole("dialog");
-    await expect(dialog.locator(".monaco-editor")).toBeVisible();
-    await dialog.locator(".monaco-editor textarea").focus();
-    await page.keyboard.press("ControlOrMeta+A");
-    await page.keyboard.insertText(sql);
-    await closeEditor(dialog);
+    await openCode(page);
+    await replaceCode(page, sql);
+    await closeCode(page);
   };
   const launch = async () => {
     const response = page.waitForResponse(

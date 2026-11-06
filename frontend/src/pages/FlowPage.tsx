@@ -25,6 +25,14 @@ import {
   type PathPart,
 } from "../graph";
 import Inspector from "../Inspector";
+import NodeCodePanel, { type CodeReveal } from "../NodeCodePanel";
+import {
+  DEFAULT_SAMPLE,
+  type DraftPreview,
+  type MissingInput,
+  type PreviewState,
+  type SampleSize,
+} from "../draftPreview";
 import {
   copiedNodes,
   copyNodes,
@@ -35,6 +43,7 @@ import {
 import { blockingDialogShown, typingTarget } from "../searchShortcuts";
 import {
   detachNode,
+  freshNodeCode,
   localDefinitions,
   nodeCode,
   nodeCodePath,
@@ -46,9 +55,15 @@ import LineagePanel from "../LineagePanel";
 import type { Cell } from "../lineageGraph";
 import NodePalette, { type NodeKind } from "../NodePalette";
 import ResultsPanel, { type ResultsTab } from "../ResultsPanel";
-import { api } from "../api";
+import { api, errorDetail, send } from "../api";
 import { useShell, useWorkspace } from "../shell";
-import type { Bundle, FlowNode, Graph, Snapshot } from "../types";
+import type {
+  Bundle,
+  FlowNode,
+  Graph,
+  Snapshot,
+  SqlDiagnostic,
+} from "../types";
 import { nodeLabel, useT } from "../i18n";
 import {
   isWideLayout,
@@ -74,6 +89,8 @@ interface FlowLocation {
   revealed: string;
   /** The result cell whose lineage is explained. */
   cell: Cell | null;
+  /** Whether the code of the selected node replaces the inspector. */
+  code: boolean;
 }
 
 /**
@@ -89,6 +106,7 @@ export function useFlowView(worktree: string, environment: string) {
     selected: null,
     revealed: "",
     cell: null,
+    code: false,
   };
   const [view, setView] = useState(empty);
   if (view.worktree !== worktree) setView(empty);
@@ -138,6 +156,7 @@ export default function FlowPage() {
     run,
     undo,
     redo,
+    starting,
   } = useLoadedWorktree();
   const view = useOutletContext<FlowView>();
   const { path, selected, cell } = view;
@@ -158,6 +177,15 @@ export default function FlowPage() {
     panels.set({ preview: true });
   };
   const [focusRequest, setFocusRequest] = useState<FocusRequest | null>(null);
+  // The preview of the selected node, computed from samples of its inputs.
+  const [preview, setPreview] = useState<PreviewState | null>(null);
+  const [sample, setSample] = useState<SampleSize>(DEFAULT_SAMPLE);
+  const [codeReveal, setCodeReveal] = useState<CodeReveal | null>(null);
+  const previewRequest = useRef<AbortController | null>(null);
+  // The code being edited in the code panel, which previews compute.
+  const codeDraft = useRef<{ node: string; code: string } | null>(null);
+  // The node to preview again once the ancestors it is waiting for have run.
+  const previewAfterRun = useRef<string | null>(null);
   const bundle = snapshot.bundle;
   const declared = snapshot.variables?.declarations;
   const valueProducers = useMemo(
@@ -222,6 +250,13 @@ export default function FlowPage() {
     revealed?: string,
   ) => {
     setFocusRequest(null);
+    if (prefix + (id || "") !== fullNode || nextPath) {
+      // A preview belongs to the node it computed.
+      previewRequest.current?.abort();
+      setPreview(null);
+      setCodeReveal(null);
+      if (resultsTab === "preview") setResultsTab("data");
+    }
     view.change({
       selected: id,
       cell: null,
@@ -257,6 +292,69 @@ export default function FlowPage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- once per location key
     reveal(target ? locate(bundle, target) : { path: [], id: null });
   }, [bundle, view.revealed, location.key, location.search, location.state]);
+
+  /** Compute the selected node's code, or its draft, on samples of its inputs. */
+  async function requestPreview(code?: string) {
+    if (!node || !canEdit) return;
+    const target = fullNode;
+    const draft =
+      code ??
+      (codeDraft.current?.node === target ? codeDraft.current.code : undefined);
+    previewRequest.current?.abort();
+    const request = new AbortController();
+    previewRequest.current = request;
+    // The previous rows stay visible, dimmed, until the new ones arrive.
+    setPreview((current) => ({
+      node: target,
+      environment,
+      pending: true,
+      result: current?.node === target ? current.result : undefined,
+    }));
+    showResults("preview");
+    try {
+      const result = await api<DraftPreview>(
+        `/worktrees/${worktree}/draft-preview/${encodeURIComponent(target)}`,
+        {
+          ...send({ environment, code: draft, rows: sample }),
+          signal: request.signal,
+        },
+      );
+      if (request.signal.aborted) return;
+      setPreview({ node: target, environment, pending: false, result });
+    } catch (error) {
+      if (request.signal.aborted) return;
+      const detail = errorDetail(error);
+      setPreview({
+        node: target,
+        environment,
+        pending: false,
+        error: t(
+          detail.code === "run_active"
+            ? "previewRunActive"
+            : detail.code === "python_preview"
+              ? "previewPython"
+              : detail.code === "partitioned_preview"
+                ? "previewPartitioned"
+                : "previewFailed",
+        ).replace("{message}", (error as Error).message),
+        missing: detail.missing as MissingInput[] | undefined,
+        diagnostic: detail.diagnostic as SqlDiagnostic | undefined,
+      });
+    }
+  }
+  const previewAgain = useEffectEvent(() => {
+    if (previewAfterRun.current !== fullNode) return;
+    previewAfterRun.current = null;
+    void requestPreview();
+  });
+  // Once the ancestors have run, preview again what they were computed for.
+  useEffect(() => {
+    if (!statuses.active && !starting) previewAgain();
+  }, [statuses.active, starting]);
+  const runAncestors = () => {
+    previewAfterRun.current = fullNode;
+    void run(fullNode, { ancestors: true });
+  };
 
   async function updateGraph(change: (graph: Graph) => void) {
     if (!canEdit) return;
@@ -304,7 +402,10 @@ export default function FlowPage() {
     };
     const added = await insertNode((value) => {
       const g = graphAt(value, path);
-      if (kind === "template" && !linked) detachNode(value, created, parent);
+      if (kind === "template" && !linked) {
+        detachNode(value, created, parent);
+        freshNodeCode(value, created, parent);
+      }
       g.nodes.push(created);
       if (connection)
         connectInput(
@@ -462,6 +563,7 @@ export default function FlowPage() {
       if (reusable) {
         created.template = "filter";
         detachNode(value, created, parent);
+        freshNodeCode(value, created, parent);
       } else {
         created.preset = "filter";
         (value.node_sql ||= {})[nodeCodePath(created.id, parent)] = FILTER_SQL;
@@ -499,12 +601,23 @@ export default function FlowPage() {
         signature.kind === "export" ? "write" : "read",
       ),
   );
+  // Component instances have no code: they keep the inspector.
+  const hasCode = !!node && !node.component;
+  const codeShown = view.code && hasCode && !!definition;
   const shown = {
     palette: panels.open.palette,
-    inspector: panels.open.inspector && !!node,
+    inspector: panels.open.inspector && !!node && !codeShown,
     preview: panels.open.preview && !!node,
+    code: panels.open.inspector && codeShown,
   };
   const editCode = (line?: number, target = fullNode) => {
+    // The selected node's code docks beside the canvas, in the inspector's place.
+    if (target === fullNode && hasCode) {
+      view.change({ code: true });
+      panels.set({ inspector: true });
+      if (line) setCodeReveal({ line, key: Date.now() });
+      return;
+    }
     const location = nodeLocation(bundle, target);
     if (!location) return;
     const { node, parent } = location;
@@ -529,12 +642,12 @@ export default function FlowPage() {
   };
   return (
     <div
-      className={`flow-layout ${shown.palette ? "palette-open" : ""} ${shown.inspector ? "inspector-open" : ""} ${shown.preview ? "preview-open" : ""} ${path.length ? "nested-flow" : ""}`}
+      className={`flow-layout ${shown.palette ? "palette-open" : ""} ${shown.inspector || shown.code ? "inspector-open" : ""} ${shown.preview ? "preview-open" : ""} ${path.length ? "nested-flow" : ""}`}
       style={
         {
           "--notice-height": `${NOTICE_HEIGHT * noticeCount(snapshot, statuses.active)}px`,
           "--palette-width": `${sizes.sizes.palette}px`,
-          "--inspector-width": `${sizes.sizes.inspector}px`,
+          "--inspector-width": `${codeShown ? sizes.sizes.code : sizes.sizes.inspector}px`,
           "--preview-height": `${sizes.sizes.preview}px`,
         } as CSSProperties
       }
@@ -675,6 +788,12 @@ export default function FlowPage() {
             }
             onAddFilter={addFilterNode}
             onEditCode={editCode}
+            preview={
+              preview?.node === fullNode && preview.environment === environment
+                ? preview
+                : null
+            }
+            onRunAncestors={runAncestors}
           />
         ) : null}
       </main>
@@ -692,7 +811,33 @@ export default function FlowPage() {
         hidden={!panels.open.inspector}
         inert={busy}
       >
-        {node && definition ? (
+        {node && definition && codeShown ? (
+          <NodeCodePanel
+            key={inspected}
+            snapshot={snapshot}
+            node={node}
+            parent={parent}
+            fullNode={fullNode}
+            label={nodeLabel(node, signature!, t)}
+            environment={environment}
+            readOnly={!canEdit}
+            statuses={statuses}
+            preview={
+              preview?.node === fullNode && preview.environment === environment
+                ? preview
+                : null
+            }
+            reveal={codeReveal}
+            sample={sample}
+            onSample={setSample}
+            onPreview={(code) => void requestPreview(code)}
+            onDraft={(code) => {
+              codeDraft.current =
+                code === null ? null : { node: fullNode, code };
+            }}
+            onClose={() => view.change({ code: false })}
+          />
+        ) : node && definition ? (
           <Inspector
             readOnly={!canEdit}
             key={inspected}
@@ -752,15 +897,7 @@ export default function FlowPage() {
             onRun={() => run(fullNode)}
             onOpen={() => openComponent(node.id)}
             onEditTemplate={() => editCode()}
-            onViewCode={() =>
-              openModal({
-                kind: "nodeCode",
-                worktree,
-                node: node.id,
-                parent,
-                fullNode,
-              })
-            }
+            onViewCode={() => editCode()}
             onDetach={() =>
               safe(() =>
                 save(snapshot, (value) => {

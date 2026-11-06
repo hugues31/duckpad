@@ -6,6 +6,7 @@ import { useState } from "react";
 import {
   Clock,
   Columns3,
+  Eye,
   GitCommitHorizontal,
   Loader2,
   Play,
@@ -19,7 +20,10 @@ import { nodeInterface, outputSource, type NodeInterface } from "./graph";
 import { nodeLabel, useT } from "./i18n";
 import { localDefinitions, nodeCode, nodeLocation } from "./nodeCode";
 import type { Cell } from "./lineageGraph";
+import DraftPreviewView from "./DraftPreviewView";
+import type { PreviewState } from "./draftPreview";
 import ExecutionError from "./ExecutionError";
+import { displayNodeName } from "./nodeNames";
 import ResultsColumns from "./ResultsColumns";
 import ResultsData, { type FailingRows } from "./ResultsData";
 import ResultsLog from "./ResultsLog";
@@ -38,8 +42,10 @@ import type {
 import { useApiResource } from "./useApiResource";
 
 export const RESULT_TABS = ["data", "columns", "tests", "log"] as const;
-export type ResultsTab = (typeof RESULT_TABS)[number];
+/** A tab of the panel; "preview" shows while the node has a preview. */
+export type ResultsTab = (typeof RESULT_TABS)[number] | "preview";
 export const TAB_LABELS = {
+  preview: "results_preview",
   data: "results_data",
   columns: "results_columns",
   tests: "results_tests",
@@ -102,6 +108,8 @@ export default function ResultsPanel({
   onSaveDocumentation,
   onAddFilter,
   onEditCode,
+  preview,
+  onRunAncestors,
 }: {
   readOnly: boolean;
   user: string;
@@ -128,14 +136,24 @@ export default function ResultsPanel({
   ) => Promise<unknown>;
   onAddFilter: (port: string, condition: string) => Promise<unknown>;
   onEditCode: (line?: number, fullNode?: string) => void;
+  /** The preview of this node computed from samples of its inputs, if any. */
+  preview: PreviewState | null;
+  onRunAncestors: () => void;
 }) {
   const t = useT();
   const ports = signature.outputs;
   const exportNode = signature.kind === "export";
-  const tabs = RESULT_TABS.filter(
-    (key) => ports.length > 0 || key === "tests" || key === "log",
-  );
-  const shown = tabs.includes(tab) ? tab : tabs[tabs.length - 1];
+  const tabs: ResultsTab[] = [
+    ...(preview ? (["preview"] as const) : []),
+    ...RESULT_TABS.filter(
+      (key) => ports.length > 0 || key === "tests" || key === "log",
+    ),
+  ];
+  const shown = tabs.includes(tab)
+    ? tab
+    : tab === "preview" && tabs.includes("data")
+      ? "data"
+      : tabs[tabs.length - 1];
   const [target, setTarget] = useState<ResultsTarget>({
     node: fullNode,
     port: ports[0] || "result",
@@ -391,6 +409,7 @@ export default function ResultsPanel({
       <div className="tabs results-tabs" role="tablist">
         {tabs.map((key) => {
           const Icon = {
+            preview: Eye,
             data: Table2,
             columns: Columns3,
             tests: ShieldCheck,
@@ -400,7 +419,7 @@ export default function ResultsPanel({
             <button
               key={key}
               role="tab"
-              className={shown === key ? "active" : ""}
+              className={`${shown === key ? "active" : ""} ${key === "preview" ? "draft-tab" : ""}`}
               aria-selected={shown === key}
               onClick={() => onTab(key)}
             >
@@ -415,7 +434,16 @@ export default function ResultsPanel({
           );
         })}
       </div>
-      {shown === "data" ? (
+      {shown === "preview" && preview ? (
+        <DraftPreviewView
+          key={preview.result ? "computed" : "pending"}
+          preview={preview}
+          canRun={!readOnly && !statuses.active && !worktree?.starting}
+          running={!!statuses.active || !!worktree?.starting}
+          inputName={(id) => displayNodeName(snapshot.node_names?.[id], id, t)}
+          onRunAncestors={onRunAncestors}
+        />
+      ) : shown === "data" ? (
         <>
           {failure && (
             <ExecutionError

@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useT } from "./i18n";
 
-const PANELS = ["palette", "inspector", "preview"] as const;
+// The code panel takes the inspector's place, with its own width.
+const PANELS = ["palette", "inspector", "preview", "code"] as const;
 export type Panel = (typeof PANELS)[number];
 type Sizes = Partial<Record<Panel, number>>;
 const WIDE_LAYOUT = "(min-width: 1100px)";
@@ -55,6 +56,17 @@ export function usePanelSizes() {
     palette = Math.round(180 + (palette - 180) * ratio);
     inspector = Math.round(260 + (inspector - 260) * ratio);
   }
+  // Code needs more room than the inspector; the canvas keeps at least 360 pixels.
+  const codeMax = desktop
+    ? Math.max(360, Math.min(1100, width - palette - 360))
+    : mobile
+      ? width
+      : Math.max(360, width - 320);
+  const code = clamp(
+    preferences.code ?? clamp(width * 0.4, 440, 760),
+    Math.min(360, codeMax),
+    codeMax,
+  );
   const headerHeight = mobile ? 198 : width <= 800 ? 132 : 96;
   // Keep room for the graph, its breadcrumb and navigation controls.
   const previewMax = Math.max(180, height - headerHeight - 300);
@@ -63,7 +75,7 @@ export function usePanelSizes() {
     180,
     previewMax,
   );
-  const sizes = { palette, inspector, preview };
+  const sizes = { palette, inspector, preview, code };
   const limits: Record<Panel, [number, number]> = {
     palette: [
       180,
@@ -77,6 +89,7 @@ export function usePanelSizes() {
       ),
     ],
     preview: [180, previewMax],
+    code: [Math.min(360, codeMax), codeMax],
   };
   return {
     sizes,
@@ -100,15 +113,18 @@ export type PanelSizes = ReturnType<typeof usePanelSizes>;
 /** Whether the screen leaves room for the node library beside the canvas. */
 export const isWideLayout = () => window.matchMedia(WIDE_LAYOUT).matches;
 
+/** A panel that can be hidden; the code panel shows in the inspector's place. */
+type FloatingPanel = Exclude<Panel, "code">;
+
 /** Which floating panels of the flow are open. */
 export function usePanelVisibility() {
-  const [open, setOpen] = useState<Record<Panel, boolean>>(() => ({
+  const [open, setOpen] = useState<Record<FloatingPanel, boolean>>(() => ({
     palette: isWideLayout(),
     inspector: true,
     preview: true,
   }));
   const set = useCallback(
-    (change: Partial<Record<Panel, boolean>>) =>
+    (change: Partial<Record<FloatingPanel, boolean>>) =>
       setOpen((current) => ({ ...current, ...change })),
     [],
   );
@@ -151,6 +167,8 @@ function PanelResizeHandle({
 }) {
   const t = useT();
   const horizontal = panel === "preview";
+  // The code panel is resized from the inspector's edge.
+  const side = panel === "code" ? "inspector" : panel;
   const drag = useRef<{
     pointer: number;
     coordinate: number;
@@ -162,20 +180,22 @@ function PanelResizeHandle({
       ? "resizeNodes"
       : panel === "inspector"
         ? "resizeInspector"
-        : "resizePreview",
+        : panel === "code"
+          ? "resizeCodePanel"
+          : "resizePreview",
   );
   return (
     <div
-      className={`panel-resizer resize-${panel}${active ? " active" : ""}`}
+      className={`panel-resizer resize-${side}${active ? " active" : ""}`}
       role="separator"
       tabIndex={0}
       aria-label={label}
       title={`${label}. ${t("resizeHint")}`}
       aria-orientation={horizontal ? "horizontal" : "vertical"}
       aria-controls={
-        panel === "palette"
+        side === "palette"
           ? "node-palette"
-          : panel === "inspector"
+          : side === "inspector"
             ? "node-inspector"
             : "data-preview"
       }

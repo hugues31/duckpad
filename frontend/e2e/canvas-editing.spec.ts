@@ -1,5 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
-import { autosaved, closeEditor, signIn } from "./helpers";
+import { autosaved, closeCode, codePanel, openCode, signIn } from "./helpers";
 import type { Snapshot } from "../src/types";
 
 const DOUBLED = `-- @label Doubled
@@ -288,18 +288,23 @@ test("canvas shortcuts yield to fields, editors and dialogs", async ({
   await label.press("ControlOrMeta+V");
   await label.blur();
   await expect(page.locator(".save-status")).toHaveText("All changes saved");
-  await inspector
-    .getByRole("button", { name: "Edit code", exact: true })
+  // The docked code editor keeps its own shortcuts.
+  const panel = await openCode(page);
+  await panel.locator(".monaco-editor textarea").focus();
+  await page.keyboard.press("ControlOrMeta+V");
+  await page.keyboard.press("ControlOrMeta+Z");
+  await closeCode(page);
+  // An open dialog blocks the canvas shortcuts, wherever the focus is.
+  await page
+    .getByRole("complementary", { name: "Nodes" })
+    .getByRole("button", { name: "New SQL template" })
     .click();
-  const dialog = page.getByRole("dialog");
+  const dialog = page.getByRole("dialog", { name: "New SQL template" });
   await expect(dialog.locator(".monaco-editor")).toBeVisible();
-  // The open dialog blocks the canvas shortcuts, wherever the focus is.
   await page.keyboard.press("ControlOrMeta+Z");
   await page.keyboard.press("ControlOrMeta+V");
-  await dialog.locator(".monaco-editor textarea").focus();
-  await page.keyboard.press("ControlOrMeta+V");
-  await page.keyboard.press("ControlOrMeta+Z");
-  await closeEditor(dialog);
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
   expect(reverts).toEqual([]);
   expect((await read()).bundle!.flow.nodes).toHaveLength(4);
   await expect(page.locator(".react-flow__node")).toHaveCount(4);
@@ -311,13 +316,8 @@ test("the code editor saves after a pause, with Ctrl+S and when it closes", asyn
   const { endpoint, read } = await prepare(page);
   const code = async () => (await read()).files["nodes/doubled.sql"];
   await select(page, "doubled");
-  await page
-    .locator(".inspector")
-    .getByRole("button", { name: "Edit code", exact: true })
-    .click();
-  const dialog = page.getByRole("dialog");
+  const dialog = await openCode(page);
   const state = dialog.locator(".editor-save-state");
-  await expect(dialog.locator(".monaco-editor")).toBeVisible();
   await expect(
     dialog.getByRole("button", { name: "Save changes", exact: true }),
   ).toHaveCount(0);
@@ -342,7 +342,21 @@ test("the code editor saves after a pause, with Ctrl+S and when it closes", asyn
   expect(await code()).toMatch(/\n-- paused\n-- shortcut$/);
   await expect(dialog).toBeVisible();
 
+  // Selecting another node saves the code it leaves; the panel stays open.
+  await page.keyboard.insertText("\n-- switched");
+  await select(page, "filtered");
+  await expect(codePanel(page)).toBeVisible();
+  await expect.poll(code).toMatch(/\n-- paused\n-- shortcut\n-- switched$/);
+  await select(page, "doubled");
+  // The editor reports changes once it shows the node's code.
+  await expect(codePanel(page).locator(".monaco-editor")).toContainText(
+    "switched",
+  );
+  await codePanel(page).locator(".monaco-editor textarea").focus();
+  await page.keyboard.press("ControlOrMeta+End");
   await page.keyboard.insertText("\n-- closed");
-  await closeEditor(dialog);
-  expect(await code()).toMatch(/\n-- paused\n-- shortcut\n-- closed$/);
+  await closeCode(page);
+  await expect
+    .poll(code)
+    .toMatch(/\n-- paused\n-- shortcut\n-- switched\n-- closed$/);
 });

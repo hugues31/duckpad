@@ -603,3 +603,63 @@
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+/* Preview of a node's code on samples of its inputs, which nothing keeps. */
+.draft-preview {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+.draft-preview[data-pending] .data-scroll {
+  opacity: 0.55;
+  transition: opacity 150ms ease 200ms;
+}
+.draft-preview-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  min-height: 38px;
+  padding: 6px 14px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.draft-preview-bar .muted {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.badge.draft {
+  background: #e8eefc;
+  color: #5b77be;
+}
+.results-tabs .draft-tab {
+  color: #5b77be;
+}
+.draft-preview-error {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin: 10px 14px 0;
+  flex-shrink: 0;
+}
+.draft-preview-error p {
+  flex: 1;
+  margin: 0;
+  min-width: 200px;
+}
+.draft-preview .stale-reason {
+  padding: 4px 14px;
+  font-size: 10px;
+}
+.column-heading {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  min-width: 100px;
+  padding: 10px 13px;
+  font-size: 12px;
+  font-weight: 550;
+}
