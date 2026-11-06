@@ -12,37 +12,35 @@ export async function verifyPython(page: Page) {
   const read = async (): Promise<Snapshot> =>
     (await page.request.get(endpoint)).json();
   await page.goto(`/worktrees/${worktree.id}/flow`);
+  const newTemplate = page.getByRole("button", {
+    name: "New Python template",
+    exact: true,
+  });
+  await expect(newTemplate).toBeDisabled();
+  const before = await read();
+  // Enabled from another tab: the open flow follows the policy without reloading.
+  const settings = await page.context().newPage();
+  await settings.goto(`/projects/${worktree.project}/settings/python`);
   await expect(
-    page.getByRole("button", { name: "New Python template", exact: true }),
+    settings.getByRole("checkbox", { name: /Allow dependency source builds/ }),
   ).toBeDisabled();
-  await page.goto(`/projects/${worktree.project}/settings/python`);
   await expect(
-    page.getByRole("checkbox", { name: /Allow dependency source builds/ }),
-  ).toBeDisabled();
-  await expect(
-    page.getByText(/access to the secrets of all authorized/),
+    settings.getByText(/access to the secrets of all authorized/),
   ).toBeVisible();
-  await page
+  await settings
     .getByLabel("Enable Python in this project", { exact: true })
     .click();
-  await expect(
-    page.getByRole("button", { name: "Save changes", exact: true }),
-  ).toBeEnabled();
-  await page.getByRole("button", { name: "Save changes", exact: true }).click();
-  await expect
-    .poll(
-      async () =>
-        (
-          await (
-            await page.request.get(`/api/projects/${worktree.project}/settings`)
-          ).json()
-        ).python.enabled,
-    )
-    .toBe(true);
-  await page.goto(`/worktrees/${worktree.id}/flow`);
-  await page
-    .getByRole("button", { name: "New Python template", exact: true })
-    .click();
+  const save = settings.getByRole("button", {
+    name: "Save changes",
+    exact: true,
+  });
+  await expect(save).toBeEnabled();
+  await save.click();
+  await expect(newTemplate).toBeEnabled();
+  await settings.close();
+  // Only the policy changed, not the project files or their commit.
+  expect((await read()).commit).toBe(before.commit);
+  await newTemplate.click();
   const templateDialog = page.getByRole("dialog", {
     name: "New Python template",
   });
