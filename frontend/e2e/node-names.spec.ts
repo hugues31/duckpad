@@ -43,9 +43,8 @@ test("display names follow SQL and templates through messages, lineage, usages a
     "Revenue report",
     "Filter",
   ]);
-  await expect(page.locator(".banner.error")).toContainText(
-    "flow.json: Connect input 'source' on Filter",
-  );
+  // An unconnected input is reported once a run needs it.
+  await expect(page.locator(".banner.error")).toHaveCount(0);
   await page
     .locator(".react-flow__node")
     .filter({ has: page.getByText("Filter", { exact: true }) })
@@ -54,9 +53,11 @@ test("display names follow SQL and templates through messages, lineage, usages a
     .locator(".inspector")
     .getByRole("button", { name: "Run with ancestors", exact: true })
     .click();
-  await expect(page.locator(".toast")).toContainText(
-    "Connect input source on Filter",
+  await expect(page.locator(".banner.error")).toContainText(
+    "flow.json: Connect input 'source' on Filter",
   );
+  // The banner reports it; a toast would repeat it.
+  await expect(page.locator(".toast")).toHaveCount(0);
 
   const disconnected = await read();
   disconnected.bundle!.flow.edges = [

@@ -675,7 +675,7 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
 
     @app.get("/api/projects/{project}/python/environment", response_model=None)
     def python_environment_status(project: str) -> Record:
-        from .python_environment import environment_status
+        from .python_progress import environment_status
 
         return environment_status(store.home, project)
 

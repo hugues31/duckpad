@@ -4,8 +4,8 @@ An administrator enables **Python execution** in project settings. An editor can
 then click the **Python** button at the bottom of the palette and edit the new
 template; the editor saves as you type. Click or drag its new palette entry onto
 the flow and connect its tabular ports to SQL nodes. Each ordinary insertion owns
-an independent copy of the code; **Add linked** creates instances that share the
-template. Results, parameters, messages and downloads use the same panels.
+an independent copy of the code; **Add linked** (Alt+click or right-click the
+palette entry) creates instances that share the template. Results, parameters, messages and downloads use the same panels.
 Operators run reviewed jobs; they cannot activate Python or edit its code.
 Assistant run approvals list the Python nodes that will execute.
 
@@ -103,8 +103,15 @@ standard `HTTP_PROXY` / `HTTPS_PROXY` / `NO_PROXY` variables. User and system
 `uv.toml` files can also supply these settings (see below). Cache the locked wheels
 in advance. Project manifests cannot override the operator index, cache, or build policy, including through optional dependencies or dependency groups. A `uv.lock` that takes packages from another index or file host is resolved again on an editable branch and refused for tags. Validated manifest/lock pairs are cached, so unchanged executions do not relock or contact the index. A missing offline dependency produces a preparation error. The
 operator can supply `DUCKPAD_RUNTIME_WHEEL` matching the installed runtime.
-The project’s Python settings show resolution, installation, readiness and the
-last preparation error. Environments unused for seven days are removed during
+While dependencies are resolved on save or the environment is built for a run,
+the workspace shows a notice with the current preparation stage, an indeterminate
+progress bar, elapsed time and expandable live uv output. No download percentage is
+estimated. A success closes the notice after a few seconds unless its log is open; a
+failure stays until closed. Cached environments are reused without reinstalling
+dependencies or showing the notice. The project’s Python settings retain the latest
+preparation, its error and up to 16,000 characters of log output, with credentials
+and local runtime paths masked. A preparation interrupted by a server stop is
+reported as failed. Environments unused for seven days are removed during
 later preparations; active workers hold a lease that prevents removal.
 
 ### Use an on-premises Artifactory index

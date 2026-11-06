@@ -13,7 +13,7 @@ import {
 import { useT } from "./i18n";
 import { useShell } from "./shell";
 import type { Diagnostic, Run, Snapshot } from "./types";
-import { useLoadedWorktree } from "./worktree";
+import { sameInput, useLoadedWorktree } from "./worktree";
 import { useAsyncAction } from "./useAsyncAction";
 
 /** Tabs, save state and run controls of the open working branch. */
@@ -125,16 +125,19 @@ export function FlowToolbar() {
 export function WorkspaceNotices({
   snapshot,
   active,
+  runDiagnostics,
   onResolve,
   onViewFiles,
 }: {
   snapshot: Snapshot;
   active: Run | null;
+  runDiagnostics: Diagnostic[];
   onResolve: () => void;
-  /** Show where a diagnostic applies: its variable, or the project files. */
+  /** Show where a diagnostic applies: its node, variable, or project files. */
   onViewFiles: (diagnostic: Diagnostic) => void;
 }) {
   const t = useT();
+  const diagnostics = visibleDiagnostics(snapshot, runDiagnostics);
   const nodes = Object.values(active?.nodes || {});
   const completed = nodes.filter((n) => n.status === "success").length;
   return (
@@ -171,18 +174,20 @@ export function WorkspaceNotices({
           </button>
         </div>
       )}
-      {!!snapshot.diagnostics.length && (
+      {!!diagnostics.length && (
         <div className="banner error">
           <AlertCircle size={16} />
           <span>
-            {snapshot.diagnostics.length} · {snapshot.diagnostics[0].file}:{" "}
-            {snapshot.diagnostics[0].message}
+            {diagnostics.length} · {diagnostics[0].file}:{" "}
+            {diagnostics[0].message}
           </span>
-          <button onClick={() => onViewFiles(snapshot.diagnostics[0])}>
+          <button onClick={() => onViewFiles(diagnostics[0])}>
             {t(
-              snapshot.diagnostics[0].variable
-                ? "openInVariables"
-                : "viewFiles",
+              diagnostics[0].node
+                ? "showNode"
+                : diagnostics[0].variable
+                  ? "openInVariables"
+                  : "viewFiles",
             )}
             <ArrowRight size={14} />
           </button>
@@ -208,9 +213,23 @@ export function WorkspaceNotices({
   );
 }
 
-export const noticeCount = (snapshot: Snapshot, active: Run | null) =>
+export const visibleDiagnostics = (
+  snapshot: Snapshot,
+  attempted: Diagnostic[],
+) =>
+  snapshot.diagnostics.filter(
+    (item) =>
+      item.code !== "missing_input" ||
+      attempted.some((problem) => sameInput(problem, item)),
+  );
+
+export const noticeCount = (
+  snapshot: Snapshot,
+  active: Run | null,
+  attempted: Diagnostic[],
+) =>
   Number(!!snapshot.conflicts.length) +
-  Number(!!snapshot.diagnostics.length) +
+  Number(!!visibleDiagnostics(snapshot, attempted).length) +
   Number(!!active) +
   Number(
     snapshot.worktree.read_only ||

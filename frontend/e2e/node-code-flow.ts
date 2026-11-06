@@ -1,5 +1,5 @@
 import { expect, type Page } from "@playwright/test";
-import { closeEditor } from "./helpers";
+import { closeEditor, nodeMenuAction } from "./helpers";
 import type { Snapshot } from "../src/types";
 
 /** Exercise the real UI on a local instance or an authenticated deployed preview. */
@@ -58,9 +58,7 @@ export async function verifyNodeCode(page: Page) {
   await expect(
     inspector.getByRole("textbox", { name: /marker/ }),
   ).toBeVisible();
-  await inspector
-    .getByRole("button", { name: "Convert to template", exact: true })
-    .click();
+  await nodeMenuAction(page, "Convert to template");
   const conversion = page.getByRole("dialog");
   await conversion.getByLabel("Template name").fill("Shared filter");
   await conversion
@@ -74,8 +72,8 @@ export async function verifyNodeCode(page: Page) {
   expect(shared).toBeTruthy();
   expect(snapshot.files[`nodes/${second.id}.sql`]).toBeUndefined();
   await page
-    .getByRole("button", { name: "Add linked: Shared filter", exact: true })
-    .click();
+    .getByRole("button", { name: "Shared filter", exact: true })
+    .click({ modifiers: ["Alt"] });
   await expect(
     inspector.getByRole("button", {
       name: "Edit template (2 nodes)",
@@ -89,18 +87,14 @@ export async function verifyNodeCode(page: Page) {
   await expect(inspector.getByLabel(/shared_flag/)).toBeVisible();
   await select(second.id);
   await expect(inspector.getByLabel(/shared_flag/)).toBeVisible();
-  await inspector
-    .getByRole("button", { name: "View code", exact: true })
-    .click();
+  await nodeMenuAction(page, "View code");
   await expect(
     page
       .getByRole("dialog")
       .getByRole("button", { name: "Save changes", exact: true }),
   ).toHaveCount(0);
   await page.keyboard.press("Escape");
-  await inspector
-    .getByRole("button", { name: "Detach from template", exact: true })
-    .click();
+  await nodeMenuAction(page, "Detach from template");
   await expect(
     inspector.getByRole("button", { name: "Edit code", exact: true }),
   ).toBeVisible();
@@ -110,37 +104,29 @@ export async function verifyNodeCode(page: Page) {
     snapshot.bundle!.flow.nodes.find((n) => n.id === second.id)!.origin,
   ).toBe(shared);
   // A relink is an explicit confirmation, and cancel keeps local code.
-  await inspector
-    .getByRole("button", { name: "Link to original template", exact: true })
-    .click();
+  await nodeMenuAction(page, "Link to original template");
   await page
     .getByRole("dialog")
     .getByRole("button", { name: "Cancel", exact: true })
     .click();
   expect((await read()).files[`nodes/${second.id}.sql`]).toBe(sharedText);
-  await inspector
-    .getByRole("button", { name: "Link to original template", exact: true })
-    .click();
+  await nodeMenuAction(page, "Link to original template");
   await page
     .getByRole("dialog")
     .getByRole("button", { name: "Link to original template", exact: true })
     .click();
   await expect(
     inspector.getByRole("button", {
-      name: "Detach from template",
+      name: "Edit template (2 nodes)",
       exact: true,
     }),
   ).toBeVisible();
   expect((await read()).files[`nodes/${second.id}.sql`]).toBeUndefined();
-  await inspector
-    .getByRole("button", { name: "Detach from template", exact: true })
-    .click();
+  await nodeMenuAction(page, "Detach from template");
   await expect(
     inspector.getByRole("button", { name: "Edit code", exact: true }),
   ).toBeVisible();
-  await inspector
-    .getByRole("button", { name: "Duplicate node", exact: true })
-    .click();
+  await nodeMenuAction(page, "Duplicate node");
   await expect
     .poll(async () => (await read()).bundle!.flow.nodes.length)
     .toBe(4);

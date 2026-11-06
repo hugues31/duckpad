@@ -74,8 +74,9 @@ const builtinLabels = {
   export_oracle: "Export Oracle",
   sql: "SQL transform",
 } satisfies Partial<Record<TranslationKey, string>>;
-const isBuiltin = (id: string): id is keyof typeof builtinLabels =>
-  Object.hasOwn(builtinLabels, id);
+export const isBuiltinTemplate = (
+  id: string,
+): id is keyof typeof builtinLabels => Object.hasOwn(builtinLabels, id);
 
 /** Built-in templates keep a translated label until their label is edited. */
 export function templateLabel(
@@ -83,7 +84,9 @@ export function templateLabel(
   label: string | undefined,
   t: Translate,
 ) {
-  return isBuiltin(id) && label === builtinLabels[id] ? t(id) : label || id;
+  return isBuiltinTemplate(id) && label === builtinLabels[id]
+    ? t(id)
+    : label || id;
 }
 
 /** The effective canvas label, also used when choosing a node's output. */

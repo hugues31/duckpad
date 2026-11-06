@@ -1,5 +1,5 @@
 import { expect, type Page } from "@playwright/test";
-import { closeEditor } from "./helpers";
+import { closeEditor, nodeMenuAction } from "./helpers";
 import type { Run, Snapshot } from "../src/types";
 
 /** Verify message editing, publication and history on Northstar, locally or in a preview. */
@@ -26,9 +26,7 @@ export async function verifyMessages(page: Page) {
     await node("validated").locator(".node-shape").click();
   };
   await select();
-  await inspector
-    .getByRole("button", { name: "Detach from template", exact: true })
-    .click();
+  await nodeMenuAction(page, "Detach from template");
   await expect(
     inspector.getByRole("button", { name: "Edit code", exact: true }),
   ).toBeVisible();

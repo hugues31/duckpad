@@ -45,7 +45,13 @@ def test_names_and_diagnostics_do_not_require_an_explicit_label(named_bundle, se
     assert node_name(named_bundle, "node_filter") == "Filter"
     assert usages(named_bundle)["minimum"][0]["label"] == "Filter"
     assert validate(named_bundle) == [
-        {"file": "flow.json", "node": "node_filter", "message": "Connect input 'source' on Filter"}
+        {
+            "file": "flow.json",
+            "node": "node_filter",
+            "code": "missing_input",
+            "port": "source",
+            "message": "Connect input 'source' on Filter",
+        }
     ]
     worktree = projects.create("Display names", named_bundle)["id"]
     run = join_run(store, engine.launch(worktree, "dev")["id"])
@@ -53,7 +59,7 @@ def test_names_and_diagnostics_do_not_require_an_explicit_label(named_bundle, se
     assert scoped["scope_name"] == [{"label": "Revenue report", "template": "sql"}]
     assert run["nodes"]["node_filter"]["error"] == "Connect input source on Filter"
     assert run["nodes"]["node_filter"]["label"] == "Filter"
-    with pytest.raises(Problem, match="Connect input source on Filter"):
+    with pytest.raises(Problem, match="Connect input 'source' on Filter"):
         engine.launch(worktree, "dev", "node_filter", entry_point="ui")
     assert projects.snapshot(worktree)["node_names"]["node_source"] == [
         {"label": "Revenue report", "template": "sql"}
@@ -64,6 +70,75 @@ def test_names_and_diagnostics_do_not_require_an_explicit_label(named_bundle, se
     assert expand(named_bundle, tolerant=True)[0]["node_source"]["error"] == (
         "Connect input source on Revenue report"
     )
+
+
+def test_ui_run_reports_missing_inputs_only_in_its_scope(named_bundle, services):
+    store, projects, _, engine = services
+    worktree = projects.create("Incomplete pipeline", named_bundle)["id"]
+    scoped = join_run(store, engine.launch(worktree, "dev", "node_source", entry_point="ui")["id"])
+    assert scoped["status"] == "success"
+    for target in (None, "node_filter"):
+        with pytest.raises(Problem) as rejected:
+            engine.launch(worktree, "dev", target, entry_point="ui")
+        assert rejected.value.detail == validate(named_bundle)
+        assert rejected.value.detail[0]["code"] == "missing_input"
+        assert rejected.value.detail[0]["port"] == "source"
+    named_bundle["flow"]["edges"] = [
+        {
+            "id": "input",
+            "source": "node_source",
+            "sourceHandle": "result",
+            "target": "node_filter",
+            "targetHandle": "source",
+        }
+    ]
+    connected = projects.create("Connected pipeline", named_bundle)["id"]
+    assert join_run(store, engine.launch(connected, "dev", entry_point="ui")["id"])["status"] == "success"
+
+
+def test_missing_component_input_is_reported_on_its_instance(named_bundle, services):
+    store, projects, _, engine = services
+    named_bundle["flow"]["nodes"] = [
+        {"id": "outer", "component": "wrapper", "params": {}, "position": {"x": 0, "y": 0}}
+    ]
+    named_bundle["node_sql"] = {
+        "components/branch/other.sql": "-- @label Constant\n-- @output result\nSELECT 1 AS amount;"
+    }
+    named_bundle["components"] = {
+        "branch": {
+            "name": "Branch",
+            "nodes": [
+                {"id": "inner", "template": "filter", "params": {"condition": "amount > 0"}},
+                {"id": "other", "params": {}},
+            ],
+            "edges": [],
+            "inputs": {"rows": {"node": "inner", "port": "source"}},
+            "outputs": {},
+        },
+        # Nested exposure: the outermost instance is where the input is connected.
+        "wrapper": {
+            "name": "Wrapper",
+            "nodes": [{"id": "middle", "component": "branch", "params": {}}],
+            "edges": [],
+            "inputs": {"orders": {"node": "middle", "port": "rows"}},
+            "outputs": {},
+        },
+    }
+    assert validate(named_bundle) == [
+        {
+            "file": "flow.json",
+            "node": "outer",
+            "code": "missing_input",
+            "port": "orders",
+            "message": "Connect input 'orders' on Wrapper",
+        }
+    ]
+    worktree = projects.create("Component input", named_bundle)["id"]
+    unrelated = engine.launch(worktree, "dev", "outer::middle::other", entry_point="ui")
+    assert join_run(store, unrelated["id"])["status"] == "success"
+    for target in (None, "outer::middle::inner"):
+        with pytest.raises(Problem, match="Connect input 'orders' on Wrapper"):
+            engine.launch(worktree, "dev", target, entry_point="ui")
 
 
 def test_commit_messages_name_added_removed_and_connected_nodes(named_bundle):

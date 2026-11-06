@@ -1,5 +1,6 @@
 import { Link } from "react-router";
 import { useEffect, useRef, useState } from "react";
+import { moveMenuFocus } from "./ActionMenu";
 import { Check, LogOut, Settings2 } from "lucide-react";
 import { useT } from "./i18n";
 import { usePreferenceChoices, type Preferences } from "./preferences";
@@ -65,27 +66,11 @@ export default function AccountMenu({
               close();
             }
             if (event.key === "Tab") close();
-            if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key))
-              return;
-            event.preventDefault();
-            const items = [
+            moveMenuFocus(event, [
               ...menu.current!.querySelectorAll<HTMLElement>(
                 '[role^="menuitem"]',
               ),
-            ];
-            const current = items.indexOf(
-              document.activeElement as HTMLElement,
-            );
-            const index =
-              event.key === "Home"
-                ? 0
-                : event.key === "End"
-                  ? items.length - 1
-                  : (current +
-                      (event.key === "ArrowDown" ? 1 : -1) +
-                      items.length) %
-                    items.length;
-            items[index].focus();
+            ]);
           }}
         >
           {choices.map((choice) => (

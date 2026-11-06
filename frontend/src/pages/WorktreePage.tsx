@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Outlet, useNavigate } from "react-router";
 import CodePanel from "../CodePanel";
+import { PythonPreparationNotice } from "../PythonEnvironmentStatus";
 import { FlowToolbar, WorkspaceNotices } from "../FlowToolbar";
 import { usePageRoute, worktreeUrl } from "../navigation";
 import { useT } from "../i18n";
@@ -22,10 +23,13 @@ export default function WorktreePage() {
     environment,
     snapshot,
     statuses,
+    runDiagnostics,
     loadError,
     canEdit,
     saveFiles,
     setAssistantNode,
+    saving,
+    starting,
   } = useWorktree();
   const flowView = useFlowView(id, environment);
   // Another session deleted the open branch: return to the project's main branch.
@@ -54,6 +58,7 @@ export default function WorktreePage() {
       <FlowToolbar />
       <WorkspaceNotices
         snapshot={snapshot}
+        runDiagnostics={runDiagnostics}
         active={statuses.active}
         onResolve={() =>
           openModal({
@@ -63,24 +68,35 @@ export default function WorktreePage() {
           })
         }
         onViewFiles={(diagnostic) =>
-          diagnostic.variable
+          diagnostic.node
             ? void navigate(
-                worktreeUrl(id, "variables", environment, {
-                  variable: diagnostic.variable,
-                }),
+                worktreeUrl(id, "flow", environment, { node: diagnostic.node }),
               )
-            : openWorktree(id, "code")
+            : diagnostic.variable
+              ? void navigate(
+                  worktreeUrl(id, "variables", environment, {
+                    variable: diagnostic.variable,
+                  }),
+                )
+              : openWorktree(id, "code")
         }
       />
       <CodePanel
         selectedNode={assistantNode}
-        key={id}
+        key={`code:${id}`}
         hidden={tab !== "code"}
         readOnly={!canEdit}
         snapshot={snapshot}
         onSave={saveFiles}
       />
       <Outlet key={id} context={flowView} />
+      {snapshot.python_enabled && (
+        <PythonPreparationNotice
+          key={`python:${tree.project}`}
+          project={tree.project}
+          active={saving || starting || !!statuses.active}
+        />
+      )}
     </>
   );
 }
