@@ -59,8 +59,8 @@ SELECT * FROM (VALUES
 ) AS sample(order_id, region, status, amount);
 ```
 
-Close the editor; your code is already saved. Choose **Run all**. Select the node: its **Data** tab
-under the canvas shows all four orders.
+Close the editor; your code is already saved. Choose **Run all**. Select the
+node: its **Data** tab under the canvas shows all four orders.
 
 `-- @output orders` names the table it publishes. The rest is DuckDB SQL, ending
 in a semicolon. Without inputs, the node is a source; it uses inline data. Later
@@ -136,8 +136,9 @@ SELECT 'info' AS level, COUNT(*) || ' paid orders checked' AS message
 FROM {{ paid_orders }};
 ```
 
-Close the editor and run again. **Tests** shows `amount_nonnegative` as **OK**, with zero
-failing rows. **Log** shows **3 paid orders checked** alongside the execution.
+Close the editor and run again. **Tests** shows `amount_nonnegative` as **OK**,
+with zero failing rows. **Log** shows **3 paid orders checked** alongside the
+execution.
 
 A test returns the rows that violate a rule; zero rows passes. An error test
 blocks publication when it finds failures. A message returns `level` and
@@ -147,9 +148,9 @@ blocks publication when it finds failures. A message returns `level` and
 ## 7. Change, rerun and keep your work · 2 minutes
 
 In the **Revenue report** inspector, change **status** from `paid` to `pending`;
-the change is saved after a short pause. The previous result becomes **Stale**. Run again:
-**report** now contains one North America row with **orders = 1** and
-**revenue = 50.00**. Set the parameter back to `paid`, save and rerun.
+the change is saved after a short pause. The previous result becomes **Stale**.
+Run again: **report** now contains one North America row with **orders = 1** and
+**revenue = 50.00**. Set the parameter back to `paid` and rerun.
 
 Completed saves create Git commits automatically. **Code** shows the SQL files,
 and **History** records the executions. Before a larger experiment, create a

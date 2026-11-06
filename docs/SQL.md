@@ -8,16 +8,16 @@ node's own code and a shared SQL template. Start with the
 ## Create and edit code
 
 Click or drag **SQL** from the palette list onto the canvas, then use
-**Edit code**; the editor saves as you type. This changes only that node. Normal palette nodes
-also receive their own copy of the SQL. To share code, use **Convert to template**
-or **Add linked**; editing a shared template affects all of its linked nodes in
-that branch. See
+**Edit code**; the editor saves as you type. This changes only that node. Normal
+palette nodes also receive their own copy of the SQL. To share code, use
+**Convert to template** or **Add linked**; editing a shared template affects all
+of its linked nodes in that branch. See
 [code ownership](AUTHORING.md#editing-node-code).
 
 To create a reusable definition directly, click the **SQL** button at the bottom
 of the palette. It is created at once, without adding a node to the canvas;
-edit its SQL and `@label`, and the palette entry follows. Use **Import** beside it to copy a
-template or component from another project.
+edit its SQL and `@label`, and the palette entry follows. Use **Import** beside
+it to copy a template or component from another project.
 
 The inspector's **SQL** tab compiles the current configuration without running
 it. After a run, **Results → Log → Executed SQL** shows what actually ran.

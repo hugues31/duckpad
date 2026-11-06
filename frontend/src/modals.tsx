@@ -1,4 +1,3 @@
-import type { SqlDiagnostic } from "./types";
 import {
   lazy,
   Suspense,
@@ -205,42 +204,31 @@ export function Modal({
   );
 }
 
+/** Edit a text in a dialog and save it explicitly; the dialog closes once saved. */
 export function EditorModal({
   title,
-  description,
   value,
   language = "sql",
   onSave,
   onClose,
-  readOnly = false,
-  diagnostic,
-  revealLine,
 }: {
   title: string;
-  description?: string;
   value: string;
   language?: string;
-  onSave?: (v: string) => Promise<void>;
+  onSave: (v: string) => Promise<void>;
   onClose: () => void;
-  readOnly?: boolean;
-  diagnostic?: SqlDiagnostic | null;
-  revealLine?: number;
 }) {
   const t = useT();
   const [text, setText] = useState(value);
   const { pending, error, run } = useAsyncAction();
   return (
     <Modal title={title} onClose={onClose} wide>
-      {description && <p className="modal-description">{description}</p>}
       <Suspense fallback={<p>{t("loading")}</p>}>
         <CodeEditor
           value={text}
           onChange={setText}
           language={language}
-          readOnly={readOnly}
           height="460px"
-          diagnostic={diagnostic}
-          revealLine={revealLine}
         />
       </Suspense>
       {error && <div className="notice error">{error}</div>}
@@ -248,17 +236,15 @@ export function EditorModal({
         <button className="button secondary" onClick={onClose}>
           {t("close")}
         </button>
-        {onSave && !readOnly && (
-          <button
-            className="button primary"
-            disabled={pending}
-            onClick={async () => {
-              if (await run(() => onSave(text))) onClose();
-            }}
-          >
-            {t(pending ? "saving" : "save")}
-          </button>
-        )}
+        <button
+          className="button primary"
+          disabled={pending}
+          onClick={async () => {
+            if (await run(() => onSave(text))) onClose();
+          }}
+        >
+          {t(pending ? "saving" : "save")}
+        </button>
       </footer>
     </Modal>
   );
