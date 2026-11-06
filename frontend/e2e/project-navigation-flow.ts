@@ -35,12 +35,14 @@ export async function projectNavigationFlow(page: Page) {
     name: en.projectNavigation,
   });
   await expect(navigation.getByRole("link")).toHaveCount(7);
+  const toolbar = page.locator(".flow-toolbar");
   // The new branch also offers its first run in the missing-results notice.
   await expect(
-    page
-      .locator(".flow-toolbar")
-      .getByRole("button", { name: en.run, exact: true }),
+    toolbar.getByRole("button", { name: en.run, exact: true }),
   ).toBeVisible();
+  // Opening a page focuses its toolbar for keyboard users, without a focus ring.
+  await expect(toolbar).toBeFocused();
+  await expect(toolbar).toHaveCSS("outline-style", "none");
   await navigation.getByRole("link", { name: en.jobs, exact: true }).click();
   await expect(
     navigation.getByRole("link", { name: en.jobs, exact: true }),
@@ -69,6 +71,12 @@ export async function projectNavigationFlow(page: Page) {
   await expect(page.getByLabel(en.branch, { exact: true })).toHaveValue(
     branch.id,
   );
+  const heading = page.getByRole("heading", {
+    name: en.projectSettings,
+    exact: true,
+  });
+  await expect(heading).toBeFocused();
+  await expect(heading).toHaveCSS("outline-style", "none");
   const editor = page.getByRole("form", {
     name: en.partitionSettings,
     exact: true,
