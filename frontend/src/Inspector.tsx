@@ -348,6 +348,12 @@ export default function Inspector({
         } else previewParams[key] = value;
       }
     }
+  const previewTypes =
+    previewParams?.types &&
+    typeof previewParams.types === "object" &&
+    !Array.isArray(previewParams.types)
+      ? previewParams.types
+      : {};
   // The preview edits CSV types once it reads the file; an expression or a bound variable keeps the field.
   const typesInPreview =
     csvSource &&
@@ -560,11 +566,20 @@ export default function Inspector({
                       >
                         {t("createSourceConnection")}
                       </RouterLink>
-                      <RouterLink
-                        to={`/projects/${snapshot.worktree.project}/settings/connections?worktree=${worktree}`}
-                      >
-                        {t("authorizeSourceConnection")}
-                      </RouterLink>
+                      {/* Only an existing database connection can be authorized. */}
+                      {workspace.catalog.connections.some(
+                        (c) =>
+                          workspace.catalog.connectors.find(
+                            (connector) => connector.id === c.connector,
+                          )?.family !== "storage",
+                      ) && (
+                        <RouterLink
+                          className="button secondary"
+                          to={`/projects/${snapshot.worktree.project}/settings/connections?worktree=${worktree}`}
+                        >
+                          {t("authorizeSourceConnection")}
+                        </RouterLink>
+                      )}
                     </>
                   ) : (
                     <>
@@ -649,13 +664,17 @@ export default function Inspector({
                     }
                     onChange={(value, settings) => {
                       if (parameter.name === "file" && fileSource) {
+                        // The label follows the chosen file until renamed; an expression names no file.
+                        const named = (file: Json | undefined) =>
+                          String(file || "").includes("{{")
+                            ? ""
+                            : sourceFileName(String(file || ""));
                         update((current) => ({
                           ...current,
                           label:
                             !current.label ||
-                            current.label ===
-                              sourceFileName(String(current.params.file || ""))
-                              ? sourceFileName(String(value || "")) || undefined
+                            current.label === named(current.params.file)
+                              ? named(value) || undefined
                               : current.label,
                           params: {
                             ...current.params,
@@ -665,6 +684,14 @@ export default function Inspector({
                         }));
                       } else {
                         setParameter(parameter.name, value);
+                        // Other parsing options change the columns, so type overrides no longer apply.
+                        if (
+                          typesInPreview &&
+                          (parameter.name === "delimiter" ||
+                            parameter.name === "header") &&
+                          Object.keys(previewTypes).length
+                        )
+                          setParameter("types", {});
                         if (parameter.name === listedConnection) {
                           if (listedSchema) setParameter(listedSchema, "");
                           if (listedTable) setParameter(listedTable, "");

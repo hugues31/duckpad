@@ -9,17 +9,22 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-it("lets a user remove a type override that prevents previewing the file", async () => {
+it("lists every detected column while a type override fails, so it can be removed", async () => {
   vi.stubGlobal(
     "fetch",
-    vi
-      .fn()
-      .mockResolvedValue(
-        new Response(
-          JSON.stringify({ error: "Cannot convert name to INTEGER" }),
-          { status: 422, headers: { "content-type": "application/json" } },
-        ),
+    vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          columns: [],
+          rows: [],
+          error: "Cannot convert name to INTEGER",
+          detected_columns: [
+            { name: "id", type: "BIGINT" },
+            { name: "name", type: "VARCHAR" },
+          ],
+        }),
       ),
+    ),
   );
   const onTypes = vi.fn();
   render(
@@ -34,6 +39,10 @@ it("lets a user remove a type override that prevents previewing the file", async
     "textContent",
     "Cannot convert name to INTEGER",
   );
+  expect(
+    screen.getByRole("combobox", { name: "Data type: id" }),
+  ).toHaveProperty("value", "");
+  expect(document.querySelector(".source-sample")).toBeNull();
   fireEvent.change(screen.getByRole("combobox", { name: "Data type: name" }), {
     target: { value: "" },
   });

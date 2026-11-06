@@ -27,16 +27,19 @@ def file_name(path: str) -> str:
 
 
 def list_files(folder: Path) -> list[dict]:
+    """Readable project files by name; uploads of the same name follow their upload order."""
     if not folder.exists():
         return []
-    return [
-        {"path": path.relative_to(folder).as_posix(), "name": file_name(path.name)}
-        for path in sorted(folder.rglob("*"))
+    paths = [
+        path
+        for path in folder.rglob("*")
         if path.is_file()
         and path.resolve().is_relative_to(folder.resolve())
         and not any(part.startswith(".") for part in path.relative_to(folder).parts)
         and path.suffix.lower() in FORMATS
     ]
+    paths.sort(key=lambda path: (file_name(path.name).lower(), path.stat().st_mtime_ns))
+    return [{"path": path.relative_to(folder).as_posix(), "name": file_name(path.name)} for path in paths]
 
 
 def sample(db, sql, values=None):
@@ -72,17 +75,24 @@ def preview(folder, file, options, config, requirements, imports):
         )
     except subprocess.TimeoutExpired:
         raise Problem("Source preview timed out. Try a smaller file.", 422) from None
-    if result.returncode:
+
+    def public(detail: str) -> str:
         # DuckDB errors echo their SQL and file names. Never expose server paths.
-        detail = result.stderr.strip() if result.returncode == 1 else "The file reader stopped unexpectedly."
-        for private, public in (
+        for private, shown in (
             (str(path), file_name(file)),
             (str(folder), "<project files>"),
             (config["extension_directory"], "<extensions>"),
         ):
-            detail = detail.replace(private, public)
-        raise Problem(project_extensions.explain_missing(detail), 422)
-    return json.loads(result.stdout)
+            detail = detail.replace(private, shown)
+        return project_extensions.explain_missing(detail)
+
+    if result.returncode:
+        detail = result.stderr.strip() if result.returncode == 1 else "The file reader stopped unexpectedly."
+        raise Problem(public(detail), 422)
+    sample = json.loads(result.stdout)
+    if "error" in sample:
+        sample["error"] = public(sample["error"])
+    return sample
 
 
 def read_sample(db, path, options):
@@ -102,11 +112,17 @@ def read_sample(db, path, options):
         types = options.get("types") or {}
         if not isinstance(types, dict) or not all(isinstance(v, str) for v in types.values()):
             raise Problem("Column types must map column names to types")
-        result = sample(
-            db,
-            "SELECT * FROM read_csv(?, delim=?, header=?" + (", types=?" if types else "") + ") LIMIT 20",
-            [path, sniff[0], sniff[1]] + ([types] if types else []),
-        )
+        try:
+            result = sample(
+                db,
+                "SELECT * FROM read_csv(?, delim=?, header=?" + (", types=?" if types else "") + ") LIMIT 20",
+                [path, sniff[0], sniff[1]] + ([types] if types else []),
+            )
+        except duckdb.Error as error:
+            if not types:
+                raise
+            # A failed override keeps the detected columns listed, so it can be corrected.
+            result = {"columns": [], "rows": [], "error": str(error)}
         result["detected_columns"] = [{"name": c["name"], "type": c["type"]} for c in sniff[2]]
     elif kind == "xlsx":
         result = sample(

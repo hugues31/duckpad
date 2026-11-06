@@ -293,6 +293,33 @@
   white-space: nowrap;
 }
 
+/* Long values are cut; their cell's title holds them whole. */
+.source-sample td {
+  max-width: 16em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* The types table fits the inspector: long names wrap, selects shrink. */
+.source-types {
+  table-layout: fixed;
+}
+
+.source-types td:first-child {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.source-types select {
+  width: 100%;
+}
+
+.source-error {
+  max-height: 160px;
+  overflow: auto;
+  white-space: pre-wrap;
+}
+
 .source-sample th small {
   display: block;
   color: var(--muted);

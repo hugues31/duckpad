@@ -79,9 +79,16 @@ def test_preview_options_limit_and_errors(source):
     no_header = client.post(url + "/source-preview", json={"file": uploaded["path"], "header": False})
     assert no_header.json()["rows"][0] == ["id", "name"]
     bad = client.post(url + "/source-preview", json={"file": uploaded["path"], "types": {"name": "INTEGER"}})
-    assert bad.status_code == 422
+    # A failed override keeps the detected columns, so the types table can correct it.
+    assert bad.status_code == 200, bad.text
+    assert bad.json()["rows"] == []
+    assert [column["name"] for column in bad.json()["detected_columns"]] == ["id", "name"]
     assert str(app.state.services.store.home) not in bad.text
-    assert "customers.csv" in bad.text
+    assert "customers.csv" in bad.json()["error"]
+    broken = upload(client, url, name="broken.parquet", content=b"not parquet")
+    unreadable = client.post(url + "/source-preview", json={"file": broken["path"]})
+    assert unreadable.status_code == 422
+    assert str(app.state.services.store.home) not in unreadable.text
 
 
 @pytest.mark.parametrize(
@@ -91,6 +98,14 @@ def test_preview_rejects_external_and_missing_paths(source, file):
     _, client, url = source
     response = client.post(url + "/source-preview", json={"file": file})
     assert response.status_code in (400, 404, 422)
+
+
+def test_uploads_of_the_same_name_are_listed_in_upload_order(source):
+    _, client, url = source
+    first = upload(client, url, name="b.csv")["path"]
+    second = upload(client, url, name="b.csv")["path"]
+    other = upload(client, url, name="a.csv")["path"]
+    assert [file["path"] for file in client.get(url + "/source-files").json()] == [other, first, second]
 
 
 def test_file_listing_is_project_scoped_and_hides_symlinks(source, tmp_path):

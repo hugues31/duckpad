@@ -9,6 +9,8 @@ export interface SourceSample {
   rows: Json[][];
   settings?: { delimiter?: string; header?: boolean };
   detected_columns?: Column[];
+  /** Why the type overrides could not be read; the detected columns stay listed. */
+  error?: string;
 }
 
 export const previewFile = (
@@ -56,13 +58,7 @@ export function SampleTable({ data }: { data: SourceSample }) {
           {data.rows.map((row, i) => (
             <tr key={i}>
               {row.map((value, j) => (
-                <td key={j}>
-                  {value === null
-                    ? "NULL"
-                    : typeof value === "object"
-                      ? JSON.stringify(value)
-                      : String(value)}
-                </td>
+                <SampleCell key={j} value={value} />
               ))}
             </tr>
           ))}
@@ -71,6 +67,16 @@ export function SampleTable({ data }: { data: SourceSample }) {
       {!data.rows.length && <p>{t("sourceEmpty")}</p>}
     </div>
   );
+}
+
+function SampleCell({ value }: { value: Json }) {
+  const text =
+    value === null
+      ? "NULL"
+      : typeof value === "object"
+        ? JSON.stringify(value)
+        : String(value);
+  return <td title={text}>{text}</td>;
 }
 
 export default function SourcePreview({
@@ -87,19 +93,23 @@ export default function SourcePreview({
   onTypes: (types: Record<string, Json>) => void;
 }) {
   const t = useT();
-  const key = params ? JSON.stringify([worktree, params]) : null;
-  const file = useResource(key, (signal) =>
-    new Promise<void>((resolve, reject) => {
-      const timer = setTimeout(resolve, 250);
-      signal.addEventListener(
-        "abort",
-        () => {
-          clearTimeout(timer);
-          reject(signal.reason);
-        },
-        { once: true },
-      );
-    }).then(() => previewFile(worktree, params!, signal)),
+  const key = params ? JSON.stringify([worktree, params.file]) : null;
+  // Changed options reload the same file and keep its sample meanwhile.
+  const file = useResource(
+    key,
+    (signal) =>
+      new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(resolve, 250);
+        signal.addEventListener(
+          "abort",
+          () => {
+            clearTimeout(timer);
+            reject(signal.reason);
+          },
+          { once: true },
+        );
+      }).then(() => previewFile(worktree, params!, signal)),
+    { refresh: JSON.stringify(params) },
   );
   const table = useApiResource<SourceSample>(tableUrl || null);
   const result = tableUrl ? table : file;
@@ -110,18 +120,20 @@ export default function SourcePreview({
       ? params.types
       : {};
   if (!key && !tableUrl) return null;
+  const error = result.error || result.data?.error;
+  const detected = csv ? result.data?.detected_columns : undefined;
   return (
     <section className="source-preview" aria-label={t("sourcePreview")}>
       <h4>{t("sourcePreview")}</h4>
       <p className="muted">{t("sourcePreviewHint")}</p>
       {result.pending && <p role="status">{t("sourcePreviewLoading")}</p>}
-      {result.error && (
-        <p className="notice error" role="alert">
-          {result.error}
-        </p>
+      {error && (
+        <pre className="notice error source-error" role="alert">
+          {error}
+        </pre>
       )}
-      {result.data && <SampleTable data={result.data} />}
-      {csv && (result.data || Object.keys(types).length > 0) && (
+      {result.data && !result.data.error && <SampleTable data={result.data} />}
+      {detected && (
         <table className="source-types">
           <caption>{t("sourceColumnTypes")}</caption>
           <thead>
@@ -131,11 +143,7 @@ export default function SourcePreview({
             </tr>
           </thead>
           <tbody>
-            {(
-              result.data?.detected_columns ||
-              result.data?.columns ||
-              Object.keys(types).map((name) => ({ name, type: "VARCHAR" }))
-            ).map((column) => (
+            {detected.map((column) => (
               <tr key={column.name}>
                 <td>{column.name}</td>
                 <td>

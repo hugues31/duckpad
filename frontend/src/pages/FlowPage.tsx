@@ -333,10 +333,17 @@ export default function FlowPage() {
     if (added && !position)
       setFocusRequest({ id: created.id, key: created.id, reveal: true });
   }
-  async function dropFiles(files: File[], position: FlowNode["position"]) {
+  async function dropFiles(dropped: File[], position: FlowNode["position"]) {
     if (!canEdit || additionPending.current) return;
-    if (!files.every((file) => isSourceFile(file.name)))
-      throw new Error(t("unsupportedSourceFile"));
+    const files = dropped.filter((file) => isSourceFile(file.name));
+    const skipped = dropped.filter((file) => !isSourceFile(file.name));
+    const unsupported = t("unsupportedSourceFile").replace(
+      "{files}",
+      skipped.map((file) => file.name).join(", "),
+    );
+    if (!files.length) throw new Error(unsupported);
+    // Supported files are still imported; the others are named.
+    if (skipped.length) notify(unsupported, true);
     additionPending.current = true;
     setAddingNode(true);
     try {

@@ -56,6 +56,7 @@ export default function SourceFileField({
   );
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
+  const [expression, setExpression] = useState(value.includes("{{"));
   const attempt = useRef(0);
   const choose = async (path: string) => {
     const request = ++attempt.current;
@@ -90,26 +91,30 @@ export default function SourceFileField({
         {value && !files.data?.some((file) => file.path === value) && (
           <option value={value}>{sourceFileName(value)}</option>
         )}
-        {files.data?.map((file, index) => (
-          <option key={file.path} value={file.path}>
-            {file.name}
-            {files.data!.filter((other) => other.name === file.name).length > 1
-              ? ` (${index + 1})`
-              : ""}
-          </option>
-        ))}
+        {files.data?.map((file, _, list) => {
+          // Uploads of the same name are numbered in upload order.
+          const same = list.filter((other) => other.name === file.name);
+          return (
+            <option key={file.path} value={file.path}>
+              {same.length > 1
+                ? `${file.name} (${same.indexOf(file) + 1})`
+                : file.name}
+            </option>
+          );
+        })}
       </Select>
       {expressionVariables && (
-        <details open={value.includes("{{") || undefined}>
+        <details
+          open={expression}
+          onToggle={(e) => setExpression(e.currentTarget.open)}
+        >
           <summary>{t("sourcePathExpression")}</summary>
           <ExpressionInput
             id={`${id}-expression`}
-            value={value.startsWith("/") ? "" : value}
+            value={value}
             variables={expressionVariables}
             singleLine
-            onChange={(path) => {
-              if (!String(path).startsWith("/")) onChange(path);
-            }}
+            onChange={(path) => onChange(path)}
             onBlur={onBlur}
           />
         </details>
@@ -127,6 +132,13 @@ export default function SourceFileField({
             const input = e.currentTarget;
             const file = input.files?.[0];
             if (!file) return;
+            if (!isSourceFile(file.name)) {
+              setError(
+                t("unsupportedSourceFile").replace("{files}", file.name),
+              );
+              input.value = "";
+              return;
+            }
             setPending(true);
             setError("");
             try {

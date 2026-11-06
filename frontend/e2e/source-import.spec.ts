@@ -38,7 +38,12 @@ test("drop CSV and JSON, preview before a run, edit types and reuse a project fi
     await drop(page, [
       { name: "customers.csv", content: "id;name\n001;Alice\n002;Bob\n" },
       { name: "events.json", content: '[{"event":"signup","count":2}]' },
+      { name: "notes.txt", content: "not a source" },
     ]);
+    // Supported files are imported; the others are named.
+    await expect(
+      page.getByText("notes.txt: choose CSV, Parquet, XLSX or JSON files."),
+    ).toBeVisible();
     await expect(page.locator(".react-flow__node")).toHaveCount(2);
     const inspector = page.locator(".inspector");
     await expect(inspector.locator(".source-sample")).toContainText("Alice");
@@ -68,6 +73,18 @@ test("drop CSV and JSON, preview before a run, edit types and reuse a project fi
         .selectOption("VARCHAR"),
     );
     await expect(inspector.locator(".source-sample")).toContainText("001");
+    // A failed override keeps every detected column listed, so it can be undone.
+    const nameType = inspector.getByRole("combobox", {
+      name: "Data type: name",
+      exact: true,
+    });
+    await nameType.selectOption("BIGINT");
+    await expect(inspector.getByRole("alert")).toContainText("customers.csv");
+    await expect(
+      inspector.getByRole("combobox", { name: "Data type: id", exact: true }),
+    ).toHaveValue("VARCHAR");
+    await autosaved(page, () => nameType.selectOption(""));
+    await expect(inspector.locator(".source-sample")).toContainText("001");
     const response = await page.request.post(`${endpoint}/runs`, {
       data: { environment: "dev" },
     });
@@ -92,6 +109,18 @@ test("drop CSV and JSON, preview before a run, edit types and reuse a project fi
       .toBe(";");
     current = await snapshot();
     expect(current.bundle!.flow.nodes[2].label).toBe("customers.csv");
+    // Another delimiter changes the columns, so their type overrides are dropped.
+    await autosaved(page, () =>
+      inspector
+        .getByRole("combobox", { name: "Data type: id", exact: true })
+        .selectOption("VARCHAR"),
+    );
+    await autosaved(page, () =>
+      inspector.getByRole("textbox", { name: /delimiter/ }).fill(","),
+    );
+    await expect
+      .poll(async () => (await snapshot()).bundle!.flow.nodes[2].params.types)
+      .toEqual({});
     await page.reload();
     await expect(page.locator(".react-flow__node")).toHaveCount(3);
   } finally {
