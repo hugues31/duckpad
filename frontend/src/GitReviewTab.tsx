@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { api, send } from "./api";
 import ComparisonView from "./ComparisonView";
+import GitDataImpact from "./GitDataImpact";
 import { TabStatus, useTabAction } from "./gitTabs";
 import type { MergeChoice, MergeReview } from "./gitTypes";
 import { useT } from "./i18n";
@@ -31,7 +32,7 @@ export default function GitReviewTab({
   onChanged: () => Promise<void>;
 }) {
   const t = useT();
-  const { snapshot } = useWorktree();
+  const { snapshot, environment } = useWorktree();
   const { pending, error, run, retry } = useTabAction();
   const [review, setReview] = useState(proposal);
   const [integrated, setIntegrated] = useState<MergeReview | null>(null);
@@ -67,12 +68,15 @@ export default function GitReviewTab({
       <h3>
         {review.source} → {review.destination}
       </h3>
-      <p>
-        {t("commonBase")}: <code>{review.base_head.slice(0, 12)}</code> ·{" "}
-        {t("incoming")}: <code>{review.source_head.slice(0, 12)}</code> ·{" "}
-        {t("current")}: <code>{review.target_head.slice(0, 12)}</code>
-      </p>
-      <p className="muted">{t("reviewMergeHint")}</p>
+      <details>
+        <summary>{t("gitDetails")}</summary>
+        <p>
+          {t("commonBase")}: <code>{review.base_head.slice(0, 12)}</code> ·{" "}
+          {t("incoming")}: <code>{review.source_head.slice(0, 12)}</code> ·{" "}
+          {t("current")}: <code>{review.target_head.slice(0, 12)}</code>
+        </p>
+        <p className="muted">{t("reviewMergeHint")}</p>
+      </details>
       {review.conflicts.length > 0 && (
         <section>
           <h3>
@@ -136,6 +140,9 @@ export default function GitReviewTab({
         report={review.comparison}
         storageKey={storageKey + ".reviewFilters"}
       />
+      {!integrated && (
+        <GitDataImpact review={review} environment={environment} />
+      )}
       {!integrated ? (
         <div className="git-controls">
           <button className="button secondary" onClick={onCancel}>

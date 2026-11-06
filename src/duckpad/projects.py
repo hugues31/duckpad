@@ -236,6 +236,8 @@ class Projects:
         result = {"id": key, "project": worktree["project"], "branch": branch, "path": str(path)}
         try:
             files = self.read_files(result)
+            if start:
+                self.git(repository, "config", f"branch.{branch}.duckpad-origin", worktree["branch"])
             self.store.put("worktree", key, result)
         except Exception:
             shutil.rmtree(path, ignore_errors=True)

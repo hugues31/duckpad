@@ -237,6 +237,15 @@ class GitReview(BaseModel):
     source: str
 
 
+class GitDataComparison(BaseModel):
+    environment: str
+    node: str
+    port: str = "result"
+    before: str
+    after: str
+    key: str | None = None
+
+
 class GitChoices(BaseModel):
     choices: dict[str, Literal["base", "current", "incoming"]] = Field(default_factory=dict)
 

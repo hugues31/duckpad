@@ -27,6 +27,7 @@ export default function GitSyncButton({
     : error
       ? `${t("sync_unavailable")}: ${error}`
       : t("loading");
+  if (!state?.url && !error) return null;
   return (
     <button
       className="button secondary small git-status-button"
@@ -44,7 +45,7 @@ export default function GitSyncButton({
       )}
       <span>
         {state?.ahead !== null && state?.ahead !== undefined
-          ? `${state.ahead} ↑ / ${state.behind} ↓`
+          ? `↓${state.behind ?? "—"} ↑${state.ahead}`
           : t("gitSynchronization")}
       </span>
     </button>

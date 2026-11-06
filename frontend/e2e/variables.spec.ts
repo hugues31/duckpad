@@ -478,8 +478,9 @@ test("try another value on a branch and compare it with main (workflow 5)", asyn
     order_status: { default: "paid" },
   });
 
+  await page.getByRole("link", { name: "History", exact: true }).click();
   await page
-    .getByRole("button", { name: "Git synchronization", exact: true })
+    .getByRole("button", { name: "Compare versions", exact: true })
     .click();
   const git = page.getByRole("dialog", { name: "Project Git workspace" });
   await git
@@ -684,8 +685,9 @@ test("merge conflicts on variables are resolved per variable", async ({
     variable.description = "Statuses counted as revenue.";
   });
   await page.goto(url.replace("/api", "") + "/flow");
+  await page.getByRole("link", { name: "History", exact: true }).click();
   await page
-    .getByRole("button", { name: "Git synchronization", exact: true })
+    .getByRole("button", { name: "Compare versions", exact: true })
     .click();
   const dialog = page.getByRole("dialog", { name: "Project Git workspace" });
   await dialog

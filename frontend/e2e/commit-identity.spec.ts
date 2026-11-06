@@ -59,8 +59,9 @@ test("local collaborators save under their own identities and see them in Git hi
           ).items[0].author,
       )
       .toBe(username);
+    await member.getByRole("link", { name: "History", exact: true }).click();
     await member
-      .getByRole("button", { name: "Git synchronization", exact: true })
+      .getByRole("button", { name: "Compare versions", exact: true })
       .click();
     const git = member.getByRole("dialog", { name: "Project Git workspace" });
     await git

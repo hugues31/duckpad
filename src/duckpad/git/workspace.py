@@ -477,6 +477,14 @@ class GitWorkspace:
                     "ref": ref,
                     "name": name,
                     "head": head,
+                    "origin": (
+                        self.git(
+                            worktree["path"], "config", "--get", f"branch.{name}.duckpad-origin", check=False
+                        )
+                        or None
+                    )
+                    if not remote
+                    else None,
                     "remote": remote,
                     "current": bool(tree and tree["id"] == worktree_id),
                     "worktree": tree["id"] if tree else None,
@@ -577,6 +585,24 @@ class GitWorkspace:
         for commit in commits:
             self.remember(self.rejected, commit, message)
         raise Problem(message, 422)
+
+    def prepare_origin(self, worktree_id):
+        """Review this branch into its recorded origin; older branches default to main."""
+        with self.projects.locked(worktree_id) as source:
+            origin = (
+                self.git(
+                    source["path"],
+                    "config",
+                    "--get",
+                    f"branch.{source['branch']}.duckpad-origin",
+                    check=False,
+                )
+                or "main"
+            )
+            destination = self.store.find_worktree(source["project"], origin)
+            if not destination or destination["id"] == worktree_id:
+                raise Problem("Open the origin branch or choose a destination in Branches.", 409)
+            return self.prepare(destination["id"], "refs/heads/" + source["branch"])
 
     def prepare(self, destination, source_ref, remote_guard=None):
         if source_ref.startswith(("refs/heads/", "refs/remotes/origin/")):

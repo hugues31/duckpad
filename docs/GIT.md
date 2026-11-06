@@ -52,8 +52,8 @@ the reviewed branch commit.
 
 ## Compare versions
 
-Open **Git synchronization** beside the branch selector, or **Compare versions**
-in History. Choose **A: reference** and **B: target** from local branches, fetched
+Open **Compare versions** in History, or the synchronization status beside the
+branch selector when a remote is connected. Choose **A: reference** and **B: target** from local branches, fetched
 remote branches, tags, commit IDs or **Working files**. The resolved commits,
 author and date appear below each selection. **Swap A/B** reverses the comparison.
 
@@ -66,7 +66,9 @@ worktree for the browser session.
 The comparison workspace includes a resizable element list, read-only graph and
 before/after inspector. Added (`+`), removed (`−`), modified (`~`) and unchanged
 (`=`) elements remain distinguishable without color. Deleted nodes and connections
-are inspectable. SQL uses Monaco's read-only diff editor. Component definitions,
+are inspectable. Modified elements show only changed fields, including individual
+parameters. Unchanged fields and code remain under **Full definition**; changed
+SQL uses Monaco's read-only diff editor. Component definitions,
 boundary ports, exposed parameters, node parameters, project variables and
 documentation have their own logical entries, identified by stable IDs and
 component paths. A variable lists the root flow parameters bound to it.
@@ -111,8 +113,17 @@ the new branch starts at that exact commit. Opening a revision from the History
 page preselects it. **Enter a Git reference (advanced)** also accepts an existing
 branch name, tag, or commit.
 
-Choose an explicit source and destination, compare them, then select **Review
-merge**. The review displays the common base and exact heads. Conflicts use node
+Results belong to each worktree. A new working branch shows **No results on this
+branch**, its node count, and **Run all** until execution starts. Results from the
+source branch are not copied.
+
+**Compare & merge** opens a review directly into the branch from which the working
+branch was created. That origin is recorded locally when creating a branch;
+branches created before this feature default to main. If the origin is no longer
+open, use **Branches** to open it or choose another destination. The Branches tab
+also supports explicit source/destination selection and **Review merge**.
+
+The review keeps the common base and exact heads under **Details**. Conflicts use node
 or component names with the file path underneath. For every conflicting field,
 inspect base/current/incoming values and choose one. Changed characters are
 highlighted: additions are underlined and removed base characters are struck
@@ -135,6 +146,22 @@ and its worktree. Main, the currently open worktree, the destination, dirty work
 untracked files, active executions and unmerged commits are protected. Cleanup
 is explicit; no branch is deleted automatically.
 
+### Data impact
+
+For modified nodes with current, complete results on both local branches,
+**Data impact** lists output row counts and column additions, removals and type
+changes in the selected environment. **Calculate row changes** reads those stored
+outputs only when requested. It compares the destination's output with the source
+branch's output; it does not predict the unexecuted merge proposal or run SQL nodes.
+
+Without a comparison key, the diff counts whole rows, including duplicates, as
+additions and removals. Select a common, unique, non-null column to distinguish
+modified rows from added or deleted keys. Row comparisons use common columns of
+matching types and support up to 50,000 rows per output. Column changes remain
+available for larger outputs or changed types. Stale, incomplete, partitioned and
+remote-only outputs are excluded. Results replaced since the section loaded are
+rejected; reload the section before calculating again.
+
 ### Concurrent saves
 
 If another tab or user saves incompatible edits, select **Save resolution**.
@@ -156,7 +183,8 @@ If the saved files changed again, review the refreshed evidence before retrying.
 
 ## Origin, fetch, pull and push
 
-A project administrator configures one **origin** and an explicit mapping from
+A project administrator opens **Project settings → General → Connect or configure
+a Git repository** to configure one **origin** and an explicit mapping from
 the current local branch to its remote branch. Origin is shared across worktrees;
 each branch has its own mapping. Settings live in instance metadata and Git's
 shared configuration, outside versioned project files. Disconnecting origin keeps
@@ -170,14 +198,18 @@ Use SSH (`git@example.com:team/project.git` or
 must be allowed by the instance's [Git hosts](#network-credentials). Authentication
 errors never echo raw Git output. Each network operation has a 30-second limit.
 
-1. **Fetch** updates remote-tracking references and the last successful check. It
+Without a remote, no synchronization button appears in the top bar. With a remote,
+one status button shows incoming and outgoing commit counts, such as **↓2 ↑1**, and
+opens the **Pull / Push** actions. Commit IDs, manual Fetch and reload controls,
+and synchronization explanations are under **Details**.
+
+1. **Fetch**, including the fetch performed by Pull and Push, updates remote-tracking references and the last successful check. It
    does not change local branches or project files. The status distinguishes an
    unverified remote, up-to-date/ahead/behind/diverged branches, a first publication,
    a deleted remote branch and unrelated histories.
-2. **Review incoming changes** uses the displayed fetched head and opens the same
-   semantic review as a local merge. Fetch again first when newer remote knowledge
-   is needed. Unrelated or invalid incoming definitions cannot be adopted.
-3. **Review publication** shows the definitions that the displayed local commit
+2. **Pull** fetches current remote knowledge and opens the same semantic review as
+   a local merge. Unrelated or invalid incoming definitions cannot be adopted.
+3. **Push** fetches current remote knowledge and shows the definitions that the local commit
    would publish. **Publish reviewed commit** publishes that exact commit to the
    displayed branch. The fetched remote head must be its ancestor. An exact-head
    lease rejects a remote race, including an update between inspection and push.

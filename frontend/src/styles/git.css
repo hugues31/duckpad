@@ -308,3 +308,22 @@
     display: none;
   }
 }
+.branch-results-notice {
+  position: absolute;
+  z-index: 25;
+  top: calc(var(--stage-top) + 40px);
+  left: calc(var(--canvas-left) + 12px);
+  right: calc(var(--canvas-right) + 12px);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+.change-summary {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

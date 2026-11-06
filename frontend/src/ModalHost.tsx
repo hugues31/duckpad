@@ -69,7 +69,7 @@ type WorktreeModal = { worktree: string } & (
   | { kind: "newBranch"; revision?: string }
   | {
       kind: "git";
-      mode?: "compare" | "branches" | "sync";
+      mode?: "compare" | "branches" | "sync" | "review";
       commit?: string;
       entity?: string;
     }

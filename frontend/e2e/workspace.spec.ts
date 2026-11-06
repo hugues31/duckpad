@@ -181,10 +181,6 @@ test("Git branch creation, isolated edits and explicit merge", async ({
     .click();
   await expect(page.getByRole("dialog")).toBeVisible();
   await page
-    .getByRole("dialog")
-    .getByRole("button", { name: "Review merge", exact: true })
-    .click();
-  await page
     .getByRole("button", { name: "Apply reviewed merge", exact: true })
     .click();
   await expect(page.getByRole("dialog")).toContainText("Branch merged");

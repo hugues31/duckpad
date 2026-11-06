@@ -30,7 +30,7 @@ async function createProject(page: Page) {
   expect(response.ok()).toBeTruthy();
   await page.goto(`/worktrees/${tree.id}/flow`);
   await expect(
-    page.getByRole("button", { name: "Git synchronization", exact: true }),
+    page.getByTitle("New working branch", { exact: true }),
   ).toBeVisible();
   return tree;
 }
@@ -48,13 +48,100 @@ async function change(page: Page, id: string, mutate: (bundle: any) => void) {
 }
 
 async function openGit(page: Page, tab = "Compare versions") {
+  await page.getByRole("link", { name: "History", exact: true }).click();
   await page
-    .getByRole("button", { name: "Git synchronization", exact: true })
+    .getByRole("button", { name: "Compare versions", exact: true })
     .click();
   const dialog = page.getByRole("dialog", { name: "Project Git workspace" });
   await dialog.getByRole("button", { name: tab, exact: true }).first().click();
   return dialog;
 }
+
+test("new branch explains missing results and reviews a parameter change into its origin in one click", async ({
+  page,
+}) => {
+  const main = await createProject(page);
+  await change(page, main.id, (bundle) => {
+    bundle.templates.query = bundle.templates.query.replace(
+      "SELECT",
+      "SELECT 1 AS id,",
+    );
+  });
+  const initial = await (
+    await page.request.post(`/api/worktrees/${main.id}/runs`, {
+      data: { environment: "dev" },
+    })
+  ).json();
+  await expect
+    .poll(
+      async () =>
+        (await (await page.request.get(`/api/runs/${initial.id}`)).json())
+          .status,
+    )
+    .toBe("success");
+  await expect(
+    page.getByRole("button", { name: "Git synchronization", exact: true }),
+  ).toBeHidden();
+  await page.getByTitle("New working branch", { exact: true }).click();
+  const create = page.getByRole("dialog", { name: "New working branch" });
+  await create
+    .getByLabel("Branch name", { exact: true })
+    .fill("experiment/quick-review");
+  await create.getByRole("button", { name: "Create", exact: true }).click();
+  await expect(create).toBeHidden();
+  const banner = page.locator(".branch-results-notice");
+  await expect(banner).toBeVisible();
+  await expect(banner).toContainText("1 node");
+  await page.locator('.react-flow__node[data-id="revenue"]').click();
+  await page.getByLabel("minimum", { exact: true }).fill("10");
+  await page.getByLabel("minimum", { exact: true }).blur();
+  await banner.getByRole("button", { name: "Run all" }).click();
+  await expect(banner).toBeHidden();
+  await expect(
+    page.locator('.react-flow__node[data-id="revenue"]'),
+  ).toContainText("1 row");
+  let rowReads = 0;
+  page.on("request", (request) => {
+    if (request.method() === "POST" && request.url().endsWith("/data"))
+      rowReads++;
+  });
+  await page
+    .getByRole("button", { name: "Compare & merge", exact: true })
+    .click();
+  const review = page.getByRole("dialog", { name: "Project Git workspace" });
+  await expect(
+    review.getByRole("heading", { name: "experiment/quick-review → main" }),
+  ).toBeVisible();
+  await expect(review.locator(".comparison-values tbody tr")).toHaveCount(1);
+  await expect(review.locator(".comparison-values")).toContainText(
+    "params.minimum",
+  );
+  await expect(review.locator(".monaco-diff-editor")).toHaveCount(0);
+  await expect(
+    review.getByText("Full definition").locator(".."),
+  ).not.toHaveAttribute("open", "");
+  const impact = review.getByRole("region", { name: "Data impact" });
+  await expect(
+    impact.getByRole("button", { name: "Calculate row changes" }),
+  ).toBeVisible();
+  expect(rowReads).toBe(0);
+  await impact.getByLabel("Comparison key").selectOption("id");
+  await impact.getByRole("button", { name: "Calculate row changes" }).click();
+  await expect(impact.getByRole("status")).toContainText("Rows modified: 1");
+  expect(rowReads).toBe(1);
+  await review.getByRole("button", { name: "Apply reviewed merge" }).click();
+  await expect(review).toContainText("Branch merged");
+  const merged = await (
+    await page.request.get(`/api/worktrees/${main.id}`)
+  ).json();
+  expect(merged.bundle.flow.nodes[0].params.minimum).toBe(10);
+  await page.keyboard.press("Escape");
+  await page.goto(`/projects/${main.project}/settings/general`);
+  await page
+    .getByRole("button", { name: "Connect or configure a Git repository" })
+    .click();
+  await expect(page.getByLabel("Repository URL")).toBeVisible();
+});
 
 for (const language of ["en", "fr"] as const) {
   test(`invalid branch names explain how to recover in ${language}`, async ({
@@ -148,7 +235,7 @@ test("semantic comparison, actual parent, filters, frozen revisions and responsi
   await page.keyboard.press("Escape");
   await expect(dialog).toBeHidden();
   await expect(
-    page.getByRole("button", { name: "Git synchronization", exact: true }),
+    page.getByRole("button", { name: "Compare versions", exact: true }),
   ).toBeFocused();
   expect(writes).toEqual([]);
   expect(errors).toEqual([]);
@@ -207,7 +294,7 @@ test("loaded comparison editors close and switch elements without disposing atta
     await page.keyboard.press("Escape");
     await expect(dialog).toBeHidden();
     await expect(
-      page.getByRole("button", { name: "Git synchronization", exact: true }),
+      page.getByRole("button", { name: "Compare versions", exact: true }),
     ).toBeFocused();
   }
   expect(errors).toEqual([]);
@@ -306,11 +393,15 @@ test("configure origin, fetch, review first publication, integrate incoming chan
     .fill(`https://example.invalid/e2e/${main.id.replaceAll("_", "-")}.git`);
   await dialog.getByLabel("Remote branch", { exact: true }).fill("main");
   await dialog.getByRole("button", { name: "Save configuration" }).click();
+  if (
+    !(await dialog
+      .getByRole("button", { name: "Fetch", exact: true })
+      .isVisible())
+  )
+    await dialog.getByText("Details", { exact: true }).click();
   await dialog.getByRole("button", { name: "Fetch", exact: true }).click();
   await expect(dialog).toContainText("Ready for first publication");
-  await dialog
-    .getByRole("button", { name: "Review publication", exact: true })
-    .click();
+  await dialog.getByRole("button", { name: "Push", exact: true }).click();
   await dialog
     .getByRole("button", { name: "Publish reviewed commit", exact: true })
     .click();
@@ -341,18 +432,22 @@ test("configure origin, fetch, review first publication, integrate incoming chan
   );
   expect(pushed.ok()).toBeTruthy();
   await dialog.getByRole("button", { name: "Reload state" }).click();
+  if (
+    !(await dialog
+      .getByRole("button", { name: "Fetch", exact: true })
+      .isVisible())
+  )
+    await dialog.getByText("Details", { exact: true }).click();
   await dialog.getByRole("button", { name: "Fetch", exact: true }).click();
   await expect(dialog.locator(".git-sync-summary")).toContainText("Behind");
-  await dialog.getByRole("button", { name: "Review incoming changes" }).click();
+  await dialog.getByRole("button", { name: "Pull" }).click();
   await expect(dialog).toContainText("origin/main → main");
   await dialog.getByRole("button", { name: "Apply reviewed merge" }).click();
   await expect(dialog).toContainText("Branch merged");
   await dialog
     .getByRole("button", { name: "Git synchronization", exact: true })
     .click();
-  await dialog
-    .getByRole("button", { name: "Review publication", exact: true })
-    .click();
+  await dialog.getByRole("button", { name: "Push", exact: true }).click();
   await dialog
     .getByRole("button", { name: "Publish reviewed commit", exact: true })
     .click();
@@ -360,7 +455,7 @@ test("configure origin, fetch, review first publication, integrate incoming chan
   await page.keyboard.press("Escape");
   await expect(
     page.getByRole("button", { name: "Git synchronization", exact: true }),
-  ).toContainText("0 ↑ / 0 ↓");
+  ).toContainText("↓0 ↑0");
 });
 
 test("outdated comparison responses cannot replace the latest selection", async ({
@@ -405,8 +500,9 @@ test("SQL inspection is read-only in French and dark theme", async ({
   await page
     .getByRole("menuitemradio", { name: "French", exact: true })
     .click();
+  await page.getByRole("link", { name: fr.history, exact: true }).click();
   await page
-    .getByRole("button", { name: fr.gitSynchronization, exact: true })
+    .getByRole("button", { name: fr.compareVersions, exact: true })
     .click();
   const dialog = page.getByRole("dialog", { name: fr.gitWorkspace });
   await dialog
@@ -567,7 +663,8 @@ test("a failed history page keeps the comparison and Retry loads that page again
   await panel.getByRole("button", { name: "Retry", exact: true }).click();
   await expect(panel.locator(".git-commit")).toHaveCount(history.items.length);
   await expect(panel.getByRole("alert")).toHaveCount(0);
-  expect(pages).toEqual(["first", "1", "1"]);
+  // History loads once on the page, then once inside the comparison dialog.
+  expect(pages).toEqual(["first", "first", "1", "1"]);
   await expect(dialog.locator(".change-list")).toContainText("Latest name");
 });
 
@@ -614,15 +711,16 @@ test("closing the dialog during an action neither navigates nor closes the next 
   // Let the late action finish before checking that it changed nothing.
   await page.evaluate(() => new Promise((resolve) => setTimeout(resolve, 500)));
   await expect(next).toBeVisible();
-  await expect(page).toHaveURL(new RegExp(`/worktrees/${main.id}/flow`));
+  await expect(page).toHaveURL(new RegExp(`/worktrees/${main.id}/history`));
 });
 
 test("the branches tab creates branches with the shared branch dialog", async ({
   page,
 }) => {
   const main = await createProject(page);
+  await page.getByRole("link", { name: "History", exact: true }).click();
   await page
-    .getByRole("button", { name: "Git synchronization", exact: true })
+    .getByRole("button", { name: "Compare versions", exact: true })
     .click();
   const dialog = page.getByRole("dialog", { name: "Project Git workspace" });
   const close = dialog.getByRole("button", { name: "Close", exact: true });
@@ -645,7 +743,7 @@ test("the branches tab creates branches with the shared branch dialog", async ({
   await page.keyboard.press("Escape");
   await expect(create).toBeHidden();
   const opener = page.getByRole("button", {
-    name: "Git synchronization",
+    name: "Compare versions",
     exact: true,
   });
   await expect(opener).toBeFocused();
@@ -666,7 +764,7 @@ test("the branches tab creates branches with the shared branch dialog", async ({
       w.project === main.project && w.branch === "experiment/from-git",
   );
   expect(branch).toBeTruthy();
-  await expect(page).toHaveURL(new RegExp(`/worktrees/${branch.id}/flow`));
+  await expect(page).toHaveURL(new RegExp(`/worktrees/${branch.id}/history`));
 });
 
 test("the synchronization button reports a failed status check and retries it", async ({
@@ -687,7 +785,7 @@ test("the synchronization button reports a failed status check and retries it", 
   );
   await page.unroute("**/git/remote");
   await button.click();
-  await expect(button).toHaveAttribute("title", /· Disconnected ·/);
+  await expect(button).toBeHidden();
   await expect(
     page.getByRole("dialog", { name: "Project Git workspace" }),
   ).toBeVisible();

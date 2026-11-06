@@ -37,12 +37,24 @@ const fieldOf = (value: unknown, field: string): unknown =>
   typeof value === "object" && value !== null
     ? (value as Record<string, unknown>)[field]
     : undefined;
+const pathValue = (value: unknown, path: string): unknown =>
+  path === "value" && (value === null || typeof value !== "object")
+    ? value
+    : path.split("/").reduce(fieldOf, value);
 const valueText = (value: unknown) =>
   value === undefined || value === null
     ? "—"
     : typeof value === "string"
       ? value
       : JSON.stringify(value, null, 2);
+
+function visibleFields(entity: EntityChange) {
+  if (entity.status === "modified") return entity.fields;
+  const value = entity.after ?? entity.before;
+  return value !== null && typeof value === "object"
+    ? Object.keys(value).sort()
+    : ["value"];
+}
 
 function ComparisonGraph({
   entities,
@@ -313,6 +325,15 @@ export default function ComparisonView({
                 {e.categories.map(translateValue).join(", ")}
               </small>
               <small>{e.scope || e.file}</small>
+              {e.status === "modified" &&
+                e.fields.length === 1 &&
+                e.fields[0] !== "sql" && (
+                  <small className="change-summary">
+                    {e.fields[0].replaceAll("/", ".")}:{" "}
+                    {valueText(pathValue(e.before, e.fields[0]))} →{" "}
+                    {valueText(pathValue(e.after, e.fields[0]))}
+                  </small>
+                )}
             </button>
           ))}
         </nav>
@@ -356,9 +377,7 @@ export default function ComparisonView({
                   </button>
                 )}
               </div>
-              <p className="muted">
-                {active.id} · {active.file}
-              </p>
+
               {active.kind === "template" || active.kind === "file" ? (
                 <Suspense fallback={<p>{t("loading")}</p>}>
                   <CodeDiff
@@ -379,31 +398,16 @@ export default function ComparisonView({
                     </tr>
                   </thead>
                   <tbody>
-                    {(typeof (active.after || active.before) === "object" &&
-                    (active.after || active.before) !== null
-                      ? Array.from(
-                          new Set([
-                            ...Object.keys(active.before || {}),
-                            ...Object.keys(active.after || {}),
-                          ]),
-                        ).sort()
-                      : ["value"]
-                    )
+                    {visibleFields(active)
                       .filter(
                         (field) => active.kind !== "node" || field !== "sql",
                       )
                       .map((field) => (
                         <tr key={field}>
-                          <th>{field}</th>
+                          <th>{field.replaceAll("/", ".")}</th>
                           {[active.before, active.after].map((value, i) => (
                             <td key={i}>
-                              <pre>
-                                {valueText(
-                                  field === "value" && typeof value !== "object"
-                                    ? value
-                                    : fieldOf(value, field),
-                                )}
-                              </pre>
+                              <pre>{valueText(pathValue(value, field))}</pre>
                             </td>
                           ))}
                         </tr>
@@ -412,6 +416,8 @@ export default function ComparisonView({
                 </table>
               )}
               {active.kind === "node" &&
+                fieldOf(active.before, "sql") !==
+                  fieldOf(active.after, "sql") &&
                 [active.before, active.after].some(
                   (value) => typeof fieldOf(value, "sql") === "string",
                 ) && (
@@ -423,6 +429,22 @@ export default function ComparisonView({
                     />
                   </Suspense>
                 )}
+              <details>
+                <summary>{t("gitFullDefinition")}</summary>
+                <p className="muted">
+                  {active.id} · {active.file}
+                </p>
+                <div className="git-wiring">
+                  <section>
+                    <h4>{t("before")}</h4>
+                    <pre>{valueText(active.before)}</pre>
+                  </section>
+                  <section>
+                    <h4>{t("after")}</h4>
+                    <pre>{valueText(active.after)}</pre>
+                  </section>
+                </div>
+              </details>
               {active.kind === "variable" && (
                 <p className="comparison-usages">
                   <strong>{t("affectedNodes")}</strong>:{" "}
