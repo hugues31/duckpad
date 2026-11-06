@@ -267,6 +267,11 @@ test("Branches confirms deletion, explains protections and redirects another ses
   await expect(confirm).toBeHidden();
   await expect(row("already-merged")).toHaveCount(0);
   await expect(observer).toHaveURL(new RegExp(`/worktrees/${main.id}/flow`));
+  await expect(
+    observer.getByRole("status").filter({
+      hasText: "Branch already-merged was deleted. The main branch is open.",
+    }),
+  ).toBeVisible();
   await observer.close();
 });
 

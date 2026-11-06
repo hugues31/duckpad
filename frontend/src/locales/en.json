@@ -398,6 +398,7 @@
   "branchCleanupMain": "The main branch is protected.",
   "branchCleanupCurrent": "Open another branch before deleting this one.",
   "branchCleanupDestination": "The destination branch is protected.",
+  "openBranchDeleted": "Branch {name} was deleted. The main branch is open.",
   "mergeComplete": "Branch merged",
   "importComplete": "Independent copy imported",
   "noMatches": "No rows match these filters",

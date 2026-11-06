@@ -398,6 +398,7 @@
   "branchCleanupMain": "La branche main est protégée.",
   "branchCleanupCurrent": "Ouvrez une autre branche avant de supprimer celle-ci.",
   "branchCleanupDestination": "La branche de destination est protégée.",
+  "openBranchDeleted": "La branche {name} a été supprimée. La branche main est ouverte.",
   "mergeComplete": "Branche fusionnée",
   "importComplete": "Copie indépendante importée",
   "noMatches": "Aucune ligne ne correspond aux filtres",

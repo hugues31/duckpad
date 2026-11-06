@@ -3,14 +3,17 @@ import { Outlet, useNavigate } from "react-router";
 import CodePanel from "../CodePanel";
 import { FlowToolbar, WorkspaceNotices } from "../FlowToolbar";
 import { usePageRoute, worktreeUrl } from "../navigation";
+import { useT } from "../i18n";
 import { useShell, useWorkspace } from "../shell";
 import { useWorktree } from "../worktree";
 import { useFlowView } from "./FlowPage";
 import { PageLoading, RouteError } from "./PageStates";
+import type { Worktree } from "../types";
 
 /** The toolbar, notices and code editor shared by the tabs of a working branch. */
 export default function WorktreePage() {
-  const { openModal, openWorktree } = useShell();
+  const t = useT();
+  const { openModal, openWorktree, notify } = useShell();
   const navigate = useNavigate();
   const workspace = useWorkspace();
   const { tab = "flow" } = usePageRoute();
@@ -25,21 +28,24 @@ export default function WorktreePage() {
     setAssistantNode,
   } = useWorktree();
   const flowView = useFlowView(id, environment);
-  const known = useRef<{ id: string; project: string } | null>(null);
+  // Another session deleted the open branch: return to the project's main branch.
+  const known = useRef<Worktree | null>(null);
   useEffect(() => {
     const tree = workspace.worktrees.find((w) => w.id === id);
     if (tree) {
       known.current = tree;
     } else if (known.current?.id === id) {
-      const project = workspace.projects.find(
-        (p) => p.id === known.current?.project,
-      );
-      if (project)
+      const { branch, project: projectId } = known.current;
+      const project = workspace.projects.find((p) => p.id === projectId);
+      if (project) {
+        known.current = null;
+        notify(t("openBranchDeleted").replace("{name}", branch));
         void navigate(worktreeUrl(project.main, "flow", environment), {
           replace: true,
         });
+      }
     }
-  }, [id, workspace, environment, navigate]);
+  }, [id, workspace, environment, navigate, notify, t]);
   const assistantNode = flowView.selected
     ? [...flowView.path.map((p) => p.instance), flowView.selected].join("::")
     : "";

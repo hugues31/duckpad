@@ -398,6 +398,7 @@
   "branchCleanupMain": "O branch main é protegido.",
   "branchCleanupCurrent": "Abra outro branch antes de excluir este.",
   "branchCleanupDestination": "O branch de destino é protegido.",
+  "openBranchDeleted": "O branch {name} foi excluído. O branch main está aberto.",
   "mergeComplete": "Branch mesclado",
   "importComplete": "Cópia independente importada",
   "noMatches": "Nenhuma linha corresponde a estes filtros",
