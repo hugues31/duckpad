@@ -66,13 +66,13 @@ export async function verifyNodeCreation(page: Page) {
   await page.getByRole("button", { name: "Fit view", exact: true }).click();
   await source.locator(".node-shape").click();
   await inspector
-    .getByRole("button", { name: "Run node", exact: true })
+    .getByRole("button", { name: en.runNode, exact: true })
     .click();
   await expect(source.locator(".node-row-count")).toContainText("1 row");
   await expect(page.locator(".banner.error")).toHaveCount(0);
   await page
     .locator(".flow-toolbar")
-    .getByRole("button", { name: "Run", exact: true })
+    .getByRole("button", { name: en.run, exact: true })
     .click();
   await expect(page.locator(".banner.error")).toContainText(
     "Connect input 'source'",
@@ -154,14 +154,12 @@ export async function verifyNodeCreation(page: Page) {
     await expect(
       page.getByRole("combobox", { name: labels.searchNodes, exact: true }),
     ).toBeVisible();
-    const section = palette
-      .locator("section")
-      .filter({
-        has: page.getByRole("heading", {
-          name: labels.projectTemplates,
-          exact: true,
-        }),
-      });
+    const section = palette.locator("section").filter({
+      has: page.getByRole("heading", {
+        name: labels.projectTemplates,
+        exact: true,
+      }),
+    });
     await expect(
       section.getByRole("button", { name: "Project summary", exact: true }),
     ).toBeVisible();
@@ -186,5 +184,7 @@ export async function verifyNodeCreation(page: Page) {
   }
   await page.evaluate(() => localStorage.setItem("duckpad-language", "en"));
   await page.reload();
+  await expect(page.locator(".react-flow__node")).toHaveCount(3);
+  await page.getByRole("button", { name: en.fitView, exact: true }).click();
   return id as string;
 }

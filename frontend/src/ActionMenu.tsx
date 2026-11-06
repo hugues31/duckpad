@@ -1,4 +1,10 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type RefObject,
+} from "react";
 import { createPortal } from "react-dom";
 import { MoreHorizontal } from "lucide-react";
 
@@ -15,11 +21,13 @@ export function ActionMenu({
   label,
   items,
   position,
+  trigger,
   onClose,
 }: {
   label: string;
   items: ActionItem[];
   position: { x: number; y: number };
+  trigger?: RefObject<HTMLButtonElement | null>;
   onClose: () => void;
 }) {
   const menu = useRef<HTMLDivElement>(null);
@@ -45,7 +53,11 @@ export function ActionMenu({
   }, []);
   useEffect(() => {
     const outside = (event: PointerEvent) => {
-      if (!menu.current?.contains(event.target as Node)) onClose();
+      if (
+        !menu.current?.contains(event.target as Node) &&
+        !trigger?.current?.contains(event.target as Node)
+      )
+        onClose();
     };
     document.addEventListener("pointerdown", outside, true);
     window.addEventListener("resize", onClose);
@@ -53,7 +65,7 @@ export function ActionMenu({
       document.removeEventListener("pointerdown", outside, true);
       window.removeEventListener("resize", onClose);
     };
-  }, [onClose]);
+  }, [onClose, trigger]);
   return createPortal(
     <div
       ref={menu}
@@ -64,7 +76,11 @@ export function ActionMenu({
       style={{ left: point.x, top: point.y }}
       onContextMenu={(event) => event.preventDefault()}
       onBlur={(event) => {
-        if (!event.currentTarget.contains(event.relatedTarget)) onClose();
+        if (
+          !event.currentTarget.contains(event.relatedTarget) &&
+          !trigger?.current?.contains(event.relatedTarget)
+        )
+          onClose();
       }}
       onKeyDown={(event) => {
         event.stopPropagation();
@@ -159,6 +175,7 @@ export function ActionMenuButton({
           label={label}
           items={items}
           position={position}
+          trigger={trigger}
           onClose={() => {
             setPosition(null);
             trigger.current?.focus();
