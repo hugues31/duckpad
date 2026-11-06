@@ -10,8 +10,9 @@ node's own code and a shared SQL template. Start with the
 Click or drag **SQL** from the palette list onto the canvas, then use
 **Edit code**; the editor saves as you type. This changes only that node. Normal
 palette nodes also receive their own copy of the SQL. To share code, use
-**Convert to template** or **Add linked**; editing a shared template affects all
-of its linked nodes in that branch. See
+**Convert to template** in the node's actions, or Alt+click a template in the
+palette (**Add linked**); editing a shared template affects all of its linked
+nodes in that branch. See
 [code ownership](AUTHORING.md#editing-node-code).
 
 To create a reusable definition directly, click the **SQL** button at the bottom
