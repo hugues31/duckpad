@@ -247,7 +247,14 @@ function SignedIn({
   return (
     <ShellContext.Provider value={shell}>
       <WorktreeProvider
-        worktree={worktree || (worktreeSettings ? contextWorktree : "")}
+        worktree={
+          worktree ||
+          (worktreeSettings
+            ? contextWorktree
+            : modal && "worktree" in modal
+              ? modal.worktree
+              : "")
+        }
       >
         <div className="app-shell">
           <div className="workspace-shell">

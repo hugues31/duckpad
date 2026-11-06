@@ -14,11 +14,13 @@ import { useT } from "./i18n";
 import { useShell } from "./shell";
 import type { Diagnostic, Run, Snapshot } from "./types";
 import { useLoadedWorktree } from "./worktree";
+import { useAsyncAction } from "./useAsyncAction";
 
 /** Tabs, save state and run controls of the open working branch. */
 export function FlowToolbar() {
   const t = useT();
-  const { drafts, openModal } = useShell();
+  const { drafts, openModal, notify } = useShell();
+  const review = useAsyncAction();
   const {
     id,
     environment,
@@ -29,6 +31,7 @@ export function FlowToolbar() {
     starting,
     run,
     stop,
+    settle,
   } = useLoadedWorktree();
   const dirty = drafts.dirty();
   const saveState = t(saving ? "saving" : dirty ? "unsavedChanges" : "saved");
@@ -54,8 +57,16 @@ export function FlowToolbar() {
         {canEdit && snapshot.worktree.branch !== "main" && (
           <button
             className="button secondary small"
+            disabled={review.pending}
             onClick={() =>
-              openModal({ kind: "git", worktree: id, mode: "branches" })
+              void review.run(async () => {
+                try {
+                  await settle();
+                  openModal({ kind: "git", worktree: id, mode: "review" });
+                } catch (error) {
+                  notify((error as Error).message, true);
+                }
+              })
             }
           >
             <GitMerge size={14} />

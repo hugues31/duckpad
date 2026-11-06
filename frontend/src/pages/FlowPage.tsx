@@ -13,6 +13,7 @@ import { Loader2 } from "lucide-react";
 import Canvas, { type CanvasHandle, type FocusRequest } from "../Canvas";
 import { findNodePosition } from "../graphLayout";
 import CanvasHeader from "../CanvasHeader";
+import BranchResultsNotice from "../BranchResultsNotice";
 import { noticeCount } from "../FlowToolbar";
 import {
   connectInput,
@@ -565,6 +566,8 @@ export default function FlowPage() {
         </div>
       )}
       <main className="canvas-column" inert={busy}>
+        {/* Components show their own notice in this place. */}
+        {!path.length && <BranchResultsNotice />}
         <CanvasHeader
           projectName={project?.name || bundle.flow.name}
           path={path}

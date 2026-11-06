@@ -23,6 +23,11 @@ BLOB_BATCH = 256
 UNREADABLE = object()
 
 
+def origin_key(branch):
+    """Git configuration recording the branch a working branch was created from."""
+    return f"branch.{branch}.duckpad-origin"
+
+
 def entity_sources(entity):
     """The graph file, code file and node ID defining a node or template entity.
 
@@ -527,7 +532,11 @@ class GitWorkspace:
                 self.store.delete("worktree", remove_id)
             self.projects.discard([remove], artifacts)
             # Git logs each failure; a branch left behind is only listed as closed.
-            for args in (("worktree", "prune"), ("update-ref", "-d", "refs/heads/" + remove["branch"], head)):
+            for args in (
+                ("worktree", "prune"),
+                ("update-ref", "-d", "refs/heads/" + remove["branch"], head),
+                ("config", "--unset", origin_key(remove["branch"])),
+            ):
                 with suppress(GitError):
                     self.git(current["path"], *args)
             return {"ok": True}
@@ -577,6 +586,25 @@ class GitWorkspace:
         for commit in commits:
             self.remember(self.rejected, commit, message)
         raise Problem(message, 422)
+
+    def prepare_origin(self, worktree_id):
+        """Review this branch into its recorded origin; older branches default to main.
+
+        `prepare` validates history before taking the repository lock, so it is not called under it.
+        """
+        source = self.projects.get(worktree_id)
+        origin = self.git(source["path"], "config", "--get", origin_key(source["branch"]), check=False)
+        # A deleted origin, typically merged then cleaned up, falls back to main as well.
+        if not origin or not self.git(
+            source["path"], "rev-parse", "--verify", "--quiet", "refs/heads/" + origin, check=False
+        ):
+            origin = "main"
+        destination = self.store.find_worktree(source["project"], origin)
+        if not destination or destination["id"] == worktree_id:
+            raise Problem(
+                f"Open {origin} to review a merge into it, or choose a destination in Branches.", 409
+            )
+        return self.prepare(destination["id"], "refs/heads/" + source["branch"])
 
     def prepare(self, destination, source_ref, remote_guard=None):
         if source_ref.startswith(("refs/heads/", "refs/remotes/origin/")):

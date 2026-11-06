@@ -68,12 +68,14 @@ export default function ProjectSettings({
   workspace,
   refresh,
   onDeleted,
+  onGit,
 }: {
   project: string;
   section?: string;
   workspace: Workspace;
   refresh: () => Promise<unknown>;
   onDeleted: () => void;
+  onGit?: () => void;
 }) {
   const t = useT();
   const { search } = useLocation();
@@ -421,6 +423,14 @@ export default function ProjectSettings({
         )}
         {section === "general" && (
           <>
+            {onGit && (
+              <div className="settings-card">
+                <h2>Git</h2>
+                <button className="button secondary" onClick={onGit}>
+                  {t("connectGitRepository")}
+                </button>
+              </div>
+            )}
             <div className="settings-card">
               <h2>{t("project")}</h2>
               <p>{settings?.project.name}</p>

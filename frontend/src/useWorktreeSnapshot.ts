@@ -98,7 +98,10 @@ export function useWorktreeSnapshot(
           ]);
           if (status && !signal.aborted)
             setStatuses((old) =>
-              JSON.stringify(old) === JSON.stringify(status) ? old : status,
+              old !== EMPTY_STATUSES &&
+              JSON.stringify(old) === JSON.stringify(status)
+                ? old
+                : status,
             );
         } catch {
           // Keep polling: temporary failures pass, and revoked access can be restored.
@@ -112,6 +115,8 @@ export function useWorktreeSnapshot(
   return {
     snapshot: state?.worktree.id === worktree ? state : null,
     statuses,
+    /** Whether the branch's statuses were read, so "no results" is known. */
+    statusesLoaded: statuses !== EMPTY_STATUSES,
     /** Why the latest read of the snapshot failed; cleared by the next success. */
     loadError,
     /** Reload the snapshot after a change, ignoring reads started before it. */

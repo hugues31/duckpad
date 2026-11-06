@@ -8,6 +8,17 @@ import type { Comparison, MergeReview, RemoteStatus } from "./gitTypes";
 import { useT, useTranslateValue } from "./i18n";
 import { ConfirmModal } from "./modals";
 
+/** The origin state that the form and a reviewed publication belong to. */
+const remoteRevision = (remote: RemoteStatus | null) =>
+  JSON.stringify(
+    remote && [
+      remote.config_revision,
+      remote.local_head,
+      remote.remote_head,
+      remote.checked,
+    ],
+  );
+
 export default function GitSyncTab({
   base,
   role,
@@ -41,9 +52,13 @@ export default function GitSyncTab({
     diff: Comparison;
   } | null>(null);
   // A new origin state resets the form and invalidates the reviewed publication.
-  const [formRemote, setFormRemote] = useState(remote);
-  if (remote !== formRemote) {
-    setFormRemote(remote);
+  const revision = remoteRevision(remote);
+  // Set when a pull found nothing incoming, until the origin state changes.
+  const [upToDate, setUpToDate] = useState(false);
+  const [formRemote, setFormRemote] = useState(revision);
+  if (revision !== formRemote) {
+    setFormRemote(revision);
+    setUpToDate(false);
     setUrl(remote?.url || "");
     setMapping(remote?.remote_branch || remote?.local_branch || "");
     setPublication(null);
@@ -88,11 +103,6 @@ export default function GitSyncTab({
       </div>
     );
 
-  const heads = {
-    config_revision: remote.config_revision,
-    local_head: remote.local_head,
-    remote_head: remote.remote_head,
-  };
   const syncReason = !canEdit
     ? t("gitReaderHint")
     : remote.pending ||
@@ -100,9 +110,7 @@ export default function GitSyncTab({
         ? t("configureOriginHint")
         : !remote.remote_branch
           ? t("mappingRequired")
-          : !remote.checked
-            ? t("fetchFirst")
-            : "");
+          : "");
   const actionDisabled = pending || !!syncReason;
 
   return (
@@ -127,27 +135,24 @@ export default function GitSyncTab({
           ) : undefined
         }
       />
-      <div className="git-sync-summary">
-        <strong>
-          {remote.local_branch} → origin/{remote.remote_branch || "—"}
-        </strong>
-        <span className="badge">{t(`sync_${remote.state}`)}</span>
-        <p>
-          {remote.ahead ?? "—"} {t("toPush")} / {remote.behind ?? "—"}{" "}
-          {t("toIntegrate")}
-        </p>
-        <small>
-          {t("lastCheck")}:{" "}
-          {remote.checked
-            ? new Date(remote.checked).toLocaleString()
-            : t("neverChecked")}
-        </small>
-        <p>
-          {t("localHead")}: <code>{remote.local_head}</code>
-          <br />
-          {t("remoteHead")}: <code>{remote.remote_head || "—"}</code>
-        </p>
-      </div>
+      {remote.url && (
+        <div className="git-sync-summary">
+          <strong>
+            {remote.local_branch} → origin/{remote.remote_branch || "—"}
+          </strong>
+          <span className="badge">{t(`sync_${remote.state}`)}</span>
+          <p>
+            {remote.ahead ?? "—"} {t("toPush")} / {remote.behind ?? "—"}{" "}
+            {t("toIntegrate")}
+          </p>
+          <small>
+            {t("lastCheck")}:{" "}
+            {remote.checked
+              ? new Date(remote.checked).toLocaleString()
+              : t("neverChecked")}
+          </small>
+        </div>
+      )}
       <details open={!remote.url}>
         <summary>{t("remoteConfiguration")}</summary>
         <p>{t("gitAuthenticationHint")}</p>
@@ -194,110 +199,150 @@ export default function GitSyncTab({
           <button className="button primary" disabled={pending || !admin}>
             {t("saveConfiguration")}
           </button>
-          <button
-            type="button"
-            className="button secondary"
-            disabled={pending || !admin || !remote.url}
-            onClick={() =>
-              act(async () =>
-                onChanged(
-                  await api<RemoteStatus>(
-                    `${base}/remote`,
-                    send(
-                      { url: null, config_revision: remote.config_revision },
-                      "PUT",
+          {remote.url && (
+            <button
+              type="button"
+              className="button secondary"
+              disabled={pending || !admin || !remote.url}
+              onClick={() =>
+                act(async () =>
+                  onChanged(
+                    await api<RemoteStatus>(
+                      `${base}/remote`,
+                      send(
+                        { url: null, config_revision: remote.config_revision },
+                        "PUT",
+                      ),
                     ),
                   ),
-                ),
-              )
-            }
-          >
-            {t("disconnectRemote")}
-          </button>
+                )
+              }
+            >
+              {t("disconnectRemote")}
+            </button>
+          )}
         </form>
         {!admin && <p className="notice">{t("remoteAdminHint")}</p>}
       </details>
-      {syncReason && <p className="notice">{syncReason}</p>}
-      <div className="git-controls">
-        <button
-          className="button secondary"
-          disabled={pending || repository.loading}
-          onClick={() => void repository.reload()}
-        >
-          {t("reloadState")}
-        </button>
-        <button
-          className="button primary"
-          disabled={pending || !canEdit || !remote.url}
-          onClick={() =>
-            network(async () =>
-              onChanged(
-                await api<RemoteStatus>(
-                  `${base}/fetch`,
-                  send({ config_revision: remote.config_revision }),
-                ),
-              ),
-            )
-          }
-        >
-          {t("fetchRemote")}
-        </button>
-        <button
-          className="button secondary"
-          disabled={
-            actionDisabled ||
-            !remote.remote_head ||
-            remote.state === "unrelated"
-          }
-          onClick={() =>
-            act(async () =>
-              onReview(await api<MergeReview>(`${base}/pull`, send(heads))),
-            )
-          }
-        >
-          {t("reviewPull")}
-        </button>
-        <button
-          className="button secondary"
-          disabled={
-            actionDisabled ||
-            ["behind", "diverged", "unrelated", "unverified"].includes(
-              remote.state,
-            )
-          }
-          onClick={() =>
-            act(async () => {
-              const diff = await api<Comparison>(
-                withQuery(`${base}/compare`, {
-                  a: remote.remote_head || "empty",
-                  b: remote.local_head,
-                }),
-              );
-              setPublication({ remote, diff });
-              setRecreate(false);
-            })
-          }
-        >
-          {t("reviewPush")}
-        </button>
-      </div>
-      <p className="muted">{t("fetchPullHint")}</p>
-      {[
-        "behind",
-        "diverged",
-        "unrelated",
-        "unverified",
-        "remote_deleted",
-      ].includes(remote.state) && (
-        <p className="notice">{translateValue("recovery_" + remote.state)}</p>
+      {remote.url && (
+        <>
+          {syncReason && <p className="notice">{syncReason}</p>}
+          <div className="git-controls">
+            <button
+              className="button primary"
+              disabled={actionDisabled}
+              onClick={() =>
+                network(async () => {
+                  const fresh = await api<RemoteStatus>(
+                    `${base}/fetch`,
+                    send({ config_revision: remote.config_revision }),
+                  );
+                  await onChanged(fresh);
+                  if (fresh.state === "unrelated")
+                    throw new Error(translateValue("recovery_unrelated"));
+                  if (!fresh.remote_head || !fresh.behind) {
+                    setFormRemote(remoteRevision(fresh));
+                    setUpToDate(true);
+                    return;
+                  }
+                  onReview(
+                    await api<MergeReview>(
+                      `${base}/pull`,
+                      send({
+                        config_revision: fresh.config_revision,
+                        local_head: fresh.local_head,
+                        remote_head: fresh.remote_head,
+                      }),
+                    ),
+                  );
+                })
+              }
+            >
+              {t("gitPull")}
+            </button>
+            <button
+              className="button secondary"
+              disabled={actionDisabled}
+              onClick={() =>
+                network(async () => {
+                  const fresh = await api<RemoteStatus>(
+                    `${base}/fetch`,
+                    send({ config_revision: remote.config_revision }),
+                  );
+                  await onChanged(fresh);
+                  if (
+                    ["behind", "diverged", "unrelated", "unverified"].includes(
+                      fresh.state,
+                    )
+                  )
+                    throw new Error(translateValue("recovery_" + fresh.state));
+                  const diff = await api<Comparison>(
+                    withQuery(`${base}/compare`, {
+                      a: fresh.remote_head || "empty",
+                      b: fresh.local_head,
+                    }),
+                  );
+                  setFormRemote(remoteRevision(fresh));
+                  setPublication({ remote: fresh, diff });
+                  setRecreate(false);
+                })
+              }
+            >
+              {t("gitPush")}
+            </button>
+          </div>
+          {upToDate && (
+            <p role="status" className="muted">
+              {t("gitNothingToPull")}
+            </p>
+          )}
+          <details className="git-sync-details">
+            <summary>{t("gitDetails")}</summary>
+            <p>
+              {t("localHead")}: <code>{remote.local_head}</code>
+              <br />
+              {t("remoteHead")}: <code>{remote.remote_head || "—"}</code>
+            </p>
+            <p className="muted">{t("fetchPullHint")}</p>
+            <div className="git-controls">
+              <button
+                className="button secondary"
+                disabled={pending || repository.loading}
+                onClick={() => void repository.reload()}
+              >
+                {t("reloadState")}
+              </button>
+              <button
+                className="button secondary"
+                disabled={pending || !canEdit}
+                onClick={() =>
+                  network(async () =>
+                    onChanged(
+                      await api<RemoteStatus>(
+                        `${base}/fetch`,
+                        send({ config_revision: remote.config_revision }),
+                      ),
+                    ),
+                  )
+                }
+              >
+                {t("fetchRemote")}
+              </button>
+            </div>
+          </details>
+        </>
       )}
       {publication && (
         <section className="publication-review">
           <h3>
-            {t("publishReviewedHead")}:{" "}
-            {publication.remote.local_head.slice(0, 12)} → origin/
+            {t("publishReviewedHead")}: {publication.remote.local_branch} →
+            origin/
             {publication.remote.remote_branch}
           </h3>
+          <details>
+            <summary>{t("gitDetails")}</summary>
+            <code>{publication.remote.local_head}</code>
+          </details>
           <ComparisonView
             report={publication.diff}
             storageKey={storageKey + ".publishFilters"}

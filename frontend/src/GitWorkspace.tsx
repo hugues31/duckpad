@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { api, withQuery } from "./api";
+import { api, send, withQuery } from "./api";
+import { useResource } from "./useApiResource";
+import { TabStatus } from "./gitTabs";
 import GitBranchesTab from "./GitBranchesTab";
 import GitCompareTab, { savedSelection, type Selection } from "./GitCompareTab";
 import GitReviewTab from "./GitReviewTab";
@@ -103,6 +105,16 @@ export default function GitWorkspace({
   );
   const [ready, setReady] = useState(!commit);
   const [review, setReview] = useState<MergeReview | null>(null);
+  const automatic = useResource<MergeReview>(
+    mode === "review" ? `${base}/review-origin` : null,
+    (signal) =>
+      api<MergeReview>(`${base}/review-origin`, { ...send({}), signal }),
+  );
+  const [accepted, setAccepted] = useState<MergeReview | null>(null);
+  if (automatic.data && automatic.data !== accepted) {
+    setAccepted(automatic.data);
+    setReview(automatic.data);
+  }
   const [version, setVersion] = useState(0);
   const { repository, setRemote, refresh } = useRepository(base, onChanged);
 
@@ -180,6 +192,13 @@ export default function GitWorkspace({
           ))}
         </nav>
         <div className="git-content">
+          {tab === "review" && !review && (
+            <TabStatus
+              error={automatic.error}
+              pending={automatic.pending}
+              onRetry={automatic.reload}
+            />
+          )}
           {panel(
             "compare",
             <GitCompareTab
@@ -199,7 +218,7 @@ export default function GitWorkspace({
               worktree={worktree}
               base={base}
               canEdit={canEdit}
-              preferMain={mode === "branches"}
+              preferMain={mode === "branches" || mode === "review"}
               repository={repository}
               onCompare={compare}
               onReview={openReview}

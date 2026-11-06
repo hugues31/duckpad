@@ -22,7 +22,7 @@ from starlette.datastructures import UploadFile as FormFile
 from starlette.exceptions import HTTPException
 from starlette.middleware.base import RequestResponseEndpoint
 
-from . import __version__, automation, schemas, variables
+from . import __version__, automation, data_comparison, schemas, variables
 from .archive import archive_bundle, import_warnings, read_archive, write_archive
 from .artifacts import CHUNK_SIZE
 from .assistant.api import router as assistant_router
@@ -164,6 +164,7 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
                 request.method == "GET"
                 or (request.method == "POST" and parts[3:] == ["lineage"])
                 or (request.method in ("POST", "DELETE") and parts[3:4] == ["statistics"])
+                or (request.method == "POST" and parts[3:5] == ["git", "reviews"] and parts[6:] == ["data"])
             )
             access.worktree(user, parts[2], "reader" if read else "editor")
             if parts[3:] == ["git", "remote"] and request.method == "PUT":
@@ -853,6 +854,10 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
     def git_review(worktree: str, data: schemas.GitReview) -> Record:
         return projects.versioning.prepare(worktree, data.source)
 
+    @app.post("/api/worktrees/{worktree}/git/review-origin", response_model=None)
+    def git_review_origin(worktree: str) -> Record:
+        return projects.versioning.prepare_origin(worktree)
+
     @app.post("/api/worktrees/{worktree}/git/reviews/{review}", response_model=None)
     def git_choices(worktree: str, review: str, data: schemas.GitChoices) -> Record:
         return projects.versioning.proposal(worktree, review, data.choices)
@@ -860,6 +865,25 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
     @app.post("/api/worktrees/{worktree}/git/reviews/{review}/apply", response_model=None)
     def git_apply(worktree: str, review: str, data: schemas.GitApply) -> Record:
         return projects.versioning.apply(worktree, review, data.choices, data.proposal_revision)
+
+    def current_review(worktree: str, review: str) -> Record:
+        """A review whose branches did not move. Results are then read without the repository lock."""
+        with projects.locked(worktree):
+            proposal = projects.versioning.review(worktree, review)
+            projects.versioning.verify_review(proposal)
+            return proposal
+
+    @app.get("/api/worktrees/{worktree}/git/reviews/{review}/data", response_model=None)
+    def git_data_results(worktree: str, review: str, environment: str) -> list[Record]:
+        return data_comparison.available_results(
+            engine.results, current_review(worktree, review), environment
+        )
+
+    @app.post("/api/worktrees/{worktree}/git/reviews/{review}/data", response_model=None)
+    def git_data_comparison(worktree: str, review: str, data: schemas.GitDataComparison) -> Record:
+        return data_comparison.compare_result(
+            engine.results, current_review(worktree, review), **data.model_dump()
+        )
 
     @app.get("/api/worktrees/{worktree}/git/remote", response_model=None)
     def git_remote(worktree: str) -> Record:

@@ -784,8 +784,9 @@ test("capture branch creation and a real parameter comparison", async ({
     .toBe("refunded");
   // Keep both revision selectors and the before/after values in the image.
   await page.setViewportSize({ width: 1440, height: 1200 });
+  await page.getByRole("link", { name: "History", exact: true }).click();
   await page
-    .getByRole("button", { name: "Git synchronization", exact: true })
+    .getByRole("button", { name: "Compare versions", exact: true })
     .click();
   const git = page.getByRole("dialog", { name: "Project Git workspace" });
   await git

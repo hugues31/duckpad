@@ -84,6 +84,8 @@ ROUTE_ACCESS = {
         "GET /api/worktrees/{worktree}/extensions",
         "GET /api/worktrees/{worktree}/connections/{connection}/objects",
         "POST /api/worktrees/{worktree}/lineage",
+        "GET /api/worktrees/{worktree}/git/reviews/{review}/data",
+        "POST /api/worktrees/{worktree}/git/reviews/{review}/data",
         "GET /api/runs/{run}",
     ],
     OPERATOR: [
@@ -100,6 +102,7 @@ ROUTE_ACCESS = {
         "POST /api/worktrees/{worktree}/git/tags",
         "POST /api/worktrees/{worktree}/git/cleanup",
         "POST /api/worktrees/{worktree}/git/reviews",
+        "POST /api/worktrees/{worktree}/git/review-origin",
         "POST /api/worktrees/{worktree}/git/reviews/{review}",
         "POST /api/worktrees/{worktree}/git/reviews/{review}/apply",
         "POST /api/worktrees/{worktree}/git/consent",
@@ -440,6 +443,7 @@ def test_project_role_matrix_and_cross_project_import(instance, role):
         "git/open",
         "git/cleanup",
         "git/reviews",
+        "git/review-origin",
         "git/reviews/missing",
         "git/reviews/missing/apply",
         "git/fetch",
@@ -448,6 +452,16 @@ def test_project_role_matrix_and_cross_project_import(instance, role):
     ):
         response = request(client, headers, "POST", f"/worktrees/{worktree}/{suffix}", json={})
         assert response.status_code in ((403,) if role in ("reader", "operator") else (409, 422))
+    # The data impact of a review only reads retained results, so readers may calculate it.
+    for method in ("GET", "POST"):
+        response = request(
+            client,
+            headers,
+            method,
+            f"/worktrees/{worktree}/git/reviews/missing/data?environment=dev",
+            json={},
+        )
+        assert response.status_code in (409, 422)
     remote = request(client, headers, "GET", f"/worktrees/{worktree}/git/remote").json()
     app.state.services.projects.remotes.credentials.save_hosts("", ["https://example.invalid/"])
     response = request(

@@ -308,3 +308,27 @@
     display: none;
   }
 }
+/* Docked under the breadcrumb like the component notice; the canvas frames the graph below it. */
+.branch-results-notice {
+  position: absolute;
+  z-index: 15;
+  top: calc(var(--stage-top) + 38px);
+  left: var(--canvas-left);
+  right: var(--canvas-right);
+  min-height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 10px 4px 12px;
+  font-size: 11px;
+  border-bottom: 1px solid var(--border);
+}
+.flow-layout:has(.branch-results-notice) .canvas-safe-area {
+  top: calc(var(--stage-top) + 90px);
+}
+.change-summary {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
