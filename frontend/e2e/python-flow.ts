@@ -45,6 +45,10 @@ export async function verifyPython(page: Page) {
   const templateDialog = page.getByRole("dialog", {
     name: "New Python template",
   });
+  // Its first edit creates the template.
+  await templateDialog.locator(".monaco-editor textarea").focus();
+  await page.keyboard.press("ControlOrMeta+End");
+  await page.keyboard.insertText("# Reusable\n");
   await closeEditor(templateDialog);
   expect((await read()).bundle!.flow.nodes).toHaveLength(0);
   await page

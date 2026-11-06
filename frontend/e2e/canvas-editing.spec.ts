@@ -1,5 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
-import { closeEditor, signIn } from "./helpers";
+import { autosaved, closeEditor, signIn } from "./helpers";
 import type { Snapshot } from "../src/types";
 
 const DOUBLED = `-- @label Doubled
@@ -157,6 +157,68 @@ test("deleting a node offers Undo, and Ctrl+Z / Ctrl+Shift+Z keep a concurrent e
   expect((await read()).files["nodes/doubled.sql"]).toBe(
     before.files["nodes/doubled.sql"],
   );
+});
+
+test("a conflicting undo is reported once, and editors wait for undos", async ({
+  page,
+}) => {
+  const { endpoint, read, reverts } = await prepare(page);
+  await select(page, "rows");
+  const inspector = page.locator(".inspector");
+  await autosaved(page, () =>
+    inspector
+      .getByRole("textbox", { name: "Display name", exact: true })
+      .fill("Mine"),
+  );
+  // A collaborator renames the same node afterwards.
+  const remote = await read();
+  remote.bundle!.flow.nodes.find((item) => item.id === "rows")!.label =
+    "Theirs";
+  expect(
+    (
+      await page.request.put(endpoint, {
+        data: { revision: remote.revision, bundle: remote.bundle },
+      })
+    ).ok(),
+  ).toBe(true);
+  await page.route(/\/revert$/, async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    await route.continue();
+  });
+  await page.keyboard.press("ControlOrMeta+Z");
+  // No edit can race the undo.
+  await expect(page.locator("#node-inspector")).toHaveAttribute("inert");
+  await expect(page.locator(".toast")).toContainText("Concurrent edits");
+  await expect(page.locator("#node-inspector")).not.toHaveAttribute("inert");
+  // The retained conflict settles that undo: it is not sent again.
+  await page.keyboard.press("ControlOrMeta+Z");
+  await expect(page.locator(".toast")).toContainText("Nothing to undo");
+  expect(reverts).toHaveLength(1);
+});
+
+test("copy includes edits still being saved", async ({ page }) => {
+  const { endpoint, read } = await prepare(page);
+  await select(page, "doubled");
+  await page.route(`**${endpoint}`, async (route) => {
+    if (route.request().method() === "PUT")
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+    await route.continue();
+  });
+  await page
+    .locator(".inspector")
+    .getByRole("textbox", { name: "Display name", exact: true })
+    .fill("Renamed");
+  // Selecting the node again leaves the field, which starts its save.
+  await select(page, "doubled");
+  await expect(page.locator(".save-status")).toHaveText("Saving…");
+  await page.keyboard.press("ControlOrMeta+C");
+  await expect(page.locator(".toast")).toContainText("Node copied");
+  await page.keyboard.press("ControlOrMeta+V");
+  await expect(page.locator(".react-flow__node")).toHaveCount(5);
+  const pasted = (await read()).bundle!.flow.nodes.find(
+    (item) => !["rows", "filtered", "doubled", "boxed"].includes(item.id),
+  )!;
+  expect(pasted.label).toBe("Renamed");
 });
 
 test("copied connected nodes paste as new connected nodes, here and in a component", async ({

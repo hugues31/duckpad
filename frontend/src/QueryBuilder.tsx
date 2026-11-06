@@ -82,9 +82,11 @@ export default function QueryBuilder({
   const changeFilter = (change: Partial<typeof filter>) => {
     const next = { ...filter, ...change };
     setFilter(next);
-    if (!next.column) return;
     const chosen = usableVariable(next.variable);
-    const operand = next.operator.includes("NULL")
+    const unary = next.operator.includes("NULL");
+    // The condition is written once the form is complete, never with an empty value.
+    if (!next.column || !(unary || chosen || next.value)) return;
+    const operand = unary
       ? ""
       : " " +
         (chosen

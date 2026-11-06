@@ -64,10 +64,6 @@ class Transform(dp.Node):
   },
 } as const;
 
-/** The code of a new template, saved before its editor opens. */
-export const newTemplateCode = (language: "sql" | "python") =>
-  TEMPLATE_EDITOR[language].code;
-
 /**
  * The open dialog, as plain data. Its actions are built when it renders, so
  * they always use the current session and working branch.
@@ -359,7 +355,10 @@ function WorktreeDialog({
           language={language}
           description={t(modal.create ? text.hint : "sharedTemplateHint")}
           readOnly={!canEdit}
-          read={(bundle) => bundle.templates[modal.template] ?? ""}
+          // A new template is created by its first saved edit.
+          read={(bundle) =>
+            bundle.templates[modal.template] ?? (modal.create ? text.code : "")
+          }
           write={(bundle, text) => {
             bundle.templates[modal.template] = text;
           }}

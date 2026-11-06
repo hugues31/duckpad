@@ -20,7 +20,6 @@ it.each([
   ["VARCHAR", "false", "'false'"],
   ["VARCHAR", "null", "'null'"],
   ["VARCHAR", "O'Brien", "'O''Brien'"],
-  ["VARCHAR", "", "''"],
   ["VARCHAR", " 001 ", "' 001 '"],
   ["INTEGER", "001", "001"],
   ["BIGINT", "9007199254740993", "9007199254740993"],
@@ -46,6 +45,23 @@ it.each([
   expect(onChange).toHaveBeenLastCalledWith({
     condition: `"order""code" = ${sql}`,
   });
+});
+
+it("writes no filter condition before its value is entered", () => {
+  const onChange = vi.fn();
+  render(
+    <QueryBuilder
+      kind="filter"
+      schemas={{ source: [{ name: "amount", type: "INTEGER" }] }}
+      onChange={onChange}
+    />,
+  );
+  choose("Column", "amount");
+  choose("Operator", ">");
+  // An existing hand-written condition stays until the form is complete.
+  expect(onChange).not.toHaveBeenCalled();
+  choose("Value", "2");
+  expect(onChange).toHaveBeenLastCalledWith({ condition: '"amount" > 2' });
 });
 
 it.each(["IS NULL", "IS NOT NULL"])(

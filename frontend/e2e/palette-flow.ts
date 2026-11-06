@@ -54,16 +54,20 @@ export async function verifyPalette(
   await expect(palette.getByText("Drag a node onto the canvas")).toHaveCount(0);
   const title = python ? "New Python template" : "New SQL template";
   const create = actions.getByRole("button", { name: title });
+  const before = await read(project);
+  expect(before.bundle!.flow.nodes).toHaveLength(0);
   await create.focus();
   await page.keyboard.press("Enter");
   const dialog = page.getByRole("dialog", { name: title });
   await expect(dialog).toContainText(
-    `Save a reusable ${python ? "Python" : "SQL"} template`,
+    `add a reusable ${python ? "Python" : "SQL"} template`,
   );
   await page.keyboard.press("Escape");
   await expect(create).toBeFocused();
-  const before = await read(project);
-  expect(before.bundle!.flow.nodes).toHaveLength(0);
+  // Closing a new template before any edit creates nothing.
+  expect((await read(project)).bundle!.templates).toEqual(
+    before.bundle!.templates,
+  );
   await create.click();
   const name = `Reusable ${language} answer`;
   const code = python

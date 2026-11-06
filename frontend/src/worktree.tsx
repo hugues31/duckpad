@@ -13,7 +13,7 @@ import type {
   PartitionEntry,
   PartitionLaunchOptions,
 } from "./partitions";
-import { api, errorDetail, send, withQuery } from "./api";
+import { api, ApiError, errorDetail, send, withQuery } from "./api";
 import { outputSource } from "./graph";
 import { useT } from "./i18n";
 import { useShell } from "./shell";
@@ -55,6 +55,8 @@ export interface Worktree {
   refresh: () => Promise<void>;
   /** Wait for saves already started by the canvas or an editor. */
   flush: () => Promise<void>;
+  /** Save the open drafts, then wait for every save started so far. */
+  settle: () => Promise<void>;
   /** Save a change applied to a copy of the bundle of `base`; it can be undone. */
   save: (base: Snapshot, change: (bundle: Bundle) => void) => Promise<Snapshot>;
   /**
@@ -247,9 +249,7 @@ export function WorktreeProvider({
   async function revertNow(direction: keyof History, change?: string) {
     if (!canEdit) return false;
     // Pending edits are saved first, so they are the latest change.
-    await flush();
-    await drafts.persist();
-    await flush();
+    await settle();
     const commits = history(id)[direction];
     const index = change ? commits.lastIndexOf(change) : commits.length - 1;
     if (index < 0) return false;
@@ -262,7 +262,9 @@ export function WorktreeProvider({
         history(id)[direction === "undo" ? "redo" : "undo"].push(result.change);
       return true;
     } catch (error) {
-      commits.splice(index, 0, commit);
+      // A conflict retains both versions for resolution, which settles the change.
+      if (!(error instanceof ApiError && error.status === 409))
+        commits.splice(index, 0, commit);
       throw error;
     }
   }
@@ -280,6 +282,13 @@ export function WorktreeProvider({
       await Promise.all([...pendingWrites.current]);
   }
 
+  async function settle() {
+    // Observe failures from saves already in flight before persisting drafts.
+    await flush();
+    await drafts.persist();
+    await flush();
+  }
+
   async function launch(
     environment: string,
     node?: string,
@@ -290,10 +299,7 @@ export function WorktreeProvider({
     launching.current = true;
     setStarting(true);
     try {
-      // Observe failures from saves already in flight before persisting drafts.
-      await flush();
-      await drafts.persist();
-      await flush();
+      await settle();
       const run = await api<Run>(
         `/worktrees/${id}/runs`,
         send({ environment, node, entry_point: "ui", confirmed, ...options }),
@@ -340,6 +346,7 @@ export function WorktreeProvider({
     gitVersion,
     refresh: () => refresh(),
     flush,
+    settle,
     save: async (base, change) => {
       const bundle = structuredClone(base.bundle!);
       change(bundle);

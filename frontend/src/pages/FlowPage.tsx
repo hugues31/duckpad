@@ -24,7 +24,6 @@ import {
   type PathPart,
 } from "../graph";
 import Inspector from "../Inspector";
-import { newTemplateCode } from "../ModalHost";
 import {
   copiedNodes,
   copyNodes,
@@ -46,8 +45,9 @@ import LineagePanel from "../LineagePanel";
 import type { Cell } from "../lineageGraph";
 import NodePalette, { type NodeKind } from "../NodePalette";
 import ResultsPanel, { type ResultsTab } from "../ResultsPanel";
+import { api } from "../api";
 import { useShell, useWorkspace } from "../shell";
-import type { Bundle, FlowNode, Graph } from "../types";
+import type { Bundle, FlowNode, Graph, Snapshot } from "../types";
 import { nodeLabel, useT } from "../i18n";
 import {
   isWideLayout,
@@ -123,7 +123,7 @@ function locate(bundle: Bundle, target: string) {
 
 export default function FlowPage() {
   const t = useT();
-  const { notify, openModal, flowPanels: panels } = useShell();
+  const { notify, openModal, flowPanels: panels, drafts } = useShell();
   const workspace = useWorkspace();
   const {
     id: worktree,
@@ -131,6 +131,8 @@ export default function FlowPage() {
     snapshot,
     statuses,
     canEdit,
+    saving,
+    settle,
     save,
     run,
     undo,
@@ -144,6 +146,9 @@ export default function FlowPage() {
   const [selection, setSelection] = useState<string[]>([]);
   const [addingNode, setAddingNode] = useState(false);
   const additionPending = useRef(false);
+  // Undos and redos in flight; editors stay inert so no edit races them.
+  const [reverting, setReverting] = useState(0);
+  const busy = addingNode || reverting > 0;
   const [resultsTab, setResultsTab] = useState<ResultsTab>("data");
   const [failureFocus, setFailureFocus] = useState(0);
   // Badges and summary links open their results tab, even when the panel is hidden.
@@ -353,20 +358,40 @@ export default function FlowPage() {
   }
   /** Undo or redo a change, from a shortcut or a toast, and report it. */
   function revert(direction: "undo" | "redo", change?: string) {
+    setReverting((count) => count + 1);
     safe(async () => {
-      const done = await (direction === "undo" ? undo(change) : redo());
-      notify(
-        t(
-          direction === "undo"
-            ? done
-              ? "changeUndone"
-              : "nothingToUndo"
-            : done
-              ? "changeRedone"
-              : "nothingToRedo",
-        ),
-      );
+      try {
+        const done = await (direction === "undo" ? undo(change) : redo());
+        notify(
+          t(
+            direction === "undo"
+              ? done
+                ? "changeUndone"
+                : "nothingToUndo"
+              : done
+                ? "changeRedone"
+                : "nothingToRedo",
+          ),
+        );
+      } finally {
+        setReverting((count) => count - 1);
+      }
     });
+  }
+  /** Copy nodes of the opened graph, with the edits still being saved. */
+  async function copy(ids: string[]) {
+    let source = bundle!;
+    if (canEdit && (saving || drafts.dirty())) {
+      await settle();
+      source = (await api<Snapshot>(`/worktrees/${worktree}`)).bundle!;
+    }
+    const copied = copyNodes(source, parent, ids);
+    if (copied)
+      notify(
+        copied.nodes.length === 1
+          ? t("nodeCopied")
+          : t("nodesCopied").replace("{count}", String(copied.nodes.length)),
+      );
   }
   /** Paste the copied nodes into the opened graph and select the first one. */
   async function paste(copied: CopiedNodes) {
@@ -394,30 +419,22 @@ export default function FlowPage() {
     )
       return;
     const key = event.key.toLowerCase();
-    const editable = canEdit && !addingNode && !!bundle;
     if (key === "z" || key === "y") {
-      if (!editable) return;
+      // Repeated undos queue up behind the one in flight.
+      if (!canEdit || addingNode || !bundle) return;
       event.preventDefault();
       if (!event.repeat)
         revert(key === "y" || event.shiftKey ? "redo" : "undo");
-    } else if (key === "c" && !event.shiftKey && bundle) {
+    } else if (key === "c" && !event.shiftKey && graph) {
       // Selected text is copied as usual.
       if (window.getSelection()?.toString()) return;
-      const copied = copyNodes(
-        bundle,
-        parent,
-        selection.length ? selection : selected ? [selected] : [],
-      );
-      if (!copied) return;
+      const ids = selection.length ? selection : selected ? [selected] : [];
+      if (!graph.nodes.some((item) => ids.includes(item.id))) return;
       event.preventDefault();
-      notify(
-        copied.nodes.length === 1
-          ? t("nodeCopied")
-          : t("nodesCopied").replace("{count}", String(copied.nodes.length)),
-      );
+      if (!event.repeat) safe(() => copy(ids));
     } else if (key === "v" && !event.shiftKey) {
       const copied = copiedNodes();
-      if (!editable || !copied) return;
+      if (!canEdit || busy || !bundle || !copied) return;
       event.preventDefault();
       if (!event.repeat) safe(() => paste(copied));
     }
@@ -522,7 +539,7 @@ export default function FlowPage() {
       }
     >
       <NodePalette
-        readOnly={!canEdit || addingNode}
+        readOnly={!canEdit || busy}
         snapshot={snapshot}
         excludedComponents={path.map((part) => part.definition)}
         hidden={!panels.open.palette}
@@ -531,14 +548,12 @@ export default function FlowPage() {
           safe(() => addNode(kind, id, undefined, undefined, linked))
         }
         onNewTemplate={(language) =>
-          safe(async () => {
-            // Edits are saved as they are typed, so the template exists first.
-            const template =
-              identifier("template") + (language === "python" ? ".py" : "");
-            await save(snapshot, (value) => {
-              value.templates[template] = newTemplateCode(language);
-            });
-            openModal({ kind: "template", worktree, template, create: true });
+          openModal({
+            kind: "template",
+            worktree,
+            template:
+              identifier("template") + (language === "python" ? ".py" : ""),
+            create: true,
           })
         }
         onLibrary={() => openModal({ kind: "library", worktree })}
@@ -549,7 +564,7 @@ export default function FlowPage() {
           {t("addingNode")}
         </div>
       )}
-      <main className="canvas-column" inert={addingNode}>
+      <main className="canvas-column" inert={busy}>
         <CanvasHeader
           projectName={project?.name || bundle.flow.name}
           path={path}
@@ -586,7 +601,7 @@ export default function FlowPage() {
             ref={canvas}
             valueProducers={valueProducers}
             // Its delete keys listen on the document, which inert does not cover.
-            readOnly={!canEdit || addingNode}
+            readOnly={!canEdit || busy}
             nodes={graph.nodes}
             edges={graph.edges}
             parsed={snapshot.parsed_templates}
@@ -672,7 +687,7 @@ export default function FlowPage() {
         className="inspector-layer"
         id="node-inspector"
         hidden={!panels.open.inspector}
-        inert={addingNode}
+        inert={busy}
       >
         {node && definition ? (
           <Inspector
