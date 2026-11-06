@@ -35,8 +35,11 @@ export async function projectNavigationFlow(page: Page) {
     name: en.projectNavigation,
   });
   await expect(navigation.getByRole("link")).toHaveCount(7);
+  // The new branch also offers its first run in the missing-results notice.
   await expect(
-    page.getByRole("button", { name: en.run, exact: true }),
+    page
+      .locator(".flow-toolbar")
+      .getByRole("button", { name: en.run, exact: true }),
   ).toBeVisible();
   await navigation.getByRole("link", { name: en.jobs, exact: true }).click();
   await expect(
@@ -183,7 +186,9 @@ export async function projectNavigationFlow(page: Page) {
   });
   await translated.getByRole("link", { name: fr.flow, exact: true }).click();
   await expect(
-    page.getByRole("button", { name: fr.run, exact: true }),
+    page
+      .locator(".flow-toolbar")
+      .getByRole("button", { name: fr.run, exact: true }),
   ).toBeInViewport();
   expect(runs).toBe(0);
   return { project, branch };

@@ -23,6 +23,11 @@ BLOB_BATCH = 256
 UNREADABLE = object()
 
 
+def origin_key(branch):
+    """Git configuration recording the branch a working branch was created from."""
+    return f"branch.{branch}.duckpad-origin"
+
+
 def entity_sources(entity):
     """The graph file, code file and node ID defining a node or template entity.
 
@@ -477,14 +482,6 @@ class GitWorkspace:
                     "ref": ref,
                     "name": name,
                     "head": head,
-                    "origin": (
-                        self.git(
-                            worktree["path"], "config", "--get", f"branch.{name}.duckpad-origin", check=False
-                        )
-                        or None
-                    )
-                    if not remote
-                    else None,
                     "remote": remote,
                     "current": bool(tree and tree["id"] == worktree_id),
                     "worktree": tree["id"] if tree else None,
@@ -535,7 +532,11 @@ class GitWorkspace:
                 self.store.delete("worktree", remove_id)
             self.projects.discard([remove], artifacts)
             # Git logs each failure; a branch left behind is only listed as closed.
-            for args in (("worktree", "prune"), ("update-ref", "-d", "refs/heads/" + remove["branch"], head)):
+            for args in (
+                ("worktree", "prune"),
+                ("update-ref", "-d", "refs/heads/" + remove["branch"], head),
+                ("config", "--unset", origin_key(remove["branch"])),
+            ):
                 with suppress(GitError):
                     self.git(current["path"], *args)
             return {"ok": True}
@@ -587,22 +588,16 @@ class GitWorkspace:
         raise Problem(message, 422)
 
     def prepare_origin(self, worktree_id):
-        """Review this branch into its recorded origin; older branches default to main."""
-        with self.projects.locked(worktree_id) as source:
-            origin = (
-                self.git(
-                    source["path"],
-                    "config",
-                    "--get",
-                    f"branch.{source['branch']}.duckpad-origin",
-                    check=False,
-                )
-                or "main"
-            )
-            destination = self.store.find_worktree(source["project"], origin)
-            if not destination or destination["id"] == worktree_id:
-                raise Problem("Open the origin branch or choose a destination in Branches.", 409)
-            return self.prepare(destination["id"], "refs/heads/" + source["branch"])
+        """Review this branch into its recorded origin; older branches default to main.
+
+        `prepare` validates history before taking the repository lock, so it is not called under it.
+        """
+        source = self.projects.get(worktree_id)
+        origin = self.git(source["path"], "config", "--get", origin_key(source["branch"]), check=False)
+        destination = self.store.find_worktree(source["project"], origin or "main")
+        if not destination or destination["id"] == worktree_id:
+            raise Problem("Open the origin branch or choose a destination in Branches.", 409)
+        return self.prepare(destination["id"], "refs/heads/" + source["branch"])
 
     def prepare(self, destination, source_ref, remote_guard=None):
         if source_ref.startswith(("refs/heads/", "refs/remotes/origin/")):

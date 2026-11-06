@@ -866,19 +866,24 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
     def git_apply(worktree: str, review: str, data: schemas.GitApply) -> Record:
         return projects.versioning.apply(worktree, review, data.choices, data.proposal_revision)
 
-    @app.get("/api/worktrees/{worktree}/git/reviews/{review}/data", response_model=None)
-    def git_data_results(worktree: str, review: str, environment: str) -> list[Record]:
+    def current_review(worktree: str, review: str) -> Record:
+        """A review whose branches did not move. Results are then read without the repository lock."""
         with projects.locked(worktree):
             proposal = projects.versioning.review(worktree, review)
             projects.versioning.verify_review(proposal)
-            return data_comparison.available_results(engine.results, proposal, environment)
+            return proposal
+
+    @app.get("/api/worktrees/{worktree}/git/reviews/{review}/data", response_model=None)
+    def git_data_results(worktree: str, review: str, environment: str) -> list[Record]:
+        return data_comparison.available_results(
+            engine.results, current_review(worktree, review), environment
+        )
 
     @app.post("/api/worktrees/{worktree}/git/reviews/{review}/data", response_model=None)
     def git_data_comparison(worktree: str, review: str, data: schemas.GitDataComparison) -> Record:
-        with projects.locked(worktree):
-            proposal = projects.versioning.review(worktree, review)
-            projects.versioning.verify_review(proposal)
-            return data_comparison.compare_result(engine.results, proposal, **data.model_dump())
+        return data_comparison.compare_result(
+            engine.results, current_review(worktree, review), **data.model_dump()
+        )
 
     @app.get("/api/worktrees/{worktree}/git/remote", response_model=None)
     def git_remote(worktree: str) -> Record:

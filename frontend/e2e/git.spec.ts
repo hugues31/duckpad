@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { signIn } from "./helpers";
+import { fetchOrigin, signIn } from "./helpers";
 import en from "../src/locales/en.json" with { type: "json" };
 import fr from "../src/locales/fr.json" with { type: "json" };
 
@@ -393,13 +393,7 @@ test("configure origin, fetch, review first publication, integrate incoming chan
     .fill(`https://example.invalid/e2e/${main.id.replaceAll("_", "-")}.git`);
   await dialog.getByLabel("Remote branch", { exact: true }).fill("main");
   await dialog.getByRole("button", { name: "Save configuration" }).click();
-  if (
-    !(await dialog
-      .getByRole("button", { name: "Fetch", exact: true })
-      .isVisible())
-  )
-    await dialog.getByText("Details", { exact: true }).click();
-  await dialog.getByRole("button", { name: "Fetch", exact: true }).click();
+  await fetchOrigin(dialog);
   await expect(dialog).toContainText("Ready for first publication");
   await dialog.getByRole("button", { name: "Push", exact: true }).click();
   await dialog
@@ -432,13 +426,7 @@ test("configure origin, fetch, review first publication, integrate incoming chan
   );
   expect(pushed.ok()).toBeTruthy();
   await dialog.getByRole("button", { name: "Reload state" }).click();
-  if (
-    !(await dialog
-      .getByRole("button", { name: "Fetch", exact: true })
-      .isVisible())
-  )
-    await dialog.getByText("Details", { exact: true }).click();
-  await dialog.getByRole("button", { name: "Fetch", exact: true }).click();
+  await fetchOrigin(dialog);
   await expect(dialog.locator(".git-sync-summary")).toContainText("Behind");
   await dialog.getByRole("button", { name: "Pull" }).click();
   await expect(dialog).toContainText("origin/main → main");

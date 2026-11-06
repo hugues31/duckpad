@@ -154,8 +154,6 @@ export type SyncState =
   | "diverged";
 
 export interface Branch {
-  /** Local branch this working branch was created from, when known. */
-  origin?: string | null;
   /** Full reference name, under refs/heads or refs/remotes/origin. */
   ref: string;
   name: string;

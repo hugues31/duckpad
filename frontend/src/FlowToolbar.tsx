@@ -31,7 +31,7 @@ export function FlowToolbar() {
     starting,
     run,
     stop,
-    flush,
+    settle,
   } = useLoadedWorktree();
   const dirty = drafts.dirty();
   const saveState = t(saving ? "saving" : dirty ? "unsavedChanges" : "saved");
@@ -61,9 +61,7 @@ export function FlowToolbar() {
             onClick={() =>
               void review.run(async () => {
                 try {
-                  await flush();
-                  await drafts.persist();
-                  await flush();
+                  await settle();
                   openModal({ kind: "git", worktree: id, mode: "review" });
                 } catch (error) {
                   notify((error as Error).message, true);

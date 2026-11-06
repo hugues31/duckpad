@@ -82,6 +82,10 @@ def compare_result(results, review, environment, node, port, before, after, key=
         results.find_dataset(review[side], environment, node, port)
         for side in ("worktree", "source_worktree")
     ]
+    # Never label another generation as the result the user asked to compare. `reading` then
+    # refuses generations replaced meanwhile.
+    if [dataset.id for _, dataset in pairs] != [before, after]:
+        raise Problem("Results changed. Reload the data impact section.", 409)
     encoded = []
     with ExitStack() as reads:
         cursors = [reads.enter_context(reading(context, [dataset])) for context, dataset in pairs]
@@ -103,9 +107,6 @@ def compare_result(results, review, environment, node, port, before, after, key=
             else:
                 values = Counter(encode(row) for row in rows)
             encoded.append(values)
-        # Never label an earlier generation as the result the user asked to compare.
-        if [dataset.id for _, dataset in pairs] != [before, after]:
-            raise Problem("Results changed during comparison. Reload the data impact section.", 409)
     old, new = encoded
     if key:
         added, removed = len(new.keys() - old.keys()), len(old.keys() - new.keys())

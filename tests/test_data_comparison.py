@@ -5,6 +5,7 @@ from helpers import join_run
 
 from duckpad import data_comparison
 from duckpad.bundle import bundle_to_files
+from duckpad.git.workspace import origin_key
 from duckpad.util import Problem
 
 
@@ -115,8 +116,10 @@ def test_origin_is_persistent_and_nested_branches_review_their_parent(branches, 
     proposal = projects.versioning.prepare_origin(nested["id"])
     assert proposal["worktree"] == feature["id"]
     assert proposal["source"] == nested["branch"]
-    branch = next(value for value in projects.versioning.branches(nested["id"]) if value["current"])
-    assert branch["origin"] == feature["branch"]
-    projects.git(main["path"], "config", f"branch.{nested['branch']}.duckpad-origin", "missing")
+    projects.git(main["path"], "config", origin_key(nested["branch"]), "missing")
     with pytest.raises(Problem, match="choose a destination"):
         projects.versioning.prepare_origin(nested["id"])
+    # Deleting a merged branch forgets its origin, so a branch reusing the name starts afresh.
+    head = projects.git(nested["path"], "rev-parse", "HEAD")
+    projects.versioning.cleanup(main["id"], nested["id"], feature["id"], head)
+    assert not projects.git(main["path"], "config", "--get", origin_key(nested["branch"]), check=False)

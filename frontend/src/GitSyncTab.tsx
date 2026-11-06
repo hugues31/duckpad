@@ -8,6 +8,17 @@ import type { Comparison, MergeReview, RemoteStatus } from "./gitTypes";
 import { useT, useTranslateValue } from "./i18n";
 import { ConfirmModal } from "./modals";
 
+/** The origin state that the form and a reviewed publication belong to. */
+const remoteRevision = (remote: RemoteStatus | null) =>
+  JSON.stringify(
+    remote && [
+      remote.config_revision,
+      remote.local_head,
+      remote.remote_head,
+      remote.checked,
+    ],
+  );
+
 export default function GitSyncTab({
   base,
   role,
@@ -41,14 +52,7 @@ export default function GitSyncTab({
     diff: Comparison;
   } | null>(null);
   // A new origin state resets the form and invalidates the reviewed publication.
-  const revision = JSON.stringify(
-    remote && [
-      remote.config_revision,
-      remote.local_head,
-      remote.remote_head,
-      remote.checked,
-    ],
-  );
+  const revision = remoteRevision(remote);
   const [formRemote, setFormRemote] = useState(revision);
   if (revision !== formRemote) {
     setFormRemote(revision);
@@ -268,14 +272,7 @@ export default function GitSyncTab({
                       b: fresh.local_head,
                     }),
                   );
-                  setFormRemote(
-                    JSON.stringify([
-                      fresh.config_revision,
-                      fresh.local_head,
-                      fresh.remote_head,
-                      fresh.checked,
-                    ]),
-                  );
+                  setFormRemote(remoteRevision(fresh));
                   setPublication({ remote: fresh, diff });
                   setRecreate(false);
                 })
@@ -284,7 +281,7 @@ export default function GitSyncTab({
               {t("gitPush")}
             </button>
           </div>
-          <details>
+          <details className="git-sync-details">
             <summary>{t("gitDetails")}</summary>
             <p>
               {t("localHead")}: <code>{remote.local_head}</code>

@@ -1,6 +1,11 @@
 import { generateKeyPairSync } from "node:crypto";
 import { expect, test, type Page } from "@playwright/test";
-import { openInstanceSettings, openUserSettings, signIn } from "./helpers";
+import {
+  fetchOrigin,
+  openInstanceSettings,
+  openUserSettings,
+  signIn,
+} from "./helpers";
 import fr from "../src/locales/fr.json" with { type: "json" };
 
 /** An OpenSSH ed25519 public key line, as published by a Git host. */
@@ -117,13 +122,7 @@ test("synchronize over SSH with the account key after confirming each origin URL
   await expect(dialog.getByRole("alert")).toHaveCount(0);
 
   // Without a key, Duckpad points to the user settings instead of server credentials.
-  if (
-    !(await dialog
-      .getByRole("button", { name: "Fetch", exact: true })
-      .isVisible())
-  )
-    await dialog.getByText("Details", { exact: true }).click();
-  await dialog.getByRole("button", { name: "Fetch", exact: true }).click();
+  await fetchOrigin(dialog);
   await expect(dialog.getByRole("alert")).toContainText(
     "Generate your SSH key",
   );
@@ -145,13 +144,7 @@ test("synchronize over SSH with the account key after confirming each origin URL
   await expect(fingerprint).not.toHaveText(first!);
 
   dialog = await openSync(page, tree.id);
-  if (
-    !(await dialog
-      .getByRole("button", { name: "Fetch", exact: true })
-      .isVisible())
-  )
-    await dialog.getByText("Details", { exact: true }).click();
-  await dialog.getByRole("button", { name: "Fetch", exact: true }).click();
+  await fetchOrigin(dialog);
   const consent = page.getByRole("dialog", {
     name: "Use your SSH key for this origin?",
   });
@@ -163,13 +156,7 @@ test("synchronize over SSH with the account key after confirming each origin URL
   await expect(dialog.locator(".git-sync-summary")).toContainText(
     "Not checked",
   );
-  if (
-    !(await dialog
-      .getByRole("button", { name: "Fetch", exact: true })
-      .isVisible())
-  )
-    await dialog.getByText("Details", { exact: true }).click();
-  await dialog.getByRole("button", { name: "Fetch", exact: true }).click();
+  await fetchOrigin(dialog);
   await consent
     .getByRole("button", { name: "Use my key for this URL" })
     .click();
@@ -181,13 +168,7 @@ test("synchronize over SSH with the account key after confirming each origin URL
   const other = `git@example.invalid:e2e/${name}-other.git`;
   await dialog.getByText("Origin configuration", { exact: true }).click();
   await configureOrigin(page, dialog, other);
-  if (
-    !(await dialog
-      .getByRole("button", { name: "Fetch", exact: true })
-      .isVisible())
-  )
-    await dialog.getByText("Details", { exact: true }).click();
-  await dialog.getByRole("button", { name: "Fetch", exact: true }).click();
+  await fetchOrigin(dialog);
   await expect(consent.locator(".git-consent-url")).toHaveText(other);
   await consent
     .getByRole("button", { name: "Use my key for this URL" })

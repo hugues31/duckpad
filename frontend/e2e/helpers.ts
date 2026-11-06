@@ -57,6 +57,14 @@ export async function closeEditor(dialog: Locator) {
   await expect(dialog).toHaveCount(0, { timeout: 30000 });
 }
 
+/** Fetch only refreshes the remote status, so it stays under the synchronization details. */
+export async function fetchOrigin(dialog: Locator) {
+  const fetch = dialog.getByRole("button", { name: "Fetch", exact: true });
+  if (!(await fetch.isVisible()))
+    await dialog.locator(".git-sync-details > summary").click();
+  await fetch.click();
+}
+
 export async function openInstanceSettings(
   page: Page,
   section = "Users and permissions",

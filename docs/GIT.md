@@ -53,9 +53,10 @@ the reviewed branch commit.
 ## Compare versions
 
 Open **Compare versions** in History, or the synchronization status beside the
-branch selector when a remote is connected. Choose **A: reference** and **B: target** from local branches, fetched
-remote branches, tags, commit IDs or **Working files**. The resolved commits,
-author and date appear below each selection. **Swap A/B** reverses the comparison.
+branch selector when a remote is connected. Choose **A: reference** and
+**B: target** from local branches, fetched remote branches, tags, commit IDs or
+**Working files**. The resolved commits, author and date appear below each
+selection. **Swap A/B** reverses the comparison.
 
 Working files are captured once. **Capture working files** takes a new snapshot;
 retrying the same comparison retains the existing capture and resolved commits.
@@ -68,10 +69,10 @@ before/after inspector. Added (`+`), removed (`−`), modified (`~`) and unchang
 (`=`) elements remain distinguishable without color. Deleted nodes and connections
 are inspectable. Modified elements show only changed fields, including individual
 parameters. Unchanged fields and code remain under **Full definition**; changed
-SQL uses Monaco's read-only diff editor. Component definitions,
-boundary ports, exposed parameters, node parameters, project variables and
-documentation have their own logical entries, identified by stable IDs and
-component paths. A variable lists the root flow parameters bound to it.
+SQL uses Monaco's read-only diff editor. Component definitions, boundary ports,
+exposed parameters, node parameters, project variables and documentation have
+their own logical entries, identified by stable IDs and component paths. A
+variable lists the root flow parameters bound to it.
 
 Use **Only changes**, category filters, search, previous/next and **Focus on
 change** to navigate. Processing/configuration, documentation/names and canvas
@@ -119,12 +120,12 @@ source branch are not copied.
 
 **Compare & merge** opens a review directly into the branch from which the working
 branch was created. That origin is recorded locally when creating a branch;
-branches created before this feature default to main. If the origin is no longer
-open, use **Branches** to open it or choose another destination. The Branches tab
-also supports explicit source/destination selection and **Review merge**.
+branches without a recorded origin target main. If the origin is no longer open,
+use **Branches** to open it or choose another destination. The Branches tab also
+supports explicit source/destination selection and **Review merge**.
 
-The review keeps the common base and exact heads under **Details**. Conflicts use node
-or component names with the file path underneath. For every conflicting field,
+The review keeps the common base and exact heads under **Details**. Conflicts use
+node or component names with the file path underneath. For every conflicting field,
 inspect base/current/incoming values and choose one. Changed characters are
 highlighted: additions are underlined and removed base characters are struck
 through. File conflicts use a syntax-highlighted diff. A conflict in
@@ -203,14 +204,15 @@ one status button shows incoming and outgoing commit counts, such as **↓2 ↑1
 opens the **Pull / Push** actions. Commit IDs, manual Fetch and reload controls,
 and synchronization explanations are under **Details**.
 
-1. **Fetch**, including the fetch performed by Pull and Push, updates remote-tracking references and the last successful check. It
+1. **Fetch**, including the fetch performed by Pull and Push, updates
+   remote-tracking references and the last successful check. It
    does not change local branches or project files. The status distinguishes an
    unverified remote, up-to-date/ahead/behind/diverged branches, a first publication,
    a deleted remote branch and unrelated histories.
 2. **Pull** fetches current remote knowledge and opens the same semantic review as
    a local merge. Unrelated or invalid incoming definitions cannot be adopted.
-3. **Push** fetches current remote knowledge and shows the definitions that the local commit
-   would publish. **Publish reviewed commit** publishes that exact commit to the
+3. **Push** fetches current remote knowledge and shows the definitions that the
+   local commit would publish. **Publish reviewed commit** publishes that exact commit to the
    displayed branch. The fetched remote head must be its ancestor. An exact-head
    lease rejects a remote race, including an update between inspection and push.
    This lease never authorizes a non-fast-forward replacement. Fetch and integrate

@@ -24,7 +24,7 @@ from .git import command
 from .git.command import GitError, GitOptions
 from .git.identity import SYSTEM_IDENTITY, current_identity
 from .git.remote import Remotes
-from .git.workspace import GitWorkspace, diagnose, require_valid
+from .git.workspace import GitWorkspace, diagnose, origin_key, require_valid
 from .merge import conflict_details, merge_files
 from .node_code import owned_paths
 from .node_names import node_names
@@ -237,7 +237,7 @@ class Projects:
         try:
             files = self.read_files(result)
             if start:
-                self.git(repository, "config", f"branch.{branch}.duckpad-origin", worktree["branch"])
+                self.git(repository, "config", origin_key(branch), worktree["branch"])
             self.store.put("worktree", key, result)
         except Exception:
             shutil.rmtree(path, ignore_errors=True)
