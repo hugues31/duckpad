@@ -9,11 +9,10 @@ import re
 
 from . import value_sources, variables
 from .graph import reachable
-from .partition_filters import canonical as canonical
-from .partition_filters import filter_statements as filter_statements
-from .templates import base_type
+from .partition_filters import canonical
 from .types import Record
 from .util import Problem, digest, qi, uid
+from .value_types import IDENTIFIER_CASE, INTEGER, base_type
 
 REFERENCE = re.compile(r"\{\{\s*partition(?:\.([a-z][a-z0-9_]*))?\s*\}\}")
 TYPES = {"text", "number", "date", "boolean"}
@@ -392,7 +391,7 @@ def scalar_type(sql_type):
     if sql_type == "BOOLEAN":
         return "boolean"
     if (
-        value_sources.INTEGER.fullmatch(sql_type)
+        INTEGER.fullmatch(sql_type)
         or sql_type in ("FLOAT", "DOUBLE", "REAL")
         or sql_type.startswith("DECIMAL(")
     ):
@@ -408,8 +407,7 @@ def extract(cursor, dataset, dimension, source, run):
         matches = [
             c
             for c in (dataset.source_columns or dataset.columns)
-            if c["name"].translate(value_sources.IDENTIFIER_CASE)
-            == name.translate(value_sources.IDENTIFIER_CASE)
+            if c["name"].translate(IDENTIFIER_CASE) == name.translate(IDENTIFIER_CASE)
         ]
         if len(matches) != 1:
             raise Problem(f"invalid_value_source: column {name} is missing or ambiguous")
@@ -420,7 +418,7 @@ def extract(cursor, dataset, dimension, source, run):
                 f"partition_type: column {name} has type {column['type']}, expected {dimension['type']}"
             )
         columns.append({**column, "scalar_type": dimension["type"] if not columns else kind})
-    if len({c["name"].translate(value_sources.IDENTIFIER_CASE) for c in columns}) != len(columns):
+    if len({c["name"].translate(IDENTIFIER_CASE) for c in columns}) != len(columns):
         raise Problem("partition_definition: attributes must be distinct from the key column")
     rows = cursor.execute(
         f"SELECT {', '.join(qi(c['name']) for c in columns)} FROM {qi(dataset.table)}"

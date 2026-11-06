@@ -16,6 +16,7 @@ from duckpad.components import expand, group
 from duckpad.merge import merge_files
 from duckpad.templates import compile_template, parse_template
 from duckpad.util import Problem
+from duckpad.value_types import convert
 
 
 def bundle(sql="SELECT 4 AS amount, '2026-06-30' AS day"):
@@ -62,7 +63,7 @@ def change(projects, worktree, update):
     ],
 )
 def test_lossless_conversions(kind, sql_type, cell, expected):
-    assert value_sources.convert(kind, sql_type, cell) == expected
+    assert convert(kind, sql_type, cell) == expected
     assert json.loads(json.dumps(expected)) == expected
 
 
@@ -83,7 +84,7 @@ def test_lossless_conversions(kind, sql_type, cell, expected):
 )
 def test_unsafe_conversions_are_rejected(kind, sql_type, cell):
     with pytest.raises(Problem):
-        value_sources.convert(kind, sql_type, cell)
+        convert(kind, sql_type, cell)
 
 
 @pytest.mark.parametrize(

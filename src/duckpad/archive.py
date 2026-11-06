@@ -13,8 +13,9 @@ from .components import expand
 from .graph import connection_references
 from .node_names import graph_names, name_text
 from .projects import decode
-from .templates import URI, base_type
+from .templates import URI
 from .util import Problem
+from .value_types import base_type
 
 MAX_ARCHIVE_BYTES = 16 * 1024 * 1024
 MAX_ARCHIVE_ENTRIES = 10_000

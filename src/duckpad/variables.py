@@ -17,11 +17,10 @@ import re
 from collections.abc import Iterable
 
 from .node_names import graph_names, name_text
-from .templates import VARIABLE_REFERENCE, base_type, directives, parse_parameter
+from .templates import VARIABLE_REFERENCE, directives, parse_parameter
 from .types import Record
 from .util import Problem, dumps
-from .value_types import check_value as check_value
-from .value_types import options as options
+from .value_types import base_type, check_value, options
 
 FILE = "variables.json"
 KEY = "$var"

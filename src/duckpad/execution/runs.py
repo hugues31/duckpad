@@ -29,15 +29,17 @@ from ..materialize import (
     publish_view,
 )
 from ..node_names import node_name_parts
+from ..partition_filters import filter_statements
 from ..partition_runs import PartitionRun
 from ..partition_storage import PartitionStorage
 from ..projects import Projects
 from ..python_policy import get_policy
 from ..sql_errors import SqlSourceError
 from ..store import Store
-from ..templates import base_type, compile_template
+from ..templates import compile_template
 from ..types import Connections, Record, RunToken, SQLCursor
 from ..util import Problem, now, qi, uid
+from ..value_types import base_type
 from .contexts import ContextPool, cancel_lineage, interrupt, wait_for_readers
 from .exports import Exports
 from .fingerprints import Fingerprints
@@ -832,7 +834,7 @@ class Runner:
                     continue
                 table = statement["table"]
                 if execution.partition is not None:
-                    partitions.filter_statements([statement], node, execution.partition, cursor)
+                    filter_statements([statement], node, execution.partition, cursor)
                 if execution.schema_only:
                     statement["query"] = f"SELECT * FROM ({statement['query']}) AS empty_partition LIMIT 0"
                 output_start = time.monotonic()

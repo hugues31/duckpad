@@ -9,6 +9,7 @@ from duckpad import partitions, variables
 from duckpad.bundle import bundle_to_files, files_to_bundle, validate
 from duckpad.components import expand, expand_for, group
 from duckpad.merge import merge_files
+from duckpad.partition_filters import canonical, filter_statements
 from duckpad.templates import compile_template
 from duckpad.util import Problem
 
@@ -158,13 +159,13 @@ def test_filter_keeps_duplicate_rows_and_binds_injection_as_data(tmp_path):
         node["parsed"], {}, {}, {"result": "output"}, {}, {"file": tmp_path, "destination": tmp_path}
     )
     with duckdb.connect() as db:
-        partitions.filter_statements(statements, node, entry(), db)
+        filter_statements(statements, node, entry(), db)
         assert db.execute(statements[0]["sql"], statements[0]["bindings"]).fetchall() == [("a", 1), ("a", 1)]
     malicious = "a' OR TRUE --"
     statements = compile_template(
         node["parsed"], {}, {}, {"result": "output"}, {}, {"file": tmp_path, "destination": tmp_path}
     )
-    partitions.filter_statements(statements, node, entry(malicious))
+    filter_statements(statements, node, entry(malicious))
     assert malicious not in statements[0]["sql"]
     with duckdb.connect() as db:
         assert db.execute(statements[0]["sql"], statements[0]["bindings"]).fetchall() == []
@@ -196,7 +197,7 @@ def test_merge_keeps_value_source_atomic_and_conflicts_on_collector_mode():
 
 def test_numeric_keys_must_survive_the_browser_round_trip():
     with pytest.raises(Problem, match="browser"):
-        partitions.canonical("number", "BIGINT", 2**53 + 1)
+        canonical("number", "BIGINT", 2**53 + 1)
     assert partitions.identity({"type": "number", "value": 1}) == partitions.identity(
         {"type": "number", "value": 1.0}
     )
@@ -218,7 +219,7 @@ def test_parquet_predicate_is_inside_the_native_scan(tmp_path):
             "bindings": {"file": str(path)},
         }
         node = {"partition_filters": {"result": {"by": "batch", "column": "batch"}}}
-        partitions.filter_statements([statement], node, entry(), db)
+        filter_statements([statement], node, entry(), db)
         explained = db.execute("EXPLAIN " + statement["query"], statement["bindings"]).fetchone()[1]
         assert "READ_PARQUET" in explained
         assert "Filters:" in explained and "batch='a'" in explained.replace(" ", "")
@@ -233,7 +234,7 @@ def test_late_boundary_filters_after_limit_without_changing_its_meaning():
     }
     node = {"partition_filters": {"result": {"by": "batch", "column": "batch"}}}
     with duckdb.connect() as db:
-        partitions.filter_statements([statement], node, entry("b"), db)
+        filter_statements([statement], node, entry("b"), db)
         assert db.execute(statement["query"], statement["bindings"]).fetchall() == []
 
 

@@ -6,9 +6,9 @@ from helpers import wait_run
 from test_partitions import bundle
 from test_python_nodes import single
 
-from duckpad import partitions
 from duckpad.bundle import bundle_to_files
 from duckpad.native import Cursor
+from duckpad.partition_filters import filter_statements
 from duckpad.python_execution import execute
 from duckpad.util import Problem, qi
 
@@ -86,7 +86,7 @@ def test_sql_and_python_accept_the_same_key_column_pairs(tmp_path, kind, value, 
     statement = {"output": "result", "query": query, "bindings": {}}
     with duckdb.connect() as db:
         try:
-            partitions.filter_statements([statement], request, request["partition"], db)
+            filter_statements([statement], request, request["partition"], db)
             sql_accepted = True
         except (Problem, duckdb.Error):
             sql_accepted = False

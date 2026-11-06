@@ -13,9 +13,7 @@ from sqlglot.tokens import TokenType
 from .data_preparation import PREPARATION_TYPES, render_preparation
 from .sql_errors import SqlSourceError, source_context
 from .util import Problem, literal, qi
-from .value_types import base_type as base_type
-from .value_types import is_date as is_date
-from .value_types import type_argument as type_argument
+from .value_types import base_type, is_date, type_argument
 
 REFERENCE = re.compile(r"{{\s*(\w+)\s*}}")
 # A project variable referenced inside an expression parameter value.

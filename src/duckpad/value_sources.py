@@ -9,9 +9,7 @@ import copy
 from . import variables
 from .graph import reachable
 from .util import Problem, digest, qi
-from .value_types import IDENTIFIER_CASE as IDENTIFIER_CASE
-from .value_types import INTEGER as INTEGER
-from .value_types import convert as convert
+from .value_types import IDENTIFIER_CASE, convert
 
 
 def locate(bundle, nodes, boundaries, source):
