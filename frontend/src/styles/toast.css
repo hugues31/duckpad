@@ -1,0 +1,29 @@
+/* Toast notifications. */
+.toast {
+  position: fixed;
+  bottom: 22px;
+  left: 50%;
+  transform: translateX(-50%);
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  z-index: 200;
+  padding: 13px 17px;
+  color: var(--accent);
+  max-width: min(90vw, 700px);
+  font-size: 12px;
+}
+.toast.error {
+  color: light-dark(#a33e36, #f4ada4);
+}
+.toast > span {
+  overflow-wrap: anywhere;
+}
+/* An action offered by the message, such as undoing what it reports. */
+.toast-action {
+  font-weight: 650;
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: color-mix(in srgb, currentColor 12%, transparent);
+}
