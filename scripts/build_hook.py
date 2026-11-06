@@ -1,4 +1,4 @@
-"""Release wheels carry the frontend; editable installs allow building it later."""
+"""Release wheels carry the frontend and the assistant's guides; editable installs read them in place."""
 
 from pathlib import Path
 
@@ -17,3 +17,8 @@ class FrontendHook(BuildHookInterface):
         build_data["force_include"][str(frontend)] = (
             "duckpad/static" if self.target_name == "wheel" else "src/duckpad/static"
         )
+        if self.target_name == "wheel":
+            # Every published guide, without Git-ignored operator files such as docs/MULTICA.md.
+            for guide in sorted(Path(self.root, "docs").glob("*.md")):
+                if not self.build_config.path_is_excluded(f"docs/{guide.name}"):
+                    build_data["force_include"][str(guide)] = f"duckpad/assistant/guides/{guide.name}"
