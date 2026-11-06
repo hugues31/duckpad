@@ -116,21 +116,9 @@ See [XLSX limits](#xlsx-workbooks) and the raw reports in `docs/validation/`.
 
 ## Project files and storage locations
 
-Every file node (Load CSV, Load Parquet, Load XLSX, Load JSON, Export CSV and Export XLSX) has a **Location** field. It defaults to **Project files**: the project's uploads and its exports, available in every environment without a connection or a grant. Drop one or more CSV, Parquet, XLSX or JSON files onto the canvas to upload them and
-create configured reader nodes at the drop position. Each node is named after its
-file. XLSX drops enable the project's `excel` extension; an instance administrator
-must have installed it first if it is not built in.
+Every file node (Load CSV, Load Parquet, Load XLSX, Load JSON, Export CSV and Export XLSX) has a **Location** field. It defaults to **Project files**: the project's uploads and its exports, available in every environment without a connection or a grant. Drop one or more CSV, Parquet, XLSX or JSON files onto the canvas to upload them: each becomes a configured reader node, named after its file, at the drop position. XLSX drops enable the project's `excel` extension; an instance administrator must have installed it first if it is not built in.
 
-The `file` selector shows uploaded filenames and lets you reuse files from this
-project. New file readers start empty. Uploads store project-relative references,
-so their node parameters and project ZIP exports contain no server file paths.
-**Relative path or expression** accepts a resource path or a variable expression.
-
-The inspector previews the first 20 rows before running. CSV imports detect the
-delimiter, header and column types with DuckDB's `sniff_csv`. Change the delimiter
-or header above the preview and override types in the column table; **Auto** restores
-detection. An invalid conversion displays an error and leaves the override editable.
-Previews do not publish results or run the flow. Files resolve as follows:
+The `file` field selects one of the project's uploaded files, and **Upload file** adds one. New file readers start empty. Uploads are stored as project-relative references, so node parameters and project ZIP exports contain no server path. **Relative path or expression** accepts a resource path or a variable expression. Paths resolve as follows:
 
 - A relative source path resolves under the project's resources, where uploads land.
 - A relative destination resolves under `exports/<worktree>/<environment>/`, so each branch and environment writes its own files.
@@ -148,7 +136,7 @@ To read a shared folder, an instance admin creates a **Server folder** connectio
 
 ![Load XLSX reads inbox/budget.xlsx from the Finance share Server folder](images/server-folder-location.png)
 
-CSV exposes header, delimiter and column type overrides. With no overrides, it retains native inference. Parquet uses native types.
+With project files, the inspector previews a reader's first 20 rows before any run; a preview neither runs the flow nor publishes results. Choosing or dropping a CSV fills its delimiter and header from DuckDB's `sniff_csv`. The preview's column table overrides CSV types, and **Auto** keeps the detected type; an invalid conversion shows an error and leaves the override editable. Without overrides, CSV keeps DuckDB's native inference. Parquet uses native types.
 
 Single-file CSV `COPY` follows DuckDB's native replacement behavior on a second run. Duckpad does not add an overwrite option, rename files, or ask for an existence-based confirmation.
 
@@ -251,13 +239,7 @@ SELECT * FROM {{ connection }}.{{ schema }}.{{ table }};
 INSERT INTO {{ connection }}.{{ schema }}.{{ table }} BY NAME SELECT * FROM {{ source }};
 ```
 
-Select a connection, then a schema and a table from the selected environment.
-Load table previews the columns, types and first 20 rows before execution.
-When the project has no authorized database connection, instance administrators
-can choose **Create a connection**: saving it authorizes it for this project and
-returns to the source node. They can also authorize an existing connection from
-project settings. Other members can choose **Ask an administrator** to see the
-project's participants and administrator roles. The schema defaults to `public`, PostgreSQL's default. DuckDB and SQLite files use `main`, and MySQL the database name.
+Select a connection, then a schema and a table of the selected environment; Load table previews their columns, types and first 20 rows before any run. When no database connection is authorized for the project, instance administrators can choose **Create a connection**: saving it authorizes it for this project and returns to the source node. They can also authorize an existing connection from project settings. Other members can choose **Ask an administrator** to see the project's participants and their roles. The schema defaults to `public`, PostgreSQL's default. DuckDB and SQLite files use `main`, and MySQL the database name.
 
 ![Load table reads public.orders from a PostgreSQL connection](images/load-table.png)
 

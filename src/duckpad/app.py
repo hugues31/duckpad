@@ -161,10 +161,14 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
             if len(parts) >= 4 and parts[3] in ("connections", "python") and request.method != "GET":
                 access.instance_admin(user)
         elif route == "worktrees" and len(parts) >= 3:
+            # Source previews read files and tables beyond the results: editors only, like runs.
+            preview = parts[3:] == ["source-preview"] or (
+                parts[3:4] == ["connections"] and parts[5:] == ["preview"]
+            )
             # Explaining a value and computing column statistics read results without changing them.
-            read = (
+            read = not preview and (
                 request.method == "GET"
-                or (request.method == "POST" and parts[3:] in (["lineage"], ["source-preview"]))
+                or (request.method == "POST" and parts[3:] == ["lineage"])
                 or (request.method in ("POST", "DELETE") and parts[3:4] == ["statistics"])
                 or (request.method == "POST" and parts[3:5] == ["git", "reviews"] and parts[6:] == ["data"])
             )

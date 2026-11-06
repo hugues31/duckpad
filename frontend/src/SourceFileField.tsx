@@ -11,6 +11,22 @@ import { useT } from "./i18n";
 import Select from "./Select";
 import type { Json } from "./types";
 
+/** Project file formats that a reader node imports. */
+const SOURCE_EXTENSIONS = [
+  ".csv",
+  ".tsv",
+  ".parquet",
+  ".xlsx",
+  ".json",
+  ".jsonl",
+  ".ndjson",
+];
+export const isSourceFile = (name: string) =>
+  SOURCE_EXTENSIONS.some((extension) => name.toLowerCase().endsWith(extension));
+/** Built-in readers whose `file` parameter selects a project file. */
+export const isFileReader = (template?: string) =>
+  /^load_(csv|parquet|xlsx|json)$/.test(template || "");
+
 export const sourceFileName = (path: string) =>
   path
     .split(/[\\/]/)
@@ -104,7 +120,7 @@ export default function SourceFileField({
         {t("upload")}
         <input
           type="file"
-          accept=".csv,.tsv,.parquet,.xlsx,.json,.jsonl,.ndjson"
+          accept={SOURCE_EXTENSIONS.join(",")}
           aria-label={t("upload")}
           disabled={pending}
           onChange={async (e) => {

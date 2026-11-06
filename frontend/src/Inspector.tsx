@@ -1,6 +1,6 @@
 import { useWorkspace } from "./shell";
 import SourcePreview from "./SourcePreview";
-import { sourceFileName } from "./SourceFileField";
+import { isFileReader, sourceFileName } from "./SourceFileField";
 import { ActionMenuButton, type ActionItem } from "./ActionMenu";
 import { PartitionInspector } from "./PartitionControls";
 import { useOptionalWorktree, usePartitionQuery } from "./worktree";
@@ -319,10 +319,7 @@ export default function Inspector({
   );
   const sourceKind = node.preset || node.template || node.origin;
   const csvSource = sourceKind === "load_csv";
-  const fileSource =
-    !!sourceKind &&
-    /^load_(csv|parquet|xlsx|json)$/.test(sourceKind) &&
-    !valueOf("connection");
+  const fileSource = isFileReader(sourceKind) && !valueOf("connection");
   const fileValue = valueOf("file");
   const previewParams: Record<string, Json> | null =
     fileSource && fileValue && !fileValue.includes("{{")
@@ -348,6 +345,14 @@ export default function Inspector({
         } else previewParams[key] = value;
       }
     }
+  // The preview edits CSV types once it reads the file; an expression or a bound variable keeps the field.
+  const typesInPreview =
+    csvSource &&
+    fileSource &&
+    (!!previewParams ||
+      !(
+        draft.params.file ?? parameters.find((p) => p.name === "file")?.default
+      ));
   const listedTable = parameters.find((p) =>
     p.type.startsWith("table_name("),
   )?.name;
@@ -572,7 +577,7 @@ export default function Inspector({
                 </div>
               )}
             {parameters
-              .filter((p) => !(fileSource && csvSource && p.name === "types"))
+              .filter((p) => !(typesInPreview && p.name === "types"))
               .map((parameter) => {
                 const value =
                   draft.params?.[parameter.name] ?? parameter.default;
@@ -687,13 +692,15 @@ export default function Inspector({
                   />
                 );
               })}
-            <SourcePreview
-              worktree={worktree}
-              params={previewParams}
-              csv={csvSource}
-              tableUrl={tablePreviewUrl}
-              onTypes={(types) => setParameter("types", types)}
-            />
+            {!readOnly && (
+              <SourcePreview
+                worktree={worktree}
+                params={previewParams}
+                csv={csvSource}
+                tableUrl={tablePreviewUrl}
+                onTypes={(types) => setParameter("types", types)}
+              />
+            )}
             {!node.component && (
               <button
                 className="button secondary full"

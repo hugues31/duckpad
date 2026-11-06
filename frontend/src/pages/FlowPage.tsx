@@ -50,6 +50,7 @@ import NodePalette, { type NodeKind } from "../NodePalette";
 import ResultsPanel, { type ResultsTab } from "../ResultsPanel";
 import { api, uploadSourceFile } from "../api";
 import { previewFile } from "../SourcePreview";
+import { isFileReader, isSourceFile } from "../SourceFileField";
 import { useShell, useWorkspace } from "../shell";
 import type { Bundle, FlowNode, Graph, Json, Snapshot } from "../types";
 import { countLabel, isBuiltinTemplate, nodeLabel, useT } from "../i18n";
@@ -300,7 +301,7 @@ export default function FlowPage() {
       // SQL is the default: flow.json names the language of Python nodes only.
       ...(id.endsWith(".py") && { language: "python" as const }),
       ...(kind === "component" ? { component: id } : { template: id }),
-      params: /^load_(csv|parquet|xlsx|json)$/.test(id) ? { file: "" } : {},
+      params: isFileReader(id) ? { file: "" } : {},
       position:
         position ??
         canvas.current?.newNodePosition(graph?.nodes || []) ??
@@ -334,12 +335,7 @@ export default function FlowPage() {
   }
   async function dropFiles(files: File[], position: FlowNode["position"]) {
     if (!canEdit || additionPending.current) return;
-    if (
-      files.some(
-        (file) =>
-          !/\.(csv|tsv|parquet|xlsx|json|jsonl|ndjson)$/i.test(file.name),
-      )
-    )
+    if (!files.every((file) => isSourceFile(file.name)))
       throw new Error(t("unsupportedSourceFile"));
     additionPending.current = true;
     setAddingNode(true);
@@ -349,11 +345,14 @@ export default function FlowPage() {
       })[] = [];
       for (const file of files) {
         const uploaded = await uploadSourceFile(file, worktree);
-        let settings = {};
-        if (uploaded.template === "load_csv")
-          settings =
-            (await previewFile(worktree, { file: uploaded.path })).settings ||
-            {};
+        // A file the sniffer cannot read still gets its node, whose preview shows the error.
+        const settings =
+          uploaded.template === "load_csv"
+            ? await previewFile(worktree, { file: uploaded.path }).then(
+                (sample) => sample.settings || {},
+                () => ({}),
+              )
+            : {};
         uploads.push({ ...uploaded, settings });
       }
       let selected = "";
@@ -379,7 +378,10 @@ export default function FlowPage() {
                 : {};
             value.extensions = {
               ...extensions,
-              excel: { source: "core", enabled: true },
+              excel: {
+                ...(extensions.excel ?? { source: "core" }),
+                enabled: true,
+              },
             };
           }
           graph.nodes.push(created);
