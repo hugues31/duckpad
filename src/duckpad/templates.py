@@ -3,7 +3,6 @@
 import json
 import math
 import re
-from datetime import date
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
@@ -14,6 +13,9 @@ from sqlglot.tokens import TokenType
 from .data_preparation import PREPARATION_TYPES, render_preparation
 from .sql_errors import SqlSourceError, source_context
 from .util import Problem, literal, qi
+from .value_types import base_type as base_type
+from .value_types import is_date as is_date
+from .value_types import type_argument as type_argument
 
 REFERENCE = re.compile(r"{{\s*(\w+)\s*}}")
 # A project variable referenced inside an expression parameter value.
@@ -22,7 +24,6 @@ IDENTIFIER = re.compile(r"[A-Za-z_]\w*")
 DIRECTIVE = re.compile(r"^\s*--\s*@([\w]+)\s*(.*?)\s*$")
 PARAMETER = re.compile(r"(\w+)\s*:\s*([^=]+?)(?:\s*=\s*(.*))?")
 URI = re.compile(r"[a-zA-Z][a-zA-Z0-9+.-]*://")
-ISO_DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
 PARAMETER_TYPES = {
     "text",
     "number",
@@ -52,17 +53,6 @@ RESOURCE_TYPES = ("file", "destination")
 # Directives that document a template without changing what it computes.
 DESCRIPTIVE = ("label", "description")
 LIST_ITEM_TYPES = ("text", "number", "boolean", "column")
-
-
-def base_type(type_name):
-    """`file(connection)` -> `file`, `list<text>` -> `list`."""
-    return re.split(r"[<(]", type_name.strip())[0]
-
-
-def type_argument(type_name):
-    """`choice(a|b)` -> `a|b`; None without parentheses."""
-    match = re.search(r"\((.*)\)", type_name)
-    return (match[1] or None) if match else None
 
 
 def directive(line):
@@ -581,16 +571,6 @@ def check_scalar(name, kind, argument, value):
         raise Problem(f"{name} requires a date written YYYY-MM-DD")
     elif kind == "choice" and argument and str(value) not in argument.split("|"):
         raise Problem(f"{name} must be one of {argument}")
-
-
-def is_date(value):
-    if not isinstance(value, str) or not ISO_DATE.fullmatch(value):
-        return False
-    try:
-        date.fromisoformat(value)
-    except ValueError:
-        return False
-    return True
 
 
 def parse_block(sql):

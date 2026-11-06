@@ -5,20 +5,13 @@ requires exactly one row; neither source resolution nor inspection executes SQL.
 """
 
 import copy
-import datetime
-import json
-import math
-import re
-from decimal import Decimal
 
 from . import variables
 from .graph import reachable
-from .templates import base_type
 from .util import Problem, digest, qi
-
-INTEGER = re.compile(r"U?(?:TINYINT|SMALLINT|INTEGER|BIGINT|HUGEINT)")
-# DuckDB folds ASCII letters in identifiers, including quoted identifiers.
-IDENTIFIER_CASE = str.maketrans("ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz")
+from .value_types import IDENTIFIER_CASE as IDENTIFIER_CASE
+from .value_types import INTEGER as INTEGER
+from .value_types import convert as convert
 
 
 def locate(bundle, nodes, boundaries, source):
@@ -134,42 +127,6 @@ def dependencies(nodes, edges, sources):
             )
             errors[key] = {"code": code, "error": message}
     return phase, errors
-
-
-def convert(type_name, duck_type, value):
-    """Convert by the SQL column type, never infer it from the worker's JSON value."""
-    if value is None:
-        raise Problem("NULL is not a variable value")
-    kind = base_type(type_name)
-    sql_type = duck_type.upper()
-    if kind == "list":
-        match = re.fullmatch(r"(.+)\[\d*\]", sql_type)
-        if not match or not isinstance(value, (list, tuple)):
-            raise Problem(f"Expected {type_name}, got {duck_type}")
-        return [convert("text" if type_name == "list<text>" else "number", match[1], v) for v in value]
-    valid = False
-    if kind in ("text", "choice", "identifier"):
-        valid = sql_type == "VARCHAR" and isinstance(value, str)
-    elif kind == "boolean":
-        valid = sql_type == "BOOLEAN" and isinstance(value, bool)
-    elif kind == "date":
-        valid = sql_type in ("DATE", "VARCHAR")
-        if isinstance(value, datetime.date) and not isinstance(value, datetime.datetime):
-            value = value.isoformat()
-    elif kind == "number":
-        if INTEGER.fullmatch(sql_type):
-            valid = isinstance(value, int) and not isinstance(value, bool)
-        elif sql_type in ("FLOAT", "DOUBLE"):
-            valid = isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
-        elif re.fullmatch(r"DECIMAL\(\d+,\s*\d+\)", sql_type):
-            decimal = Decimal(str(value))
-            if decimal.is_finite():
-                value = int(decimal) if decimal == decimal.to_integral_value() else float(decimal)
-                valid = math.isfinite(value) and Decimal(json.dumps(value)) == decimal
-    error = variables.check_value(type_name, value) if valid else f"expected {type_name}, got {duck_type}"
-    if error:
-        raise Problem(error + "; use an explicit lossless cast in the producer")
-    return value
 
 
 def extract(cursor, dataset, source):
