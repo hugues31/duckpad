@@ -1,4 +1,5 @@
 import { expect, type Page } from "@playwright/test";
+import { closeEditor } from "./helpers";
 import type { Snapshot } from "../src/types";
 
 /** Exercise the real UI on a local instance or an authenticated deployed preview. */
@@ -35,10 +36,7 @@ export async function verifyNodeCode(page: Page) {
     await dialog.locator(".monaco-editor textarea").focus();
     await page.keyboard.press("ControlOrMeta+A");
     await page.keyboard.insertText(text);
-    await dialog
-      .getByRole("button", { name: "Save changes", exact: true })
-      .click();
-    await expect(dialog).toHaveCount(0);
+    await closeEditor(dialog);
   };
   await add();
   await expect

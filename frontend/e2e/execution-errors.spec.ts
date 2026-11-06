@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { signIn } from "./helpers";
+import { closeEditor, signIn } from "./helpers";
 import type { Run, Snapshot } from "../src/types";
 
 test("execution errors open from the canvas, point into saved code and clear after a successful run", async ({
@@ -128,10 +128,7 @@ test("execution errors open from the canvas, point into saved code and clear aft
   );
   await page.keyboard.press("ControlOrMeta+V");
   await expect(dialog.locator(".squiggly-error")).toHaveCount(0);
-  await dialog
-    .getByRole("button", { name: "Save changes", exact: true })
-    .click();
-  await expect(dialog).toHaveCount(0);
+  await closeEditor(dialog);
   await expect(card).toContainText("The code has changed since this failure");
   await run();
   await page.reload();

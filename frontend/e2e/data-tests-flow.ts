@@ -1,4 +1,5 @@
 import { expect, type Page } from "@playwright/test";
+import { closeEditor } from "./helpers";
 import type { Run, Snapshot } from "../src/types";
 
 /** Exercise data tests in normal node code on Northstar, locally or in a preview. */
@@ -35,10 +36,7 @@ export async function verifyDataTests(page: Page) {
       original +
         `\n-- @test orders_checked: ${severity}\nSELECT * FROM {{ orders }} WHERE ${predicate};`,
     );
-    await dialog
-      .getByRole("button", { name: "Save changes", exact: true })
-      .click();
-    await expect(dialog).toHaveCount(0);
+    await closeEditor(dialog);
   };
   const launch = async () => {
     const response = page.waitForResponse(

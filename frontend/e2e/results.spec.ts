@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { signIn } from "./helpers";
+import { autosaved, signIn } from "./helpers";
 import type { Run, Snapshot } from "../src/types";
 
 /** A run Northstar project, opened on the flow with Paid orders selected. */
@@ -137,11 +137,9 @@ test("a rerun that shrinks the result returns to a page that exists", async ({
   const next = panel.getByRole("button", { name: "Next", exact: true });
   const rerunWithStatus = async (status: string) => {
     const inspector = page.locator(".inspector");
-    await inspector.getByRole("textbox", { name: /status/ }).fill(status);
-    await inspector
-      .getByRole("button", { name: "Save changes", exact: true })
-      .click();
-    await expect(page.locator(".save-status")).toHaveText("All changes saved");
+    await autosaved(page, () =>
+      inspector.getByRole("textbox", { name: /status/ }).fill(status),
+    );
     await runProject(page, worktree);
   };
   await expect(range).toHaveText("1–100 / 107");

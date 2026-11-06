@@ -1,4 +1,5 @@
 import { expect, type Page } from "@playwright/test";
+import { closeEditor } from "./helpers";
 import type { Snapshot } from "../src/types";
 
 /** Real Python authoring, mixed execution, captured parents and managed downloads. */
@@ -44,10 +45,11 @@ export async function verifyPython(page: Page) {
   const templateDialog = page.getByRole("dialog", {
     name: "New Python template",
   });
-  await templateDialog
-    .getByRole("button", { name: "Save changes", exact: true })
-    .click();
-  await expect(templateDialog).toHaveCount(0);
+  // Its first edit creates the template.
+  await templateDialog.locator(".monaco-editor textarea").focus();
+  await page.keyboard.press("ControlOrMeta+End");
+  await page.keyboard.insertText("# Reusable\n");
+  await closeEditor(templateDialog);
   expect((await read()).bundle!.flow.nodes).toHaveLength(0);
   await page
     .locator(".palette")
@@ -73,10 +75,7 @@ class Filter(dp.Node):
   await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
   await page.evaluate((text) => navigator.clipboard.writeText(text), code);
   await page.keyboard.press("ControlOrMeta+V");
-  await dialog
-    .getByRole("button", { name: "Save changes", exact: true })
-    .click();
-  await expect(dialog).toHaveCount(0);
+  await closeEditor(dialog);
   await expect(inspector.getByRole("textbox", { name: /minimum/ })).toHaveValue(
     "2",
   );

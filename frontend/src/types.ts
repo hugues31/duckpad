@@ -194,6 +194,8 @@ export interface Snapshot {
   worktree: Worktree;
   revision: string;
   commit: string;
+  /** In the answer to a save: the commit it created, or null when nothing changed. */
+  change?: string | null;
   bundle: Bundle | null;
   files: Record<string, string>;
   diagnostics: Diagnostic[];

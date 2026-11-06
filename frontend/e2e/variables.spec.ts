@@ -938,9 +938,7 @@ test("filter on a period with a variable, typed or chosen in the guided form (wo
     "dev 2026-10-15 (default)",
   );
   await expect(values).toContainText("prod 2026-10-01");
-  await inspector
-    .getByRole("button", { name: "Save changes", exact: true })
-    .click();
+  await condition.blur();
   await saved(page);
   const recent = (await snapshot(page, url)).bundle!.flow.nodes.find(
     (n) => n.id === "recent",
@@ -1006,9 +1004,7 @@ test("filter on a period with a variable, typed or chosen in the guided form (wo
     .getByLabel("Value source", { exact: true })
     .selectOption("report_start");
   await expect(inspector.getByLabel("Value", { exact: true })).toBeHidden();
-  await inspector
-    .getByRole("button", { name: "Apply to parameters", exact: true })
-    .click();
+  // The guided form writes the condition directly.
   await expect(condition).toHaveValue('"order_date" < {{ var.report_start }}');
   await saved(page);
   await expect

@@ -1,4 +1,5 @@
 import { expect, type Page } from "@playwright/test";
+import { autosaved } from "./helpers";
 
 /** The same synthetic form workflow is also used to verify a deployed preview. */
 export async function verifyDataPreparation(page: Page) {
@@ -14,14 +15,7 @@ export async function verifyDataPreparation(page: Page) {
     (await snapshot()).bundle.flow.nodes.find(
       (node: any) => (node.template || node.origin) === template,
     ).id;
-  const save = async () => {
-    await inspector
-      .getByRole("button", { name: "Save changes", exact: true })
-      .click();
-    await expect(
-      page.getByText("Unsaved changes", { exact: true }),
-    ).toHaveCount(0);
-  };
+  const save = (edit: () => Promise<unknown>) => autosaved(page, edit);
   const run = async (status = "success") => {
     await expect(
       page.getByRole("button", { name: "Run all", exact: true }),
@@ -86,10 +80,11 @@ export async function verifyDataPreparation(page: Page) {
   await expect(inspector.getByRole("textbox", { name: /file/ })).toHaveValue(
     /preparation\.csv$/,
   );
-  await inspector
-    .getByRole("textbox", { name: /types/ })
-    .fill('{"id":"VARCHAR","day":"VARCHAR","amount":"BIGINT"}');
-  await save();
+  await save(() =>
+    inspector
+      .getByRole("textbox", { name: /types/ })
+      .fill('{"id":"VARCHAR","day":"VARCHAR","amount":"BIGINT"}'),
+  );
   await expect
     .poll(async () => (await snapshot()).bundle.flow.nodes[0].params.types)
     .toContain("VARCHAR");
@@ -99,17 +94,20 @@ export async function verifyDataPreparation(page: Page) {
   await expect(
     inspector.getByRole("button", { name: "Add column", exact: true }),
   ).toBeEnabled();
-  let row = await addColumn("id");
-  await row.getByLabel("Trim text", { exact: true }).check();
-  row = await addColumn("amount");
-  await row.getByLabel("Replace nulls", { exact: true }).check();
-  await row.getByLabel("Replacement value", { exact: true }).fill("0");
-  row = await addColumn("day");
-  await row.getByLabel("Parse date", { exact: true }).check();
-  await row.getByLabel("Date format", { exact: true }).fill("%d/%m/%Y");
-  await row.getByLabel("Replace nulls", { exact: true }).check();
-  await row.getByLabel("Replacement value", { exact: true }).fill("2000-01-01");
-  await save();
+  await save(async () => {
+    let row = await addColumn("id");
+    await row.getByLabel("Trim text", { exact: true }).check();
+    row = await addColumn("amount");
+    await row.getByLabel("Replace nulls", { exact: true }).check();
+    await row.getByLabel("Replacement value", { exact: true }).fill("0");
+    row = await addColumn("day");
+    await row.getByLabel("Parse date", { exact: true }).check();
+    await row.getByLabel("Date format", { exact: true }).fill("%d/%m/%Y");
+    await row.getByLabel("Replace nulls", { exact: true }).check();
+    await row
+      .getByLabel("Replacement value", { exact: true })
+      .fill("2000-01-01");
+  });
   await expect
     .poll(
       async () =>
@@ -132,34 +130,38 @@ export async function verifyDataPreparation(page: Page) {
     ["002", 12, "2000-01-01", "also"],
   ]);
   await add("Select columns", clean);
-  await inspector
-    .getByRole("button", { name: "Use all columns", exact: true })
-    .click();
-  await expect(rows()).toHaveCount(4);
-  await rows()
-    .nth(3)
-    .getByRole("button", { name: "Drop column", exact: true })
-    .click();
-  await rows().nth(0).getByLabel("Output name", { exact: true }).fill("key");
-  await rows().nth(1).getByLabel("Output name", { exact: true }).fill("KEY");
-  await expect(
-    inspector.getByText("Output names must be unique, ignoring letter case."),
-  ).toHaveCount(2);
-  await rows().nth(1).getByLabel("Output name", { exact: true }).fill("total");
-  await rows()
-    .nth(1)
-    .getByLabel("Output type", { exact: true })
-    .selectOption("DOUBLE");
-  await rows().nth(2).getByLabel("Output name", { exact: true }).fill("date");
-  await rows()
-    .nth(2)
-    .getByRole("button", { name: "Move up", exact: true })
-    .click();
-  await rows()
-    .nth(1)
-    .getByRole("button", { name: "Move up", exact: true })
-    .click();
-  await save();
+  await save(async () => {
+    await inspector
+      .getByRole("button", { name: "Use all columns", exact: true })
+      .click();
+    await expect(rows()).toHaveCount(4);
+    await rows()
+      .nth(3)
+      .getByRole("button", { name: "Drop column", exact: true })
+      .click();
+    await rows().nth(0).getByLabel("Output name", { exact: true }).fill("key");
+    await rows().nth(1).getByLabel("Output name", { exact: true }).fill("KEY");
+    await expect(
+      inspector.getByText("Output names must be unique, ignoring letter case."),
+    ).toHaveCount(2);
+    await rows()
+      .nth(1)
+      .getByLabel("Output name", { exact: true })
+      .fill("total");
+    await rows()
+      .nth(1)
+      .getByLabel("Output type", { exact: true })
+      .selectOption("DOUBLE");
+    await rows().nth(2).getByLabel("Output name", { exact: true }).fill("date");
+    await rows()
+      .nth(2)
+      .getByRole("button", { name: "Move up", exact: true })
+      .click();
+    await rows()
+      .nth(1)
+      .getByRole("button", { name: "Move up", exact: true })
+      .click();
+  });
   const selection = await nodeId("select_columns");
   const expected = [
     { source: "day", name: "date" },
@@ -191,10 +193,9 @@ export async function verifyDataPreparation(page: Page) {
     rows().nth(2).getByLabel("Replacement value", { exact: true }),
   ).toHaveValue("2000-01-01");
   await add("Filter", selection);
-  await inspector
-    .getByRole("textbox", { name: /condition/ })
-    .fill('"total" >= 0');
-  await save();
+  await save(() =>
+    inspector.getByRole("textbox", { name: /condition/ }).fill('"total" >= 0'),
+  );
   await run();
   const filtered = await nodeId("filter");
   const result = await (
@@ -214,19 +215,18 @@ export async function verifyDataPreparation(page: Page) {
   await selectNode(selection);
   await expect(page.locator(".preview-panel")).toContainText("2026-12-31");
   // Conversion errors must retain stale results and block downstream work.
-  await rows()
-    .nth(1)
-    .getByLabel("Output type", { exact: true })
-    .selectOption("DATE");
-  await save();
+  await save(() =>
+    rows()
+      .nth(1)
+      .getByLabel("Output type", { exact: true })
+      .selectOption("DATE"),
+  );
   const failure = await run("partial_failure");
   expect(failure.nodes[selection].error).toContain("Conversions must be valid");
   expect(failure.nodes[filtered].status).toBe("blocked");
-  await rows()
-    .nth(1)
-    .getByLabel("Output type", { exact: true })
-    .selectOption("");
-  await save();
+  await save(() =>
+    rows().nth(1).getByLabel("Output type", { exact: true }).selectOption(""),
+  );
   await run();
   return { worktree: worktree.id, selection, endpoint };
 }

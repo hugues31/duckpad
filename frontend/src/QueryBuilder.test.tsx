@@ -14,17 +14,12 @@ function choose(label: string, value: string) {
   );
 }
 
-function apply() {
-  fireEvent.click(screen.getByRole("button", { name: "Apply to parameters" }));
-}
-
 it.each([
   ["VARCHAR", "001", "'001'"],
   ["VARCHAR", "true", "'true'"],
   ["VARCHAR", "false", "'false'"],
   ["VARCHAR", "null", "'null'"],
   ["VARCHAR", "O'Brien", "'O''Brien'"],
-  ["VARCHAR", "", "''"],
   ["VARCHAR", " 001 ", "' 001 '"],
   ["INTEGER", "001", "001"],
   ["BIGINT", "9007199254740993", "9007199254740993"],
@@ -37,68 +32,82 @@ it.each([
   ["", "001", "'001'"],
   ["INTEGER", "1 OR TRUE", "'1 OR TRUE'"],
 ])("formats a %s filter value %j using its column type", (type, value, sql) => {
-  const onApply = vi.fn();
+  const onChange = vi.fn();
   render(
     <QueryBuilder
       kind="filter"
       schemas={{ source: [{ name: 'order"code', type }] }}
-      onApply={onApply}
+      onChange={onChange}
     />,
   );
   choose("Column", 'order"code');
   choose("Value", value);
-  apply();
-  expect(onApply).toHaveBeenLastCalledWith({
+  expect(onChange).toHaveBeenLastCalledWith({
     condition: `"order""code" = ${sql}`,
   });
+});
+
+it("writes no filter condition before its value is entered", () => {
+  const onChange = vi.fn();
+  render(
+    <QueryBuilder
+      kind="filter"
+      schemas={{ source: [{ name: "amount", type: "INTEGER" }] }}
+      onChange={onChange}
+    />,
+  );
+  choose("Column", "amount");
+  choose("Operator", ">");
+  // An existing hand-written condition stays until the form is complete.
+  expect(onChange).not.toHaveBeenCalled();
+  choose("Value", "2");
+  expect(onChange).toHaveBeenLastCalledWith({ condition: '"amount" > 2' });
 });
 
 it.each(["IS NULL", "IS NOT NULL"])(
   "keeps %s separate from text values",
   (op) => {
-    const onApply = vi.fn();
+    const onChange = vi.fn();
     render(
       <QueryBuilder
         kind="filter"
         schemas={{ source: [{ name: "code", type: "VARCHAR" }] }}
-        onApply={onApply}
+        onChange={onChange}
       />,
     );
     choose("Column", "code");
     choose("Value", "null");
     choose("Operator", op);
     expect(screen.queryByLabelText("Value")).toBeNull();
-    apply();
-    expect(onApply).toHaveBeenLastCalledWith({ condition: `"code" ${op}` });
+    expect(onChange).toHaveBeenLastCalledWith({ condition: `"code" ${op}` });
   },
 );
 
 it("uses the refreshed column type when the source schema changes", () => {
-  const onApply = vi.fn();
+  const onChange = vi.fn();
   const { rerender } = render(
     <QueryBuilder
       kind="filter"
       schemas={{ source: [{ name: "code", type: "INTEGER" }] }}
-      onApply={onApply}
+      onChange={onChange}
     />,
   );
   choose("Column", "code");
   choose("Value", "001");
-  apply();
-  expect(onApply).toHaveBeenLastCalledWith({ condition: '"code" = 001' });
+  expect(onChange).toHaveBeenLastCalledWith({ condition: '"code" = 001' });
   rerender(
     <QueryBuilder
       kind="filter"
       schemas={{ source: [{ name: "code", type: "VARCHAR" }] }}
-      onApply={onApply}
+      onChange={onChange}
     />,
   );
-  apply();
-  expect(onApply).toHaveBeenLastCalledWith({ condition: "\"code\" = '001'" });
+  choose("Value", "002");
+  expect(onChange).toHaveBeenLastCalledWith({ condition: "\"code\" = '002'" });
 });
 
 it("keeps typed input names available for joins", () => {
-  const onApply = vi.fn();
+  const onChange = vi.fn();
   render(
     <QueryBuilder
       kind="join"
@@ -106,13 +115,57 @@ it("keeps typed input names available for joins", () => {
         left: [{ name: "code", type: "VARCHAR" }],
         right: [{ name: "id", type: "VARCHAR" }],
       }}
-      onApply={onApply}
+      onChange={onChange}
     />,
   );
   choose("Left key", "code");
   choose("Right key", "id");
-  apply();
-  expect(onApply).toHaveBeenLastCalledWith({
+  expect(onChange).toHaveBeenLastCalledWith({
     condition: 'l."code" = r."id"',
+  });
+});
+
+it("writes nothing until the form is complete, then each change", () => {
+  const onChange = vi.fn();
+  render(
+    <QueryBuilder
+      kind="filter"
+      schemas={{ source: [{ name: "amount", type: "INTEGER" }] }}
+      onChange={onChange}
+    />,
+  );
+  choose("Operator", ">");
+  choose("Value", "10");
+  expect(onChange).not.toHaveBeenCalled();
+  choose("Column", "amount");
+  expect(onChange).toHaveBeenLastCalledWith({ condition: '"amount" > 10' });
+  choose("Value", "100");
+  expect(onChange).toHaveBeenLastCalledWith({ condition: '"amount" > 100' });
+});
+
+it("writes aggregates once groups and measures are valid", () => {
+  const onChange = vi.fn();
+  render(
+    <QueryBuilder
+      kind="aggregate"
+      schemas={{
+        source: [
+          { name: "region", type: "VARCHAR" },
+          { name: "amount", type: "INTEGER" },
+        ],
+      }}
+      onChange={onChange}
+    />,
+  );
+  const groups = screen.getByLabelText("Group by columns", {
+    selector: "select",
+  }) as HTMLSelectElement;
+  groups.options[0].selected = true;
+  fireEvent.change(groups);
+  expect(onChange).not.toHaveBeenCalled();
+  choose("Column", "amount");
+  expect(onChange).toHaveBeenLastCalledWith({
+    groups: '"region"',
+    measures: 'SUM("amount") AS "total"',
   });
 });

@@ -1,4 +1,5 @@
 import { expect, type Page } from "@playwright/test";
+import { closeEditor } from "./helpers";
 import type { Snapshot } from "../src/types";
 
 /** Exercise palette authoring against a local instance or an authenticated preview. */
@@ -53,16 +54,20 @@ export async function verifyPalette(
   await expect(palette.getByText("Drag a node onto the canvas")).toHaveCount(0);
   const title = python ? "New Python template" : "New SQL template";
   const create = actions.getByRole("button", { name: title });
+  const before = await read(project);
+  expect(before.bundle!.flow.nodes).toHaveLength(0);
   await create.focus();
   await page.keyboard.press("Enter");
   const dialog = page.getByRole("dialog", { name: title });
   await expect(dialog).toContainText(
-    `Save a reusable ${python ? "Python" : "SQL"} template`,
+    `add a reusable ${python ? "Python" : "SQL"} template`,
   );
   await page.keyboard.press("Escape");
   await expect(create).toBeFocused();
-  const before = await read(project);
-  expect(before.bundle!.flow.nodes).toHaveLength(0);
+  // Closing a new template before any edit creates nothing.
+  expect((await read(project)).bundle!.templates).toEqual(
+    before.bundle!.templates,
+  );
   await create.click();
   const name = `Reusable ${language} answer`;
   const code = python
@@ -74,10 +79,7 @@ export async function verifyPalette(
   await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
   await page.evaluate((text) => navigator.clipboard.writeText(text), code);
   await page.keyboard.press("ControlOrMeta+V");
-  await dialog
-    .getByRole("button", { name: "Save changes", exact: true })
-    .click();
-  await expect(dialog).toHaveCount(0);
+  await closeEditor(dialog);
   const template = palette.getByRole("button", { name, exact: true });
   await expect(template).toBeVisible();
   let snapshot = await read(project);

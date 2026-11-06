@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { execFileSync } from "node:child_process";
 import { expect, test } from "@playwright/test";
-import { signIn } from "./helpers";
+import { autosaved, signIn } from "./helpers";
 
 test.use({ actionTimeout: 10000 });
 
@@ -53,10 +53,9 @@ test("upload a worksheet and export it as project files through the canvas", asy
     await expect(inspector.getByRole("textbox", { name: /file/ })).toHaveValue(
       /workbook\.xlsx$/,
     );
-    await inspector.getByRole("textbox", { name: /sheet/ }).fill("Orders");
-    await inspector
-      .getByRole("button", { name: "Save changes", exact: true })
-      .click();
+    await autosaved(page, () =>
+      inspector.getByRole("textbox", { name: /sheet/ }).fill("Orders"),
+    );
     await expect
       .poll(async () => {
         const snapshot = await (await page.request.get(endpoint)).json();
@@ -80,12 +79,9 @@ test("upload a worksheet and export it as project files through the canvas", asy
       )
       .toBe(1);
     await expect(location).toHaveValue("");
-    await inspector
-      .getByRole("textbox", { name: /sheet/ })
-      .fill("Exported orders");
-    await inspector
-      .getByRole("button", { name: "Save changes", exact: true })
-      .click();
+    await autosaved(page, () =>
+      inspector.getByRole("textbox", { name: /sheet/ }).fill("Exported orders"),
+    );
     await expect
       .poll(async () => {
         const current = await (await page.request.get(endpoint)).json();

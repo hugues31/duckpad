@@ -7,7 +7,7 @@ from pydantic import BaseModel, ConfigDict
 
 from ..comparison import compare_files
 from ..git.identity import commit_author
-from ..util import Problem, digest
+from ..util import Problem
 from .tools import PageContext, validate_context
 
 
@@ -129,17 +129,12 @@ class Actions:
                         continue
                     if action.get("conflict"):
                         break
-                    after = self.projects.revision_files(worktree["path"], action["commit"])
-                    before = self.projects.revision_files(worktree["path"], action["before"])
-                    revision = digest(after)
-                    # A receipt can outlive the short optimistic-save cache and restart recovery window.
-                    self.projects.cached(self.projects.revisions, (worktree["id"], revision), after)
                     try:
                         with commit_author(assistant.auth.commit_identity(user)):
-                            result = self.projects.write(
+                            result = self.projects.revert(
                                 worktree["id"],
-                                revision,
-                                before,
+                                action["commit"],
+                                action["before"],
                                 validate=True,
                                 assistant=identity,
                             )

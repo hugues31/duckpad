@@ -1,4 +1,5 @@
 import { expect, type Page } from "@playwright/test";
+import { closeEditor } from "./helpers";
 import type { Snapshot } from "../src/types";
 
 /** The same interaction runs against the test model and a configured real preview. */
@@ -79,10 +80,7 @@ export async function verifyAssistantEditing(page: Page) {
   await editor.locator(".monaco-editor textarea").focus();
   await page.keyboard.press("ControlOrMeta+A");
   await page.keyboard.insertText(sql.replace("1", "3"));
-  await editor
-    .getByRole("button", { name: "Save changes", exact: true })
-    .click();
-  await expect(editor).toHaveCount(0);
+  await closeEditor(editor);
   await launch();
   await chat.getByRole("button", { name: "Undo", exact: true }).click();
   await expect

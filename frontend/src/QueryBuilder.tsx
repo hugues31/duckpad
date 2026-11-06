@@ -22,14 +22,29 @@ const literal = (value: string, type = "") => {
   return "'" + value.replaceAll("'", "''") + "'";
 };
 
-/** Optional form helpers write the same expression parameters as the SQL form. */
+interface Measure {
+  function: string;
+  column: string;
+  alias: string;
+}
+
+const validMeasure = (m: Measure) =>
+  !!m.column && !!m.alias && (m.column !== "*" || m.function === "COUNT");
+
+const measureSql = (m: Measure) =>
+  `${m.function === "COUNT DISTINCT" ? "COUNT" : m.function}(${m.function === "COUNT DISTINCT" ? "DISTINCT " : ""}${m.column === "*" ? "*" : quote(m.column)}) AS ${quote(m.alias)}`;
+
+/**
+ * Optional form helpers for the expression parameters shown below them.
+ * Each complete change of the form rewrites those parameters directly.
+ */
 export default function QueryBuilder({
   kind,
   parameters,
   schemas,
   variables,
   environment,
-  onApply,
+  onChange,
 }: {
   kind: string;
   parameters?: string[];
@@ -37,26 +52,74 @@ export default function QueryBuilder({
   /** The variables a filter value can reference; only root flow nodes can. */
   variables?: VariablesSummary | null;
   environment?: string;
-  onApply: (parameters: Record<string, Json>) => void;
+  onChange: (parameters: Record<string, Json>) => void;
 }) {
   const t = useT();
-  const [column, setColumn] = useState("");
-  const [right, setRight] = useState("");
-  const [operator, setOperator] = useState("=");
-  const [value, setValue] = useState("");
-  const [chosen, setVariable] = useState("");
+  const [filter, setFilter] = useState({
+    column: "",
+    operator: "=",
+    value: "",
+    variable: "",
+  });
+  const [join, setJoin] = useState({ left: "", right: "" });
+  const [aggregate, setAggregate] = useState<{
+    groups: string[];
+    measures: Measure[];
+  }>({
+    groups: [],
+    measures: [{ function: "SUM", column: "", alias: "total" }],
+  });
   const usable = Object.entries(variables?.declarations || {}).filter(
     ([, declared]) => usableInExpressions(declared.type),
   );
   // A variable deleted or retyped since it was chosen is no longer offered.
-  const variable = usable.some(([name]) => name === chosen) ? chosen : "";
-  const [groups, setGroups] = useState<string[]>([]);
-  const [measures, setMeasures] = useState([
-    { function: "SUM", column: "", alias: "total" },
-  ]);
+  const usableVariable = (name: string) =>
+    usable.some(([usableName]) => usableName === name) ? name : "";
+  const variable = usableVariable(filter.variable);
   const names = (columns: Column[] = []) => columns.map(({ name }) => name);
   const inputColumns = schemas.source || schemas.left || [];
   const columns = names(inputColumns);
+  const changeFilter = (change: Partial<typeof filter>) => {
+    const next = { ...filter, ...change };
+    setFilter(next);
+    const chosen = usableVariable(next.variable);
+    const unary = next.operator.includes("NULL");
+    // The condition is written once the form is complete, never with an empty value.
+    if (!next.column || !(unary || chosen || next.value)) return;
+    const operand = unary
+      ? ""
+      : " " +
+        (chosen
+          ? expressionReference(chosen)
+          : literal(
+              next.value,
+              inputColumns.find((input) => input.name === next.column)?.type,
+            ));
+    onChange({
+      condition: `${quote(next.column)} ${next.operator}${operand}`,
+    });
+  };
+  const changeJoin = (change: Partial<typeof join>) => {
+    const next = { ...join, ...change };
+    setJoin(next);
+    if (next.left && next.right)
+      onChange({ condition: `l.${quote(next.left)} = r.${quote(next.right)}` });
+  };
+  const changeAggregate = (change: Partial<typeof aggregate>) => {
+    const next = { ...aggregate, ...change };
+    setAggregate(next);
+    if (next.groups.length && next.measures.every(validMeasure))
+      onChange({
+        groups: next.groups.map(quote).join(", "),
+        measures: next.measures.map(measureSql).join(", "),
+      });
+  };
+  const changeMeasure = (index: number, change: Partial<Measure>) =>
+    changeAggregate({
+      measures: aggregate.measures.map((m, i) =>
+        i === index ? { ...m, ...change } : m,
+      ),
+    });
   const choose = (
     label: string,
     selected: string,
@@ -93,13 +156,18 @@ export default function QueryBuilder({
       {!columns.length && <p className="muted small">{t("schemaHint")}</p>}
       {kind === "filter" && (
         <>
-          {choose(t("column"), column, setColumn, columns)}
+          {choose(
+            t("column"),
+            filter.column,
+            (column) => changeFilter({ column }),
+            columns,
+          )}
           <label className="field">
             <span>{t("operator")}</span>
             <Select
               aria-label={t("operator")}
-              value={operator}
-              onChange={(e) => setOperator(e.target.value)}
+              value={filter.operator}
+              onChange={(e) => changeFilter({ operator: e.target.value })}
             >
               {[
                 "=",
@@ -116,7 +184,7 @@ export default function QueryBuilder({
               ))}
             </Select>
           </label>
-          {!operator.includes("NULL") && (
+          {!filter.operator.includes("NULL") && (
             <div className="field">
               <span>{t("value")}</span>
               <div className="filter-value">
@@ -124,7 +192,7 @@ export default function QueryBuilder({
                   <Select
                     aria-label={t("filterValueSource")}
                     value={variable}
-                    onChange={(e) => setVariable(e.target.value)}
+                    onChange={(e) => changeFilter({ variable: e.target.value })}
                   >
                     <option value="">{t("fixedValue")}</option>
                     <optgroup label={t("variables")}>
@@ -144,50 +212,29 @@ export default function QueryBuilder({
                 {!variable && (
                   <input
                     aria-label={t("value")}
-                    value={value}
-                    onChange={(e) => setValue(e.target.value)}
+                    value={filter.value}
+                    onChange={(e) => changeFilter({ value: e.target.value })}
                   />
                 )}
               </div>
             </div>
           )}
-          <button
-            className="button secondary full"
-            disabled={!column}
-            onClick={() =>
-              onApply({
-                condition: `${quote(column)} ${operator}${
-                  operator.includes("NULL")
-                    ? ""
-                    : " " +
-                      (variable
-                        ? expressionReference(variable)
-                        : literal(
-                            value,
-                            inputColumns.find((input) => input.name === column)
-                              ?.type,
-                          ))
-                }`,
-              })
-            }
-          >
-            {t("applyExpression")}
-          </button>
         </>
       )}
       {kind === "join" && (
         <>
-          {choose(t("leftKey"), column, setColumn, names(schemas.left))}
-          {choose(t("rightKey"), right, setRight, names(schemas.right))}
-          <button
-            className="button secondary full"
-            disabled={!column || !right}
-            onClick={() =>
-              onApply({ condition: `l.${quote(column)} = r.${quote(right)}` })
-            }
-          >
-            {t("applyExpression")}
-          </button>
+          {choose(
+            t("leftKey"),
+            join.left,
+            (left) => changeJoin({ left }),
+            names(schemas.left),
+          )}
+          {choose(
+            t("rightKey"),
+            join.right,
+            (right) => changeJoin({ right }),
+            names(schemas.right),
+          )}
         </>
       )}
       {kind === "aggregate" && (
@@ -196,14 +243,14 @@ export default function QueryBuilder({
             <span>{t("groupBy")}</span>
             <Select
               multiple
-              value={groups}
+              value={aggregate.groups}
               onChange={(e) =>
-                setGroups(
-                  Array.from(
+                changeAggregate({
+                  groups: Array.from(
                     e.target.selectedOptions,
                     (option) => option.value,
                   ),
-                )
+                })
               }
             >
               {columns.map((name) => (
@@ -211,18 +258,14 @@ export default function QueryBuilder({
               ))}
             </Select>
           </label>
-          {measures.map((measure, index) => (
+          {aggregate.measures.map((measure, index) => (
             <div className="measure-form" key={index}>
               <label className="field">
                 <span>{t("function")}</span>
                 <Select
                   value={measure.function}
                   onChange={(e) =>
-                    setMeasures(
-                      measures.map((m, i) =>
-                        i === index ? { ...m, function: e.target.value } : m,
-                      ),
-                    )
+                    changeMeasure(index, { function: e.target.value })
                   }
                 >
                   {["SUM", "AVG", "MIN", "MAX", "COUNT", "COUNT DISTINCT"].map(
@@ -235,12 +278,7 @@ export default function QueryBuilder({
               {choose(
                 t("column"),
                 measure.column,
-                (v) =>
-                  setMeasures(
-                    measures.map((m, i) =>
-                      i === index ? { ...m, column: v } : m,
-                    ),
-                  ),
+                (column) => changeMeasure(index, { column }),
                 ["*", ...columns],
               )}
               <label className="field">
@@ -248,19 +286,19 @@ export default function QueryBuilder({
                 <input
                   value={measure.alias}
                   onChange={(e) =>
-                    setMeasures(
-                      measures.map((m, i) =>
-                        i === index ? { ...m, alias: e.target.value } : m,
-                      ),
-                    )
+                    changeMeasure(index, { alias: e.target.value })
                   }
                 />
               </label>
-              {measures.length > 1 && (
+              {aggregate.measures.length > 1 && (
                 <button
                   className="text-button danger"
                   onClick={() =>
-                    setMeasures(measures.filter((_, i) => i !== index))
+                    changeAggregate({
+                      measures: aggregate.measures.filter(
+                        (_, i) => i !== index,
+                      ),
+                    })
                   }
                 >
                   {t("remove")}
@@ -271,38 +309,15 @@ export default function QueryBuilder({
           <button
             className="text-button"
             onClick={() =>
-              setMeasures([
-                ...measures,
-                { function: "COUNT", column: "*", alias: "count" },
-              ])
-            }
-          >
-            {t("addMeasure")}
-          </button>
-          <button
-            className="button secondary full"
-            disabled={
-              !groups.length ||
-              measures.some(
-                (m) =>
-                  !m.column ||
-                  !m.alias ||
-                  (m.column === "*" && m.function !== "COUNT"),
-              )
-            }
-            onClick={() =>
-              onApply({
-                groups: groups.map(quote).join(", "),
-                measures: measures
-                  .map(
-                    (m) =>
-                      `${m.function === "COUNT DISTINCT" ? "COUNT" : m.function}(${m.function === "COUNT DISTINCT" ? "DISTINCT " : ""}${m.column === "*" ? "*" : quote(m.column)}) AS ${quote(m.alias)}`,
-                  )
-                  .join(", "),
+              changeAggregate({
+                measures: [
+                  ...aggregate.measures,
+                  { function: "COUNT", column: "*", alias: "count" },
+                ],
               })
             }
           >
-            {t("applyExpression")}
+            {t("addMeasure")}
           </button>
         </>
       )}
