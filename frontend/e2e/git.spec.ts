@@ -224,6 +224,7 @@ test("Branches confirms deletion, explains protections and redirects another ses
   });
   const destination = await branch("release");
   const current = await branch("open-branch");
+  const moved = await branch("moved");
   await page.goto(`/worktrees/${current.id}/flow`);
   const observer = await page.context().newPage();
   await observer.goto(`/worktrees/${merged.id}/flow`);
@@ -240,7 +241,7 @@ test("Branches confirms deletion, explains protections and redirects another ses
     ["main", "The main branch is protected."],
     ["open-branch", "Open another branch"],
     ["release", "The destination branch is protected."],
-    ["unmerged", "not merged into the destination"],
+    ["unmerged", "not merged into release"],
   ]) {
     await expect(
       row(name).getByRole("button", { name: "Delete", exact: true }),
@@ -257,7 +258,9 @@ test("Branches confirms deletion, explains protections and redirects another ses
     name: "Delete branch already-merged",
     exact: true,
   });
-  await expect(confirm).toContainText("The remote branch will be kept");
+  await expect(confirm).toContainText(
+    "Delete local branch already-merged and its worktree",
+  );
   await confirm.getByRole("button", { name: "Cancel", exact: true }).click();
   expect(
     (await page.request.get(`/api/worktrees/${merged.id}`)).ok(),
@@ -266,6 +269,26 @@ test("Branches confirms deletion, explains protections and redirects another ses
   await confirm.getByRole("button", { name: "Delete", exact: true }).click();
   await expect(confirm).toBeHidden();
   await expect(row("already-merged")).toHaveCount(0);
+  // A branch that moves after the confirmation opened is kept, and its row says why.
+  await row("moved")
+    .getByRole("button", { name: "Delete", exact: true })
+    .click();
+  await change(page, moved.id, (b) => {
+    b.flow.nodes[0].params.minimum = 6;
+  });
+  await page
+    .getByRole("dialog", { name: "Delete branch moved", exact: true })
+    .getByRole("button", { name: "Delete", exact: true })
+    .click();
+  await expect(
+    page.getByRole("alert").filter({
+      hasText: "Branch moved was kept: The branch changed. Review it again.",
+    }),
+  ).toBeVisible();
+  await expect(row("moved")).toContainText("not merged into release");
+  await expect(
+    row("moved").getByRole("button", { name: "Delete", exact: true }),
+  ).toBeDisabled();
   await expect(observer).toHaveURL(new RegExp(`/worktrees/${main.id}/flow`));
   await expect(
     observer.getByRole("status").filter({

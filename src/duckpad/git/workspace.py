@@ -21,7 +21,7 @@ MAX_HISTORY = 10000
 BLOB_BATCH = 256
 # A version that cannot be parsed: compared with nothing, like a malformed revision in a comparison.
 UNREADABLE = object()
-UNMERGED = "The branch has commits that are not merged into the destination."
+UNMERGED = "The branch has commits that are not merged into {}."
 
 
 def origin_key(branch):
@@ -497,14 +497,16 @@ class GitWorkspace:
                 }
             )
             if target and not remote:
+                # Lock each check rather than the listing, so saves never wait for every branch.
                 try:
-                    if tree:
-                        self.check_cleanup(worktree, tree, target, head)
-                    else:
-                        # Closed local branches are opened before cleanup by the client.
-                        target_head, _ = self.clean(target)
-                        if not self.ancestor(worktree["path"], head, target_head):
-                            raise Problem(UNMERGED, 409)
+                    with self.projects.repository(worktree["project"]):
+                        if tree:
+                            self.check_cleanup(worktree, tree, target, head)
+                        else:
+                            # Closed local branches are opened before cleanup by the client.
+                            target_head, _ = self.clean(target)
+                            if not self.ancestor(worktree["path"], head, target_head):
+                                raise Problem(UNMERGED.format(target["branch"]), 409)
                     result[-1]["cleanup_error"] = None
                 except Problem as error:
                     result[-1]["cleanup_error"] = str(error)
@@ -532,7 +534,7 @@ class GitWorkspace:
         if head != expected_head:
             raise Problem("The branch changed. Review it again.", 409)
         if not self.ancestor(remove["path"], head, target_head):
-            raise Problem(UNMERGED, 409)
+            raise Problem(UNMERGED.format(target["branch"]), 409)
         # Like `git worktree remove` without --force, keep untracked files and locked worktrees.
         gitdir = Path(self.git(remove["path"], "rev-parse", "--absolute-git-dir"))
         if (gitdir / "locked").exists() or self.git(

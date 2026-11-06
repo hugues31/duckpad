@@ -25,7 +25,7 @@ export default function GitBranchesTab({
   worktree: string;
   base: string;
   canEdit: boolean;
-  /** Whether the tab is shown: deletion checks only refresh while it is. */
+  /** Whether the tab is shown: deletion checks run again each time it is. */
   active: boolean;
   /** Propose the main branch as the merge destination. */
   preferMain: boolean;
@@ -54,7 +54,7 @@ export default function GitBranchesTab({
     canEdit
       ? withQuery(`${base}/branches`, { integrated_worktree: destinationId })
       : null,
-    { interval: 5000, enabled: active, refresh: JSON.stringify(branches) },
+    { enabled: active, refresh: JSON.stringify(branches) },
   );
   const cleanupReason = (item: Branch) => {
     if (item.name === "main") return t("branchCleanupMain");
@@ -199,28 +199,42 @@ export default function GitBranchesTab({
           confirmLabel={t("delete")}
           onClose={() => setRemoving(null)}
           onConfirm={async () => {
-            const tree = removing.worktree
-              ? { id: removing.worktree }
-              : await api<Worktree>(
-                  `${base}/open`,
-                  send({ name: removing.name }),
-                );
-            await api(
-              `${base}/cleanup`,
-              send({
-                remove_worktree: tree.id,
-                integrated_worktree: destinationId,
-                expected_head: removing.head,
-              }),
-            );
-            setRemoving(null);
-            if (source === removing.ref) setSource("");
-            notify(t("branchDeleted").replace("{name}", removing.name));
-            cleanup.reload();
+            const { name, ref, head, worktree: opened } = removing;
+            try {
+              const tree = opened
+                ? { id: opened }
+                : await api<Worktree>(`${base}/open`, send({ name }));
+              await api(
+                `${base}/cleanup`,
+                send({
+                  remove_worktree: tree.id,
+                  integrated_worktree: destinationId,
+                  expected_head: head,
+                }),
+              );
+              if (source === ref) setSource("");
+              cleanup.setData(
+                (list) => list && list.filter((v) => v.ref !== ref),
+              );
+              notify(t("branchDeleted").replace("{name}", name));
+            } catch (e) {
+              // The confirmation cannot succeed again: its row explains why once checked again.
+              cleanup.reload();
+              notify(
+                t("branchKept")
+                  .replace("{name}", name)
+                  .replace("{reason}", (e as Error).message),
+                true,
+              );
+            }
             await onChanged();
           }}
         >
-          <p>{t("confirmDeleteBranch").replace("{name}", removing.name)}</p>
+          <p>
+            {t("confirmDeleteBranch").replace("{name}", removing.name)}
+            {removing.upstream &&
+              ` ${t("remoteBranchKept").replace("{name}", `origin/${removing.upstream}`)}`}
+          </p>
         </ConfirmModal>
       )}
       <div className="git-controls">

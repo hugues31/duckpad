@@ -210,7 +210,12 @@ export default function GitReviewTab({
                     await refreshWorkspace();
                   } catch (error) {
                     // The dialog is now closed; keep failures visible on the destination.
-                    notify((error as Error).message, true);
+                    notify(
+                      t("branchKept")
+                        .replace("{name}", integrated.source)
+                        .replace("{reason}", (error as Error).message),
+                      true,
+                    );
                   }
                 })
               }
