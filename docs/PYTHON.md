@@ -246,7 +246,27 @@ before increasing concurrency. Linux workers set `oom_score_adj=1000` before
 confinement to prefer them during OOM selection, without guaranteeing API survival
 under system-wide memory exhaustion. A worker crash, OOM, cancellation or timeout
 invalidates that context; the next run recomputes it. Other contexts remain usable.
-`DUCKPAD_PYTHON_TIMEOUT_SECONDS` defaults to 300 seconds per Python node.
+
+## Execution timeout and cancellation
+
+Python nodes have no execution timeout by default, like SQL nodes. Long-running
+API pagination or data transformations can finish without an automatic cutoff.
+Users can still cancel a run.
+
+Operators can set `DUCKPAD_PYTHON_TIMEOUT_SECONDS` to a positive number of seconds
+(for example, `600`) to limit each Python worker call. Leave the variable unset
+to keep execution unlimited. The deadline covers the entire call, including
+`run()`, DuckDB output materialization (`CREATE TABLE … AS`), `self.check`
+validation and `write()`; it is not limited to time spent in user Python code.
+It does not impose a timeout on SQL nodes.
+
+When the deadline expires, Duckpad fails the node and terminates the worker for
+that worktree and environment. All in-memory results in that context are lost,
+including results from SQL nodes; the next run recomputes the context. Other
+worktrees and environments remain available. Canceling active Python can also
+terminate the worker. External writes may already have completed or have a
+partial or unknown outcome; Duckpad does not roll them back or retry them
+automatically.
 
 ## Trust boundary
 

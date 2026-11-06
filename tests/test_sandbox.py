@@ -22,6 +22,33 @@ def transport():
     return database
 
 
+@pytest.mark.parametrize(
+    ("operation", "configured_timeout"),
+    [("python", None), ("python", "600"), ("execute", "0.25")],
+)
+def test_worker_reply_after_five_minutes_without_an_expired_deadline(
+    transport, monkeypatch, operation, configured_timeout
+):
+    monkeypatch.delenv("DUCKPAD_PYTHON_TIMEOUT_SECONDS", raising=False)
+    if configured_timeout is not None:
+        monkeypatch.setenv("DUCKPAD_PYTHON_TIMEOUT_SECONDS", configured_timeout)
+
+    def delayed_reply(*, timeout):
+        # Simulate a reply after the old default deadline without a five-minute test.
+        if timeout is not None and timeout < 301:
+            raise queue.Empty
+        return {"value": "completed"}
+
+    response = Mock()
+    response.get.side_effect = delayed_reply
+    monkeypatch.setattr("duckpad.sandbox.queue.Queue", lambda: response)
+    transport.stop_worker = Mock()
+
+    assert transport.call(operation) == "completed"
+    transport.stop_worker.assert_not_called()
+    assert transport.pending == {}
+
+
 @pytest.mark.parametrize("failure", [ConnectionResetError, OSError])
 def test_reader_disconnect_releases_all_waiting_calls(transport, failure):
     waiting = [queue.Queue(), queue.Queue()]

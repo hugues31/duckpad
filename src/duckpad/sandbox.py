@@ -146,11 +146,8 @@ class Database:
                     (json.dumps(clean({"id": identity, "operation": operation, **arguments})) + "\n").encode()
                 )
             try:
-                result = target.get(
-                    timeout=float(os.environ.get("DUCKPAD_PYTHON_TIMEOUT_SECONDS", "300"))
-                    if operation == "python"
-                    else None
-                )
+                timeout = os.environ.get("DUCKPAD_PYTHON_TIMEOUT_SECONDS") if operation == "python" else None
+                result = target.get(timeout=float(timeout) if timeout is not None else None)
             except queue.Empty:
                 self.stop_worker()
                 raise Problem(
