@@ -13,7 +13,7 @@ import {
 import { useT } from "./i18n";
 import { useShell } from "./shell";
 import type { Diagnostic, Run, Snapshot } from "./types";
-import { useLoadedWorktree } from "./worktree";
+import { sameInput, useLoadedWorktree } from "./worktree";
 import { useAsyncAction } from "./useAsyncAction";
 
 /** Tabs, save state and run controls of the open working branch. */
@@ -220,12 +220,7 @@ export const visibleDiagnostics = (
   snapshot.diagnostics.filter(
     (item) =>
       item.code !== "missing_input" ||
-      attempted.some(
-        (problem) =>
-          problem.code === item.code &&
-          problem.node === item.node &&
-          problem.port === item.port,
-      ),
+      attempted.some((problem) => sameInput(problem, item)),
   );
 
 export const noticeCount = (

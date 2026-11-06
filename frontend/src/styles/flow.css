@@ -198,6 +198,8 @@
   font-size: 11px;
   min-width: 0;
   width: 100%;
+  /* A narrow palette shortens long translated placeholders visibly. */
+  text-overflow: ellipsis;
 }
 .search input:focus-visible {
   outline: none;

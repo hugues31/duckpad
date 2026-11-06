@@ -127,14 +127,14 @@ export default function ConnectionPalette({
         <input
           ref={input}
           role="combobox"
-          aria-label={t("searchNodes")}
+          aria-label={t("searchNodeTypes")}
           aria-expanded="true"
           aria-controls={listId}
           aria-autocomplete="list"
           aria-activedescendant={
             items.length ? `${listId}-${activeIndex}` : undefined
           }
-          placeholder={t("searchNodes")}
+          placeholder={t("searchNodeTypes")}
           value={search}
           onChange={(event) => {
             setSearch(event.target.value);

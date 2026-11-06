@@ -85,11 +85,19 @@ export async function verifyNodeCreation(page: Page) {
     .getByRole("button", { name: "Show node", exact: true })
     .click();
   await expect(sql).toHaveClass(/selected/);
-  await inspector
-    .getByRole("combobox", { name: "source", exact: true })
-    .selectOption("source:result");
+  const input = inspector.getByRole("combobox", {
+    name: "source",
+    exact: true,
+  });
+  await input.selectOption("source:result");
   await expect(sql.locator(".missing-input")).toHaveCount(0);
   await expect(page.locator(".banner.error")).toHaveCount(0);
+  // Disconnecting again waits for the next run before reporting it.
+  await input.selectOption("");
+  await expect(sql.locator(".missing-input")).toHaveCount(1);
+  await expect(page.locator(".banner.error")).toHaveCount(0);
+  await input.selectOption("source:result");
+  await expect(sql.locator(".missing-input")).toHaveCount(0);
 
   // A palette copy of a built-in template has nothing to relink to.
   await page.getByRole("button", { name: "Fit view", exact: true }).click();

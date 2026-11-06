@@ -68,17 +68,23 @@ export function ActionMenu({
     )?.focus();
   }, []);
   useEffect(() => {
-    const outside = (event: PointerEvent) => {
+    const outside = (event: Event) => {
       if (
         !menu.current?.contains(event.target as Node) &&
         !trigger?.current?.contains(event.target as Node)
       )
         onClose();
     };
+    // Zooming or scrolling would leave the menu beside another node.
     document.addEventListener("pointerdown", outside, true);
+    document.addEventListener("wheel", outside, {
+      capture: true,
+      passive: true,
+    });
     window.addEventListener("resize", onClose);
     return () => {
       document.removeEventListener("pointerdown", outside, true);
+      document.removeEventListener("wheel", outside, true);
       window.removeEventListener("resize", onClose);
     };
   }, [onClose, trigger]);

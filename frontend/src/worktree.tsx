@@ -98,6 +98,10 @@ export interface Worktree {
 
 const WorktreeContext = createContext<Worktree | null>(null);
 
+/** Whether two diagnostics report the same unconnected input. */
+export const sameInput = (a: Diagnostic, b: Diagnostic) =>
+  a.code === b.code && a.node === b.node && a.port === b.port;
+
 /** Unconnected inputs that made the server refuse a run started from the UI. */
 const refusedInputs = (error: unknown): Diagnostic[] =>
   error instanceof ApiError &&
@@ -176,6 +180,14 @@ export function WorktreeProvider({
       return refreshWorkspace();
     },
   });
+  // Once connected, an input is only reported again by the next refused run.
+  const unresolved = snapshot
+    ? validation.diagnostics.filter((item) =>
+        snapshot.diagnostics.some((current) => sameInput(current, item)),
+      )
+    : validation.diagnostics;
+  if (unresolved.length !== validation.diagnostics.length)
+    setValidation({ ...validation, diagnostics: unresolved });
   const manifest = snapshot?.partitions?.[environment]?.manifest?.id;
   const dimension = snapshot?.partitions?.[environment]?.dimension;
   const partitionScope = JSON.stringify([

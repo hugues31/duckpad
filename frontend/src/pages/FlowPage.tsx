@@ -42,6 +42,7 @@ import {
   nodeLocation,
   nodeEntity,
   nodeGraph,
+  templateUsage,
 } from "../nodeCode";
 import LineagePanel from "../LineagePanel";
 import type { Cell } from "../lineageGraph";
@@ -50,7 +51,7 @@ import ResultsPanel, { type ResultsTab } from "../ResultsPanel";
 import { api } from "../api";
 import { useShell, useWorkspace } from "../shell";
 import type { Bundle, FlowNode, Graph, Snapshot } from "../types";
-import { isBuiltinTemplate, nodeLabel, useT } from "../i18n";
+import { countLabel, isBuiltinTemplate, nodeLabel, useT } from "../i18n";
 import {
   isWideLayout,
   PanelResizeHandles,
@@ -539,13 +540,16 @@ export default function FlowPage() {
     const actions = [
       item(
         "edit",
-        t(
-          target.component
-            ? "openComponent"
-            : target.template
-              ? "editTemplate"
-              : "editNodeCode",
-        ),
+        target.component
+          ? t("openComponent")
+          : target.template
+            ? countLabel(
+                t,
+                templateUsage(bundle, target.template),
+                "editTemplateOne",
+                "editTemplateCount",
+              )
+            : t("editNodeCode"),
         () =>
           target.component
             ? openComponent(target.id)

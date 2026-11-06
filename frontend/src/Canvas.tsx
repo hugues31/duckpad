@@ -748,6 +748,8 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
           props.onSelect(null);
         }}
         onNodeContextMenu={(event, node) => {
+          // On a read-only branch, every action of this menu is disabled.
+          if (props.readOnly) return;
           event.preventDefault();
           props.onSelect(node.id);
           setContext({
