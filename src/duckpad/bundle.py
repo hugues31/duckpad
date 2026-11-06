@@ -9,7 +9,7 @@ from pathlib import Path
 from . import partitions, project_extensions, variables, views
 from .components import expand
 from .node_code import node_sql
-from .node_names import Name, node_names
+from .node_names import Name, node_name, node_names
 from .templates import parse_template
 from .types import Files
 from .util import Problem, dumps
@@ -247,16 +247,26 @@ def validate(bundle):
             if key in seen_inputs:
                 raise Problem(f"Input {nodes[key[0]]['display_name']}.{key[1]} has more than one source")
             seen_inputs.add(key)
-        errors.extend(
-            {
-                "file": "flow.json",
-                "node": node["id"],
-                "message": f"Connect input '{port}' on {node['display_name']}",
-            }
-            for node in nodes.values()
-            for port in node["parsed"]["inputs"]
-            if (node["id"], port) not in seen_inputs
-        )
+        # An input a component exposes is connected on its outermost exposing instance.
+        exposed = {}
+        for instance in sorted(boundaries, key=lambda key: key.count("::"), reverse=True):
+            for name, port in boundaries[instance]["inputs"].items():
+                exposed[port] = (instance, name)
+        for node in nodes.values():
+            for port in node["parsed"]["inputs"]:
+                if (node["id"], port) in seen_inputs:
+                    continue
+                key, name = exposed.get((node["id"], port), (node["id"], port))
+                caption = node["display_name"] if key == node["id"] else node_name(bundle, key)
+                errors.append(
+                    {
+                        "file": "flow.json",
+                        "node": key,
+                        "code": "missing_input",
+                        "port": name,
+                        "message": f"Connect input '{name}' on {caption}",
+                    }
+                )
         topological(nodes, edges)
     except Exception as error:
         errors.append({"file": "flow.json", "message": str(error)})

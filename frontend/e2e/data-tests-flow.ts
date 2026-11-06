@@ -1,5 +1,5 @@
 import { expect, type Page } from "@playwright/test";
-import { closeEditor } from "./helpers";
+import { closeEditor, nodeMenuAction } from "./helpers";
 import type { Run, Snapshot } from "../src/types";
 
 /** Exercise data tests in normal node code on Northstar, locally or in a preview. */
@@ -16,9 +16,7 @@ export async function verifyDataTests(page: Page) {
   const inspector = page.locator(".inspector");
   await page.getByRole("button", { name: "Fit view", exact: true }).click();
   await node("validated").locator(".node-shape").click();
-  await inspector
-    .getByRole("button", { name: "Detach from template", exact: true })
-    .click();
+  await nodeMenuAction(page, "Detach from template");
   await expect(
     inspector.getByRole("button", { name: "Edit code", exact: true }),
   ).toBeVisible();

@@ -1445,5 +1445,11 @@
   "nodesDeleted": "{count} nós removidos",
   "nodesCopied": "{count} nós copiados",
   "undo": "Desfazer",
-  "gitNothingToPull": "Nenhuma alteração a receber da origin."
+  "gitNothingToPull": "Nenhuma alteração a receber da origin.",
+  "searchNodeTypes": "Pesquisar um tipo de nó…",
+  "projectTemplates": "Modelos do projeto",
+  "addLinkedHint": "Alt+clique ou clique direito para adicionar um nó vinculado",
+  "nodeActions": "Ações do nó",
+  "connectSource": "Conectar uma fonte",
+  "showNode": "Mostrar nó"
 }

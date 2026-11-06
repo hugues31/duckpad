@@ -1,3 +1,5 @@
+import { useNavigate } from "react-router";
+import { worktreeUrl } from "./navigation";
 import { useApiResource } from "./useApiResource";
 import {
   createContext,
@@ -17,7 +19,14 @@ import { api, ApiError, errorDetail, send, withQuery } from "./api";
 import { outputSource } from "./graph";
 import { useT } from "./i18n";
 import { useShell } from "./shell";
-import type { Bundle, Environment, Run, Snapshot, Statuses } from "./types";
+import type {
+  Bundle,
+  Diagnostic,
+  Environment,
+  Run,
+  Snapshot,
+  Statuses,
+} from "./types";
 import { useWorktreeSnapshot } from "./useWorktreeSnapshot";
 
 /** How many saves of a working branch can be undone. */
@@ -51,6 +60,8 @@ export interface Worktree {
   saving: boolean;
   /** A run is being started. */
   starting: boolean;
+  /** Diagnostics revealed by the latest rejected run, scoped to this branch. */
+  runDiagnostics: Diagnostic[];
   /** Changes after Git operations, so Git indicators reload. */
   gitVersion: number;
   /** Reload the snapshot after a change; a failed read is left to polling. */
@@ -87,6 +98,20 @@ export interface Worktree {
 
 const WorktreeContext = createContext<Worktree | null>(null);
 
+/** Whether two diagnostics report the same unconnected input. */
+export const sameInput = (a: Diagnostic, b: Diagnostic) =>
+  a.code === b.code && a.node === b.node && a.port === b.port;
+
+/** Unconnected inputs that made the server refuse a run started from the UI. */
+const refusedInputs = (error: unknown): Diagnostic[] =>
+  error instanceof ApiError &&
+  error.status === 422 &&
+  Array.isArray(error.detail)
+    ? (error.detail as Diagnostic[]).filter(
+        (item) => item.code === "missing_input",
+      )
+    : [];
+
 export function WorktreeProvider({
   worktree: id,
   children,
@@ -95,6 +120,11 @@ export function WorktreeProvider({
   children: ReactNode;
 }) {
   const t = useT();
+  const navigate = useNavigate();
+  const [validation, setValidation] = useState<{
+    worktree: string;
+    diagnostics: Diagnostic[];
+  }>({ worktree: id, diagnostics: [] });
   const {
     workspace,
     environment,
@@ -150,6 +180,14 @@ export function WorktreeProvider({
       return refreshWorkspace();
     },
   });
+  // Once connected, an input is only reported again by the next refused run.
+  const unresolved = snapshot
+    ? validation.diagnostics.filter((item) =>
+        snapshot.diagnostics.some((current) => sameInput(current, item)),
+      )
+    : validation.diagnostics;
+  if (unresolved.length !== validation.diagnostics.length)
+    setValidation({ ...validation, diagnostics: unresolved });
   const manifest = snapshot?.partitions?.[environment]?.manifest?.id;
   const dimension = snapshot?.partitions?.[environment]?.dimension;
   const partitionScope = JSON.stringify([
@@ -308,6 +346,17 @@ export function WorktreeProvider({
         send({ environment, node, entry_point: "ui", confirmed, ...options }),
       );
       setActive(id, run);
+      setValidation({ worktree: id, diagnostics: [] });
+    } catch (error) {
+      const missing = refusedInputs(error);
+      if (missing.length) {
+        // The banner now shows these inputs; select the first node to connect.
+        setValidation({ worktree: id, diagnostics: missing });
+        void navigate(
+          worktreeUrl(id, "flow", environment, { node: missing[0].node! }),
+        );
+      }
+      throw error;
     } finally {
       launching.current = false;
       setStarting(false);
@@ -344,6 +393,7 @@ export function WorktreeProvider({
     statuses,
     statusesLoaded,
     loadError,
+    runDiagnostics: validation.worktree === id ? validation.diagnostics : [],
     canEdit,
     saving: saves > 0,
     starting,
@@ -392,7 +442,7 @@ export function WorktreeProvider({
         const required = errorDetail(e).confirmation_required as
           Environment | undefined;
         if (required) confirmRun(required, node, options);
-        else notify((e as Error).message, true);
+        else if (!refusedInputs(e).length) notify((e as Error).message, true);
       }
     },
     runConfirmed: (environment, node, options) =>

@@ -15,10 +15,14 @@ collapses built-in templates by default.
 
 ## Build and inspect
 
-Add a palette item by clicking it or dragging it onto the canvas. Connect an
-output to an input, or choose the upstream output in the node's inspector.
-Select a node for its parameters and code on the right and its
-[results](RESULTS.md) below. Double-click a [component](COMPONENTS.md) to open
+Add a palette item by clicking it or dragging it onto the canvas;
+**Search node types…** filters the palette, and **Project templates** lists the
+templates created in the project. Connect an output to an input, or choose the
+upstream output in the node's inspector. An input without a source is orange on
+the node until you connect it. Select a node for its parameters and code on the
+right and its [results](RESULTS.md) below. Its other actions, such as
+**Duplicate node**, are in **Node actions** (**⋯** in the inspector title, or
+right-click the node). Double-click a [component](COMPONENTS.md) to open
 its contents; use the breadcrumbs to return. **Fit view** brings the graph into
 view. Drag a port onto empty space to add a compatible connected node.
 
@@ -63,8 +67,10 @@ rule. Existing external edits remain available for their own save.
 
 Every run first saves pending editor changes and waits for saves already in
 progress; a failed save stops the launch. **Run all** runs the whole flow;
-a node's **Run with ancestors** runs a smaller scope. **Stop execution** requests
-cancellation of active SQL. A protected environment asks for confirmation.
+a node's **Run with ancestors** runs a smaller scope. A run from the interface is
+refused while an input in its scope has no source: the banner names the input
+and the node is selected. **Stop execution** requests cancellation of active
+SQL. A protected environment asks for confirmation.
 
 Results belong to a branch and environment. A change can mark previous results
 **Stale**, and a failed run retains the previous successful data. Successful canvas

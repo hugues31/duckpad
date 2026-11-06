@@ -1445,5 +1445,11 @@
   "nodesDeleted": "{count} nodes deleted",
   "nodesCopied": "{count} nodes copied",
   "undo": "Undo",
-  "gitNothingToPull": "No incoming changes on origin."
+  "gitNothingToPull": "No incoming changes on origin.",
+  "searchNodeTypes": "Search node types…",
+  "projectTemplates": "Project templates",
+  "addLinkedHint": "Alt+click or right-click to add linked",
+  "nodeActions": "Node actions",
+  "connectSource": "Connect a source",
+  "showNode": "Show node"
 }

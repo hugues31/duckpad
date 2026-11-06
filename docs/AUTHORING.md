@@ -79,15 +79,18 @@ The template is saved as you edit it and appears in the palette; click or drag
 the entry to create independent nodes. **Import** copies a reusable definition from
 another project into this palette.
 
-Use **Add linked** to share a template. Linked nodes show a badge and template
-name. **View code** is read-only; **Edit template (N nodes)** edits every linked
-instance in the branch. **Detach from template** copies the SQL while retaining
-parameters and connections.
+To share a template, Alt+click its palette entry, or right-click it and choose
+**Add linked**. Linked nodes show a badge and template name. **Edit template
+(N nodes)** edits every linked instance in the branch. The other actions below
+are in **Node actions**: **⋯** in the inspector title, or a right-click on the
+node. **View code** is read-only. **Detach from template** copies the SQL while
+retaining parameters and connections.
 
 **Convert to template** names a new shared definition and links the node to it.
-**Link to original template** asks before discarding local code. Detaching or
-converting preserves valid results; relinking to different executable SQL makes
-results stale. Linked code has no partial overrides.
+**Link to original template**, offered for nodes that come from a project
+template, asks before discarding local code. Detaching or converting preserves
+valid results; relinking to different executable SQL makes results stale.
+Linked code has no partial overrides.
 
 ![A normal node owns its code and offers explicit template conversions](images/node-code.png)
 
