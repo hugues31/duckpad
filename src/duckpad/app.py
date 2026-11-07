@@ -12,7 +12,7 @@ from pathlib import Path, PureWindowsPath
 from typing import Annotated, Any, Literal
 from urllib.parse import quote, urlparse
 
-from fastapi import FastAPI, File, Form, Query, Request, UploadFile
+from fastapi import Depends, FastAPI, Query, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response, StreamingResponse
@@ -23,7 +23,7 @@ from starlette.exceptions import HTTPException
 from starlette.middleware.base import RequestResponseEndpoint
 
 from . import __version__, automation, data_comparison, schemas, source_files, variables
-from .archive import archive_bundle, import_warnings, read_archive, write_archive
+from .archive import MAX_ARCHIVE_BYTES, archive_bundle, import_warnings, read_archive, write_archive
 from .artifacts import CHUNK_SIZE
 from .assistant.api import router as assistant_router
 from .assistant.service import Assistant
@@ -33,6 +33,7 @@ from .bundle import bundle_to_files
 from .components import group, import_definition
 from .example import create_example
 from .execution.samples import Sample
+from .extensions import MAX_UPLOAD_BYTES as MAX_EXTENSION_BYTES
 from .git.identity import commit_author
 from .jobs import Jobs
 from .monitoring import Monitoring
@@ -44,6 +45,7 @@ from .search import search_instance
 from .services import Services
 from .templates import parse_templates
 from .types import Record
+from .uploads import limited_body
 from .util import Problem, clean, uid
 
 SESSION_COOKIE = "duckpad_session"
@@ -242,6 +244,8 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
             if scheme.lower() == "bearer" and bearer.startswith("dpk_"):
                 user, request.state.token_name = auth.check_api_token(bearer)
                 parts = request.url.path.strip("/").split("/")
+                if parts[1:2] == ["api-tokens"] or (parts[1:2] == ["users"] and parts[3:4] == ["api-tokens"]):
+                    raise Problem("API tokens cannot create or manage API tokens; sign in interactively", 403)
                 if parts[1:2] == ["ssh-key"] or (
                     parts[1:2] == ["worktrees"]
                     and parts[3:4] == ["git"]
@@ -416,12 +420,19 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
     def extension_runtime() -> Record:
         return engine.extension_runtime()
 
-    @app.post("/api/extensions/import", response_model=None)
-    def import_extension(
-        file: Annotated[UploadFile, File()],
-        source: Annotated[Literal["core", "community", "unsigned"], Form()],
-    ) -> Record:
-        return engine.import_extension(file.filename, source, file.file)
+    @app.post(
+        "/api/extensions/import",
+        response_model=None,
+        dependencies=[Depends(limited_body(MAX_EXTENSION_BYTES))],
+    )
+    async def import_extension(request: Request) -> Record:
+        async with request.form(max_files=1, max_fields=1) as form:
+            file, source = form.get("file"), form.get("source")
+            if not isinstance(file, FormFile):
+                raise Problem("Choose a file to upload", 422)
+            if source not in ("core", "community", "unsigned"):
+                raise Problem("Choose a core, community, or unsigned extension source", 422)
+            return await run_in_threadpool(engine.import_extension, file.filename, source, file.file)
 
     @app.get("/api/catalog", response_model=None)
     def get_catalog() -> Record:
@@ -493,15 +504,12 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
         template = f"load_{kind}" if kind else ""
         return {"path": path.name, "name": name, "template": template, "code": BUILTINS.get(template, "")}
 
-    @app.post("/api/worktrees/{worktree}/uploads", response_model=None)
+    @app.post(
+        "/api/worktrees/{worktree}/uploads",
+        response_model=None,
+        dependencies=[Depends(limited_body(MAX_UPLOAD_BYTES))],
+    )
     async def upload(worktree: str, request: Request) -> Record:
-        # Without chunked transfer encoding, the server never reads past Content-Length,
-        # so oversized uploads are refused before any of their content is received.
-        length = request.headers.get("content-length", "")
-        if not length.isdigit() or "transfer-encoding" in request.headers:
-            raise Problem("Send the upload with a Content-Length header", 411)
-        if int(length) > MAX_UPLOAD_BYTES:
-            raise Problem("Uploads are limited to 1 GiB", 413)
         async with request.form(max_files=1) as form:
             file = form.get("file")
             if not isinstance(file, FormFile):
@@ -550,10 +558,19 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
     def create_project(data: schemas.NewProject, request: Request) -> Record:
         return access.create(request.state.user, lambda grant: projects.create(data.name, record=grant))
 
-    @app.post("/api/projects/import", response_model=None)
-    def import_project(
-        request: Request, file: Annotated[UploadFile, File()], name: Annotated[str, Form()] = ""
-    ) -> Record:
+    @app.post(
+        "/api/projects/import", response_model=None, dependencies=[Depends(limited_body(MAX_ARCHIVE_BYTES))]
+    )
+    async def import_project(request: Request) -> Record:
+        async with request.form(max_files=1, max_fields=1) as form:
+            file, name = form.get("file"), form.get("name", "")
+            if not isinstance(file, FormFile):
+                raise Problem("Choose a file to upload", 422)
+            if not isinstance(name, str):
+                raise Problem("Choose a project name", 422)
+            return await run_in_threadpool(import_project_file, request, file, name)
+
+    def import_project_file(request: Request, file: FormFile, name: str) -> Record:
         bundle = archive_bundle(read_archive(file.file))
         flow_name = bundle["flow"].get("name")
         name = name.strip() or (flow_name.strip() if isinstance(flow_name, str) else "") or "Imported project"
