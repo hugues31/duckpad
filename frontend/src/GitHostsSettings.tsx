@@ -40,7 +40,6 @@ export default function GitHostsSettings() {
     },
     save: async () => {
       if (!settings) return;
-
       show(
         await api<GitHosts>(
           "/git-hosts",

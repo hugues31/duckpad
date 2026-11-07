@@ -31,7 +31,6 @@ export default function SQLResourceSettings() {
     },
     save: async () => {
       if (!config) return;
-
       const { threads, memory_limit } = config;
       settings.setData(
         await api<Configuration>(

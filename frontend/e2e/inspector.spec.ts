@@ -1,5 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
-import { signIn } from "./helpers";
+import { createFilterProject, deferred, signIn } from "./helpers";
 import type { Snapshot } from "../src/types";
 import fr from "../src/locales/fr.json" with { type: "json" };
 
@@ -24,12 +24,6 @@ async function openInspector(page: Page) {
     }),
     status: inspector.getByRole("textbox", { name: /status/ }),
   };
-}
-
-function deferred() {
-  let resolve!: () => void;
-  const promise = new Promise<void>((done) => (resolve = done));
-  return { promise, resolve };
 }
 
 async function delayFirstSave(page: Page, endpoint: string, fail = false) {
@@ -355,4 +349,46 @@ test("input choices use the names shown on the canvas", async ({ page }) => {
   ]);
   await expect(nodes.filter({ hasText: fr.load_parquet })).toHaveCount(1);
   await expect(compared).toContainText(`source ← ${fr.load_parquet} · result`);
+});
+
+test("the Inspector translates builtin titles and names a missing template", async ({
+  page,
+}) => {
+  const { endpoint, read } = await createFilterProject(page);
+  await page.evaluate(() => localStorage.setItem("duckpad-language", "fr"));
+  await page.reload();
+  await expect(page.locator(".inspector-title")).toContainText(fr.filter);
+  const snapshot = await read();
+  snapshot.bundle!.flow.nodes.find((node) => node.id === "filtered")!.template =
+    "missing_template";
+  await page.request.put(endpoint, {
+    data: { revision: snapshot.revision, bundle: snapshot.bundle },
+  });
+  await expect(page.locator(".inspector-title")).toContainText(
+    "missing_template",
+  );
+});
+
+test("binding diagnostics distinguish overlapping parameter names", async ({
+  page,
+}) => {
+  await createFilterProject(page, (bundle) => {
+    bundle.templates.paths =
+      '-- @label Paths\n-- @input source\n-- @param file: text = ""\n-- @param file_name: text = ""\n-- @output result\nSELECT * FROM {{ source }};';
+    const node = bundle.flow.nodes.find((node) => node.id === "filtered")!;
+    node.template = "paths";
+    node.params = { file: { $var: "path" }, file_name: { $var: "count" } };
+    bundle.variables = {
+      path: { type: "text", default: "data.csv" },
+      count: { type: "number", default: 1 },
+    };
+  });
+  const inspector = page.locator(".inspector");
+  await expect(inspector.locator(".variable-binding")).toHaveCount(2);
+  await expect(inspector.locator(".variable-binding").first()).not.toHaveClass(
+    /has-error/,
+  );
+  await expect(inspector.locator(".variable-binding").last()).toHaveClass(
+    /has-error/,
+  );
 });

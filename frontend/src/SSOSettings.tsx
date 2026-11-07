@@ -42,7 +42,6 @@ export default function SSOSettings() {
     },
     save: async () => {
       if (!config) return;
-
       const {
         has_secret: _hasSecret,
         redirect_uri: _redirect,

@@ -23,7 +23,6 @@ export default function ExtensionSettings() {
     },
     save: async () => {
       if (!config) return;
-
       settings.setData(
         await api<Configuration>("/extensions/settings", send(config, "PUT")),
       );

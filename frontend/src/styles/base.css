@@ -200,7 +200,7 @@ p {
 code,
 pre,
 .code-input {
-  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-family: var(--mono);
 }
 small {
   font-size: 11px;

@@ -148,7 +148,7 @@ export default function VariablesPanel({
   });
   useEffect(() => {
     // URL navigation must use the same confirmation as a click in the variable list.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- may restore the URL
     receiveRequest(requested);
   }, [requested]);
   const editing =

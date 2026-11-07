@@ -334,7 +334,6 @@ export default function AssistantChat() {
       setPending(null);
       setDraft(detail.prompt);
       following.current = true;
-      setOpen(true);
     };
     window.addEventListener(DEBUG_ASSISTANT_EVENT, receive);
     return () => window.removeEventListener(DEBUG_ASSISTANT_EVENT, receive);

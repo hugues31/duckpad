@@ -400,3 +400,63 @@ test("project administrators manage their project and password without instance 
     await context.close();
   }
 });
+
+test("leaving modified instance settings confirms and keeps a draft on Stay", async ({
+  page,
+}) => {
+  await signIn(page);
+  const guard = page.getByRole("dialog", {
+    name: "Unsaved changes",
+    exact: true,
+  });
+  const leave = () =>
+    page
+      .getByRole("link", { name: "Users and permissions", exact: true })
+      .click();
+  const edits: Record<string, () => Promise<unknown>> = {
+    sso: () =>
+      page.getByLabel("Client secret", { exact: true }).fill("unsaved-secret"),
+    assistant: async () => {
+      await page.getByRole("button", { name: "DeepSeek", exact: true }).click();
+      await page.getByLabel("API key", { exact: true }).fill("unsaved-key");
+    },
+    "sql-resources": () =>
+      page.getByLabel("Threads per session", { exact: true }).fill("3"),
+    "git-hosts": () =>
+      page
+        .getByLabel("Trusted SSH host keys", { exact: true })
+        .fill("unsaved host key"),
+    extensions: () =>
+      page
+        .getByRole("checkbox", {
+          name: "Allow unsigned extensions",
+          exact: true,
+        })
+        .click(),
+  };
+  for (const [section, edit] of Object.entries(edits))
+    await test.step(section, async () => {
+      await page.goto(`/instance-settings/${section}`);
+      await edit();
+      await leave();
+      await guard
+        .getByRole("button", { name: "Stay on this page", exact: true })
+        .click();
+      await expect(page).toHaveURL(
+        new RegExp(`/instance-settings/${section}$`),
+      );
+      // Closing the tab gets the same protection.
+      expect(
+        await page.evaluate(() => {
+          const event = new Event("beforeunload", { cancelable: true });
+          window.dispatchEvent(event);
+          return event.defaultPrevented;
+        }),
+      ).toBe(true);
+      await leave();
+      await guard
+        .getByRole("button", { name: "Discard and leave", exact: true })
+        .click();
+      await expect(page).toHaveURL(/\/instance-settings\/users$/);
+    });
+});

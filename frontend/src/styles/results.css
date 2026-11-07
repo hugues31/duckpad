@@ -224,7 +224,7 @@
 .sample-popover textarea {
   width: 100%;
   min-height: 52px;
-  font-family: var(--mono, monospace);
+  font-family: var(--mono);
   font-size: 11px;
   resize: vertical;
 }
@@ -491,7 +491,7 @@
   font-size: 12px;
 }
 .log-entry time {
-  font-family: var(--mono, monospace);
+  font-family: var(--mono);
   font-size: 10px;
   color: var(--muted);
   padding-top: 2px;

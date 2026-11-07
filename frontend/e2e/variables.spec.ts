@@ -1,5 +1,9 @@
 import { expect, test, type Page } from "@playwright/test";
-import { signIn, withoutExampleVariables } from "./helpers";
+import {
+  createFilterProject,
+  signIn,
+  withoutExampleVariables,
+} from "./helpers";
 import type { Snapshot } from "../src/types";
 import { resolve } from "node:path";
 
@@ -1018,4 +1022,45 @@ test("filter on a period with a variable, typed or chosen in the guided form (wo
     )
     .toBe('"order_date" < {{ var.report_start }}');
   await expect(page.locator(".preview-header .badge")).toHaveText("Stale");
+});
+
+test("a variable diagnostic asks before replacing the active variable draft", async ({
+  page,
+}) => {
+  const { id } = await createFilterProject(page, (bundle) => {
+    bundle.variables = {
+      first: { type: "text", default: "saved" },
+      broken: { type: "number", default: "invalid" },
+    };
+  });
+  await page.goto(`/worktrees/${id}/variables?variable=first`);
+  const editor = page.getByRole("complementary", {
+    name: "first",
+    exact: true,
+  });
+  await editor
+    .getByLabel("Description", { exact: true })
+    .fill("Keep this draft");
+  await page
+    .getByRole("button", { name: "Open in Variables", exact: true })
+    .click();
+  const dialog = page.getByRole("dialog", {
+    name: "Unsaved changes",
+    exact: true,
+  });
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+  await expect(
+    editor.getByRole("textbox", { name: "Description", exact: true }),
+  ).toHaveValue("Keep this draft");
+  await expect(page).toHaveURL(/variable=first/);
+  await page
+    .getByRole("button", { name: "Open in Variables", exact: true })
+    .click();
+  await dialog
+    .getByRole("button", { name: "Discard changes", exact: true })
+    .click();
+  await expect(
+    page.getByRole("complementary", { name: "broken", exact: true }),
+  ).toBeVisible();
 });
