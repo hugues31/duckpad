@@ -308,7 +308,9 @@ class Engine:
         imports = self.store.get("settings", "offline_extensions", {})
         return connection_probe.run(self.pool.probe_config(), captured, imports, secrets)
 
-    def connection_objects(self, worktree: str, reference: str, environment: str) -> Record:
+    def connection_objects(
+        self, worktree: str, reference: str, environment: str, table: tuple[str, str] | None = None
+    ) -> Record:
         """The schemas and tables of a database connection granted to the worktree's project."""
         captured, secrets = self.pool.capture(worktree, [reference], environment)
         if self.pool.isolated:
@@ -321,15 +323,17 @@ class Engine:
         try:
             # A new attachment lists the tables created since a session attached the database:
             # attached catalogs, such as PostgreSQL's, are cached.
-            return connection_probe.run(self.pool.probe_config(), captured, imports, secrets)
+            return connection_probe.run(self.pool.probe_config(), captured, imports, secrets, table=table)
         except Problem:
             # A database file that a session attached is locked: list the session's attachment.
-            listed = self._session_objects(worktree, environment, connection["alias"])
+            listed = self._session_objects(worktree, environment, connection["alias"], table)
             if listed is None:
                 raise
             return listed
 
-    def _session_objects(self, worktree: str, environment: str, alias: str) -> Record | None:
+    def _session_objects(
+        self, worktree: str, environment: str, alias: str, table: tuple[str, str] | None = None
+    ) -> Record | None:
         """The schemas and tables of a session's attachment, if a session attached the database."""
         context = self.pool.find(worktree, environment)
         if context is None or context.db is None or getattr(context.db, "closed", False):
@@ -338,7 +342,11 @@ class Engine:
         try:
             if not connection_probe.attached(cursor, alias):
                 return None
-            return connection_probe.objects(cursor, alias)
+            return (
+                connection_probe.table_sample(cursor, alias, *table)
+                if table
+                else connection_probe.objects(cursor, alias)
+            )
         except (duckdb.Error, Problem):
             return None
         finally:

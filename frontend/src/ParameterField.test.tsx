@@ -72,7 +72,7 @@ it("asks for a database connection that SQL uses directly", () => {
   ).toEqual(["Choose a source…", "Warehouse"]);
 });
 
-it("suggests table names listed from the database connection", () => {
+it("selects table names listed from the database connection", () => {
   const onChange = vi.fn();
   const { rerender } = render(
     <ParameterField
@@ -80,7 +80,7 @@ it("suggests table names listed from the database connection", () => {
       value=""
       onChange={onChange}
       connections={connections}
-      objects={{ names: [], pending: true, error: "" }}
+      objects={{ names: [], pending: true, error: "", complete: true }}
     />,
   );
   expect(screen.getByText("Listing schemas and tables…")).toBeTruthy();
@@ -90,7 +90,59 @@ it("suggests table names listed from the database connection", () => {
       value=""
       onChange={onChange}
       connections={connections}
-      objects={{ names: ["order_totals", "orders"], pending: false, error: "" }}
+      objects={{
+        names: ["order_totals", "orders"],
+        pending: false,
+        error: "",
+        complete: true,
+      }}
+    />,
+  );
+  const input = screen.getByRole("combobox", { name: "table" });
+  expect(Array.from(input.querySelectorAll("option"), (o) => o.value)).toEqual([
+    "",
+    "order_totals",
+    "orders",
+  ]);
+  fireEvent.change(input, { target: { value: "orders" } });
+  expect(onChange).toHaveBeenLastCalledWith("orders");
+  rerender(
+    <ParameterField
+      parameter={{ name: "table", type: "table_name(schema)", default: "" }}
+      value=""
+      onChange={onChange}
+      connections={connections}
+      objects={{
+        names: [],
+        pending: false,
+        error: "password failed",
+        complete: false,
+      }}
+    />,
+  );
+  expect(
+    screen.getByText("Cannot list schemas and tables: password failed"),
+  ).toBeTruthy();
+  // Without a complete listing, a name typed by hand stays possible.
+  const typed = screen.getByRole("combobox", { name: "table" });
+  expect(typed.tagName).toBe("INPUT");
+  fireEvent.change(typed, { target: { value: "new_table" } });
+  expect(onChange).toHaveBeenLastCalledWith("new_table");
+});
+
+it("suggests the listed names while typing when the listing is truncated", () => {
+  render(
+    <ParameterField
+      parameter={{ name: "table", type: "table_name(schema)", default: "" }}
+      value=""
+      onChange={() => undefined}
+      connections={connections}
+      objects={{
+        names: ["order_totals", "orders"],
+        pending: false,
+        error: "",
+        complete: false,
+      }}
     />,
   );
   const input = screen.getByRole("combobox", { name: "table" });
@@ -99,21 +151,6 @@ it("suggests table names listed from the database connection", () => {
     "order_totals",
     "orders",
   ]);
-  // A name typed by hand stays possible, for objects created after the listing.
-  fireEvent.change(input, { target: { value: "new_table" } });
-  expect(onChange).toHaveBeenLastCalledWith("new_table");
-  rerender(
-    <ParameterField
-      parameter={{ name: "table", type: "table_name(schema)", default: "" }}
-      value=""
-      onChange={onChange}
-      connections={connections}
-      objects={{ names: [], pending: false, error: "password failed" }}
-    />,
-  );
-  expect(
-    screen.getByText("Cannot list schemas and tables: password failed"),
-  ).toBeTruthy();
 });
 
 it("explains integer and bound errors on numeric Python fields", () => {

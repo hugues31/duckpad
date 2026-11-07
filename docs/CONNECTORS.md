@@ -116,7 +116,9 @@ See [XLSX limits](#xlsx-workbooks) and the raw reports in `docs/validation/`.
 
 ## Project files and storage locations
 
-Every file node (Load CSV, Load Parquet, Load XLSX, Export CSV and Export XLSX) has a **Location** field. It defaults to **Project files**: the project's uploads and its exports, available in every environment without a connection or a grant. Upload a file next to the node's `file` field, or enter a path:
+Every file node (Load CSV, Load Parquet, Load XLSX, Load JSON, Export CSV and Export XLSX) has a **Location** field. It defaults to **Project files**: the project's uploads and its exports, available in every environment without a connection or a grant. Drop one or more CSV, Parquet, XLSX or JSON files onto the canvas to upload them: each becomes a configured reader node, named after its file, at the drop position. Other dropped files are skipped and named in a notice. XLSX drops enable the project's `excel` extension; an instance administrator must have installed it first if it is not built in.
+
+The `file` field selects one of the project's uploaded files, and **Upload file** adds one. New file readers start empty. Uploads are stored as project-relative references, so node parameters and project ZIP exports contain no server path. **Relative path or expression** accepts a resource path or a variable expression. Paths resolve as follows:
 
 - A relative source path resolves under the project's resources, where uploads land.
 - A relative destination resolves under `exports/<worktree>/<environment>/`, so each branch and environment writes its own files.
@@ -134,7 +136,7 @@ To read a shared folder, an instance admin creates a **Server folder** connectio
 
 ![Load XLSX reads inbox/budget.xlsx from the Finance share Server folder](images/server-folder-location.png)
 
-CSV exposes header, delimiter and a JSON type-override map; `{}` retains native inference. Parquet uses native types.
+With project files, the inspector previews a reader's first 20 rows before any run; a preview neither runs the flow nor publishes results. Choosing or dropping a CSV fills its delimiter and header from DuckDB's `sniff_csv`. The preview's column table overrides CSV types, and **Auto** keeps the detected type; an invalid conversion shows an error and leaves every column editable. Changing the delimiter or header clears the overrides, since the columns change. Without overrides, CSV keeps DuckDB's native inference. Parquet uses native types.
 
 Single-file CSV `COPY` follows DuckDB's native replacement behavior on a second run. Duckpad does not add an overwrite option, rename files, or ask for an existence-based confirmation.
 
@@ -237,7 +239,7 @@ SELECT * FROM {{ connection }}.{{ schema }}.{{ table }};
 INSERT INTO {{ connection }}.{{ schema }}.{{ table }} BY NAME SELECT * FROM {{ source }};
 ```
 
-Select a connection, then a schema and a table. The inspector suggests those of the selected environment, read from the connection's attachment; typing a name also works, for example for a table created after the list loaded. The schema defaults to `public`, PostgreSQL's default. DuckDB and SQLite files use `main`, and MySQL the database name.
+Select a connection, then a schema and a table of the selected environment; Load table previews their columns, types and first 20 rows before any run. When no database connection is authorized for the project, instance administrators can choose **Create a connection**: saving it authorizes it for this project and returns to the source node. They can also authorize an existing connection from project settings. Other members can choose **Ask an administrator** to see the project's participants and their roles. The schema defaults to `public`, PostgreSQL's default. DuckDB and SQLite files use `main`, and MySQL the database name.
 
 ![Load table reads public.orders from a PostgreSQL connection](images/load-table.png)
 

@@ -116,11 +116,12 @@ export async function importProjectArchive(
   return response.json();
 }
 
-/** Store a local file on the server and return its server-side path. */
-export async function uploadFile(
-  file: File,
-  worktree: string,
-): Promise<string> {
+/** Store a file in the project and return its relative resource name. */
+export async function uploadFile(file: File, worktree: string) {
+  return (await uploadSourceFile(file, worktree)).path;
+}
+
+export async function uploadSourceFile(file: File, worktree: string) {
   const form = new FormData();
   form.append("file", file);
   const response = await fetch(
@@ -132,7 +133,12 @@ export async function uploadFile(
     },
   );
   if (!response.ok) throw await readError(response);
-  return (await response.json()).path;
+  return response.json() as Promise<{
+    path: string;
+    name: string;
+    template: string;
+    code: string;
+  }>;
 }
 
 /** Import a server-platform extension without the backend downloading anything. */

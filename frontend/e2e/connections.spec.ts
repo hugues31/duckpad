@@ -529,20 +529,28 @@ test("database connections are tested from their form and list their tables in L
     await inspector
       .getByRole("combobox", { name: "connection", exact: true })
       .selectOption(identity);
-    const suggestions = async (name: string) => {
-      const input = inspector.getByRole("combobox", { name, exact: true });
-      const list = await input.getAttribute("list");
-      return page
-        .locator(`datalist[id="${list}"] option`)
-        .evaluateAll((options) =>
-          options.map((option) => (option as HTMLOptionElement).value),
-        );
-    };
-    await expect.poll(() => suggestions("schema")).toEqual(["main", "sales"]);
-    await inspector
-      .getByRole("combobox", { name: "schema", exact: true })
-      .fill("sales");
-    await expect.poll(() => suggestions("table")).toEqual(["orders", "totals"]);
+    const schema = inspector.getByRole("combobox", {
+      name: "schema",
+      exact: true,
+    });
+    const table = inspector.getByRole("combobox", {
+      name: "table",
+      exact: true,
+    });
+    await expect(schema.locator("option")).toHaveText([
+      "Choose…",
+      "main",
+      "sales",
+    ]);
+    await schema.selectOption("sales");
+    await expect(table.locator("option")).toHaveText([
+      "Choose…",
+      "orders",
+      "totals",
+    ]);
+    await table.selectOption("orders");
+    await expect(inspector.locator(".source-sample")).toContainText("INTEGER");
+    await expect(inspector.locator(".source-sample td")).toHaveText(["1"]);
   } finally {
     await page.request.delete(`/api/projects/${worktree.project}`);
     await page.request.delete(`/api/catalog/connection/${identity}`);

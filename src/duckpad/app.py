@@ -22,12 +22,13 @@ from starlette.datastructures import UploadFile as FormFile
 from starlette.exceptions import HTTPException
 from starlette.middleware.base import RequestResponseEndpoint
 
-from . import __version__, automation, data_comparison, schemas, variables
+from . import __version__, automation, data_comparison, schemas, source_files, variables
 from .archive import archive_bundle, import_warnings, read_archive, write_archive
 from .artifacts import CHUNK_SIZE
 from .assistant.api import router as assistant_router
 from .assistant.service import Assistant
 from .auth import SESSION_LIFETIME, Auth
+from .builtin_templates import BUILTINS
 from .bundle import bundle_to_files
 from .components import group, import_definition
 from .example import create_example
@@ -36,6 +37,7 @@ from .git.identity import commit_author
 from .jobs import Jobs
 from .monitoring import Monitoring
 from .oidc import CALLBACK_PATH, OIDC, TRANSACTION_LIFETIME, OIDCSettings
+from .project_extensions import enabled as enabled_extensions
 from .python_policy import get_policy
 from .resources import resource_usage
 from .search import search_instance
@@ -159,8 +161,12 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
             if len(parts) >= 4 and parts[3] in ("connections", "python") and request.method != "GET":
                 access.instance_admin(user)
         elif route == "worktrees" and len(parts) >= 3:
+            # Source previews read files and tables beyond the results: editors only, like runs.
+            preview = parts[3:] == ["source-preview"] or (
+                parts[3:4] == ["connections"] and parts[5:] == ["preview"]
+            )
             # Explaining a value and computing column statistics read results without changing them.
-            read = (
+            read = not preview and (
                 request.method == "GET"
                 or (request.method == "POST" and parts[3:] == ["lineage"])
                 or (request.method in ("POST", "DELETE") and parts[3:4] == ["statistics"])
@@ -483,8 +489,9 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
             temporary.replace(path)
         finally:
             temporary.unlink(missing_ok=True)
-        # File parameters still need the server path; the project files already store it.
-        return {"path": str(path), "name": name}
+        kind = source_files.FORMATS.get(path.suffix.lower())
+        template = f"load_{kind}" if kind else ""
+        return {"path": path.name, "name": name, "template": template, "code": BUILTINS.get(template, "")}
 
     @app.post("/api/worktrees/{worktree}/uploads", response_model=None)
     async def upload(worktree: str, request: Request) -> Record:
@@ -500,6 +507,22 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
             if not isinstance(file, FormFile):
                 raise Problem("Choose a file to upload", 422)
             return await run_in_threadpool(save_upload, worktree, file)
+
+    @app.get("/api/worktrees/{worktree}/source-files", response_model=None)
+    def source_file_list(worktree: str) -> list[Record]:
+        return source_files.list_files(store.paths.resources(projects.get(worktree)["project"]))
+
+    @app.post("/api/worktrees/{worktree}/source-preview", response_model=None)
+    def source_preview(worktree: str, data: schemas.SourcePreview) -> Record:
+        snapshot = projects.snapshot(worktree)
+        return source_files.preview(
+            store.paths.resources(snapshot["worktree"]["project"]),
+            data.file,
+            data.model_dump(exclude_none=True, exclude={"file"}),
+            engine.pool.probe_config(),
+            enabled_extensions((snapshot.get("bundle") or {}).get("extensions")),
+            store.get("settings", "offline_extensions", {}),
+        )
 
     # Projects and worktrees
 
@@ -771,6 +794,12 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
             for environment in catalog.environment_names()
         }
         return result
+
+    @app.get("/api/worktrees/{worktree}/connections/{connection}/preview", response_model=None)
+    def table_source_preview(
+        worktree: str, connection: str, environment: str, schema: str, table: str
+    ) -> Record:
+        return engine.connection_objects(worktree, connection, environment, (schema, table))
 
     @app.get("/api/worktrees/{worktree}/connections/{connection}/objects", response_model=None)
     def connection_objects(worktree: str, connection: str, environment: str) -> Record:

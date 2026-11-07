@@ -45,7 +45,13 @@ def source_bundle(params=None):
     return enable_excel(
         {
             "flow": {
-                "nodes": [{"id": "source", "template": "load_xlsx", "params": params or {}}],
+                "nodes": [
+                    {
+                        "id": "source",
+                        "template": "load_xlsx",
+                        "params": {"file": "workbook.xlsx", **(params or {})},
+                    }
+                ],
                 "edges": [],
             },
             "templates": BUILTINS.copy(),
@@ -73,7 +79,7 @@ def project_files(instance, worktree):
 def replace_source(instance, worktree, **params):
     snapshot = instance.projects.snapshot(worktree)
     bundle = snapshot["bundle"]
-    bundle["flow"]["nodes"][0]["params"] = params
+    bundle["flow"]["nodes"][0]["params"] = {"file": "workbook.xlsx", **params}
     instance.projects.write(worktree, snapshot["revision"], bundle_to_files(bundle))
 
 

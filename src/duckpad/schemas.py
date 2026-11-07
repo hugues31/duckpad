@@ -356,3 +356,12 @@ class Explain(BaseModel):
     group: str | None = None
     context: bool = False
     partition_context: dict | None = None
+
+
+class SourcePreview(BaseModel):
+    file: str
+    delimiter: str | None = None
+    header: bool | None = None
+    types: dict[str, str] | None = None
+    sheet: str = ""
+    all_varchar: bool = False

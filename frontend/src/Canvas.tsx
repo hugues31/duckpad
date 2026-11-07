@@ -278,6 +278,7 @@ interface CanvasProps {
     position?: { x: number; y: number },
     connection?: NodeConnection,
   ) => void;
+  onFiles?: (files: File[], position: { x: number; y: number }) => void;
   actionsFor: (id: string) => ActionItem[];
   /** Inputs of the opened component definition, connected from outside it. */
   exposedInputs?: Record<string, ComponentPort>;
@@ -812,11 +813,22 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
         onSelectionChange={selectionChanged}
         onDragOver={(event) => {
           event.preventDefault();
-          event.dataTransfer.dropEffect = "move";
+          event.dataTransfer.dropEffect = event.dataTransfer.types.includes(
+            "Files",
+          )
+            ? "copy"
+            : "move";
         }}
         onDrop={(event) => {
           if (props.readOnly) return;
           event.preventDefault();
+          if (event.dataTransfer.files.length) {
+            props.onFiles?.(
+              Array.from(event.dataTransfer.files),
+              screenToFlowPosition({ x: event.clientX, y: event.clientY }),
+            );
+            return;
+          }
           try {
             const value = JSON.parse(event.dataTransfer.getData(DRAG_TYPE));
             props.onAdd(
