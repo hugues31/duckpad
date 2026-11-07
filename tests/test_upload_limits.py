@@ -35,6 +35,7 @@ def test_upload_admission_precedes_multipart_parsing(uploads, monkeypatch, route
     monkeypatch.setattr(Request, "form", never)
     for headers, status in (
         ({"Content-Length": str(limit + 1)}, 413),
+        ({"Content-Length": "9" * 5000}, 413),
         ({"Content-Length": "invalid"}, 411),
         ({"Transfer-Encoding": "chunked"}, 411),
     ):
