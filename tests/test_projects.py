@@ -11,6 +11,7 @@ from duckpad.auth import Auth
 from duckpad.bundle import bundle_to_files, files_to_bundle
 from duckpad.components import expand, group, import_definition
 from duckpad.engine import Engine
+from duckpad.example import create_example
 from duckpad.merge import merge_files
 from duckpad.projects import QUIET_PERIOD, Projects
 from duckpad.util import Problem, dumps
@@ -540,3 +541,31 @@ def test_combined_resolution_preserves_deletions_and_logical_paths(name, delete)
         ]
     else:
         assert json.loads(merged[name]) == {"report:result": [{"name": "My/view"}]}
+
+
+@pytest.mark.parametrize("fail", [False, True])
+def test_example_deletion_removes_owned_settings_and_connection_atomically(services, monkeypatch, fail):
+    store, projects, catalog, _ = services
+    worktree = create_example(projects, catalog)
+    project = worktree["project"]
+    other = create_example(projects, catalog)
+    store.put("settings", "python:" + project, {"enabled": True})
+    root = store.paths.resources(project)
+    delete = store.delete
+
+    def checked(kind, key):
+        if fail and kind == "project":
+            raise RuntimeError("Deletion failed")
+        delete(kind, key)
+
+    monkeypatch.setattr(store, "delete", checked)
+    if fail:
+        with pytest.raises(RuntimeError, match="Deletion failed"):
+            projects.delete(project)
+    else:
+        projects.delete(project)
+    assert bool(store.get("project", project)) is fail
+    assert bool(store.get("connection", "sample_" + project)) is fail
+    assert bool(store.get("settings", "python:" + project)) is fail
+    assert root.exists() is fail
+    assert store.get("connection", "sample_" + other["project"])

@@ -211,6 +211,9 @@ class Projects:
             with self.store.transaction():
                 worktrees = self.store.worktrees(project_id)
                 artifacts = self.store.artifact_ids(project=project_id)
+                # Example connections own files inside this project's resources directory.
+                self.store.delete("connection", "sample_" + project_id)
+                self.store.delete("settings", "python:" + project_id)
                 self.store.delete("project", project_id)
             self.discard(worktrees, artifacts)
             shutil.rmtree(self.store.paths.resources(project_id), ignore_errors=True)
