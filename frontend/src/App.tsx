@@ -314,7 +314,7 @@ function NavigationGuard({ drafts }: { drafts: DraftRegistry }) {
             new URLSearchParams(nextLocation.search).get(key),
         );
       return (
-        area === "projectSettings" &&
+        (area === "projectSettings" || area === "instanceSettings") &&
         (leavesPage || changesPartitionContext) &&
         (drafts.dirty("page") || saving)
       );
@@ -351,6 +351,7 @@ function PendingNavigation({
   drafts: DraftRegistry;
 }) {
   const t = useT();
+  const navigate = useNavigate();
   const { id: worktree, flush, saving } = useWorktree();
   const scope = isWorktreePage(blocker.location.pathname, worktree)
     ? "page"
@@ -364,10 +365,17 @@ function PendingNavigation({
       // blocked navigation only once, even if that update reruns the effect.
       if (finished.current) return;
       finished.current = true;
-      if (leave) blocker.proceed();
-      else blocker.reset();
+      if (!leave) return blocker.reset();
+      try {
+        blocker.proceed();
+      } catch {
+        // The router renders blocker changes in a transition. A navigation that
+        // completed meanwhile, such as a command selecting what it created,
+        // already released this one: replay it rather than proceed.
+        void navigate(blocker.location);
+      }
     },
-    [blocker],
+    [blocker, navigate],
   );
   const settle = useEffectEvent(async () => {
     // Back can leave a field focused. Finish its blur now, so focusing an

@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { fetchOrigin, signIn } from "./helpers";
+import { createFilterProject, fetchOrigin, signIn } from "./helpers";
 import en from "../src/locales/en.json" with { type: "json" };
 import fr from "../src/locales/fr.json" with { type: "json" };
 
@@ -970,4 +970,73 @@ test("normal node code has a readable SQL diff in Compare versions", async ({
   await expect(dialog.locator(".comparison-values")).not.toContainText(
     "SELECT",
   );
+});
+
+test("Git comparison draws added and removed edges and resets a missing component scope", async ({
+  page,
+}, info) => {
+  const { id, endpoint, read } = await createFilterProject(page);
+  const before = await read();
+  const grouped = await page.request.post(`${endpoint}/group`, {
+    data: {
+      revision: before.revision,
+      nodes: ["filtered"],
+      name: "Review group",
+      parameters: {},
+    },
+  });
+  expect(grouped.ok()).toBe(true);
+  const groupedSnapshot: Snapshot = await grouped.json();
+  // Replacing connections gives the comparison distinct added and removed edges.
+  for (const edge of groupedSnapshot.bundle!.flow.edges)
+    edge.id = `replacement_${edge.id}`;
+  groupedSnapshot.bundle!.flow.nodes.find((node) => node.component)!.position =
+    { x: 350, y: 160 };
+  const replaced = await page.request.put(endpoint, {
+    data: {
+      revision: groupedSnapshot.revision,
+      bundle: groupedSnapshot.bundle,
+    },
+  });
+  expect(replaced.ok()).toBe(true);
+  const after: Snapshot = await replaced.json();
+  await page.goto(`/worktrees/${id}/history`);
+  await page
+    .getByRole("button", { name: "Compare versions", exact: true })
+    .click();
+  const dialog = page.getByRole("dialog", {
+    name: "Project Git workspace",
+    exact: true,
+  });
+  await dialog.getByLabel("A: reference", { exact: true }).fill(before.commit);
+  await dialog.getByLabel("B: target", { exact: true }).fill(after.commit);
+  const graph = dialog.locator(".comparison-graph");
+  for (const [theme, success, danger] of [
+    ["light", "rgb(31, 122, 77)", "rgb(163, 62, 54)"],
+    ["dark", "rgb(142, 224, 178)", "rgb(244, 173, 164)"],
+  ]) {
+    await page.evaluate((theme) => {
+      document.documentElement.dataset.theme = theme;
+    }, theme);
+    await expect
+      .poll(async () =>
+        graph
+          .locator(".react-flow__edge-path")
+          .evaluateAll((edges) =>
+            edges.map((edge) => getComputedStyle(edge).stroke),
+          ),
+      )
+      .toEqual(expect.arrayContaining([success, danger]));
+    await dialog.screenshot({
+      path: info.outputPath(`comparison-edges-${theme}.png`),
+      animations: "disabled",
+    });
+  }
+  const scope = dialog.locator(".git-scope").getByRole("combobox");
+  const component = Object.keys(after.bundle!.components)[0];
+  await scope.selectOption(`component/${component}`);
+  await expect(graph.locator(".react-flow__node")).toHaveCount(1);
+  await dialog.getByLabel("B: target", { exact: true }).fill(before.commit);
+  await expect(scope).toHaveValue("");
+  await expect(graph.locator(".react-flow__node")).toHaveCount(3);
 });

@@ -1168,6 +1168,7 @@
   "assistantStepDefault": "Escolher o modelo padrão",
   "assistantDefaultHint": "As conversas começam com este modelo; cada pessoa pode trocar para outro modelo permitido.",
   "assistantNoAllowedModels": "Permita primeiro um modelo acima",
+  "assistantRequestWaiting": "O assistente está ocupado. Aguarde o fim da resposta atual e pergunte novamente.",
   "assistantTesting": "Testando…",
   "assistantTestHint": "Envia uma breve mensagem de verificação com as configurações acima, mesmo não salvas. Nenhum conteúdo de projeto é enviado.",
   "assistantStepData": "Definir o acesso aos dados",

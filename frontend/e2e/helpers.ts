@@ -1,6 +1,6 @@
 import { expect, type Locator, type Page } from "@playwright/test";
 import en from "../src/locales/en.json" with { type: "json" };
-import type { Snapshot } from "../src/types";
+import type { Bundle, Snapshot } from "../src/types";
 
 /** Administrator password of the disposable instance started by scripts/e2e_server.py. */
 export const PASSWORD = "duckpad-browser-test";
@@ -216,4 +216,78 @@ export async function nodeMenuAction(page: Page, name: string) {
     .getByRole("button", { name: "Node actions", exact: true })
     .click();
   await page.getByRole("menuitem", { name, exact: true }).click();
+}
+
+/** A promise resolved by the test, to hold a request until a given step. */
+export function deferred() {
+  let resolve!: () => void;
+  const promise = new Promise<void>((done) => (resolve = done));
+  return { promise, resolve };
+}
+
+/**
+ * Sign in to a new project Rows → Filter (`filtered`) → Output, whose Output
+ * keeps one column and has a warning test; open its flow on the Filter.
+ */
+export async function createFilterProject(
+  page: Page,
+  change?: (bundle: Bundle) => void,
+) {
+  await signIn(page);
+  const created = await page.request.post("/api/projects", {
+    data: { name: "Filtered rows" },
+  });
+  expect(created.ok()).toBe(true);
+  const { id } = await created.json();
+  const endpoint = `/api/worktrees/${id}`;
+  const read = async (): Promise<Snapshot> =>
+    (await page.request.get(endpoint)).json();
+  const initial = await read();
+  const bundle = initial.bundle!;
+  bundle.templates.rows =
+    "-- @label Rows\n-- @output result\nSELECT 1 AS amount, 'input' AS input_only;";
+  bundle.templates.output =
+    "-- @label Output\n-- @input source\n-- @output result\nSELECT amount FROM {{ source }};\n-- @test rejected: warning\nSELECT * FROM {{ result }} WHERE amount > 0;";
+  bundle.flow.nodes = [
+    { id: "rows", template: "rows", params: {}, position: { x: 0, y: 0 } },
+    {
+      id: "filtered",
+      template: "filter",
+      params: { condition: "true" },
+      position: { x: 350, y: 0 },
+    },
+    {
+      id: "output",
+      template: "output",
+      params: {},
+      position: { x: 700, y: 0 },
+    },
+  ];
+  bundle.flow.edges = [
+    {
+      id: "first",
+      source: "rows",
+      sourceHandle: "result",
+      target: "filtered",
+      targetHandle: "source",
+    },
+    {
+      id: "second",
+      source: "filtered",
+      sourceHandle: "result",
+      target: "output",
+      targetHandle: "source",
+    },
+  ];
+  change?.(bundle);
+  expect(
+    (
+      await page.request.put(endpoint, {
+        data: { revision: initial.revision, bundle },
+      })
+    ).ok(),
+  ).toBe(true);
+  await page.goto(`/worktrees/${id}/flow?node=filtered`);
+  await expect(page.locator(".react-flow__node")).toHaveCount(3);
+  return { id: id as string, endpoint, read };
 }

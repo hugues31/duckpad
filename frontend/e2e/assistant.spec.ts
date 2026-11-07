@@ -1,5 +1,7 @@
 import { expect, test } from "@playwright/test";
 import {
+  createFilterProject,
+  deferred,
   openInstanceSettings,
   signIn,
   withoutExampleVariables,
@@ -547,4 +549,81 @@ test("assistant writes appear on the canvas and undo preserves a manual SQL edit
   });
   expect(configured.ok()).toBeTruthy();
   await verifyAssistantEditing(page);
+});
+
+test("Stop before conversation creation prevents the message, and a busy debug request opens the chat", async ({
+  page,
+}) => {
+  const { endpoint } = await createFilterProject(page);
+  await page.request.put("/api/assistant/settings", {
+    data: {
+      enabled: true,
+      providers: [
+        {
+          id: "primary",
+          kind: "deepseek",
+          api_key: "test-key",
+          models: ["test"],
+        },
+      ],
+      default_provider: "primary",
+      default_model: "test",
+    },
+  });
+  await page.reload();
+  const release = deferred();
+  const started = deferred();
+  const sent: string[] = [];
+  page.on("request", (request) => {
+    if (
+      request.method() === "POST" &&
+      request.url().includes("/assistant/conversations")
+    )
+      sent.push(request.url());
+  });
+  await page.route(`**${endpoint}`, async (route) => {
+    if (route.request().method() !== "PUT") return route.continue();
+    started.resolve();
+    await release.promise;
+    await route.continue();
+  });
+  await page
+    .locator(".inspector")
+    .getByLabel("Display name", { exact: true })
+    .fill("Pending edit");
+  await started.promise;
+  await page
+    .getByRole("button", { name: "Open AI assistant", exact: true })
+    .click();
+  const chat = page.getByRole("dialog", {
+    name: "AI assistant",
+    exact: true,
+  });
+  await chat
+    .getByRole("textbox", { name: "Message", exact: true })
+    .fill("Explain the flow");
+  await chat.getByRole("button", { name: "Send", exact: true }).click();
+  await chat.getByRole("button", { name: "Close", exact: true }).click();
+  await page.evaluate(() =>
+    window.dispatchEvent(
+      new CustomEvent("duckpad:ask-assistant", {
+        detail: { environment: "dev", prompt: "Explain this error" },
+      }),
+    ),
+  );
+  await expect(chat).toBeVisible();
+  await expect(chat).toContainText("Wait for the current response to finish");
+  await chat.getByRole("button", { name: "Stop", exact: true }).click();
+  release.resolve();
+  await expect(
+    chat.getByRole("button", { name: "Send", exact: true }),
+  ).toBeVisible();
+  await expect(
+    chat.getByRole("textbox", { name: "Message", exact: true }),
+  ).toHaveValue("Explain the flow");
+  // The notice lasts only while the chat is busy.
+  await expect(
+    chat.getByText("Wait for the current response to finish"),
+  ).toHaveCount(0);
+  expect(sent).toEqual([]);
 });

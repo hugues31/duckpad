@@ -71,7 +71,7 @@
   color: var(--accent);
 }
 .python-preparation.floating.failed header > svg {
-  color: light-dark(#a33e36, #f4ada4);
+  color: var(--danger);
 }
 .python-preparation.floating header p {
   flex: 1;

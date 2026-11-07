@@ -1,4 +1,5 @@
 import { useNavigate } from "react-router";
+import type { Snapshot } from "../types";
 import { api, send } from "../api";
 import { useT } from "../i18n";
 import { worktreeUrl } from "../navigation";
@@ -13,7 +14,7 @@ export default function VariablesPage() {
   const navigate = useNavigate();
   const { openWorktree } = useShell();
   const workspace = useWorkspace();
-  const { id, environment, snapshot, canEdit, save, refresh, run } =
+  const { id, environment, snapshot, canEdit, save, commit, run } =
     useLoadedWorktree();
   if (!snapshot.bundle) return <InvalidProject />;
   return (
@@ -32,15 +33,13 @@ export default function VariablesPage() {
           bundle.variables = variables;
         })
       }
-      onRename={async (base, name, target) => {
-        try {
-          await api(
+      onRename={async (name, target) => {
+        await commit((base) =>
+          api<Snapshot>(
             `/worktrees/${id}/variables/${encodeURIComponent(name)}/rename`,
             send({ revision: base.revision, name: target }),
-          );
-        } finally {
-          await refresh();
-        }
+          ),
+        );
       }}
       onOpenNode={(node) =>
         void navigate(worktreeUrl(id, "flow", environment, { node }))

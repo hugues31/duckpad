@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { autosaved, signIn } from "./helpers";
+import { autosaved, createFilterProject, signIn } from "./helpers";
 import type { Run, Snapshot } from "../src/types";
 
 /** A run Northstar project, opened on the flow with Paid orders selected. */
@@ -360,4 +360,43 @@ test("the log tells the run behind the result, and exports open on it", async ({
   await expect(
     panel.getByRole("button", { name: "Download exported data", exact: true }),
   ).toBeEnabled();
+});
+
+test("failing rows drop an incompatible input sample before returning to output rows", async ({
+  page,
+}) => {
+  const { id, endpoint } = await createFilterProject(page);
+  const launch = await page.request.post(`${endpoint}/runs`, {
+    data: { environment: "dev" },
+  });
+  expect(launch.ok()).toBe(true);
+  const run = await launch.json();
+  await expect
+    .poll(
+      async () =>
+        (await (await page.request.get(`/api/runs/${run.id}`)).json()).status,
+    )
+    .toBe("success");
+  await page.goto(`/worktrees/${id}/flow?node=output`);
+  const panel = page.getByRole("region", { name: "Results", exact: true });
+  await panel
+    .getByLabel("Output", { exact: true })
+    .selectOption("input:source");
+  await panel.getByRole("button", { name: /^Sample:/ }).click();
+  const sample = page.getByRole("dialog", { name: "Sample", exact: true });
+  await sample
+    .getByRole("textbox", { name: "Filter", exact: true })
+    .fill("input_only = 'input'");
+  await expect(sample.getByRole("status")).toHaveText("1 matching rows");
+  await sample.getByRole("button", { name: "Apply", exact: true }).click();
+  await panel.getByRole("tab", { name: /^Tests/ }).click();
+  await panel.getByRole("button", { name: /Show the 1 failing row/ }).click();
+  await expect(panel.locator(".sample-chip.failing")).toBeVisible();
+  await panel.getByRole("button", { name: "Clear", exact: true }).click();
+  await expect(panel.getByLabel("Output", { exact: true })).toHaveValue(
+    "result",
+  );
+  await expect(panel.locator(".data-table tbody tr")).toHaveCount(1);
+  await expect(panel.locator(".notice.error")).toHaveCount(0);
+  await expect(panel.locator(".sample-chip")).toHaveCount(0);
 });

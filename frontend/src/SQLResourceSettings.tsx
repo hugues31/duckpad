@@ -1,3 +1,4 @@
+import { useSettingsForm } from "./useSettingsForm";
 import { useState } from "react";
 import { api, send } from "./api";
 import { useT } from "./i18n";
@@ -12,16 +13,35 @@ type Configuration = Resources & {
 export default function SQLResourceSettings() {
   const t = useT();
   const settings = useApiResource<Configuration>("/sql-resources");
-  const { data: config, setData: setConfig } = settings;
+  const [draft, setConfig] = useState<Configuration | null>(null);
+  const config = draft ?? settings.data;
   const [saved, setSaved] = useState(false);
   const { pending, run, ...save } = useAsyncAction();
   const error = save.error || settings.error;
   function change(values: Partial<Resources>) {
-    setConfig((current) => current && { ...current, ...values });
+    setConfig(config && { ...config, ...values });
     setSaved(false);
   }
   const automatic = (value: string | number) =>
     t("automaticValue").replace("{value}", String(value));
+  const persist = useSettingsForm({
+    dirty: !!draft && JSON.stringify(draft) !== JSON.stringify(settings.data),
+    discard: () => {
+      setConfig(null);
+    },
+    save: async () => {
+      if (!config) return;
+      const { threads, memory_limit } = config;
+      settings.setData(
+        await api<Configuration>(
+          "/sql-resources",
+          send({ threads, memory_limit }, "PUT"),
+        ),
+      );
+      setConfig(null);
+      setSaved(true);
+    },
+  });
   return (
     <section className="settings-card" aria-label={t("sqlResources")}>
       <h2>{t("sqlResources")}</h2>
@@ -38,16 +58,7 @@ export default function SQLResourceSettings() {
           onSubmit={(event) => {
             event.preventDefault();
             setSaved(false);
-            void run(async () => {
-              const { threads, memory_limit } = config;
-              setConfig(
-                await api<Configuration>(
-                  "/sql-resources",
-                  send({ threads, memory_limit }, "PUT"),
-                ),
-              );
-              setSaved(true);
-            });
+            void run(persist);
           }}
         >
           <fieldset disabled={pending} className="sql-resource-fields">
@@ -87,7 +98,9 @@ export default function SQLResourceSettings() {
                   aria-describedby="sql-memory-hint"
                   placeholder={automatic(config.automatic.memory_limit)}
                   value={config.memory_limit ?? ""}
-                  onChange={(e) => change({ memory_limit: e.target.value })}
+                  onChange={(e) =>
+                    change({ memory_limit: e.target.value || null })
+                  }
                 />
                 <small className="muted" id="sql-memory-hint">
                   {t("sqlMemoryLimitHint").replace(

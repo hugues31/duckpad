@@ -9,7 +9,7 @@ export default defineConfig({
     // Unit tests sit next to their sources; e2e/ holds the Playwright specs.
     // They run in Node; hook tests opt into a DOM with a
     // `// @vitest-environment happy-dom` comment.
-    include: ["src/**/*.test.{ts,tsx}"],
+    include: ["src/**/*.test.{ts,tsx}", "scripts/**/*.test.mjs"],
     restoreMocks: true,
     unstubGlobals: true,
   },

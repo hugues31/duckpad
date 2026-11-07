@@ -397,7 +397,7 @@
 }
 .assistant-tool-icon[data-status="assistantFailed"],
 .assistant-tool-icon[data-status="assistantRunDeclined"] {
-  color: light-dark(#a33e36, #f4ada4);
+  color: var(--danger);
 }
 .assistant-tool-icon[data-status="assistantStopped"] {
   color: var(--muted);

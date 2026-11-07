@@ -83,14 +83,15 @@ See [results and logs](RESULTS.md) and [environments](ENVIRONMENTS.md).
 ## Undo, copy and paste
 
 On the canvas, **Ctrl+Z** (**⌘Z**) undoes your latest change of this session and
-**Ctrl+Shift+Z** or **Ctrl+Y** (**⌘⇧Z**) redoes it, including parameters, code and
-deleted nodes; deleting nodes also offers **Undo** in its message. An undo saves
-the inverse of that change as a new commit: later edits to other nodes, yours or a
-collaborator's, are kept, and a conflicting one is reported like any concurrent
-edit. **Ctrl+C** and **Ctrl+V** (**⌘C**, **⌘V**) copy the selected nodes and paste
-them, with the connections between them, into this flow, a component or another
-branch opened in the same browser tab; copies get new IDs and are offset. These
-shortcuts do nothing while you type in a field or editor, or while a dialog is open.
+**Ctrl+Shift+Z** or **Ctrl+Y** (**⌘⇧Z**) redoes it, including parameters, code,
+deleted nodes, groups, library imports, variable renames and conflict resolutions;
+deleting nodes also offers **Undo** in its message. An undo saves the inverse of
+that change as a new commit: later edits to other nodes, yours or a collaborator's,
+are kept, and a conflicting one is reported like any concurrent edit. **Ctrl+C**
+and **Ctrl+V** (**⌘C**, **⌘V**) copy the selected nodes and paste them, with the
+connections between them, into this flow, a component or another branch opened in
+the same browser tab; copies get new IDs and are offset. These shortcuts do nothing
+while you type in a field or editor, or while a dialog is open.
 
 ## Preferences and access
 

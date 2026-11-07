@@ -152,6 +152,20 @@ for (const [language, theme, choice] of [
       expect(result.bundle.flow.nodes[0].params.status).toBe(
         "changed in tab B",
       );
+    await expect(page.locator(".save-status")).toHaveText(labels.saved);
+    if (choice !== "current") {
+      await page.getByRole("link", { name: labels.flow, exact: true }).click();
+      await expect(page.locator(".react-flow__node")).toHaveCount(1);
+      await page.getByRole("link", { name: labels.flow, exact: true }).focus();
+      await page.keyboard.press("Control+z");
+      await expect
+        .poll(
+          async () =>
+            (await (await page.request.get(`/api/worktrees/${tree.id}`)).json())
+              .files[sqlPath],
+        )
+        .toContain("saved from tab B");
+    }
     expect(errors).toEqual([]);
   });
 }

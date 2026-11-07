@@ -332,14 +332,15 @@ def test_identifier_list_undeclared_and_misplaced_references_are_errors_on_the_n
         "parameters can. Bind the whole parameter to the variable instead."
     )
     assert projects.snapshot(worktree)["diagnostics"] == [
-        {"file": "flow.json", "node": "large", "message": identifier},
-        {"file": "flow.json", "node": "large", "message": listed},
+        {"file": "flow.json", "node": "large", "parameter": "condition", "message": identifier},
+        {"file": "flow.json", "node": "large", "parameter": "condition", "message": listed},
         {
             "file": "flow.json",
             "node": "paid",
+            "parameter": "condition",
             "message": "Parameter condition references undeclared variable missing",
         },
-        {"file": "flow.json", "node": "titled", "message": misplaced},
+        {"file": "flow.json", "node": "titled", "parameter": "title", "message": misplaced},
     ]
     run = wait_run(store, engine.launch(worktree, "dev"))
     assert run["nodes"]["large"]["status"] == "blocked"

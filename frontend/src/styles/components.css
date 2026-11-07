@@ -131,7 +131,7 @@ a.button {
   text-decoration: underline;
 }
 .danger {
-  color: light-dark(#a33e36, #f4ada4);
+  color: var(--danger);
 }
 .eyebrow {
   font-size: 10px;
@@ -214,7 +214,7 @@ a.button {
 }
 .notice.error {
   background: #f9e8e522;
-  color: light-dark(#a33e36, #f4ada4);
+  color: var(--danger);
   border: 1px solid #c66b6533;
 }
 .notice.warning {

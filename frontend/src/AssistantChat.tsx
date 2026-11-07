@@ -305,6 +305,9 @@ export default function AssistantChat() {
   const [busy, setBusy] = useState(false);
   const [undoing, setUndoing] = useState(false);
   const [error, setError] = useState("");
+  // An "Ask the assistant" request arrived during a response; told until idle.
+  const [waiting, setWaiting] = useState(false);
+  if (waiting && !busy && !undoing) setWaiting(false);
   const [pending, setPending] = useState<AssistantTurn | null>(null);
   // The turn that streams again after a run approval.
   const [continuing, setContinuing] = useState("");
@@ -323,14 +326,17 @@ export default function AssistantChat() {
     conversation?.turns.at(-1)?.status === "awaiting_approval";
   useEffect(() => {
     const receive = (event: Event) => {
-      if (busy || undoing) return;
+      setOpen(true);
+      if (busy || undoing) {
+        setWaiting(true);
+        return;
+      }
       const detail = (event as CustomEvent<DebugRequest>).detail;
       setDebug({ ...detail, worktree: worktree.id });
       setConversation(null);
       setPending(null);
       setDraft(detail.prompt);
       following.current = true;
-      setOpen(true);
     };
     window.addEventListener(DEBUG_ASSISTANT_EVENT, receive);
     return () => window.removeEventListener(DEBUG_ASSISTANT_EVENT, receive);
@@ -493,6 +499,7 @@ export default function AssistantChat() {
         await drafts.persist();
         await worktree.flush();
       }
+      abort.signal.throwIfAborted();
       if (!value || !bound) {
         value = await api<Conversation>("/assistant/conversations", {
           ...send(context),
@@ -500,6 +507,7 @@ export default function AssistantChat() {
         });
         setConversation(value);
       }
+      abort.signal.throwIfAborted();
       identity.current = value.id;
       following.current = true;
       setPending(current);
@@ -654,7 +662,10 @@ export default function AssistantChat() {
         : undefined,
   });
   async function stop() {
-    if (!identity.current) return;
+    if (!identity.current) {
+      controller.current?.abort();
+      return;
+    }
     try {
       await api(`/assistant/conversations/${identity.current}/stop`, send({}));
     } catch (e) {
@@ -943,6 +954,11 @@ export default function AssistantChat() {
               {error && (
                 <p className="notice error" role="alert">
                   {explainError(error)}
+                </p>
+              )}
+              {waiting && (
+                <p className="assistant-notice" role="status">
+                  {t("assistantRequestWaiting")}
                 </p>
               )}
               {awaitingApproval && (

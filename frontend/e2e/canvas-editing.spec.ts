@@ -4,6 +4,7 @@ import {
   canvasZoom,
   closeCode,
   codePanel,
+  deferred,
   openCode,
   signIn,
 } from "./helpers";
@@ -201,6 +202,78 @@ test("a conflicting undo is reported once, and editors wait for undos", async ({
   await page.keyboard.press("ControlOrMeta+Z");
   await expect(page.locator(".toast")).toContainText("Nothing to undo");
   expect(reverts).toHaveLength(1);
+});
+
+test("grouping waits for an Inspector save, and Ctrl+Z undoes the group before the edit", async ({
+  page,
+}) => {
+  const { endpoint, read } = await prepare(page);
+  await select(page, "filtered");
+  const release = deferred();
+  const started = deferred();
+  let savedRevision = "";
+  await page.route(`**${endpoint}`, async (route) => {
+    if (route.request().method() !== "PUT") return route.continue();
+    const response = await route.fetch();
+    savedRevision = (await response.json()).revision;
+    started.resolve();
+    await release.promise;
+    await route.fulfill({ response });
+  });
+  await page
+    .locator(".inspector")
+    .getByLabel("Display name", { exact: true })
+    .fill("Reviewed filter");
+  await started.promise;
+  await page.locator(".group-button").click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByLabel("Component name").fill("Reviewed group");
+  const request = page.waitForRequest((r) => r.url().endsWith("/group"));
+  await dialog.getByRole("button", { name: "Create", exact: true }).click();
+  release.resolve();
+  // The group applies to the revision of the edit it waited for.
+  expect((await request).postDataJSON().revision).toBe(savedRevision);
+  await expect(dialog).toHaveCount(0);
+  const groups = async () =>
+    Object.values((await read()).bundle!.components).map(
+      (component) => component.name,
+    );
+  await expect.poll(groups).toContain("Reviewed group");
+  await page.getByRole("link", { name: "Flow", exact: true }).focus();
+  await page.keyboard.press("ControlOrMeta+Z");
+  await expect.poll(groups).not.toContain("Reviewed group");
+  expect(
+    (await read()).bundle!.flow.nodes.find((item) => item.id === "filtered")
+      ?.label,
+  ).toBe("Reviewed filter");
+});
+
+test("Back during a group waits for it, then leaves the flow", async ({
+  page,
+}) => {
+  await prepare(page);
+  // Back to a page of this session, which the router can hold.
+  await page.getByRole("link", { name: "Variables", exact: true }).click();
+  await page.getByRole("link", { name: "Flow", exact: true }).click();
+  await select(page, "filtered");
+  const release = deferred();
+  const held = deferred();
+  await page.route(/\/group$/, async (route) => {
+    held.resolve();
+    await release.promise;
+    await route.continue();
+  });
+  await page.locator(".group-button").click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByLabel("Component name").fill("Left group");
+  await dialog.getByRole("button", { name: "Create", exact: true }).click();
+  await held.promise;
+  // The group then selects its component, a navigation of its own.
+  await page.evaluate(() => history.back());
+  release.resolve();
+  await expect(
+    page.getByRole("heading", { name: "Project variables", exact: true }),
+  ).toBeVisible();
 });
 
 test("copy includes edits still being saved", async ({ page }) => {

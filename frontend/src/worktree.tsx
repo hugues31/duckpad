@@ -15,7 +15,14 @@ import type {
   PartitionEntry,
   PartitionLaunchOptions,
 } from "./partitions";
-import { api, ApiError, errorDetail, send, withQuery } from "./api";
+import {
+  api,
+  ApiError,
+  errorDetail,
+  retainedConflict,
+  send,
+  withQuery,
+} from "./api";
 import { outputSource } from "./graph";
 import { useT } from "./i18n";
 import { useShell } from "./shell";
@@ -72,6 +79,11 @@ export interface Worktree {
   settle: () => Promise<void>;
   /** Save a change applied to a copy of the bundle of `base`; it can be undone. */
   save: (base: Snapshot, change: (bundle: Bundle) => void) => Promise<Snapshot>;
+  /** Finish drafts, then commit against the current revision with undo support. */
+  commit: <T extends Snapshot>(
+    request: (base: Snapshot) => Promise<T>,
+    options?: { conflict?: string },
+  ) => Promise<T>;
   /**
    * Revert the latest change saved in this session, or the given one, by a
    * commit that keeps later independent edits. Resolves false if there is none.
@@ -159,6 +171,8 @@ export function WorktreeProvider({
   );
   const [saves, setSaves] = useState(0);
   const pendingWrites = useRef(new Set<Promise<Snapshot>>());
+  const pendingCommits = useRef(new Set<Promise<Snapshot>>());
+  const commits = useRef<Promise<unknown>>(Promise.resolve());
   // The commits of the session's saves by working branch, which undo reverts.
   const histories = useRef(new Map<string, History>());
   // Undos and redos run one after another, each on the history the last one left.
@@ -254,29 +268,35 @@ export function WorktreeProvider({
     await refresh();
   }, [refreshWorkspace, refresh]);
 
-  async function write(worktree: string, request: () => Promise<Snapshot>) {
+  async function write<T extends Snapshot>(
+    worktree: string,
+    request: () => Promise<T>,
+  ) {
     if (!canEdit) throw new Error(t("readerNotice"));
     setSaves((count) => count + 1);
-    const pending = request();
+    const pending = Promise.resolve()
+      .then(request)
+      .finally(async () => {
+        // Show the saved revision, or the one that rejected the change.
+        await refresh(worktree);
+        pendingWrites.current.delete(pending);
+        setSaves((count) => count - 1);
+      });
     pendingWrites.current.add(pending);
-    try {
-      return await pending;
-    } finally {
-      pendingWrites.current.delete(pending);
-      // Show the saved revision, or the one that rejected the change.
-      await refresh(worktree);
-      setSaves((count) => count - 1);
-    }
+    return pending;
   }
 
   const put = (
     base: Snapshot,
     change: { bundle: Bundle } | { files: Record<string, string> },
   ) =>
-    write(base.worktree.id, () =>
-      api<Snapshot>(
-        `/worktrees/${base.worktree.id}`,
-        send({ revision: base.revision, ...change }, "PUT"),
+    write(base.worktree.id, async () =>
+      remember(
+        base.worktree.id,
+        await api<Snapshot>(
+          `/worktrees/${base.worktree.id}`,
+          send({ revision: base.revision, ...change }, "PUT"),
+        ),
       ),
     );
 
@@ -286,6 +306,49 @@ export function WorktreeProvider({
       histories.current.set(worktree, (entry = { undo: [], redo: [] }));
     return entry;
   };
+
+  function remember<T extends Snapshot>(worktree: string, result: T): T {
+    if (result.change) {
+      const entry = history(worktree);
+      entry.undo.push(result.change);
+      entry.undo.splice(0, Math.max(0, entry.undo.length - HISTORY_LIMIT));
+      entry.redo.length = 0;
+    }
+    return result;
+  }
+
+  function commit<T extends Snapshot>(
+    request: (base: Snapshot) => Promise<T>,
+    { conflict }: { conflict?: string } = {},
+  ) {
+    // Track preparation too: navigation and runs must wait even before the POST.
+    setSaves((count) => count + 1);
+    const pending = commits.current
+      .catch(() => undefined)
+      .then(async () => {
+        await flushWrites();
+        // A resolution already contains the retained proposal. Retrying its
+        // rejected editor draft would create another conflict before resolving it.
+        if (!conflict) await drafts.persist();
+        await flushWrites();
+        return write(id, async () => {
+          const base = await api<Snapshot>(`/worktrees/${id}`);
+          const result = await request(base);
+          if (conflict)
+            drafts.discardRejected(
+              (error) => retainedConflict(error) === conflict,
+            );
+          return remember(id, result);
+        });
+      })
+      .finally(() => {
+        pendingCommits.current.delete(pending);
+        setSaves((count) => count - 1);
+      });
+    commits.current = pending;
+    pendingCommits.current.add(pending);
+    return pending;
+  }
 
   async function revertNow(direction: keyof History, change?: string) {
     if (!canEdit) return false;
@@ -318,9 +381,14 @@ export function WorktreeProvider({
     return next;
   }
 
-  async function flush() {
+  async function flushWrites() {
     while (pendingWrites.current.size)
       await Promise.all([...pendingWrites.current]);
+  }
+
+  async function flush() {
+    while (pendingWrites.current.size || pendingCommits.current.size)
+      await Promise.all([...pendingWrites.current, ...pendingCommits.current]);
   }
 
   async function settle() {
@@ -401,18 +469,11 @@ export function WorktreeProvider({
     refresh: () => refresh(),
     flush,
     settle,
+    commit,
     save: async (base, change) => {
       const bundle = structuredClone(base.bundle!);
       change(bundle);
-      const result = await put(base, { bundle });
-      if (result.change) {
-        // Undos in flight keep their arrays: change them in place.
-        const commits = history(base.worktree.id);
-        commits.undo.push(result.change);
-        commits.undo.splice(0, commits.undo.length - HISTORY_LIMIT);
-        commits.redo.length = 0;
-      }
-      return result;
+      return put(base, { bundle });
     },
     saveFiles: (files, base) => put(base, { files }),
     undo: (change) => revert("undo", change),

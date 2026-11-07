@@ -454,6 +454,67 @@ function Editor({
 }
 
 describe("useDraftRegistry", () => {
+  it("preserves edits typed during a flush whose submitted proposal was rejected", async () => {
+    const handle = createRef<Draft>();
+    const { save, calls } = server();
+    render(
+      <Registry>
+        <Editor handle={handle} scope="page" save={save} />
+      </Registry>,
+    );
+    act(() => handle.current!.update(() => "submitted proposal"));
+    let flushing!: Promise<void>;
+    await act(async () => {
+      flushing = registry.current!.persist();
+    });
+    act(() => handle.current!.update(() => "typed during save"));
+    const conflict = new Error("Retained proposal");
+    await act(async () => {
+      const assertion = expect(flushing).rejects.toThrow("Retained proposal");
+      calls[0].reject(conflict);
+      await assertion;
+    });
+    act(() => registry.current!.discardRejected((error) => error === conflict));
+    expect(handle.current!.draft).toBe("typed during save");
+    expect(handle.current!.dirty).toBe(true);
+  });
+
+  it("discards only the resolved rejection, preserving newer and unrelated drafts", async () => {
+    const resolved = createRef<Draft>();
+    const edited = createRef<Draft>();
+    const unrelated = createRef<Draft>();
+    const conflict = new Error("Retained proposal");
+    const save = vi.fn(async () => {
+      throw conflict;
+    });
+    render(
+      <Registry>
+        <Editor handle={resolved} scope="page" save={save} />
+        <Editor handle={edited} scope="page" save={save} />
+        <Editor
+          handle={unrelated}
+          scope="page"
+          save={async () => {
+            throw new Error("Offline");
+          }}
+        />
+      </Registry>,
+    );
+    for (const editor of [resolved, edited, unrelated]) {
+      act(() => editor.current!.update(() => "proposal"));
+      await act(async () => {
+        await expect(editor.current!.persist()).rejects.toThrow();
+      });
+    }
+    act(() => edited.current!.update(() => "newer changes"));
+    act(() => registry.current!.discardRejected((error) => error === conflict));
+    expect(resolved.current!.dirty).toBe(false);
+    expect(edited.current!.draft).toBe("newer changes");
+    expect(unrelated.current!.draft).toBe("proposal");
+    expect(edited.current!.dirty).toBe(true);
+    expect(unrelated.current!.dirty).toBe(true);
+  });
+
   it("autosaves only the automatic drafts that navigation will close", async () => {
     const automatic = createRef<Draft>();
     const manual = createRef<Draft>();

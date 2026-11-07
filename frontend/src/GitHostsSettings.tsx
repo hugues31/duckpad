@@ -1,3 +1,4 @@
+import { useSettingsForm } from "./useSettingsForm";
 import { useState } from "react";
 import { api, send } from "./api";
 import { useT } from "./i18n";
@@ -28,6 +29,35 @@ export default function GitHostsSettings() {
     setKnownHosts(null);
     setPrefixes(null);
   };
+  const persist = useSettingsForm({
+    dirty:
+      !!settings &&
+      (knownHosts !== settings.known_hosts ||
+        prefixes !== settings.prefixes.join("\n")),
+    discard: () => {
+      setKnownHosts(null);
+      setPrefixes(null);
+    },
+    save: async () => {
+      if (!settings) return;
+      show(
+        await api<GitHosts>(
+          "/git-hosts",
+          send(
+            {
+              known_hosts: knownHosts,
+              prefixes: prefixes
+                .split("\n")
+                .map((value) => value.trim())
+                .filter(Boolean),
+            },
+            "PUT",
+          ),
+        ),
+      );
+      setSaved(true);
+    },
+  });
   return (
     <section className="settings-card" aria-labelledby="git-hosts-heading">
       <h2 id="git-hosts-heading">{t("gitHosts")}</h2>
@@ -44,24 +74,7 @@ export default function GitHostsSettings() {
           onSubmit={(event) => {
             event.preventDefault();
             setSaved(false);
-            void run(async () => {
-              show(
-                await api<GitHosts>(
-                  "/git-hosts",
-                  send(
-                    {
-                      known_hosts: knownHosts,
-                      prefixes: prefixes
-                        .split("\n")
-                        .map((value) => value.trim())
-                        .filter(Boolean),
-                    },
-                    "PUT",
-                  ),
-                ),
-              );
-              setSaved(true);
-            });
+            void run(persist);
           }}
         >
           <fieldset disabled={pending} className="git-hosts-fields">

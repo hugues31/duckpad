@@ -15,7 +15,7 @@
   font-size: 12px;
 }
 .toast.error {
-  color: light-dark(#a33e36, #f4ada4);
+  color: var(--danger);
 }
 .toast > span {
   overflow-wrap: anywhere;

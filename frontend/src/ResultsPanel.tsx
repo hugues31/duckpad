@@ -296,6 +296,7 @@ export default function ResultsPanel({
       !sampleFits(
         shownSample.sample,
         columns.map((c) => c.name),
+        dataset?.columns.map((c) => c.name),
       )
     )
       setShownSample({ environment, ...loadSample(storage(next)) });
@@ -527,7 +528,7 @@ export default function ResultsPanel({
           canShowRows={!!dataset && dataset.status === "valid" && !exportNode}
           readOnly={readOnly}
           onShowRows={(test, count, output) => {
-            setTarget({
+            showDataset({
               node: fullNode,
               // Failing rows come from the output the test checks.
               port:

@@ -1168,6 +1168,7 @@
   "assistantStepDefault": "Choose the default model",
   "assistantDefaultHint": "Conversations start with this model; people can switch to any allowed model.",
   "assistantNoAllowedModels": "Allow a model above first",
+  "assistantRequestWaiting": "The assistant is busy. Wait for the current response to finish, then ask again.",
   "assistantTesting": "Testing…",
   "assistantTestHint": "Sends a short check prompt with the settings above, even unsaved. No project content is sent.",
   "assistantStepData": "Set data access",
