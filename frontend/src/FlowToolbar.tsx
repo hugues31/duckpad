@@ -197,8 +197,9 @@ export function WorkspaceNotices({
         <div className="run-progress">
           <Loader2 className="spin" size={13} />
           <span>
-            {t(active.status)} · {active.environment} · {completed}/
-            {nodes.length} {t("nodes")}
+            {t(active.status)} · {active.environment}
+            {/* A preparing run lists its nodes once dependencies and the worker are ready. */}
+            {!!nodes.length && ` · ${completed}/${nodes.length} ${t("nodes")}`}
           </span>
           <div className="progress-track">
             <div
