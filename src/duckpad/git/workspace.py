@@ -25,6 +25,10 @@ UNREADABLE = object()
 UNMERGED = "The branch has commits that are not merged into {}."
 
 
+def history_cache_key(repository):
+    return "git_history:" + digest(str(repository))
+
+
 def origin_key(branch):
     """Git configuration recording the branch a working branch was created from."""
     return f"branch.{branch}.duckpad-origin"
@@ -109,9 +113,7 @@ class GitWorkspace:
         self.reports_lock = threading.Lock()
         # Validation outcomes per commit, which is immutable: accepted histories, and the error of
         # each rejected head and offending commit.
-        self.safe_heads = OrderedDict(
-            (tuple(tip), None) for tip in self.store.get("settings", "git_history", {}).get("tips", [])
-        )
+        self.safe_heads = OrderedDict()
         self.rejected = OrderedDict()
 
     def remember(self, cache, key, value):
@@ -589,7 +591,7 @@ class GitWorkspace:
         with self.reports_lock:
             if (repository, head) in self.safe_heads:
                 return
-            tips = [tip for repo, tip in self.safe_heads if repo == repository]
+            tips = self.store.get("settings", history_cache_key(repository), {}).get("tips", [])
         if message := self.rejected.get(head):
             raise Problem(message, 422)
         # Raw diffs include every parent of merges and the root tree. Disabling renames makes each
@@ -649,7 +651,12 @@ class GitWorkspace:
             self.safe_heads.move_to_end((repository, head))
             while len(self.safe_heads) > MAX_SAFE_HEADS:
                 self.safe_heads.popitem(last=False)
-            self.store.put("settings", "git_history", {"tips": list(self.safe_heads)})
+            # Evicting an in-memory entry must not forget another project's validated history.
+            with self.store.transaction():
+                key = history_cache_key(repository)
+                saved = self.store.get("settings", key, {}).get("tips", [])
+                tips = [tip for tip in saved if tip != head] + [head]
+                self.store.put("settings", key, {"tips": tips[-MAX_SAFE_HEADS:]})
 
     def reject(self, message, *commits):
         for commit in commits:

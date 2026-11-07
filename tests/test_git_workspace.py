@@ -20,7 +20,7 @@ from duckpad.git import command
 from duckpad.git.command import GitError
 from duckpad.git.identity import commit_author
 from duckpad.git.remote import validate_url
-from duckpad.git.workspace import GitWorkspace
+from duckpad.git.workspace import GitWorkspace, history_cache_key
 from duckpad.services import Services
 from duckpad.util import Problem
 
@@ -870,6 +870,8 @@ def test_large_history_validation_is_incremental_and_survives_restart(local_remo
     state = projects.remotes.fetch(main["id"], state["config_revision"])
     state = push(projects, main, state)
     checkpoint = state["local_head"]
+    # Losing the bounded in-memory cache must not discard persisted project checkpoints.
+    projects.versioning.safe_heads.clear()
     target = projects.branch(main["id"], "target")
     append(6000)
     # A new service reads the trusted tips from instance storage, rather than losing them at restart.
@@ -935,7 +937,9 @@ def test_history_validation_checks_merge_parents_and_bounds_saved_tips(project, 
     for _ in range(4):
         projects.git(main["path"], "commit", "--allow-empty", "-m", "chore: save")
         workspace.validate_history(main["path"], workspace.resolve(main["path"], "HEAD"))
-    assert len(workspace.safe_heads) == len(GitWorkspace(projects).safe_heads) == 2
+    assert len(workspace.safe_heads) == 2
+    repository = projects.git(main["path"], "rev-parse", "--path-format=absolute", "--git-common-dir")
+    assert len(projects.store.get("settings", history_cache_key(repository))["tips"]) == 2
     bad = projects.branch(main["id"], "bad")
     Path(bad["path"], "nodes").mkdir(exist_ok=True)
     Path(bad["path"], "nodes", "link.sql").symlink_to("../flow.json")

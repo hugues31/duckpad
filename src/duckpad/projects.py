@@ -24,7 +24,7 @@ from .git import command
 from .git.command import GitError, GitOptions
 from .git.identity import SYSTEM_IDENTITY, current_identity
 from .git.remote import Remotes
-from .git.workspace import GitWorkspace, diagnose, origin_key, require_valid
+from .git.workspace import GitWorkspace, diagnose, history_cache_key, origin_key, require_valid
 from .merge import conflict_details, merge_files
 from .node_code import owned_paths
 from .node_names import node_names
@@ -214,6 +214,9 @@ class Projects:
                 # Example connections own files inside this project's resources directory.
                 self.store.delete("connection", "sample_" + project_id)
                 self.store.delete("settings", "python:" + project_id)
+                self.store.delete(
+                    "settings", history_cache_key(self.store.paths.project(project_id) / ".git")
+                )
                 self.store.delete("project", project_id)
             self.discard(worktrees, artifacts)
             shutil.rmtree(self.store.paths.resources(project_id), ignore_errors=True)
