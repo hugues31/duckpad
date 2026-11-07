@@ -621,5 +621,9 @@ test("Stop before conversation creation prevents the message, and a busy debug r
   await expect(
     chat.getByRole("textbox", { name: "Message", exact: true }),
   ).toHaveValue("Explain the flow");
+  // The notice lasts only while the chat is busy.
+  await expect(
+    chat.getByText("Wait for the current response to finish"),
+  ).toHaveCount(0);
   expect(sent).toEqual([]);
 });

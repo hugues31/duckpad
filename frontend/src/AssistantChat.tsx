@@ -305,6 +305,9 @@ export default function AssistantChat() {
   const [busy, setBusy] = useState(false);
   const [undoing, setUndoing] = useState(false);
   const [error, setError] = useState("");
+  // An "Ask the assistant" request arrived during a response; told until idle.
+  const [waiting, setWaiting] = useState(false);
+  if (waiting && !busy && !undoing) setWaiting(false);
   const [pending, setPending] = useState<AssistantTurn | null>(null);
   // The turn that streams again after a run approval.
   const [continuing, setContinuing] = useState("");
@@ -325,7 +328,7 @@ export default function AssistantChat() {
     const receive = (event: Event) => {
       setOpen(true);
       if (busy || undoing) {
-        setError(t("assistantRequestWaiting"));
+        setWaiting(true);
         return;
       }
       const detail = (event as CustomEvent<DebugRequest>).detail;
@@ -337,7 +340,7 @@ export default function AssistantChat() {
     };
     window.addEventListener(DEBUG_ASSISTANT_EVENT, receive);
     return () => window.removeEventListener(DEBUG_ASSISTANT_EVENT, receive);
-  }, [busy, undoing, worktree.id, t]);
+  }, [busy, undoing, worktree.id]);
   const controller = useRef<AbortController | null>(null);
   const launcher = useRef<HTMLButtonElement>(null);
   const input = useRef<HTMLTextAreaElement>(null);
@@ -951,6 +954,11 @@ export default function AssistantChat() {
               {error && (
                 <p className="notice error" role="alert">
                   {explainError(error)}
+                </p>
+              )}
+              {waiting && (
+                <p className="assistant-notice" role="status">
+                  {t("assistantRequestWaiting")}
                 </p>
               )}
               {awaitingApproval && (
