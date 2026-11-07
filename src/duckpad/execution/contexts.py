@@ -207,7 +207,7 @@ class ContextPool:
                     context is None
                     or getattr(context.db, "closed", False)
                     or (
-                        restart
+                        (restart or (opening and context.db is None))
                         and (
                             context.extensions != requirements
                             or context.resources != resources

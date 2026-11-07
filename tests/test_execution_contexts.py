@@ -324,3 +324,17 @@ def test_cancellation_keeps_newer_run_progress(services, monkeypatch):
     assert record["nodes"]["first"]["status"] == "success"
     assert record["nodes"]["second"]["status"] == "running"
     engine.active.pop(tree["id"])
+
+
+def test_starting_an_empty_context_records_the_settings_it_opens_with(isolated):
+    engine = isolated.engine
+    tree = project(isolated, "Empty context")
+    placeholder = engine.context(tree["id"], "dev")
+    assert placeholder.db is None
+    engine.configure_sql_resources({"threads": 2, "memory_limit": "1GiB"})
+    started = engine.pool.ensure_started(tree["id"], "dev")
+    assert started.resources == {"threads": 2, "memory_limit": "1GiB"}
+    assert started.db.execute("SELECT current_setting('threads')").fetchone() == (2,)
+    engine.configure_sql_resources({"threads": 3, "memory_limit": "2GiB"})
+    assert engine.pool.ensure_started(tree["id"], "dev") is started
+    assert started.resources == {"threads": 2, "memory_limit": "1GiB"}
