@@ -85,7 +85,7 @@ export default function VariablesPanel({
     change: (variables: Declarations) => void,
   ) => Promise<Snapshot>;
   /** Rename a variable and every reference to it, in one commit. */
-  onRename: (base: Snapshot, name: string, target: string) => Promise<void>;
+  onRename: (name: string, target: string) => Promise<void>;
   onOpenNode: (node: string) => void;
   onViewFiles: () => void;
   onRunSource?: (node: string) => void;
@@ -292,7 +292,7 @@ export default function VariablesPanel({
             environments={environments}
             onSave={onSave}
             onRename={async (target) => {
-              await onRename(snapshot, editing!, target);
+              await onRename(editing!, target);
               open(target);
             }}
             onOpenNode={onOpenNode}

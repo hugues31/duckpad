@@ -12,11 +12,11 @@ badge, the time, duration and commit of the run that produced the rows, and the
 row and column counts. With several outputs, or inputs, the selector lists the
 node's outputs and, under **Inputs, to compare**, the datasets connected to its
 inputs: showing an input keeps the current sample when its columns allow it, to
-check an operation before and after. A SQL filter travels only when the destination
-keeps every source column; otherwise the destination's saved sample is restored.
-This also applies when opening failing rows from an input preview.
-An export node has no rows: its panel opens
-on **Log**, with **Tests**. A component instance shows its exposed outputs.
+check an operation before and after. A sample filter is kept only when the other
+dataset has every column of the current one; otherwise that dataset's own sample
+is restored, as when opening failing rows from an input. An export node has no
+rows: its panel opens on **Log**, with **Tests**. A component instance shows its
+exposed outputs.
 
 The inspector's result summary links to Data, Log and Tests, showing validity,
 warnings and the latest failure for the selected environment.

@@ -33,7 +33,7 @@ export default function VariablesPage() {
           bundle.variables = variables;
         })
       }
-      onRename={async (_base, name, target) => {
+      onRename={async (name, target) => {
         await commit((base) =>
           api<Snapshot>(
             `/worktrees/${id}/variables/${encodeURIComponent(name)}/rename`,
