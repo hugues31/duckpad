@@ -272,6 +272,8 @@ The form proposes an expiration date 90 days away; clear it for a token without 
 Copy the `dpk_` secret when it is created: it is shown only once, and the database stores
 only its hash. Send it as `Authorization: Bearer dpk_…` to use the account's current permissions.
 Tokens are never accepted from cookies and do not authorize SSH key management or network Git.
+Creating, listing, or revoking tokens requires an interactive session. API tokens cannot
+manage their own tokens or another account's tokens, even with administrator permissions.
 The list shows creation, expiration and last use (updated at most once per minute), and allows revocation.
 Changing a password leaves API tokens valid. Deactivation deletes all tokens permanently,
 including after reactivation. An SSO account's tokens work only while SSO is enabled.

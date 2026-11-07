@@ -138,8 +138,9 @@ def test_admin_revocation_and_token_ownership(instance):
     token = auth.create_api_token(user, user["id"], "Owned")
     other_token = auth.create_api_token(other, other["id"], "Other")
     headers = bearer(token["token"])
-    assert client.get("/api/api-tokens", headers=headers).json()[0]["id"] == token["id"]
-    assert client.delete(f"/api/api-tokens/{other_token['id']}", headers=headers).status_code == 404
+    session_headers = bearer(auth.login("owner", PASSWORD))
+    assert client.get("/api/api-tokens", headers=session_headers).json()[0]["id"] == token["id"]
+    assert client.delete(f"/api/api-tokens/{other_token['id']}", headers=session_headers).status_code == 404
     assert client.get(f"/api/users/{other['id']}/api-tokens", headers=headers).status_code == 403
     path = f"/api/users/{user['id']}/api-tokens"
     assert client.get(path).json()[0]["name"] == "Owned"
@@ -160,6 +161,7 @@ def test_personal_token_permissions_follow_current_account_and_membership(instan
     assert client.get(path, headers=headers).status_code == 200
     assert client.patch(f"/api/users/{user['id']}", json={"role": "member"}).status_code == 200
     assert client.get(path, headers=headers).status_code == 404
+
     member = f"/api/projects/{worktree['project']}/members/{user['id']}"
     assert client.put(member, json={"role": "editor"}).status_code == 200
     response = client.post(f"{path}/runs", headers=headers, json={"environment": "dev"})
@@ -171,6 +173,25 @@ def test_personal_token_permissions_follow_current_account_and_membership(instan
     assert client.post(f"{path}/runs", headers=headers, json={"environment": "dev"}).status_code == 403
     assert client.delete(member).status_code == 200
     assert client.get(path, headers=headers).status_code == 404
+
+
+@pytest.mark.parametrize("role", ["admin", "member"])
+def test_api_tokens_cannot_create_list_or_revoke_tokens(instance, role):
+    app, client = instance
+    auth = app.state.auth
+    user = auth.create_user("token-owner", PASSWORD, role)
+    expiry = (datetime.now(UTC) + timedelta(days=90)).timestamp()
+    token = auth.create_api_token(user, user["id"], "Expiring", expires=expiry)
+    before = app.state.services.store.all("api_token")
+    for root in ("/api/api-tokens", f"/api/users/{user['id']}/api-tokens", "/api/users/admin/api-tokens"):
+        for method, path in (("GET", root), ("POST", root), ("DELETE", root + "/" + token["id"])):
+            response = client.request(
+                method, path, headers=bearer(token["token"]), json={"name": "Permanent"}
+            )
+            assert response.status_code == 403
+            assert "sign in interactively" in response.json()["error"]
+    after = app.state.services.store.all("api_token")
+    assert [(t["id"], t["expires"]) for t in after] == [(t["id"], t["expires"]) for t in before]
 
 
 def test_service_accounts_are_reader_only_and_admin_managed(instance):
