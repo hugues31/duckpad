@@ -80,7 +80,10 @@ def test_failed_retry_refreshes_manifest_and_skips_successful_exports(services, 
     first = join_run(store, engine.launch(worktree, "dev")["id"])
     assert first["status"] == "partial_failure", first
     fail = False
-    second = join_run(store, engine.launch(worktree, "dev", partition_selection={"mode": "failed"})["id"])
+    launched = engine.launch(worktree, "dev", partition_selection={"mode": "failed"})
+    # The launch answers while the run prepares; it already describes the requested selection.
+    assert launched["partition_selection"] == {"mode": "failed"}
+    second = join_run(store, launched["id"])
     assert second["status"] == "success", second
     assert second["partitions"]["selected"] == 1
     assert first["partitions"]["manifest"] != second["partitions"]["manifest"]

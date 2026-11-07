@@ -50,6 +50,30 @@ UNFINISHED_RUN_STATUSES = ("preparing", "running", "canceling")
 
 
 @dataclass
+class Admission:
+    """Definitions and options of a launch, checked before any setup."""
+
+    bundle: Record
+    nodes: dict[str, Record]
+    edges: list[Record]
+    boundaries: Record
+    plan: Record
+    selection: Record | None
+    policy: Record | None
+    scope: set[str]
+    python: bool
+
+
+def blocking_error(node: Record) -> str | None:
+    """A node error that refuses a targeted run; values calculated during the run come later."""
+    deferred = any(
+        binding.get("source") == "node" and "error" in binding
+        for binding in [*node.get("variables", {}).values(), *variables.expression_bindings(node)]
+    ) or str(node.get("error", "")).startswith("Partition values not calculated")
+    return None if deferred else node.get("error")
+
+
+@dataclass
 class Execution:
     """State of one accepted run, owned by its worker thread."""
 
@@ -185,7 +209,7 @@ class Runner:
         record = self.projects.get(worktree)
         if record.get("read_only") and job is None:
             raise Problem("Launch this worktree from its Job", 403)
-        self._check_launch(
+        admission = self._check_launch(
             worktree, environment, target, entry_point, partition_selection, partition_execution, ancestors
         )
         token: RunToken = {"id": uid("run_"), "cancel": threading.Event(), "cursor": None}
@@ -198,7 +222,7 @@ class Runner:
             "commit": "",
             "revision": "",
             "scope": target or "project",
-            "scope_name": [],
+            "scope_name": node_name_parts(admission.bundle, target) if target else [],
             "trigger": "manual",
             "entry_point": entry_point,
             "status": "preparing",
@@ -208,6 +232,8 @@ class Runner:
             "connections": {},
             "requester": copy.deepcopy(requester),
             **({"ancestors": True} if ancestors else {}),
+            **({"partition_selection": admission.selection} if admission.selection else {}),
+            **({"partition_execution": admission.policy} if admission.policy else {}),
         }
         if job is not None:
             run.update(trigger="job", job=copy.deepcopy(job), tag=job.get("tag"))
@@ -250,51 +276,69 @@ class Runner:
         selection: Record | None,
         policy: Record | None,
         ancestors: bool,
-    ) -> None:
-        """Reject invalid requests without starting setup or recording a run.
+    ) -> Admission:
+        """Refuse an invalid request before recording a run, without starting any setup.
 
-        Preparation rechecks the definitions after flushing; admission only reads the current
-        snapshot and settings, never resolving dependencies or starting a worker.
+        Preparation checks the definitions again once pending saves are flushed.
         """
         self.catalog.environment(environment)
         snapshot = self.projects.snapshot(worktree, committed=True)
-        bundle = snapshot["bundle"]
-        if bundle is None:
+        admission = self._validate(
+            snapshot, worktree, environment, target, entry_point, selection, policy, ancestors
+        )
+        self._check_conflicts(snapshot["conflicts"], admission.scope, environment)
+        if target:
+            values = self.pool.computed(worktree, environment, admission.bundle)
+            nodes, _, _ = expand_for(admission.bundle, environment, computed=values)
+            for key in admission.scope:
+                try:
+                    self.pool.capture(worktree, connection_references(nodes[key]), environment)
+                except Problem as error:
+                    raise Problem(str(error), 422) from error
+                if error := blocking_error(nodes[key]):
+                    raise Problem(error, 422)
+        return admission
+
+    def _validate(
+        self,
+        snapshot: Record,
+        worktree: str,
+        environment: str,
+        target: str | None,
+        entry_point: str,
+        partition_selection: Record | None,
+        partition_execution: Record | None,
+        ancestors: bool,
+    ) -> Admission:
+        """Refuse definitions, options or settings a launch cannot run; reads no worker state."""
+        if snapshot["bundle"] is None:
             raise Problem(
                 "Project files are invalid; correct them before execution", 422, snapshot["diagnostics"]
             )
-        values = self.pool.computed(worktree, environment, bundle)
-        nodes, edges, boundaries = expand_for(bundle, environment, computed=values)
-        scope = launch_scope(nodes, edges, target, ancestors)
+        bundle = copy.deepcopy(snapshot["bundle"])
+        nodes, edges, boundaries = expand(bundle, tolerant=True)
         plan = partitions.plan(bundle, nodes, edges, boundaries)
-        partitions.launch_options(plan.get("dimension"), selection, policy)
-        scope = self._partition_scope(worktree, environment, nodes, edges, scope, plan)
-        if any(nodes[key].get("language") == "python" for key in scope) and not get_policy(
-            self.store, snapshot["worktree"]["project"]
-        ).get("enabled"):
-            raise Problem("Python execution is disabled; ask an instance administrator to enable it", 403)
-        self._check_conflicts(snapshot["conflicts"], scope, environment)
-        missing = []
+        # Refuse invalid options before marking any result stale.
+        selection, policy = partitions.launch_options(
+            plan.get("dimension"), partition_selection, partition_execution
+        )
+        scope = self._partition_scope(
+            worktree, environment, nodes, edges, launch_scope(nodes, edges, target, ancestors), plan
+        )
+        missing_inputs = []
         for diagnostic in snapshot["diagnostics"]:
-            if diagnostic.get("code") == "missing_input":
-                exposed = boundaries.get(diagnostic["node"], {}).get("inputs", {}).get(diagnostic["port"])
-                if (exposed[0] if exposed else diagnostic["node"]) in scope:
-                    missing.append(diagnostic)
-        if entry_point == "ui" and missing:
-            raise Problem(missing[0]["message"], 422, missing)
-        if target:
-            for key in scope:
-                node = nodes[key]
-                try:
-                    self.pool.capture(worktree, connection_references(node), environment)
-                except Problem as error:
-                    raise Problem(str(error), 422) from error
-                deferred = any(
-                    binding.get("source") == "node" and "error" in binding
-                    for binding in [*node.get("variables", {}).values(), *variables.expression_bindings(node)]
-                ) or str(node.get("error", "")).startswith("Partition values not calculated")
-                if node.get("error") and not deferred:
-                    raise Problem(node["error"], 422)
+            if diagnostic.get("code") != "missing_input":
+                continue
+            # A component input names its instance; the run needs the node behind it.
+            exposed = boundaries.get(diagnostic["node"], {}).get("inputs", {}).get(diagnostic["port"])
+            if (exposed[0] if exposed else diagnostic["node"]) in scope:
+                missing_inputs.append(diagnostic)
+        if entry_point == "ui" and missing_inputs:
+            raise Problem(missing_inputs[0]["message"], 422, missing_inputs)
+        python = any(nodes[key].get("language") == "python" for key in scope)
+        if python and not get_policy(self.store, snapshot["worktree"]["project"]).get("enabled"):
+            raise Problem("Python execution is disabled; ask an instance administrator to enable it", 403)
+        return Admission(bundle, nodes, edges, boundaries, plan, selection, policy, scope, python)
 
     @staticmethod
     def _check_canceled(token: RunToken) -> None:
@@ -400,45 +444,24 @@ class Runner:
         self._check_canceled(token)
         snapshot = self.projects.flush(worktree)
         self._check_canceled(token)
-        settings = get_policy(self.store, snapshot["worktree"]["project"])
-        bundle = copy.deepcopy(snapshot["bundle"])
-        if bundle is None:
-            raise Problem(
-                "Project files are invalid; correct them before execution", 422, snapshot["diagnostics"]
-            )
-        structural, edges, boundaries = expand(bundle, tolerant=True)
-        sources = value_sources.sources(bundle, structural, boundaries)
-        phase, validation_errors = value_sources.dependencies(structural, edges, sources)
-        partition_plan = partitions.plan(bundle, structural, edges, boundaries)
-        # Refuse invalid options before marking any result stale.
-        selection, policy = partitions.launch_options(
-            partition_plan.get("dimension"), partition_selection, partition_execution
-        )
-        phase |= partition_plan["value_phase"]
-        selected_scope = self._partition_scope(
+        admission = self._validate(
+            snapshot,
             worktree,
             environment,
-            structural,
-            edges,
-            launch_scope(structural, edges, target, ancestors),
-            partition_plan,
+            target,
+            entry_point,
+            partition_selection,
+            partition_execution,
+            ancestors,
         )
-        missing_inputs = []
-        for diagnostic in snapshot["diagnostics"]:
-            if diagnostic.get("code") != "missing_input":
-                continue
-            # A component input names its instance; the run needs the node behind it.
-            exposed = boundaries.get(diagnostic["node"], {}).get("inputs", {}).get(diagnostic["port"])
-            if (exposed[0] if exposed else diagnostic["node"]) in selected_scope:
-                missing_inputs.append(diagnostic)
-        if entry_point == "ui" and missing_inputs:
-            raise Problem(missing_inputs[0]["message"], 422, missing_inputs)
-        needs_python = any(structural[key].get("language") == "python" for key in selected_scope)
-        if needs_python and not settings.get("enabled"):
-            raise Problem("Python execution is disabled; ask an instance administrator to enable it", 403)
+        bundle, partition_plan, needs_python = admission.bundle, admission.plan, admission.python
+        sources = value_sources.sources(bundle, admission.nodes, admission.boundaries)
+        phase, validation_errors = value_sources.dependencies(admission.nodes, admission.edges, sources)
+        phase |= partition_plan["value_phase"]
         if needs_python:
             from ..python_environment import lock_files
 
+            settings = get_policy(self.store, snapshot["worktree"]["project"])
             files = snapshot["files"]
             locked = lock_files(
                 files,
@@ -526,10 +549,10 @@ class Runner:
             "variable_declarations": bundle.get("variables"),
             "extensions": bundle.get("extensions"),
         }
-        if selection:
-            run["partition_selection"] = selection
-        if policy:
-            run["partition_execution"] = policy
+        if admission.selection:
+            run["partition_selection"] = admission.selection
+        if admission.policy:
+            run["partition_execution"] = admission.policy
         for name, source in sources.items():
             if source.get("node") in scope:
                 run["variables"][name] = {
@@ -635,13 +658,8 @@ class Runner:
                 node["error"] = str(error)
                 if strict:
                     raise Problem(str(error), 422) from error
-            deferred = any(
-                binding.get("source") == "node" and "error" in binding
-                for binding in [*node.get("variables", {}).values(), *variables.expression_bindings(node)]
-            )
-            deferred |= str(node.get("error", "")).startswith("Partition values not calculated")
-            if strict and node.get("error") and not deferred:
-                raise Problem(node["error"], 422)
+            if strict and (error := blocking_error(node)):
+                raise Problem(error, 422)
         return captured, secrets
 
     def cancel(self, run_id: str) -> Record:
