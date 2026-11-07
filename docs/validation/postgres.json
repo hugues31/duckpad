@@ -1,0 +1,52 @@
+{
+  "checks": [
+    "test connection lists schemas and tables",
+    "inspector listing",
+    "Load table",
+    "transform",
+    "Export table inserts by name into an existing table",
+    "repeated append without truncation",
+    "dev and prod values",
+    "cell lineage",
+    "secret redaction",
+    "Additional options",
+    "wrong password and unreachable host reported"
+  ],
+  "connector": "postgres",
+  "duckdb": "2.0.0",
+  "extensions": [
+    [
+      "excel",
+      "81bb84b115",
+      "STATICALLY_LINKED"
+    ],
+    [
+      "postgres_scanner",
+      "c0f5a3c0c4",
+      "STATICALLY_LINKED"
+    ]
+  ],
+  "modes": {
+    "embedded": {
+      "first_run_seconds": 0.7786557152867317,
+      "production_run_seconds": 0.7381286025047302,
+      "production_sessions_use_tls": true,
+      "repeat_run_seconds": 0.7986808717250824,
+      "unreachable_host": "IO Error: Unable to connect to Postgres at \"application_name=duckpad-validation-7681c088\": connection to server at \"127.0.0.1\", port 1 failed: Connection refused\n\tIs the server running on that host and accepting TCP/IP connections?",
+      "verify_full": "IO Error: Unable to connect to Postgres at \"sslmode=verify-full sslrootcert=system\": connection to server at \"127.0.0.1\", port 55454 failed: SSL error: certificate verify failed",
+      "wrong_password": "IO Error: Unable to connect to Postgres at \"application_name=duckpad-validation-7681c088\": connection to server at \"127.0.0.1\", port 55454 failed: FATAL:  password authentication failed for user \"duckpad\"\nconnection to server at \"127.0.0.1\", port 55454 failed: FATAL:  password authentication failed for user \"duckpad\""
+    },
+    "isolated": {
+      "first_run_seconds": 0.7819590494036674,
+      "production_run_seconds": 0.7212903648614883,
+      "production_sessions_use_tls": true,
+      "repeat_run_seconds": 0.7441839203238487,
+      "unreachable_host": "IO Error: Unable to connect to Postgres at \"application_name=duckpad-validation-7681c088\": connection to server at \"127.0.0.1\", port 1 failed: Connection refused\n\tIs the server running on that host and accepting TCP/IP connections?",
+      "verify_full": "IO Error: Unable to connect to Postgres at \"sslmode=verify-full sslrootcert=system\": connection to server at \"127.0.0.1\", port 55454 failed: SSL error: certificate verify failed",
+      "wrong_password": "IO Error: Unable to connect to Postgres at \"application_name=duckpad-validation-7681c088\": connection to server at \"127.0.0.1\", port 55454 failed: FATAL:  password authentication failed for user \"duckpad\"\nconnection to server at \"127.0.0.1\", port 55454 failed: FATAL:  password authentication failed for user \"duckpad\""
+    }
+  },
+  "platform": "Linux-6.1.0-32-amd64-x86_64-with-glibc2.36",
+  "postgres": "16.15 (Debian 16.15-1.pgdg13+2)",
+  "status": "passed"
+}
