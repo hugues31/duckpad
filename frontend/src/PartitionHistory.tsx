@@ -90,6 +90,7 @@ export function PartitionHistory({
               onClick={() =>
                 worktree.run(run.scope === "project" ? undefined : run.scope, {
                   partitions: { mode: "failed" },
+                  ancestors: run.ancestors,
                 })
               }
             >

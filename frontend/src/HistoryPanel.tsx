@@ -144,7 +144,12 @@ export default function HistoryPanel({
                   <strong>{t("fullRun")}</strong>
                 ) : (
                   <strong title={run.scope}>
-                    {displayNodeName(run.scope_name, run.scope, t)}
+                    {run.ancestors
+                      ? t("ancestorsOf").replace(
+                          "{node}",
+                          displayNodeName(run.scope_name, run.scope, t),
+                        )
+                      : displayNodeName(run.scope_name, run.scope, t)}
                   </strong>
                 )}
                 <small>

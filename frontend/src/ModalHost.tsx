@@ -284,14 +284,17 @@ function WorktreeDialog({
           <p>{t("confirmRunHint")}</p>
           <p>
             {snapshot.bundle?.flow.name || ""} · {snapshot.worktree.branch} ·{" "}
-            {modal.node ||
-              t(partitionRunLabels[modal.options?.partitions?.mode || "all"])}
+            {modal.node && modal.options?.ancestors
+              ? t("ancestorsOf").replace("{node}", modal.node)
+              : modal.node ||
+                t(partitionRunLabels[modal.options?.partitions?.mode || "all"])}
           </p>
           <PartitionRunSummary options={modal.options} node={modal.node} />
           <ScopeVariables
             worktree={modal.worktree}
             environment={modal.environment.id}
             node={modal.node}
+            ancestors={modal.options?.ancestors}
           />
         </ConfirmModal>
       );

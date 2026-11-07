@@ -56,7 +56,8 @@
   z-index: 1;
   padding: 0;
 }
-.data-table th button {
+.data-table th button,
+.data-table th .column-heading {
   width: 100%;
   display: flex;
   flex-direction: column;

@@ -5,10 +5,12 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import {
   autosaved,
-  closeEditor,
+  closeCode,
+  openCode,
   openInstanceSettings,
   openUserSettings,
   PASSWORD,
+  replaceCode,
   signIn,
   stubDuckDBWebsites,
 } from "../e2e/helpers";
@@ -199,15 +201,9 @@ test("capture the quickstart using the SQL printed in the guide", async ({
   const inspector = page.locator(".inspector");
   const results = page.getByRole("region", { name: "Results", exact: true });
   const edit = async (code: string) => {
-    await inspector
-      .getByRole("button", { name: "Edit code", exact: true })
-      .click();
-    const editor = page.getByRole("dialog");
-    await expect(editor.locator(".monaco-editor")).toBeVisible();
-    await editor.locator(".monaco-editor textarea").focus();
-    await page.keyboard.press("ControlOrMeta+A");
-    await page.keyboard.insertText(code);
-    await closeEditor(editor);
+    await openCode(page);
+    await replaceCode(page, code);
+    await closeCode(page);
   };
   const add = async (label: string, code: string, count: number) => {
     await page
@@ -399,6 +395,25 @@ test("capture parameters, node documentation and nested components", async ({
   await node(page, "Revenue by region").click();
   await expect(page.locator(".preview-header .badge")).toHaveText("Valid");
   await capture(page, "component");
+});
+
+test("capture the docked code editor and its preview", async ({ page }) => {
+  await example(page);
+  await run(page);
+  await node(page, "Customer reach").click();
+  const panel = await openCode(page);
+  await expect(panel.getByText("Last result", { exact: true })).toBeVisible();
+  await panel.locator(".monaco-editor textarea").focus();
+  await page.keyboard.press("ControlOrMeta+Enter");
+  const preview = page.locator(".draft-preview");
+  await expect(preview.locator(".data-table tbody tr")).not.toHaveCount(0);
+  await expect(preview).toContainText("Computed from the first 1,000 rows");
+  await capture(
+    page,
+    "code-preview",
+    page,
+    ".draft-preview-time { visibility: hidden !important; }",
+  );
 });
 
 test("capture project variables, a parameter binding and a run confirmation", async ({

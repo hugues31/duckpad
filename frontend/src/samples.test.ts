@@ -87,6 +87,16 @@ describe("samples", () => {
     expect(quoteIdentifier('a"b')).toBe('"a""b"');
   });
 
+  it("quotes names that are not plain identifiers or are SQL keywords", () => {
+    expect(quoteIdentifier("country")).toBe("country");
+    expect(quoteIdentifier("Order_ID")).toBe("Order_ID");
+    expect(quoteIdentifier("unit price")).toBe('"unit price"');
+    expect(quoteIdentifier("1st")).toBe('"1st"');
+    for (const keyword of ["order", "Group", "pivot", "left", "returning"])
+      expect(quoteIdentifier(keyword)).toBe(`"${keyword}"`);
+    expect(quoteIdentifier("ordered")).toBe("ordered");
+  });
+
   it("turns a filter into a test block appended to node code", () => {
     const block = testBlock(
       "large_amount",

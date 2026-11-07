@@ -84,7 +84,7 @@ not-found screen; inaccessible resources show an unavailable screen.
 
 Sign-in preserves a validated internal destination, including across OIDC.
 Code drafts survive tab changes within a worktree. The flow's editors (Inspector,
-node documentation, code editor dialog) save after a typing pause, on blur and on
+node documentation, docked code editor) save after a typing pause, on blur and on
 close, and navigation waits for them. Leaving with drafts that need an explicit
 save, or after a failed autosave, requires confirmation; reloads use
 `beforeunload`. Responses from an old worktree cannot replace the current snapshot.

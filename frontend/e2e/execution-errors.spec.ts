@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { closeEditor, signIn } from "./helpers";
+import { closeCode, codePanel, codeSaved, signIn } from "./helpers";
 import type { Run, Snapshot } from "../src/types";
 
 test("execution errors open from the canvas, point into saved code and clear after a successful run", async ({
@@ -109,7 +109,8 @@ test("execution errors open from the canvas, point into saved code and clear aft
   ).toHaveAttribute("aria-selected", "true");
   await panel.getByRole("tab", { name: "Data", exact: true }).click();
   await card.getByRole("button", { name: "Open code at line 3" }).click();
-  const dialog = page.getByRole("dialog");
+  // The code docks beside the canvas, with the results still in view.
+  const dialog = codePanel(page);
   const editor = dialog.locator(".monaco-editor textarea");
   await expect(dialog.locator(".squiggly-error")).not.toHaveCount(0);
   await expect(editor).toBeFocused();
@@ -126,9 +127,9 @@ test("execution errors open from the canvas, point into saved code and clear aft
     (text) => navigator.clipboard.writeText(text),
     code.replace("countryy", "country"),
   );
-  await page.keyboard.press("ControlOrMeta+V");
+  await codeSaved(page, () => page.keyboard.press("ControlOrMeta+V"));
   await expect(dialog.locator(".squiggly-error")).toHaveCount(0);
-  await closeEditor(dialog);
+  await closeCode(page);
   await expect(card).toContainText("The code has changed since this failure");
   await run();
   await page.reload();

@@ -15,6 +15,7 @@ from .access import Access
 from .catalog import Catalog
 from .datasets import Context
 from .execution.contexts import ContextPool, automatic_resources
+from .execution.drafts import DEFAULT_SAMPLE, DraftPreviews
 from .execution.exports import Exports
 from .execution.fingerprints import Fingerprints
 from .execution.results import Results
@@ -61,6 +62,9 @@ class Engine:
             self.active,
             isolated=self.isolated,
         )
+        self.drafts = DraftPreviews(
+            store, projects, catalog, self.pool, self.lock, self.active, isolated=self.isolated
+        )
         self.runs.recover()
 
     def context(self, worktree: str, environment: str, create: bool = False) -> Context:
@@ -76,6 +80,7 @@ class Engine:
         requester: Record | None = None,
         partition_selection: Record | None = None,
         partition_execution: Record | None = None,
+        ancestors: bool = False,
     ) -> Record:
         return self.runs.launch(
             worktree,
@@ -85,16 +90,33 @@ class Engine:
             requester=requester,
             partition_selection=partition_selection,
             partition_execution=partition_execution,
+            ancestors=ancestors,
         )
 
-    def scope_variables(self, worktree: str, environment: str, target: str | None = None) -> Record:
-        return self.runs.scope_variables(worktree, environment, target)
+    def scope_variables(
+        self, worktree: str, environment: str, target: str | None = None, ancestors: bool = False
+    ) -> Record:
+        return self.runs.scope_variables(worktree, environment, target, ancestors)
 
     def cancel(self, run_id: str) -> Record:
         return self.runs.cancel(run_id)
 
     def statuses(self, worktree: str, environment: str) -> Record:
         return self.results.statuses(worktree, environment)
+
+    def draft_preview(
+        self,
+        worktree: str,
+        environment: str,
+        node: str,
+        code: str | None = None,
+        rows: int | None = DEFAULT_SAMPLE,
+        requester: str = "",
+    ) -> Record:
+        return self.drafts.preview(worktree, environment, node, code, rows, requester)
+
+    def input_columns(self, worktree: str, environment: str, node: str) -> Record:
+        return self.drafts.input_columns(worktree, environment, node)
 
     def preview(
         self,

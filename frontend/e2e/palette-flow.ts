@@ -1,5 +1,5 @@
 import { expect, type Page } from "@playwright/test";
-import { closeEditor } from "./helpers";
+import { closeCode, closeEditor, openCode } from "./helpers";
 import type { Snapshot } from "../src/types";
 
 /** Exercise palette authoring against a local instance or an authenticated preview. */
@@ -117,17 +117,13 @@ export async function verifyPalette(
     .getByRole("button", { name, exact: true })
     .click({ modifiers: ["Alt"] });
   await expect(page.locator(".react-flow__node")).toHaveCount(3);
-  await page
-    .locator(".inspector")
-    .getByRole("button", { name: "Edit template (1 node)", exact: true })
-    .click();
-  await expect(
-    page.getByRole("dialog", {
-      name: python ? "Edit shared Python template" : "Edit shared SQL template",
-      exact: true,
-    }),
-  ).toBeVisible();
-  await page.keyboard.press("Escape");
+  const shared = await openCode(page, "Edit template (1 node)");
+  await expect(shared).toContainText("Shared template, 1 node");
+  await expect(shared.locator("[data-mode-id]")).toHaveAttribute(
+    "data-mode-id",
+    language,
+  );
+  await closeCode(page);
   // Import adds a reusable definition to the destination palette, without a canvas node.
   const destination = await createProject(`${language} palette imports`);
   if (python) await enablePython(destination);

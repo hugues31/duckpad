@@ -1,5 +1,5 @@
 import { expect, type Page } from "@playwright/test";
-import { closeEditor } from "./helpers";
+import { closeCode, openCode, replaceCode } from "./helpers";
 import type { Snapshot } from "../src/types";
 
 /** The same interaction runs against the test model and a configured real preview. */
@@ -71,16 +71,9 @@ export async function verifyAssistantEditing(page: Page) {
   await page
     .locator('.react-flow__node[data-id="manual_source"] .node-shape')
     .click();
-  await page
-    .locator(".inspector")
-    .getByRole("button", { name: "Edit code", exact: true })
-    .click();
-  const editor = page.getByRole("dialog");
-  await expect(editor.locator(".monaco-editor")).toBeVisible();
-  await editor.locator(".monaco-editor textarea").focus();
-  await page.keyboard.press("ControlOrMeta+A");
-  await page.keyboard.insertText(sql.replace("1", "3"));
-  await closeEditor(editor);
+  await openCode(page);
+  await replaceCode(page, sql.replace("1", "3"));
+  await closeCode(page);
   await launch();
   await chat.getByRole("button", { name: "Undo", exact: true }).click();
   await expect

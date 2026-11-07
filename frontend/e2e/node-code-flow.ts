@@ -1,5 +1,5 @@
 import { expect, type Page } from "@playwright/test";
-import { closeEditor, nodeMenuAction } from "./helpers";
+import { closeCode, nodeMenuAction, openCode, replaceCode } from "./helpers";
 import type { Snapshot } from "../src/types";
 
 /** Exercise the real UI on a local instance or an authenticated deployed preview. */
@@ -30,13 +30,9 @@ export async function verifyNodeCode(page: Page) {
     ).toBeVisible();
   };
   const edit = async (button: string, text: string) => {
-    await inspector.getByRole("button", { name: button, exact: true }).click();
-    const dialog = page.getByRole("dialog");
-    await expect(dialog.locator(".monaco-editor")).toBeVisible();
-    await dialog.locator(".monaco-editor textarea").focus();
-    await page.keyboard.press("ControlOrMeta+A");
-    await page.keyboard.insertText(text);
-    await closeEditor(dialog);
+    await openCode(page, button);
+    await replaceCode(page, text);
+    await closeCode(page);
   };
   await add();
   await expect
@@ -87,13 +83,13 @@ export async function verifyNodeCode(page: Page) {
   await expect(inspector.getByLabel(/shared_flag/)).toBeVisible();
   await select(second.id);
   await expect(inspector.getByLabel(/shared_flag/)).toBeVisible();
-  await nodeMenuAction(page, "View code");
-  await expect(
-    page
-      .getByRole("dialog")
-      .getByRole("button", { name: "Save changes", exact: true }),
-  ).toHaveCount(0);
-  await page.keyboard.press("Escape");
+  // The linked node's code is its shared template, docked like its own code.
+  const linkedCode = await openCode(page, "Edit template (2 nodes)");
+  await expect(linkedCode).toContainText("Shared template, 2 nodes");
+  await expect(linkedCode.locator(".monaco-editor")).toContainText(
+    "shared_flag",
+  );
+  await closeCode(page);
   await nodeMenuAction(page, "Detach from template");
   await expect(
     inspector.getByRole("button", { name: "Edit code", exact: true }),
@@ -147,11 +143,17 @@ export async function verifyNodeCode(page: Page) {
   await expect(
     inspector.getByRole("button", { name: "Edit code", exact: true }),
   ).toBeVisible();
+  // The canvas shows the node before its save lands.
+  await expect
+    .poll(async () => (await read()).bundle!.flow.nodes.length)
+    .toBe(4);
   snapshot = await read();
   const fresh = snapshot.bundle!.flow.nodes.at(-1)!;
   expect(fresh.template).toBeUndefined();
+  // The palette's description of SQL nodes stays out of the new node's code.
+  expect(snapshot.bundle!.templates.sql).toContain("-- @description");
   expect(snapshot.files[`nodes/${fresh.id}.sql`]).toBe(
-    snapshot.bundle!.templates.sql,
+    snapshot.bundle!.templates.sql.replace(/^-- @description.*\n/m, ""),
   );
   return { worktree: worktree.id, normal: first.id, linked: shared };
 }

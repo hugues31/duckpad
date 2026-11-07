@@ -57,6 +57,59 @@ export async function closeEditor(dialog: Locator) {
   await expect(dialog).toHaveCount(0, { timeout: 30000 });
 }
 
+/** The selected node's code, docked beside the canvas in the inspector's place. */
+export const codePanel = (page: Page) =>
+  page.getByRole("complementary", { name: "Code editor", exact: true });
+
+/** Open the selected node's code with an inspector button and wait for its editor. */
+export async function openCode(page: Page, button = "Edit code") {
+  await page
+    .locator(".inspector")
+    .getByRole("button", { name: button, exact: true })
+    .click();
+  const panel = codePanel(page);
+  await expect(panel.locator(".monaco-editor")).toBeVisible();
+  return panel;
+}
+
+/**
+ * Make an edit in the code panel and wait until the pause after it saved it.
+ * A Python save also resolves the project's lock, which takes longer.
+ */
+export async function codeSaved(page: Page, edit: () => Promise<unknown>) {
+  const saved = page.waitForResponse(
+    (response) =>
+      response.request().method() === "PUT" &&
+      /^\/api\/worktrees\/[^/]+$/.test(new URL(response.url()).pathname),
+    { timeout: 30000 },
+  );
+  await edit();
+  expect((await saved).ok()).toBeTruthy();
+  await expect(codePanel(page).locator(".editor-save-state")).toHaveText(
+    "All changes saved",
+    { timeout: 30000 },
+  );
+}
+
+/** Replace the code shown in the code panel and wait until it is saved. */
+export async function replaceCode(page: Page, text: string) {
+  await codeSaved(page, async () => {
+    await codePanel(page).locator(".monaco-editor textarea").focus();
+    await page.keyboard.press("ControlOrMeta+A");
+    await page.keyboard.insertText(text);
+  });
+}
+
+/** Close the code panel: the inspector takes its place again. */
+export async function closeCode(page: Page) {
+  const panel = codePanel(page);
+  await panel
+    .getByRole("button", { name: "Close the code editor", exact: true })
+    .click();
+  await expect(panel).toHaveCount(0);
+  await expect(page.locator(".inspector")).toBeVisible();
+}
+
 /** Fetch only refreshes the remote status, so it stays under the synchronization details. */
 export async function fetchOrigin(dialog: Locator) {
   const fetch = dialog.getByRole("button", { name: "Fetch", exact: true });

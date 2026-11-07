@@ -76,7 +76,7 @@ def problems(bundle):
         return [{"file": FILE, "message": str(error)}]
 
 
-def explain_missing(message):
+def explain_missing(message: str) -> str:
     """Name the project extension to enable when a node uses a capability of an unloaded extension."""
     return MISSING.sub(
         lambda match: (

@@ -68,6 +68,21 @@ export function detachNode(bundle: Bundle, node: FlowNode, parent?: string) {
   (bundle.node_sql ||= {})[nodeCodePath(node.id, parent, node.language)] = code;
 }
 
+/**
+ * Give a new node's own SQL no `@description`: copied from its template, it
+ * describes the palette entry, not this node.
+ */
+export function freshNodeCode(bundle: Bundle, node: FlowNode, parent?: string) {
+  if (node.language === "python") return;
+  const path = nodeCodePath(node.id, parent, node.language);
+  const code = bundle.node_sql?.[path];
+  if (code !== undefined)
+    bundle.node_sql![path] = code.replace(
+      /^[ \t]*--[ \t]*@description\b.*(?:\r?\n|$)/gm,
+      "",
+    );
+}
+
 export function linkNode(
   bundle: Bundle,
   node: FlowNode,

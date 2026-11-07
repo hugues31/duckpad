@@ -1,5 +1,5 @@
 import { expect, type Page } from "@playwright/test";
-import { closeEditor, nodeMenuAction } from "./helpers";
+import { closeCode, nodeMenuAction, openCode, replaceCode } from "./helpers";
 import type { Run, Snapshot } from "../src/types";
 
 /** Exercise data tests in normal node code on Northstar, locally or in a preview. */
@@ -23,18 +23,13 @@ export async function verifyDataTests(page: Page) {
   const snapshot: Snapshot = await (await page.request.get(url)).json();
   const original = snapshot.files["nodes/validated.sql"];
   const edit = async (severity: "error" | "warning", predicate: string) => {
-    await inspector
-      .getByRole("button", { name: "Edit code", exact: true })
-      .click();
-    const dialog = page.getByRole("dialog");
-    await expect(dialog.locator(".monaco-editor")).toBeVisible();
-    await dialog.locator(".monaco-editor textarea").focus();
-    await page.keyboard.press("ControlOrMeta+A");
-    await page.keyboard.insertText(
+    await openCode(page);
+    await replaceCode(
+      page,
       original +
         `\n-- @test orders_checked: ${severity}\nSELECT * FROM {{ orders }} WHERE ${predicate};`,
     );
-    await closeEditor(dialog);
+    await closeCode(page);
   };
   const launch = async () => {
     const response = page.waitForResponse(
