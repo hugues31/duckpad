@@ -252,6 +252,9 @@ test("Back during a group waits for it, then leaves the flow", async ({
   page,
 }) => {
   await prepare(page);
+  // Back to a page of this session, which the router can hold.
+  await page.getByRole("link", { name: "Variables", exact: true }).click();
+  await page.getByRole("link", { name: "Flow", exact: true }).click();
   await select(page, "filtered");
   const release = deferred();
   const held = deferred();
@@ -269,7 +272,7 @@ test("Back during a group waits for it, then leaves the flow", async ({
   await page.evaluate(() => history.back());
   release.resolve();
   await expect(
-    page.getByRole("heading", { name: "Projects", exact: true }),
+    page.getByRole("heading", { name: "Project variables", exact: true }),
   ).toBeVisible();
 });
 
