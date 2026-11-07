@@ -22,7 +22,7 @@ import InstanceMonitoring from "./InstanceMonitoring";
 import { useT } from "./i18n";
 import SQLResourceSettings from "./SQLResourceSettings";
 import SSOSettings from "./SSOSettings";
-import type { ConnectorEditor, Workspace } from "./types";
+import type { Connection, ConnectorEditor, Workspace } from "./types";
 
 const sectionIcons = {
   monitoring: Activity,
@@ -41,11 +41,13 @@ export default function InstanceSettings({
   workspace,
   refresh,
   onConnectorEditor,
+  onConnectionCreated,
 }: {
   section: string;
   workspace: Workspace;
   refresh: () => Promise<void>;
   onConnectorEditor: (editor: ConnectorEditor) => void;
+  onConnectionCreated?: (connection: Connection) => Promise<void>;
 }) {
   const t = useT();
   return (
@@ -88,6 +90,7 @@ export default function InstanceSettings({
           workspace={workspace}
           refresh={refresh}
           onEditor={onConnectorEditor}
+          onCreated={onConnectionCreated}
         />
       )}
     </SettingsLayout>

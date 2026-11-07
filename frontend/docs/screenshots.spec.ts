@@ -1,13 +1,16 @@
+import { execFileSync } from "node:child_process";
 import { test, expect, type Locator, type Page } from "@playwright/test";
 import { mkdir } from "node:fs/promises";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import {
   autosaved,
-  closeEditor,
+  closeCode,
+  openCode,
   openInstanceSettings,
   openUserSettings,
   PASSWORD,
+  replaceCode,
   signIn,
   stubDuckDBWebsites,
 } from "../e2e/helpers";
@@ -198,15 +201,9 @@ test("capture the quickstart using the SQL printed in the guide", async ({
   const inspector = page.locator(".inspector");
   const results = page.getByRole("region", { name: "Results", exact: true });
   const edit = async (code: string) => {
-    await inspector
-      .getByRole("button", { name: "Edit code", exact: true })
-      .click();
-    const editor = page.getByRole("dialog");
-    await expect(editor.locator(".monaco-editor")).toBeVisible();
-    await editor.locator(".monaco-editor textarea").focus();
-    await page.keyboard.press("ControlOrMeta+A");
-    await page.keyboard.insertText(code);
-    await closeEditor(editor);
+    await openCode(page);
+    await replaceCode(page, code);
+    await closeCode(page);
   };
   const add = async (label: string, code: string, count: number) => {
     await page
@@ -400,6 +397,25 @@ test("capture parameters, node documentation and nested components", async ({
   await capture(page, "component");
 });
 
+test("capture the docked code editor and its preview", async ({ page }) => {
+  await example(page);
+  await run(page);
+  await node(page, "Customer reach").click();
+  const panel = await openCode(page);
+  await expect(panel.getByText("Last result", { exact: true })).toBeVisible();
+  await panel.locator(".monaco-editor textarea").focus();
+  await page.keyboard.press("ControlOrMeta+Enter");
+  const preview = page.locator(".draft-preview");
+  await expect(preview.locator(".data-table tbody tr")).not.toHaveCount(0);
+  await expect(preview).toContainText("Computed from the first 1,000 rows");
+  await capture(
+    page,
+    "code-preview",
+    page,
+    ".draft-preview-time { visibility: hidden !important; }",
+  );
+});
+
 test("capture project variables, a parameter binding and a run confirmation", async ({
   page,
 }) => {
@@ -516,22 +532,38 @@ test("capture project variables, a parameter binding and a run confirmation", as
   await capture(page, "variable-expression");
 });
 
-test("capture a file node reading project files", async ({ page }) => {
+test("capture a file node reading project files", async ({
+  page,
+}, testInfo) => {
   const created = await page.request.post("/api/projects", {
     data: { name: "Budget" },
   });
   expect(created.ok()).toBeTruthy();
   const worktree = await created.json();
+  const workbook = testInfo.outputPath("budget.xlsx");
+  execFileSync("../.venv/bin/python", ["../tests/xlsx_fixture.py", workbook]);
+  const endpoint = `/api/worktrees/${worktree.id}`;
+  const snapshot = await (await page.request.get(endpoint)).json();
+  snapshot.bundle.extensions = { excel: { source: "core", enabled: true } };
+  await page.request.put(endpoint, {
+    data: { revision: snapshot.revision, bundle: snapshot.bundle },
+  });
   await page.goto(`/worktrees/${worktree.id}/flow`);
   await page.getByRole("button", { name: "Load XLSX", exact: true }).click();
   const inspector = page.locator(".inspector");
   await expect(
     inspector.getByRole("combobox", { name: "Location", exact: true }),
   ).toHaveValue("");
-  await autosaved(page, async () => {
-    await inspector.getByRole("textbox", { name: /file/ }).fill("budget.xlsx");
-    await inspector.getByRole("textbox", { name: /sheet/ }).fill("Orders");
-  });
+  await inspector
+    .getByLabel("Upload file", { exact: true })
+    .setInputFiles(workbook);
+  await expect(inspector.getByRole("combobox", { name: /^file/ })).toHaveValue(
+    /budget\.xlsx$/,
+  );
+  await autosaved(page, () =>
+    inspector.getByRole("textbox", { name: /sheet/ }).fill("Orders"),
+  );
+  await expect(inspector.locator(".source-sample")).toContainText("North");
   await expect
     .poll(
       async () =>
@@ -734,10 +766,11 @@ test("capture a PostgreSQL connection test and Load table", async ({
       name: "table",
       exact: true,
     });
-    await expect(
-      page.locator(`datalist[id="${await table.getAttribute("list")}"] option`),
-    ).not.toHaveCount(0);
-    await autosaved(page, () => table.fill("orders"));
+    await inspector
+      .getByRole("combobox", { name: "schema", exact: true })
+      .selectOption("public");
+    await expect(table.locator("option[value=orders]")).toHaveCount(1);
+    await autosaved(page, () => table.selectOption("orders"));
     await expect
       .poll(
         async () =>

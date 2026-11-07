@@ -1214,7 +1214,8 @@ def test_upload_stores_a_complete_file_under_the_project_resources(app, client, 
     )
     assert response.status_code == 200, response.text
     result = response.json()
-    path = Path(result["path"])
+    assert not Path(result["path"]).is_absolute()
+    path = upload_folder(app, worktree) / result["path"]
     assert result["name"] == "orders.csv"
     assert path.parent == upload_folder(app, worktree)
     assert path.name.endswith("_orders.csv")

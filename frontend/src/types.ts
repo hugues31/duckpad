@@ -463,6 +463,8 @@ export interface Run {
   commit: string;
   /** The node whose subtree ran, or "project". */
   scope: string;
+  /** Only the upstream nodes of `scope` ran, for its preview. */
+  ancestors?: boolean;
   scope_name: NodeName;
   trigger: string;
   entry_point: "ui" | "api" | "assistant";

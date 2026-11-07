@@ -923,6 +923,12 @@ def test_confirmation_scope_compiled_sql_and_run_details_show_the_values_used(ap
     assert client.get(path + "/variables/scope", params={"environment": "prod", "node": "total"}).json() == {
         "threshold": threshold
     }
+    # Running the ancestors of a node leaves out the variables of the node itself.
+    ancestors = {"environment": "prod", "node": "large", "ancestors": True}
+    assert client.get(path + "/variables/scope", params=ancestors).json() == {}
+    response = client.post(path + "/runs", json={**launch, **ancestors})
+    assert response.status_code == 409
+    assert response.json()["detail"]["variables"] == {}
     assert (
         client.get(path + "/variables/scope", params={"environment": "prod", "node": "missing"}).status_code
         == 404

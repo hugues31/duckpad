@@ -115,7 +115,15 @@ def test_source_readers_reject_undeclared_or_unverifiable_files(body):
 
 
 PROJECT_FILES = {"file": Path("/resources"), "destination": Path("/exports")}
-FILE_TEMPLATES = ["load_csv", "load_parquet", "load_xlsx", "export_csv", "export_xlsx"]
+FILE_TEMPLATES = ["load_csv", "load_parquet", "load_xlsx", "load_json", "export_csv", "export_xlsx"]
+
+
+@pytest.mark.parametrize("name", ["load_csv", "load_parquet", "load_xlsx", "load_json"])
+def test_file_readers_start_empty_and_request_a_file(name):
+    template = parse_template(BUILTINS[name])
+    assert next(p for p in template["parameters"] if p["name"] == "file")["default"] == ""
+    with pytest.raises(Problem, match="Choose or upload a file"):
+        compile_template(template, {}, {}, {"result": "out"}, {}, PROJECT_FILES)
 
 
 @pytest.mark.parametrize("name", FILE_TEMPLATES)
@@ -131,10 +139,10 @@ def test_builtin_file_templates_default_to_project_files(name):
 @pytest.mark.parametrize(
     ("name", "params", "path"),
     [
-        ("load_csv", {}, "/resources/orders.csv"),
+        ("load_csv", {"file": "orders.csv"}, "/resources/orders.csv"),
         ("load_parquet", {"file": "inbox/customers.parquet"}, "/resources/inbox/customers.parquet"),
         ("load_xlsx", {"file": "/resources/abc_budget.xlsx"}, "/resources/abc_budget.xlsx"),
-        ("load_csv", {"connection": "local"}, "/data/orders.csv"),
+        ("load_csv", {"connection": "local", "file": "orders.csv"}, "/data/orders.csv"),
         ("load_csv", {"file": "s3://bucket/orders.csv"}, "s3://bucket/orders.csv"),
         ("export_csv", {}, "/exports/export.csv"),
         ("export_xlsx", {"destination": "reports/budget.xlsx"}, "/exports/reports/budget.xlsx"),

@@ -18,6 +18,10 @@ on **Log**, with **Tests**. A component instance shows its exposed outputs.
 The inspector's result summary links to Data, Log and Tests, showing validity,
 warnings and the latest failure for the selected environment.
 
+While you edit a node's code, **Preview** adds a **Preview** tab with the outputs
+computed from samples of its inputs. Nothing in it is saved or published; see
+[previews](SQL.md#preview-while-you-edit).
+
 ## Data and samples
 
 The **Data** tab pages through the retained result, 100 rows at a time. Select a
@@ -149,3 +153,14 @@ These internal UI routes require an explicit `environment` query parameter.
 - `GET /api/worktrees/{worktree}/test-rows/{node}/{test}?environment&limit&offset`
   returns a page of a test's failing rows for a valid result.
 - Run records keep each output's `duration` in seconds.
+- `POST /api/worktrees/{worktree}/draft-preview/{node}` with `{"environment", "code",
+  "rows"}` computes a node's outputs from the first `rows` rows (100, 1000 or
+  10000; `null` for all) of its retained inputs, with `code` replacing the saved
+  code for that request. It keeps nothing and needs edit access. A missing input
+  result returns 409 with the `missing` inputs; an active run of the branch
+  returns 409 too.
+- `GET /api/worktrees/{worktree}/input-columns/{node}?environment` lists the
+  columns of each input, from its upstream result (`origin: "result"`) or
+  described from the upstream code (`"description"`).
+- `POST /api/worktrees/{worktree}/runs` with `"ancestors": true` and a `node` runs
+  only the upstream nodes of that node.

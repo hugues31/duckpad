@@ -118,6 +118,14 @@ def test_an_administrator_declared_database_works_through_load_table_and_export_
         engine.access.grant_connections(projects.get(worktree)["project"], ["warehouse"])
     # Before any run, a separate process attaches the database to list it.
     listed = engine.connection_objects(worktree, "warehouse", "dev")
+    sample = engine.connection_objects(worktree, "warehouse", "dev", ("sales", "orders"))
+    assert sample["rows"] == [[1, "North", 10]]
+    assert sample["columns"][0] == {"name": "id", "type": "INTEGER"}
+    assert store.all("run") == []
+    with pytest.raises(Problem):
+        engine.connection_objects(
+            worktree, "warehouse", "dev", ("sales", 'orders"; DROP TABLE sales.orders; --')
+        )
     assert listed["schemas"] == ["main", "sales"]
     assert listed["tables"] == [
         {"schema": "sales", "name": "large_orders", "view": True},
@@ -130,6 +138,7 @@ def test_an_administrator_declared_database_works_through_load_table_and_export_
     assert engine.preview(worktree, "prod", "read")["rows"][0]["values"] == [1, "North", 100]
     # The session now holds the file's lock: listing falls back to its attachment.
     assert engine.connection_objects(worktree, "warehouse", "dev") == listed
+    assert engine.connection_objects(worktree, "warehouse", "dev", ("sales", "orders")) == sample
     for environment, rows in (("dev", [("North", 10, None)] * 2), ("prod", [("North", 100, None)])):
         alias = catalog.capture(["warehouse"], environment)[0]["warehouse"]["alias"]
         context = engine.context(worktree, environment)

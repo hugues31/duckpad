@@ -43,9 +43,9 @@ test("a member reads an upload and exports it as project files, without any conn
       mimeType: "text/csv",
       buffer: Buffer.from("id,amount\n1,10\n2,20\n"),
     });
-    await expect(inspector.getByRole("textbox", { name: /file/ })).toHaveValue(
-      /budget\.csv$/,
-    );
+    await expect(
+      inspector.getByRole("combobox", { name: /^file/ }),
+    ).toHaveValue(/budget\.csv$/);
     await expect
       .poll(
         async () =>

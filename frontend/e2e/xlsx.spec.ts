@@ -50,9 +50,9 @@ test("upload a worksheet and export it as project files through the canvas", asy
     const upload = inspector.getByLabel("Upload file", { exact: true });
     await expect(upload).toHaveAttribute("accept", /\.xlsx/);
     await upload.setInputFiles(file);
-    await expect(inspector.getByRole("textbox", { name: /file/ })).toHaveValue(
-      /workbook\.xlsx$/,
-    );
+    await expect(
+      inspector.getByRole("combobox", { name: /^file/ }),
+    ).toHaveValue(/workbook\.xlsx$/);
     await autosaved(page, () =>
       inspector.getByRole("textbox", { name: /sheet/ }).fill("Orders"),
     );

@@ -273,14 +273,14 @@ test("guided filters format fixed values from the input column type", async ({
       "code,mixed,amount,active\n001,001,10,true\n1,1,1,false\n002,ABC,3,false\n",
     ),
   });
-  await expect(inspector.getByRole("textbox", { name: /file/ })).toHaveValue(
+  await expect(inspector.getByRole("combobox", { name: /^file/ })).toHaveValue(
     /codes\.csv$/,
   );
   // Without a declared type, CSV detection reads these codes as numbers.
   await autosaved(page, () =>
     inspector
-      .getByRole("textbox", { name: /types/ })
-      .fill('{"code":"VARCHAR"}'),
+      .getByRole("combobox", { name: "Data type: code", exact: true })
+      .selectOption("VARCHAR"),
   );
   await run(page);
 
