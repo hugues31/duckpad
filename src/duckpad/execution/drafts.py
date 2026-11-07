@@ -290,9 +290,7 @@ class DraftPreviews:
 
         A live context is never replaced here: only a run may restart it with new settings.
         """
-        if context is not None and context.db is not None and not getattr(context.db, "closed", False):
-            return context
-        return self.pool.get(worktree, environment, create=True)
+        return self.pool.ensure_started(worktree, environment)
 
     def _connections(
         self,

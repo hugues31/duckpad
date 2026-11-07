@@ -1,10 +1,43 @@
 """Inspection contexts must never execute a source or silently choose another key."""
 
+import threading
+
 import pytest
 from helpers import join_run
 from test_partitions import bundle
 
 from duckpad.util import Problem
+
+
+def test_partition_reads_preserve_live_results_after_resource_changes(services, monkeypatch):
+    store, projects, _, engine = services
+    worktree = projects.create("Retained partitions", bundle())["id"]
+    run = join_run(store, engine.launch(worktree, "dev")["id"])
+    selection = {"manifest": run["partitions"]["manifest"], "partition_mode": "all"}
+    context = engine.context(worktree, "dev")
+    database = context.db
+    retained = set(context.datasets)
+    entered, release = threading.Event(), threading.Event()
+    compute = engine.runs._compute
+
+    def pause(*args, **kwargs):
+        entered.set()
+        assert release.wait(10)
+        return compute(*args, **kwargs)
+
+    monkeypatch.setattr(engine.runs, "_compute", pause)
+    active = engine.launch(worktree, "dev")
+    try:
+        assert entered.wait(10)
+        engine.configure_sql_resources({"threads": 2, "memory_limit": "1GiB"})
+        preview = engine.preview(worktree, "dev", "transform", partition_context=selection)
+        assert len(preview["rows"]) == 3
+        assert engine.context(worktree, "dev") is context
+        assert context.db is database and not database.closed
+        assert retained <= context.datasets.keys()
+    finally:
+        release.set()
+    assert join_run(store, active["id"])["status"] == "success"
 
 
 def test_explicit_contexts_paging_and_retained_reads(services, monkeypatch):

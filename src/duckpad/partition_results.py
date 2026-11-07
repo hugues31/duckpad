@@ -231,7 +231,7 @@ class PartitionResults:
             )
         if not artifacts:
             raise Problem("partition_not_retained: no partition output is retained", 409)
-        context = self.engine.pool.get(worktree, environment, create=True)
+        context = self.engine.pool.ensure_started(worktree, environment)
         cache_key = digest([selection, node, port, [a["id"] for a in artifacts]])
         with context.lock:
             cached = context.partition_cache.get(cache_key)

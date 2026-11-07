@@ -148,13 +148,33 @@ class ContextPool:
         self.lock = lock
         self.contexts: dict[tuple[str, str], Context] = {}
 
-    def get(
+    def get(self, worktree: str, environment: str, create: bool = False) -> Context:
+        return self._get(worktree, environment, create=create)
+
+    def ensure_started(self, worktree: str, environment: str) -> Context:
+        """Start an absent or dead context without replacing a live reader or run's results."""
+        return self._get(worktree, environment, create=True)
+
+    def restart_for_run(
+        self,
+        worktree: str,
+        environment: str,
+        requirements: list[Record] | None = None,
+        python: bool = False,
+    ) -> Context:
+        """Apply current settings; only the run holding the worktree reservation may call this."""
+        return self._get(
+            worktree, environment, create=True, requirements=requirements, python=python, restart=True
+        )
+
+    def _get(
         self,
         worktree: str,
         environment: str,
         create: bool = False,
         requirements: list[Record] | None = None,
         python: bool = False,
+        restart: bool = False,
     ) -> Context:
         """The live DuckDB context of an existing worktree in a configured environment.
 
@@ -167,7 +187,7 @@ class ContextPool:
             existing = self.contexts.get(key)
         partition_artifacts = existing.partition_artifacts if existing else False
         if opening and (
-            create or existing is None or existing.db is None or getattr(existing.db, "closed", False)
+            restart or existing is None or existing.db is None or getattr(existing.db, "closed", False)
         ):
             bundle = self.projects.snapshot(worktree, committed=True)["bundle"]
             partition_artifacts = bool((bundle or {}).get("flow", {}).get("partitions"))
@@ -187,7 +207,7 @@ class ContextPool:
                     context is None
                     or getattr(context.db, "closed", False)
                     or (
-                        create
+                        restart
                         and (
                             context.extensions != requirements
                             or context.resources != resources

@@ -316,14 +316,14 @@ class Runner:
         if needs_python:
             bundle["python_lock"] = snapshot["files"].get("uv.lock")
         requirements = project_extensions.enabled(bundle.get("extensions"))
-        context = self.pool.get(
-            worktree, environment, create=True, requirements=requirements, python=needs_python
+        context = self.pool.restart_for_run(
+            worktree, environment, requirements=requirements, python=needs_python
         )
         self.pool.renew(context, python=needs_python)
         if getattr(context.db, "closed", False):
             # The results could not move to a worker with the new connections or environment.
-            context = self.pool.get(
-                worktree, environment, create=True, requirements=requirements, python=needs_python
+            context = self.pool.restart_for_run(
+                worktree, environment, requirements=requirements, python=needs_python
             )
         values = self.pool.computed(worktree, environment, bundle)
         nodes, edges, _ = expand_for(bundle, environment, computed=values)
