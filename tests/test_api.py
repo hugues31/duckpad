@@ -1239,10 +1239,11 @@ def test_upload_names_keep_only_a_safe_base_name(filename, name):
     assert len(upload_name(filename).encode()) <= 200
 
 
-def test_oversized_uploads_are_refused_before_storing_anything(app, client, worktree, monkeypatch):
-    monkeypatch.setattr("duckpad.app.MAX_UPLOAD_BYTES", 1000)
+def test_oversized_uploads_are_refused_before_storing_anything(app, client, worktree):
     response = client.post(
-        f"/api/worktrees/{worktree}/uploads", files={"file": ("large.csv", b"x" * 1000, "text/csv")}
+        f"/api/worktrees/{worktree}/uploads",
+        files={"file": ("large.csv", b"x" * 1000, "text/csv")},
+        headers={"Content-Length": str(1024**3 + 1)},
     )
     assert response.status_code == 413
     assert response.json()["error"] == "Uploads are limited to 1 GiB"

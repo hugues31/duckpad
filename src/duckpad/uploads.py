@@ -26,6 +26,9 @@ def limited_body(max_bytes: int) -> Callable[[Request], Coroutine[Any, Any, None
             raise Problem("Send the upload with a Content-Length header", 411)
         length, maximum = lengths[0].lstrip("0") or "0", str(max_bytes)
         if len(length) > len(maximum) or (len(length) == len(maximum) and length > maximum):
-            raise Problem(f"Uploads are limited to {max_bytes // (1024 * 1024)} MiB", 413)
+            limit = (
+                f"{max_bytes // 1024**3} GiB" if max_bytes % 1024**3 == 0 else f"{max_bytes // 1024**2} MiB"
+            )
+            raise Problem(f"Uploads are limited to {limit}", 413)
 
     return check
