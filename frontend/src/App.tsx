@@ -459,6 +459,8 @@ function PageFocus({ ready }: { ready: boolean }) {
       );
       if (target) {
         target.tabIndex = -1;
+        // Styles hide the focus ring of these noninteractive targets.
+        target.dataset.routeFocus = "";
         target.focus({ preventScroll: true });
       }
     });

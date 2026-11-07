@@ -427,6 +427,10 @@
   background: var(--accent-soft);
   color: var(--accent);
 }
+.main-tabs :is(button, a):focus-visible {
+  /* The scrolling tab bar clips anything drawn outside the tabs. */
+  outline-offset: -2px;
+}
 .flow-toolbar > .row {
   flex-shrink: 0;
 }
