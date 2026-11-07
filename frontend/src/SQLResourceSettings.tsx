@@ -98,7 +98,9 @@ export default function SQLResourceSettings() {
                   aria-describedby="sql-memory-hint"
                   placeholder={automatic(config.automatic.memory_limit)}
                   value={config.memory_limit ?? ""}
-                  onChange={(e) => change({ memory_limit: e.target.value })}
+                  onChange={(e) =>
+                    change({ memory_limit: e.target.value || null })
+                  }
                 />
                 <small className="muted" id="sql-memory-hint">
                   {t("sqlMemoryLimitHint").replace(

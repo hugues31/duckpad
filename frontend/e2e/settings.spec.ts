@@ -1,5 +1,10 @@
 import { expect, test } from "@playwright/test";
-import { openInstanceSettings, openUserSettings, signIn } from "./helpers";
+import {
+  deferred,
+  openInstanceSettings,
+  openUserSettings,
+  signIn,
+} from "./helpers";
 import fr from "../src/locales/fr.json" with { type: "json" };
 
 test("unsigned extension settings persist, report rejected changes and are translated", async ({
@@ -459,4 +464,58 @@ test("leaving modified instance settings confirms and keeps a draft on Stay", as
         .click();
       await expect(page).toHaveURL(/\/instance-settings\/users$/);
     });
+});
+
+test("leaving SQL resources ignores a cleared field and waits for a save in flight", async ({
+  page,
+}) => {
+  await signIn(page);
+  await page.request.put("/api/sql-resources", {
+    data: { threads: null, memory_limit: null },
+  });
+  const leave = () =>
+    page
+      .getByRole("link", { name: "Users and permissions", exact: true })
+      .click();
+  try {
+    await page.goto("/instance-settings/sql-resources");
+    const memory = page.getByLabel("Memory limit per session", {
+      exact: true,
+    });
+    await memory.fill("1GB");
+    await memory.fill("");
+    await leave();
+    await expect(page).toHaveURL(/\/instance-settings\/users$/);
+
+    await page.goBack();
+    await page.getByLabel("Threads per session", { exact: true }).fill("3");
+    const release = deferred();
+    await page.route("**/api/sql-resources", async (route) => {
+      if (route.request().method() !== "PUT") return route.continue();
+      await release.promise;
+      await route.continue();
+    });
+    await page
+      .getByRole("button", { name: "Save SQL resources", exact: true })
+      .click();
+    await leave();
+    // A save already sent cannot be discarded: leaving waits for it, without
+    // offering to discard it in the meantime.
+    const guard = page.getByRole("dialog", {
+      name: "Unsaved changes",
+      exact: true,
+    });
+    await page.waitForTimeout(500);
+    await expect(guard).toHaveCount(0);
+    await expect(page).toHaveURL(/\/instance-settings\/sql-resources$/);
+    release.resolve();
+    await expect(page).toHaveURL(/\/instance-settings\/users$/);
+    expect(
+      (await (await page.request.get("/api/sql-resources")).json()).threads,
+    ).toBe(3);
+  } finally {
+    await page.request.put("/api/sql-resources", {
+      data: { threads: null, memory_limit: null },
+    });
+  }
 });
