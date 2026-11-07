@@ -1,5 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
-import { signIn } from "./helpers";
+import { canvasZoom, signIn } from "./helpers";
 
 async function openProject(page: Page, example = false) {
   await signIn(page);
@@ -107,12 +107,7 @@ test("repeated Northstar palette additions avoid existing bounds after pan and z
   );
   await page.mouse.up();
   await page.getByRole("button", { name: "Zoom in", exact: true }).click();
-  const zoom = () =>
-    page
-      .locator(".react-flow__viewport")
-      .evaluate(
-        (element) => new DOMMatrix(getComputedStyle(element).transform).a,
-      );
+  const zoom = () => canvasZoom(page);
   await expect.poll(zoom).not.toBeCloseTo(1, 2);
   const chosen = await zoom();
   for (const label of [

@@ -1,5 +1,12 @@
 import { test, expect, type Page } from "@playwright/test";
-import { autosaved, closeCode, codePanel, openCode, signIn } from "./helpers";
+import {
+  autosaved,
+  canvasZoom,
+  closeCode,
+  codePanel,
+  openCode,
+  signIn,
+} from "./helpers";
 import type { Snapshot } from "../src/types";
 
 const DOUBLED = `-- @label Doubled
@@ -271,12 +278,6 @@ test("copied connected nodes paste as new connected nodes, here and in a compone
   expect(box.edges).toHaveLength(1);
 });
 
-const zoom = (page: Page) =>
-  page
-    .locator(".react-flow__viewport")
-    .evaluate(
-      (viewport) => new DOMMatrix(getComputedStyle(viewport).transform).a,
-    );
 /**
  * Double-click a node at human speed: the first click selects it, which opens
  * the inspector and the preview and refits the graph, so the second click lands
@@ -295,7 +296,7 @@ async function slowDoubleClick(page: Page, id: string) {
       return Math.hypot(after.x - before.x, after.y - before.y);
     })
     .toBeGreaterThan(before.height);
-  const refitted = await zoom(page);
+  const refitted = await canvasZoom(page);
   await page.mouse.down({ clickCount: 2 });
   await page.mouse.up({ clickCount: 2 });
   return refitted;
@@ -318,7 +319,7 @@ test("a double-click acts on the node its first click selected, even after the g
   const refitted = await slowDoubleClick(page, "filtered");
   await page.waitForTimeout(500);
   // Neither the pane nor another node takes the second click.
-  expect(await zoom(page)).toBe(refitted);
+  expect(await canvasZoom(page)).toBe(refitted);
   await expect(page.locator(".react-flow__node.selected")).toHaveCount(1);
   await expect(node(page, "filtered")).toHaveClass(/selected/);
   await expect(page.locator(".component-notice")).toHaveCount(0);
