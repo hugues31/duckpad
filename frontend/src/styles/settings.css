@@ -170,14 +170,14 @@
 }
 
 .monitoring-level-error {
-  color: light-dark(#a33e36, #f4ada4);
+  color: var(--danger);
   background: light-dark(#fcecea, #442b2b);
 }
 
 .monitoring-level-critical {
   color: light-dark(#fff, #2b1010);
-  background: light-dark(#a33e36, #f4ada4);
-  border-color: light-dark(#a33e36, #f4ada4);
+  background: var(--danger);
+  border-color: var(--danger);
 }
 
 .monitoring-level-warning {

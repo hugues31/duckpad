@@ -45,7 +45,7 @@
 }
 .results-failure {
   font-size: 11px;
-  color: light-dark(#a33e36, #f4ada4);
+  color: var(--danger);
   white-space: nowrap;
 }
 .results-actions {
@@ -129,7 +129,7 @@
   text-overflow: ellipsis;
 }
 .sample-chip.failing {
-  color: light-dark(#8a5300, #ffcf8a);
+  color: var(--warning);
   background: light-dark(#fff1d6, #4a3510);
 }
 .sample-chip .icon,
@@ -233,7 +233,7 @@
   color: var(--muted);
 }
 .sample-check .error-text {
-  color: light-dark(#a33e36, #f4ada4);
+  color: var(--danger);
 }
 .sort-row {
   margin-bottom: 5px;
@@ -370,7 +370,7 @@
   font-size: 11px;
 }
 .schema-chip.changed {
-  color: light-dark(#8a5300, #ffcf8a);
+  color: var(--warning);
   background: light-dark(#fff1d6, #4a3510);
 }
 .statistics-note {
@@ -391,15 +391,15 @@
 }
 .tests-summary .ok,
 .test-status.ok {
-  color: light-dark(#1f7a4d, #8ee0b2);
+  color: var(--success);
 }
 .tests-summary .warning,
 .test-status.warning {
-  color: light-dark(#8a5300, #ffcf8a);
+  color: var(--warning);
 }
 .tests-summary .error,
 .test-status.error {
-  color: light-dark(#a33e36, #f4ada4);
+  color: var(--danger);
 }
 .tests-summary .muted {
   font-weight: 400;
@@ -425,7 +425,7 @@
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: light-dark(#1f7a4d, #8ee0b2);
+  background: var(--success);
 }
 .test-strip .dot.none {
   background: var(--surface-alt);
@@ -513,7 +513,7 @@
   padding: 0;
 }
 .log-entry.success > svg {
-  color: light-dark(#1f7a4d, #8ee0b2);
+  color: var(--success);
 }
 .log-entry.info > svg {
   color: var(--accent);

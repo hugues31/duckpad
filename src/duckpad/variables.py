@@ -481,15 +481,21 @@ def node_problems(bundle, nodes):
             continue
         parameters = {p["name"]: p for p in node["parsed"]["parameters"]}
         messages = [
-            reference_error(bundle, variables, None, node, param, name)
+            (param, reference_error(bundle, variables, None, node, param, name))
             for param, name in sorted(bound.items())
             if not file_error
         ]
         for param, names in sorted(texts.items()):
             # A file error is reported once, on the file; a misplaced reference does not depend on it.
             if not file_error or base_type(parameters[param]["type"]) not in REFERENCE_PARAMETERS:
-                messages += [expression_error(variables, None, parameters[param], name) for name in names]
-        result += [{"file": "flow.json", "node": key, "message": message} for message in messages if message]
+                messages += [
+                    (param, expression_error(variables, None, parameters[param], name)) for name in names
+                ]
+        result += [
+            {"file": "flow.json", "node": key, "parameter": param, "message": message}
+            for param, message in messages
+            if message
+        ]
     return result
 
 

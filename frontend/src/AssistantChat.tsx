@@ -323,7 +323,11 @@ export default function AssistantChat() {
     conversation?.turns.at(-1)?.status === "awaiting_approval";
   useEffect(() => {
     const receive = (event: Event) => {
-      if (busy || undoing) return;
+      setOpen(true);
+      if (busy || undoing) {
+        setError(t("assistantRequestWaiting"));
+        return;
+      }
       const detail = (event as CustomEvent<DebugRequest>).detail;
       setDebug({ ...detail, worktree: worktree.id });
       setConversation(null);
@@ -334,7 +338,7 @@ export default function AssistantChat() {
     };
     window.addEventListener(DEBUG_ASSISTANT_EVENT, receive);
     return () => window.removeEventListener(DEBUG_ASSISTANT_EVENT, receive);
-  }, [busy, undoing, worktree.id]);
+  }, [busy, undoing, worktree.id, t]);
   const controller = useRef<AbortController | null>(null);
   const launcher = useRef<HTMLButtonElement>(null);
   const input = useRef<HTMLTextAreaElement>(null);
@@ -493,6 +497,7 @@ export default function AssistantChat() {
         await drafts.persist();
         await worktree.flush();
       }
+      abort.signal.throwIfAborted();
       if (!value || !bound) {
         value = await api<Conversation>("/assistant/conversations", {
           ...send(context),
@@ -500,6 +505,7 @@ export default function AssistantChat() {
         });
         setConversation(value);
       }
+      abort.signal.throwIfAborted();
       identity.current = value.id;
       following.current = true;
       setPending(current);
@@ -654,7 +660,10 @@ export default function AssistantChat() {
         : undefined,
   });
   async function stop() {
-    if (!identity.current) return;
+    if (!identity.current) {
+      controller.current?.abort();
+      return;
+    }
     try {
       await api(`/assistant/conversations/${identity.current}/stop`, send({}));
     } catch (e) {

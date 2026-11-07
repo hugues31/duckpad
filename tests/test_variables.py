@@ -401,11 +401,13 @@ def test_undeclared_and_incompatible_references_block_the_node_and_its_descendan
         {
             "file": "flow.json",
             "node": "large",
+            "parameter": "threshold",
             "message": "Parameter threshold references undeclared variable missing",
         },
         {
             "file": "flow.json",
             "node": "paid",
+            "parameter": "status",
             "message": "Variable threshold (number) cannot be bound to parameter status (text)",
         },
     ]
@@ -603,8 +605,8 @@ def test_bound_variables_must_meet_every_exposed_parameter_type_on_the_way():
         "of component by_status (choice(paid|refunded))"
     )
     assert validate(bundle) == [
-        {"file": "flow.json", "node": "direct::filter", "message": message},
-        {"file": "flow.json", "node": "wrapped::inner::filter", "message": message},
+        {"file": "flow.json", "node": "direct::filter", "parameter": "status", "message": message},
+        {"file": "flow.json", "node": "wrapped::inner::filter", "parameter": "status", "message": message},
     ]
     nodes, _, _ = expand_for(bundle, "dev")
     assert nodes["direct::filter"]["error"] == nodes["wrapped::inner::filter"]["error"] == message

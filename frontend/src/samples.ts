@@ -49,9 +49,22 @@ export function sampleQuery(sample: Sample) {
   };
 }
 
-/** Whether every column the sample sorts on exists, so it applies to another dataset. */
-export function sampleFits(sample: Sample, columns: string[]) {
-  return (sample.order || []).every(([column]) => columns.includes(column));
+/** Whether another dataset has the columns needed to carry this sample safely. */
+export function sampleFits(
+  sample: Sample,
+  columns: string[],
+  sourceColumns?: string[],
+) {
+  // SQL filters can reference any source column. Without parsing SQL in the UI,
+  // carry them only when the destination retains the complete source schema.
+  const keepsFilter =
+    !sample.filter?.trim() ||
+    (!!sourceColumns &&
+      sourceColumns.every((column) => columns.includes(column)));
+  return (
+    keepsFilter &&
+    (sample.order || []).every(([column]) => columns.includes(column))
+  );
 }
 
 const VARIABLE = /{{\s*var\.\w+\s*}}/;

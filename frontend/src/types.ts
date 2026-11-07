@@ -171,6 +171,7 @@ export interface Conflict {
   merged: Record<string, string>;
 }
 export interface Diagnostic {
+  parameter?: string;
   file: string;
   message: string;
   code?: string;

@@ -387,7 +387,7 @@ function WorktreeDialog({
         />
       );
     case "group":
-      return <GroupDialog {...modal} snapshot={snapshot} onClose={onClose} />;
+      return <GroupDialog {...modal} onClose={onClose} />;
     case "library":
       return <LibraryDialog snapshot={snapshot} onClose={onClose} />;
   }
@@ -550,32 +550,30 @@ function GroupDialog({
   nodes,
   parent,
   prefix,
-  snapshot,
   onClose,
 }: {
   nodes: string[];
   parent?: string;
   prefix: string;
-  snapshot: Snapshot;
   onClose: () => void;
 }) {
   const t = useT();
   const location = useLocation();
   const navigate = useNavigate();
-  const { id, refresh } = useWorktree();
-  const [base] = useState(snapshot);
+  const { id, commit } = useWorktree();
   const group = async (values: Record<string, string>) => {
-    const result = await api<Snapshot & { selected: string }>(
-      `/worktrees/${id}/group`,
-      send({
-        revision: base.revision,
-        nodes,
-        parent,
-        name: values.name,
-        parameters: JSON.parse(values.parameters || "{}"),
-      }),
+    const result = await commit((base) =>
+      api<Snapshot & { selected: string }>(
+        `/worktrees/${id}/group`,
+        send({
+          revision: base.revision,
+          nodes,
+          parent,
+          name: values.name,
+          parameters: JSON.parse(values.parameters || "{}"),
+        }),
+      ),
     );
-    await refresh();
     // Select the new component the way the flow reveals search results.
     const search = new URLSearchParams(location.search);
     search.set("node", prefix + result.selected);
@@ -622,7 +620,7 @@ function LibraryDialog({
 }) {
   const t = useT();
   const { notify } = useShell();
-  const { id, refresh } = useWorktree();
+  const { id, commit } = useWorktree();
   const library = useApiResource<LibraryItem[]>("/library");
   const { pending, error, run } = useAsyncAction();
   // A double click must not import two copies.
@@ -634,16 +632,17 @@ function LibraryDialog({
     if (importing.current) return;
     importing.current = true;
     const imported = await run(async () => {
-      await api(
-        `/worktrees/${id}/import`,
-        send({
-          revision: snapshot.revision,
-          source_worktree: item.worktree,
-          kind: item.kind,
-          id: item.id,
-        }),
+      await commit((base) =>
+        api<Snapshot>(
+          `/worktrees/${id}/import`,
+          send({
+            revision: base.revision,
+            source_worktree: item.worktree,
+            kind: item.kind,
+            id: item.id,
+          }),
+        ),
       );
-      await refresh();
     });
     importing.current = false;
     if (imported) notify(t("importComplete"));

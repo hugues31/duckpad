@@ -383,12 +383,7 @@ export default function Inspector({
   return (
     <aside className="inspector">
       <div className="inspector-title">
-        <span>
-          {node.label ||
-            (signature.kind === "component"
-              ? signature.definition?.name
-              : signature.definition?.label)}
-        </span>
+        <span>{nodeLabel(node, signature, t)}</span>
         <ActionMenuButton
           label={t("nodeActions")}
           items={actions}
@@ -641,10 +636,8 @@ export default function Inspector({
                                 parameterType={type}
                                 name={reference}
                                 problem={
-                                  nodeProblems.find((item) =>
-                                    String(item.message).includes(
-                                      `parameter ${parameter.name}`,
-                                    ),
+                                  nodeProblems.find(
+                                    (item) => item.parameter === parameter.name,
                                   )?.message
                                 }
                                 disabled={readOnly}

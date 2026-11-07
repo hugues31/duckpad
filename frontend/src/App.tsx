@@ -314,7 +314,7 @@ function NavigationGuard({ drafts }: { drafts: DraftRegistry }) {
             new URLSearchParams(nextLocation.search).get(key),
         );
       return (
-        area === "projectSettings" &&
+        (area === "projectSettings" || area === "instanceSettings") &&
         (leavesPage || changesPartitionContext) &&
         (drafts.dirty("page") || saving)
       );

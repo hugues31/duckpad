@@ -1,3 +1,4 @@
+import { useSettingsForm } from "./useSettingsForm";
 import { useState } from "react";
 import { api, send } from "./api";
 import { useT } from "./i18n";
@@ -21,15 +22,42 @@ export default function SSOSettings() {
     const value = await api<Configuration>("/sso", { signal });
     return { ...value, public_url: value.public_url || location.origin };
   });
-  const { data: config, setData: setConfig } = resource;
+  const [draft, setConfig] = useState<Configuration | null>(null);
+  const config = draft ?? resource.data;
   const [secret, setSecret] = useState("");
   const [saved, setSaved] = useState(false);
   const { pending, run, ...save } = useAsyncAction();
   const error = save.error || resource.error;
   function change(values: Partial<Configuration>) {
-    setConfig((current) => current && { ...current, ...values });
+    setConfig(config && { ...config, ...values });
     setSaved(false);
   }
+  const persist = useSettingsForm({
+    dirty:
+      (!!draft && JSON.stringify(draft) !== JSON.stringify(resource.data)) ||
+      !!secret,
+    discard: () => {
+      setConfig(null);
+      setSecret("");
+    },
+    save: async () => {
+      if (!config) return;
+
+      const {
+        has_secret: _hasSecret,
+        redirect_uri: _redirect,
+        ...settings
+      } = config;
+      const value = await api<Configuration>(
+        "/sso",
+        send({ ...settings, client_secret: secret || undefined }, "PUT"),
+      );
+      resource.setData(value);
+      setConfig(null);
+      setSecret("");
+      setSaved(true);
+    },
+  });
   return (
     <section className="settings-card" aria-label={t("ssoSettings")}>
       <h2>{t("ssoSettings")}</h2>
@@ -46,23 +74,7 @@ export default function SSOSettings() {
           onSubmit={(event) => {
             event.preventDefault();
             setSaved(false);
-            void run(async () => {
-              const {
-                has_secret: _hasSecret,
-                redirect_uri: _redirect,
-                ...settings
-              } = config;
-              const value = await api<Configuration>(
-                "/sso",
-                send(
-                  { ...settings, client_secret: secret || undefined },
-                  "PUT",
-                ),
-              );
-              setConfig(value);
-              setSecret("");
-              setSaved(true);
-            });
+            void run(persist);
           }}
         >
           <fieldset disabled={pending} className="sso-fields">

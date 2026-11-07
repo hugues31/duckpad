@@ -1,7 +1,7 @@
 import { displayNodeName } from "./nodeNames";
 import { ValueSourceFields } from "./ValueSourceFields";
 import { localDefinitions } from "./nodeCode";
-import { useEffect, useId, useMemo, useState } from "react";
+import { useEffect, useEffectEvent, useId, useMemo, useState } from "react";
 import { useSearchParams } from "react-router";
 import {
   AlertCircle,
@@ -99,14 +99,6 @@ export default function VariablesPanel({
   const [search, setSearch] = useState("");
   const [dirty, setDirty] = useState(false);
   const [leaving, setLeaving] = useState<(() => void) | null>(null);
-  const [previousRequest, setPreviousRequest] = useState(requested);
-  if (requested !== previousRequest) {
-    setPreviousRequest(requested);
-    if (requested) {
-      setSelected(requested);
-      setCreating(null);
-    }
-  }
   const summary = snapshot.variables;
   const declared = Object.entries(summary?.declarations || {});
   const shown = declared.filter(([name, variable]) =>
@@ -138,6 +130,27 @@ export default function VariablesPanel({
     if (dirty && !discard) setLeaving(() => go);
     else go();
   };
+  const receiveRequest = useEffectEvent((name: string | null) => {
+    if (name === selected) return;
+    open(name);
+    if (dirty) {
+      // Keep the URL on the active draft until the user confirms the switch.
+      setParams(
+        (current) => {
+          const next = new URLSearchParams(current);
+          if (selected) next.set("variable", selected);
+          else next.delete("variable");
+          return next;
+        },
+        { replace: true },
+      );
+    }
+  });
+  useEffect(() => {
+    // URL navigation must use the same confirmation as a click in the variable list.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    receiveRequest(requested);
+  }, [requested]);
   const editing =
     creating !== null
       ? null

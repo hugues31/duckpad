@@ -4,6 +4,10 @@
   color: var(--text);
   background: var(--bg);
   font-synthesis: none;
+  --mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  --success: #1f7a4d;
+  --danger: #a33e36;
+  --warning: #8a5300;
   --bg: #f2f2f4;
   --surface: #fafafa;
   --surface-alt: #eaeaee;
@@ -29,6 +33,9 @@
   font-size: 13px;
 }
 :root[data-theme="dark"] {
+  --success: #8ee0b2;
+  --danger: #f4ada4;
+  --warning: #ffcf8a;
   --bg: #1c1c1e;
   --surface: #29292c;
   --surface-alt: #343438;

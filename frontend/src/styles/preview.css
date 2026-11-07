@@ -158,7 +158,7 @@
   font-size: 10px;
   max-height: 55px;
   overflow: auto;
-  color: light-dark(#a33e36, #f4ada4);
+  color: var(--danger);
   background: #bc655e10;
   padding: 7px 14px;
 }

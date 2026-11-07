@@ -8,6 +8,7 @@ import {
   outputViews,
   quoteIdentifier,
   sameSample,
+  sampleFits,
   sampleKey,
   sampleQuery,
   sampleSql,
@@ -21,6 +22,25 @@ import {
 
 describe("samples", () => {
   beforeEach(() => localStorage.clear());
+
+  it("carries filters only when the destination keeps the source columns", () => {
+    const sample = { method: "first" as const, filter: "input_only = 'input'" };
+    expect(sampleFits(sample, ["amount"], ["amount", "input_only"])).toBe(
+      false,
+    );
+    expect(
+      sampleFits(
+        sample,
+        ["amount", "input_only", "extra"],
+        ["amount", "input_only"],
+      ),
+    ).toBe(true);
+    expect(sampleFits(sample, ["amount"])).toBe(false);
+    expect(sampleFits(ALL_ROWS, ["amount"])).toBe(true);
+    expect(
+      sampleFits({ ...ALL_ROWS, order: [["input_only", "asc"]] }, ["amount"]),
+    ).toBe(false);
+  });
 
   it("drops default settings before comparing or storing", () => {
     expect(

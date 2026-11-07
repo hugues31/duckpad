@@ -16,7 +16,7 @@ import {
 import { useT, type Translate } from "./i18n";
 import { Modal } from "./modals";
 import { useShell } from "./shell";
-import type { Conflict } from "./types";
+import type { Conflict, Snapshot } from "./types";
 import { useAsyncAction } from "./useAsyncAction";
 import { useWorktree } from "./worktree";
 
@@ -36,16 +36,19 @@ export function ConflictDialog({
   const t = useT();
   const labels = saveLabels(t);
   const { openModal } = useShell();
-  const { id, refresh } = useWorktree();
+  const { id, commit } = useWorktree();
   const { pending, error, run } = useAsyncAction();
   const choose = async (choice: "current" | "proposal") => {
     if (
       await run(async () => {
-        try {
-          await api(`/conflicts/${conflict.id}/resolve`, send({ choice }));
-        } finally {
-          await refresh();
-        }
+        await commit(
+          () =>
+            api<Snapshot>(
+              `/conflicts/${conflict.id}/resolve`,
+              send({ choice }),
+            ),
+          { conflict: conflict.id },
+        );
       })
     )
       onClose();
@@ -128,7 +131,7 @@ export function CombinedResolutionDialog({
   const t = useT();
   const labels = saveLabels(t);
   const { openModal } = useShell();
-  const { id, refresh } = useWorktree();
+  const { id, commit } = useWorktree();
   const [base] = useState(conflict);
   const [drafts, setDrafts] = useState(() => conflictDrafts(conflict));
   const { pending, error, run } = useAsyncAction();
@@ -144,14 +147,14 @@ export function CombinedResolutionDialog({
         } catch {
           throw new Error(t("conflictInvalidValue"));
         }
-        try {
-          await api(
-            `/conflicts/${base.id}/resolve`,
-            send({ choice: "combined", files }),
-          );
-        } finally {
-          await refresh();
-        }
+        await commit(
+          () =>
+            api<Snapshot>(
+              `/conflicts/${base.id}/resolve`,
+              send({ choice: "combined", files }),
+            ),
+          { conflict: base.id },
+        );
       })
     )
       onClose();

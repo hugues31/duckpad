@@ -1,3 +1,4 @@
+import { useSettingsForm } from "./useSettingsForm";
 import { useState } from "react";
 import { api, send } from "./api";
 import { useT } from "./i18n";
@@ -10,10 +11,26 @@ type Configuration = { allow_unsigned_extensions: boolean };
 export default function ExtensionSettings() {
   const t = useT();
   const settings = useApiResource<Configuration>("/extensions/settings");
-  const { data: config, setData: setConfig } = settings;
+  const [draft, setConfig] = useState<Configuration | null>(null);
+  const config = draft ?? settings.data;
   const [saved, setSaved] = useState(false);
   const { pending, run, ...save } = useAsyncAction();
   const error = save.error || settings.error;
+  const persist = useSettingsForm({
+    dirty: !!draft && JSON.stringify(draft) !== JSON.stringify(settings.data),
+    discard: () => {
+      setConfig(null);
+    },
+    save: async () => {
+      if (!config) return;
+
+      settings.setData(
+        await api<Configuration>("/extensions/settings", send(config, "PUT")),
+      );
+      setConfig(null);
+      setSaved(true);
+    },
+  });
   return (
     <section aria-label={t("extensionSettings")}>
       <h2>{t("extensionSettings")}</h2>
@@ -36,15 +53,7 @@ export default function ExtensionSettings() {
               onSubmit={(event) => {
                 event.preventDefault();
                 setSaved(false);
-                void run(async () => {
-                  setConfig(
-                    await api<Configuration>(
-                      "/extensions/settings",
-                      send(config, "PUT"),
-                    ),
-                  );
-                  setSaved(true);
-                });
+                void run(persist);
               }}
             >
               <label className="check-row">

@@ -4,7 +4,7 @@
   padding: 12px;
   border: 1px solid var(--border);
   border-radius: 10px;
-  background: var(--surface-secondary, var(--bg));
+  background: var(--surface-alt);
 }
 .query-builder > summary {
   cursor: pointer;

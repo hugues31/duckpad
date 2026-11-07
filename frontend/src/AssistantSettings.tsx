@@ -1,3 +1,4 @@
+import { useSettingsForm } from "./useSettingsForm";
 import { useState, type FormEvent, type ReactNode } from "react";
 import { Check, ExternalLink, Plus, RefreshCw, Trash2, X } from "lucide-react";
 import { PromptSettings } from "./AssistantPrompts";
@@ -93,10 +94,13 @@ export default function AssistantSettings() {
     check.setError("");
     save.setError("");
   };
-  const submit = (event: FormEvent) => {
-    event.preventDefault();
-    if (!config) return;
-    void save.run(async () => {
+  const dirty =
+    !!draft && JSON.stringify(draft) !== JSON.stringify(resource.data);
+  const persist = useSettingsForm({
+    dirty,
+    discard,
+    save: async () => {
+      if (!config) return;
       const value = await api<Configuration>(
         "/assistant/settings",
         send({ ...config, providers: config.providers.map(payload) }, "PUT"),
@@ -105,7 +109,11 @@ export default function AssistantSettings() {
       setDraft(null);
       setSaved(true);
       await refreshWorkspace();
-    });
+    },
+  });
+  const submit = (event: FormEvent) => {
+    event.preventDefault();
+    void save.run(persist);
   };
   const defaultProvider = config?.providers.find(
     (p) => p.id === config.default_provider,
@@ -126,8 +134,6 @@ export default function AssistantSettings() {
       );
     });
   const enabled = resource.data?.enabled;
-  const dirty =
-    !!draft && JSON.stringify(draft) !== JSON.stringify(resource.data);
   return (
     <section
       className="settings-card assistant-settings"

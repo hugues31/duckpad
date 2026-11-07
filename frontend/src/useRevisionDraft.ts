@@ -18,6 +18,7 @@ interface Draft {
   autosave: boolean;
   discard: () => void;
   persist: () => Promise<void>;
+  rejection?: () => unknown;
 }
 
 /** Registers an unsaved draft and returns its unregistration. */
@@ -57,6 +58,11 @@ export function useDraftRegistry() {
       /** Discard unsaved changes, optionally only those of one scope. */
       discard: (scope?: DraftScope) =>
         matching(scope).forEach((draft) => draft.discard()),
+      /** Accept a reviewed proposal without dropping edits typed since its rejection. */
+      discardRejected: (matches: (error: unknown) => boolean) =>
+        matching().forEach((draft) => {
+          if (matches(draft.rejection?.())) draft.discard();
+        }),
       /** Save each editor against its own base, stopping on a rejected save. */
       persist: async () => {
         for (const draft of matching()) await draft.persist();
@@ -114,7 +120,9 @@ export function useRevisionDraft<T, Revision>(
   const incoming = useRef({ value, revision });
   const saving = useRef<{ draft: T; promise: Promise<void> } | null>(null);
   // A rejected draft was already reported; closing the editor must not resend it.
-  const rejected = useRef<{ draft: T } | null>(null);
+  const rejected = useRef<{ draft: T; submitted: T; error: unknown } | null>(
+    null,
+  );
   // Discarding invalidates the result of a save still in flight.
   const generation = useRef(0);
   const dirty = !equal(state.draft, state.saved);
@@ -169,7 +177,7 @@ export function useRevisionDraft<T, Revision>(
           show(latest.current, draft);
         },
         (error) => {
-          rejected.current = { draft };
+          rejected.current = { draft, submitted: draft, error };
           throw error;
         },
       )
@@ -195,7 +203,11 @@ export function useRevisionDraft<T, Revision>(
       } while (unsaved());
     } catch (error) {
       // The navigation reports the failure, edits typed meanwhile included.
-      rejected.current = { draft: latest.current };
+      rejected.current = {
+        draft: latest.current,
+        submitted: rejected.current?.submitted ?? latest.current,
+        error,
+      };
       throw error;
     }
   };
@@ -212,6 +224,10 @@ export function useRevisionDraft<T, Revision>(
       autosave,
       discard: () => actions.current.discard(),
       persist: () => actions.current.flush(),
+      rejection: () =>
+        rejected.current?.submitted === latest.current
+          ? rejected.current?.error
+          : undefined,
     });
   }, [dirty, register, scope, autosave]);
   useEffect(() => () => actions.current.close(), []);

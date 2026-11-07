@@ -83,7 +83,7 @@
   color: var(--accent);
 }
 .project-extension-action.remove:not(:disabled):hover {
-  color: light-dark(#a33e36, #f4ada4);
+  color: var(--danger);
   border-color: currentcolor;
 }
 /* Fade the icon only, so the tooltip of a disabled action stays readable. */

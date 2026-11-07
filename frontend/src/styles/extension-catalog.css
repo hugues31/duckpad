@@ -69,5 +69,5 @@
   margin: 0;
 }
 .extension-availability.missing {
-  color: light-dark(#a33e36, #f4ada4);
+  color: var(--danger);
 }

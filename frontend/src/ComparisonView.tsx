@@ -244,6 +244,13 @@ export default function ComparisonView({
     sessionStorage.setItem(storageKey, JSON.stringify(filters));
   }, [storageKey, filters]);
   const entities = report.entities;
+  if (
+    scope &&
+    !entities.some(
+      (entity) => entity.kind === "component" && entity.id === scope,
+    )
+  )
+    setScope("");
   const filtered = entities.filter(
     (e) =>
       (!filters.only || e.status !== "unchanged") &&

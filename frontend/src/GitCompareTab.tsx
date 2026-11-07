@@ -362,6 +362,7 @@ export default function GitCompareTab({
       ) : (
         report && (
           <ComparisonView
+            key={JSON.stringify([report.a.ref, report.b.ref])}
             report={report}
             storageKey={storageKey + ".filters"}
             onHistory={setEntity}
