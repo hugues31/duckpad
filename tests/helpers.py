@@ -22,7 +22,8 @@ def wait_until(predicate, timeout=10, message="Condition was not reached"):
     raise AssertionError(message)
 
 
-def wait_run(store, run, timeout=10):
+def wait_run(store, run, timeout=30):
+    # Launch returns before dependency and worker setup, which is part of this bounded wait now.
     def finished():
         result = store.get("run", run["id"])
         return result if result["status"] not in UNFINISHED_RUN_STATUSES else None
