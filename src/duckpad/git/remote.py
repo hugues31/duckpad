@@ -152,10 +152,15 @@ class Remotes:
         self.credentials = GitCredentials(self.store)
         self.temporary = self.store.home / "git-network"
         self.temporary.mkdir(mode=0o700, exist_ok=True)
-        # Key copies of an operation interrupted by a crash must not outlive a restart.
+        self.cleanup_keys()
+
+    def cleanup_keys(self):
+        # Keep young directories that concurrent network operations may still be using. A quick
+        # restart leaves them temporarily; later network operations retry after the safety window.
         for leftover in self.temporary.iterdir():
-            if leftover.stat().st_mtime < time.time() - 4 * NETWORK_TIMEOUT:
-                shutil.rmtree(leftover, ignore_errors=True)
+            with suppress(FileNotFoundError):
+                if leftover.stat().st_mtime < time.time() - 4 * NETWORK_TIMEOUT:
+                    shutil.rmtree(leftover, ignore_errors=True)
 
     def config(self, worktree):
         return self.store.get(
@@ -231,6 +236,7 @@ class Remotes:
 
     def network(self, path, *args, key=None):
         """Run network Git with the given account key for SSH, or without credentials for HTTPS."""
+        self.cleanup_keys()
         allowed = "ssh" if key else "https"
         settings = [
             "core.askPass=",

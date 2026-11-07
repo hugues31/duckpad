@@ -452,7 +452,7 @@ def test_https_never_retries_with_server_authentication(team, monkeypatch, tmp_p
         server.server_close()
 
 
-def test_key_copies_left_by_a_crash_are_removed_at_startup(tmp_path):
+def test_key_copies_left_by_a_crash_are_removed_at_startup_and_before_network(tmp_path, monkeypatch):
     home = tmp_path / "instance"
     services = Services.open(home)
     folder = services.projects.remotes.temporary
@@ -464,5 +464,18 @@ def test_key_copies_left_by_a_crash_are_removed_at_startup(tmp_path):
     old = time.time() - 3600
     os.utime(stale, (old, old))
     services = Services.open(home)
-    services.close()
-    assert not stale.exists() and recent.exists()
+    try:
+        assert not stale.exists() and recent.exists()
+        os.utime(recent, (old, old))
+        current = folder / "tmpcurrent"
+        current.mkdir()
+
+        def run(*args, **kwargs):
+            assert not recent.exists()
+            assert current.exists()
+            return ""
+
+        monkeypatch.setattr("duckpad.git.command.run", run)
+        services.projects.remotes.network(home, "ls-remote", "https://example.invalid/repo.git")
+    finally:
+        services.close()
