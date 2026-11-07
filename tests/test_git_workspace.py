@@ -20,6 +20,7 @@ from duckpad.git import command
 from duckpad.git.command import GitError
 from duckpad.git.identity import commit_author
 from duckpad.git.remote import validate_url
+from duckpad.git.workspace import GitWorkspace
 from duckpad.services import Services
 from duckpad.util import Problem
 
@@ -830,7 +831,7 @@ def test_rejected_history_is_never_walked_under_the_repository_lock(local_remote
     lock, git, walks = projects.repository(main["project"]), projects.versioning.git, []
 
     def record(path, *args, **options):
-        if args[0] == "ls-tree":
+        if args[0] == "log" and "--raw" in args:
             # A walk under the lock would stall saves and statuses of every worktree of the project.
             walks.append(lock._is_owned())
         return git(path, *args, **options)
@@ -843,11 +844,74 @@ def test_rejected_history_is_never_walked_under_the_repository_lock(local_remote
             )
     assert walks and not any(walks)
     walks.clear()
-    # A descendant of the offending commit is rejected without inspecting any tree.
+    # A descendant is rejected in a single walk, before taking the repository lock.
     edit(projects, incoming, lambda b: b["documentation"].update(project="Descendant"))
     with pytest.raises(Problem, match="unsupported files"):
         projects.versioning.prepare(main["id"], "refs/heads/incoming")
-    assert not walks
+    assert walks == [False]
+
+
+def test_large_history_validation_is_incremental_and_survives_restart(local_remote, monkeypatch):
+    projects, main, _, state = local_remote
+
+    def append(count):
+        parent = projects.git(main["path"], "rev-parse", "HEAD")
+        commits = []
+        for index in range(1, count + 1):
+            commits.append(
+                f"commit refs/heads/main\nmark :{index}\n"
+                "committer Test <test@example.com> 1700000000 +0000\ndata 4\nsave\n"
+                f"from {parent}\n\n"
+            )
+            parent = f":{index}"
+        projects.git(main["path"], "fast-import", "--quiet", input="".join(commits))
+
+    append(6000)
+    state = projects.remotes.fetch(main["id"], state["config_revision"])
+    state = push(projects, main, state)
+    checkpoint = state["local_head"]
+    target = projects.branch(main["id"], "target")
+    append(6000)
+    # A new service reads the trusted tips from instance storage, rather than losing them at restart.
+    workspace = GitWorkspace(projects)
+    projects.versioning = projects.remotes.workspace = workspace
+    git, calls = workspace.git, []
+
+    def record(path, *args, **options):
+        if args[0] == "log" and "--raw" in args:
+            calls.append(args)
+        return git(path, *args, **options)
+
+    monkeypatch.setattr(workspace, "git", record)
+    state = push(projects, main, projects.remotes.status(main["id"]))
+    assert state["state"] == "up_to_date"
+    assert len(calls) == 1 and checkpoint in calls[0]
+    assert int(git(main["path"], "rev-list", "--count", "HEAD")) > 10000
+    workspace.prepare(target["id"], "refs/heads/main")
+    assert len(calls) == 1
+
+
+def test_history_validation_checks_merge_parents_and_bounds_saved_tips(project, monkeypatch):
+    from duckpad.git import workspace as module
+
+    projects, main = project
+    workspace = projects.versioning
+    monkeypatch.setattr(module, "MAX_SAFE_HEADS", 2)
+    for _ in range(4):
+        projects.git(main["path"], "commit", "--allow-empty", "-m", "chore: save")
+        workspace.validate_history(main["path"], workspace.resolve(main["path"], "HEAD"))
+    assert len(workspace.safe_heads) == len(GitWorkspace(projects).safe_heads) == 2
+    bad = projects.branch(main["id"], "bad")
+    Path(bad["path"], "nodes").mkdir(exist_ok=True)
+    Path(bad["path"], "nodes", "link.sql").symlink_to("../flow.json")
+    projects.git(bad["path"], "add", "nodes/link.sql")
+    projects.git(bad["path"], "commit", "-m", "chore: add link")
+    bad_head = workspace.resolve(bad["path"], "HEAD")
+    clean = workspace.resolve(main["path"], "HEAD")
+    tree = projects.git(main["path"], "rev-parse", "HEAD^{tree}")
+    merge = projects.git(main["path"], "commit-tree", tree, "-p", clean, "-p", bad_head, "-m", "Merge")
+    with pytest.raises(Problem, match="unsupported files"):
+        workspace.validate_history(main["path"], merge)
 
 
 @pytest.mark.parametrize("operation", ["fetch", "push"])
