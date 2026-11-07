@@ -248,6 +248,31 @@ test("grouping waits for an Inspector save, and Ctrl+Z undoes the group before t
   ).toBe("Reviewed filter");
 });
 
+test("Back during a group waits for it, then leaves the flow", async ({
+  page,
+}) => {
+  await prepare(page);
+  await select(page, "filtered");
+  const release = deferred();
+  const held = deferred();
+  await page.route(/\/group$/, async (route) => {
+    held.resolve();
+    await release.promise;
+    await route.continue();
+  });
+  await page.locator(".group-button").click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByLabel("Component name").fill("Left group");
+  await dialog.getByRole("button", { name: "Create", exact: true }).click();
+  await held.promise;
+  // The group then selects its component, a navigation of its own.
+  await page.evaluate(() => history.back());
+  release.resolve();
+  await expect(
+    page.getByRole("heading", { name: "Projects", exact: true }),
+  ).toBeVisible();
+});
+
 test("copy includes edits still being saved", async ({ page }) => {
   const { endpoint, read } = await prepare(page);
   await select(page, "doubled");
