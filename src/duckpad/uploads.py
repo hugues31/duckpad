@@ -24,8 +24,9 @@ def limited_body(max_bytes: int) -> Callable[[Request], Coroutine[Any, Any, None
             or "transfer-encoding" in request.headers
         ):
             raise Problem("Send the upload with a Content-Length header", 411)
-        length, maximum = lengths[0].lstrip("0") or "0", str(max_bytes)
-        if len(length) > len(maximum) or (len(length) == len(maximum) and length > maximum):
+        length = lengths[0].lstrip("0")
+        # A longer digit string is larger, and int() refuses strings of thousands of digits.
+        if len(length) > len(str(max_bytes)) or int(length or 0) > max_bytes:
             limit = (
                 f"{max_bytes // 1024**3} GiB" if max_bytes % 1024**3 == 0 else f"{max_bytes // 1024**2} MiB"
             )
