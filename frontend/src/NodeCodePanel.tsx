@@ -185,9 +185,9 @@ export default function NodeCodePanel({
     : 0;
   // Input columns follow the declared inputs, their edges and upstream
   // results, not each save of this code.
-  const declared = node.template
-    ? snapshot.parsed_templates[node.template]
-    : snapshot.parsed_nodes?.[nodeCodePath(node.id, parent, node.language)];
+  const declared =
+    snapshot.parsed_nodes?.[nodeCodePath(node.id, parent, node.language)] ??
+    (node.template ? snapshot.parsed_templates[node.template] : undefined);
   const prefix = fullNode.slice(0, -node.id.length);
   const upstream = (nodeGraph(snapshot.bundle!, parent)?.edges || [])
     .filter((edge) => edge.target === node.id)

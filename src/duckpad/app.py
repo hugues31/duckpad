@@ -776,11 +776,12 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
                     parsed = collection.get(path, {})
                     from .python_nodes import retained_contract
 
-                    collection[path] = retained_contract(node, parsed, graph.get("edges", []))
-                    if collection[path].get("error"):
+                    retained = retained_contract(node, parsed, graph.get("edges", []))
+                    result["parsed_nodes"][code_path(node["id"], parent, "python")] = retained
+                    if retained.get("error"):
                         file = "templates/" + path if node.get("template") else path
                         located = {"node": node["id"], "code": "python_contract"}
-                        message = collection[path]["error"]
+                        message = retained["error"]
                         # A syntax error is already reported for its file: locate it on the node.
                         same = next(
                             (
