@@ -225,3 +225,5 @@ def test_preparing_run_is_visible_and_cancellable_during_uv_lock(services, tmp_p
         os.kill(child, 0)
     assert projects.snapshot(tree["id"])["commit"] == before
     assert not any(t.is_alive() for t in engine.runs.threads)
+    # Stopping the run neither prepared nor broke the environment: no error is left in settings.
+    assert python_environment.environment_status(store.home, tree["project"])["state"] == "unprepared"

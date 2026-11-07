@@ -150,3 +150,12 @@ def test_real_preparation_and_cache_reuse_replace_previous_errors(services, monk
     status = environment_status(store.home, project)
     assert status["state"] == "ready" and status["stage"] == "cached"
     assert not status["log"]
+
+
+def test_canceled_preparation_restores_the_status_it_replaced(tmp_path):
+    Preparation(tmp_path, "project", "installing").finish("ready")
+    stopped = Preparation(tmp_path, "project", "resolving")
+    stopped.step("resolving")
+    assert environment_status(tmp_path, "project")["state"] == "resolving"
+    stopped.cancel()
+    assert environment_status(tmp_path, "project")["state"] == "ready"

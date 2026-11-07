@@ -63,9 +63,13 @@ def preparation_cancellation(event):
         PREPARATION_CANCEL.reset(token)
 
 
-def check_canceled():
+def canceled():
     event = PREPARATION_CANCEL.get()
-    if event is not None and event.is_set():
+    return event is not None and event.is_set()
+
+
+def check_canceled():
+    if canceled():
         raise Problem("Execution canceled", 409)
 
 
@@ -444,7 +448,10 @@ def lock_files(files, home, *, read_only=False, allow_builds=False, project=None
         progress.finish("locked")
         return locked
     except Exception as error:
-        progress.finish("error", error)
+        if canceled():
+            progress.cancel()
+        else:
+            progress.finish("error", error)
         raise
 
 
@@ -534,7 +541,10 @@ def prepare(files, home, project, *, allow_builds=False):
             logger.warning("Python environment cleanup failed", exc_info=True)
         return result
     except Exception as error:
-        progress.finish("error", error)
+        if canceled():
+            progress.cancel()
+        else:
+            progress.finish("error", error)
         raise
 
 
