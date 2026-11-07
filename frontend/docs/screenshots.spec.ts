@@ -403,6 +403,10 @@ test("capture the docked code editor and its preview", async ({ page }) => {
   await node(page, "Customer reach").click();
   const panel = await openCode(page);
   await expect(panel.getByText("Last result", { exact: true })).toBeVisible();
+  // The run can finish before the interface receives its completed status.
+  await expect(
+    panel.getByRole("button", { name: "Preview", exact: true }),
+  ).toBeEnabled();
   await panel.locator(".monaco-editor textarea").focus();
   await page.keyboard.press("ControlOrMeta+Enter");
   const preview = page.locator(".draft-preview");
