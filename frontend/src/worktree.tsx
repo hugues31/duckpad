@@ -15,7 +15,14 @@ import type {
   PartitionEntry,
   PartitionLaunchOptions,
 } from "./partitions";
-import { api, ApiError, errorDetail, send, withQuery } from "./api";
+import {
+  api,
+  ApiError,
+  errorDetail,
+  retainedConflict,
+  send,
+  withQuery,
+} from "./api";
 import { outputSource } from "./graph";
 import { useT } from "./i18n";
 import { useShell } from "./shell";
@@ -329,10 +336,7 @@ export function WorktreeProvider({
           const result = await request(base);
           if (conflict)
             drafts.discardRejected(
-              (error) =>
-                error instanceof ApiError &&
-                error.status === 409 &&
-                errorDetail(error).id === conflict,
+              (error) => retainedConflict(error) === conflict,
             );
           return remember(id, result);
         });

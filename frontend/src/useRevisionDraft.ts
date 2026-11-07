@@ -243,5 +243,10 @@ export function useRevisionDraft<T, Revision>(
     discard,
     /** Whether a failed save already reported the current draft; only an explicit save resends it. */
     rejected: () => rejected.current?.draft === latest.current,
+    /** Why the current draft was rejected, if it was. */
+    rejection: () =>
+      rejected.current?.draft === latest.current
+        ? rejected.current.error
+        : undefined,
   };
 }

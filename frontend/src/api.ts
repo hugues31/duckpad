@@ -17,6 +17,12 @@ export function errorDetail(error: unknown): Record<string, unknown> {
     : {};
 }
 
+/** The conflict that retained a rejected save, if any. */
+export const retainedConflict = (error: unknown) =>
+  error instanceof ApiError && error.status === 409
+    ? (errorDetail(error).id as string | undefined)
+    : undefined;
+
 type Query = Record<string, string | number | boolean | undefined>;
 
 /** Build an API path with encoded query parameters; undefined values are omitted. */

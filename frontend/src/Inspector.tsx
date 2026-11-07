@@ -26,7 +26,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { api, withQuery } from "./api";
+import { api, retainedConflict, withQuery } from "./api";
 import { containsPython, nodeInterface, type NodeInterface } from "./graph";
 import { nodeLabel, templateLabel, useT } from "./i18n";
 import { projectSettingsUrl } from "./navigation";
@@ -144,6 +144,7 @@ export default function Inspector({
     update,
     persist: saveDraft,
     rejected,
+    rejection,
   } = useRevisionDraft(
     node,
     snapshot,
@@ -230,8 +231,9 @@ export default function Inspector({
       : null,
     { refresh: snapshot.revision },
   );
+  // A resolved conflict discards the draft its error was about.
   const error =
-    saveError ||
+    (dirty && saveError) ||
     compilation.error ||
     (signature.kind !== "component" && signature.definition?.error);
   const schemas = Object.fromEntries(
@@ -252,6 +254,11 @@ export default function Inspector({
   useIdleSave(draft, dirty && !readOnly, () => {
     if (!rejected()) void persist();
   });
+  // A conflict retains this draft until it is resolved: blurring the field, for
+  // instance to open that conflict, must not retain another one.
+  const blur = () => {
+    if (!retainedConflict(rejection())) void persist();
+  };
   const { kind, parameters, inputs } = signature;
   const linkedCount = node.template
     ? templateUsage(snapshot.bundle!, node.template)
@@ -474,7 +481,7 @@ export default function Inspector({
                 onChange={(e) =>
                   update((current) => ({ ...current, label: e.target.value }))
                 }
-                onBlur={persist}
+                onBlur={blur}
               />
             </label>
             {node.component && (
@@ -695,7 +702,7 @@ export default function Inspector({
                           setParameter(listedTable, "");
                       }
                     }}
-                    onBlur={persist}
+                    onBlur={blur}
                     expressionVariables={
                       bindable
                         ? { summary: snapshot.variables, environment }

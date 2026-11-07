@@ -392,3 +392,40 @@ test("binding diagnostics distinguish overlapping parameter names", async ({
     /has-error/,
   );
 });
+
+test("a conflict opened from the banner while editing resolves once and leaves the field clean", async ({
+  page,
+}) => {
+  const { endpoint, read } = await createFilterProject(page);
+  // A collaborator renames the node the page still shows at its old revision.
+  const remote = await read();
+  remote.bundle!.flow.nodes.find((node) => node.id === "filtered")!.label =
+    "Theirs";
+  expect(
+    (
+      await page.request.put(endpoint, {
+        data: { revision: remote.revision, bundle: remote.bundle },
+      })
+    ).ok(),
+  ).toBe(true);
+  const inspector = page.locator(".inspector");
+  await inspector.getByLabel("Display name", { exact: true }).fill("Mine");
+  const resolve = page.getByRole("button", {
+    name: "Save resolution",
+    exact: true,
+  });
+  // Still in the field: opening the conflict blurs it.
+  await resolve.click();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Use my proposal", exact: true })
+    .click();
+  await expect(page.locator(".save-status")).toHaveText("All changes saved");
+  await expect(resolve).toHaveCount(0);
+  await expect(inspector.locator(".notice.error")).toHaveCount(0);
+  const resolved = await read();
+  expect(resolved.conflicts).toEqual([]);
+  expect(
+    resolved.bundle!.flow.nodes.find((node) => node.id === "filtered")!.label,
+  ).toBe("Mine");
+});
