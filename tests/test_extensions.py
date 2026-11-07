@@ -3,7 +3,7 @@
 import duckdb
 import pytest
 from fastapi.testclient import TestClient
-from helpers import wait_run
+from helpers import wait_run, wait_until
 
 from duckpad.app import create_app
 from duckpad.auth import Auth
@@ -74,6 +74,7 @@ def test_extension_settings_api_requires_a_boolean_and_preserves_active_runs(tmp
         app.state.access.own(worktree, {"id": "admin"}, [])
         run = services.engine.launch(worktree["id"], "dev")
         try:
+            wait_until(lambda: services.store.get("run", run["id"])["status"] == "running")
             response = client.put("/api/extensions/settings", json=defaults)
             assert response.status_code == 409
             assert "active executions" in response.json()["error"]
