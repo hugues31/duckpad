@@ -168,7 +168,11 @@ def test_trusted_mode_cancels_native_sql_and_can_run_again(local):
         == 200
     )
     run = client.post(endpoint + "/runs", json={"environment": "dev"}).json()
-    wait_until(lambda: client.get(f"/api/runs/{run['id']}").json()["nodes"]["source"]["status"] == "running")
+    wait_until(
+        lambda: (
+            client.get(f"/api/runs/{run['id']}").json()["nodes"].get("source", {}).get("status") == "running"
+        )
+    )
     assert client.post(f"/api/runs/{run['id']}/cancel").status_code == 200
     assert join_run(app.state.services.store, run["id"], timeout=30)["status"] == "canceled"
     snapshot = client.get(endpoint).json()
@@ -288,8 +292,10 @@ def test_restart_without_flag_restores_isolation_and_never_falls_back(tmp_path, 
     with TestClient(app) as client:
         assert client.post("/api/login", json={"password": password}).status_code == 200
         response = client.post(f"/api/worktrees/{worktree}/runs", json={"environment": "dev"})
-        assert response.status_code == 503
-        assert response.json()["error"] == "SQL isolation is unavailable"
+        assert response.status_code == 200
+        run = join_run(app.state.services.store, response.json()["id"])
+        assert run["status"] == "failed"
+        assert run["error"] == "SQL isolation is unavailable"
 
 
 @pytest.mark.parametrize("host", ["127.0.0.1", "localhost", "::1"])
