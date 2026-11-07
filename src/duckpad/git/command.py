@@ -33,9 +33,10 @@ ISOLATED_VARIABLES = ("GIT_", "SSH_", "GCM_", "DUCKPAD_SECRET_")
 class GitError(Problem):
     """A failed Git command. Its output can contain server paths, so it stays in the server logs."""
 
-    def __init__(self, message: str = FAILURE, status: int = 409, output: str = "") -> None:
+    def __init__(self, message: str = FAILURE, status: int = 409, output: str = "", stdout: str = "") -> None:
         super().__init__(message, status)
         self.output = output
+        self.stdout = stdout
 
 
 class GitTimeout(GitError):
@@ -165,8 +166,11 @@ def run(
         output = (
             result.stderr.decode("utf-8", "replace") if isinstance(result.stderr, bytes) else result.stderr
         )
-        log_failure(path, args, result.returncode, output.strip())
-        raise GitError(failure, output=output)
+        stdout = (
+            result.stdout.decode("utf-8", "replace") if isinstance(result.stdout, bytes) else result.stdout
+        )
+        log_failure(path, args, result.returncode, (output + "\n" + stdout).strip())
+        raise GitError(failure, output=output, stdout=stdout)
     return result.stdout if binary else result.stdout.strip()
 
 

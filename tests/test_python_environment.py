@@ -289,8 +289,9 @@ def test_manifest_from_another_runtime_blocks_runs_but_not_unrelated_saves(servi
     bundle = snapshot["bundle"]
     bundle["templates"]["total"] += "\n-- unrelated edit"
     snapshot = projects.write(tree["id"], snapshot["revision"], bundle_to_files(bundle))
-    with pytest.raises(Problem, match=f'path = ".duckpad-runtime/{runtime_tag()}"'):
-        engine.launch(tree["id"], "dev")
+    run = wait_run(store, engine.launch(tree["id"], "dev"))
+    assert run["status"] == "failed"
+    assert f'path = ".duckpad-runtime/{runtime_tag()}"' in run["error"]
     # Editing the manifest still validates it at save time.
     with pytest.raises(Problem, match="must match this server's runtime"):
         projects.write(

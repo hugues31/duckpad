@@ -2,7 +2,7 @@
 
 import pytest
 from fastapi.testclient import TestClient
-from helpers import wait_run
+from helpers import wait_run, wait_until
 
 from duckpad.app import create_app
 from duckpad.auth import Auth
@@ -108,6 +108,7 @@ def test_sql_resources_api_validates_values_and_keeps_active_runs(tmp_path):
         app.state.access.own(worktree, {"id": "admin"}, [])
         run = services.engine.launch(worktree["id"], "dev")
         try:
+            wait_until(lambda: services.store.get("run", run["id"])["status"] == "running")
             session = services.engine.context(worktree["id"], "dev").db
             # Saving needs no idle instance: running sessions keep their resources.
             response = client.put("/api/sql-resources", json={"threads": None, "memory_limit": ""})

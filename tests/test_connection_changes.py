@@ -11,7 +11,6 @@ from helpers import wait_run
 from duckpad.builtin_templates import BUILTINS
 from duckpad.execution import contexts
 from duckpad.services import Services
-from duckpad.util import Problem
 
 # The secret selects the attached file only so that a test can see which value a worker used.
 # Real connectors keep what selects data, such as a host or a database, in non-secret parameters.
@@ -183,9 +182,10 @@ def test_a_failing_new_worker_keeps_the_results(isolated, tmp_path, request):
     broken.write_text("not a database")
     connection["environments"]["dev"]["database"] = str(broken)
     isolated.catalog.save("connection", copy.deepcopy(connection))
-    with pytest.raises(Problem, match="Cannot initialize execution worker") as refused:
-        isolated.engine.launch(worktree, "dev", "other")
-    assert str(broken) not in str(refused.value)
+    refused = wait_run(isolated.store, isolated.engine.launch(worktree, "dev", "other"), timeout=30)
+    assert refused["status"] == "failed"
+    assert "Cannot initialize execution worker" in refused["error"]
+    assert str(broken) not in refused["error"]
     assert results(isolated, worktree) == before
     assert not isolated.engine.active
     context = isolated.engine.context(worktree, "dev")
@@ -219,9 +219,10 @@ def test_results_that_cannot_be_saved_stay_in_the_old_worker(isolated, tmp_path,
     monkeypatch.setattr(contexts, "transfer", full_disk)
     connection["environments"]["dev"]["database"] = database(tmp_path, "second", 20)
     isolated.catalog.save("connection", copy.deepcopy(connection))
-    with pytest.raises(Problem, match=r"Cannot move the results.*No space left on device") as refused:
-        isolated.engine.launch(worktree, "dev", "other")
-    assert refused.value.status == 503
+    refused = wait_run(isolated.store, isolated.engine.launch(worktree, "dev", "other"), timeout=30)
+    assert refused["status"] == "failed"
+    assert "Cannot move the results" in refused["error"]
+    assert "No space left on device" in refused["error"]
     assert isolated.engine.context(worktree, "dev").db is worker
     assert all(candidate.closed for candidate, _, _ in started)
     assert results(isolated, worktree) == before

@@ -55,6 +55,9 @@ export function localDefinitions(
     ).map((node) => [
       node.id,
       snapshot.parsed_nodes?.[nodeCodePath(node.id, parent, node.language)] ||
+        (node.template
+          ? snapshot.parsed_templates[node.template]
+          : undefined) ||
         {},
     ]),
   );

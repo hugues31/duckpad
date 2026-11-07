@@ -776,7 +776,7 @@ def test_sql_worker_cancels_and_recovers_after_process_exit(instance):
     projects.write(worktree["id"], snapshot["revision"], bundle_to_files(bundle))
     run = engine.launch(worktree["id"], "dev")
     deadline = time.monotonic() + 10
-    while store.get("run", run["id"])["nodes"]["source"]["status"] != "running":
+    while store.get("run", run["id"])["nodes"].get("source", {}).get("status") != "running":
         assert time.monotonic() < deadline
         time.sleep(0.01)
     engine.cancel(run["id"])

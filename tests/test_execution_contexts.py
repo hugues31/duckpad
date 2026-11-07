@@ -57,7 +57,7 @@ def test_blocked_worker_startup_blocks_neither_statuses_nor_other_cancellations(
     )
     run = engine.launch(busy["id"], "dev")
     wait_until(
-        lambda: store.get("run", run["id"])["nodes"]["slow"]["status"] == "running",
+        lambda: store.get("run", run["id"])["nodes"].get("slow", {}).get("status") == "running",
         message="The long query did not start",
     )
     entered, release = threading.Event(), threading.Event()
@@ -85,7 +85,8 @@ def test_blocked_worker_startup_blocks_neither_statuses_nor_other_cancellations(
             assert statuses["active"]["id"] == run["id"]
             assert pool.submit(engine.statuses, starting["id"], "dev").result(PROMPT)["nodes"] == {}
             assert pool.submit(engine.cancel, run["id"]).result(PROMPT)["status"] in ("canceling", "canceled")
-            assert not launch.done()
+            assert launch.done()
+            assert engine.statuses(starting["id"], "dev")["active"]["status"] == "preparing"
         finally:
             release.set()
         started = launch.result(60)
@@ -281,7 +282,7 @@ def test_lineage_unregisters_before_closing_and_ignores_closed_cursors(services,
     canceled = threading.Event()
     context.lineage["closed"] = {"cursor": Closed(), "canceled": canceled, "nodes": {"query"}}
     run = engine.launch(worktree, "dev")
-    assert canceled.is_set() and interrupted.wait(PROMPT)
+    assert canceled.wait(PROMPT) and interrupted.wait(PROMPT)
     assert wait_run(store, run)["status"] == "success"
 
 
@@ -323,3 +324,17 @@ def test_cancellation_keeps_newer_run_progress(services, monkeypatch):
     assert record["nodes"]["first"]["status"] == "success"
     assert record["nodes"]["second"]["status"] == "running"
     engine.active.pop(tree["id"])
+
+
+def test_starting_an_empty_context_records_the_settings_it_opens_with(isolated):
+    engine = isolated.engine
+    tree = project(isolated, "Empty context")
+    placeholder = engine.context(tree["id"], "dev")
+    assert placeholder.db is None
+    engine.configure_sql_resources({"threads": 2, "memory_limit": "1GiB"})
+    started = engine.pool.ensure_started(tree["id"], "dev")
+    assert started.resources == {"threads": 2, "memory_limit": "1GiB"}
+    assert started.db.execute("SELECT current_setting('threads')").fetchone() == (2,)
+    engine.configure_sql_resources({"threads": 3, "memory_limit": "2GiB"})
+    assert engine.pool.ensure_started(tree["id"], "dev") is started
+    assert started.resources == {"threads": 2, "memory_limit": "1GiB"}

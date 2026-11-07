@@ -435,3 +435,29 @@ describe("connectInput", () => {
     ]);
   });
 });
+
+it("keeps a shared Python template's retained ports specific to each node", () => {
+  const current = {
+    language: "python",
+    inputs: [],
+    outputs: ["new"],
+  } as ParsedTemplate;
+  const retained = {
+    ...current,
+    outputs: ["old", "new"],
+    error: "Python ports changed",
+  };
+  const templates = { "shared.py": current };
+  const local = { first: retained, second: current };
+  expect(
+    nodeInterface({ id: "first", template: "shared.py" }, templates, {}, local)
+      .definition,
+  ).toBe(retained);
+  expect(
+    nodeInterface({ id: "second", template: "shared.py" }, templates, {}, local)
+      .definition,
+  ).toBe(current);
+  expect(nodeInterface({ template: "shared.py" }, templates).outputs).toEqual([
+    "new",
+  ]);
+});

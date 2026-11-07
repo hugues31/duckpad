@@ -67,6 +67,8 @@ class Preparation:
             "log_truncated": False,
         }
         self.active = False
+        # The status this preparation replaced, which a canceled run leaves in place.
+        self.previous = None
         if start:
             self.start()
 
@@ -81,6 +83,8 @@ class Preparation:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with FileLock(str(self.path.with_suffix(".lock"))):
             # A slower, older preparation must not overwrite the latest operation.
+            if initial and self.path.exists():
+                self.previous = self.path.read_text()
             if not initial and self.path.exists():
                 current = json.loads(self.path.read_text())
                 if current.get("operation") != self.status["operation"]:
@@ -96,6 +100,21 @@ class Preparation:
         clean = clean_output(text, self.home)
         self.status.update(log=clean[-LOG_LIMIT:], log_truncated=truncated or len(clean) > LOG_LIMIT)
         self.save()
+
+    def cancel(self):
+        """Restore the replaced status: stopping a run neither prepared nor broke the environment."""
+        if not self.active or self.path is None:
+            return
+        with FileLock(str(self.path.with_suffix(".lock"))):
+            if (
+                not self.path.exists()
+                or json.loads(self.path.read_text()).get("operation") != self.status["operation"]
+            ):
+                return
+            if self.previous is None:
+                self.path.unlink()
+            else:
+                atomic_write(self.path, self.previous)
 
     def finish(self, state, error=None):
         if error:

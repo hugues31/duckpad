@@ -132,9 +132,8 @@ export function nodeInterface(
       ),
     };
   }
-  const definition = node.template
-    ? parsed[node.template]
-    : local[node.id || ""];
+  const definition =
+    local[node.id || ""] ?? (node.template ? parsed[node.template] : undefined);
   const inputs = definition?.inputs || [];
   const outputs = definition?.outputs || [];
   return {

@@ -687,3 +687,52 @@ def test_remembered_contracts_keep_flow_json_canonical(services):
     _, projects, _, _ = services
     text = projects.snapshot(flow(services)["id"])["files"]["flow.json"]
     assert '"python_contract"' in text and text == dumps(json.loads(text))
+
+
+@pytest.mark.parametrize("reverse", [False, True])
+def test_shared_python_template_contracts_are_retained_per_node(tmp_path, reverse):
+    from fastapi.testclient import TestClient
+
+    from duckpad.app import create_app
+
+    app = create_app(tmp_path / "instance", watch=False)
+    with TestClient(app) as client:
+        client.post("/api/login", json={"password": app.state.auth.initial_password})
+        worktree = client.post("/api/projects", json={"name": "Shared contracts"}).json()
+        projects = app.state.services.projects
+        snapshot = projects.snapshot(worktree["id"])
+        bundle = snapshot["bundle"]
+        nodes = [
+            {"id": key, "language": "python", "template": "shared.py", "params": {}}
+            for key in ("first", "second")
+        ]
+        bundle["flow"]["nodes"] = (nodes[::-1] if reverse else nodes) + [
+            {"id": "sink", "template": "sink", "params": {}}
+        ]
+        bundle["flow"]["edges"] = [
+            {
+                "id": "edge",
+                "source": "first",
+                "sourceHandle": "old",
+                "target": "sink",
+                "targetHandle": "source",
+            }
+        ]
+        code = "import duckpad as dp\nclass Shared(dp.Node):\n    class Outputs(dp.Outputs):\n        old: dp.Relation\n    def run(self) -> Outputs: pass\n"
+        bundle["templates"].update(
+            {"shared.py": code, "sink": "-- @input source\n-- @output result\nSELECT * FROM {{ source }}"}
+        )
+        snapshot = projects.write(worktree["id"], snapshot["revision"], bundle_to_files(bundle))
+        projects.write(
+            worktree["id"],
+            snapshot["revision"],
+            {**snapshot["files"], "templates/shared.py": code.replace("old:", "new:")},
+        )
+        result = client.get(f"/api/worktrees/{worktree['id']}").json()
+        assert result["parsed_templates"]["shared.py"]["outputs"] == ["new"]
+        assert not result["parsed_templates"]["shared.py"].get("error")
+        assert result["parsed_nodes"]["nodes/first.py"]["outputs"] == ["old", "new"]
+        assert "Python ports changed" in result["parsed_nodes"]["nodes/first.py"]["error"]
+        assert result["parsed_nodes"]["nodes/second.py"]["outputs"] == ["new"]
+        assert not result["parsed_nodes"]["nodes/second.py"].get("error")
+        assert {d["node"] for d in result["diagnostics"] if d.get("code") == "python_contract"} == {"first"}

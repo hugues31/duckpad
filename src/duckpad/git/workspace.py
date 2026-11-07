@@ -17,11 +17,17 @@ from .command import GitError
 
 MAX_REPORTS = 128
 MAX_HISTORY = 10000
+MAX_SAFE_HEADS = 128
 # Blobs read by one cat-file process while summarizing an element's history.
 BLOB_BATCH = 256
 # A version that cannot be parsed: compared with nothing, like a malformed revision in a comparison.
 UNREADABLE = object()
 UNMERGED = "The branch has commits that are not merged into {}."
+
+
+def history_cache_key(repository):
+    """Settings key of a repository's validated tips; Git and Python spell its path differently."""
+    return "git_history:" + digest(str(Path(repository).resolve()))
 
 
 def origin_key(branch):
@@ -108,7 +114,7 @@ class GitWorkspace:
         self.reports_lock = threading.Lock()
         # Validation outcomes per commit, which is immutable: accepted histories, and the error of
         # each rejected head and offending commit.
-        self.safe_heads = set()
+        self.safe_heads = OrderedDict()
         self.rejected = OrderedDict()
 
     def remember(self, cache, key, value):
@@ -582,29 +588,76 @@ class GitWorkspace:
 
         A history that descends from a rejected commit is rejected without inspecting any tree.
         """
-        if head in self.safe_heads:
-            return
+        repository = self.git(path, "rev-parse", "--path-format=absolute", "--git-common-dir")
+        with self.reports_lock:
+            if (repository, head) in self.safe_heads:
+                return
+            tips = self.store.get("settings", history_cache_key(repository), {}).get("tips", [])
         if message := self.rejected.get(head):
             raise Problem(message, 422)
-        commits = self.git(path, "rev-list", f"--max-count={MAX_HISTORY + 1}", head).splitlines()
-        if len(commits) > MAX_HISTORY:
-            self.reject("History exceeds the validation limit; use a smaller project repository.", head)
-        for commit in commits:
-            if message := self.rejected.get(commit):
-                self.reject(message, head)
-        for commit in commits:
-            if commit in self.safe_heads:
+        # Raw diffs include every parent of merges and the root tree. Disabling renames makes each
+        # record have exactly one NUL-delimited path, including unusual or malicious file names.
+        records = iter(
+            self.git(
+                path,
+                "log",
+                "--raw",
+                "-r",
+                "-m",
+                "--root",
+                "--no-abbrev",
+                "--no-renames",
+                "--no-ext-diff",
+                "--format=%H",
+                "-z",
+                f"--max-count={MAX_HISTORY + 1}",
+                "--ignore-missing",
+                head,
+                "--not",
+                *tips,
+                "--",
+            ).split("\0")
+        )
+        commits = set()
+        commit = head
+        for record in records:
+            record = record.lstrip("\n")
+            if not record:
                 continue
-            for row in self.git(path, "ls-tree", "-r", "--full-tree", commit).splitlines():
-                metadata, name = row.split("\t", 1)
-                mode, kind, _ = metadata.split()
-                if mode != "100644" or kind != "blob" or not (is_declarative(name) or name == ".gitignore"):
-                    self.reject(
-                        "Git history contains unsupported files or file modes. Synchronize only declarative Duckpad project history.",
-                        head,
-                        commit,
-                    )
-        self.safe_heads.update(commits)
+            if not record.startswith(":"):
+                commit = record
+                commits.add(commit)
+                if message := self.rejected.get(commit):
+                    self.reject(message, head)
+                continue
+            old_mode, new_mode, *_ = record[1:].split()
+            name = next(records)
+            if (
+                old_mode not in ("000000", "100644")
+                or new_mode not in ("000000", "100644")
+                or not (is_declarative(name) or name == ".gitignore")
+            ):
+                self.reject(
+                    "Git history contains unsupported files or file modes. Synchronize only declarative Duckpad project history.",
+                    head,
+                    commit,
+                )
+        if len(commits) > MAX_HISTORY:
+            # A later validated ancestor can make this request small enough; do not cache the limit.
+            raise Problem(
+                "Unvalidated history exceeds the validation limit; validate an earlier revision first.", 422
+            )
+        with self.reports_lock:
+            self.safe_heads[repository, head] = None
+            self.safe_heads.move_to_end((repository, head))
+            while len(self.safe_heads) > MAX_SAFE_HEADS:
+                self.safe_heads.popitem(last=False)
+            # Evicting an in-memory entry must not forget another project's validated history.
+            with self.store.transaction():
+                key = history_cache_key(repository)
+                saved = self.store.get("settings", key, {}).get("tips", [])
+                tips = [tip for tip in saved if tip != head] + [head]
+                self.store.put("settings", key, {"tips": tips[-MAX_SAFE_HEADS:]})
 
     def reject(self, message, *commits):
         for commit in commits:

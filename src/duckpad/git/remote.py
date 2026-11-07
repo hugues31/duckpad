@@ -97,8 +97,23 @@ def ssh_command(identity, known_hosts):
     return shlex.join(arguments)
 
 
-def network_problem(output, key):
+REMOTE_CHANGED = "The remote changed or rejected the push. Fetch and review incoming changes before retrying."
+
+
+def network_problem(output, key, stdout=""):
     """A user message for a failed network Git command, which never echoes its output."""
+    # Push --porcelain reports each refused ref on stdout. Only its status field is read: ref names
+    # and the remote URL there are user text that must not match the keywords below.
+    for line in stdout.splitlines():
+        fields = line.split("\t")
+        if len(fields) == 3 and fields[0] == "!" and fields[2].startswith("[remote rejected]"):
+            return Problem(
+                "The remote refused this update: a protected branch or server hook rejected the push. "
+                "Check the repository's push rules or contact its administrator.",
+                409,
+            )
+        if len(fields) == 3 and fields[0] == "!" and fields[2].startswith("[rejected]"):
+            return Problem(REMOTE_CHANGED, 409)
     text = output.lower()
     if "host key verification" in text or "host key for" in text:
         return Problem(
@@ -124,10 +139,7 @@ def network_problem(output, key):
             502,
         )
     if any(word in text for word in ("stale info", "rejected", "non-fast-forward")):
-        return Problem(
-            "The remote changed or rejected the push. Fetch and review incoming changes before retrying.",
-            409,
-        )
+        return Problem(REMOTE_CHANGED, 409)
     # Remote stderr can contain credentials, private paths or attacker-controlled text.
     return Problem(
         "Git network operation failed. Check the repository URL and server connectivity, then fetch again.",
@@ -144,10 +156,15 @@ class Remotes:
         self.credentials = GitCredentials(self.store)
         self.temporary = self.store.home / "git-network"
         self.temporary.mkdir(mode=0o700, exist_ok=True)
-        # Key copies of an operation interrupted by a crash must not outlive a restart.
+        self.cleanup_keys()
+
+    def cleanup_keys(self):
+        # Keep young directories that concurrent network operations may still be using. A quick
+        # restart leaves them temporarily; later network operations retry after the safety window.
         for leftover in self.temporary.iterdir():
-            if leftover.stat().st_mtime < time.time() - 4 * NETWORK_TIMEOUT:
-                shutil.rmtree(leftover, ignore_errors=True)
+            with suppress(FileNotFoundError):
+                if leftover.stat().st_mtime < time.time() - 4 * NETWORK_TIMEOUT:
+                    shutil.rmtree(leftover, ignore_errors=True)
 
     def config(self, worktree):
         return self.store.get(
@@ -223,6 +240,7 @@ class Remotes:
 
     def network(self, path, *args, key=None):
         """Run network Git with the given account key for SSH, or without credentials for HTTPS."""
+        self.cleanup_keys()
         allowed = "ssh" if key else "https"
         settings = [
             "core.askPass=",
@@ -257,7 +275,7 @@ class Remotes:
                     "Git network operation timed out. Check server connectivity, then fetch again.", 504
                 ) from error
             except GitError as error:
-                raise network_problem(error.output, key) from error
+                raise network_problem(error.output, key, error.stdout) from error
 
     def status(self, worktree_id):
         with self.projects.locked(worktree_id) as worktree:

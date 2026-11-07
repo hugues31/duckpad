@@ -100,13 +100,13 @@ def test_job_and_run_contract_trigger_requester_and_log(api):
     assert run["trigger"] == trigger
     assert run["requester"]["username"] == "operator"
     assert run["requester"]["token_name"] == "Tests"
-    assert run["nodes"]["total"] == 1
     assert run["links"] == {
         name: f"/api/v1/runs/{run['id']}" + suffix
         for name, suffix in (("self", ""), ("cancel", "/cancel"), ("log", "/log"))
     }
-    finished = call("GET", f"/runs/{run['id']}?wait=5", actor="reader").json()
+    finished = call("GET", f"/runs/{run['id']}?wait=30", actor="reader").json()
     assert finished["status"] == "success" and finished["finished"]
+    assert finished["nodes"]["total"] == 1
     assert finished["nodes"]["success"] == 1
     internal = app.state.services.store.get("run", run["id"])
     assert internal["trigger"] == "job" and internal["external_trigger"] == trigger
@@ -187,7 +187,7 @@ def test_concurrent_retries_are_one_run(api, monkeypatch):
     try:
         with ThreadPoolExecutor(max_workers=8) as pool:
             responses = list(pool.map(lambda _: call("POST", "/jobs/daily/runs", {}, key="same"), range(8)))
-        assert entered.is_set()
+        assert entered.wait(10)
         assert {response.status_code for response in responses} == {202}
         assert len({response.json()["id"] for response in responses}) == 1
         assert len(app.state.services.store.all("run")) == 1
@@ -267,9 +267,10 @@ def test_key_and_run_are_atomic_before_execution(api, monkeypatch):
 
 def test_wait_timeout_completion_and_cancellation(api, monkeypatch):
     app, call, _, _, _, _ = api
-    _, release = hold_execution(app, monkeypatch)
+    entered, release = hold_execution(app, monkeypatch)
     try:
         run = launch(call)
+        assert entered.wait(10)
         start = time.monotonic()
         waiting = call("GET", f"/runs/{run['id']}?wait=0.15")
         assert time.monotonic() - start >= 0.15
