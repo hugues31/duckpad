@@ -4,7 +4,7 @@ BUILTINS = {
     "load_csv": """-- @label Load CSV
 -- @description Read a CSV resource using native DuckDB options.
 -- @param connection: connection = ""
--- @param file: file(connection) = "orders.csv"
+-- @param file: file(connection) = ""
 -- @param delimiter: text = ","
 -- @param header: boolean = true
 -- @param types: schema = {}
@@ -13,19 +13,26 @@ SELECT * FROM read_csv({{ file }}, delim={{ delimiter }}, header={{ header }}, t
 """,
     "load_parquet": """-- @label Load Parquet
 -- @param connection: connection = ""
--- @param file: file(connection) = "customers.parquet"
+-- @param file: file(connection) = ""
 -- @output result
 SELECT * FROM read_parquet({{ file }});
 """,
     "load_xlsx": """-- @label Load XLSX
 -- @description Read an XLSX worksheet. Leave sheet blank to use the first sheet; all_varchar preserves mixed columns as text.
 -- @param connection: connection = ""
--- @param file: file(connection) = "workbook.xlsx"
+-- @param file: file(connection) = ""
 -- @param sheet: text = ""
 -- @param header: boolean = true
 -- @param all_varchar: boolean = false
 -- @output result
 SELECT * FROM read_xlsx({{ file }}, sheet={{ sheet }}, header={{ header }}, all_varchar={{ all_varchar }});
+""",
+    "load_json": """-- @label Load JSON
+-- @description Read JSON or newline-delimited JSON from project files.
+-- @param connection: connection = ""
+-- @param file: file(connection) = ""
+-- @output result
+SELECT * FROM read_json_auto({{ file }});
 """,
     "load_table": """-- @label Load table
 -- @description Read a table or view of a database connection.

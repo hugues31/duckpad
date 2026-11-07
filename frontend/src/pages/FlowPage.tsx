@@ -48,9 +48,11 @@ import LineagePanel from "../LineagePanel";
 import type { Cell } from "../lineageGraph";
 import NodePalette, { type NodeKind } from "../NodePalette";
 import ResultsPanel, { type ResultsTab } from "../ResultsPanel";
-import { api } from "../api";
+import { api, uploadSourceFile } from "../api";
+import { previewFile } from "../SourcePreview";
+import { isFileReader, isSourceFile } from "../SourceFileField";
 import { useShell, useWorkspace } from "../shell";
-import type { Bundle, FlowNode, Graph, Snapshot } from "../types";
+import type { Bundle, FlowNode, Graph, Json, Snapshot } from "../types";
 import { countLabel, isBuiltinTemplate, nodeLabel, useT } from "../i18n";
 import {
   isWideLayout,
@@ -299,7 +301,7 @@ export default function FlowPage() {
       // SQL is the default: flow.json names the language of Python nodes only.
       ...(id.endsWith(".py") && { language: "python" as const }),
       ...(kind === "component" ? { component: id } : { template: id }),
-      params: {},
+      params: isFileReader(id) ? { file: "" } : {},
       position:
         position ??
         canvas.current?.newNodePosition(graph?.nodes || []) ??
@@ -330,6 +332,74 @@ export default function FlowPage() {
     });
     if (added && !position)
       setFocusRequest({ id: created.id, key: created.id, reveal: true });
+  }
+  async function dropFiles(dropped: File[], position: FlowNode["position"]) {
+    if (!canEdit || additionPending.current) return;
+    const files = dropped.filter((file) => isSourceFile(file.name));
+    const skipped = dropped.filter((file) => !isSourceFile(file.name));
+    const unsupported = t("unsupportedSourceFile").replace(
+      "{files}",
+      skipped.map((file) => file.name).join(", "),
+    );
+    if (!files.length) throw new Error(unsupported);
+    // Supported files are still imported; the others are named.
+    if (skipped.length) notify(unsupported, true);
+    additionPending.current = true;
+    setAddingNode(true);
+    try {
+      const uploads: (Awaited<ReturnType<typeof uploadSourceFile>> & {
+        settings: Record<string, Json>;
+      })[] = [];
+      for (const file of files) {
+        const uploaded = await uploadSourceFile(file, worktree);
+        // A file the sniffer cannot read still gets its node, whose preview shows the error.
+        const settings =
+          uploaded.template === "load_csv"
+            ? await previewFile(worktree, { file: uploaded.path }).then(
+                (sample) => sample.settings || {},
+                () => ({}),
+              )
+            : {};
+        uploads.push({ ...uploaded, settings });
+      }
+      let selected = "";
+      await save(snapshot, (value) => {
+        const graph = graphAt(value, path);
+        uploads.forEach((upload, index) => {
+          const created: FlowNode = {
+            id: identifier(),
+            label: upload.name,
+            preset: upload.template,
+            params: { file: upload.path, ...upload.settings },
+            position: {
+              x: position.x + (index % 3) * 260,
+              y: position.y + Math.floor(index / 3) * 160,
+            },
+          };
+          (value.node_sql ||= {})[nodeCodePath(created.id, parent)] =
+            upload.code;
+          if (upload.template === "load_xlsx") {
+            const extensions =
+              typeof value.extensions === "object" && value.extensions
+                ? value.extensions
+                : {};
+            value.extensions = {
+              ...extensions,
+              excel: {
+                ...(extensions.excel ?? { source: "core" }),
+                enabled: true,
+              },
+            };
+          }
+          graph.nodes.push(created);
+          selected ||= created.id;
+        });
+      });
+      select(selected);
+    } finally {
+      additionPending.current = false;
+      setAddingNode(false);
+    }
   }
   async function removeNodes(ids: string[], edges: string[] = []) {
     const { change } = await save(snapshot, (value) => {
@@ -752,6 +822,9 @@ export default function FlowPage() {
               safe(() => updateGraph((g) => connectInput(g, connection)))
             }
             onDelete={(nodes, edges) => reported(removeNodes(nodes, edges))}
+            onFiles={(files, position) =>
+              safe(() => dropFiles(files, position))
+            }
             onAdd={(kind, id, position, connection) =>
               safe(() => addNode(kind, id, position, connection))
             }

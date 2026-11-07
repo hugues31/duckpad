@@ -263,3 +263,76 @@
     bottom: 0;
   }
 }
+
+.source-preview {
+  min-width: 0;
+  margin-block: 12px;
+}
+
+.source-sample {
+  overflow: auto;
+  max-height: 260px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.source-sample table,
+.source-types {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.source-sample th,
+.source-sample td,
+.source-types th,
+.source-types td {
+  padding: 6px 8px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+/* Long values are cut; their cell's title holds them whole. */
+.source-sample td {
+  max-width: 16em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* The types table fits the inspector: long names wrap, selects shrink. */
+.source-types {
+  table-layout: fixed;
+}
+
+.source-types td:first-child {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.source-types select {
+  width: 100%;
+}
+
+.source-error {
+  max-height: 160px;
+  overflow: auto;
+  white-space: pre-wrap;
+}
+
+.source-sample th small {
+  display: block;
+  color: var(--muted);
+  font-weight: normal;
+}
+
+.source-types caption {
+  padding-block: 12px 6px;
+  text-align: left;
+  font-weight: 600;
+}
+
+.source-empty {
+  display: grid;
+  gap: 8px;
+}

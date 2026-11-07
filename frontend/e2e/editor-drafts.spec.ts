@@ -285,7 +285,7 @@ test("Inspector saves guided expressions and uploads before another node opens",
     mimeType: "text/csv",
     buffer: Buffer.from("amount\n120\n"),
   });
-  await expect(inspector.getByRole("textbox", { name: /file/ })).toHaveValue(
+  await expect(inspector.getByRole("combobox", { name: /^file/ })).toHaveValue(
     /orders\.csv$/,
   );
   await select(page, "filtered");

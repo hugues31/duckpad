@@ -77,17 +77,23 @@ export async function verifyDataPreparation(page: Page) {
       "id,amount,day,other\n 001 ,,31/12/2026,keep\n 002 ,12,,also\n",
     ),
   });
-  await expect(inspector.getByRole("textbox", { name: /file/ })).toHaveValue(
+  await expect(inspector.getByRole("combobox", { name: /^file/ })).toHaveValue(
     /preparation\.csv$/,
   );
-  await save(() =>
-    inspector
-      .getByRole("textbox", { name: /types/ })
-      .fill('{"id":"VARCHAR","day":"VARCHAR","amount":"BIGINT"}'),
-  );
+  for (const [column, type] of [
+    ["id", "VARCHAR"],
+    ["day", "VARCHAR"],
+    ["amount", "BIGINT"],
+  ]) {
+    await save(() =>
+      inspector
+        .getByRole("combobox", { name: `Data type: ${column}`, exact: true })
+        .selectOption(type),
+    );
+  }
   await expect
     .poll(async () => (await snapshot()).bundle.flow.nodes[0].params.types)
-    .toContain("VARCHAR");
+    .toEqual({ id: "VARCHAR", day: "VARCHAR", amount: "BIGINT" });
   await run();
   const source = await nodeId("load_csv");
   await add("Clean values", source);
