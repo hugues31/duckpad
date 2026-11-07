@@ -900,7 +900,9 @@ def test_real_push_porcelain_rejections_are_not_connectivity_errors(
     projects, main = project
     remote = tmp_path / "remote.git"
     projects.git(tmp_path, "init", "--bare", str(remote))
-    projects.git(main["path"], "push", str(remote), "HEAD:main")
+    # Ref names on stdout are user text: this one must not read as an authentication failure.
+    branch = "refs/heads/fix-authentication"
+    projects.git(main["path"], "push", str(remote), "HEAD:" + branch)
     projects.git(main["path"], "commit", "--allow-empty", "-m", "chore: update")
     hook = remote / "hooks" / "pre-receive"
     hook.write_text("#!/bin/sh\necho 'private policy detail' >&2\nexit 1\n")
@@ -917,9 +919,9 @@ def test_real_push_porcelain_rejections_are_not_connectivity_errors(
         )
 
     monkeypatch.setattr(command, "run", local_transport)
-    lease = ["--force-with-lease=refs/heads/main:" + "0" * 40] if rejection == "stale" else []
+    lease = [f"--force-with-lease={branch}:" + "0" * 40] if rejection == "stale" else []
     with pytest.raises(Problem) as caught:
-        projects.remotes.network(main["path"], "push", "--porcelain", *lease, str(remote), "HEAD:main")
+        projects.remotes.network(main["path"], "push", "--porcelain", *lease, str(remote), "HEAD:" + branch)
     assert caught.value.status == 409
     assert ("protected branch or server hook" if rejection == "hook" else "Fetch and review") in str(
         caught.value

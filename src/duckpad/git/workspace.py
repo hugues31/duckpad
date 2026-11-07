@@ -26,7 +26,8 @@ UNMERGED = "The branch has commits that are not merged into {}."
 
 
 def history_cache_key(repository):
-    return "git_history:" + digest(str(repository))
+    """Settings key of a repository's validated tips; Git and Python spell its path differently."""
+    return "git_history:" + digest(str(Path(repository).resolve()))
 
 
 def origin_key(branch):
