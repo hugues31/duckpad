@@ -70,7 +70,7 @@ def blocking_error(node: Record) -> str | None:
         binding.get("source") == "node" and "error" in binding
         for binding in [*node.get("variables", {}).values(), *variables.expression_bindings(node)]
     ) or str(node.get("error", "")).startswith("Partition values not calculated")
-    return None if deferred else node.get("error")
+    return None if deferred or not node.get("error") else str(node["error"])
 
 
 @dataclass
