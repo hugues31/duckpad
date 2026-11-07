@@ -32,7 +32,10 @@ vi.mock("./worktree", () => ({ useLoadedWorktree: () => worktree }));
 vi.mock("@xyflow/react", () => ({
   Background: () => null,
   Controls: () => null,
-  ReactFlow: () => null,
+  // The node count shows which scope the comparison graph draws.
+  ReactFlow: ({ nodes }: { nodes: unknown[] }) => (
+    <output data-testid="graph">{nodes.length}</output>
+  ),
   ReactFlowProvider: ({ children }: { children: ReactNode }) => children,
   Position: { Right: "right", Left: "left" },
   useReactFlow: () => ({ fitView: vi.fn() }),
@@ -101,6 +104,47 @@ it("shows only the changed leaf field and keeps unchanged code in a collapsed de
   expect(screen.getByText("Full definition").closest("details")?.open).toBe(
     false,
   );
+});
+
+it("returns to the flow when a refreshed report no longer has the chosen component", () => {
+  const entity = (id: string, kind: string, scope = "") => ({
+    id,
+    name: id,
+    kind,
+    file: "flow.json",
+    scope,
+    status: "added",
+    categories: ["processing"],
+    fields: [],
+  });
+  const report = (component: string) =>
+    ({
+      entities: [
+        entity(component, "component"),
+        entity("node/a", "node"),
+        entity("node/b", "node"),
+        entity("node/inner", "node", component),
+      ],
+      counts: { added: 4 },
+      categories: { processing: 4, documentation: 0, layout: 0 },
+      diagnostics: [],
+    }) as unknown as ComparisonReport;
+  // Reviews refresh their report in place, without remounting the view.
+  const view = render(
+    <ComparisonView report={report("component/box")} storageKey="test" />,
+  );
+  expect(screen.getByTestId("graph").textContent).toBe("2");
+  fireEvent.change(
+    within(document.querySelector(".git-scope") as HTMLElement).getByRole(
+      "combobox",
+    ),
+    { target: { value: "component/box" } },
+  );
+  expect(screen.getByTestId("graph").textContent).toBe("1");
+  view.rerender(
+    <ComparisonView report={report("component/other")} storageKey="test" />,
+  );
+  expect(screen.getByTestId("graph").textContent).toBe("2");
 });
 
 it("hides disconnected synchronization and displays a single incoming/outgoing status when connected", async () => {
