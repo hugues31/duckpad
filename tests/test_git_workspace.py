@@ -891,6 +891,41 @@ def test_large_history_validation_is_incremental_and_survives_restart(local_remo
     assert len(calls) == 1
 
 
+@pytest.mark.parametrize("rejection", ["hook", "stale"])
+def test_real_push_porcelain_rejections_are_not_connectivity_errors(
+    project, tmp_path, monkeypatch, rejection
+):
+    projects, main = project
+    remote = tmp_path / "remote.git"
+    projects.git(tmp_path, "init", "--bare", str(remote))
+    projects.git(main["path"], "push", str(remote), "HEAD:main")
+    projects.git(main["path"], "commit", "--allow-empty", "-m", "chore: update")
+    hook = remote / "hooks" / "pre-receive"
+    hook.write_text("#!/bin/sh\necho 'private policy detail' >&2\nexit 1\n")
+    hook.chmod(0o755)
+    run = command.run
+
+    def local_transport(path, *args, settings=(), **options):
+        # Exercise the real network wrapper and GitError while permitting only this local fixture.
+        return run(
+            path,
+            *args,
+            settings=[*settings, "protocol.file.allow=always", f"core.hooksPath={remote / 'hooks'}"],
+            **options,
+        )
+
+    monkeypatch.setattr(command, "run", local_transport)
+    lease = ["--force-with-lease=refs/heads/main:" + "0" * 40] if rejection == "stale" else []
+    with pytest.raises(Problem) as caught:
+        projects.remotes.network(main["path"], "push", "--porcelain", *lease, str(remote), "HEAD:main")
+    assert caught.value.status == 409
+    assert ("protected branch or server hook" if rejection == "hook" else "Fetch and review") in str(
+        caught.value
+    )
+    assert "private policy detail" not in str(caught.value)
+    assert "!\t" in caught.value.__cause__.stdout
+
+
 def test_history_validation_checks_merge_parents_and_bounds_saved_tips(project, monkeypatch):
     from duckpad.git import workspace as module
 

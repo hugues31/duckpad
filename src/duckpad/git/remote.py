@@ -97,9 +97,17 @@ def ssh_command(identity, known_hosts):
     return shlex.join(arguments)
 
 
-def network_problem(output, key):
+def network_problem(output, key, stdout=""):
     """A user message for a failed network Git command, which never echoes its output."""
-    text = output.lower()
+    for line in stdout.splitlines():
+        fields = line.split("\t")
+        if len(fields) == 3 and fields[0] == "!" and fields[2].startswith("[remote rejected]"):
+            return Problem(
+                "The remote refused this update: a protected branch or server hook rejected the push. "
+                "Check the repository's push rules or contact its administrator.",
+                409,
+            )
+    text = (output + "\n" + stdout).lower()
     if "host key verification" in text or "host key for" in text:
         return Problem(
             "The Git host's SSH key does not match this instance's trusted hosts. Ask an instance "
@@ -257,7 +265,7 @@ class Remotes:
                     "Git network operation timed out. Check server connectivity, then fetch again.", 504
                 ) from error
             except GitError as error:
-                raise network_problem(error.output, key) from error
+                raise network_problem(error.output, key, error.stdout) from error
 
     def status(self, worktree_id):
         with self.projects.locked(worktree_id) as worktree:
