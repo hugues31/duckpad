@@ -17,13 +17,14 @@ import tempfile
 import time
 import tomllib
 import zipfile
+from contextvars import ContextVar
 from functools import cache
 from pathlib import Path
 from urllib.parse import urlsplit
 
 import _duckdb
 import duckdb
-from filelock import FileLock
+from filelock import FileLock, Timeout
 
 from .python_progress import LOG_LIMIT, Preparation, clean_output, environment_status
 from .python_sdk import SDK_CONTRACT
@@ -47,6 +48,42 @@ MODULES = (
     "partition_filters.py",
     "value_types.py",
 )
+
+
+PREPARATION_CANCEL = ContextVar("preparation_cancel", default=None)
+
+
+@contextlib.contextmanager
+def preparation_cancellation(event):
+    """Scope cancellation to this run's preparation, including nested environment setup."""
+    token = PREPARATION_CANCEL.set(event)
+    try:
+        yield
+    finally:
+        PREPARATION_CANCEL.reset(token)
+
+
+def check_canceled():
+    event = PREPARATION_CANCEL.get()
+    if event is not None and event.is_set():
+        raise Problem("Execution canceled", 409)
+
+
+@contextlib.contextmanager
+def preparation_lock(path):
+    lock = FileLock(str(path))
+    while True:
+        check_canceled()
+        try:
+            lock.acquire(timeout=0.2)
+            break
+        except Timeout:
+            continue
+    try:
+        check_canceled()
+        yield
+    finally:
+        lock.release()
 
 
 def runtime_tag():
@@ -334,6 +371,7 @@ COMMAND_TIMEOUT = 300
 
 
 def command(arguments, directory, *, allow_builds=False, progress=None):
+    check_canceled()
     executable = uv_executable()
     if not executable:
         raise Problem("Python environment setup requires the uv executable on the server", 503)
@@ -364,6 +402,7 @@ def command(arguments, directory, *, allow_builds=False, progress=None):
             detail = ""
             try:
                 while True:
+                    check_canceled()
                     timed_out = process.poll() is None and time.monotonic() >= deadline
                     if timed_out:
                         process.kill()
@@ -422,7 +461,7 @@ def cached_lock(files, home, *, read_only=False, allow_builds=False, progress=No
     cached = root / (key(files.get("uv.lock")) + ".json")
     if progress and not cached.exists():
         progress.start()
-    with FileLock(str(cached.with_suffix(".lock"))):
+    with preparation_lock(cached.with_suffix(".lock")):
         if cached.exists():
             locked = json.loads(cached.read_text())["lock"]
             if not read_only or locked == files.get("uv.lock"):
@@ -441,7 +480,7 @@ def resolve_lock(files, home, *, read_only=False, allow_builds=False, progress=N
     root.mkdir(parents=True, exist_ok=True)
     if progress:
         progress.step("runtime")
-    with FileLock(str(root / "runtime.lock")):
+    with preparation_lock(root / "runtime.lock"):
         wheel = runtime_wheel(root / "wheels")
     with tempfile.TemporaryDirectory(dir=root) as temporary:
         directory = Path(temporary)
@@ -561,7 +600,7 @@ def prepare_environment(files, home, project, *, allow_builds=False, progress=No
     directory = root / signature
     if progress and not (directory / "ready.json").exists():
         progress.start()
-    with FileLock(str(root / (signature + ".lock"))):
+    with preparation_lock(root / (signature + ".lock")):
         if not (directory / "ready.json").exists():
             if progress:
                 progress.step("runtime")
@@ -571,7 +610,7 @@ def prepare_environment(files, home, project, *, allow_builds=False, progress=No
                 (directory / "pyproject.toml").write_bytes(files["pyproject.toml"].encode("utf-8"))
                 (directory / "uv.lock").write_bytes(files["uv.lock"].encode("utf-8"))
                 (directory / "README.md").write_bytes(files.get("README.md", "").encode("utf-8"))
-                with FileLock(str(root / "runtime.lock")):
+                with preparation_lock(root / "runtime.lock"):
                     wheel = runtime_wheel(root / "wheels")
                 (directory / ".duckpad-runtime").mkdir()
                 shutil.copyfile(wheel, directory / ".duckpad-runtime" / wheel.name)

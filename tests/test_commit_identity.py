@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
+from helpers import wait_run
 
 from duckpad.app import create_app
 from duckpad.git.identity import SYSTEM_IDENTITY, account_identity
@@ -116,6 +117,7 @@ def test_external_changes_never_take_the_requesting_accounts_identity(instance, 
             f"/api/worktrees/{worktree['id']}/runs", headers=users["bob"][1], json={"environment": "dev"}
         )
         assert response.status_code == 200, response.text
+        assert wait_run(app.state.services.store, response.json())["status"] == "success"
         check_identity(projects, worktree, SYSTEM_IDENTITY)
     else:
         projects._observe(worktree)

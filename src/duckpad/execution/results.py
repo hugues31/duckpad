@@ -177,7 +177,13 @@ class Results:
         self.computations: dict[str, Computation] = {}
 
     def statuses(self, worktree: str, environment: str) -> Record:
-        context = self.pool.get(worktree, environment)
+        self.projects.get(worktree)
+        self.catalog.environment(environment)
+        context = self.pool.find(worktree, environment)
+        if context is None:
+            with self.lock:
+                active = self.active.get(worktree)
+            return {"nodes": {}, "active": self.store.get("run", active["id"]) if active else None}
         with context.lock:
             result = {
                 node: {

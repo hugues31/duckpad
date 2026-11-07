@@ -103,6 +103,12 @@ standard `HTTP_PROXY` / `HTTPS_PROXY` / `NO_PROXY` variables. User and system
 `uv.toml` files can also supply these settings (see below). Cache the locked wheels
 in advance. Project manifests cannot override the operator index, cache, or build policy, including through optional dependencies or dependency groups. A `uv.lock` that takes packages from another index or file host is resolved again on an editable branch and refused for tags. Validated manifest/lock pairs are cached, so unchanged executions do not relock or contact the index. A missing offline dependency produces a preparation error. The
 operator can supply `DUCKPAD_RUNTIME_WHEEL` matching the installed runtime.
+A run is recorded as **preparing** before dependency resolution or worker startup.
+Its run ID appears immediately in status and history, and **Stop** also works during
+`uv lock` or environment installation. Cancellation stops the dependency command;
+shutdown cancels preparation before closing execution contexts. Setup failures are
+recorded on the run, while invalid launch options are still refused immediately.
+
 While dependencies are resolved on save or the environment is built for a run,
 the workspace shows a notice with the current preparation stage, an indeterminate
 progress bar, elapsed time and expandable live uv output. No download percentage is

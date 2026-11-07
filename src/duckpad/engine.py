@@ -399,5 +399,7 @@ class Engine:
 
     def close(self) -> None:
         """Cancel active runs, wait for their workers, then close every context."""
-        self.runs.close()
-        self.pool.close()
+        try:
+            self.runs.close()
+        finally:
+            self.pool.close()

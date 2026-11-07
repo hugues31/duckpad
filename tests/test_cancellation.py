@@ -36,7 +36,8 @@ def test_cancel_interrupts_active_duckdb_and_prevents_later_branch(services, tmp
     run = engine.launch(worktree, "dev")
     wait_until(
         lambda: (
-            store.get("run", run["id"])["nodes"]["filter"]
+            store.get("run", run["id"])["nodes"]
+            .get("filter", {})
             .get("statements", [{}])[0]
             .get("materialization_sql")
         ),
@@ -83,6 +84,12 @@ def test_recalculation_cancels_only_dependent_lineage_and_rejects_old_generation
     thread.start()
     assert entered.wait(2)
     run = engine.launch(worktree, "dev", "filter")
+    wait_until(
+        lambda: (
+            old["id"] in engine.context(worktree, "dev").datasets
+            and engine.context(worktree, "dev").datasets[old["id"]].status == "stale"
+        )
+    )
     with pytest.raises(Problem, match="unavailable or stale"):
         Lineage(engine).explain(worktree, "dev", old["id"], 0, "total")
     release.set()
@@ -167,3 +174,54 @@ def test_unrelated_lineage_in_same_context_is_not_canceled(services, tmp_path, m
     release.set()
     thread.join(5)
     assert result[0]["complete"] and result[0]["total"] == 2
+
+
+@pytest.mark.parametrize("close", [False, True])
+def test_preparing_run_is_visible_and_cancellable_during_uv_lock(services, tmp_path, monkeypatch, close):
+    import os
+    import sys
+
+    from duckpad import python_environment
+
+    store, projects, _, engine = services
+    tree = projects.create("Preparing Python")
+    snapshot = projects.snapshot(tree["id"])
+    bundle = snapshot["bundle"]
+    bundle["flow"]["nodes"] = [{"id": "python", "language": "python", "params": {}}]
+    bundle["node_sql"] = {
+        "nodes/python.py": "import duckpad as dp\nclass Slow(dp.Node):\n    def run(self) -> None: pass\n"
+    }
+    projects.write(tree["id"], snapshot["revision"], bundle_to_files(bundle))
+    store.put("settings", "python:" + tree["project"], {"enabled": True})
+    marker = tmp_path / "uv-started"
+    uv = tmp_path / "uv"
+    uv.write_text(
+        f"#!{sys.executable}\nimport os, sys, time\nfrom pathlib import Path\nassert sys.argv[1] == 'lock'\nPath({str(marker)!r}).write_text(str(os.getpid()))\ntime.sleep(60)\n"
+    )
+    uv.chmod(0o755)
+    monkeypatch.setattr(python_environment, "uv_executable", lambda: str(uv))
+    # Supply a tiny wheel to keep the fixture focused on the real uv command lifecycle.
+    wheel = tmp_path / python_environment.runtime_tag()
+    wheel.write_bytes(b"test runtime")
+    monkeypatch.setattr(python_environment, "runtime_wheel", lambda _: wheel)
+    before = projects.snapshot(tree["id"])["commit"]
+    run = engine.launch(tree["id"], "dev")
+    wait_until(marker.exists, timeout=10)
+    child = int(marker.read_text())
+    assert store.get("run", run["id"])["status"] == "preparing"
+    assert engine.statuses(tree["id"], "dev")["active"]["id"] == run["id"]
+    with pytest.raises(Problem) as busy:
+        engine.launch(tree["id"], "dev")
+    assert busy.value.status == 409 and busy.value.detail["run"] == run["id"]
+    if close:
+        with ThreadPoolExecutor(1) as pool:
+            pool.submit(engine.close).result(5)
+        assert not engine.pool.all()
+    else:
+        assert engine.cancel(run["id"])["status"] == "canceling"
+    assert wait_run(store, run, timeout=5)["status"] == "canceled"
+    assert not engine.active
+    with pytest.raises(ProcessLookupError):
+        os.kill(child, 0)
+    assert projects.snapshot(tree["id"])["commit"] == before
+    assert not any(t.is_alive() for t in engine.runs.threads)

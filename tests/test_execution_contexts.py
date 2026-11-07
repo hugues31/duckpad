@@ -57,7 +57,7 @@ def test_blocked_worker_startup_blocks_neither_statuses_nor_other_cancellations(
     )
     run = engine.launch(busy["id"], "dev")
     wait_until(
-        lambda: store.get("run", run["id"])["nodes"]["slow"]["status"] == "running",
+        lambda: store.get("run", run["id"])["nodes"].get("slow", {}).get("status") == "running",
         message="The long query did not start",
     )
     entered, release = threading.Event(), threading.Event()
@@ -85,7 +85,8 @@ def test_blocked_worker_startup_blocks_neither_statuses_nor_other_cancellations(
             assert statuses["active"]["id"] == run["id"]
             assert pool.submit(engine.statuses, starting["id"], "dev").result(PROMPT)["nodes"] == {}
             assert pool.submit(engine.cancel, run["id"]).result(PROMPT)["status"] in ("canceling", "canceled")
-            assert not launch.done()
+            assert launch.done()
+            assert engine.statuses(starting["id"], "dev")["active"]["status"] == "preparing"
         finally:
             release.set()
         started = launch.result(60)
@@ -281,7 +282,7 @@ def test_lineage_unregisters_before_closing_and_ignores_closed_cursors(services,
     canceled = threading.Event()
     context.lineage["closed"] = {"cursor": Closed(), "canceled": canceled, "nodes": {"query"}}
     run = engine.launch(worktree, "dev")
-    assert canceled.is_set() and interrupted.wait(PROMPT)
+    assert canceled.wait(PROMPT) and interrupted.wait(PROMPT)
     assert wait_run(store, run)["status"] == "success"
 
 

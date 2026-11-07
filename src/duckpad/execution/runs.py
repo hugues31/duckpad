@@ -8,6 +8,7 @@ import threading
 import time
 import zipfile
 from contextlib import suppress
+from contextvars import copy_context
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, cast
@@ -138,6 +139,7 @@ class Runner:
         self.isolated = isolated
         self.threads: list[threading.Thread] = []
         self.partition_runs: dict[str, PartitionRun] = {}
+        self.closing = False
 
     def recover(self) -> None:
         """Close runs left unfinished by a stopped backend; nothing is replayed."""
@@ -183,33 +185,170 @@ class Runner:
         record = self.projects.get(worktree)
         if record.get("read_only") and job is None:
             raise Problem("Launch this worktree from its Job", 403)
+        self._check_launch(
+            worktree, environment, target, entry_point, partition_selection, partition_execution, ancestors
+        )
         token: RunToken = {"id": uid("run_"), "cancel": threading.Event(), "cursor": None}
-        self._admit(worktree, environment, token)
-        try:
-            execution = self._prepare(
-                token,
-                worktree,
-                environment,
-                target,
-                entry_point,
-                partition_selection,
-                partition_execution,
-                ancestors,
-            )
-            execution.run["requester"] = copy.deepcopy(requester)
-            if job is not None:
-                execution.run.update(trigger="job", job=copy.deepcopy(job), tag=job.get("tag"))
-                execution.run["external_trigger"] = copy.deepcopy(external_trigger)
-            self._persist(execution.run, execution.secrets, idempotency=idempotency)
-            thread = threading.Thread(target=self._execute, args=(execution,), name=token["id"], daemon=True)
-            with self.lock:
+        run: Record = {
+            "id": token["id"],
+            "worktree": worktree,
+            "project": record["project"],
+            "branch": record["branch"],
+            "environment": environment,
+            "commit": "",
+            "revision": "",
+            "scope": target or "project",
+            "scope_name": [],
+            "trigger": "manual",
+            "entry_point": entry_point,
+            "status": "preparing",
+            "started": now(),
+            "nodes": {},
+            "variables": {},
+            "connections": {},
+            "requester": copy.deepcopy(requester),
+            **({"ancestors": True} if ancestors else {}),
+        }
+        if job is not None:
+            run.update(trigger="job", job=copy.deepcopy(job), tag=job.get("tag"))
+            run["commit"] = job["commit"]
+            run["external_trigger"] = copy.deepcopy(external_trigger)
+        # Reservation, visible record, and thread registration are atomic with cancellation/close.
+        with self.lock:
+            if self.closing:
+                raise Problem("The execution service is shutting down", 503)
+            self._admit(worktree, environment, token)
+            try:
+                self._persist(run, [], idempotency=idempotency)
+                thread = threading.Thread(
+                    target=copy_context().run,
+                    args=(
+                        self._start,
+                        token,
+                        run,
+                        target,
+                        partition_selection,
+                        partition_execution,
+                        ancestors,
+                    ),
+                    name=token["id"],
+                    daemon=True,
+                )
                 self.threads = [t for t in self.threads if t.is_alive()] + [thread]
-            thread.start()
-            return cast(Record, self.store.get("run", token["id"]))
-        except Exception:
-            with self.lock:
+                thread.start()
+            except Exception:
                 self.active.pop(worktree, None)
-            raise
+                raise
+        return cast(Record, self.store.get("run", token["id"]))
+
+    def _check_launch(
+        self,
+        worktree: str,
+        environment: str,
+        target: str | None,
+        entry_point: str,
+        selection: Record | None,
+        policy: Record | None,
+        ancestors: bool,
+    ) -> None:
+        """Reject invalid requests without starting setup or recording a run.
+
+        Preparation rechecks the definitions after flushing; admission only reads the current
+        snapshot and settings, never resolving dependencies or starting a worker.
+        """
+        self.catalog.environment(environment)
+        snapshot = self.projects.snapshot(worktree, committed=True)
+        bundle = snapshot["bundle"]
+        if bundle is None:
+            raise Problem(
+                "Project files are invalid; correct them before execution", 422, snapshot["diagnostics"]
+            )
+        values = self.pool.computed(worktree, environment, bundle)
+        nodes, edges, boundaries = expand_for(bundle, environment, computed=values)
+        scope = launch_scope(nodes, edges, target, ancestors)
+        plan = partitions.plan(bundle, nodes, edges, boundaries)
+        partitions.launch_options(plan.get("dimension"), selection, policy)
+        scope = self._partition_scope(worktree, environment, nodes, edges, scope, plan)
+        if any(nodes[key].get("language") == "python" for key in scope) and not get_policy(
+            self.store, snapshot["worktree"]["project"]
+        ).get("enabled"):
+            raise Problem("Python execution is disabled; ask an instance administrator to enable it", 403)
+        self._check_conflicts(snapshot["conflicts"], scope, environment)
+        missing = []
+        for diagnostic in snapshot["diagnostics"]:
+            if diagnostic.get("code") == "missing_input":
+                exposed = boundaries.get(diagnostic["node"], {}).get("inputs", {}).get(diagnostic["port"])
+                if (exposed[0] if exposed else diagnostic["node"]) in scope:
+                    missing.append(diagnostic)
+        if entry_point == "ui" and missing:
+            raise Problem(missing[0]["message"], 422, missing)
+        if target:
+            for key in scope:
+                node = nodes[key]
+                try:
+                    self.pool.capture(worktree, connection_references(node), environment)
+                except Problem as error:
+                    raise Problem(str(error), 422) from error
+                deferred = any(
+                    binding.get("source") == "node" and "error" in binding
+                    for binding in [*node.get("variables", {}).values(), *variables.expression_bindings(node)]
+                ) or str(node.get("error", "")).startswith("Partition values not calculated")
+                if node.get("error") and not deferred:
+                    raise Problem(node["error"], 422)
+
+    @staticmethod
+    def _check_canceled(token: RunToken) -> None:
+        if token["cancel"].is_set():
+            raise Problem("Execution canceled", 409)
+
+    def _start(
+        self,
+        token: RunToken,
+        run: Record,
+        target: str | None,
+        partition_selection: Record | None,
+        partition_execution: Record | None,
+        ancestors: bool,
+    ) -> None:
+        from ..python_environment import preparation_cancellation
+
+        started = time.monotonic()
+        try:
+            with preparation_cancellation(token["cancel"]):
+                self._check_canceled(token)
+                execution = self._prepare(
+                    token,
+                    run["worktree"],
+                    run["environment"],
+                    target,
+                    run["entry_point"],
+                    partition_selection,
+                    partition_execution,
+                    ancestors,
+                )
+                self._check_canceled(token)
+            for key in ("started", "requester", "trigger", "job", "tag", "external_trigger"):
+                if key in run:
+                    execution.run[key] = run[key]
+            self._persist(execution.run, execution.secrets)
+        except Exception as error:
+            context = self.pool.find(run["worktree"], run["environment"])
+            secrets = context.secrets if context else []
+            with self.lock:
+                try:
+                    run.update(
+                        status="canceled" if token["cancel"].is_set() else "failed",
+                        error=redact(str(error), secrets),
+                        finished=now(),
+                        duration=time.monotonic() - started,
+                    )
+                    if isinstance(error, Problem):
+                        run["error_detail"] = error.detail
+                    self._persist(run, secrets)
+                finally:
+                    self.active.pop(run["worktree"], None)
+            return
+        self._execute(execution)
 
     def _partition_scope(
         self,
@@ -258,7 +397,9 @@ class Runner:
         ancestors: bool = False,
     ) -> Execution:
         """Capture the committed definitions and connection settings the run will use."""
+        self._check_canceled(token)
         snapshot = self.projects.flush(worktree)
+        self._check_canceled(token)
         settings = get_policy(self.store, snapshot["worktree"]["project"])
         bundle = copy.deepcopy(snapshot["bundle"])
         if bundle is None:
@@ -306,6 +447,7 @@ class Runner:
                 project=snapshot["worktree"]["project"],
                 allow_builds=settings.get("allow_builds", False),
             )
+            self._check_canceled(token)
             if locked != files.get("uv.lock"):
                 snapshot = self.projects.write(
                     worktree,
@@ -316,15 +458,19 @@ class Runner:
         if needs_python:
             bundle["python_lock"] = snapshot["files"].get("uv.lock")
         requirements = project_extensions.enabled(bundle.get("extensions"))
+        self._check_canceled(token)
         context = self.pool.restart_for_run(
             worktree, environment, requirements=requirements, python=needs_python
         )
+        self._check_canceled(token)
         self.pool.renew(context, python=needs_python)
+        self._check_canceled(token)
         if getattr(context.db, "closed", False):
             # The results could not move to a worker with the new connections or environment.
             context = self.pool.restart_for_run(
                 worktree, environment, requirements=requirements, python=needs_python
             )
+        self._check_canceled(token)
         values = self.pool.computed(worktree, environment, bundle)
         nodes, edges, _ = expand_for(bundle, environment, computed=values)
         scope = self._partition_scope(
@@ -1223,6 +1369,7 @@ class Runner:
     def close(self) -> None:
         """Cancel active runs and wait for their workers."""
         with self.lock:
+            self.closing = True
             tokens, threads = list(self.active.values()), list(self.threads)
         for token in tokens:
             self.cancel(token["id"])

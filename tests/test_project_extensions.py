@@ -6,7 +6,7 @@ import subprocess
 
 import pytest
 from fastapi.testclient import TestClient
-from helpers import wait_run
+from helpers import wait_run, wait_until
 
 from duckpad import project_extensions
 from duckpad.app import create_app
@@ -86,8 +86,9 @@ def test_missing_requirement_blocks_execution_without_installing(tmp_path, isola
         )
         if isolated:
             instance.engine.access.grant_connections(worktree["project"], [])
-        with pytest.raises(Problem, match="Import missing_capability from community"):
-            instance.engine.launch(worktree["id"], "dev")
+        run = wait_run(instance.store, instance.engine.launch(worktree["id"], "dev"))
+        assert run["status"] == "failed"
+        assert "Import missing_capability from community" in run["error"]
         assert not instance.engine.active
         assert instance.engine.project_extensions(worktree["id"])["requirements"][0]["status"] == "missing"
     finally:
@@ -191,6 +192,7 @@ def test_editing_requirements_does_not_close_an_active_run_database(tmp_path, is
         if isolated:
             instance.engine.access.grant_connections(worktree["project"], [])
         run = instance.engine.launch(worktree["id"], "dev")
+        wait_until(lambda: instance.store.get("run", run["id"])["status"] == "running")
         context = instance.engine.context(worktree["id"], "dev")
         save(instance, worktree["id"], {})
         # Status and preview readers keep the run's captured session. Only a later launch replaces it.
