@@ -57,6 +57,14 @@ export async function closeEditor(dialog: Locator) {
   await expect(dialog).toHaveCount(0, { timeout: 30000 });
 }
 
+/** The canvas zoom, read from React Flow's viewport transform. */
+export const canvasZoom = (page: Page) =>
+  page
+    .locator(".react-flow__viewport")
+    .evaluate(
+      (viewport) => new DOMMatrix(getComputedStyle(viewport).transform).a,
+    );
+
 /** The selected node's code, docked beside the canvas in the inspector's place. */
 export const codePanel = (page: Page) =>
   page.getByRole("complementary", { name: "Code editor", exact: true });
