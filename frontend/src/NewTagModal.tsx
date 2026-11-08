@@ -37,8 +37,8 @@ export default function NewTagModal({
       <p>
         {t("commit")}: <code>{commit}</code>
       </p>
-      <label>
-        {t("tagName")}
+      <label className="field">
+        <span>{t("tagName")}</span>
         <input
           data-autofocus
           required
@@ -48,8 +48,8 @@ export default function NewTagModal({
           placeholder="sales/2026.10.31"
         />
       </label>
-      <label>
-        {t("tagMessage")}
+      <label className="field">
+        <span>{t("tagMessage")}</span>
         <textarea
           required
           maxLength={10000}

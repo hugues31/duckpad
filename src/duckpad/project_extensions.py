@@ -190,7 +190,9 @@ def activate_file_readers(base, proposal):
                     found.add((path, node["id"]))
         return found
 
-    if not readers(proposal) - readers(base):
+    # Unchanged files hold the same readers on both sides: only edited graphs are parsed.
+    changed = {path: text for path, text in proposal.items() if base.get(path) != text}
+    if not readers(changed) - readers({path: base[path] for path in changed if path in base}):
         return proposal
     extensions = read(proposal.get(FILE))
     if isinstance(extensions, str):

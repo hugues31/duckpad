@@ -1,5 +1,5 @@
 import { KeyRound, PlugZap } from "lucide-react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api, errorDetail, send } from "./api";
 import { FAMILIES, familyOf } from "./connectionFamilies";
 import { useT } from "./i18n";
@@ -77,6 +77,11 @@ export default function ConnectionEditorModal({
     );
   };
   const testing = test !== null && !test.result && test.error === undefined;
+  // The test button sits in the footer: bring its answer, at the end of the form, into view.
+  const outcome = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (test && !testing) outcome.current?.scrollIntoView({ block: "nearest" });
+  }, [test, testing]);
   const changeValue = (name: string, value: Json | undefined) => {
     resetTest();
     const old = selectedRef.current!;
@@ -319,7 +324,7 @@ export default function ConnectionEditorModal({
           <p className="muted small">{t("connectionTestHint")}</p>
 
           {test?.result && (
-            <div className="notice success" role="status">
+            <div ref={outcome} className="notice success" role="status">
               {test.result.schemas
                 ? t("connectionTestPassed")
                     .replace("{environment}", label(test.environment))
@@ -335,7 +340,11 @@ export default function ConnectionEditorModal({
             </div>
           )}
           {test?.error && (
-            <div className="notice error connection-test-error" role="alert">
+            <div
+              ref={outcome}
+              className="notice error connection-test-error"
+              role="alert"
+            >
               {test.error}
             </div>
           )}
