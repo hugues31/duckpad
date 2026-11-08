@@ -1,118 +1,18 @@
 # Connections and connector compatibility
 
-A connector is a declarative setup definition. A connection is a named reusable instance with independent environment values. Both live in the instance catalog, outside Git. Projects store only references. Instance admins configure them from **Instance settings → Connections**; connector definitions have a JSON editor, and their typed parameters generate connection forms.
+Use **Project files** to upload files and write local exports without configuring
+any connection. For a guided first import, follow [Use your own data](YOUR_DATA.md).
+A connection is needed when the data lives in a server folder, object storage or
+a database. Instance administrators configure it and grant it to your project.
 
-A connection says where data lives and how to reach it in each environment. Connections fall into two families, which group the Connections page:
-
-- **Databases and warehouses** are attached and read as tables with [Load table and Export table](#database-tables), such as PostgreSQL, Oracle or a database type an administrator declares.
-- **File storage** is a location for file nodes: a Server folder, an S3 bucket prefix, or a storage type an administrator declares.
-
-Fresh instances have no connection. File nodes read uploads and write exports as [project files](#project-files-and-storage-locations) without one; connections reach server folders, object storage and databases.
-
-![Connections and connector definitions grouped by family, with a customized built-in](images/connections.png)
-
-The instance-admin-only `PUT /api/catalog/connector` and `PUT /api/catalog/connection` endpoints accept those same JSON objects, so an administrator can submit declarative files without changing application code. Secret fields are encrypted in the instance database and masked in public catalog responses and execution records; they can also [come from the server](#secrets-from-the-server). Definition snapshots and non-secret settings used by each run remain in its history. Instance admins grant each project access to connections in **Project settings**. Members see only the names and capabilities of granted connections, not the global catalog.
-
-Connection identifiers are fixed after creation; edit the display name to rename
-a connection without changing project references. The editor rejects duplicate
-identifiers and updates to connections that have been deleted. Changing connectors
-keeps only parameters declared by the selected connector, in every environment.
-
-To create a connection, use `PUT /api/catalog/connection?create=true` (409 if the
-identifier exists). For updates, use `?create=false` or omit `create` (404 if the
-connection does not exist). Masked secrets in an update retain their stored values.
-
-![Create a server folder connection with separate development and production settings](images/connection.png)
-
-## Secrets from the server
-
-A secret parameter can name an environment variable or a file of the server
-instead of holding a value. The instance database then never contains that
-secret, and connection files submitted to the API can be versioned without it.
-In the connection form, choose **Environment variable** or **Secret file** next to
-a secret field. In JSON, write a reference in place of the value:
-
-```json
-{
-  "id": "warehouse",
-  "name": "Warehouse",
-  "connector": "postgres",
-  "environments": {
-    "prod": {
-      "host": "db.internal",
-      "database": "sales",
-      "user": "duckpad",
-      "password": {"from": "file", "name": "pg_prod_password"}
-    },
-    "dev": {
-      "host": "localhost",
-      "database": "sales_dev",
-      "user": "duckpad",
-      "password": {"from": "env", "name": "DUCKPAD_SECRET_PG_DEV_PASSWORD"}
-    }
-  }
-}
-```
-
-- An environment variable must start with `DUCKPAD_SECRET_` and contain only
-  upper case letters, digits and underscores. Git commands never inherit these
-  variables, and SQL workers never inherit the server environment.
-- A secret file is named without a slash, in the directory `DUCKPAD_SECRETS_DIR`
-  (`/run/secrets` by default, where Docker mounts secrets). After symbolic links
-  are resolved, it must be a regular file inside that directory: Kubernetes
-  secret volumes qualify, while their service account token, in a subdirectory,
-  stays out of reach, and so does the master key file. Files are limited to
-  64 KiB; trailing line breaks are removed.
-
-These limits keep instance administrators from reading other variables or files
-of the server, such as the master key or cloud credentials, through a connection.
-
-The server reads a reference at each run, connection test and session start;
-SQL workers only receive the value. A rotated file therefore applies at the next
-run, without restarting Duckpad or losing results. References are displayed as
-they are, since they say where a secret is rather than what it is, and values
-read from the server are masked in messages like stored secrets. When the server
-does not provide a referenced secret, nodes that use the connection are blocked
-with a message such as `Connection warehouse: DUCKPAD_SECRET_PG_DEV_PASSWORD is
-not set on the server (dev)`. Their results stay valid: secrets never count in
-fingerprints, and fingerprints never read references. See
-[Installation](INSTALLATION.md#secrets-from-docker-or-kubernetes) for Docker
-Compose and Kubernetes examples.
-
-## Test a connection
-
-**Test connection**, in the connection form, runs the setup of the selected environment with the values in the form, saved or not, in a separate process. It reports what would otherwise fail the first run that uses the connection, without stopping the Duckpad server:
-
-- a wrong password, an unknown database or an unreachable host, with the driver's message;
-- an extension that cannot load, or that stops its process, such as a binary built for a newer processor;
-- a Server folder root that does not exist on the server.
-
-A database connection then lists the schemas and tables it attached; a storage connection reports that its setup succeeded. Masked secrets of a saved connection keep their stored values, and errors never show secret values. A test stops after 30 seconds; add `connect_timeout=5` to a PostgreSQL connection's Additional options to fail sooner on an unreachable host.
-
-![Test a PostgreSQL connection in production before saving it](images/connection-test.png)
-
-Runs get the same protection. Duckpad loads each connector extension once in a separate process before relying on it: in embedded execution before loading it in the server, in isolated execution before starting the worker. An extension that crashes then fails the node, or the start of the isolated session, instead of stopping Duckpad.
-
-## Environments
-
-Configure labels, colors, connection values and run confirmation in the
-[environments guide](ENVIRONMENTS.md). Each branch and environment has its own
-results; switching environment never starts a run.
-
-## Validated scope
-
-| Preset | Required operations | Recorded validation |
-| --- | --- | --- |
-| Server folder | CSV and Parquet read; CSV export | DuckDB 2.0.0, Python 3.13.12, Linux x86_64; unit/native-equivalence tests, browser example and million-row benchmark |
-| S3 | CSV and Parquet read; CSV export; relative paths under a bucket prefix | DuckDB 2.0.0 with matching `httpfs`, Linux x86_64; Moto S3 emulator on localhost; repeated native destination replacement |
-| PostgreSQL | Load table and Export table; Additional options; Test connection | DuckDB 2.0.0 with its `postgres` extension linked statically, PostgreSQL 16, Linux x86_64 without AVX2, in embedded and isolated execution; CI with the PyPI wheel and downloaded extension |
-| Oracle | Read attached tables; export to an existing table with OraDuck | DuckDB 2.0.0, signed community OraDuck 0.4.0, Oracle 19.3, Oracle Instant Client 19.32, Linux x86_64 |
-| MySQL and SQLite examples | Load table and Export table through [published definitions](#published-examples-mysql-and-sqlite) | DuckDB 2.0.0 with matching `mysql` and `sqlite` extensions, MySQL 8.4, Linux x86_64 (CI) |
-
-These are recorded combinations, not validation of every newer build or provider.
-Use an extension matching the installed DuckDB version. Isolated execution also
-requires Linux Landlock; validate remote deployments with their network policy.
-See [XLSX limits](#xlsx-workbooks) and the raw reports in `docs/validation/`.
+| Task | Read next |
+| --- | --- |
+| Upload a file or choose a storage location | [Project files and storage locations](#project-files-and-storage-locations) |
+| Choose a format or read a workbook | [File formats](#file-formats-and-extensions) and [XLSX workbooks](#xlsx-workbooks) |
+| Read or append rows in a database | [Database tables](#database-tables) |
+| Configure access for a team | [Configure and grant a connection](#configure-and-grant-a-connection) |
+| Check supported combinations | [Validated scope](#validated-scope) |
+| Define a new database or storage type | [Custom connector types](#built-in-and-custom-connector-types) |
 
 ## Project files and storage locations
 
@@ -218,18 +118,6 @@ and malformed workbooks report execution errors and retain the last result as
 stale. See the [DuckDB Excel extension documentation](https://duckdb.org/docs/stable/core_extensions/excel.html)
 for native format behavior and limits.
 
-## S3
-
-Configure a root, access key ID, secret access key, region and endpoint per environment. The preset loads `httpfs` and creates a temporary S3 secret. Set `root` to a bucket prefix such as `s3://landing/raw/` and select the connection as a file node's Location: relative paths are appended to it. Full `s3://bucket/key.csv` URIs also work, with or without a root. `use_ssl` defaults to true and `url_style` to `vhost`; a local S3-compatible endpoint can use false and `path` respectively.
-
-S3 checks use a local Moto emulator; live AWS credentials, IAM policies and
-provider-specific behavior require separate validation. Reproduce the check with:
-
-```sh
-uv sync --group integration
-uv run python scripts/integration.py s3 --output docs/validation/s3.json
-```
-
 ## Database tables
 
 **Load table** reads a table or view of a database connection granted to the project, built-in or custom, and **Export table** inserts rows into an existing table. Both address the connection's attachment as `{{ connection }}.{{ schema }}.{{ table }}`:
@@ -246,6 +134,73 @@ Select a connection, then a schema and a table of the selected environment; Load
 Export table matches columns by name: every input column must exist in the destination, and destination columns absent from the input take their default value, such as `NULL`. Each run appends its rows. Duckpad never truncates, creates or replaces the table; prepare or clear it in the database itself. Oracle keeps **Export Oracle**, whose OraDuck `COPY` is not an `INSERT`; Load table reads Oracle like any other database.
 
 Template authors declare the same fields with the `schema_name(connection)` and `table_name(schema)` parameter types, described in the [SQL templates guide](SQL.md#parameter-values).
+
+## Configure and grant a connection
+
+A connector defines how to reach a type of storage. A connection is a named
+instance of that type, with separate values per environment. Both live outside
+project Git; projects store references to their connections.
+
+1. As an instance admin, open **Instance settings → Connections → New connection**.
+2. Choose a connector, give the connection an identifier and display name, and
+   enter its values for the environment you want to use.
+3. Choose **Test connection** for that environment, then save the connection.
+4. Open **Project settings** and authorize it for the project. For a database,
+   the [Load table shortcut](#database-tables) combines these steps.
+5. In the node, select the connection and resource, then run. Configure and test
+   each additional environment before using it.
+
+**Databases and warehouses** provide tables to Load table and Export table.
+**File storage** provides locations to file nodes. The sections below describe
+S3, PostgreSQL and Oracle settings; a Server folder needs a root directory on
+the server, as shown above.
+
+![Connections and connector definitions grouped by family, with a customized built-in](images/connections.png)
+
+The instance-admin-only `PUT /api/catalog/connector` and `PUT /api/catalog/connection` endpoints accept those same JSON objects, so an administrator can submit declarative files without changing application code. Secret fields are encrypted in the instance database and masked in public catalog responses and execution records; they can also [come from the server](#secrets-from-the-server). Definition snapshots and non-secret settings used by each run remain in its history. Instance admins grant each project access to connections in **Project settings**. Members see only the names and capabilities of granted connections, not the global catalog.
+
+Connection identifiers are fixed after creation; edit the display name to rename
+a connection without changing project references. The editor rejects duplicate
+identifiers and updates to connections that have been deleted. Changing connectors
+keeps only parameters declared by the selected connector, in every environment.
+
+To create a connection, use `PUT /api/catalog/connection?create=true` (409 if the
+identifier exists). For updates, use `?create=false` or omit `create` (404 if the
+connection does not exist). Masked secrets in an update retain their stored values.
+
+![Create a server folder connection with separate development and production settings](images/connection.png)
+
+## Test a connection
+
+**Test connection**, in the connection form, runs the setup of the selected environment with the values in the form, saved or not, in a separate process. It reports what would otherwise fail the first run that uses the connection, without stopping the Duckpad server:
+
+- a wrong password, an unknown database or an unreachable host, with the driver's message;
+- an extension that cannot load, or that stops its process, such as a binary built for a newer processor;
+- a Server folder root that does not exist on the server.
+
+A database connection then lists the schemas and tables it attached; a storage connection reports that its setup succeeded. Masked secrets of a saved connection keep their stored values, and errors never show secret values. A test stops after 30 seconds; add `connect_timeout=5` to a PostgreSQL connection's Additional options to fail sooner on an unreachable host.
+
+![Test a PostgreSQL connection in production before saving it](images/connection-test.png)
+
+Runs get the same protection. Duckpad loads each connector extension once in a separate process before relying on it: in embedded execution before loading it in the server, in isolated execution before starting the worker. An extension that crashes then fails the node, or the start of the isolated session, instead of stopping Duckpad.
+
+## Environments
+
+Configure labels, colors, connection values and run confirmation in the
+[environments guide](ENVIRONMENTS.md). Each branch and environment has its own
+results; switching environment never starts a run.
+
+## S3
+
+Configure a root, access key ID, secret access key, region and endpoint per environment. The preset loads `httpfs` and creates a temporary S3 secret. Set `root` to a bucket prefix such as `s3://landing/raw/` and select the connection as a file node's Location: relative paths are appended to it. Full `s3://bucket/key.csv` URIs also work, with or without a root. `use_ssl` defaults to true and `url_style` to `vhost`; a local S3-compatible endpoint can use false and `path` respectively.
+
+S3 checks use a local Moto emulator; live AWS credentials, IAM policies and
+provider-specific behavior require separate validation. Reproduce the check with:
+
+```sh
+uv sync --group integration
+uv run python scripts/integration.py s3 --output docs/validation/s3.json
+```
 
 ## PostgreSQL
 
@@ -289,6 +244,61 @@ uv run python scripts/integration.py oracle --output docs/validation/oracle.json
 ```
 
 The script creates uniquely named disposable test tables and drops only those tables in its cleanup. Credentials are never included in its report. See the [OraDuck documentation](https://raw.githubusercontent.com/hugues31/oraduck/main/README.md) for deployment prerequisites.
+
+## Secrets from the server
+
+A secret parameter can name an environment variable or a file of the server
+instead of holding a value. The instance database then never contains that
+secret, and connection files submitted to the API can be versioned without it.
+In the connection form, choose **Environment variable** or **Secret file** next to
+a secret field. In JSON, write a reference in place of the value:
+
+```json
+{
+  "id": "warehouse",
+  "name": "Warehouse",
+  "connector": "postgres",
+  "environments": {
+    "prod": {
+      "host": "db.internal",
+      "database": "sales",
+      "user": "duckpad",
+      "password": {"from": "file", "name": "pg_prod_password"}
+    },
+    "dev": {
+      "host": "localhost",
+      "database": "sales_dev",
+      "user": "duckpad",
+      "password": {"from": "env", "name": "DUCKPAD_SECRET_PG_DEV_PASSWORD"}
+    }
+  }
+}
+```
+
+- An environment variable must start with `DUCKPAD_SECRET_` and contain only
+  upper case letters, digits and underscores. Git commands never inherit these
+  variables, and SQL workers never inherit the server environment.
+- A secret file is named without a slash, in the directory `DUCKPAD_SECRETS_DIR`
+  (`/run/secrets` by default, where Docker mounts secrets). After symbolic links
+  are resolved, it must be a regular file inside that directory: Kubernetes
+  secret volumes qualify, while their service account token, in a subdirectory,
+  stays out of reach, and so does the master key file. Files are limited to
+  64 KiB; trailing line breaks are removed.
+
+These limits keep instance administrators from reading other variables or files
+of the server, such as the master key or cloud credentials, through a connection.
+
+The server reads a reference at each run, connection test and session start;
+SQL workers only receive the value. A rotated file therefore applies at the next
+run, without restarting Duckpad or losing results. References are displayed as
+they are, since they say where a secret is rather than what it is, and values
+read from the server are masked in messages like stored secrets. When the server
+does not provide a referenced secret, nodes that use the connection are blocked
+with a message such as `Connection warehouse: DUCKPAD_SECRET_PG_DEV_PASSWORD is
+not set on the server (dev)`. Their results stay valid: secrets never count in
+fingerprints, and fingerprints never read references. See
+[Installation](INSTALLATION.md#secrets-from-docker-or-kubernetes) for Docker
+Compose and Kubernetes examples.
 
 ## Built-in and custom connector types
 
@@ -414,3 +424,18 @@ and isolated execution, checking Load table, Export table and different dev/prod
 values (`docs/validation/sqlite.json`).
 
 On x86-64 processors without AVX2, the `mysql` and `sqlite` binaries published for DuckDB 2.0.0 stop their process when they load. Test connection reports it; such a server needs a compatible build of the extension, as Duckpad's container image provides for `postgres`.
+
+## Validated scope
+
+| Preset | Required operations | Recorded validation |
+| --- | --- | --- |
+| Server folder | CSV and Parquet read; CSV export | DuckDB 2.0.0, Python 3.13.12, Linux x86_64; unit/native-equivalence tests, browser example and million-row benchmark |
+| S3 | CSV and Parquet read; CSV export; relative paths under a bucket prefix | DuckDB 2.0.0 with matching `httpfs`, Linux x86_64; Moto S3 emulator on localhost; repeated native destination replacement |
+| PostgreSQL | Load table and Export table; Additional options; Test connection | DuckDB 2.0.0 with its `postgres` extension linked statically, PostgreSQL 16, Linux x86_64 without AVX2, in embedded and isolated execution; CI with the PyPI wheel and downloaded extension |
+| Oracle | Read attached tables; export to an existing table with OraDuck | DuckDB 2.0.0, signed community OraDuck 0.4.0, Oracle 19.3, Oracle Instant Client 19.32, Linux x86_64 |
+| MySQL and SQLite examples | Load table and Export table through [published definitions](#published-examples-mysql-and-sqlite) | DuckDB 2.0.0 with matching `mysql` and `sqlite` extensions, MySQL 8.4, Linux x86_64 (CI) |
+
+These are recorded combinations, not validation of every newer build or provider.
+Use an extension matching the installed DuckDB version. Isolated execution also
+requires Linux Landlock; validate remote deployments with their network policy.
+See [XLSX limits](#xlsx-workbooks) and the raw reports in `docs/validation/`.

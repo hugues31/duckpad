@@ -1,8 +1,32 @@
 # Installation and accounts
 
+If your team already runs Duckpad, open its address in your browser and ask an
+administrator for an account and project access. You do not need to install
+Python, Git or Duckpad on your own computer to use that server.
+
+| I want to… | Read next |
+| --- | --- |
+| Run Duckpad myself | [Start and platform requirements](#start) |
+| Upgrade or keep a backup | [Upgrades and backups](#upgrades-and-backups) |
+| Add people or understand a missing action | [Accounts and project access](#accounts-and-project-access) |
+| Host a shared instance | [Reverse proxy](#reverse-proxy), [secrets](#secrets-and-the-master-key) and [SQL resources](#sql-resources) |
+| Change language or theme | [Workspace preferences](WORKSPACE.md#preferences-and-access) |
+| Fix a startup or sign-in error | [Troubleshooting](TROUBLESHOOTING.md#start-and-sign-in) |
+
 ## Start
 
 Requires **Python 3.11+ and Git** on `PATH`. The default isolated SQL mode also requires **Linux with Landlock ABI 2 or later** (Linux 5.19+ with Landlock enabled); unsupported hosts refuse execution rather than automatically running without isolation. For a trusted Windows workstation, explicitly select [trusted local mode](#trusted-local-mode). Release wheels include the frontend, Monaco and its workers; Node.js is not needed to run the installed application.
+
+Create and activate a virtual environment before installing if your Python is
+managed by the operating system. On Linux:
+
+```sh
+python3 -m venv .venv
+source .venv/bin/activate
+```
+
+In Windows PowerShell, use `python -m venv .venv` followed by
+`.venv\Scripts\Activate.ps1`. Then install and start Duckpad:
 
 ```sh
 pip install duckpad
@@ -14,14 +38,6 @@ Version tags also create a GitHub release with downloadable wheels. To install
 a downloaded wheel, use `pip install <wheel-file>`. See the
 [release guide](../docs/RELEASING.md) for publishing instructions.
 
-If your Python installation is managed by the operating system, create and
-activate a virtual environment first:
-
-```sh
-python3 -m venv .venv
-source .venv/bin/activate
-```
-
 Open the localhost address printed in the terminal. Sign in as `admin` using the password printed **once** on the first launch. The same password remains valid after a restart. The default instance directory is `$XDG_DATA_HOME/duckpad`, or `~/.local/share/duckpad`. Authentication, connection settings and execution history are kept there, outside project repositories.
 
 ```sh
@@ -29,6 +45,24 @@ duckpad start --home /path/to/my-instance --port 8765 --no-browser
 ```
 
 Only one backend may own an instance directory at a time. Use separate `--home` directories for independent instances. The default address is `127.0.0.1`.
+
+For air-gapped deployments, [download extensions on any connected computer and
+import them into Duckpad](OFFLINE_EXTENSIONS.md) before running connectors that
+need them.
+
+## Upgrades and backups
+
+Before upgrading, stop the server and keep a private backup of the entire
+instance directory, including its project repositories and SQLite database.
+Keep the master key too; if it is supplied externally, back it up separately.
+Source data in external folders or databases needs its own backup. A project
+ZIP excludes data, Git history, accounts, connection settings and run history.
+
+Upgrade Duckpad in the same Python environment with `pip install --upgrade duckpad`,
+then start it with the same `--home`. Read the
+[release notes](https://github.com/hugues31/duckpad/releases) before changing
+versions. To recover the old instance, use its backup with the Duckpad version
+that created it.
 
 Duckpad is in v0: a release may reset the storage schema without an upgrade
 path. Startup then rejects the existing database without changing it. Keep the
@@ -43,16 +77,7 @@ connections, then import each project as a ZIP downloaded from the previous
 version; its files must follow the current [file format](AUTHORING.md).
 The old instance's execution history remains in its original database.
 
-For air-gapped deployments, [download extensions on any connected computer and
-import them into Duckpad](OFFLINE_EXTENSIONS.md) before running connectors that
-need them.
-
-Successful GET requests used for background polling (workspace, resources, worktree
-snapshots, status, and generations) are logged at DEBUG. The default INFO level
-still shows other requests, including failed polling requests. Use
-`duckpad start --log-level debug` to include polling in the server logs.
-
-### Instance monitoring
+## Instance monitoring
 
 Instance administrators can open **Instance settings → Monitoring** to inspect
 the available space on the filesystem holding the instance directory, system
@@ -62,6 +87,12 @@ measure remote connections, separate project mounts or directory sizes. System
 memory can reflect the host rather than a container's quota. Backend memory
 excludes SQL worker processes. Unavailable counters are reported independently.
 A warning appears when at most 10% of the data disk remains available.
+
+Instance admins can monitor server CPU and RAM in the top bar. Click either
+indicator for two minutes of history; samples refresh every two seconds. Values
+are machine-wide and include other applications. In a container they follow what
+its runtime exposes, usually the host rather than the container's limits. Missing
+measurements appear as unavailable. History resets on reload or sign-out.
 
 The same page shows recent Duckpad and Uvicorn logs, newest first, with minimum
 severity and case-insensitive text filters. While the page is open, it refreshes
@@ -78,6 +109,11 @@ retention, and access-log query strings and client addresses are omitted.
 Application messages and exception traces may still contain sensitive data;
 only instance administrators can access either monitoring endpoint. Use the
 deployment's existing log collection for durable history and alerting.
+
+Successful GET requests used for background polling (workspace, resources, worktree
+snapshots, status, and generations) are logged at DEBUG. The default INFO level
+still shows other requests, including failed polling requests. Use
+`duckpad start --log-level debug` to include polling in the server logs.
 
 Debug also logs complete tracebacks of assistant provider failures. Credentials
 are masked, but these traces can contain prompts, responses and project data:
@@ -248,17 +284,8 @@ may stop Duckpad processes when memory runs out.
 
 ## Develop from source
 
-Contributors also need [uv](https://docs.astral.sh/uv/) and Node.js 20+.
-Setup provisions Python 3.12 and builds the interface:
-
-```sh
-git clone https://github.com/hugues31/duckpad.git
-cd duckpad
-bash scripts/setup.sh
-uv run duckpad start --home .duckpad-dev --no-browser
-```
-
-See the [contributing guide](../CONTRIBUTING.md) for development checks.
+Follow the [contributing guide](../CONTRIBUTING.md) for source setup, tool
+versions and checks. Installed release wheels already include the interface.
 
 ## Accounts and project access
 
@@ -320,24 +347,6 @@ Memberships, password hashes and connection grants remain in instance SQLite,
 outside project Git.
 See [authorization and execution isolation](ARCHITECTURE.md#authorization-and-execution-isolation)
 for deployment requirements and file access boundaries.
-
-## Preferences and result lifetime
-
-Instance admins can monitor server CPU and RAM in the top bar. Click either
-indicator for two minutes of history; samples refresh every two seconds. Values
-are machine-wide and include other applications. In a container they follow what
-its runtime exposes, usually the host rather than the container's limits. Missing
-measurements appear as unavailable. History resets on reload or sign-out.
-
-Language defaults to the first supported language in your browser preferences
-(English, French or Portuguese, with English as the fallback), and the theme defaults to your
-system color scheme. Manual choices are saved in this browser and take priority
-on subsequent visits. Open **Account menu → User settings** to choose your
-language and theme.
-
-![Language and theme choices in personal preferences](images/preferences.png)
-
-Results live in memory per worktree and environment. After a backend restart, history remains available but previews and lineage require another manual run. Editing or changing an external source does not launch a run automatically.
 
 ## Python node environments
 

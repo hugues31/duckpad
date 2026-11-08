@@ -8,6 +8,9 @@ Prefer to explore an existing pipeline? Open the [Northstar tour](EXAMPLE.md).
 
 ## 1. Install and sign in · 2 minutes
 
+Already have an account on a team instance? Sign in at its address and skip to
+step 2: any account can create its own project.
+
 With **Python 3.11+** and **Git** installed, run:
 
 ```sh
@@ -160,8 +163,8 @@ and **History** records the executions. Before a larger experiment, create a
 ## Where next?
 
 - [Prepare columns and values](DATA_PREPARATION.md) with guided forms.
-- [Read your own files and databases](CONNECTORS.md), then write an export with
-  the [SQL guide](SQL.md#write-an-export).
+- [Use your own data](YOUR_DATA.md): upload a CSV, transform it and download
+  the result, or choose a database connection.
 - [Reuse a group of nodes](COMPONENTS.md) and configure it with
   [project variables](VARIABLES.md).
 - [Create a Job](JOBS.md) and [launch it from a scheduler](AUTOMATION.md).
@@ -171,13 +174,10 @@ and **History** records the executions. Before a larger experiment, create a
 
 ## If something gets in the way
 
-- **Unsupported sandbox:** check the host requirements in
-  [installation](INSTALLATION.md#start). Shared instances require isolation.
 - **Missing source input:** connect the transformation's input; remove the
   default input declaration from the inline source node.
 - **Unknown reference:** check the spelling inside `{{ }}` and declare an output
   before reading it from another output.
-- **Stale or empty results:** save the changes and run again. Results live in
-  memory and need a new run after a backend restart; history persists.
-- **Instance already running:** stop the existing process or use a separate
-  `--home` directory and `--port`.
+
+For startup, permissions, missing files or stale results, use
+[troubleshooting](TROUBLESHOOTING.md).
