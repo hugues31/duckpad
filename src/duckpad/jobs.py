@@ -10,6 +10,7 @@ from sqlalchemy.exc import IntegrityError
 
 from .bundle import files_to_bundle
 from .components import expand_for
+from .execution.launch import confirm_environment
 from .execution.runs import launch_scope
 from .git.command import check_branch_name
 from .git.workspace import require_valid
@@ -264,10 +265,7 @@ class Jobs:
                 raise Problem(
                     "Job environment is unavailable", 409, {"code": "target_unavailable"}
                 ) from error
-            if data.entry_point == "ui" and settings["confirm_before_run"] and not data.confirmed:
-                raise Problem(
-                    "Confirm this environment before running", 409, {"confirmation_required": settings}
-                )
+            confirm_environment(settings, data.entry_point, data.confirmed)
             target = job["target"]
             try:
                 if target["kind"] == "tag":

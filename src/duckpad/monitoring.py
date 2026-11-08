@@ -10,6 +10,7 @@ from datetime import UTC, datetime
 import psutil
 
 from . import __version__
+from .logging import polling_request
 from .resources import resource_usage
 
 LOG_CAPACITY = 1000
@@ -47,8 +48,8 @@ class RecentLogs(logging.Handler):
             if record.name == "uvicorn.access" and isinstance(record.args, tuple) and len(record.args) == 5:
                 _, method, target, _, status = record.args
                 path = str(target).partition("?")[0]
-                # Viewing diagnostics must never fill the buffer with its own polling requests.
-                if path in ("/api/monitoring", "/api/monitoring/logs") and 200 <= int(status) < 300:
+                # Successful polling must not displace diagnostics from the bounded buffer.
+                if polling_request(method, target, status):
                     return
                 message = f"{method} {path} {status}"
             else:

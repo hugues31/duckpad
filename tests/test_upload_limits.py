@@ -4,7 +4,8 @@ import pytest
 from fastapi.testclient import TestClient
 from starlette.requests import Request
 
-from duckpad.app import MAX_UPLOAD_BYTES, create_app
+from duckpad.api.http import MAX_UPLOAD_BYTES
+from duckpad.app import create_app
 from duckpad.archive import MAX_ARCHIVE_BYTES
 from duckpad.extensions import MAX_UPLOAD_BYTES as MAX_EXTENSION_BYTES
 

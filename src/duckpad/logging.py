@@ -7,8 +7,21 @@ from copy import deepcopy
 from uvicorn.config import LOGGING_CONFIG
 
 POLLING_PATH = re.compile(
-    r"/api/(?:resources|monitoring(?:/logs)?|workspace|worktrees/[^/]+(?:/status|/generations/[^/]+)?)"
+    r"/api/(?:resources|monitoring(?:/logs)?|workspace|search|runs(?:/[^/]+)?"
+    r"|projects/[^/]+/(?:jobs|python/environment)|jobs/[^/]+(?:/runs)?"
+    r"|worktrees/[^/]+(?:/status|/generations/[^/]+|/exports/[^/]+)?)"
 )
+
+
+def polling_request(method, target, status):
+    """The successful UI reads hidden from both access logs and the admin buffer."""
+    return (
+        method == "GET"
+        and isinstance(target, str)
+        and isinstance(status, int)
+        and 200 <= status < 300
+        and POLLING_PATH.fullmatch(target.partition("?")[0]) is not None
+    )
 
 
 class PollingAccessFilter(logging.Filter):
@@ -25,13 +38,7 @@ class PollingAccessFilter(logging.Filter):
             args = record.args
         if record.levelno == logging.INFO and isinstance(args, tuple) and len(args) == 5:
             _, method, target, _, status = args
-            if (
-                method == "GET"
-                and isinstance(target, str)
-                and isinstance(status, int)
-                and 200 <= status < 300
-                and POLLING_PATH.fullmatch(target.partition("?")[0])
-            ):
+            if polling_request(method, target, status):
                 record.levelno = logging.DEBUG
                 record.levelname = "DEBUG"
                 # The logger checked the original INFO level before running filters.

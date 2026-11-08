@@ -14,6 +14,7 @@ from helpers import wait_until
 
 from duckpad.app import create_app
 from duckpad.logging import PollingAccessFilter, server_log_config
+from duckpad.monitoring import RecentLogs
 
 
 @pytest.mark.parametrize("level", [None, "debug"])
@@ -187,3 +188,43 @@ def test_assistant_logs_follow_the_server_level(level):
     logger = config["loggers"]["duckpad.assistant"]
     assert logger == {"handlers": ["default"], "level": level.upper(), "propagate": False}
     assert config["handlers"]["default"]["stream"] == "ext://sys.stderr"
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/api/resources",
+        "/api/monitoring",
+        "/api/monitoring/logs",
+        "/api/workspace",
+        "/api/worktrees/w",
+        "/api/worktrees/w/status",
+        "/api/worktrees/w/generations/n",
+        "/api/projects/p/jobs",
+        "/api/jobs/job",
+        "/api/jobs/job/runs",
+        "/api/projects/p/python/environment",
+        "/api/worktrees/w/exports/n",
+        "/api/runs",
+        "/api/runs/run",
+        "/api/search",
+    ],
+)
+@pytest.mark.parametrize(
+    ("method", "status", "polling"), [("GET", 200, True), ("POST", 200, False), ("GET", 403, False)]
+)
+def test_access_log_and_monitoring_share_polling_rules(path, method, status, polling):
+    record = logging.LogRecord(
+        "uvicorn.access",
+        logging.INFO,
+        "",
+        0,
+        '%s - "%s %s HTTP/%s" %d',
+        ("127.0.0.1:1234", method, path + "?environment=dev", "1.1", status),
+        None,
+    )
+    logs = RecentLogs()
+    logs.emit(record)
+    assert len(logs.entries) == (0 if polling else 1)
+    PollingAccessFilter().filter(record)
+    assert record.levelno == (logging.DEBUG if polling else logging.INFO)

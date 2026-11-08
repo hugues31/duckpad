@@ -9,7 +9,8 @@ import pytest
 from fastapi.testclient import TestClient
 from helpers import wait_run
 
-from duckpad.app import SESSION_COOKIE, create_app
+from duckpad.api.http import SESSION_COOKIE
+from duckpad.app import create_app
 from duckpad.auth import session_key
 from duckpad.util import Problem
 

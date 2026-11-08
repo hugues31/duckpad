@@ -11,7 +11,8 @@ from fastapi.testclient import TestClient
 from helpers import wait_run
 
 import duckpad
-from duckpad.app import SESSION_COOKIE, create_app, upload_name
+from duckpad.api.http import SESSION_COOKIE, upload_name
+from duckpad.app import create_app
 from duckpad.builtin_templates import BUILTINS
 from duckpad.util import Problem
 
@@ -1276,3 +1277,24 @@ def test_failed_upload_leaves_no_partial_file(app, client, worktree, monkeypatch
     assert response.status_code == 500
     assert str(upload_folder(app, worktree)) not in response.text
     assert upload_files(app, worktree) == []
+
+
+@pytest.mark.parametrize("operation", ["group", "rename", "import"])
+def test_structural_edits_reject_stale_revisions_without_writing(app, client, worktree, operation):
+    projects = app.state.services.projects
+    snapshot = projects.snapshot(worktree)
+    changed = {**snapshot["files"], "README.md": "A concurrent edit"}
+    current = projects.write(worktree, snapshot["revision"], changed)
+    if operation == "group":
+        suffix, data = "group", {"nodes": ["missing"], "name": "Group"}
+    elif operation == "rename":
+        suffix, data = "variables/before/rename", {"name": "after"}
+    else:
+        suffix, data = "import", {"source_worktree": worktree, "kind": "templates", "id": "missing"}
+    response = client.post(
+        f"/api/worktrees/{worktree}/{suffix}", json={"revision": snapshot["revision"], **data}
+    )
+    assert response.status_code == 409, response.text
+    after = projects.snapshot(worktree)
+    assert after["revision"] == current["revision"]
+    assert after["files"] == changed

@@ -1,10 +1,11 @@
 """Authenticated assistant endpoints; the application middleware validates every session."""
 
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, Depends, Query, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import StreamingResponse
 from starlette.background import BackgroundTask
 
+from ..api.security import instance_admin
 from .actions import UndoRequest
 from .approvals import ApprovalRequest
 from .config import ConnectionCheck, ProviderSettings, Settings
@@ -20,30 +21,25 @@ def router(assistant: Assistant):
     def options():
         return configuration.options()
 
-    @routes.get("/settings")
+    @routes.get("/settings", dependencies=[Depends(instance_admin)])
     def settings(request: Request):
-        assistant.services.engine.access.instance_admin(request.state.user)
         return configuration.public()
 
-    @routes.put("/settings")
+    @routes.put("/settings", dependencies=[Depends(instance_admin)])
     def save_settings(request: Request, data: Settings):
-        assistant.services.engine.access.instance_admin(request.state.user)
         return configuration.save(data)
 
-    @routes.post("/test")
+    @routes.post("/test", dependencies=[Depends(instance_admin)])
     async def test(request: Request, check: ConnectionCheck | None = None):
-        assistant.services.engine.access.instance_admin(request.state.user)
         return await configuration.test(check)
 
-    @routes.get("/models/{provider}")
+    @routes.get("/models/{provider}", dependencies=[Depends(instance_admin)])
     async def models(request: Request, provider: str):
-        assistant.services.engine.access.instance_admin(request.state.user)
         return await configuration.models(provider)
 
-    @routes.post("/models")
+    @routes.post("/models", dependencies=[Depends(instance_admin)])
     async def discover(request: Request, provider: ProviderSettings):
         """List the models of unsaved provider settings, reusing the saved key when allowed."""
-        assistant.services.engine.access.instance_admin(request.state.user)
         return await configuration.discover(await run_in_threadpool(configuration.draft, provider))
 
     @routes.get("/conversations")
@@ -76,7 +72,7 @@ def router(assistant: Assistant):
 
     @routes.post("/conversations/{identity}/approvals")
     def approve(request: Request, identity: str, data: ApprovalRequest):
-        from ..app import session_token
+        from ..api.http import session_token
 
         stream, cancellation = assistant.approvals.decide(
             request.state.user, session_token(request), identity, data
@@ -90,7 +86,7 @@ def router(assistant: Assistant):
 
     @routes.post("/conversations/{identity}/messages")
     def message(request: Request, identity: str, data: TurnRequest):
-        from ..app import session_token
+        from ..api.http import session_token
 
         stream, cancellation = assistant.prepare(request.state.user, session_token(request), identity, data)
         return StreamingResponse(
