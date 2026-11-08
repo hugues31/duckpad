@@ -102,13 +102,21 @@
   border-style: dashed;
   color: var(--muted);
 }
-/* The partition selector takes room from the tabs and the save label, only in
-   partitioned projects; the save state keeps its icon and tooltip. */
-@media (min-width: 1051px) and (max-width: 1450px) {
+@media (min-width: 601px) and (max-width: 1450px) {
+  .partition-menu {
+    left: 0;
+    right: auto;
+  }
+}
+/* Between the two-row layout and a wide desktop, retain the save tooltip while
+   leaving room for longer translated tabs and partition keys. */
+@media (min-width: 1451px) and (max-width: 1650px) {
   .flow-toolbar:has(.partition-trigger) .main-tabs a {
     padding-inline: 7px;
     gap: 4px;
   }
+}
+@media (min-width: 1451px) and (max-width: 1650px), (max-width: 600px) {
   .flow-toolbar .partition-trigger {
     max-width: 150px;
   }

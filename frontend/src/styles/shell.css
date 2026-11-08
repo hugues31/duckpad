@@ -442,6 +442,29 @@
   color: var(--muted);
   margin-right: 8px;
 }
+/* Give navigation and execution controls their own row before they compete for
+   space. Keep the height shared with the canvas and floating panels. */
+@media (min-width: 601px) and (max-width: 1450px) {
+  .app-shell {
+    --toolbar-height: 78px;
+  }
+  .flow-toolbar {
+    flex-wrap: wrap;
+    padding-block: 5px;
+    gap: 3px;
+  }
+  .flow-toolbar > .row {
+    width: 100%;
+    justify-content: flex-end;
+  }
+  .flow-toolbar .partition-selector {
+    margin-right: auto;
+  }
+  .main-tabs {
+    width: 100%;
+    flex-shrink: 0;
+  }
+}
 @media (max-width: 1200px) {
   .project-picker select {
     max-width: 230px;

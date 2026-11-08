@@ -1,6 +1,7 @@
 import { PartitionRunMenu } from "./PartitionRunMenu";
 import { PartitionSelector } from "./PartitionControls";
 import ProjectTabs from "./ProjectTabs";
+import RunProgress from "./RunProgress";
 import {
   AlertCircle,
   ArrowRight,
@@ -73,21 +74,6 @@ export function FlowToolbar() {
             {t("merge")}
           </button>
         )}
-        {active?.partitions && (
-          <span role="status">
-            {active.partitions.completed}/{active.partitions.selected}{" "}
-            {t("partitions")} · {active.partitions.failed} {t("failed")}
-            {!!active.partitions.active_keys?.length &&
-              ` · ${t("running")}: ${active.partitions.active_keys.map((key) => String(key.value)).join(", ")}`}
-          </span>
-        )}
-        {active?.phase && (
-          <span role="status" className="muted small">
-            {active.phase === "values"
-              ? t("calculatingValues")
-              : t("runningConsumers")}
-          </span>
-        )}
         {active ? (
           <button
             className="button stop"
@@ -138,8 +124,6 @@ export function WorkspaceNotices({
 }) {
   const t = useT();
   const diagnostics = visibleDiagnostics(snapshot, runDiagnostics);
-  const nodes = Object.values(active?.nodes || {});
-  const completed = nodes.filter((n) => n.status === "success").length;
   return (
     <>
       {(snapshot.worktree.read_only ||
@@ -193,23 +177,7 @@ export function WorkspaceNotices({
           </button>
         </div>
       )}
-      {active && (
-        <div className="run-progress">
-          <Loader2 className="spin" size={13} />
-          <span>
-            {t(active.status)} · {active.environment}
-            {/* A preparing run lists its nodes once dependencies and the worker are ready. */}
-            {!!nodes.length && ` · ${completed}/${nodes.length} ${t("nodes")}`}
-          </span>
-          <div className="progress-track">
-            <div
-              style={{
-                width: `${(100 * completed) / Math.max(1, nodes.length)}%`,
-              }}
-            />
-          </div>
-        </div>
-      )}
+      {active && <RunProgress run={active} />}
     </>
   );
 }

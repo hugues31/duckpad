@@ -153,6 +153,7 @@
   "runNode": "Run with ancestors",
   "running": "Running",
   "stop": "Stop execution",
+  "runProgress": "Run progress",
   "canceling": "Stopping…",
   "environment": "Environment",
   "branch": "Branch",
