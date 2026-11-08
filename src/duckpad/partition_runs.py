@@ -58,8 +58,6 @@ class PartitionRun:
             "not_started": 0,
             "execution": self.policy,
         }
-        for key in self.partitioned:
-            self.root["nodes"][key]["partitioned"] = True
 
     def resolve(self):
         execution, source = self.execution, self.plan["source"]

@@ -186,7 +186,7 @@ describe("remainingSeconds", () => {
 
 it("formats approximate durations compactly without false precision", () => {
   expect([0.2, 1.1, 59.5, 61, 3599, 3660].map(remainingDuration)).toEqual([
-    "<1 s",
+    "1 s",
     "2 s",
     "1 min",
     "2 min",

@@ -57,7 +57,6 @@ export function remainingSeconds(run: Run, now: number): number | null {
 
 /** Compact, deliberately rounded precision for an approximate duration. */
 export function remainingDuration(seconds: number): string {
-  if (seconds < 1) return "<1 s";
   const rounded = Math.ceil(seconds);
   if (rounded < 60) return `${rounded} s`;
   const minutes = Math.ceil(rounded / 60);
