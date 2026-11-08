@@ -1,0 +1,104 @@
+import { describe, expect, it } from "vitest";
+import {
+  changedEnvironments,
+  completeReference,
+  partialReference,
+  referencedVariables,
+  resolveValue,
+  usableInExpressions,
+} from "./variables";
+
+describe("computed declarations", () => {
+  const computed = {
+    type: "number",
+    from: { node: "control", column: "amount" },
+  };
+
+  it("does not restore an ordinary fallback from a computed declaration", () => {
+    expect(
+      resolveValue(
+        { ...computed, default: 1, environments: { prod: 2 } },
+        "prod",
+      ),
+    ).toEqual({});
+  });
+
+  it("reports source changes in every environment and ignores descriptions", () => {
+    expect(
+      changedEnvironments(
+        computed,
+        { ...computed, from: { node: "control", column: "limit" } },
+        ["dev", "prod"],
+      ),
+    ).toEqual(["dev", "prod"]);
+    expect(
+      changedEnvironments(computed, { ...computed, description: "A limit" }, [
+        "dev",
+        "prod",
+      ]),
+    ).toEqual([]);
+  });
+
+  it("reports a type change but not an inferred port spelled out", () => {
+    expect(
+      changedEnvironments(computed, { ...computed, type: "text" }, ["dev"]),
+    ).toEqual(["dev"]);
+    expect(
+      changedEnvironments(
+        computed,
+        {
+          ...computed,
+          from: { node: "control", port: "result", column: "amount" },
+        },
+        ["dev"],
+      ),
+    ).toEqual([]);
+  });
+});
+
+describe("expression references", () => {
+  it("lists referenced variables once, in order", () => {
+    expect(
+      referencedVariables(
+        "day >= {{var.start}} AND amount >= {{ var.threshold }} AND day < {{ var.start }} + 1",
+      ),
+    ).toEqual(["start", "threshold"]);
+    expect(referencedVariables("{{ threshold }} AND {{ var. }}")).toEqual([]);
+  });
+
+  it("finds the reference being typed before the caret", () => {
+    expect(partialReference("amount >= {{ var.")).toEqual({
+      start: 10,
+      prefix: "",
+    });
+    expect(partialReference("amount >= {{var.thr")).toEqual({
+      start: 10,
+      prefix: "thr",
+    });
+    expect(partialReference("amount >= {{ var.threshold }}")).toBeNull();
+    expect(partialReference("amount >= {{ threshold")).toBeNull();
+  });
+
+  it("completes a reference and keeps the rest of the expression", () => {
+    expect(completeReference("amount >= {{ var.th", 19, "threshold")).toEqual({
+      text: "amount >= {{ var.threshold }}",
+      caret: 29,
+    });
+    // A name and closing braces already written after the caret are replaced.
+    expect(
+      completeReference("a >= {{ var.t }} AND b", 12, "threshold"),
+    ).toEqual({ text: "a >= {{ var.threshold }} AND b", caret: 24 });
+    expect(completeReference("a >= 1", 6, "threshold")).toBeNull();
+  });
+
+  it("accepts only scalar variable types in expressions", () => {
+    expect(
+      ["text", "number", "boolean", "date", "choice(a|b)"].every(
+        usableInExpressions,
+      ),
+    ).toBe(true);
+    expect(
+      ["identifier", "list<text>", "list<number>"].some(usableInExpressions),
+    ).toBe(false);
+  });
+});
