@@ -25,6 +25,10 @@ from .launches import LaunchPlanner
 from .nodes import NodeExecutor
 from .values import RunValues
 
+logger = logging.getLogger(__name__)
+# Expiring runs scans every retained reference, so it waits for this many excess runs.
+RETENTION_SLACK = 100
+
 
 class Runner:
     def __init__(
@@ -206,10 +210,11 @@ class Runner:
             try:
                 with context.lock:
                     protected = {dataset.run for dataset in context.datasets.values()}
-                keep = self.store.get("settings", "run_retention", {}).get("per_environment", 1000)
-                self.store.prune_runs(context.worktree, context.environment, keep=keep, protected=protected)
+                self.store.prune_runs(
+                    context.worktree, context.environment, slack=RETENTION_SLACK, protected=protected
+                )
             except Exception:
-                logging.getLogger(__name__).exception("Cannot expire old execution history")
+                logger.exception("Cannot expire old execution history")
 
     def close(self) -> None:
         """Cancel active runs and wait for their workers."""

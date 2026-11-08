@@ -1,6 +1,7 @@
 """Polling caches must save work without hiding changes or weakening access checks."""
 
 import copy
+import time
 
 import pytest
 from helpers import join_run
@@ -209,3 +210,33 @@ def test_retention_preserves_reused_manifest_owners_and_expires_obsolete_evidenc
     assert storage.manifest(identity="manifest_2")  # Current key list.
     assert storage.manifest(identity="manifest_1") is None
     assert storage.attempts("run_1", "key") == {}
+
+
+def test_retention_waits_for_its_slack_and_keeps_idempotent_job_launches(services):
+    from duckpad.schemas import NewJob
+
+    store, projects, _, _ = services
+    tree = projects.create("Retained launches")
+    Jobs(service_record(services)).create(
+        tree["project"],
+        NewJob(slug="nightly", name="Nightly", environment="dev", target={"kind": "branch", "ref": "main"}),
+        {"id": "admin", "username": "admin"},
+    )
+    for index in range(4):
+        store.put(
+            "run",
+            f"run_{index}",
+            {
+                "project": tree["project"],
+                "worktree": tree["id"],
+                "environment": "dev",
+                "started": f"2026-01-01T00:00:0{index}Z",
+                "status": "success",
+            },
+        )
+    store.remember_job_launch(
+        {"job": "nightly", "key": "retry", "request_hash": "same"}, "run_0", time.time()
+    )
+    assert store.prune_runs(tree["id"], "dev", keep=1, slack=3) == 0
+    assert store.prune_runs(tree["id"], "dev", keep=1, slack=2) == 2
+    assert store.job_launch("nightly", "retry", time.time())["run"] == "run_0"

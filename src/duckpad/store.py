@@ -47,6 +47,8 @@ MODELS = {
 SNAPSHOTS = {"connector": "definition", "conflict": "snapshot", "run": "snapshot"}
 # Kinds whose records can hold secrets.
 SEALED_KINDS = ("connection", "settings", "ssh_key")
+# Completed runs kept per worktree and environment, besides the ones still referenced.
+RUN_RETENTION = 1000
 
 
 def reject_unknown_fields(kind, data, fields):
@@ -605,11 +607,12 @@ class Store:
                 for identity, started, value in session.execute(statement)
             ]
 
-    def prune_runs(self, worktree, environment, *, keep=1000, protected=()):
-        """Keep recent runs and the evidence still used by results, exports or manifests.
+    def prune_runs(self, worktree, environment, *, keep=RUN_RETENTION, slack=0, protected=()):
+        """Keep recent runs and the evidence still used by results, exports, manifests or Job launches.
 
         The limit counts completed runs per worktree/environment; referenced runs and
-        unfinished runs are exempt. Cascades remove attempts and obsolete manifests.
+        unfinished runs are exempt. Nothing expires until more than `keep + slack` exist.
+        Cascades remove attempts and obsolete manifests.
         No artifact file is removed here: every artifact owner is protected.
         """
         keep = max(1, int(keep))
@@ -625,10 +628,12 @@ class Store:
                     .order_by(m.Run.started.desc(), m.Run.id.desc())
                 )
             )
-            candidates = set(rows[keep:])
-            if not candidates:
+            if len(rows) <= keep + slack:
                 return 0
+            candidates = set(rows[keep:])
             retained = set(protected) | set(rows[:keep])
+            # A Job launch retried with its idempotency key must still find its run.
+            retained.update(session.exec(select(m.JobIdempotency.run)))
             retained.update(session.exec(select(m.Artifact.run).where(m.Artifact.worktree == worktree)))
             retained.update(
                 session.exec(select(m.ExportResult.run).where(m.ExportResult.worktree == worktree))
