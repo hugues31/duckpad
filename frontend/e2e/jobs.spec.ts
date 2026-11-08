@@ -44,10 +44,10 @@ test("job history displays every loaded summary and requests older pages explici
   await page.goto(`/projects/${tree.project}/jobs`);
   await page.getByRole("button", { name: "History Job", exact: true }).click();
   const details = page.locator(".job-details");
-  await expect(details.locator(".history-row")).toHaveCount(50);
+  await expect(details.locator("button.history-row")).toHaveCount(50);
   expect(requests).not.toContain("older");
   await details.getByRole("button", { name: "Load more", exact: true }).click();
-  await expect(details.locator(".history-row")).toHaveCount(51);
+  await expect(details.locator("button.history-row")).toHaveCount(51);
   await expect(
     details.getByRole("button", { name: "Load more", exact: true }),
   ).toHaveCount(0);
