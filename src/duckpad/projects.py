@@ -15,10 +15,10 @@ from contextlib import contextmanager, suppress
 from pathlib import Path
 from typing import Literal, Unpack, cast, overload
 
-from . import views
+from . import python_environment, views
 from .builtin_templates import BUILTINS
-from .bundle import ROOT_FILES, bundle_to_files, file_node_names, files_to_bundle, is_declarative
-from .comparison import commit_message
+from .bundle import bundle_to_files, file_node_names, files_to_bundle
+from .comparison import CommitContext, commit_message
 from .components import expand, reconcile_documentation
 from .git import command
 from .git.command import GitError, GitOptions
@@ -28,6 +28,8 @@ from .git.workspace import GitWorkspace, diagnose, history_cache_key, origin_key
 from .merge import conflict_details, merge_files
 from .node_code import owned_paths
 from .node_names import node_names
+from .project_files import definition_names, is_declarative
+from .python_nodes import remember_contracts
 from .python_policy import get_policy
 from .store import Store
 from .templates import parse_template
@@ -42,7 +44,6 @@ QUIET_PERIOD = 0.5
 CACHED_REVISIONS = 256
 # After a restart, the base of a save is searched in this many latest commits of its branch.
 BASE_SEARCH = 32
-EXTERNAL_SAVE = "feat(project): save external changes"
 # A save keeps its backups in an untracked worktree folder named with this prefix.
 SAVE_BACKUPS = ".duckpad-save-"
 OPEN_FAILURE = "Git could not open this branch. It may be checked out outside Duckpad."
@@ -53,27 +54,6 @@ def decode(name: str, content: bytes) -> str:
         return content.decode("utf-8")
     except UnicodeDecodeError as error:
         raise Problem(f"{name} is not valid UTF-8 text", 422) from error
-
-
-def definition_names(path: Path) -> list[str]:
-    """Root file names, present or not, and the files found in the definition folders."""
-    return [
-        *ROOT_FILES,
-        *(
-            p.relative_to(path).as_posix()
-            for folder, pattern in [
-                ("templates", "*.sql"),
-                ("templates", "*.py"),
-                ("nodes", "*.sql"),
-                ("nodes", "*.py"),
-                ("modules", "**/*.py"),
-                ("components", "*/*.py"),
-                ("components", "*.json"),
-                ("components", "*/*.sql"),
-            ]
-            for p in sorted((path / folder).glob(pattern))
-        ),
-    ]
 
 
 def conflict_view(conflict: Record) -> Record:
@@ -192,7 +172,7 @@ class Projects:
             bundle["flow"].update(id=project_id, name=name)
             for file, content in bundle_to_files(bundle).items():
                 atomic_write(path / file, content)
-            self.commit(path, f"feat(project): {action} " + " ".join(name.split())[:64])
+            self.commit(path, message=f"feat(project): {action} " + " ".join(name.split())[:64])
             project = {"id": project_id, "name": name, "main": worktree_id, "created": now()}
             worktree = {"id": worktree_id, "project": project_id, "branch": "main", "path": str(path)}
             with self.store.transaction():
@@ -319,9 +299,16 @@ class Projects:
             if is_declarative(name) and (path / name).is_file()
         }
 
-    def commit(self, path: str | Path, message: str, *, assistant: str | None = None) -> str:
+    def commit(
+        self,
+        path: str | Path,
+        context: CommitContext = CommitContext.SAVE,
+        *,
+        message: str | None = None,
+        assistant: str | None = None,
+    ) -> str:
         with self._save_transaction(path):
-            return self._commit(path, message, assistant=assistant)
+            return self._commit(path, context, message=message, assistant=assistant)
 
     @contextmanager
     def _save_transaction(self, path: str | Path) -> Generator[None, None, None]:
@@ -373,7 +360,14 @@ class Projects:
                     index.unlink(missing_ok=True)
                 raise
 
-    def _commit(self, path: str | Path, message: str, *, assistant: str | None = None) -> str:
+    def _commit(
+        self,
+        path: str | Path,
+        context: CommitContext = CommitContext.SAVE,
+        *,
+        message: str | None = None,
+        assistant: str | None = None,
+    ) -> str:
         tracked = self.git(path, "ls-files").splitlines()
         existing = self.read_files({"path": str(path)})
         head = self.git(path, "rev-parse", "--verify", "HEAD", check=False)
@@ -394,7 +388,7 @@ class Projects:
                     if name in reconciled:
                         atomic_write(Path(path) / name, reconciled[name])
                 existing = self.read_files({"path": str(path)})
-        except (Problem, KeyError, TypeError, AttributeError):
+        except Problem:
             # An unavailable schema or malformed definition is never a deletion.
             pass
         paths = sorted(
@@ -407,16 +401,7 @@ class Projects:
         if paths:
             self.git(path, "add", "-A", "--", *paths)
         if self.git(path, "diff", "--cached", "--name-only", "--", *paths):
-            context = (
-                "external"
-                if message == EXTERNAL_SAVE
-                else "resolution"
-                if "resolve concurrent" in message
-                else "import"
-                if "import" in message
-                else ""
-            )
-            if head:
+            if message is None:
                 message = commit_message(previous_files, self.read_files({"path": str(path)}), context)
             if assistant:
                 message += "\n\nDuckpad-Assistant: " + assistant
@@ -428,7 +413,7 @@ class Projects:
                 message,
                 "--",
                 *paths,
-                identity=SYSTEM_IDENTITY if context == "external" else None,
+                identity=SYSTEM_IDENTITY if context is CommitContext.EXTERNAL else None,
             )
         return self.git(path, "rev-parse", "HEAD")
 
@@ -516,8 +501,9 @@ class Projects:
         worktree_id: str,
         revision: str,
         proposal: Files,
-        message: str = "feat(project): save workspace changes",
+        context: CommitContext = CommitContext.SAVE,
         *,
+        message: str | None = None,
         validate: bool = False,
         assistant: str | None = None,
         relock: bool = True,
@@ -537,7 +523,6 @@ class Projects:
             base = self.base(worktree, revision, current)
             if base is None:
                 raise Problem("The editing revision is unavailable. Reload before saving.", 409)
-            proposal = dict(proposal)
             manifest_edited = proposal.get("pyproject.toml") != base.get("pyproject.toml")
             if not manifest_edited and current.get("pyproject.toml") != base.get("pyproject.toml"):
                 # Another save changed the dependencies: this one keeps its base lock, so the
@@ -550,7 +535,7 @@ class Projects:
                 removed = owned_paths(files_to_bundle(base)) - owned_paths(files_to_bundle(proposal))
                 for name in removed:
                     proposal.pop(name, None)
-            except (Problem, KeyError, TypeError, AttributeError):
+            except Problem:
                 # Malformed graph edits cannot establish ownership changes.
                 pass
             merged, paths = merge_files(base, current, proposal)
@@ -582,7 +567,6 @@ class Projects:
                     "Python dependencies changed concurrently. Reload and save to resolve the merged manifest.",
                     409,
                 )
-            from .python_nodes import remember_contracts
 
             merged = remember_contracts(merged)
             if validate:
@@ -593,10 +577,10 @@ class Projects:
             with self._save_transaction(worktree["path"]):
                 # Retain the independent external save unit only if the whole save succeeds.
                 if external:
-                    self._commit(worktree["path"], EXTERNAL_SAVE)
+                    self._commit(worktree["path"], CommitContext.EXTERNAL)
                 previous = self.git(worktree["path"], "rev-parse", "--verify", "HEAD", check=False)
                 self._write_files(worktree, merged, current)
-                commit = self._commit(worktree["path"], message, assistant=assistant)
+                commit = self._commit(worktree["path"], context, message=message, assistant=assistant)
             self.observed[worktree_id] = self.read_files(worktree)
             self.pending.pop(worktree_id, None)
             self.on_change(worktree_id)
@@ -647,11 +631,10 @@ class Projects:
         ):
             # Untouched dependencies keep their lock; a launch reports a manifest this server cannot use.
             return proposal
-        from .python_environment import lock_files
 
         return {
             **proposal,
-            "uv.lock": lock_files(
+            "uv.lock": python_environment.lock_files(
                 proposal,
                 self.store.home,
                 allow_builds=policy.get("allow_builds", False),
@@ -697,7 +680,7 @@ class Projects:
                     worktree_id,
                     snapshot["revision"],
                     bundle_to_files(bundle),
-                    "docs(schema): remove documentation for removed columns",
+                    message="docs(schema): remove documentation for removed columns",
                     relock=False,
                 )
 
@@ -773,7 +756,7 @@ class Projects:
                 conflict["worktree"],
                 snapshot["revision"],
                 proposal,
-                "fix(project): resolve concurrent edits",
+                CommitContext.RESOLUTION,
                 validate=bool(conflict.get("assistant")),
                 assistant=conflict.get("assistant"),
             )
@@ -797,7 +780,7 @@ class Projects:
             else:
                 raise Problem("Project files are changing continuously; retry once saves settle", 409)
             changed = current != self.observed.get(worktree_id)
-            commit = self.commit(worktree["path"], EXTERNAL_SAVE)
+            commit = self.commit(worktree["path"], CommitContext.EXTERNAL)
             self.observed[worktree_id] = self.revision_files(worktree["path"], commit)
             self.pending.pop(worktree_id, None)
             if changed:
@@ -859,7 +842,7 @@ class Projects:
             self.observed[key] = current
             self.pending[key] = time.monotonic()
         if key in self.pending and time.monotonic() - self.pending[key] >= QUIET_PERIOD:
-            self.commit(worktree["path"], EXTERNAL_SAVE)
+            self.commit(worktree["path"], CommitContext.EXTERNAL)
             del self.pending[key]
             self.on_change(key)
 

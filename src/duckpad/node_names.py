@@ -1,8 +1,10 @@
 """Display names shared by diagnostics, history and the interface, independent of valid SQL."""
 
 from .node_code import code_path
+from .python_contract import parse_python
 from .templates import directives
 from .types import Record
+from .util import Problem
 
 Name = list[dict[str, str]]
 
@@ -21,9 +23,6 @@ def node_caption(bundle: Record, node: Record, parent: str | None = None) -> dic
         else bundle.get("node_sql", {}).get(code_path(node["id"], parent, node.get("language", "sql")), "")
     )
     if node.get("language") == "python":
-        from .python_contract import parse_python
-        from .util import Problem
-
         try:
             return {"label": parse_python(sql)["label"]}
         except Problem:
@@ -75,12 +74,8 @@ def node_names(bundle: Record | None) -> dict[str, Name]:
             if component and component not in stack:
                 visit(bundle.get("components", {}).get(component, {}), key + "::", parts, (*stack, component))
 
-    try:
-        visit(bundle.get("flow", {}), "", [], ())
-        for parent in bundle.get("components", {}):
-            for key, name in graph_names(bundle, parent).items():
-                result[f"components/{parent}/{key}"] = name
-    except (AttributeError, KeyError, TypeError):
-        # A malformed file must remain editable, with names for any readable nodes.
-        pass
+    visit(bundle.get("flow", {}), "", [], ())
+    for parent in bundle.get("components", {}):
+        for key, name in graph_names(bundle, parent).items():
+            result[f"components/{parent}/{key}"] = name
     return result

@@ -30,6 +30,7 @@ from .assistant.service import Assistant
 from .auth import SESSION_LIFETIME, Auth
 from .builtin_templates import BUILTINS
 from .bundle import bundle_to_files
+from .comparison import CommitContext
 from .components import group, import_definition
 from .example import create_example
 from .execution.samples import Sample
@@ -1019,9 +1020,7 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
             data.id,
             {"project": source["worktree"]["project"], "commit": source["commit"]},
         )
-        result = projects.write(
-            worktree, data.revision, bundle_to_files(bundle), "feat(project): import definition"
-        )
+        result = projects.write(worktree, data.revision, bundle_to_files(bundle), CommitContext.IMPORT)
         result["imported"] = key
         return result
 

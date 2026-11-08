@@ -7,11 +7,13 @@ from collections import OrderedDict
 from contextlib import suppress
 from pathlib import Path
 
-from ..bundle import file_node_names, files_to_bundle, is_declarative, validate
+from ..bundle import file_node_names, files_to_bundle
 from ..comparison import categories, compare_files, fields
 from ..merge import merge_files
 from ..node_code import code_path, template_path
+from ..project_files import is_declarative
 from ..util import Problem, digest, now, uid
+from ..validation import validate
 from . import command
 from .command import GitError
 
@@ -84,10 +86,11 @@ def entity_value(found, code):
 def diagnose(files):
     """The bundle of project files and its validation errors; malformed definitions are errors."""
     try:
-        bundle = files_to_bundle(files)
-        return bundle, validate(bundle)
-    except (Problem, KeyError, TypeError, AttributeError) as error:
-        return None, [{"file": "flow.json", "message": str(error)}]
+        bundle = files_to_bundle(files, check_structure=False)
+        errors = validate(bundle)
+        return (None if any(e.get("code") == "project_structure" for e in errors) else bundle), errors
+    except Problem as error:
+        return None, error.detail or [{"file": "flow.json", "message": str(error)}]
 
 
 def require_valid(files, message, baseline=None):
@@ -269,7 +272,13 @@ class GitWorkspace:
             return {
                 **self.metadata(path, commit),
                 "status": status,
-                "categories": categories(kind, fields(previous, value), previous, value)
+                "categories": categories(
+                    kind,
+                    fields(previous, value),
+                    previous,
+                    value,
+                    "python" if code and code.endswith(".py") else "sql",
+                )
                 if status == "modified"
                 else [],
             }

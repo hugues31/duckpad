@@ -8,11 +8,11 @@ import copy
 import re
 
 from . import value_sources, variables
-from .graph import reachable
+from .graph import reachable, topological
 from .partition_filters import canonical
 from .types import Record
 from .util import Problem, digest, qi, uid
-from .value_types import IDENTIFIER_CASE, INTEGER, base_type
+from .value_types import IDENTIFIER_CASE, INTEGER, base_type, resolve_column
 
 REFERENCE = re.compile(r"\{\{\s*partition(?:\.([a-z][a-z0-9_]*))?\s*\}\}")
 TYPES = {"text", "number", "date", "boolean"}
@@ -109,8 +109,6 @@ def has_reference(value):
 
 def plan(bundle, nodes, edges, boundaries):
     """Annotate the real expanded dependencies, including component input barriers."""
-    from .bundle import topological
-
     errors = []
     try:
         dimension = definition(bundle["flow"])
@@ -215,15 +213,19 @@ def plan(bundle, nodes, edges, boundaries):
                 for k in affected
             )
     collected = set().union(*collectors.values()) if collectors else set()
+    specification = signature(dimension) if dimension else None
+    incoming_edges = {}
+    for edge in edges:
+        incoming_edges.setdefault(edge["target"], []).append(edge)
     for key in topological(nodes, edges, tolerant=True):
-        incoming = [e for e in edges if e["target"] == key]
+        incoming = incoming_edges.get(key, [])
         inherited = [
             e["source"]
             for e in incoming
             if nodes[e["source"]].get("partitioned") and (key, e["targetHandle"]) not in collected
         ]
         node = nodes[key]
-        if REFERENCE.search(node.get("template_sql", "")):
+        if node.get("language") != "python" and REFERENCE.search(node.get("template_sql", "")):
             errors.append(
                 problem(
                     "partition_reference",
@@ -233,6 +235,7 @@ def plan(bundle, nodes, edges, boundaries):
             )
         node["partitioned"] = bool(key in filters or inherited)
         node["partition_filters"] = filters.get(key, {})
+        node["partition_definition"] = specification
         node["partition_collect_inputs"] = [
             e["targetHandle"]
             for e in incoming
@@ -290,21 +293,7 @@ def plan(bundle, nodes, edges, boundaries):
                 for key in affected | collector_nodes
             )
     phase = reachable({source["node"]}, edges, upstream=True) if source else set()
-    scalars = value_sources.sources(bundle, nodes, boundaries)
-    scalar_phase, scalar_errors = value_sources.dependencies(nodes, edges, scalars)
-    for key in phase | scalar_phase:
-        node = nodes[key]
-        uses = set(variables.references(node.get("params")).values())
-        uses.update(n for names in variables.expression_references_of(node).values() for n in names)
-        if node.get("partitioned") or (key in phase and uses & scalars.keys()):
-            errors.append(
-                problem(
-                    "value_dependency_cycle" if key in phase and node.get("partitioned") else "value_chain",
-                    f"{key}: value producers and their ancestors may use ordinary variables only",
-                    key,
-                )
-            )
-    errors.extend(problem(e["code"], e["error"], key) for key, e in scalar_errors.items())
+    errors.extend(value_sources.problems(bundle, nodes, edges, boundaries, phase))
     for error in errors:
         affected = (
             {k for k in nodes if k == error.get("node") or k.startswith(str(error.get("node")) + "::")}
@@ -404,14 +393,10 @@ def extract(cursor, dataset, dimension, source, run):
     requested = [source["from"]["column"], *dimension["attributes"]]
     columns = []
     for name in requested:
-        matches = [
-            c
-            for c in (dataset.source_columns or dataset.columns)
-            if c["name"].translate(IDENTIFIER_CASE) == name.translate(IDENTIFIER_CASE)
-        ]
-        if len(matches) != 1:
-            raise Problem(f"invalid_value_source: column {name} is missing or ambiguous")
-        column = matches[0]
+        try:
+            column = resolve_column(dataset.source_columns or dataset.columns, name)
+        except Problem as error:
+            raise Problem(f"invalid_value_source: {error}") from error
         kind = scalar_type(column["type"])
         if not columns and kind != dimension["type"] and not (kind == "text" and dimension["type"] == "date"):
             raise Problem(

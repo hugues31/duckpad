@@ -6,12 +6,13 @@ import duckdb
 import pytest
 
 from duckpad import partitions, variables
-from duckpad.bundle import bundle_to_files, files_to_bundle, validate
+from duckpad.bundle import bundle_to_files, files_to_bundle
 from duckpad.components import expand, expand_for, group
 from duckpad.merge import merge_files
 from duckpad.partition_filters import canonical, filter_statements
 from duckpad.templates import compile_template
 from duckpad.util import Problem
+from duckpad.validation import validate
 
 
 def bundle():
@@ -215,27 +216,27 @@ def test_parquet_predicate_is_inside_the_native_scan(tmp_path):
         )
         statement = {
             "output": "result",
-            "query": "SELECT * FROM read_parquet($file)",
+            "sql": "SELECT * FROM read_parquet($file)",
             "bindings": {"file": str(path)},
         }
         node = {"partition_filters": {"result": {"by": "batch", "column": "batch"}}}
         filter_statements([statement], node, entry(), db)
-        explained = db.execute("EXPLAIN " + statement["query"], statement["bindings"]).fetchone()[1]
+        explained = db.execute("EXPLAIN " + statement["sql"], statement["bindings"]).fetchone()[1]
         assert "READ_PARQUET" in explained
         assert "Filters:" in explained and "batch='a'" in explained.replace(" ", "")
-        assert len(db.execute(statement["query"], statement["bindings"]).fetchall()) == 5000
+        assert len(db.execute(statement["sql"], statement["bindings"]).fetchall()) == 5000
 
 
 def test_late_boundary_filters_after_limit_without_changing_its_meaning():
     statement = {
         "output": "result",
-        "query": "SELECT * FROM (VALUES ('a'), ('b')) t(batch) ORDER BY batch LIMIT 1",
+        "sql": "SELECT * FROM (VALUES ('a'), ('b')) t(batch) ORDER BY batch LIMIT 1",
         "bindings": {},
     }
     node = {"partition_filters": {"result": {"by": "batch", "column": "batch"}}}
     with duckdb.connect() as db:
         filter_statements([statement], node, entry("b"), db)
-        assert db.execute(statement["query"], statement["bindings"]).fetchall() == []
+        assert db.execute(statement["sql"], statement["bindings"]).fetchall() == []
 
 
 def test_compile_shows_the_bound_source_filter_without_reading_sources(services):

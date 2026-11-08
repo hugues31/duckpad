@@ -1,10 +1,13 @@
 """Project-owned reusable subgraphs with stable boundary ports."""
 
 import copy
+import tomllib
 
-from . import partitions, variables, views
+from . import partitions, value_sources, variables, views
 from .node_code import code_path, node_sql
 from .node_names import name_text, node_caption
+from .python_environment import requirement_name
+from .python_nodes import retained_contract
 from .templates import IDENTIFIER, directives, parse_template
 from .util import Problem, uid
 
@@ -61,7 +64,7 @@ def expand(bundle, tolerant=False):
                         value = node.get("params", {}).get(name, parameter.get("default"))
                         for target in parameter.get("targets", []):
                             target_node = next(
-                                (n for n in definition["nodes"] if n["id"] == target["node"]), None
+                                (n for n in definition.get("nodes", []) if n["id"] == target["node"]), None
                             )
                             if not target_node:
                                 raise Problem(f"Invalid exposed parameter target: {name}")
@@ -81,8 +84,6 @@ def expand(bundle, tolerant=False):
                 else:
                     text = node_sql(bundle, node, stack[-1] if stack else None)
                     if node.get("language") == "python":
-                        from .python_nodes import retained_contract
-
                         try:
                             template = parse_template(text, "python")
                         except Problem as error:
@@ -98,7 +99,7 @@ def expand(bundle, tolerant=False):
                     else:
                         template = parse_template(text, node.get("language", "sql"))
                     add_leaf(node, key, path, template, text, local_ports)
-            except (Problem, KeyError, TypeError) as error:
+            except Problem as error:
                 if not tolerant:
                     raise
                 for old in list(nodes):
@@ -270,8 +271,6 @@ def group(bundle, selection, label, exposed=None, parent=None):
                 port = f"output_{len(definition['outputs']) + 1}"
                 definition["outputs"][port] = {"node": key[0], "port": key[1]}
     if not parent:
-        from . import value_sources
-
         nodes, _, boundaries = expand(bundle, tolerant=True)
         for name, source in value_sources.sources(bundle, nodes, boundaries).items():
             origin = source["from"]
@@ -376,7 +375,7 @@ def parameter_types(bundle, node, parent=None):
             p["name"]: p["type"]
             for p in parse_template(node_sql(bundle, node, parent), node.get("language", "sql"))["parameters"]
         }
-    except (Problem, KeyError):
+    except Problem:
         return {}
 
 
@@ -428,10 +427,6 @@ def import_definition(destination, source, kind, identity, origin):
 
     imported = transfer(kind, identity)
     if python_imported:
-        import tomllib
-
-        from .python_environment import requirement_name
-
         required = tomllib.loads(source.get("pyproject") or "").get("project", {}).get("dependencies", [])
         available = {
             requirement_name(item)

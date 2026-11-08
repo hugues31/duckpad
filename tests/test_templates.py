@@ -42,7 +42,7 @@ def test_expression_lists_accept_projection_modifiers():
         {},
         Path(),
     )
-    assert statements[0]["query"] == 'SELECT l.*, SUM(amount) AS revenue FROM "input"'
+    assert statements[0]["sql"] == 'SELECT l.*, SUM(amount) AS revenue FROM "input"'
 
 
 @pytest.mark.parametrize(
@@ -162,7 +162,7 @@ def test_relative_project_file_sources_resolve_under_resources_and_destinations_
     [statement] = compile_template(
         parse_template(BUILTINS[name]), params, inputs, {"result": "out"}, connections, PROJECT_FILES
     )
-    assert f"'{path}'" in statement["query"]
+    assert f"'{path}'" in statement["sql"]
 
 
 @pytest.mark.parametrize(
@@ -191,7 +191,7 @@ def test_storage_roots_receive_relative_paths_and_uri_roots_stay_as_written(root
         connections,
         PROJECT_FILES,
     )
-    assert f"READ_CSV('{path}'" in statement["query"]
+    assert f"READ_CSV('{path}'" in statement["sql"]
 
 
 @pytest.mark.parametrize(
@@ -221,7 +221,7 @@ def test_path_references_stay_under_storage_roots(root, file, expected):
             PROJECT_FILES,
             variables={"name": {"type": "text", "value": "orders"}},
         )
-        return statement["query"]
+        return statement["sql"]
 
     if expected.startswith("s3://"):
         assert f"READ_CSV('{expected}'" in compile_path()
@@ -255,7 +255,7 @@ def test_a_connection_without_a_value_selects_project_files():
         "-- @output result\nSELECT * FROM read_csv({{ file }});"
     )
     [statement] = compile_template(template, {"file": "a.csv"}, {}, {"result": "out"}, {}, PROJECT_FILES)
-    assert statement["query"] == "SELECT * FROM READ_CSV('/resources/a.csv')"
+    assert statement["sql"] == "SELECT * FROM READ_CSV('/resources/a.csv')"
 
 
 def test_sql_using_an_empty_connection_asks_for_one():
@@ -333,7 +333,7 @@ def test_schema_and_table_names_are_chosen_from_their_connection():
         connections,
         PROJECT_FILES,
     )
-    assert statement["query"] == 'SELECT * FROM "conn_1"."Sales ""EU"""."orders.2026"'
+    assert statement["sql"] == 'SELECT * FROM "conn_1"."Sales ""EU"""."orders.2026"'
     with pytest.raises(Problem, match="Choose a table for table"):
         compile_template(template, {"connection": "pg"}, {}, {"result": "out"}, connections, PROJECT_FILES)
     export = parse_template(BUILTINS["export_table"])
@@ -351,4 +351,4 @@ def test_schema_and_table_names_are_chosen_from_their_connection():
     [insert] = compile_template(
         export, {"connection": "pg", "table": "totals"}, {"source": '"input"'}, {}, connections, PROJECT_FILES
     )
-    assert insert["query"] == 'INSERT INTO "conn_1"."public"."totals" BY NAME SELECT * FROM "input"'
+    assert insert["sql"] == 'INSERT INTO "conn_1"."public"."totals" BY NAME SELECT * FROM "input"'

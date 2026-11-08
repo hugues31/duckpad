@@ -77,9 +77,12 @@ def test_compiled_sql_is_the_query_that_runs_materialize(services, tmp_path):
     store, projects, _, engine = services
     wt = projects.create("Test", example_bundle(tmp_path / "input.csv"))["id"]
     compiled = engine.compile(wt, "dev", "total")[0]
-    assert compiled["sql"] == compiled["query"] and compiled["sql"].startswith("SELECT")
+    assert "query" not in compiled and compiled["sql"].startswith("SELECT")
     statement = wait_run(store, engine.launch(wt, "dev"))["nodes"]["total"]["statements"][0]
-    assert statement["sql"] == statement["query"]
+    # The editor uses a symbolic input; execution resolves the retained result table.
+    source = engine.context(wt, "dev").outputs["filter"]["result"]
+    assert "query" not in statement
+    assert statement["sql"] == compiled["sql"].replace('"input_filter_result"', f'"{source.table}"')
     storage = statement["table"] + "_storage"
     assert statement["materialization_sql"][0].startswith(f'CREATE TABLE "{storage}" AS ')
 

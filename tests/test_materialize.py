@@ -13,7 +13,7 @@ def upstream():
         query = (
             "SELECT * FROM (VALUES (1, 2, 3, {'x': 4, 'y': 5}), (6, 7, 8, {'x': 9, 'y': 10})) t(a, b, c, s)"
         )
-        plan = plan_materialization(db, {"table": "up", "query": query, "bindings": {}}, {}, instrument=False)
+        plan = plan_materialization(db, {"table": "up", "sql": query, "bindings": {}}, {}, instrument=False)
         db.execute(plan["sql"])
         columns, column_map, _ = publish_view(db, "up", plan)
         data = Dataset(
@@ -52,7 +52,7 @@ def test_instrumentation_never_shifts_published_columns(upstream, query, instrum
     db, data = upstream
     expected = db.execute("DESCRIBE " + query).fetchall()
     rows = db.execute(query).fetchall()
-    plan = plan_materialization(db, {"table": "out", "query": query, "bindings": {}}, {"up": data})
+    plan = plan_materialization(db, {"table": "out", "sql": query, "bindings": {}}, {"up": data})
     db.execute(plan["sql"])
     columns, _, _ = publish_view(db, "out", plan)
     assert [(c["name"], c["type"]) for c in columns] == [(c[0], c[1]) for c in expected]
@@ -80,7 +80,7 @@ def test_physical_names_point_tables_at_storage_and_renamed_columns_at_their_sto
 def test_witnesses_keep_physical_rowids_beside_a_user_rowid_column():
     with duckdb.connect() as db:
         query = "SELECT * FROM (VALUES (10, 1), (20, 2)) t(rowid, a)"
-        plan = plan_materialization(db, {"table": "up", "query": query, "bindings": {}}, {}, instrument=False)
+        plan = plan_materialization(db, {"table": "up", "sql": query, "bindings": {}}, {}, instrument=False)
         db.execute(plan["sql"])
         columns, column_map, _ = publish_view(db, "up", plan)
         data = Dataset(
@@ -98,7 +98,7 @@ def test_witnesses_keep_physical_rowids_beside_a_user_rowid_column():
             storage=plan["storage"],
             column_map=column_map,
         )
-        statement = {"table": "out", "query": "SELECT rowid, a FROM up ORDER BY a DESC", "bindings": {}}
+        statement = {"table": "out", "sql": "SELECT rowid, a FROM up ORDER BY a DESC", "bindings": {}}
         plan = plan_materialization(db, statement, {"up": data})
         db.execute(plan["sql"])
         publish_view(db, "out", plan)

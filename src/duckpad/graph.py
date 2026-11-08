@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 
 from .types import Record
+from .util import Problem
 
 
 def connection_references(node: Record) -> list[str]:
@@ -30,3 +31,37 @@ def reachable(seeds: Iterable[str], edges: list[Record], upstream: bool) -> set[
         if extended == result:
             return result
         result = extended
+
+
+def topological(nodes, edges, tolerant=False):
+    """Order nodes in waves, each in node order, in time linear in the nodes and edges.
+
+    An edge from a missing source never resolves, like a cycle.
+    """
+    position = {key: index for index, key in enumerate(nodes)}
+    waiting: dict[str, set[str]] = {key: set() for key in position}
+    dependents: dict[str, set[str]] = {}
+    for edge in edges:
+        if edge["target"] in waiting:
+            waiting[edge["target"]].add(edge["source"])
+            dependents.setdefault(edge["source"], set()).add(edge["target"])
+    ordered: list[str] = []
+    ready = [key for key, sources in waiting.items() if not sources]
+    while ready:
+        ordered.extend(ready)
+        released = set()
+        for key in ready:
+            for target in dependents.get(key, ()):
+                waiting[target].discard(key)
+                if not waiting[target]:
+                    released.add(target)
+        ready = sorted(released, key=position.__getitem__)
+    if len(ordered) < len(position):
+        if not tolerant:
+            raise Problem("The graph contains a cycle")
+        done = set(ordered)
+        remaining = [key for key in position if key not in done]
+        for key in remaining:
+            nodes[key]["error"] = "This node is part of, or depends on, a graph cycle"
+        ordered.extend(remaining)
+    return ordered

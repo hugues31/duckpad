@@ -170,9 +170,9 @@ def execute(cursor, payload):
                         "Returned relations must be built from the inputs or self.db, not another DuckDB database"
                     ) from error
                 try:
-                    statement = {"output": name, "query": f"SELECT * FROM {qi(view)}", "bindings": {}}
+                    statement = {"output": name, "sql": f"SELECT * FROM {qi(view)}", "bindings": {}}
                     filter_statements([statement], payload, payload.get("partition"), db)
-                    db.execute(f"CREATE TABLE {qi(table)} AS {statement['query']}", statement["bindings"])
+                    db.execute(f"CREATE TABLE {qi(table)} AS {statement['sql']}", statement["bindings"])
                     created.append(table)
                 finally:
                     db.execute(f"DROP VIEW IF EXISTS {qi(view)}").complete()

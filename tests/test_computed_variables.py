@@ -580,10 +580,10 @@ def test_control_csv_binds_parquet_scan_predicate_and_path_without_a_join(servic
     assert statement["paths"]["file"]["template"] == "orders_{{ var.mode }}.parquet"
     assert statement["paths"]["file"]["resource"] == str(parquet)
     with duckdb.connect() as db:
-        planned = db.execute("EXPLAIN " + statement["query"], statement["bindings"]).fetchall()
+        planned = db.execute("EXPLAIN " + statement["sql"], statement["bindings"]).fetchall()
         plan = "\n".join(str(row) for row in planned)
         assert "READ_PARQUET" in plan and "Filters:" in plan and "2026-06-30" in plan
-        actual = db.execute(statement["query"], statement["bindings"]).fetchall()
+        actual = db.execute(statement["sql"], statement["bindings"]).fetchall()
         expected = db.execute(
             "SELECT * FROM read_parquet(?) WHERE day >= DATE '2026-06-30'", [str(parquet)]
         ).fetchall()

@@ -63,7 +63,7 @@ class TraceQuery:
                 for t in query.find_all(exp.Table)
                 if t.name in self.context.datasets
             }
-            statement = {"table": key, "query": sql(query), "bindings": {}}
+            statement = {"table": key, "sql": sql(query), "bindings": {}}
             plan = plan_materialization(self.cursor, statement, data_inputs)
             try:
                 self.cursor.execute(plan["sql"])

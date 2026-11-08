@@ -9,12 +9,13 @@ from helpers import wait_run
 
 from duckpad import variables
 from duckpad.app import create_app
-from duckpad.bundle import bundle_to_files, files_to_bundle, validate
+from duckpad.bundle import bundle_to_files, files_to_bundle
 from duckpad.comparison import compare_files
 from duckpad.components import expand_for, group
 from duckpad.lineage import Lineage
 from duckpad.templates import compile_template, parse_template
 from duckpad.util import Problem
+from duckpad.validation import validate
 
 ORDERS = (
     "SELECT * FROM (VALUES (1, 'paid', 100, DATE '2026-01-05', true), (2, 'paid', 500, DATE '2026-03-01', false), "
@@ -156,7 +157,7 @@ def test_references_compile_to_named_parameters_bound_with_their_type():
             "segment": {"type": "text", "value": "refunded"},
         },
     )
-    assert statement["query"] == (
+    assert statement["sql"] == (
         'SELECT * FROM "input" WHERE amount >= $var_threshold AND day >= CAST($var_report_start AS DATE) '
         "AND status = $var_order_status AND online = $var_online_only AND status <> $var_segment "
         "AND amount > $var_threshold / 2"
@@ -185,7 +186,7 @@ def test_references_compile_to_named_parameters_bound_with_their_type():
         None,
         {"rate": {"type": "number", "value": 1.5}},
     )
-    assert measures["query"] == (
+    assert measures["sql"] == (
         'SELECT status, SUM(amount) * $var_rate AS weighted, COUNT(*) AS orders FROM "input" GROUP BY status'
     )
     assert measures["bindings"] == {"var_rate": 1.5}
@@ -199,9 +200,7 @@ def test_placeholders_never_collide_with_template_parameters():
     statement = compile_filter(
         "amount >= {{ var.threshold }}", {"threshold": {"type": "number", "value": 900}}, template
     )
-    assert (
-        statement["query"] == 'SELECT *, $var_threshold AS one FROM "input" WHERE amount >= $var_threshold_2'
-    )
+    assert statement["sql"] == 'SELECT *, $var_threshold AS one FROM "input" WHERE amount >= $var_threshold_2'
     assert statement["bindings"] == {"var_threshold": 1, "var_threshold_2": 900}
     assert statement["variable_bindings"] == {"var_threshold_2": "threshold"}
 

@@ -15,6 +15,7 @@ Paths below are relative to `src/duckpad/`.
 | `models.py`, `store.py`, `migrations/`, `paths.py` | Instance schema, transactions and directory layout |
 | `catalog.py`, `sealing.py`, `secret_references.py` | Connections, environments, secret encryption and server references |
 | `projects.py`, `bundle.py`, `archive.py`, `merge.py` | Project files, snapshots, save conflicts, ZIPs and semantic merges |
+| `project_files.py`, `json_document.py`, `project_schema.py`, `validation.py`, `processing.py` | File registry, lossless JSON, document schemas, ordered semantic validation and node processing inputs |
 | `git/` | Git commands, worktrees, remote synchronization and account credentials |
 | `templates.py`, `builtin_templates.py`, `components.py`, `graph.py` | SQL compilation, node contracts and graph expansion |
 | `variables.py`, `partitions.py`, `partition_runs.py`, `partition_storage.py` | Value resolution, partition planning, attempts and retained artifacts |
@@ -109,11 +110,26 @@ duplicate watcher commits. Workspace launches first save pending editor drafts;
 the backend finalizes external batches and captures committed files through
 `git archive`. A failed save prevents launch.
 
-Computation fingerprints include SQL, parameters, input edges, enabled extensions
-and non-secret connection settings. Layout, labels and documentation do not count.
+Static comparisons and computation fingerprints share the node inputs defined in
+`processing.py`: executable code, parameters, enabled extensions, partition plans,
+and Python modules, dependency manifests and lockfiles for Python nodes. Fingerprints
+also include input results, the Python runtime and non-secret connection settings.
+Layout, labels and documentation do not count.
 Variables count by their resolved type and value in the selected environment.
 Credential rotation preserves validity; missing secret references block connection
 use without marking its existing results stale. Edits never start a run.
+
+The project file registry maps each supported path to its bundle section, merge
+strategy and comparison entity. Structural errors identify the affected file before
+graph expansion; validation preserves independent manifest and module diagnostics.
+Malformed optional JSON stays editable without changing its original text. Computed
+variable graph diagnostics belong to `value_sources.py`; validation runs expansion,
+partition planning, variable checks and shared view checks in that order.
+
+Save callers choose an explicit commit context (workspace, external, import or
+conflict resolution). A supplied commit message overrides the semantic summary,
+including dependency locking and documentation pruning. Compiled statements carry
+one `sql` field through filtering, execution and the run log.
 
 ## Execution service
 

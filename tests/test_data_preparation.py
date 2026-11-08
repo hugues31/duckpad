@@ -39,7 +39,7 @@ def test_select_names_order_types_and_quoted_identifiers():
                 {"source": "a.b", "name": 'output"; DROP TABLE input; --', "type": "BIGINT"},
             ],
         )
-        result = db.execute(statement["query"])
+        result = db.execute(statement["sql"])
         assert result.fetchall() == [(5, 42)]
         assert [(c[0], str(c[1])) for c in result.description] == [
             ("select", "INTEGER"),
@@ -62,19 +62,19 @@ def test_clean_preserves_others_and_replacement_type_and_literal_values():
                 {"source": "day", "date_format": "%d/%m/%Y"},
             ],
         )
-        result = db.execute(statement["query"])
+        result = db.execute(statement["sql"])
         row = result.fetchone()
         assert row[0] == "001" and str(row[1]) == "12.50"
         assert row[2:] == ("O'Brien'; DROP TABLE input; --", datetime.date(2026, 12, 31), " untouched ")
         assert str(result.description[1][1]) == "DECIMAL(12,2)"
-        assert db.execute(compile_columns("clean_values", [])["query"]).fetchone()[0] == " 001 "
+        assert db.execute(compile_columns("clean_values", [])["sql"]).fetchone()[0] == " 001 "
 
 
 @pytest.mark.parametrize("replacement", ["", "NULL", "001", "false"])
 def test_text_replacements_are_never_inferred_as_sql_values(replacement):
     with duckdb.connect() as db:
         db.execute("CREATE TABLE input AS SELECT NULL::VARCHAR AS text")
-        query = compile_columns("clean_values", [{"source": "text", "replacement": replacement}])["query"]
+        query = compile_columns("clean_values", [{"source": "text", "replacement": replacement}])["sql"]
         assert db.execute(query).fetchone() == (replacement,)
 
 
@@ -84,7 +84,7 @@ def test_combined_cleaning_order_and_quoted_date_format():
         query = compile_columns(
             "clean_values",
             [{"source": "day", "trim": True, "date_format": "%d/%m/%Y's", "replacement": "2000-01-01"}],
-        )["query"]
+        )["sql"]
         assert db.execute(query).fetchall() == [(datetime.date(2026, 12, 31),), (datetime.date(2000, 1, 1),)]
 
 
@@ -126,7 +126,7 @@ def test_conversion_and_date_errors_do_not_turn_into_nulls(kind, row, source, er
     with duckdb.connect() as db:
         db.execute("CREATE TABLE input AS SELECT " + source + " AS value")
         with pytest.raises(duckdb.Error, match=error):
-            db.execute(compile_columns(kind, [row])["query"])
+            db.execute(compile_columns(kind, [row])["sql"])
 
 
 def test_preparation_parameters_reference_declared_inputs_and_validate_types():
@@ -227,7 +227,7 @@ def test_save_reload_replacement_schema_change_failure_and_downstream_export(pre
             ["2026-12-31", "001", "0"],
             ["2027-01-01", "002", "12"],
         ]
-    assert "CAST" in instance.engine.compile(wt, "dev", "select")[0]["query"]
+    assert "CAST" in instance.engine.compile(wt, "dev", "select")[0]["sql"]
     source.write_text("id,amount,day,other\n 003 ,bad,31/12/2026,next\n")
     failed = wait_run(instance.store, instance.engine.launch(wt, "dev"), timeout=30)
     assert failed["nodes"]["select"]["status"] == "failed"

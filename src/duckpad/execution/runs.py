@@ -16,12 +16,12 @@ from typing import Any, cast
 import duckdb
 
 from .. import connection_probe, partitions, project_extensions, value_sources, variables
-from ..bundle import files_to_bundle, topological
+from ..bundle import files_to_bundle
 from ..catalog import Catalog, redact
 from ..components import expand, expand_for, in_subtree
 from ..data_preparation import failure_hint
 from ..datasets import Context, Dataset
-from ..graph import connection_references, reachable
+from ..graph import connection_references, reachable, topological
 from ..materialize import (
     collected_pass_through,
     drop_dataset,
@@ -476,7 +476,7 @@ class Runner:
                     worktree,
                     snapshot["revision"],
                     {**files, "uv.lock": locked},
-                    "build(project): lock Python dependencies",
+                    message="build(project): lock Python dependencies",
                 )
         if needs_python:
             bundle["python_lock"] = snapshot["files"].get("uv.lock")
@@ -1019,7 +1019,7 @@ class Runner:
         executed = ""
         try:
             for index, statement in enumerate(statements):
-                location, executed = locations[index], statement["query"]
+                location, executed = locations[index], statement["sql"]
                 if execution.canceled:
                     raise Problem("Execution canceled")
                 if statement.get("message_block") or statement.get("test_name"):
@@ -1044,10 +1044,10 @@ class Runner:
                 if execution.partition is not None:
                     filter_statements([statement], node, execution.partition, cursor)
                 if execution.schema_only:
-                    statement["query"] = f"SELECT * FROM ({statement['query']}) AS empty_partition LIMIT 0"
+                    statement["sql"] = f"SELECT * FROM ({statement['sql']}) AS empty_partition LIMIT 0"
                 output_start = time.monotonic()
                 data_inputs = {data.table: data for data in [*input_datasets.values(), *staged.values()]}
-                collected = collected_pass_through(statement["query"], data_inputs)
+                collected = collected_pass_through(statement["sql"], data_inputs)
                 if collected and not execution.schema_only:
                     storage = table + "_disk"
                     cursor.execute(f"CREATE VIEW {qi(storage)} AS SELECT * FROM {qi(collected.storage)}")
@@ -1063,7 +1063,7 @@ class Runner:
                         columns=collected.columns,
                         count=collected.count,
                         run=run["id"],
-                        query=statement["query"],
+                        query=statement["sql"],
                         bindings=statement["bindings"],
                         dependencies={collected.table: collected.id},
                         fingerprint=execution.fingerprints[key],
@@ -1074,7 +1074,7 @@ class Runner:
                         duration=time.monotonic() - output_start,
                     )
                     continue
-                executed = "DESCRIBE " + statement["query"]
+                executed = "DESCRIBE " + statement["sql"]
                 plan = plan_materialization(
                     cursor, statement, data_inputs, instrument=not statement["source"]
                 )
@@ -1096,7 +1096,7 @@ class Runner:
                     source_columns = [
                         {"name": c[0], "type": c[1]}
                         for c in cursor.execute(
-                            "DESCRIBE " + statement["query"], statement["bindings"]
+                            "DESCRIBE " + statement["sql"], statement["bindings"]
                         ).fetchall()
                     ]
                 staged[statement["output"]] = Dataset(
@@ -1106,7 +1106,7 @@ class Runner:
                     columns=columns,
                     count=count,
                     run=run["id"],
-                    query=statement["query"],
+                    query=statement["sql"],
                     bindings=statement["bindings"],
                     labels=statement.get("variable_bindings", {}),
                     dependencies={data.table: data.id for data in data_inputs.values()},

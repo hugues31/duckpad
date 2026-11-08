@@ -422,10 +422,9 @@ class DraftPreviews:
         for index, (statement, location) in enumerate(computed):
             table = qi(statement["table"])
             # A later block reads this output whole, as in a run; others stop past the rows kept.
-            read_later = any(statement["table"] in later["query"] for later, _ in computed[index + 1 :])
-            executed = (
-                f"CREATE TEMPORARY TABLE {table} AS SELECT * FROM ({statement['query']}) AS preview"
-                + ("" if read_later else f" LIMIT {OUTPUT_ROWS + 1}")
+            read_later = any(statement["table"] in later["sql"] for later, _ in computed[index + 1 :])
+            executed = f"CREATE TEMPORARY TABLE {table} AS SELECT * FROM ({statement['sql']}) AS preview" + (
+                "" if read_later else f" LIMIT {OUTPUT_ROWS + 1}"
             )
             try:
                 cursor.execute(executed, statement["bindings"])
@@ -517,7 +516,7 @@ class DraftPreviews:
                         continue
                     table = qi(statement["table"])
                     cursor.execute(
-                        f"CREATE TEMPORARY TABLE {table} AS SELECT * FROM ({statement['query']}) AS preview LIMIT 0",
+                        f"CREATE TEMPORARY TABLE {table} AS SELECT * FROM ({statement['sql']}) AS preview LIMIT 0",
                         statement["bindings"],
                     )
                     described = [

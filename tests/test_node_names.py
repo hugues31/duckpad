@@ -6,11 +6,12 @@ import pytest
 from helpers import join_run
 
 from duckpad.builtin_templates import BUILTINS
-from duckpad.bundle import bundle_to_files, file_node_names, validate
+from duckpad.bundle import bundle_to_files, file_node_names
 from duckpad.comparison import commit_message
 from duckpad.components import expand, group
 from duckpad.node_names import node_name, node_names
 from duckpad.util import Problem
+from duckpad.validation import validate
 from duckpad.variables import usages
 
 

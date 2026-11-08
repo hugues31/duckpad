@@ -9,13 +9,15 @@ import pytest
 from helpers import example_bundle, wait_run
 
 from duckpad.archive import archive_bundle, read_archive, write_archive
-from duckpad.bundle import bundle_to_files, files_to_bundle, is_declarative, validate
+from duckpad.bundle import bundle_to_files, files_to_bundle
 from duckpad.comparison import compare_files
 from duckpad.components import expand, group, import_definition
 from duckpad.merge import merge_files
 from duckpad.node_code import code_path, node_sql
+from duckpad.project_files import is_declarative
 from duckpad.search import node_entries
 from duckpad.util import Problem
+from duckpad.validation import validate
 
 
 def detach(bundle, node, parent=None):

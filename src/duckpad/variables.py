@@ -16,13 +16,15 @@ import json
 import re
 from collections.abc import Iterable
 
+from .node_code import template_path
 from .node_names import graph_names, name_text
+from .project_files import VARIABLES as DOCUMENT
 from .templates import VARIABLE_REFERENCE, directives, parse_parameter
 from .types import Record
-from .util import Problem, dumps
+from .util import Problem
 from .value_types import base_type, check_value, options
 
-FILE = "variables.json"
+FILE = DOCUMENT.file
 KEY = "$var"
 NAME = re.compile(r"[a-z][a-z0-9_]*")
 FIELDS = {"type", "description", "default", "environments", "from"}
@@ -92,22 +94,8 @@ def substitute(value, replace):
     )
 
 
-def read(text):
-    """The bundle form of variables.json: an object, None without the file, or the raw text otherwise.
-
-    Raw text keeps a malformed file saved and editable as it is, like other invalid content.
-    """
-    if text is None:
-        return None
-    try:
-        value = json.loads(text)
-    except ValueError:
-        return text
-    return value if isinstance(value, dict) else text
-
-
-def write(value):
-    return value if isinstance(value, str) else dumps(value)
+read = DOCUMENT.read
+write = DOCUMENT.write
 
 
 def normalized_type(type_name):
@@ -127,44 +115,35 @@ def normalized_type(type_name):
 
 
 def declarations(bundle):
-    """Parse a bundle's variables into `(variables, file_error)`.
+    """Parse variable declarations, raising Problem for an invalid document.
 
     Each variable holds its canonical type, description, environment values and optional
     default, plus `errors`: the default or environment keys whose value does not match the
     type. A file error makes every variable unavailable.
     """
-    raw = bundle.get("variables")
-    if raw is None:
-        return {}, None
-    if isinstance(raw, str):
-        try:
-            json.loads(raw)
-        except ValueError as error:
-            return {}, f"{FILE} is not valid JSON: {error}"
-    if not isinstance(raw, dict):
-        return {}, f"{FILE} must contain a JSON object of variables"
+    raw = DOCUMENT.declarations(bundle.get("variables"))
     result = {}
     for name, declaration in raw.items():
         if not NAME.fullmatch(name):
-            return {}, (
-                f"Invalid variable name {name!r}: use lowercase letters, digits and underscores, "
-                "starting with a letter"
+            raise Problem(
+                f"Invalid variable name {name!r}: use lowercase letters, digits and underscores, starting with a letter",
+                422,
             )
         if not isinstance(declaration, dict):
-            return {}, f"Variable {name} must be an object with a type"
+            raise Problem(f"Variable {name} must be an object with a type", 422)
         unknown = sorted(declaration.keys() - FIELDS)
         if unknown and "from" not in declaration:
-            return {}, f"Variable {name} has unknown fields: {', '.join(unknown)}"
+            raise Problem(f"Variable {name} has unknown fields: {', '.join(unknown)}", 422)
         type_name = normalized_type(declaration.get("type"))
         if type_name is None:
-            return {}, (
-                f"Variable {name} has an unknown type {declaration.get('type')!r}. Use text, number, "
-                "boolean, date, choice(a|b), identifier, list<text> or list<number>."
+            raise Problem(
+                f"Variable {name} has an unknown type {declaration.get('type')!r}. Use text, number, boolean, date, choice(a|b), identifier, list<text> or list<number>.",
+                422,
             )
         description = declaration.get("description", "")
         environments = declaration.get("environments", {})
         if not isinstance(description, str):
-            return {}, f"Variable {name}: the description must be text"
+            raise Problem(f"Variable {name}: the description must be text", 422)
         if "from" in declaration:
             errors = {"fields": f"Unknown fields: {', '.join(unknown)}"} if unknown else {}
             forbidden = declaration.keys() & {"default", "environments"}
@@ -179,7 +158,7 @@ def declarations(bundle):
             }
             continue
         if not isinstance(environments, dict):
-            return {}, f"Variable {name}: environments must be an object of values"
+            raise Problem(f"Variable {name}: environments must be an object of values", 422)
         errors = {}
         if "default" in declaration:
             message = check_value(type_name, declaration["default"])
@@ -196,7 +175,15 @@ def declarations(bundle):
             "environments": environments,
             "errors": errors,
         }
-    return result, None
+    return result
+
+
+def inspect_declarations(bundle):
+    """Collect a declaration error when an editor or tolerant planner needs partial results."""
+    try:
+        return declarations(bundle), None
+    except Problem as error:
+        return {}, str(error)
 
 
 def resolve(variable, environment, computed=None):
@@ -281,16 +268,16 @@ def definition_problems(bundle):
     """Errors on templates and component definitions that reference variables."""
     problems = []
     for key, text in sorted(bundle.get("templates", {}).items()):
-        if found := template_references(text):
+        if not key.endswith(".py") and (found := template_references(text)):
             problems.append(
                 {
-                    "file": f"templates/{key}.sql",
+                    "file": template_path(key),
                     "message": f"Templates cannot reference project variables ({', '.join(found)}). "
                     "Declare a parameter, then bind it to the variable on the node in the flow.",
                 }
             )
     for path, text in sorted(bundle.get("node_sql", {}).items()):
-        if found := template_references(text):
+        if not path.endswith(".py") and (found := template_references(text)):
             problems.append(
                 {
                     "file": path,
@@ -358,7 +345,11 @@ def unportable(bundle):
     """IDs of the components and templates whose definitions reference variables themselves."""
     return (
         {key for key, definition in bundle.get("components", {}).items() if component_references(definition)},
-        {key for key, text in bundle.get("templates", {}).items() if template_references(text)},
+        {
+            key
+            for key, text in bundle.get("templates", {}).items()
+            if not key.endswith(".py") and template_references(text)
+        },
     )
 
 
@@ -375,7 +366,11 @@ def portability_error(bundle, node, excluded):
                 f"Component {identity} references project variables. Expose the parameter, then bind "
                 "it to the variable on the component instance."
             )
-    if not node.get("template") and template_references(node.get("template_sql", "")):
+    if (
+        node.get("language") != "python"
+        and not node.get("template")
+        and template_references(node.get("template_sql", ""))
+    ):
         return "Node code references project variables. Declare a parameter, then bind it to the variable on the node in the flow."
     if node.get("template") in templates:
         return (
@@ -439,7 +434,7 @@ def expression_references_of(node):
 
 def problems(bundle):
     """Errors of variables.json and of references inside definitions. Warnings are separate."""
-    variables, file_error = declarations(bundle)
+    variables, file_error = inspect_declarations(bundle)
     if file_error:
         result = [{"file": FILE, "message": file_error}]
     else:
@@ -448,28 +443,12 @@ def problems(bundle):
             for name, variable in sorted(variables.items())
             for message in variable["errors"].values()
         ]
-    if any("from" in v for v in variables.values()):
-        from . import value_sources
-        from .components import expand
-
-        nodes, edges, boundaries = expand(bundle, tolerant=True)
-        sources = value_sources.sources(bundle, nodes, boundaries)
-        result += [
-            {"file": FILE, "variable": name, "message": source["error"], "code": source["code"]}
-            for name, source in sources.items()
-            if "error" in source
-        ]
-        _, invalid = value_sources.dependencies(nodes, edges, sources)
-        result += [
-            {"file": "flow.json", "node": key, "message": error["error"], "code": error["code"]}
-            for key, error in invalid.items()
-        ]
     return result + definition_problems(bundle)
 
 
 def node_problems(bundle, nodes):
     """Environment-independent errors of the bound parameters and expression references of expanded nodes."""
-    variables, file_error = declarations(bundle)
+    variables, file_error = inspect_declarations(bundle)
     excluded = unportable(bundle)
     result = []
     for key, node in nodes.items():
@@ -509,7 +488,7 @@ def bind(bundle, nodes, environment, computed=None):
     Expression parameters keep their text. Their `{{ var.name }}` references are recorded in
     `references`: parameter -> list of the same bindings, in order of first appearance.
     """
-    variables, file_error = declarations(bundle)
+    variables, file_error = inspect_declarations(bundle)
     excluded = unportable(bundle)
 
     def resolved(name, message):
@@ -581,7 +560,7 @@ def used(
     computed: Record | None = None,
 ) -> Record:
     """Variables used by bound nodes: name -> type, and value and source or the reason it has none."""
-    variables, file_error = declarations(bundle)
+    variables, file_error = inspect_declarations(bundle)
     names = sorted(
         {
             b["name"]
@@ -654,7 +633,7 @@ def usages(bundle):
 
 def warnings(bundle, environments):
     """Non-blocking advice: values for environments this instance lacks, and secret-like names."""
-    variables, _ = declarations(bundle)
+    variables, _ = inspect_declarations(bundle)
     result = []
     for name, variable in sorted(variables.items()):
         result += [
@@ -681,7 +660,7 @@ def warnings(bundle, environments):
 
 def summary(bundle, environments, computed=None):
     """A bundle's variables for the interface: values per environment, usages and diagnostics."""
-    variables, file_error = declarations(bundle)
+    variables, file_error = inspect_declarations(bundle)
     used_by = usages(bundle)
     advice = warnings(bundle, environments)
     return {
@@ -709,7 +688,7 @@ def summary(bundle, environments, computed=None):
 
 def rename(bundle, old, new):
     """A copy of a bundle with a declared variable and its root flow and view references renamed."""
-    variables, file_error = declarations(bundle)
+    variables, file_error = inspect_declarations(bundle)
     if file_error:
         raise Problem(f"Correct {FILE} before renaming a variable: {file_error}", 422)
     if old not in variables:
@@ -747,7 +726,7 @@ def computation(bundle, nodes):
     A declaration without its description stands for the variable: value changes in any
     environment affect the node, while renames and documentation edits do not.
     """
-    variables, file_error = declarations(bundle)
+    variables, file_error = inspect_declarations(bundle)
 
     def computed(name):
         variable = variables.get(name)
