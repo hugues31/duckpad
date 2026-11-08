@@ -20,6 +20,9 @@ async function openCode(page: Page) {
 }
 
 async function editCode(page: Page, text: string) {
+  // A newly selected file mounts a hidden editor, which ignores focus and
+  // reports no changes until it shows.
+  await expect(page.locator(".code-workspace .monaco-editor")).toBeVisible();
   const editor = page.locator(".code-workspace .monaco-editor textarea");
   await editor.focus();
   await page.keyboard.press("ControlOrMeta+A");

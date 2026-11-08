@@ -243,6 +243,11 @@ test("Run persists unsaved Code edits before launching", async ({ page }) => {
   ).params.status = { $var: "order_status" };
   await page.getByRole("link", { name: "Code", exact: true }).click();
   await page.getByRole("treeitem", { name: "flow.json", exact: true }).click();
+  // The file's new editor stays hidden, so focusing it fails, and reports no
+  // changes until it is ready: wait until it shows the file.
+  await expect(page.locator(".code-workspace .monaco-editor")).toContainText(
+    '"edges"',
+  );
   const editor = page.locator(".code-workspace .monaco-editor textarea");
   await editor.focus();
   await page.keyboard.press("ControlOrMeta+A");
