@@ -12,6 +12,7 @@ from fastapi import FastAPI, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, Response
+from fastapi.routing import APIRoute
 from starlette.exceptions import HTTPException
 from starlette.middleware.base import RequestResponseEndpoint
 
@@ -77,6 +78,17 @@ def same_origin_download(request: Request) -> None:
     request.state.frame_options = "SAMEORIGIN"
 
 
+def has_api_path(routes, path: str) -> bool:
+    """Distinguish an unsupported API method from the SPA's catch-all match."""
+    for route in routes:
+        if isinstance(route, APIRoute) and route.path.startswith("/api/"):
+            if route.path_regex.fullmatch(path):
+                return True
+        elif (included := getattr(route, "original_router", None)) and has_api_path(included.routes, path):
+            return True
+    return False
+
+
 def install(app: FastAPI, auth: Auth) -> None:
     from .security import admit, authorize_unknown_route, protected
 
@@ -101,6 +113,8 @@ def install(app: FastAPI, auth: Auth) -> None:
                 await run_in_threadpool(authorize_unknown_route, request)
             except Problem as denied:
                 return request_problem(request, denied)
+            if request.url.path.startswith("/api/") and not has_api_path(app.routes, request.url.path):
+                return request_problem(request, Problem("Not found", 404))
         return request_problem(request, Problem(str(error.detail), error.status_code), error.headers)
 
     @app.middleware("http")
