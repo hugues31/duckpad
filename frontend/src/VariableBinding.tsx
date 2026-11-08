@@ -22,7 +22,7 @@ import {
 } from "./variables";
 
 /** How a variable's values differ between environments, in one line. */
-export function useValueSummary() {
+function useValueSummary() {
   const t = useT();
   return (variable: VariableSummary) => {
     const values = Object.entries(variable.values);

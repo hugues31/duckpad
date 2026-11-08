@@ -62,6 +62,15 @@ def test_explicit_contexts_paging_and_retained_reads(services, monkeypatch):
     assert [r["values"] for r in rows["rows"]] == [[10, "one"], [10, "one"]]
     assert rows["partition_context"] == selected
     assert rows["executed_sql"]
+    missing, lookup = engine.input_columns(worktree, "dev", "transform", partition_context=selected)["inputs"]
+    assert missing["columns"] is None
+    assert lookup["columns"] == [{"name": "rate", "type": "INTEGER"}]
+    retained = {**selected, "partition_id": second["entries"][0]["partition_id"]}
+    columns, _ = engine.input_columns(worktree, "dev", "transform", partition_context=retained)["inputs"]
+    assert columns["origin"] == "result"
+    assert (
+        columns["columns"] == engine.preview(worktree, "dev", "source", partition_context=retained)["columns"]
+    )
     with pytest.raises(Problem, match="explicit partition manifest"):
         engine.preview(worktree, "dev", "transform")
     with pytest.raises(Problem, match="Select one"):
@@ -94,3 +103,22 @@ def test_eviction_is_honest_and_all_is_incomplete(services):
     )
     assert preview["incomplete"] == {"available": 1, "total": 2}
     assert preview["status"] == "stale"
+
+
+def test_input_columns_keep_healthy_ports_when_a_partition_failed(services, monkeypatch):
+    store, projects, _, engine = services
+    worktree = projects.create("Failed input partition", bundle())["id"]
+    run = join_run(store, engine.launch(worktree, "dev")["id"])
+    load = engine.partitions.load
+
+    def failed_input(worktree, environment, node, port, context):
+        if node == "source":
+            raise Problem("boom", 409)
+        return load(worktree, environment, node, port, context)
+
+    monkeypatch.setattr(engine.partitions, "load", failed_input)
+    entries = engine.input_columns(
+        worktree, "dev", "transform", partition_context={"manifest": run["partitions"]["manifest"]}
+    )["inputs"]
+    assert entries[1]["input"] == "lookup"
+    assert entries[1]["columns"] == [{"name": "rate", "type": "INTEGER"}]

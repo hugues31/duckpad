@@ -1,25 +1,20 @@
-import type { PartitionLaunchOptions } from "./partitions";
-import { PartitionRunSummary, partitionRunLabels } from "./PartitionRunMenu";
-import ConvertNodeDialog from "./ConvertNodeDialog";
-import { nodeCode, nodeCodePath, nodeGraph } from "./nodeCode";
-import {
-  lazy,
-  Suspense,
-  useEffect,
-  useEffectEvent,
-  useRef,
-  useState,
-} from "react";
-import { useLocation, useNavigate } from "react-router";
 import { Boxes } from "lucide-react";
+import { lazy, Suspense, useRef, useState } from "react";
+import { useLocation, useNavigate } from "react-router";
 import { api, errorDetail, importProjectArchive, send, withQuery } from "./api";
+import { CombinedResolutionDialog, ConflictDialog } from "./ConflictDialog";
+import ConvertNodeDialog from "./ConvertNodeDialog";
 import DuckMark from "./DuckMark";
 import GitWorkspace from "./GitWorkspace";
-import NewProjectModal from "./NewProjectModal";
-import NewBranchModal from "./NewBranchModal";
 import { useT } from "./i18n";
 import { ConfirmModal, EditorModal, FormModal, Modal } from "./modals";
 import { usePageRoute } from "./navigation";
+import NewBranchModal from "./NewBranchModal";
+import NewProjectModal from "./NewProjectModal";
+import { nodeCode, nodeGraph, setNodeCode } from "./nodeCode";
+import { partitionRunLabels, PartitionRunSummary } from "./PartitionRunMenu";
+import type { PartitionLaunchOptions } from "./partitions";
+import SaveState from "./SaveState";
 import { useShell } from "./shell";
 import type {
   Bundle,
@@ -30,9 +25,9 @@ import type {
 } from "./types";
 import { useApiResource } from "./useApiResource";
 import { useAsyncAction } from "./useAsyncAction";
-import { useIdleSave, useRevisionDraft } from "./useRevisionDraft";
+import { useAutosavedDraft } from "./useAutosavedDraft";
+import { useSaveShortcut } from "./useSaveShortcut";
 import { ScopeVariables } from "./VariableFields";
-import { ConflictDialog, CombinedResolutionDialog } from "./ConflictDialog";
 import { useWorktree } from "./worktree";
 
 const CodeEditor = lazy(() => import("./Editor"));
@@ -338,9 +333,7 @@ function WorktreeDialog({
           readOnly={!canEdit || !!node.template}
           read={(bundle) => nodeCode(bundle, node, modal.parent)}
           write={(bundle, text) => {
-            (bundle.node_sql ||= {})[
-              nodeCodePath(node.id, modal.parent, node.language)
-            ] = text;
+            setNodeCode(bundle, node, text, modal.parent);
           }}
           onClose={onClose}
         />
@@ -460,46 +453,20 @@ function RevisionEditor({
 }) {
   const t = useT();
   const { save, statuses } = useWorktree();
-  const { draft, dirty, pending, update, persist, rejected } = useRevisionDraft(
+  const { notify } = useShell();
+  const { draft, dirty, pending, update, saveNow, error } = useAutosavedDraft(
     read(snapshot.bundle!),
     snapshot,
     (text: string, base: Snapshot) =>
       save(base, (bundle) => write(bundle, text)),
-    { autosave: !readOnly },
+    {
+      readOnly,
+      onOrphanedError: (error) => notify((error as Error).message, true),
+    },
   );
-  const [error, setError] = useState("");
-  // The text whose save failed when closing; closing again leaves it unsaved.
+  // A second close can dismiss an already reported, unsavable draft.
   const [unsavable, setUnsavable] = useState<string | null>(null);
-  const saveNow = async () => {
-    if (readOnly) return true;
-    setError("");
-    try {
-      await persist();
-      return true;
-    } catch (e) {
-      setError((e as Error).message);
-      return false;
-    }
-  };
-  useIdleSave(draft, dirty && !readOnly, () => {
-    if (!rejected()) void saveNow();
-  });
-  const saveShortcut = useEffectEvent((event: KeyboardEvent) => {
-    if (
-      !(event.ctrlKey || event.metaKey) ||
-      event.altKey ||
-      event.key.toLowerCase() !== "s"
-    )
-      return;
-    // The browser would otherwise save the page.
-    event.preventDefault();
-    void saveNow();
-  });
-  useEffect(() => {
-    // Capture the key before the code editor handles it.
-    window.addEventListener("keydown", saveShortcut, true);
-    return () => window.removeEventListener("keydown", saveShortcut, true);
-  }, []);
+  useSaveShortcut(saveNow);
   const close = async () => {
     if (unsavable === draft || (await saveNow())) onClose();
     else setUnsavable(draft);
@@ -528,15 +495,7 @@ function RevisionEditor({
       {error && <div className="notice error">{error}</div>}
       <footer>
         {!readOnly && (
-          <span
-            className="editor-save-state muted small"
-            role="status"
-            title={t("editorAutosaveHint")}
-          >
-            {t(
-              pending ? "saving" : dirty || error ? "unsavedChanges" : "saved",
-            )}
-          </span>
+          <SaveState pending={pending} dirty={dirty} error={error} />
         )}
         <button className="button secondary" onClick={close}>
           {t("close")}

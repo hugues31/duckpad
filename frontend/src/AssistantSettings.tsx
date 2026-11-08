@@ -1,6 +1,7 @@
-import { useSettingsForm } from "./useSettingsForm";
-import { useState, type FormEvent, type ReactNode } from "react";
 import { Check, ExternalLink, Plus, RefreshCw, Trash2, X } from "lucide-react";
+import { useState, type FormEvent, type ReactNode } from "react";
+import { api, send } from "./api";
+import { useAssistantError } from "./assistantErrors";
 import { PromptSettings } from "./AssistantPrompts";
 import {
   ProviderLogo,
@@ -9,8 +10,6 @@ import {
   selfHosted,
   useProviderName,
 } from "./assistantProviders";
-import { useAssistantError } from "./assistantErrors";
-import { api, send } from "./api";
 import type {
   AssistantProvider,
   AssistantSettings as Configuration,
@@ -18,9 +17,10 @@ import type {
 } from "./assistantTypes";
 import { identifier } from "./graph";
 import { useT } from "./i18n";
+import { useShell } from "./shell";
 import { useResource } from "./useApiResource";
 import { useAsyncAction } from "./useAsyncAction";
-import { useShell } from "./shell";
+import { useSettingsGuard } from "./useSettingsForm";
 
 /** Credentials are sent only when typed; saved values stay on the server. */
 const payload = ({
@@ -96,7 +96,7 @@ export default function AssistantSettings() {
   };
   const dirty =
     !!draft && JSON.stringify(draft) !== JSON.stringify(resource.data);
-  const persist = useSettingsForm({
+  const persist = useSettingsGuard({
     dirty,
     discard,
     save: async () => {

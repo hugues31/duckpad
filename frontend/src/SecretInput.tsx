@@ -5,9 +5,7 @@ import type { Json } from "./types";
 /** A secret the server reads at each run instead of a stored value. */
 export type SecretReference = { from: "env" | "file"; name: string };
 
-export const isReference = (
-  value: Json | undefined,
-): value is SecretReference =>
+const isReference = (value: Json | undefined): value is SecretReference =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
 /** A secret connection parameter: a stored value, an environment variable or a secret file. */

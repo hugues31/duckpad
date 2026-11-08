@@ -1,8 +1,3 @@
-import { usePartitionQuery } from "./worktree";
-import { withQuery } from "./api";
-import { partitionMessage } from "./partitions";
-import { lazy, Suspense, useState } from "react";
-import { Link } from "react-router";
 import {
   AlertTriangle,
   CircleCheck,
@@ -14,12 +9,16 @@ import {
   Upload,
   User,
 } from "lucide-react";
+import { lazy, Suspense, useState } from "react";
+import { Link } from "react-router";
+import { withQuery } from "./api";
 import AskAssistant from "./AskAssistant";
-import ExportDownload from "./ExportDownload";
 import { messageOrigin, WarningBadge } from "./ExecutionMessages";
+import ExportDownload from "./ExportDownload";
 import { countLabel, useT } from "./i18n";
 import { worktreeUrl } from "./navigation";
-import { clock, seconds } from "./ResultsPanel";
+import { partitionMessage } from "./partitions";
+import { clock, seconds } from "./results";
 import type {
   ExecutionResult,
   NodeResult,
@@ -29,6 +28,7 @@ import type {
 } from "./types";
 import { useApiResource } from "./useApiResource";
 import { StatementVariables } from "./VariableFields";
+import { usePartitionQuery } from "./worktree";
 
 const CodeEditor = lazy(() => import("./Editor"));
 const FILTERS = ["all", "messages", "warnings", "errors"] as const;

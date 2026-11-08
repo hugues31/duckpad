@@ -1,3 +1,4 @@
+import { X } from "lucide-react";
 import {
   lazy,
   Suspense,
@@ -6,7 +7,6 @@ import {
   useRef,
   useState,
 } from "react";
-import { X } from "lucide-react";
 import { useT } from "./i18n";
 import { useAsyncAction } from "./useAsyncAction";
 
@@ -25,52 +25,93 @@ export function ConfirmModal({
   onConfirm: () => Promise<void>;
   onClose: () => void;
 }) {
+  return (
+    <ModalForm
+      title={title}
+      submitLabel={confirmLabel}
+      pendingLabel="loading"
+      onSubmit={onConfirm}
+      onClose={onClose}
+      cancelAutoFocus
+    >
+      {children}
+    </ModalForm>
+  );
+}
+
+/** A native form with one in-flight submission and guarded dismissal. */
+export function ModalForm({
+  title,
+  children,
+  onSubmit,
+  onClose,
+  submitLabel,
+  pendingLabel = "saving",
+  cancelLabel = "cancel",
+  cancelAutoFocus = false,
+  disabled = false,
+  wide = false,
+}: {
+  title: string;
+  children: React.ReactNode;
+  onSubmit: () => Promise<unknown>;
+  onClose: () => void;
+  submitLabel: string;
+  pendingLabel?: "saving" | "loading";
+  cancelLabel?: "cancel" | "close";
+  cancelAutoFocus?: boolean;
+  disabled?: boolean;
+  wide?: boolean;
+}) {
   const t = useT();
   const { pending, error, run } = useAsyncAction();
   const submitting = useRef(false);
+  const close = () => {
+    if (!submitting.current) onClose();
+  };
   return (
-    <Modal
-      title={title}
-      onClose={() => {
-        if (!submitting.current) onClose();
-      }}
-    >
-      <div className="modal-content">
-        {children}
-        {error && (
-          <div className="notice error" role="alert">
-            {error}
-          </div>
-        )}
-      </div>
-      <footer>
-        <button
-          autoFocus
-          className="button secondary"
-          disabled={pending}
-          onClick={onClose}
-        >
-          {t("cancel")}
-        </button>
-        <button
-          className="button primary"
-          disabled={pending}
-          onClick={async () => {
-            if (submitting.current) return;
-            submitting.current = true;
-            if (await run(onConfirm)) onClose();
+    <Modal title={title} onClose={close} wide={wide}>
+      <form
+        onSubmit={async (event) => {
+          event.preventDefault();
+          if (disabled || submitting.current) return;
+          submitting.current = true;
+          try {
+            if (await run(onSubmit)) onClose();
+          } finally {
             submitting.current = false;
-          }}
-        >
-          {pending ? t("loading") : confirmLabel}
-        </button>
-      </footer>
+          }
+        }}
+      >
+        <div className="modal-content">
+          {children}
+          {error && (
+            <div className="notice error" role="alert">
+              {error}
+            </div>
+          )}
+        </div>
+        <footer>
+          <button
+            type="button"
+            autoFocus={cancelAutoFocus}
+            className="button secondary"
+            disabled={pending}
+            onClick={close}
+          >
+            {t(cancelLabel)}
+          </button>
+          <button className="button primary" disabled={disabled || pending}>
+            {pending ? t(pendingLabel) : submitLabel}
+          </button>
+        </footer>
+      </form>
     </Modal>
   );
 }
 
 /** The last visible blocking dialog receives keyboard dismissal and focus cycling. */
-export function topDialog() {
+function topDialog() {
   return [
     ...document.querySelectorAll<HTMLElement>(
       '[role="dialog"]:not([aria-modal="false"])',
@@ -250,7 +291,7 @@ export function EditorModal({
   );
 }
 
-export interface FormField {
+interface FormField {
   key: string;
   label: string;
   value?: string;
@@ -279,52 +320,38 @@ export function FormModal({
   const [values, setValues] = useState<Record<string, string>>(
     Object.fromEntries(fields.map((f) => [f.key, f.value || ""])),
   );
-  const { pending, error, run } = useAsyncAction();
   return (
-    <Modal title={title} onClose={onClose}>
-      <form
-        onSubmit={async (e) => {
-          e.preventDefault();
-          if (await run(() => onSubmit(values))) onClose();
-        }}
-      >
-        <div className="modal-content">
-          {description && <p className="muted">{description}</p>}
-          {fields.map((f) => (
-            <label className="field" key={f.key}>
-              <span>{f.label}</span>
-              {f.multiline ? (
-                <textarea
-                  rows={5}
-                  value={values[f.key]}
-                  onChange={(e) =>
-                    setValues({ ...values, [f.key]: e.target.value })
-                  }
-                />
-              ) : (
-                <input
-                  autoFocus={f === fields[0]}
-                  required={f.required !== false}
-                  placeholder={f.placeholder}
-                  value={values[f.key]}
-                  onChange={(e) =>
-                    setValues({ ...values, [f.key]: e.target.value })
-                  }
-                />
-              )}
-            </label>
-          ))}
-          {error && <div className="notice error">{error}</div>}
-        </div>
-        <footer>
-          <button type="button" className="button secondary" onClick={onClose}>
-            {t("cancel")}
-          </button>
-          <button className="button primary" disabled={pending}>
-            {pending ? t("saving") : submitLabel || t("create")}
-          </button>
-        </footer>
-      </form>
-    </Modal>
+    <ModalForm
+      title={title}
+      onClose={onClose}
+      onSubmit={() => onSubmit(values)}
+      submitLabel={submitLabel || t("create")}
+    >
+      {description && <p className="muted">{description}</p>}
+      {fields.map((f) => (
+        <label className="field" key={f.key}>
+          <span>{f.label}</span>
+          {f.multiline ? (
+            <textarea
+              rows={5}
+              value={values[f.key]}
+              onChange={(e) =>
+                setValues({ ...values, [f.key]: e.target.value })
+              }
+            />
+          ) : (
+            <input
+              autoFocus={f === fields[0]}
+              required={f.required !== false}
+              placeholder={f.placeholder}
+              value={values[f.key]}
+              onChange={(e) =>
+                setValues({ ...values, [f.key]: e.target.value })
+              }
+            />
+          )}
+        </label>
+      ))}
+    </ModalForm>
   );
 }

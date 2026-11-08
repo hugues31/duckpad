@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api, withQuery } from "./api";
+import CommitRow from "./CommitRow";
 import ComparisonView from "./ComparisonView";
 import { TabStatus } from "./gitTabs";
-import type { Branch, Comparison, GitTag, HistoryPage } from "./gitTypes";
+import type { Branch, Comparison, GitTag } from "./gitTypes";
 import { useT } from "./i18n";
 import Select from "./Select";
-import TagBadges from "./TagBadges";
 import { useApiResource } from "./useApiResource";
+import { useGitHistory } from "./useGitHistory";
 
 /**
  * The revisions chosen for a comparison, as the user names them. `pinned`
@@ -81,24 +82,13 @@ export default function GitCompareTab({
   const error = settled?.comparison === comparison ? settled.error : "";
   const resolved = useRef<Resolved>(null);
   const [entity, setEntity] = useState(initialEntity);
-  const [history, setHistory] = useState<HistoryPage | null>(null);
-  const [historyAttempt, setHistoryAttempt] = useState(0);
-  const historyRequest = JSON.stringify([
-    base,
+  const gitHistory = useGitHistory(`${base}/history`, {
     entity,
-    version,
-    historyAttempt,
-  ]);
-  // Failures only show while the history they concern is the current one.
-  const [historyFailure, setHistoryFailure] = useState<{
-    request: string;
-    message: string;
-    retry: () => void;
-  } | null>(null);
-  const historyError =
-    historyFailure?.request === historyRequest ? historyFailure : null;
-  const [loadingMore, setLoadingMore] = useState(false);
-
+    refresh: version,
+    delay: 300,
+    limit: 50,
+  });
+  const history = gitHistory.data;
   useEffect(() => {
     if (!ready) return;
     const controller = new AbortController();
@@ -133,61 +123,6 @@ export default function GitCompareTab({
       controller.abort();
     };
   }, [comparison, ready]);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    const timer = window.setTimeout(() => {
-      void api<HistoryPage>(
-        withQuery(`${base}/history`, { entity: entity || undefined }),
-        { signal: controller.signal },
-      )
-        .then((page) => {
-          if (!controller.signal.aborted) setHistory(page);
-        })
-        .catch((e) => {
-          if (!controller.signal.aborted)
-            setHistoryFailure({
-              request: historyRequest,
-              message: e.message,
-              retry: () => setHistoryAttempt((value) => value + 1),
-            });
-        });
-    }, 300);
-    return () => {
-      clearTimeout(timer);
-      controller.abort();
-    };
-  }, [base, entity, historyRequest]);
-
-  async function loadMore() {
-    if (!history || history.next === null) return;
-    const from = history;
-    setLoadingMore(true);
-    setHistoryFailure(null);
-    try {
-      const page = await api<HistoryPage>(
-        withQuery(`${base}/history`, {
-          ref: from.head,
-          offset: from.next!,
-          entity: entity || undefined,
-        }),
-      );
-      // A history reloaded meanwhile is not extended with an older page.
-      setHistory((current) =>
-        current === from
-          ? { ...page, items: [...from.items, ...page.items] }
-          : current,
-      );
-    } catch (e) {
-      setHistoryFailure({
-        request: historyRequest,
-        message: (e as Error).message,
-        retry: loadMore,
-      });
-    } finally {
-      setLoadingMore(false);
-    }
-  }
 
   const items = history?.items || [];
   const currentCommit = items.find((v) => v.commit === selection.b);
@@ -315,17 +250,7 @@ export default function GitCompareTab({
             ))}
         </datalist>
         {items.map((item) => (
-          <div className="git-commit" key={item.commit}>
-            <div>
-              <strong>{item.message}</strong>
-              <TagBadges names={item.tags} />
-              <small>
-                {item.author}
-                {item.assistant ? ` ${t("assistantAttribution")}` : ""} ·{" "}
-                {new Date(item.date).toLocaleString()} ·{" "}
-                {item.commit.slice(0, 12)}
-              </small>
-            </div>
+          <CommitRow key={item.commit} commit={item} comparison>
             <button
               className="button secondary small"
               onClick={() =>
@@ -346,19 +271,16 @@ export default function GitCompareTab({
             >
               B
             </button>
-          </div>
+          </CommitRow>
         ))}
-        <TabStatus
-          error={historyError?.message}
-          onRetry={historyError?.retry}
-        />
-        {history && history.next !== null && !historyError && (
+        <TabStatus error={gitHistory.error} onRetry={gitHistory.retry} />
+        {history && history.next !== null && !gitHistory.error && (
           <button
             className="button secondary"
-            disabled={loadingMore}
-            onClick={() => void loadMore()}
+            disabled={gitHistory.loadingMore || gitHistory.pending}
+            onClick={() => void gitHistory.loadMore()}
           >
-            {t(loadingMore ? "loading" : "loadMore")}
+            {t(gitHistory.loadingMore ? "loading" : "loadMore")}
           </button>
         )}
       </details>

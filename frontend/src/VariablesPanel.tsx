@@ -1,8 +1,3 @@
-import { displayNodeName } from "./nodeNames";
-import { ValueSourceFields } from "./ValueSourceFields";
-import { localDefinitions } from "./nodeCode";
-import { useEffect, useEffectEvent, useId, useMemo, useState } from "react";
-import { useSearchParams } from "react-router";
 import {
   AlertCircle,
   ArrowRight,
@@ -12,17 +7,22 @@ import {
   Variable,
   X,
 } from "lucide-react";
+import { useEffect, useEffectEvent, useId, useMemo, useState } from "react";
+import { useSearchParams } from "react-router";
 import { nodeInterface } from "./graph";
 import { useT } from "./i18n";
 import { ConfirmModal, FormModal } from "./modals";
+import { localDefinitions } from "./nodeCode";
+import { displayNodeName } from "./nodeNames";
+import { baseType, typeOptions } from "./parameterType";
 import Select from "./Select";
 import type { Environment, Json, Snapshot, VariableSummary } from "./types";
 import { useRevisionDraft } from "./useRevisionDraft";
+import { ValueSourceFields } from "./ValueSourceFields";
 import { VariableValueInput } from "./VariableFields";
 import {
-  baseType,
-  computedDiagnostic,
   changedEnvironments,
+  computedDiagnostic,
   declarations,
   descendants,
   fill,
@@ -30,12 +30,11 @@ import {
   initialValue,
   looksSecret,
   sameValue,
-  typeOptions,
   validValue,
-  variableSummary,
   VARIABLE_NAME,
   VARIABLE_TYPES,
   VARIABLES_FILE,
+  variableSummary,
   type Declaration,
 } from "./variables";
 

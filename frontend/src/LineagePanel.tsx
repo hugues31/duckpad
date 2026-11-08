@@ -1,20 +1,9 @@
-import { PythonIcon } from "./AddIcon";
-import { displayNodeName } from "./nodeNames";
 import {
-  useCallback,
-  useEffect,
-  useId,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
-import { createPortal } from "react-dom";
-import {
-  ReactFlow,
   Background,
   Controls,
   Handle,
   Position,
+  ReactFlow,
   useReactFlow,
   useStore,
   type Node,
@@ -25,18 +14,26 @@ import {
   ArrowLeft,
   ArrowRight,
   ChevronLeft,
-  ChevronRight,
   Database,
   GitBranch,
   Layers,
   Loader2,
   X,
 } from "lucide-react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { createPortal } from "react-dom";
+import { useNavigate } from "react-router";
+import { PythonIcon } from "./AddIcon";
 import { api, send, withQuery } from "./api";
 import { formatValue } from "./graph";
 import { useT, useTranslateValue } from "./i18n";
-import { useResource } from "./useApiResource";
-import { isFinal, usePolling } from "./usePolling";
 import {
   arrangeLineage,
   buildLineageGraph,
@@ -48,11 +45,14 @@ import {
   type Explanation,
   type Query,
 } from "./lineageGraph";
-import { VariableValues } from "./VariableFields";
 import { trapFocus } from "./modals";
-import { useOptionalWorktree } from "./worktree";
-import { useNavigate } from "react-router";
+import { displayNodeName } from "./nodeNames";
+import Pager from "./Pager";
 import type { PartitionPage } from "./partitions";
+import { useResource } from "./useApiResource";
+import { isFinal, usePolling } from "./usePolling";
+import { VariableValues } from "./VariableFields";
+import { useOptionalWorktree } from "./worktree";
 
 type Props = {
   worktree: string;
@@ -262,34 +262,15 @@ function CalculationCard({ data }: NodeProps<CardNode>) {
             ))}
           </div>
           {parentRows > result.page_size && (
-            <div className="lineage-page nodrag">
-              <button
-                className="icon"
-                aria-label={t("previous")}
-                disabled={disabled || offset === 0}
-                onClick={() =>
-                  data.page(entry.id, {
-                    offset: Math.max(0, offset - result.page_size),
-                  })
-                }
-              >
-                <ChevronLeft size={14} />
-              </button>
-              <span>
-                {offset + 1}–{Math.min(offset + result.page_size, parentRows)} /{" "}
-                {parentRows}
-              </span>
-              <button
-                className="icon"
-                aria-label={t("next")}
-                disabled={disabled || offset + result.page_size >= parentRows}
-                onClick={() =>
-                  data.page(entry.id, { offset: offset + result.page_size })
-                }
-              >
-                <ChevronRight size={14} />
-              </button>
-            </div>
+            <Pager
+              className="lineage-page nodrag"
+              between
+              offset={offset}
+              total={parentRows}
+              pageSize={result.page_size}
+              onOffset={(offset) => data.page(entry.id, { offset })}
+              disabled={disabled}
+            />
           )}
         </>
       )}
@@ -377,35 +358,21 @@ function CalculationCard({ data }: NodeProps<CardNode>) {
             </button>
           )}
           {result.total > result.page_size && (
-            <div className="lineage-page nodrag">
-              <button
-                className="icon"
-                aria-label={t("previous")}
-                disabled={disabled || offset === 0}
-                onClick={() =>
-                  data.page(entry.id, {
-                    offset: Math.max(0, offset - result.page_size),
-                  })
-                }
-              >
-                <ChevronLeft size={14} />
-              </button>
-              <span>
-                {offset + 1}–{Math.min(offset + result.page_size, result.total)}{" "}
-                / {result.total}{" "}
-                {t(result.groups ? "valueGroups" : "contributions")}
-              </span>
-              <button
-                className="icon"
-                aria-label={t("next")}
-                disabled={disabled || offset + result.page_size >= result.total}
-                onClick={() =>
-                  data.page(entry.id, { offset: offset + result.page_size })
-                }
-              >
-                <ChevronRight size={14} />
-              </button>
-            </div>
+            <Pager
+              className="lineage-page nodrag"
+              between
+              offset={offset}
+              total={result.total}
+              pageSize={result.page_size}
+              onOffset={(offset) => data.page(entry.id, { offset })}
+              disabled={disabled}
+              count={
+                <>
+                  {result.total.toLocaleString()}{" "}
+                  {t(result.groups ? "valueGroups" : "contributions")}
+                </>
+              }
+            />
           )}
         </>
       )}
@@ -948,30 +915,14 @@ function CalculationDetails({
                 </tbody>
               </table>
               {page.total > page.page_size && (
-                <div className="lineage-page">
-                  <button
-                    className="icon"
-                    aria-label={t("previous")}
-                    disabled={!offset}
-                    onClick={() =>
-                      setOffset(Math.max(0, offset - page.page_size))
-                    }
-                  >
-                    <ChevronLeft size={14} />
-                  </button>
-                  <span>
-                    {offset + 1}–{Math.min(offset + page.page_size, page.total)}{" "}
-                    / {page.total}
-                  </span>
-                  <button
-                    className="icon"
-                    aria-label={t("next")}
-                    disabled={offset + page.page_size >= page.total}
-                    onClick={() => setOffset(offset + page.page_size)}
-                  >
-                    <ChevronRight size={14} />
-                  </button>
-                </div>
+                <Pager
+                  className="lineage-page"
+                  between
+                  offset={offset}
+                  total={page.total}
+                  pageSize={page.page_size}
+                  onOffset={setOffset}
+                />
               )}
             </>
           )}

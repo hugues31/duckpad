@@ -8,7 +8,7 @@ import {
 import { DraftContext } from "./useRevisionDraft";
 
 /** Register an explicitly saved settings form with navigation and tab-close guards. */
-export function useSettingsForm({
+export function useSettingsGuard({
   dirty,
   save,
   discard,
@@ -47,4 +47,56 @@ export function useSettingsForm({
     });
   }, [dirty, register, saving]);
   return persist;
+}
+
+/** State and navigation protection shared by explicitly saved instance settings. */
+export function useSettingsForm<T>(
+  value: T | null,
+  save: (value: T) => Promise<void>,
+  options: { dirty?: boolean; discard?: () => void } = {},
+) {
+  const [draft, setDraft] = useState<T | null>(null);
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState("");
+  const [pending, setPending] = useState(false);
+  const config = draft ?? value;
+  const dirty =
+    (!!draft && JSON.stringify(draft) !== JSON.stringify(value)) ||
+    !!options.dirty;
+  const persist = useSettingsGuard({
+    dirty,
+    discard: () => {
+      setDraft(null);
+      options.discard?.();
+    },
+    save: async () => {
+      if (config === null) return;
+      setPending(true);
+      setError("");
+      setSaved(false);
+      try {
+        await save(config);
+        setDraft((current) => (current === draft ? null : current));
+        setSaved(true);
+      } catch (error) {
+        setError((error as Error).message);
+        throw error;
+      } finally {
+        setPending(false);
+      }
+    },
+  });
+  return {
+    config,
+    dirty,
+    pending,
+    error,
+    saved,
+    setSaved,
+    change: (changes: Partial<T>) => {
+      if (config) setDraft({ ...config, ...changes });
+      setSaved(false);
+    },
+    submit: () => persist().catch(() => undefined),
+  };
 }

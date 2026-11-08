@@ -1,4 +1,5 @@
 import type { Translate } from "./i18n";
+import { baseType, typeOptions } from "./parameterType";
 import type {
   Bundle,
   Json,
@@ -50,15 +51,6 @@ export type Declaration = {
   default?: Json;
   environments?: Record<string, Json>;
 };
-
-/** `choice(a|b)` -> `choice`, `list<text>` -> `list`. */
-export const baseType = (type: string) => type.trim().split(/[<(]/)[0].trim();
-
-/** The options of `choice(a|b)` or `keyword(a|b)`. */
-export function typeOptions(type: string): string[] {
-  const argument = type.match(/\((.*)\)/)?.[1];
-  return argument ? argument.split("|").map((option) => option.trim()) : [];
-}
 
 /** The variable named by a parameter value such as `{"$var": "order_status"}`. */
 export function variableReference(value: unknown): string | null {

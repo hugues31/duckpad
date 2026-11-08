@@ -1,10 +1,11 @@
-import Select from "./Select";
-import SourceFileField from "./SourceFileField";
-import ColumnPreparation from "./ColumnPreparation";
-import ParameterInput from "./ParameterInput";
 import { useId, type ReactNode } from "react";
+import ColumnPreparation from "./ColumnPreparation";
 import { useT } from "./i18n";
 import { numberBounds } from "./numberBounds";
+import ParameterInput from "./ParameterInput";
+import { baseType, typeOptions } from "./parameterType";
+import Select from "./Select";
+import SourceFileField from "./SourceFileField";
 import type { Column, Json, Parameter, Snapshot } from "./types";
 import {
   ExpressionInput,
@@ -64,7 +65,7 @@ export default function ParameterField({
   const id = useId();
   const name = parameter.name;
   const type = parameter.type || "text";
-  const base = type.split(/[<(]/)[0];
+  const base = baseType(type);
   const text = value == null ? "" : String(value);
   // A location lists file storage; other connection parameters reach databases.
   const choices = connections.filter(
@@ -167,7 +168,7 @@ export default function ParameterField({
           onChange={(e) => onChange(e.target.value)}
           onBlur={onBlur}
         >
-          {(type.match(/\((.*)\)/)?.[1] || "").split("|").map((x: string) => (
+          {typeOptions(type).map((x: string) => (
             <option key={x}>{x}</option>
           ))}
         </Select>

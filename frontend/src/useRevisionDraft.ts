@@ -98,6 +98,8 @@ interface DraftOptions<T> {
   /** Save pending edits when the editor closes instead of dropping them. */
   autosave?: boolean;
   equal?: (a: T, b: T) => boolean;
+  /** Report a failed save after the editor has unmounted. */
+  onOrphanedError?: (error: unknown) => void;
 }
 
 /** Keep immutable edits tied to their revision and serialize explicit saves.
@@ -109,7 +111,12 @@ export function useRevisionDraft<T, Revision>(
   value: T,
   revision: Revision,
   onSave: (draft: T, base: Revision) => Promise<Revision>,
-  { scope = "page", autosave = false, equal = Object.is }: DraftOptions<T> = {},
+  {
+    scope = "page",
+    autosave = false,
+    equal = Object.is,
+    onOrphanedError,
+  }: DraftOptions<T> = {},
 ) {
   const [state, setState] = useState({ draft: value, saved: value });
   const [pending, setPending] = useState(false);
@@ -125,6 +132,11 @@ export function useRevisionDraft<T, Revision>(
   );
   // Discarding invalidates the result of a save still in flight.
   const generation = useRef(0);
+  const mounted = useRef(false);
+  const orphanedError = useRef(onOrphanedError);
+  useLayoutEffect(() => {
+    orphanedError.current = onOrphanedError;
+  });
   const dirty = !equal(state.draft, state.saved);
   const unsaved = () => !equal(latest.current, saved.current);
   const show = (draft: T, savedValue: T) => {
@@ -177,7 +189,9 @@ export function useRevisionDraft<T, Revision>(
           show(latest.current, draft);
         },
         (error) => {
+          if (started !== generation.current) throw error;
           rejected.current = { draft, submitted: draft, error };
+          if (!mounted.current) orphanedError.current?.(error);
           throw error;
         },
       )
@@ -230,7 +244,13 @@ export function useRevisionDraft<T, Revision>(
           : undefined,
     });
   }, [dirty, register, scope, autosave]);
-  useEffect(() => () => actions.current.close(), []);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      actions.current.close();
+    };
+  }, []);
 
   return {
     draft: state.draft,

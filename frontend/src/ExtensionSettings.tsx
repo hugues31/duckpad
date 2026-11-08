@@ -1,35 +1,28 @@
-import { useSettingsForm } from "./useSettingsForm";
-import { useState } from "react";
 import { api, send } from "./api";
-import { useT } from "./i18n";
-import { useApiResource } from "./useApiResource";
-import { useAsyncAction } from "./useAsyncAction";
 import ExtensionImport from "./ExtensionImport";
+import { useT } from "./i18n";
+import SettingsCard from "./SettingsCard";
+import { useApiResource } from "./useApiResource";
+import { useSettingsForm } from "./useSettingsForm";
 
 type Configuration = { allow_unsigned_extensions: boolean };
 
 export default function ExtensionSettings() {
   const t = useT();
   const settings = useApiResource<Configuration>("/extensions/settings");
-  const [draft, setConfig] = useState<Configuration | null>(null);
-  const config = draft ?? settings.data;
-  const [saved, setSaved] = useState(false);
-  const { pending, run, ...save } = useAsyncAction();
-  const error = save.error || settings.error;
-  const persist = useSettingsForm({
-    dirty: !!draft && JSON.stringify(draft) !== JSON.stringify(settings.data),
-    discard: () => {
-      setConfig(null);
-    },
-    save: async () => {
-      if (!config) return;
-      settings.setData(
-        await api<Configuration>("/extensions/settings", send(config, "PUT")),
-      );
-      setConfig(null);
-      setSaved(true);
-    },
+  const {
+    config,
+    change,
+    pending,
+    saved,
+    submit,
+    error: saveError,
+  } = useSettingsForm(settings.data, async (config) => {
+    settings.setData(
+      await api<Configuration>("/extensions/settings", send(config, "PUT")),
+    );
   });
+  const error = saveError || settings.error;
   return (
     <section aria-label={t("extensionSettings")}>
       <h2>{t("extensionSettings")}</h2>
@@ -37,22 +30,18 @@ export default function ExtensionSettings() {
         <div className="settings-card">
           <ExtensionImport />
         </div>
-        <div className="settings-card">
-          <h3>{t("extensionUnsigned")}</h3>
-          <p className="muted">{t("unsignedExtensionsHint")}</p>
-          {error && (
-            <div className="notice error" role="alert">
-              {error}
-            </div>
-          )}
-          {!config ? (
-            <p>{t("loading")}</p>
-          ) : (
+        <SettingsCard
+          title={t("extensionUnsigned")}
+          description={t("unsignedExtensionsHint")}
+          error={error}
+          loading={!config}
+          level={3}
+        >
+          {config && (
             <form
               onSubmit={(event) => {
                 event.preventDefault();
-                setSaved(false);
-                void run(persist);
+                void submit();
               }}
             >
               <label className="check-row">
@@ -61,10 +50,9 @@ export default function ExtensionSettings() {
                   checked={config.allow_unsigned_extensions}
                   disabled={pending}
                   onChange={(event) => {
-                    setConfig({
+                    change({
                       allow_unsigned_extensions: event.target.checked,
                     });
-                    setSaved(false);
                   }}
                 />
                 {t("allowUnsignedExtensions")}
@@ -76,7 +64,7 @@ export default function ExtensionSettings() {
               {saved && <p role="status">{t("extensionSettingsSaved")}</p>}
             </form>
           )}
-        </div>
+        </SettingsCard>
       </div>
     </section>
   );

@@ -1,9 +1,10 @@
+import { Loader2, Play } from "lucide-react";
 import { useState } from "react";
-import { ChevronLeft, ChevronRight, Loader2, Play } from "lucide-react";
+import DataGrid from "./DataGrid";
 import type { PreviewState } from "./draftPreview";
-import { formatValue } from "./graph";
 import { useT } from "./i18n";
-import { seconds } from "./ResultsPanel";
+import Pager from "./Pager";
+import { seconds } from "./results";
 import Select from "./Select";
 
 const PAGE_SIZE = 100;
@@ -138,78 +139,33 @@ export default function DraftPreviewView({
       )}
       {output && (
         <>
-          <div className="data-scroll">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th className="row-number">#</th>
-                  {output.columns.map((column) => (
-                    <th key={column.name} data-column={column.name}>
-                      <span className="column-heading">
-                        <span>{column.name}</span>
-                        <small>{column.type}</small>
-                      </span>
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {rows.slice(start, start + PAGE_SIZE).map((row, index) => (
-                  <tr key={start + index}>
-                    <td className="row-number">{start + index + 1}</td>
-                    {row.map((value, i) => (
-                      <td key={i}>
-                        <span
-                          className={`cell-text ${value === null ? "null" : ""}`}
-                        >
-                          {formatValue(value)}
-                        </span>
-                      </td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <DataGrid
+            columns={output.columns}
+            rows={rows
+              .slice(start, start + PAGE_SIZE)
+              .map((values, index) => ({ id: start + index, values }))}
+            offset={start}
+          >
             {!total && <p className="empty-small">{t("previewNoRows")}</p>}
-          </div>
+          </DataGrid>
           <div className="preview-footer">
             <span>
               {skipped > 0 ? t("previewSkipped") : t("previewNotSaved")}
             </span>
-            <div className="row">
-              <span>
-                {total
-                  ? `${start + 1}–${Math.min(start + PAGE_SIZE, total)}`
-                  : "0"}{" "}
-                /{" "}
-                {(output.truncated
-                  ? t("previewMoreRows")
-                  : output.count > total
-                    ? t("previewFirstRows")
-                    : "{count}"
-                )
-                  .replace("{count}", output.count.toLocaleString())
-                  .replace("{shown}", total.toLocaleString())}
-              </span>
-              <button
-                className="icon"
-                disabled={!start}
-                title={t("previous")}
-                aria-label={t("previous")}
-                onClick={() => setOffset(Math.max(0, start - PAGE_SIZE))}
-              >
-                <ChevronLeft size={15} />
-              </button>
-              <button
-                className="icon"
-                disabled={start + PAGE_SIZE >= total}
-                title={t("next")}
-                aria-label={t("next")}
-                onClick={() => setOffset(start + PAGE_SIZE)}
-              >
-                <ChevronRight size={15} />
-              </button>
-            </div>
+            <Pager
+              offset={start}
+              total={total}
+              pageSize={PAGE_SIZE}
+              onOffset={setOffset}
+              count={(output.truncated
+                ? t("previewMoreRows")
+                : output.count > total
+                  ? t("previewFirstRows")
+                  : "{count}"
+              )
+                .replace("{count}", output.count.toLocaleString())
+                .replace("{shown}", total.toLocaleString())}
+            />
           </div>
         </>
       )}
