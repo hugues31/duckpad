@@ -404,7 +404,7 @@ def read_runs(
                     "commit",
                 )
             }
-            for r in store.runs(user, worktree)
+            for r in store.runs(user, worktree, summary=True)
         ]
     return ctx.deps.safe(page(items, offset, limit))
 

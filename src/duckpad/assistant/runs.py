@@ -172,7 +172,7 @@ def compare_run(ctx: RunContext[Dependencies], run: str, offset: int = 0, limit:
     previous = next(
         (
             r
-            for r in ctx.deps.services.store.runs(user, record["worktree"])
+            for r in ctx.deps.services.store.runs(user, record["worktree"], summary=True)
             if r["started"] < record["started"]
             and r["status"] == "success"
             and all(r[k] == record[k] for k in ("environment", "scope", "branch"))
@@ -181,7 +181,7 @@ def compare_run(ctx: RunContext[Dependencies], run: str, offset: int = 0, limit:
     )
     if previous is None:
         return {"run": run, "previous": None}
-    run_record(ctx.deps, previous["id"])
+    previous = run_record(ctx.deps, previous["id"])
     fields = ["status", "duration", "fingerprint"]
     if config["allow_data"]:
         fields += ["error", "results"]
