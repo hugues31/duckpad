@@ -12,11 +12,12 @@ from .. import schemas
 from ..archive import MAX_ARCHIVE_BYTES, archive_bundle, import_warnings, read_archive
 from ..example import create_example
 from ..python_policy import save_policy
+from ..python_progress import environment_status
 from ..search import search_instance
 from ..types import Record
+from ..uploads import limited_body
 from ..util import Problem
 from .context import Context
-from .http import limited_body
 from .security import (
     instance_admin,
     project_role,
@@ -105,8 +106,6 @@ def router(ctx: Context) -> APIRouter:
         dependencies=[Depends(project_role("reader"))],
     )
     def python_environment_status(project: str) -> Record:
-        from ..python_progress import environment_status
-
         return environment_status(store.home, project)
 
     @api.put(

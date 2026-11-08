@@ -13,10 +13,6 @@ from fastapi.staticfiles import StaticFiles
 from . import __version__, automation
 from .api import account, admin, git, http, jobs, projects, results, session, worktrees
 from .api.context import Context
-from .api.http import MAX_UPLOAD_BYTES as MAX_UPLOAD_BYTES
-from .api.http import SESSION_COOKIE as SESSION_COOKIE
-from .api.http import session_token as session_token
-from .api.http import upload_name as upload_name
 from .api.security import authorize_unknown_route
 from .assistant.api import router as assistant_router
 from .assistant.service import Assistant

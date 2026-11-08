@@ -12,9 +12,9 @@ from .. import schemas
 from ..extensions import MAX_UPLOAD_BYTES as MAX_EXTENSION_BYTES
 from ..resources import resource_usage
 from ..types import Record
+from ..uploads import limited_body
 from ..util import Problem
 from .context import Context
-from .http import limited_body
 from .security import (
     instance_admin,
     no_api_token,

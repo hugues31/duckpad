@@ -10,6 +10,7 @@ from ..auth import Auth
 from ..oidc import CALLBACK_PATH
 from ..types import Record
 from ..util import Problem
+from .http import session_token
 
 PUBLIC_API_PATHS = {"/api/login", "/api/oidc/provider", "/api/oidc/login", CALLBACK_PATH}
 SAFE_METHODS = ("GET", "HEAD", "OPTIONS")
@@ -24,8 +25,6 @@ def admit(request: Request, auth: Auth) -> dict[str, str] | None:
     """Authenticate in the threadpool; leave resource checks to route dependencies."""
     user = None
     if protected(request):
-        from .http import session_token
-
         scheme, _, bearer = request.headers.get("authorization", "").partition(" ")
         request.state.token_name = None
         if scheme.lower() == "bearer" and bearer.startswith("dpk_"):

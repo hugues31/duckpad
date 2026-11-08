@@ -11,7 +11,8 @@ from fastapi.testclient import TestClient
 from helpers import wait_run
 
 import duckpad
-from duckpad.app import SESSION_COOKIE, create_app, upload_name
+from duckpad.api.http import SESSION_COOKIE, upload_name
+from duckpad.app import create_app
 from duckpad.builtin_templates import BUILTINS
 from duckpad.util import Problem
 

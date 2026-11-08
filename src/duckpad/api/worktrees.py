@@ -16,14 +16,10 @@ from ..components import group, import_definition
 from ..project_extensions import enabled as enabled_extensions
 from ..project_view import project_view
 from ..types import Record
+from ..uploads import limited_body
 from ..util import Problem, uid
 from .context import Context
-from .http import (
-    MAX_UPLOAD_BYTES,
-    UPLOAD_CHUNK,
-    limited_body,
-    upload_name,
-)
+from .http import MAX_UPLOAD_BYTES, UPLOAD_CHUNK, upload_name
 from .security import (
     conflict_role,
     worktree_role,

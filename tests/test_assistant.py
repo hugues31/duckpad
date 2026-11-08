@@ -194,6 +194,7 @@ def test_admin_only_configuration_and_private_conversations(instance):
         assert configure(reader).status_code == 403
         assert reader.post("/api/assistant/test").status_code == 403
         assert reader.get("/api/assistant/models/primary").status_code == 403
+        assert reader.post("/api/assistant/models", json={}).status_code == 403
         assert reader.get("/api/assistant/conversations").json()["items"] == []
         for method in ("get", "delete", "patch"):
             args = {"json": {"title": "stolen"}} if method == "patch" else {}

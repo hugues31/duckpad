@@ -42,7 +42,6 @@ def project_view(services: Services, user: Record, worktree: str) -> Record:
                 path = node.get("template") or code_path(node["id"], parent, "python")
                 collection = result["parsed_templates"] if node.get("template") else result["parsed_nodes"]
                 parsed = collection.get(path, {})
-
                 retained = retained_contract(node, parsed, graph.get("edges", []))
                 result["parsed_nodes"][code_path(node["id"], parent, "python")] = retained
                 if retained.get("error"):

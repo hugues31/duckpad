@@ -19,7 +19,6 @@ from starlette.middleware.base import RequestResponseEndpoint
 from .. import automation
 from ..auth import SESSION_LIFETIME, Auth
 from ..git.identity import commit_author
-from ..uploads import limited_body as limited_body
 from ..util import Problem, clean
 
 SESSION_COOKIE = "duckpad_session"
