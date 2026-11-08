@@ -1,6 +1,7 @@
 import { Link, useParams } from "react-router";
 import { withQuery } from "./api";
 import { useT } from "./i18n";
+import { worktreeUrl } from "./navigation";
 import ParameterInput from "./ParameterInput";
 import { baseType, typeOptions } from "./parameterType";
 import Select from "./Select";
@@ -223,8 +224,7 @@ function ValueSourceLink({
   return (
     <small>
       <Link
-        to={withQuery(`/worktrees/${worktreeId}/flow`, {
-          environment,
+        to={worktreeUrl(worktreeId!, "flow", environment, {
           node: value.from.node,
         })}
         state={{

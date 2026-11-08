@@ -1,10 +1,11 @@
-import { useCallback, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { api } from "./api";
 import { usePolling, type PollingOptions } from "./usePolling";
 
 export interface ResourceOptions<T = unknown> extends PollingOptions {
-  /** Load again, keeping the current data meanwhile, whenever this value changes. */
-  refresh?: string | number;
+  /** Load again, keeping the current data meanwhile, whenever this value changes.
+   * Values compare by identity: pass a primitive or a stable object, never an inline one. */
+  refresh?: string | number | object;
   /** Preserve the last successful value when a refresh fails. */
   keepDataOnError?: boolean;
   /** Delay after a successful response, or false to stop until a reload. */
@@ -13,7 +14,7 @@ export interface ResourceOptions<T = unknown> extends PollingOptions {
 
 interface Settled<T> {
   key: string;
-  request: string;
+  request: object;
   data: T | null;
   error: string;
 }
@@ -37,8 +38,10 @@ export function useResource<T>(
 ) {
   const [attempt, setAttempt] = useState(0);
   const [settled, setSettled] = useState<Settled<T> | null>(null);
-  const request =
-    key === null ? null : JSON.stringify([key, refresh ?? null, attempt]);
+  const request = useMemo(
+    () => (key === null ? null : { key, refresh, attempt }),
+    [key, refresh, attempt],
+  );
   // The request identifies what to load; a new `load` alone does not reload.
   const latestLoad = useRef(load);
   const cadence = useRef(nextInterval);

@@ -1,7 +1,7 @@
 import { useLocation, useNavigate } from "react-router";
 import { api, send } from "../api";
 import InstanceSettings from "../InstanceSettings";
-import { usePageRoute } from "../navigation";
+import { usePageRoute, worktreeUrl } from "../navigation";
 import { useShell, useWorkspace } from "../shell";
 import { RouteError } from "./PageStates";
 
@@ -45,7 +45,9 @@ export default function InstanceSettingsPage() {
               );
               await refreshWorkspace();
               navigate(
-                `/worktrees/${returnWorktree.id}/flow?node=${encodeURIComponent(query.get("node") || "")}`,
+                worktreeUrl(returnWorktree.id, "flow", undefined, {
+                  node: query.get("node") || "",
+                }),
               );
             }
           : undefined

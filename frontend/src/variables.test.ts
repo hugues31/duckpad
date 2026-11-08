@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import type { Translate } from "./i18n";
+import en from "./locales/en.json";
 import {
   changedEnvironments,
   completeReference,
@@ -6,7 +8,12 @@ import {
   referencedVariables,
   resolveValue,
   usableInExpressions,
+  variableDefaultError,
+  variableNameError,
+  variableProblems,
 } from "./variables";
+
+const t: Translate = (key) => en[key];
 
 describe("computed declarations", () => {
   const computed = {
@@ -101,4 +108,65 @@ describe("expression references", () => {
       ["identifier", "list<text>", "list<number>"].some(usableInExpressions),
     ).toBe(false);
   });
+});
+
+it("shares variable validation between declaration, rename and creation", () => {
+  expect(variableNameError("bad name", [], t)).toBe(en.invalidVariableName);
+  expect(variableNameError("amount", ["amount"], t)).toBe(en.variableExists);
+  expect(variableDefaultError("number", "oops", t)).toContain(en.defaultValue);
+  expect(
+    variableProblems(
+      {
+        name: "amount",
+        type: "choice(a|a)",
+        default: "b",
+        environments: { prod: "c" },
+      },
+      null,
+      [],
+      t,
+    ),
+  ).toEqual([
+    en.choiceOptionsRequired,
+    `${en.defaultValue}: ${en.invalidVariableValue.replace("{type}", "choice(a|a)")}`,
+    `prod: ${en.invalidVariableValue.replace("{type}", "choice(a|a)")}`,
+  ]);
+  expect(
+    variableProblems(
+      { name: "amount", type: "number", from: { node: "", column: "amount" } },
+      "amount",
+      [],
+      t,
+    ),
+  ).toContain(en.valueSourceRequired);
+});
+
+it("checks names only on creation and values only for literal declarations", () => {
+  // An edited declaration keeps its own name, which the taken list includes.
+  expect(
+    variableProblems(
+      { name: "amount", type: "number" },
+      "amount",
+      ["amount"],
+      t,
+    ),
+  ).toEqual([]);
+  expect(
+    variableProblems({ name: "amount", type: "number" }, null, ["amount"], t),
+  ).toEqual([en.variableExists]);
+  // A computed value ignores the literal default and environment values it replaces.
+  expect(
+    variableProblems(
+      {
+        name: "amount",
+        type: "number",
+        default: "oops",
+        environments: { prod: "oops" },
+        from: { node: "control", column: "amount" },
+      },
+      "amount",
+      [],
+      t,
+    ),
+  ).toEqual([]);
 });

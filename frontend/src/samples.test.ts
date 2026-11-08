@@ -1,13 +1,18 @@
 // @vitest-environment happy-dom
 import { beforeEach, describe, expect, it } from "vitest";
+import type { Translate } from "./i18n";
+import en from "./locales/en.json";
 import {
   ALL_ROWS,
   appendBlock,
+  appendTest,
+  deleteView,
   loadSample,
   normalizedSample,
   outputViews,
   quoteIdentifier,
   sameSample,
+  saveView,
   sampleFits,
   sampleKey,
   sampleQuery,
@@ -19,6 +24,22 @@ import {
   testSource,
   usesVariables,
 } from "./samples";
+import type { Bundle, FlowNode } from "./types";
+
+const t: Translate = (key) => en[key];
+const node = (id: string): FlowNode => ({
+  id,
+  params: {},
+  position: { x: 0, y: 0 },
+});
+const bundle = (): Bundle =>
+  ({
+    flow: { id: "flow", name: "Flow", nodes: [], edges: [] },
+    templates: {},
+    node_sql: {},
+    components: {},
+    documentation: {},
+  }) as unknown as Bundle;
 
 describe("samples", () => {
   beforeEach(() => localStorage.clear());
@@ -182,4 +203,37 @@ describe("samples", () => {
     expect(outputViews("{", "node:orders")).toEqual([]);
     expect(outputViews(null, "node:orders")).toEqual([]);
   });
+});
+
+it("updates shared views and appends tests without changing linked peers when detached", () => {
+  const value = bundle();
+  saveView(
+    value,
+    "node:result",
+    "Large",
+    { method: "first", filter: "amount > 1" },
+    t,
+  );
+  saveView(value, "node:result", "Large", { method: "first", rows: 10 }, t);
+  expect((value.views as Record<string, unknown>)["node:result"]).toEqual([
+    { name: "Large", method: "first", rows: 10 },
+  ]);
+  deleteView(value, "node:result", "Large");
+  expect(value.views).toBeNull();
+  value.templates.shared = "SELECT 1;";
+  value.flow.nodes = [
+    { ...node("a"), template: "shared" },
+    { ...node("b"), template: "shared" },
+  ];
+  appendTest(
+    value,
+    "a",
+    undefined,
+    "-- @test amount: warning\nSELECT 1;",
+    true,
+    t,
+  );
+  expect(value.templates.shared).toBe("SELECT 1;");
+  expect(value.flow.nodes[1].template).toBe("shared");
+  expect(value.node_sql?.["nodes/a.sql"]).toContain("-- @test amount");
 });

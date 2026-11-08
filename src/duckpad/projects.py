@@ -16,7 +16,7 @@ from contextlib import contextmanager, suppress
 from pathlib import Path
 from typing import Literal, TypeVar, Unpack, cast, overload
 
-from . import python_environment, views
+from . import project_extensions, python_environment, views
 from .artifacts import Artifacts
 from .builtin_templates import BUILTINS
 from .bundle import bundle_to_files, file_node_names, files_to_bundle
@@ -582,6 +582,7 @@ class Projects:
             base = self.base(worktree, revision, current)
             if base is None:
                 raise Problem("The editing revision is unavailable. Reload before saving.", 409)
+            proposal = project_extensions.activate_file_readers(base, proposal)
             manifest_edited = proposal.get("pyproject.toml") != base.get("pyproject.toml")
             if not manifest_edited and current.get("pyproject.toml") != base.get("pyproject.toml"):
                 # Another save changed the dependencies: this one keeps its base lock, so the

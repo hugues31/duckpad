@@ -37,3 +37,9 @@ export const computing = (statuses: Statuses, fullNode: string) =>
       (id === fullNode || id.startsWith(fullNode + "::")) &&
       ["pending", "running"].includes(state.status),
   );
+
+/** A data test whose failing rows the Data tab shows instead of a sample. */
+export interface FailingRows {
+  test: string;
+  count?: number;
+}

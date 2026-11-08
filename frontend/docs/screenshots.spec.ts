@@ -717,6 +717,8 @@ test("capture a PostgreSQL connection test and Load table", async ({
   page,
 }) => {
   test.skip(!postgres.host, "Set DUCKPAD_DOCS_POSTGRES_* to a test server.");
+  // Include the connection result and the fixed form actions in the guide image.
+  await page.setViewportSize({ width: 1440, height: 1200 });
   const values = (database: string, options: string) => ({
     ...postgres,
     database,
@@ -770,10 +772,16 @@ test("capture a PostgreSQL connection test and Load table", async ({
       name: "table",
       exact: true,
     });
-    await inspector
-      .getByRole("combobox", { name: "schema", exact: true })
-      .selectOption("public");
-    await expect(table.locator("option[value=orders]")).toHaveCount(1);
+    const schema = inspector.getByRole("combobox", {
+      name: "schema",
+      exact: true,
+    });
+    // The default name is already an option before the asynchronous listing arrives.
+    await expect(schema.locator("option")).toHaveText(["Choose…", "public"]);
+    await schema.selectOption("public");
+    await expect(
+      table.getByRole("option", { name: "orders", exact: true }),
+    ).toHaveCount(1);
     await autosaved(page, () => table.selectOption("orders"));
     await expect
       .poll(
