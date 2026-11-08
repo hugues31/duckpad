@@ -165,6 +165,6 @@ def test_search_limits_invalid_files_cycles_and_no_project_writes(instance):
     from pathlib import Path
 
     atomic_write(Path(broken["path"]) / "flow.json", "{")
-    projects.commit(broken["path"], "test: break project files")
+    projects.commit(broken["path"], message="test: break project files")
     result = client.get("/api/search?q=Orders").json()
     assert result["incomplete"] and len(result["results"]) == 1

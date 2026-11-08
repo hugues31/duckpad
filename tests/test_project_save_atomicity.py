@@ -6,8 +6,9 @@ from pathlib import Path
 import pytest
 
 from duckpad import projects as project_module
+from duckpad.comparison import CommitContext
 from duckpad.git.command import GitError, GitTimeout
-from duckpad.projects import EXTERNAL_SAVE, QUIET_PERIOD, SAVE_BACKUPS
+from duckpad.projects import QUIET_PERIOD, SAVE_BACKUPS
 from duckpad.services import Services
 from duckpad.util import dumps
 
@@ -167,13 +168,13 @@ def test_failed_commit_restores_reconciled_documentation_and_owned_code(services
     lock.touch()
     try:
         with pytest.raises(GitError):
-            projects.commit(path, EXTERNAL_SAVE)
+            projects.commit(path, CommitContext.EXTERNAL)
     finally:
         lock.unlink()
     assert projects.read_files(worktree) == existing
     assert projects.git(path, "rev-parse", "HEAD") == before["commit"]
     # Retrying the genuine external edit still performs reconciliation.
-    projects.commit(path, EXTERNAL_SAVE)
+    projects.commit(path, CommitContext.EXTERNAL)
     assert "nodes/source.sql" not in projects.read_files(worktree)
     assert "Keep this documentation" not in (path / "documentation.json").read_text()
 

@@ -7,11 +7,10 @@ from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from dataclasses import replace
 
 from . import partitions, variables
-from .bundle import topological
 from .catalog import redact
 from .components import expand_for
 from .datasets import Dataset
-from .graph import reachable
+from .graph import reachable, topological
 from .materialize import drop_dataset
 from .partition_storage import PartitionStorage
 from .templates import compile_template

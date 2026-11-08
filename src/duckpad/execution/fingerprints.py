@@ -4,16 +4,14 @@ from __future__ import annotations
 
 import logging
 
-from .. import partitions, project_extensions, variables
-from ..bundle import topological
+from .. import partitions, processing
 from ..catalog import Catalog
 from ..components import expand_for
 from ..datasets import Context
-from ..graph import connection_references
+from ..graph import connection_references, topological
 from ..partition_storage import PartitionStorage
 from ..projects import Projects
-from ..python_contract import executable_python
-from ..templates import executable_sql
+from ..python_environment import runtime_signature
 from ..types import Connections, Record
 from ..util import Problem, digest
 from .contexts import ContextPool
@@ -77,54 +75,16 @@ class Fingerprints:
                     connections[reference] = captured_values[reference]["fingerprint"]
                 except (Problem, KeyError) as error:
                     connections[reference] = "invalid:" + str(error)
-        extensions = project_extensions.enabled(bundle.get("extensions"))
-        from ..python_environment import runtime_signature
-
         python_runtime = (
             runtime_signature() if any(n.get("language") == "python" for n in nodes.values()) else None
         )
 
         def fingerprint(key: str, node: Record, inputs: dict[str, str], entry: Record | None = None) -> str:
-            params = {
-                parameter["name"]: parameter["default"]
-                for parameter in node["parsed"]["parameters"]
-                if "default" in parameter
-            }
-            params.update(node.get("params", {}))
             collected = node.get("partition_collect_inputs", [])
             return digest(
                 {
-                    "sql": executable_python(node["template_sql"])
-                    if node.get("language") == "python"
-                    else executable_sql(node["template_sql"]),
-                    "python": [
-                        python_runtime,
-                        bundle.get("python_lock"),
-                        bundle.get("python_helpers"),
-                        bundle.get("pyproject"),
-                    ]
-                    if node.get("language") == "python"
-                    else None,
-                    "error": node.get("error"),
-                    "params": variables.fingerprinted(node, params),
+                    **processing.inputs(bundle, node, python_runtime=python_runtime, entry=entry),
                     "connections": {r: connections[r] for r in connection_references(node)},
-                    "extensions": extensions,
-                    **(
-                        {
-                            "partition": {
-                                "key": {k: entry["key"][k] for k in ("type", "value")}
-                                if entry and node.get("partitioned")
-                                else None,
-                                "filters": {
-                                    p: d.get("column") if isinstance(d, dict) else d
-                                    for p, d in node.get("partition_filters", {}).items()
-                                },
-                                "collect": collected,
-                            }
-                        }
-                        if node.get("partitioned") or collected
-                        else {}
-                    ),
                     **(
                         {
                             "manifest": [

@@ -11,6 +11,7 @@ from sqlglot import exp
 from sqlglot.tokens import TokenType
 
 from .data_preparation import PREPARATION_TYPES, render_preparation
+from .python_contract import parse_python
 from .sql_errors import SqlSourceError, source_context
 from .util import Problem, literal, qi
 from .value_types import base_type, is_date, type_argument
@@ -66,8 +67,6 @@ def directives(sql):
 
 def parse_template(sql, language="sql"):
     if language == "python":
-        from .python_contract import parse_python
-
         return parse_python(sql)
     template = {
         "label": "SQL template",
@@ -727,7 +726,6 @@ def compile_template(
             {
                 "output": output,
                 "table": physical,
-                "query": query,
                 "source_location": source_location,
                 "source": source,
                 # Runs materialize outputs from this query and record the statements they execute.

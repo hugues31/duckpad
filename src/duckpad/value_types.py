@@ -109,3 +109,11 @@ def convert(type_name, duck_type, value):
     if error:
         raise Problem(error + "; use an explicit lossless cast in the producer")
     return value
+
+
+def resolve_column(columns, name):
+    """Resolve exactly one column using DuckDB's ASCII case-insensitive identifiers."""
+    matches = [c for c in columns if c["name"].translate(IDENTIFIER_CASE) == name.translate(IDENTIFIER_CASE)]
+    if len(matches) != 1:
+        raise Problem(f"Column {name} is missing or ambiguous")
+    return matches[0]

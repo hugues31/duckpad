@@ -83,7 +83,7 @@ def test_sql_and_python_accept_the_same_key_column_pairs(tmp_path, kind, value, 
     key = {"type": kind, "value": value}
     query = f'SELECT NULL::{sql_type} AS "BaTcH" WHERE FALSE'
     request = payload(tmp_path, query, key)
-    statement = {"output": "result", "query": query, "bindings": {}}
+    statement = {"output": "result", "sql": query, "bindings": {}}
     with duckdb.connect() as db:
         try:
             filter_statements([statement], request, request["partition"], db)

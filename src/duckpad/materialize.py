@@ -17,7 +17,7 @@ from .util import qi, uid
 
 
 def plan_materialization(cursor, statement, dependencies, instrument=True):
-    query, bindings = statement["query"], statement["bindings"]
+    query, bindings = statement["sql"], statement["bindings"]
     storage = statement["table"] + "_storage"
     if not instrument:
         return _plan(storage, None, query)

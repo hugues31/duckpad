@@ -9,7 +9,7 @@ import copy
 from . import variables
 from .graph import reachable
 from .util import Problem, digest, qi
-from .value_types import IDENTIFIER_CASE, convert
+from .value_types import convert, resolve_column
 
 
 def locate(bundle, nodes, boundaries, source):
@@ -37,7 +37,7 @@ def locate(bundle, nodes, boundaries, source):
 
 
 def sources(bundle, nodes, boundaries):
-    declared, _ = variables.declarations(bundle)
+    declared, _ = variables.inspect_declarations(bundle)
     result = {}
     for name, variable in declared.items():
         if "from" not in variable:
@@ -127,16 +127,42 @@ def dependencies(nodes, edges, sources):
     return phase, errors
 
 
+def problems(bundle, nodes, edges, boundaries, partition_phase=()):
+    """Own scalar and partition value graph rules, emitting one diagnostic per node."""
+    declared = sources(bundle, nodes, boundaries)
+    result = [
+        {"file": variables.FILE, "variable": name, "message": source["error"], "code": source["code"]}
+        for name, source in declared.items()
+        if "error" in source
+    ]
+    phase, invalid = dependencies(nodes, edges, declared)
+    for key in set(partition_phase) | phase:
+        node = nodes[key]
+        used = set(variables.references(node.get("params")).values())
+        used.update(n for names in variables.expression_references_of(node).values() for n in names)
+        if node.get("partitioned") or (key in partition_phase and used & declared.keys()):
+            invalid.setdefault(
+                key,
+                {
+                    "code": "value_dependency_cycle"
+                    if key in partition_phase and node.get("partitioned")
+                    else "value_chain",
+                    "error": f"{key}: value producers and their ancestors may use ordinary variables only",
+                },
+            )
+    return result + [
+        {"file": "flow.json", "node": key, "message": error["error"], "code": error["code"]}
+        for key, error in sorted(invalid.items())
+    ]
+
+
 def extract(cursor, dataset, source):
     """Extract one cell from a complete published output, independently of other columns."""
     column = source["from"]["column"]
-    matches = [
-        c
-        for c in (dataset.source_columns or dataset.columns)
-        if c["name"].translate(IDENTIFIER_CASE) == column.translate(IDENTIFIER_CASE)
-    ]
-    if len(matches) != 1:
-        return unavailable(source, "invalid_value_source", f"Column {column} is missing or ambiguous")
+    try:
+        matched = resolve_column(dataset.source_columns or dataset.columns, column)
+    except Problem as error:
+        return unavailable(source, "invalid_value_source", str(error))
     if dataset.count != 1:
         return unavailable(source, "value_cardinality", f"Expected exactly one row; found {dataset.count}")
     rows = cursor.execute(f"SELECT {qi(column)} FROM {qi(dataset.table)} LIMIT 2").fetchall()
@@ -144,12 +170,12 @@ def extract(cursor, dataset, source):
         return unavailable(source, "value_cardinality", f"Expected exactly one row; found {len(rows)}")
     cell = rows[0][0]
     try:
-        value = convert(source["type"], matches[0]["type"], cell)
+        value = convert(source["type"], matched["type"], cell)
     except (Problem, ValueError, OverflowError) as error:
         return unavailable(source, "value_null" if cell is None else "value_type", str(error))
     return {
         "type": source["type"],
-        "from": {**source["from"], "column": matches[0]["name"]},
+        "from": {**source["from"], "column": matched["name"]},
         "source": "node",
         "state": "ready",
         "value": value,

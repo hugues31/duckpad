@@ -143,7 +143,7 @@ def statuses(engine, worktree, environment, keys=NODES):
 
 
 def test_declarations_accept_every_type_and_prefer_environment_values_to_defaults():
-    declared, error = variables.declarations(
+    declared = variables.declarations(
         {
             "variables": {
                 "label": {"type": "text", "default": ""},
@@ -157,7 +157,6 @@ def test_declarations_accept_every_type_and_prefer_environment_values_to_default
             }
         }
     )
-    assert error is None
     assert {name: variable["type"] for name, variable in declared.items()} == {
         "label": "text",
         "threshold": "number",
@@ -172,7 +171,7 @@ def test_declarations_accept_every_type_and_prefer_environment_values_to_default
     assert variables.resolve(declared["threshold"], "prod") == {"value": 900.5, "source": "environment"}
     assert variables.resolve(declared["threshold"], "dev") == {"value": 300, "source": "default"}
     assert variables.resolve(declared["schema"], "dev") == {"error": "no value in dev"}
-    assert variables.declarations({"variables": None}) == ({}, None)
+    assert variables.declarations({"variables": None}) == {}
 
 
 @pytest.mark.parametrize(
@@ -193,10 +192,10 @@ def test_declarations_accept_every_type_and_prefer_environment_values_to_default
 )
 def test_malformed_files_names_and_types_are_one_file_error(content, message):
     bundle = {"variables": variables.read(content) if isinstance(content, str) else content}
-    declared, error = variables.declarations(bundle)
-    assert declared == {}
-    assert message in error
-    assert variables.problems(bundle) == [{"file": "variables.json", "message": error}]
+    with pytest.raises(Problem, match=message) as raised:
+        variables.declarations(bundle)
+    assert raised.value.status == 422
+    assert variables.problems(bundle) == [{"file": "variables.json", "message": str(raised.value)}]
 
 
 def test_values_that_do_not_match_their_type_are_errors_on_the_variable_and_environment():
@@ -209,8 +208,7 @@ def test_values_that_do_not_match_their_type_are_errors_on_the_variable_and_envi
             "schema": {"type": "identifier", "default": " "},
         }
     }
-    declared, error = variables.declarations(bundle)
-    assert error is None
+    declared = variables.declarations(bundle)
     threshold = declared["threshold"]
     assert variables.resolve(threshold, "prod") == {"value": 5, "source": "environment"}
     assert variables.resolve(threshold, "dev") == {
@@ -241,8 +239,7 @@ def test_values_that_do_not_match_their_type_are_errors_on_the_variable_and_envi
 def test_integers_of_any_size_are_exact_numbers_and_infinity_is_an_error():
     bundle = project_bundle()
     bundle["variables"]["unused"] = {"type": "number", "default": 10**400, "environments": {"prod": math.inf}}
-    declared, error = variables.declarations(bundle)
-    assert error is None
+    declared = variables.declarations(bundle)
     assert variables.resolve(declared["unused"], "dev") == {"value": 10**400, "source": "default"}
     assert validate(bundle) == [
         {
@@ -319,7 +316,7 @@ def test_date_parameters_bind_iso_dates_that_compare_as_dates():
         return compile_template(template, params, {"source": '"input"'}, {"result": "output"}, {}, Path())
 
     [statement] = compile_with({"start": "2026-02-01"})
-    assert statement["query"] == 'SELECT * FROM "input" WHERE day >= CAST($start AS DATE)'
+    assert statement["sql"] == 'SELECT * FROM "input" WHERE day >= CAST($start AS DATE)'
     assert statement["bindings"] == {"start": "2026-02-01"}
     for invalid in ("2026-02-30", "01/02/2026", 20260201):
         with pytest.raises(Problem, match="start requires a date written YYYY-MM-DD"):

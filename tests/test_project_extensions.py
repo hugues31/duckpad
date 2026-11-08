@@ -174,7 +174,7 @@ def test_requirements_roundtrip_merge_and_invalid_files_remain_reviewable():
         changed = copy.deepcopy(original)
         changed["extensions"] = invalid
         reread = files_to_bundle(bundle_to_files(changed))
-        assert reread["extensions"] == invalid
+        assert bundle_to_files(reread)["extensions.json"] == bundle_to_files(changed)["extensions.json"]
         assert any(error["file"] == "extensions.json" for error in validate(reread))
         with pytest.raises(Problem):
             project_extensions.enabled(invalid)

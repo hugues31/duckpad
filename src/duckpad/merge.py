@@ -2,7 +2,7 @@
 
 import json
 
-from . import project_extensions, variables, views
+from . import project_files, variables, views
 from .util import Problem, dumps
 
 MISSING = object()
@@ -116,6 +116,7 @@ def merge_files(base, current, proposal, choices=None, evidence=None, resolution
     """Merge independent edits, using combined contents only at conflicting paths."""
     result, conflicts = {}, []
     for name in sorted(base.keys() | current.keys() | proposal.keys()):
+        spec = project_files.matching(name)
         values = [v.get(name, MISSING) for v in (base, current, proposal)]
         resolution = (
             (resolutions or {}).get(name, MISSING)
@@ -126,7 +127,8 @@ def merge_files(base, current, proposal, choices=None, evidence=None, resolution
             else MISSING
         )
         if (
-            name in (variables.FILE, project_extensions.FILE, views.FILE)
+            spec is not None
+            and spec.merge in ("declarations", "views")
             and values[0] is MISSING
             and all(v is not MISSING for v in values[1:])
         ):
@@ -134,7 +136,11 @@ def merge_files(base, current, proposal, choices=None, evidence=None, resolution
             # it merge independent variables or extension requirements by name.
             values[0] = "{}"
         try:
-            if name.endswith(".json") and all(v is not MISSING for v in values):
+            if (
+                spec is not None
+                and spec.merge in ("json", "declarations", "views")
+                and all(v is not MISSING for v in values)
+            ):
                 parsed = [json.loads(v) for v in values]
                 resolved = MISSING
                 if isinstance(resolution, str):
@@ -142,7 +148,7 @@ def merge_files(base, current, proposal, choices=None, evidence=None, resolution
                         resolved = json.loads(resolution)
                     except (ValueError, TypeError) as error:
                         raise Problem(f"Combined contents for {name} must be valid JSON", 422) from error
-                named = [views.by_name(v) for v in parsed] if name == views.FILE else [None]
+                named = [views.by_name(v) for v in parsed] if spec.merge == "views" else [None]
                 if all(v is not None for v in named):
                     # Shared views merge view by view, keyed by their name.
                     merged, errors = merge_values(*named, name, choices, evidence, views.by_name(resolved))
@@ -154,7 +160,7 @@ def merge_files(base, current, proposal, choices=None, evidence=None, resolution
                 content, errors = merge_values(*values, name, choices, evidence, resolution)
         except (ValueError, TypeError):
             content, errors = merge_values(*values, name, choices, evidence, resolution)
-        if name == "uv.lock" and errors:
+        if spec is not None and spec.merge == "generated" and errors:
             # Generated dependency state is resolved again from the merged manifest.
             # Editable saves/runs regenerate it; a tag must carry the resolved lock.
             content, errors = MISSING, []

@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 
 from .types import Record
+from .util import Problem
 
 
 def connection_references(node: Record) -> list[str]:
@@ -30,3 +31,23 @@ def reachable(seeds: Iterable[str], edges: list[Record], upstream: bool) -> set[
         if extended == result:
             return result
         result = extended
+
+
+def topological(nodes, edges, tolerant=False):
+    dependencies = {n: {e["source"] for e in edges if e["target"] == n} for n in nodes}
+    ordered = []
+    while dependencies:
+        ready = [key for key, values in dependencies.items() if not values]
+        if not ready:
+            if not tolerant:
+                raise Problem("The graph contains a cycle")
+            for key in dependencies:
+                nodes[key]["error"] = "This node is part of, or depends on, a graph cycle"
+            ordered.extend(dependencies)
+            break
+        for key in ready:
+            ordered.append(key)
+            del dependencies[key]
+        for values in dependencies.values():
+            values.difference_update(ready)
+    return ordered

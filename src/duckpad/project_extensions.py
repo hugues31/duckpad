@@ -13,9 +13,10 @@ from pathlib import Path
 import duckdb
 
 from .extensions import SOURCES, runtime
-from .util import Problem, dumps, qi
+from .project_files import EXTENSIONS as DOCUMENT
+from .util import Problem, qi
 
-FILE = "extensions.json"
+FILE = DOCUMENT.file
 NAME = re.compile(r"[a-z][a-z0-9_]{0,63}")
 # Execution sessions load only built-in, project and connector extensions: DuckDB never
 # loads or downloads one on demand, so a project behaves the same in every execution mode.
@@ -25,25 +26,12 @@ EXPLICIT_LOADING = {"autoload_known_extensions": False, "autoinstall_known_exten
 MISSING = re.compile(r"(is not in the catalog, but it exists in the (\w+) extension\.).*", re.DOTALL)
 
 
-def read(text):
-    if text is None:
-        return None
-    try:
-        return json.loads(text)
-    except ValueError:
-        # Preserve invalid text through unrelated UI edits, for correction in Code.
-        return text
-
-
-def write(value):
-    return value if isinstance(value, str) else dumps(value)
+read = DOCUMENT.read
+write = DOCUMENT.write
 
 
 def declarations(value):
-    if value is None:
-        return {}
-    if not isinstance(value, dict):
-        raise Problem("extensions.json must contain an object keyed by extension name", 422)
+    value = DOCUMENT.declarations(value)
     for name, item in value.items():
         if not isinstance(name, str) or not NAME.fullmatch(name):
             raise Problem("Extension names must contain lowercase letters, digits and underscores", 422)
@@ -69,11 +57,7 @@ def enabled(value):
 
 
 def problems(bundle):
-    try:
-        declarations(bundle.get("extensions"))
-        return []
-    except Problem as error:
-        return [{"file": FILE, "message": str(error)}]
+    return DOCUMENT.problems(declarations, bundle.get("extensions"))
 
 
 def explain_missing(message: str) -> str:

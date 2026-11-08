@@ -27,7 +27,7 @@ def materialize(context, name, query, source=False):
         for t in sqlglot.parse_one(query, read="duckdb").find_all(exp.Table)
         if t.name in context.datasets
     }
-    statement = {"table": name, "query": query, "bindings": {}}
+    statement = {"table": name, "sql": query, "bindings": {}}
     plan = plan_materialization(context.db, statement, dependencies, instrument=not source)
     context.db.execute(plan["sql"])
     columns, column_map, _ = publish_view(context.db, name, plan)

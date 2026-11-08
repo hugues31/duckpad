@@ -139,7 +139,7 @@ def variable_values(
     names = list(dict.fromkeys(names))
     if not names:
         return {}
-    declared, file_error = variables.declarations(bundle or {})
+    declared, file_error = variables.inspect_declarations(bundle or {})
     values = {}
     for name in names:
         if name not in declared:
