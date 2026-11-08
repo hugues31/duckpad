@@ -10,17 +10,23 @@ test("workspace polling does not render the 105 canvas nodes again", async ({
       __REACT_DEVTOOLS_GLOBAL_HOOK__: unknown;
     };
     state.nodeRenders = 0;
+    // A commit that skips a node keeps its fiber, flags included, so the
+    // PerformedWork flag (1) of its last render stays set. Count a node only
+    // when this commit replaced its fiber; otherwise every later commit, such
+    // as a resource monitor update, would count the nodes' last render again.
+    const committed = new Map<string, unknown>();
     state.__REACT_DEVTOOLS_GLOBAL_HOOK__ = {
       supportsFiber: true,
       inject: () => 1,
       onCommitFiberRoot: (_id: number, root: any) => {
         const visit = (fiber: any) => {
           if (!fiber) return;
-          if (
-            fiber.elementType?.displayName === "PipelineNode" &&
-            fiber.flags & 1
-          )
-            state.nodeRenders++;
+          if (fiber.elementType?.displayName === "PipelineNode") {
+            const node = fiber.memoizedProps.id;
+            if (committed.get(node) !== fiber && fiber.flags & 1)
+              state.nodeRenders++;
+            committed.set(node, fiber);
+          }
           visit(fiber.child);
           visit(fiber.sibling);
         };
