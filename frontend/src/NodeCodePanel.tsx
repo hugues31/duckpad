@@ -1,0 +1,427 @@
+import {
+  lazy,
+  Suspense,
+  useEffect,
+  useEffectEvent,
+  useRef,
+  useState,
+} from "react";
+import { ChevronDown, ChevronRight, Eye, Loader2, Link, X } from "lucide-react";
+import { withQuery } from "./api";
+import {
+  insertText,
+  revealPosition,
+  type CodeEditorInstance,
+} from "./codeEditing";
+import {
+  SAMPLE_SIZES,
+  type InputColumns,
+  type PreviewState,
+  type SampleSize,
+} from "./draftPreview";
+import { useT } from "./i18n";
+import { nodeCode, nodeCodePath, nodeGraph, templateUsage } from "./nodeCode";
+import { quoteIdentifier } from "./samples";
+import Select from "./Select";
+import type { Bundle, FlowNode, Snapshot, Statuses } from "./types";
+import { useShell } from "./shell";
+import { useApiResource } from "./useApiResource";
+import { useIdleSave, useRevisionDraft } from "./useRevisionDraft";
+import { useWorktree } from "./worktree";
+
+const CodeEditor = lazy(() => import("./Editor"));
+
+/** A line of the code to put the cursor on; a new key reveals it again. */
+export interface CodeReveal {
+  line: number;
+  column?: number;
+  key: number;
+}
+
+/** Whether a key event asks for a preview: Ctrl+Enter, or ⌘Enter on macOS. */
+const previewShortcut = (event: KeyboardEvent) =>
+  (event.ctrlKey || event.metaKey) &&
+  !event.altKey &&
+  !event.shiftKey &&
+  event.key === "Enter";
+
+/**
+ * The code of the selected node, docked beside the canvas. It saves like the
+ * inspector, after a pause in typing, and previews the code being typed on
+ * samples of the node's inputs without saving or publishing anything.
+ */
+export default function NodeCodePanel({
+  snapshot,
+  node,
+  parent,
+  fullNode,
+  label,
+  environment,
+  readOnly,
+  statuses,
+  preview,
+  reveal,
+  sample,
+  onSample,
+  onPreview,
+  onDraft,
+  onClose,
+}: {
+  snapshot: Snapshot;
+  node: FlowNode;
+  /** The component definition holding the node, if not the root flow. */
+  parent?: string;
+  fullNode: string;
+  label: string;
+  environment: string;
+  readOnly: boolean;
+  statuses: Statuses;
+  /** The preview of this node, if one was requested. */
+  preview: PreviewState | null;
+  reveal: CodeReveal | null;
+  sample: SampleSize;
+  onSample: (sample: SampleSize) => void;
+  onPreview: (code: string) => void;
+  /** Reports the code being edited, which later previews compute. */
+  onDraft: (code: string | null) => void;
+  onClose: () => void;
+}) {
+  const t = useT();
+  const { notify } = useShell();
+  const { save, starting } = useWorktree();
+  const read = (bundle: Bundle) => nodeCode(bundle, node, parent) ?? "";
+  // Closing the panel or selecting another node saves the last edits without it.
+  const mounted = useRef(true);
+  useEffect(
+    () => () => {
+      mounted.current = false;
+    },
+    [],
+  );
+  const { draft, dirty, pending, update, persist, rejected } = useRevisionDraft(
+    read(snapshot.bundle!),
+    snapshot,
+    (text: string, base: Snapshot) =>
+      save(base, (bundle) => {
+        if (node.template) bundle.templates[node.template] = text;
+        else
+          (bundle.node_sql ||= {})[
+            nodeCodePath(node.id, parent, node.language)
+          ] = text;
+      }).catch((error) => {
+        // Nothing is left here to show the error of the last save.
+        if (!mounted.current) notify((error as Error).message, true);
+        throw error;
+      }),
+    { autosave: !readOnly },
+  );
+  const [error, setError] = useState("");
+  const panel = useRef<HTMLElement>(null);
+  const [editor, setEditor] = useState<CodeEditorInstance | null>(null);
+  const python = node.language === "python";
+  const saveNow = async () => {
+    if (readOnly) return;
+    setError("");
+    try {
+      await persist();
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+  useIdleSave(draft, dirty && !readOnly, () => {
+    if (!rejected()) void saveNow();
+  });
+  const reportDraft = useEffectEvent(onDraft);
+  useEffect(() => {
+    reportDraft(draft);
+  }, [draft]);
+  useEffect(() => () => reportDraft(null), []);
+  const blocked = readOnly
+    ? "previewReadOnly"
+    : python
+      ? "previewPython"
+      : statuses.active || starting
+        ? "previewRunActive"
+        : null;
+  const requestPreview = () => {
+    if (!blocked) onPreview(draft);
+  };
+  // Shortcuts apply while the focus is inside the panel, the code included.
+  const shortcuts = useEffectEvent((event: KeyboardEvent) => {
+    if (!panel.current?.contains(event.target as Node)) return;
+    if (previewShortcut(event)) {
+      // The code editor would otherwise insert a line.
+      event.preventDefault();
+      event.stopPropagation();
+      if (!event.repeat) requestPreview();
+    } else if (
+      (event.ctrlKey || event.metaKey) &&
+      !event.altKey &&
+      event.key.toLowerCase() === "s"
+    ) {
+      // The browser would otherwise save the page.
+      event.preventDefault();
+      void saveNow();
+    }
+  });
+  useEffect(() => {
+    // Capture the keys before the code editor handles them.
+    window.addEventListener("keydown", shortcuts, true);
+    return () => window.removeEventListener("keydown", shortcuts, true);
+  }, []);
+  useEffect(() => {
+    if (editor && reveal) revealPosition(editor, reveal.line, reveal.column);
+  }, [editor, reveal]);
+  // A failed preview locates its error in the code it computed, if unchanged.
+  const runDiagnostic = statuses.nodes[fullNode]?.diagnostic;
+  const diagnostic =
+    preview?.diagnostic?.source === draft
+      ? preview.diagnostic
+      : runDiagnostic?.source === draft
+        ? runDiagnostic
+        : undefined;
+  const linked = node.template
+    ? templateUsage(snapshot.bundle!, node.template)
+    : 0;
+  // Input columns follow the declared inputs, their edges and upstream
+  // results, not each save of this code.
+  const declared =
+    snapshot.parsed_nodes?.[nodeCodePath(node.id, parent, node.language)] ??
+    (node.template ? snapshot.parsed_templates[node.template] : undefined);
+  const prefix = fullNode.slice(0, -node.id.length);
+  const upstream = (nodeGraph(snapshot.bundle!, parent)?.edges || [])
+    .filter((edge) => edge.target === node.id)
+    .map((edge) => [
+      edge.targetHandle,
+      edge.source,
+      statuses.nodes[prefix + edge.source]?.outputs[edge.sourceHandle] ?? null,
+    ]);
+  return (
+    <aside className="code-panel" ref={panel} aria-label={t("codePanel")}>
+      <div className="inspector-title">
+        <span className="code-panel-title">
+          <span title={label}>{label}</span>
+          <small className="muted">
+            {python ? "Python" : "SQL"}
+            {node.template && (
+              <>
+                {" · "}
+                <Link size={11} aria-hidden="true" />
+                {t(
+                  linked === 1 ? "sharedTemplateOne" : "sharedTemplateCount",
+                ).replace("{count}", String(linked))}
+              </>
+            )}
+          </small>
+        </span>
+        <button
+          className="icon"
+          onClick={onClose}
+          title={t("closeCodeEditor")}
+          aria-label={t("closeCodeEditor")}
+        >
+          <X size={18} />
+        </button>
+      </div>
+      <div className="code-panel-toolbar">
+        <button
+          className="button primary small"
+          disabled={!!blocked}
+          title={t(blocked || "previewHint")}
+          aria-keyshortcuts="Control+Enter Meta+Enter"
+          onClick={requestPreview}
+        >
+          {preview?.pending ? (
+            <Loader2 size={14} className="spin" aria-hidden="true" />
+          ) : (
+            <Eye size={14} aria-hidden="true" />
+          )}
+          {t("previewCode")}
+        </button>
+        <Select
+          className="code-panel-sample"
+          aria-label={t("previewSample")}
+          title={t("previewSample")}
+          value={String(sample)}
+          disabled={!!blocked}
+          onChange={(event) =>
+            onSample(
+              event.target.value === "null"
+                ? null
+                : (Number(event.target.value) as SampleSize),
+            )
+          }
+        >
+          {SAMPLE_SIZES.map((size) => (
+            <option key={String(size)} value={String(size)}>
+              {size === null
+                ? t("previewAllRows")
+                : t("previewSampleRows").replace(
+                    "{count}",
+                    size.toLocaleString(),
+                  )}
+            </option>
+          ))}
+        </Select>
+        <span className="spacer" />
+        {!readOnly && (
+          <span
+            className="editor-save-state muted small"
+            role="status"
+            title={t("editorAutosaveHint")}
+          >
+            {t(
+              pending ? "saving" : dirty || error ? "unsavedChanges" : "saved",
+            )}
+          </span>
+        )}
+      </div>
+      {node.template && (
+        <p className="code-panel-notice muted small">
+          {t("sharedTemplateHint")}
+        </p>
+      )}
+      {error && (
+        <div className="notice error code-panel-notice" role="alert">
+          {error}
+        </div>
+      )}
+      <InputColumnList
+        worktree={snapshot.worktree.id}
+        fullNode={fullNode}
+        environment={environment}
+        refresh={JSON.stringify([
+          declared?.inputs,
+          upstream,
+          statuses.active?.id ?? null,
+        ])}
+        python={python}
+        disabled={readOnly || !editor}
+        onInsert={(text) => editor && insertText(editor, text)}
+      />
+      <div className="code-panel-editor">
+        <Suspense fallback={<p className="muted small">{t("loading")}</p>}>
+          <CodeEditor
+            value={draft}
+            onChange={(text) => update(() => text)}
+            language={node.language || "sql"}
+            readOnly={readOnly}
+            height="100%"
+            diagnostic={diagnostic}
+            label={t("codePanel")}
+            onEditor={setEditor}
+          />
+        </Suspense>
+      </div>
+    </aside>
+  );
+}
+
+/**
+ * The columns of each input, from the last upstream result or described from
+ * the upstream code. A click inserts a name at the cursor.
+ */
+function InputColumnList({
+  worktree,
+  fullNode,
+  environment,
+  refresh,
+  python,
+  disabled,
+  onInsert,
+}: {
+  worktree: string;
+  fullNode: string;
+  environment: string;
+  refresh: string;
+  python: boolean;
+  disabled: boolean;
+  onInsert: (text: string) => void;
+}) {
+  const t = useT();
+  const [open, setOpen] = useState(true);
+  const columns = useApiResource<InputColumns>(
+    withQuery(
+      `/worktrees/${worktree}/input-columns/${encodeURIComponent(fullNode)}`,
+      { environment },
+    ),
+    { refresh },
+  );
+  const inputs = columns.data?.inputs || [];
+  if (!inputs.length && !columns.pending) return null;
+  const Toggle = open ? ChevronDown : ChevronRight;
+  return (
+    <section className="input-columns" aria-label={t("inputColumns")}>
+      <button
+        className="input-columns-toggle"
+        aria-expanded={open}
+        onClick={() => setOpen(!open)}
+      >
+        <Toggle size={14} aria-hidden="true" />
+        {t("inputColumns")}
+        {columns.pending && (
+          <Loader2 size={12} className="spin" aria-label={t("loading")} />
+        )}
+        <span className="muted small">{t("inputColumnsHint")}</span>
+      </button>
+      {open && (
+        <div className="input-columns-list">
+          {inputs.map((input) => {
+            const reference = python ? input.input : `{{ ${input.input} }}`;
+            return (
+              <div className="input-columns-group" key={input.input}>
+                <div className="input-columns-name">
+                  <button
+                    className="column-chip input"
+                    disabled={disabled}
+                    title={t("insertName").replace("{name}", reference)}
+                    onClick={() => onInsert(reference)}
+                  >
+                    {input.input}
+                  </button>
+                  <small className="muted">
+                    {input.origin === "result"
+                      ? t(
+                          input.status === "valid"
+                            ? "columnsFromResult"
+                            : "columnsFromStaleResult",
+                        )
+                      : input.origin === "description"
+                        ? t("columnsFromCode")
+                        : t(
+                            input.reason === "not_connected"
+                              ? "inputNotConnected"
+                              : "columnsUnavailable",
+                          )}
+                  </small>
+                </div>
+                {input.columns && (
+                  <ul className="input-columns-chips">
+                    {input.columns.map((column) => {
+                      const text = python
+                        ? column.name
+                        : quoteIdentifier(column.name);
+                      return (
+                        <li key={column.name}>
+                          <button
+                            className="column-chip"
+                            disabled={disabled}
+                            title={t("insertName").replace("{name}", text)}
+                            onClick={() => onInsert(text)}
+                          >
+                            <span>{column.name}</span>
+                            <small>{column.type}</small>
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </section>
+  );
+}
