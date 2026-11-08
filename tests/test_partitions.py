@@ -6,12 +6,13 @@ import duckdb
 import pytest
 
 from duckpad import partitions, variables
-from duckpad.bundle import bundle_to_files, files_to_bundle, validate
+from duckpad.bundle import bundle_to_files, files_to_bundle
 from duckpad.components import expand, expand_for, group
 from duckpad.merge import merge_files
 from duckpad.partition_filters import canonical, filter_statements
 from duckpad.templates import compile_template
 from duckpad.util import Problem
+from duckpad.validation import validate
 
 
 def bundle():

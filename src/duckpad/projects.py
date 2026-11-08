@@ -17,7 +17,7 @@ from typing import Literal, Unpack, cast, overload
 
 from . import python_environment, views
 from .builtin_templates import BUILTINS
-from .bundle import bundle_to_files, file_node_names, files_to_bundle, is_declarative
+from .bundle import bundle_to_files, file_node_names, files_to_bundle
 from .comparison import CommitContext, commit_message
 from .components import expand, reconcile_documentation
 from .git import command
@@ -28,7 +28,7 @@ from .git.workspace import GitWorkspace, diagnose, history_cache_key, origin_key
 from .merge import conflict_details, merge_files
 from .node_code import owned_paths
 from .node_names import node_names
-from .project_files import definition_names
+from .project_files import definition_names, is_declarative
 from .python_nodes import remember_contracts
 from .python_policy import get_policy
 from .store import Store

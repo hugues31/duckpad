@@ -9,9 +9,8 @@ from .components import expand
 from .graph import reachable
 from .node_code import code_path
 from .node_names import graph_names, name_text, node_name
-from .project_schema import require_structure
 from .templates import DESCRIPTIVE, directives
-from .util import Problem
+from .util import Problem, dumps
 
 
 class CommitContext(Enum):
@@ -186,19 +185,31 @@ def categories(kind, paths, before, after, language="sql"):
 
 def potential_impact(before, after):
     """Expanded instance paths and wiring, without inferring runtime schemas or values."""
-    views, errors = [], []
+    views, errors, reported = [], [], set()
+
+    def report(error):
+        # Both versions and every node can report the same problem: list it once.
+        key = dumps(error)
+        if key not in reported:
+            reported.add(key)
+            errors.append(error)
+
     for bundle in (before, after):
         try:
-            require_structure(bundle)
             nodes, edges, boundaries = expand(bundle, tolerant=True)
-            errors.extend(partitions.plan(bundle, nodes, edges, boundaries)["errors"])
+            planned = partitions.plan(bundle, nodes, edges, boundaries)["errors"]
             # A variable's values stand for its references, so value changes reach the nodes using it.
             variables.computation(bundle, nodes)
-            errors.extend({"node": key, "message": n["error"]} for key, n in nodes.items() if n.get("error"))
+            for error in planned:
+                report(error)
+            explained = {(e.get("node"), e["message"]) for e in planned}
+            for key, node in nodes.items():
+                if node.get("error") and (key, node["error"]) not in explained:
+                    report({"node": key, "message": node["error"]})
             views.append((nodes, edges, boundaries))
         except Problem:
             views.append(({}, [], {}))
-            errors.append({"message": "Some definitions cannot be expanded; dependency analysis is partial."})
+            report({"message": "Some definitions cannot be expanded; dependency analysis is partial."})
     old, new = views
     affected = set()
     for key in old[0].keys() | new[0].keys():
@@ -206,8 +217,9 @@ def potential_impact(before, after):
             if processing.inputs(before, old[0].get(key)) != processing.inputs(after, new[0].get(key)):
                 affected.add(key)
         except Problem as error:
+            # Only project-wide declarations (extensions.json) fail here, never one node.
             affected.add(key)
-            errors.append({"node": key, "message": str(error)})
+            report({"message": str(error)})
     old_edges = {e["id"]: e for e in old[1]}
     new_edges = {e["id"]: e for e in new[1]}
     for key in old_edges.keys() | new_edges.keys():

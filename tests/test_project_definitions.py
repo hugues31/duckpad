@@ -5,12 +5,13 @@ import copy
 import pytest
 
 from duckpad import project_files
-from duckpad.bundle import bundle_to_files, files_to_bundle, validate
+from duckpad.bundle import bundle_to_files, files_to_bundle
 from duckpad.comparison import CommitContext, commit_message, compare_files
 from duckpad.execution.fingerprints import Fingerprints
 from duckpad.git.workspace import diagnose
 from duckpad.merge import merge_files
 from duckpad.util import Problem
+from duckpad.validation import validate
 
 PYTHON = """import duckpad as dp
 
@@ -218,3 +219,21 @@ def test_invalid_partition_definitions_remain_comparable(definition):
     report = compare_files(bundle_to_files(before), bundle_to_files(after))
     assert report["impact"]["status"] == "partial"
     assert report["impact"]["diagnostics"]
+
+
+def test_impact_lists_each_problem_once_across_versions_and_nodes():
+    from test_partitions import bundle
+
+    before = bundle_to_files(mixed_bundle())
+    report = compare_files(before, {**before, "extensions.json": '"abc"'})
+    assert report["impact"]["direct"] == ["consumer", "python", "sql"]
+    assert [d["message"] for d in report["impact"]["diagnostics"]] == [
+        "extensions.json must contain an object keyed by extension name"
+    ]
+    partitioned = bundle()
+    partitioned["flow"]["nodes"][3]["params"]["value"] = "{{ partition.missing }}"
+    files = bundle_to_files(partitioned)
+    report = compare_files(files, {**files, "README.md": "Notes"})
+    assert [(d.get("node"), d["message"]) for d in report["impact"]["diagnostics"]] == [
+        ("transform", "Unknown partition attribute")
+    ]

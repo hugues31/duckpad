@@ -11,10 +11,11 @@ from helpers import wait_run, wait_until
 from duckpad import project_extensions
 from duckpad.app import create_app
 from duckpad.archive import read_archive, write_archive
-from duckpad.bundle import bundle_to_files, files_to_bundle, validate
+from duckpad.bundle import bundle_to_files, files_to_bundle
 from duckpad.merge import merge_files
 from duckpad.services import Services
 from duckpad.util import Problem
+from duckpad.validation import validate
 
 
 def bundle(extensions=None):

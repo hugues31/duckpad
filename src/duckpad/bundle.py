@@ -9,13 +9,10 @@ import duckdb
 
 from . import project_files
 from .node_names import Name, node_names
-from .project_files import ROOT_FILES as ROOT_FILES
-from .project_files import is_declarative as is_declarative
 from .project_schema import require_structure
 from .python_environment import manifest_settings
 from .types import Files, Record
 from .util import Problem, dumps
-from .validation import validate as validate
 
 
 def files_to_bundle(files, *, check_structure=True):

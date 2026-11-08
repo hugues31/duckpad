@@ -214,8 +214,11 @@ def plan(bundle, nodes, edges, boundaries):
             )
     collected = set().union(*collectors.values()) if collectors else set()
     specification = signature(dimension) if dimension else None
+    incoming_edges = {}
+    for edge in edges:
+        incoming_edges.setdefault(edge["target"], []).append(edge)
     for key in topological(nodes, edges, tolerant=True):
-        incoming = [e for e in edges if e["target"] == key]
+        incoming = incoming_edges.get(key, [])
         inherited = [
             e["source"]
             for e in incoming

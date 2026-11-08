@@ -8,10 +8,11 @@ import zlib
 from pathlib import PurePosixPath, PureWindowsPath
 
 from . import project_extensions
-from .bundle import files_to_bundle, is_declarative
+from .bundle import files_to_bundle
 from .components import expand
 from .graph import connection_references
 from .node_names import graph_names, name_text
+from .project_files import is_declarative
 from .projects import decode
 from .templates import URI
 from .util import Problem

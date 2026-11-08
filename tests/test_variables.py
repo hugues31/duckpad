@@ -14,12 +14,13 @@ from helpers import wait_run
 
 from duckpad import variables
 from duckpad.app import create_app
-from duckpad.bundle import bundle_to_files, files_to_bundle, validate
+from duckpad.bundle import bundle_to_files, files_to_bundle
 from duckpad.comparison import commit_message, compare_files
 from duckpad.components import expand_for, group
 from duckpad.merge import merge_files
 from duckpad.templates import compile_template, parse_template
 from duckpad.util import Problem
+from duckpad.validation import validate
 
 ORDERS = (
     "SELECT * FROM (VALUES (1, 'paid', 100, DATE '2026-01-05'), (2, 'paid', 500, DATE '2026-03-01'), "
