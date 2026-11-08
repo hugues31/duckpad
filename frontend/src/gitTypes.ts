@@ -46,7 +46,7 @@ interface Boundary {
 }
 
 /** Static dependencies of the processing changes, without reading any source. */
-export interface Impact {
+interface Impact {
   status: "partial" | "not_applicable";
   reason: string;
   /** Node instances whose processing or wiring changed. */
@@ -70,7 +70,7 @@ export interface ComparisonReport {
 }
 
 /** One side of a comparison: a commit, frozen working files or the empty tree. */
-export interface Revision {
+interface Revision {
   /** The resolved revision, which compares the same files again. */
   ref: string;
   name: string;
@@ -142,7 +142,7 @@ export interface HistoryPage {
   next: number | null;
 }
 
-export type SyncState =
+type SyncState =
   | "disconnected"
   | "unverified"
   | "new_remote_branch"

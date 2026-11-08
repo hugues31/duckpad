@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
-import { afterEach, expect, it } from "vitest";
 import { cleanup, render } from "@testing-library/react";
-import { AssistantMessage } from "./AssistantChat";
+import { afterEach, expect, it } from "vitest";
+import { AssistantMessage } from "./AssistantMessage";
 import type { AssistantTurn } from "./assistantTypes";
 
 afterEach(cleanup);

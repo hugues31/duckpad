@@ -1,3 +1,4 @@
+import type { AssistantOptions } from "./assistantTypes";
 import type { NodeName, NodeNames } from "./nodeNames";
 import type {
   PartitionContext,
@@ -179,7 +180,7 @@ export interface Diagnostic {
   variable?: string;
   node?: string;
 }
-export type Capability = "read" | "write";
+type Capability = "read" | "write";
 /** Databases are read as tables; file storage is a location for file nodes. */
 export type ConnectorFamily = "database" | "storage";
 export interface Snapshot {
@@ -217,7 +218,7 @@ export interface Project {
   main: string;
   created: string;
 }
-export interface ConnectorParameter {
+interface ConnectorParameter {
   name: string;
   /** Text when omitted. */
   type?: string;
@@ -236,7 +237,7 @@ export interface ConnectionTest {
   root?: string | null;
 }
 /** A table or view of a database connection. */
-export interface DatabaseObject {
+interface DatabaseObject {
   schema: string;
   name: string;
   view: boolean;
@@ -290,7 +291,7 @@ export interface User {
   description?: string;
 }
 export interface Workspace {
-  assistant?: import("./assistantTypes").AssistantOptions;
+  assistant?: AssistantOptions;
   user: User;
   projects: Project[];
   worktrees: Worktree[];
@@ -357,7 +358,7 @@ export interface PreviewPage extends Dataset {
   /** The error of the node's latest run, if it failed after this result. */
   error: string | null;
 }
-export type RunStatus =
+type RunStatus =
   | "preparing"
   | "running"
   | "canceling"
@@ -366,7 +367,7 @@ export type RunStatus =
   | "failed"
   | "canceled"
   | "interrupted";
-export type NodeRunStatus =
+type NodeRunStatus =
   | "pending"
   | "running"
   | "success"

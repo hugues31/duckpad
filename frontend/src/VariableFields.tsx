@@ -1,7 +1,9 @@
 import { Link, useParams } from "react-router";
 import { withQuery } from "./api";
 import { useT } from "./i18n";
+import { worktreeUrl } from "./navigation";
 import ParameterInput from "./ParameterInput";
+import { baseType, typeOptions } from "./parameterType";
 import Select from "./Select";
 import type {
   Json,
@@ -13,13 +15,11 @@ import type {
 } from "./types";
 import { useApiResource } from "./useApiResource";
 import {
-  baseType,
   computedDiagnostic,
   descendants,
   fill,
   formatVariableValue,
   sameValue,
-  typeOptions,
   variableSummary,
 } from "./variables";
 
@@ -114,7 +114,7 @@ export function VariableValueInput({
 }
 
 /** Where a resolved value comes from: the default, or the environment's own value. */
-export function useSourceLabel() {
+function useSourceLabel() {
   const t = useT();
   return (source: string | undefined, environment: string) =>
     source === "environment"
@@ -224,8 +224,7 @@ function ValueSourceLink({
   return (
     <small>
       <Link
-        to={withQuery(`/worktrees/${worktreeId}/flow`, {
-          environment,
+        to={worktreeUrl(worktreeId!, "flow", environment, {
           node: value.from.node,
         })}
         state={{

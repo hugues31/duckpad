@@ -68,8 +68,10 @@ def router(ctx: Context) -> APIRouter:
         response_model=None,
         dependencies=[Depends(worktree_role("reader"))],
     )
-    def input_columns(worktree: str, node: str, environment: str) -> Record:
-        return engine.input_columns(worktree, environment, node)
+    def input_columns(
+        worktree: str, node: str, environment: str, partition: Annotated[PartitionQuery, Depends()]
+    ) -> Record:
+        return engine.input_columns(worktree, environment, node, partition.context)
 
     @api.get("/api/runs", response_model=None, dependencies=[Depends(signed_in)])
     def runs(

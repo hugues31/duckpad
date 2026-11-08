@@ -1,15 +1,16 @@
 import { useEffect, useState } from "react";
 import { Outlet, useNavigate } from "react-router";
 import CodePanel from "../CodePanel";
-import { PythonPreparationNotice } from "../PythonEnvironmentStatus";
 import { FlowToolbar, WorkspaceNotices } from "../FlowToolbar";
-import { usePageRoute, worktreeUrl } from "../navigation";
+import { pathPrefix } from "../graph";
 import { useT } from "../i18n";
+import { usePageRoute, worktreeUrl } from "../navigation";
+import { PythonPreparationNotice } from "../PythonEnvironmentStatus";
 import { useShell, useWorkspace } from "../shell";
-import { useWorktree } from "../worktree";
-import { useFlowView } from "./FlowPage";
-import { PageLoading, RouteError } from "./PageStates";
 import type { Worktree } from "../types";
+import { useFlowView } from "../useFlowView";
+import { useWorktree } from "../worktree";
+import { PageLoading, RouteError } from "./PageStates";
 
 /** The toolbar, notices and code editor shared by the tabs of a working branch. */
 export default function WorktreePage() {
@@ -45,7 +46,7 @@ export default function WorktreePage() {
     void navigate(worktreeUrl(fallback, tab, environment), { replace: true });
   }, [deleted, fallback, tab, environment, navigate, notify, t]);
   const assistantNode = flowView.selected
-    ? [...flowView.path.map((p) => p.instance), flowView.selected].join("::")
+    ? pathPrefix(flowView.path) + flowView.selected
     : "";
   useEffect(() => {
     setAssistantNode(assistantNode);

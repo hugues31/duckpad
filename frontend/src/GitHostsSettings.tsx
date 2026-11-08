@@ -1,9 +1,8 @@
-import { useSettingsForm } from "./useSettingsForm";
-import { useState } from "react";
 import { api, send } from "./api";
 import { useT } from "./i18n";
+import SettingsCard from "./SettingsCard";
 import { useApiResource } from "./useApiResource";
-import { useAsyncAction } from "./useAsyncAction";
+import { useSettingsForm } from "./useSettingsForm";
 
 type GitHosts = {
   known_hosts: string;
@@ -16,37 +15,26 @@ export default function GitHostsSettings() {
   const t = useT();
   const resource = useApiResource<GitHosts>("/git-hosts");
   const settings = resource.data;
-  // Unedited fields show the saved settings.
-  const [hostsDraft, setKnownHosts] = useState<string | null>(null);
-  const [prefixesDraft, setPrefixes] = useState<string | null>(null);
-  const knownHosts = hostsDraft ?? settings?.known_hosts ?? "";
-  const prefixes = prefixesDraft ?? settings?.prefixes.join("\n") ?? "";
-  const [saved, setSaved] = useState(false);
-  const { pending, run, ...save } = useAsyncAction();
-  const error = save.error || resource.error;
-  const show = (value: GitHosts) => {
-    resource.setData(value);
-    setKnownHosts(null);
-    setPrefixes(null);
-  };
-  const persist = useSettingsForm({
-    dirty:
-      !!settings &&
-      (knownHosts !== settings.known_hosts ||
-        prefixes !== settings.prefixes.join("\n")),
-    discard: () => {
-      setKnownHosts(null);
-      setPrefixes(null);
+  const {
+    config,
+    change,
+    pending,
+    saved,
+    submit,
+    error: saveError,
+  } = useSettingsForm(
+    settings && {
+      knownHosts: settings.known_hosts,
+      prefixes: settings.prefixes.join("\n"),
     },
-    save: async () => {
-      if (!settings) return;
-      show(
+    async (config) => {
+      resource.setData(
         await api<GitHosts>(
           "/git-hosts",
           send(
             {
-              known_hosts: knownHosts,
-              prefixes: prefixes
+              known_hosts: config.knownHosts,
+              prefixes: config.prefixes
                 .split("\n")
                 .map((value) => value.trim())
                 .filter(Boolean),
@@ -55,26 +43,23 @@ export default function GitHostsSettings() {
           ),
         ),
       );
-      setSaved(true);
     },
-  });
+  );
+  const knownHosts = config?.knownHosts || "";
+  const prefixes = config?.prefixes || "";
+  const error = saveError || resource.error;
   return (
-    <section className="settings-card" aria-labelledby="git-hosts-heading">
-      <h2 id="git-hosts-heading">{t("gitHosts")}</h2>
-      <p className="muted">{t("gitHostsDescription")}</p>
-      {error && (
-        <div className="notice error" role="alert">
-          {error}
-        </div>
-      )}
-      {!settings ? (
-        <p>{t("loading")}</p>
-      ) : (
+    <SettingsCard
+      title={t("gitHosts")}
+      description={t("gitHostsDescription")}
+      error={error}
+      loading={!settings}
+    >
+      {settings && (
         <form
           onSubmit={(event) => {
             event.preventDefault();
-            setSaved(false);
-            void run(persist);
+            void submit();
           }}
         >
           <fieldset disabled={pending} className="git-hosts-fields">
@@ -90,8 +75,7 @@ export default function GitHostsSettings() {
                   placeholder="git.example.com ssh-ed25519 AAAAC3Nz…"
                   value={knownHosts}
                   onChange={(e) => {
-                    setKnownHosts(e.target.value);
-                    setSaved(false);
+                    change({ knownHosts: e.target.value });
                   }}
                 />
                 <small className="muted" id="trusted-host-keys-hint">
@@ -109,8 +93,7 @@ export default function GitHostsSettings() {
                   placeholder="git@git.example.com:team/"
                   value={prefixes}
                   onChange={(e) => {
-                    setPrefixes(e.target.value);
-                    setSaved(false);
+                    change({ prefixes: e.target.value });
                   }}
                 />
                 <small className="muted" id="allowed-origin-prefixes-hint">
@@ -156,6 +139,6 @@ export default function GitHostsSettings() {
           )}
         </>
       )}
-    </section>
+    </SettingsCard>
   );
 }

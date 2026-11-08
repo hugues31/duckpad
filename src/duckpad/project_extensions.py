@@ -165,6 +165,46 @@ def check(config, requirements, imports):
         )
 
 
+def activate_file_readers(base, proposal):
+    """New XLSX readers request Excel in the same save as their node.
+
+    A later explicit disable remains possible, and malformed extension files stay editable.
+    """
+
+    def readers(files):
+        found = set()
+        for path, text in files.items():
+            if path != "flow.json" and not re.fullmatch(r"components/[^/]+\.json", path):
+                continue
+            try:
+                graph = json.loads(text)
+            except ValueError:
+                continue
+            if not isinstance(graph, dict) or not isinstance(graph.get("nodes"), list):
+                continue
+            for node in graph["nodes"]:
+                if not isinstance(node, dict):
+                    continue
+                kind = node.get("preset") or node.get("template") or node.get("origin")
+                if kind == "load_xlsx" and isinstance(node.get("id"), str):
+                    found.add((path, node["id"]))
+        return found
+
+    if not readers(proposal) - readers(base):
+        return proposal
+    extensions = read(proposal.get(FILE))
+    if isinstance(extensions, str):
+        return proposal
+    extensions = dict(extensions or {})
+    excel = extensions.get("excel")
+    if excel is not None and not isinstance(excel, dict):
+        return proposal
+    if excel and excel.get("enabled") is True:
+        return proposal
+    extensions["excel"] = {**(excel or {"source": "core"}), "enabled": True}
+    return {**proposal, FILE: write(extensions)}
+
+
 if __name__ == "__main__":
     payload = json.load(sys.stdin)
     try:

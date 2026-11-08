@@ -1,12 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, send, withQuery } from "./api";
-import { useResource } from "./useApiResource";
-import { TabStatus } from "./gitTabs";
 import GitBranchesTab from "./GitBranchesTab";
 import GitCompareTab, { savedSelection, type Selection } from "./GitCompareTab";
 import GitReviewTab from "./GitReviewTab";
 import GitSyncTab from "./GitSyncTab";
 import type { Repository } from "./gitTabs";
+import { TabStatus } from "./gitTabs";
 import type {
   Branch,
   HistoryPage,
@@ -15,6 +14,7 @@ import type {
 } from "./gitTypes";
 import { useT, type TranslationKey } from "./i18n";
 import { Modal } from "./modals";
+import { useResource } from "./useApiResource";
 
 type Mode = "compare" | "branches" | "sync" | "review";
 
@@ -33,33 +33,39 @@ function useRepository(base: string, onChanged: () => Promise<void>) {
   }>({ branches: [], remote: null });
   const [loading, setLoading] = useState(true);
   const [failure, setFailure] = useState<Repository["failure"]>(null);
-  const sequence = useRef(0);
+  const controller = useRef<AbortController | null>(null);
   const load = useCallback(
     async function load(changed = false): Promise<void> {
-      const current = ++sequence.current;
+      controller.current?.abort();
+      const request = new AbortController();
+      controller.current = request;
       setLoading(true);
       setFailure(null);
       try {
         if (changed) await onChanged();
+        request.signal.throwIfAborted();
         const [branches, remote] = await Promise.all([
-          api<Branch[]>(`${base}/branches`),
-          api<RemoteStatus>(`${base}/remote`),
+          api<Branch[]>(`${base}/branches`, { signal: request.signal }),
+          api<RemoteStatus>(`${base}/remote`, { signal: request.signal }),
         ]);
-        if (current === sequence.current) setState({ branches, remote });
+        if (!request.signal.aborted) setState({ branches, remote });
       } catch (e) {
-        if (current === sequence.current)
+        if (!request.signal.aborted)
           setFailure({
             message: (e as Error).message,
             retry: () => void load(changed),
           });
       } finally {
-        if (current === sequence.current) setLoading(false);
+        if (!request.signal.aborted) setLoading(false);
       }
     },
     [base, onChanged],
   );
   useEffect(() => {
     void load();
+    return () => {
+      controller.current?.abort();
+    };
   }, [load]);
   return {
     repository: { ...state, loading, failure, reload: () => load() },

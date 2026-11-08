@@ -1,13 +1,11 @@
-import { ActionMenu } from "./ActionMenu";
-import { useMemo, useState } from "react";
 import { Plus, Search, X } from "lucide-react";
+import { useMemo, useState } from "react";
+import { ActionMenu } from "./ActionMenu";
 import AddIcon from "./AddIcon";
-import { NodeIcon } from "./Canvas";
+import { NodeIcon } from "./CanvasNode";
 import { DRAG_TYPE, nodeChoices, type NodeKind } from "./graph";
 import { isBuiltinTemplate, templateLabel, useT } from "./i18n";
 import type { Snapshot } from "./types";
-
-export type { NodeKind } from "./graph";
 
 const CATEGORIES = [
   "sources",

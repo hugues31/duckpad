@@ -1,6 +1,3 @@
-import { useNavigate } from "react-router";
-import { worktreeUrl } from "./navigation";
-import { useApiResource } from "./useApiResource";
 import {
   createContext,
   useCallback,
@@ -10,12 +7,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import type {
-  PartitionPage,
-  PartitionContext,
-  PartitionEntry,
-  PartitionLaunchOptions,
-} from "./partitions";
+import { useNavigate } from "react-router";
 import {
   api,
   ApiError,
@@ -26,6 +18,13 @@ import {
 } from "./api";
 import { outputSource } from "./graph";
 import { useT } from "./i18n";
+import { worktreeUrl } from "./navigation";
+import type {
+  PartitionContext,
+  PartitionEntry,
+  PartitionLaunchOptions,
+  PartitionPage,
+} from "./partitions";
 import { useShell } from "./shell";
 import type {
   Bundle,
@@ -35,16 +34,9 @@ import type {
   Snapshot,
   Statuses,
 } from "./types";
+import { useApiResource } from "./useApiResource";
 import { useWorktreeSnapshot } from "./useWorktreeSnapshot";
-
-/** How many saves of a working branch can be undone. */
-const HISTORY_LIMIT = 100;
-
-/** Commits to revert: saves to undo, and undos to redo. */
-interface History {
-  undo: string[];
-  redo: string[];
-}
+import { rememberChange, revertChange, type History } from "./worktreeHistory";
 
 /** The working branch opened by the URL, with the actions that change it. */
 export interface Worktree {
@@ -324,9 +316,7 @@ export function WorktreeProvider({
     function remember<T extends Snapshot>(worktree: string, result: T): T {
       if (result.change) {
         const entry = history(worktree);
-        entry.undo.push(result.change);
-        entry.undo.splice(0, Math.max(0, entry.undo.length - HISTORY_LIMIT));
-        entry.redo.length = 0;
+        rememberChange(entry, result.change);
       }
       return result;
     }
@@ -368,25 +358,15 @@ export function WorktreeProvider({
       if (!canEdit) return false;
       // Pending edits are saved first, so they are the latest change.
       await settle();
-      const commits = history(id)[direction];
-      const index = change ? commits.lastIndexOf(change) : commits.length - 1;
-      if (index < 0) return false;
-      const [commit] = commits.splice(index, 1);
-      try {
-        const result = await write(id, () =>
-          api<Snapshot>(`/worktrees/${id}/revert`, send({ commit })),
-        );
-        if (result.change)
-          history(id)[direction === "undo" ? "redo" : "undo"].push(
-            result.change,
-          );
-        return true;
-      } catch (error) {
-        // A conflict retains both versions for resolution, which settles the change.
-        if (!(error instanceof ApiError && error.status === 409))
-          commits.splice(index, 0, commit);
-        throw error;
-      }
+      return revertChange(
+        history(id),
+        direction,
+        (commit) =>
+          write(id, () =>
+            api<Snapshot>(`/worktrees/${id}/revert`, send({ commit })),
+          ),
+        change,
+      );
     }
 
     function revert(direction: keyof History, change?: string) {

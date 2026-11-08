@@ -226,10 +226,7 @@ export function WorkspaceNotices({
   );
 }
 
-export const visibleDiagnostics = (
-  snapshot: Snapshot,
-  attempted: Diagnostic[],
-) =>
+const visibleDiagnostics = (snapshot: Snapshot, attempted: Diagnostic[]) =>
   snapshot.diagnostics.filter(
     (item) =>
       item.code !== "missing_input" ||

@@ -1,17 +1,19 @@
-import { useCallback, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { api } from "./api";
 import { usePolling, type PollingOptions } from "./usePolling";
 
 export interface ResourceOptions<T = unknown> extends PollingOptions {
   /** Load again, keeping the current data meanwhile, whenever this value changes. */
-  refresh?: string | number;
+  refresh?: unknown;
+  /** Preserve the last successful value when a refresh fails. */
+  keepDataOnError?: boolean;
   /** Delay after a successful response, or false to stop until a reload. */
   nextInterval?: (data: T) => number | false;
 }
 
 interface Settled<T> {
   key: string;
-  request: string;
+  request: object;
   data: T | null;
   error: string;
 }
@@ -27,6 +29,7 @@ export function useResource<T>(
   load: (signal: AbortSignal) => Promise<T>,
   {
     refresh,
+    keepDataOnError = false,
     enabled = true,
     nextInterval,
     ...polling
@@ -34,8 +37,10 @@ export function useResource<T>(
 ) {
   const [attempt, setAttempt] = useState(0);
   const [settled, setSettled] = useState<Settled<T> | null>(null);
-  const request =
-    key === null ? null : JSON.stringify([key, refresh ?? null, attempt]);
+  const request = useMemo(
+    () => (key === null ? null : { key, refresh, attempt }),
+    [key, refresh, attempt],
+  );
   // The request identifies what to load; a new `load` alone does not reload.
   const latestLoad = useRef(load);
   const cadence = useRef(nextInterval);
@@ -48,7 +53,13 @@ export function useResource<T>(
       async (signal: AbortSignal) => {
         const done = (data: T | null, error: string) => {
           if (!signal.aborted)
-            setSettled({ key: key!, request: request!, data, error });
+            setSettled((old) => ({
+              key: key!,
+              request: request!,
+              error,
+              data:
+                error && keepDataOnError && old?.key === key ? old.data : data,
+            }));
         };
         try {
           const data = await latestLoad.current(signal);
@@ -59,7 +70,7 @@ export function useResource<T>(
           throw e;
         }
       },
-      [key, request],
+      [key, request, keepDataOnError],
     ),
     { ...polling, enabled: enabled && request !== null },
   );

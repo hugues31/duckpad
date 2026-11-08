@@ -1,3 +1,4 @@
+import { ChevronDown, ChevronRight, Eye, Link, Loader2, X } from "lucide-react";
 import {
   lazy,
   Suspense,
@@ -6,8 +7,6 @@ import {
   useRef,
   useState,
 } from "react";
-import { ChevronDown, ChevronRight, Eye, Loader2, Link, X } from "lucide-react";
-import { withQuery } from "./api";
 import {
   insertText,
   revealPosition,
@@ -15,18 +14,19 @@ import {
 } from "./codeEditing";
 import {
   SAMPLE_SIZES,
-  type InputColumns,
   type PreviewState,
   type SampleSize,
 } from "./draftPreview";
 import { useT } from "./i18n";
-import { nodeCode, nodeCodePath, nodeGraph, templateUsage } from "./nodeCode";
+import { nodeCode, setNodeCode, templateUsage } from "./nodeCode";
 import { quoteIdentifier } from "./samples";
+import SaveState from "./SaveState";
 import Select from "./Select";
-import type { Bundle, FlowNode, Snapshot, Statuses } from "./types";
 import { useShell } from "./shell";
-import { useApiResource } from "./useApiResource";
-import { useIdleSave, useRevisionDraft } from "./useRevisionDraft";
+import type { Bundle, FlowNode, Snapshot, Statuses } from "./types";
+import { useAutosavedDraft } from "./useAutosavedDraft";
+import { useInputColumns } from "./useInputColumns";
+import { useSaveShortcut } from "./useSaveShortcut";
 import { useWorktree } from "./worktree";
 
 const CodeEditor = lazy(() => import("./Editor"));
@@ -90,47 +90,20 @@ export default function NodeCodePanel({
   const { notify } = useShell();
   const { save, starting } = useWorktree();
   const read = (bundle: Bundle) => nodeCode(bundle, node, parent) ?? "";
-  // Closing the panel or selecting another node saves the last edits without it.
-  const mounted = useRef(true);
-  useEffect(
-    () => () => {
-      mounted.current = false;
-    },
-    [],
-  );
-  const { draft, dirty, pending, update, persist, rejected } = useRevisionDraft(
+  const { draft, dirty, pending, update, saveNow, error } = useAutosavedDraft(
     read(snapshot.bundle!),
     snapshot,
     (text: string, base: Snapshot) =>
-      save(base, (bundle) => {
-        if (node.template) bundle.templates[node.template] = text;
-        else
-          (bundle.node_sql ||= {})[
-            nodeCodePath(node.id, parent, node.language)
-          ] = text;
-      }).catch((error) => {
-        // Nothing is left here to show the error of the last save.
-        if (!mounted.current) notify((error as Error).message, true);
-        throw error;
-      }),
-    { autosave: !readOnly },
+      save(base, (bundle) => setNodeCode(bundle, node, text, parent)),
+    {
+      readOnly,
+      onOrphanedError: (error) => notify((error as Error).message, true),
+    },
   );
-  const [error, setError] = useState("");
   const panel = useRef<HTMLElement>(null);
   const [editor, setEditor] = useState<CodeEditorInstance | null>(null);
   const python = node.language === "python";
-  const saveNow = async () => {
-    if (readOnly) return;
-    setError("");
-    try {
-      await persist();
-    } catch (e) {
-      setError((e as Error).message);
-    }
-  };
-  useIdleSave(draft, dirty && !readOnly, () => {
-    if (!rejected()) void saveNow();
-  });
+  useSaveShortcut(saveNow, panel);
   const reportDraft = useEffectEvent(onDraft);
   useEffect(() => {
     reportDraft(draft);
@@ -154,14 +127,6 @@ export default function NodeCodePanel({
       event.preventDefault();
       event.stopPropagation();
       if (!event.repeat) requestPreview();
-    } else if (
-      (event.ctrlKey || event.metaKey) &&
-      !event.altKey &&
-      event.key.toLowerCase() === "s"
-    ) {
-      // The browser would otherwise save the page.
-      event.preventDefault();
-      void saveNow();
     }
   });
   useEffect(() => {
@@ -183,19 +148,7 @@ export default function NodeCodePanel({
   const linked = node.template
     ? templateUsage(snapshot.bundle!, node.template)
     : 0;
-  // Input columns follow the declared inputs, their edges and upstream
-  // results, not each save of this code.
-  const declared =
-    snapshot.parsed_nodes?.[nodeCodePath(node.id, parent, node.language)] ??
-    (node.template ? snapshot.parsed_templates[node.template] : undefined);
-  const prefix = fullNode.slice(0, -node.id.length);
-  const upstream = (nodeGraph(snapshot.bundle!, parent)?.edges || [])
-    .filter((edge) => edge.target === node.id)
-    .map((edge) => [
-      edge.targetHandle,
-      edge.source,
-      statuses.nodes[prefix + edge.source]?.outputs[edge.sourceHandle] ?? null,
-    ]);
+  const columns = useInputColumns(snapshot, fullNode, environment, statuses);
   return (
     <aside className="code-panel" ref={panel} aria-label={t("codePanel")}>
       <div className="inspector-title">
@@ -265,15 +218,7 @@ export default function NodeCodePanel({
         </Select>
         <span className="spacer" />
         {!readOnly && (
-          <span
-            className="editor-save-state muted small"
-            role="status"
-            title={t("editorAutosaveHint")}
-          >
-            {t(
-              pending ? "saving" : dirty || error ? "unsavedChanges" : "saved",
-            )}
-          </span>
+          <SaveState pending={pending} dirty={dirty} error={error} />
         )}
       </div>
       {node.template && (
@@ -287,14 +232,7 @@ export default function NodeCodePanel({
         </div>
       )}
       <InputColumnList
-        worktree={snapshot.worktree.id}
-        fullNode={fullNode}
-        environment={environment}
-        refresh={JSON.stringify([
-          declared?.inputs,
-          upstream,
-          statuses.active?.id ?? null,
-        ])}
+        columns={columns}
         python={python}
         disabled={readOnly || !editor}
         onInsert={(text) => editor && insertText(editor, text)}
@@ -322,31 +260,18 @@ export default function NodeCodePanel({
  * the upstream code. A click inserts a name at the cursor.
  */
 function InputColumnList({
-  worktree,
-  fullNode,
-  environment,
-  refresh,
+  columns,
   python,
   disabled,
   onInsert,
 }: {
-  worktree: string;
-  fullNode: string;
-  environment: string;
-  refresh: string;
+  columns: ReturnType<typeof useInputColumns>;
   python: boolean;
   disabled: boolean;
   onInsert: (text: string) => void;
 }) {
   const t = useT();
   const [open, setOpen] = useState(true);
-  const columns = useApiResource<InputColumns>(
-    withQuery(
-      `/worktrees/${worktree}/input-columns/${encodeURIComponent(fullNode)}`,
-      { environment },
-    ),
-    { refresh },
-  );
   const inputs = columns.data?.inputs || [];
   if (!inputs.length && !columns.pending) return null;
   const Toggle = open ? ChevronDown : ChevronRight;
@@ -359,7 +284,7 @@ function InputColumnList({
       >
         <Toggle size={14} aria-hidden="true" />
         {t("inputColumns")}
-        {columns.pending && (
+        {columns.pending && !columns.data && (
           <Loader2 size={12} className="spin" aria-label={t("loading")} />
         )}
         <span className="muted small">{t("inputColumnsHint")}</span>

@@ -1,4 +1,6 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { useSaveShortcut } from "./useSaveShortcut";
+import { retainedConflict } from "./api";
 import { useT } from "./i18n";
 import { useIdleSave, useRevisionDraft } from "./useRevisionDraft";
 import type { Documentation, Snapshot } from "./types";
@@ -20,21 +22,23 @@ export default function NodeDocumentation({
   ) => Promise<Snapshot>;
 }) {
   const t = useT();
+  const editor = useRef<HTMLTextAreaElement>(null);
   const [error, setError] = useState("");
   const editable =
     !snapshot.worktree.read_only &&
     (snapshot.role === "admin" || snapshot.role === "editor");
   const current = snapshot.bundle?.documentation?.nodes?.[fullNode] || "";
   // Notes are saved after a pause in typing, on blur, and when the tab closes.
-  const { draft, dirty, update, persist, rejected } = useRevisionDraft(
-    current,
-    snapshot,
-    (text, base) =>
-      onSave((value) => {
-        (value.nodes ??= {})[fullNode] = text;
-      }, base),
-    { autosave: editable },
-  );
+  const { draft, dirty, update, persist, rejected, rejection } =
+    useRevisionDraft(
+      current,
+      snapshot,
+      (text, base) =>
+        onSave((value) => {
+          (value.nodes ??= {})[fullNode] = text;
+        }, base),
+      { autosave: editable },
+    );
   async function save() {
     if (!editable) return;
     setError("");
@@ -47,9 +51,13 @@ export default function NodeDocumentation({
   useIdleSave(draft, dirty && editable, () => {
     if (!rejected()) void save();
   });
+  useSaveShortcut(() => {
+    if (!retainedConflict(rejection())) return save();
+  }, editor);
   return (
     <>
       <textarea
+        ref={editor}
         readOnly={!editable}
         className="documentation-editor"
         aria-label={t("nodeDocs")}

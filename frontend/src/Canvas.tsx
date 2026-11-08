@@ -1,314 +1,51 @@
-import { ActionMenu, type ActionItem } from "./ActionMenu";
-import { PythonIcon } from "./AddIcon";
-import { primaryOutputCount, showMinimap } from "./canvasResults";
-import { displayNodeName, type NodeNames } from "./nodeNames";
-import type { PartitionNode } from "./partitions";
-import { useOptionalWorktree } from "./worktree";
 import {
-  memo,
+  applyNodeChanges,
+  ControlButton,
+  Controls,
+  MarkerType,
+  MiniMap,
+  Panel,
+  ReactFlow,
+  ReactFlowProvider,
+  useNodesInitialized,
+  useReactFlow,
+  type Connection,
+  type NodeChange,
+} from "@xyflow/react";
+import { Maximize, Sparkles, Workflow } from "lucide-react";
+import {
   useCallback,
   useEffect,
-  useEffectEvent,
   useImperativeHandle,
   useMemo,
   useRef,
   useState,
-  type Ref,
 } from "react";
-import {
-  Controls,
-  ControlButton,
-  Handle,
-  MiniMap,
-  MarkerType,
-  Panel,
-  Position,
-  ReactFlow,
-  ReactFlowProvider,
-  useReactFlow,
-  useNodesInitialized,
-  useUpdateNodeInternals,
-  getNodesBounds,
-  getViewportForBounds,
-  type Connection,
-  type NodeProps,
-  type Node,
-  type NodeChange,
-  applyNodeChanges,
-} from "@xyflow/react";
-import {
-  FileInput,
-  GitMerge,
-  Filter,
-  Sigma,
-  FileOutput,
-  Code2,
-  Link,
-  Boxes,
-  Check,
-  AlertCircle,
-  Loader2,
-  Clock3,
-  Ban,
-  Square,
-  Sparkles,
-  Maximize,
-  Workflow,
-  type LucideProps,
-} from "lucide-react";
-import { useT, templateLabel, nodeLabel } from "./i18n";
-import { DRAG_TYPE, nodeInterface, type NodeConnection } from "./graph";
+import { ActionMenu } from "./ActionMenu";
+import { PipelineNode } from "./CanvasNode";
+import { showMinimap } from "./canvasResults";
+import { CanvasProps, FocusRequest } from "./canvasTypes";
 import ConnectionPalette from "./ConnectionPalette";
-import { WarningBadge, warningCount } from "./ExecutionMessages";
+import { DRAG_TYPE, type NodeConnection } from "./graph";
 import { findNodePosition, layoutNodes } from "./graphLayout";
+import { useT } from "./i18n";
 import { SearchField } from "./Search";
-import type { NodeKind } from "./NodePalette";
-import type {
-  ComponentDefinition,
-  ComponentPort,
-  FlowEdge,
-  FlowNode,
-  ParsedTemplate,
-  Statuses,
-  TemplateKind,
-} from "./types";
-
-/** The icon of a template, from its ID, or of any component. */
-export function NodeIcon({ kind, ...props }: LucideProps & { kind: string }) {
-  // Python template IDs end with ".py", whatever their name says.
-  if (kind === "python" || kind.endsWith(".py"))
-    return <PythonIcon {...props} />;
-  if (kind.includes("export")) return <FileOutput {...props} />;
-  if (kind === "join") return <GitMerge {...props} />;
-  if (kind === "filter") return <Filter {...props} />;
-  if (kind === "aggregate" || kind.includes("metrics"))
-    return <Sigma {...props} />;
-  if (kind.startsWith("load_")) return <FileInput {...props} />;
-  if (kind === "component") return <Boxes {...props} />;
-  return <Code2 {...props} />;
-}
-function StatusIcon({ status, ...props }: LucideProps & { status: string }) {
-  if (status === "valid" || status === "success") return <Check {...props} />;
-  if (status === "running" || status === "preparing")
-    return <Loader2 {...props} />;
-  if (status === "stale") return <Clock3 {...props} />;
-  if (status === "blocked") return <Ban {...props} />;
-  if (status === "failed") return <AlertCircle {...props} />;
-  return <Square {...props} />;
-}
-
-/** What the canvas shows of a node. */
-type PipelineData = {
-  count?: number;
-  fullNode: string;
-  valueProducer?: boolean;
-  label: string;
-  kind: TemplateKind | "component";
-  inputs: string[];
-  missingInputs: string[];
-  outputs: string[];
-  /** The run or result state shown on the node, if any. */
-  status:
-    | ""
-    | "valid"
-    | "success"
-    | "stale"
-    | "failed"
-    | "blocked"
-    | "canceled"
-    | "running";
-  /** The template ID, or "component". */
-  icon: string;
-  linked?: string;
-  warnings: number;
-  partition?: PartitionNode;
-};
-type PipelineNode = Node<PipelineData, "pipeline">;
-
-const PipelineNode = memo(function PipelineNode({
-  id,
-  data,
-  selected,
-}: NodeProps<PipelineNode>) {
-  const t = useT();
-  const partition = data.partition;
-  const updateNodeInternals = useUpdateNodeInternals();
-  const portLayout = JSON.stringify([data.kind, data.inputs, data.outputs]);
-  useEffect(() => {
-    // SQL edits can rename or move handles without resizing the node.
-    updateNodeInternals(id);
-  }, [id, portLayout, updateNodeInternals]);
-  const source = data.kind === "source";
-  const StatusTag = data.status === "failed" ? "button" : "span";
-  const portPosition = (index: number, count: number) => {
-    const spacing = Math.min(24, 72 / Math.max(1, count - 1));
-    const top = 48 + (index - (count - 1) / 2) * spacing;
-    const inset = source ? 27 : 75 - Math.sqrt(48 ** 2 - (top - 48) ** 2);
-    return { top, inset };
-  };
-  return (
-    <div
-      className={`pipeline-node ${source ? "source-node" : "round-node"} ${data.kind} ${selected ? "is-selected" : ""}`}
-    >
-      <div className="node-shape">
-        <NodeIcon kind={data.icon} size={27} strokeWidth={1.6} />
-      </div>
-      <div className="node-title" title={data.label}>
-        {data.label}
-      </div>
-      {data.linked && (
-        <div
-          className="node-link-badge"
-          title={`${t("linkedNode")}: ${data.linked}`}
-        >
-          <Link size={11} />
-          {data.linked}
-        </div>
-      )}
-      {partition && (partition.partitioned || partition.collect.length > 0) && (
-        <span className="node-partition-badge">
-          {partition.collect.length
-            ? t("partitionCollector")
-            : `${partition.dimension} · ${Object.keys(partition.filters).length ? t("partitionFiltered") : t("partitionInherited")}`}
-        </span>
-      )}
-      <div className="node-status-slot">
-        {data.valueProducer && (
-          <span className="badge neutral" title={t("valueProducer")}>
-            ƒ
-          </span>
-        )}
-        <WarningBadge count={data.warnings} />
-        {(data.status === "valid" || data.status === "success") &&
-          data.count != null && (
-            <span className="node-row-count">
-              {data.count.toLocaleString()}{" "}
-              {t(data.count === 1 ? "row" : "rows")}
-            </span>
-          )}
-        {data.status &&
-          data.status !== "valid" &&
-          data.status !== "success" && (
-            <StatusTag
-              className={`node-status ${data.status}`}
-              title={t(data.status)}
-            >
-              <StatusIcon
-                status={data.status}
-                size={13}
-                className={data.status === "running" ? "spin" : ""}
-                aria-hidden="true"
-              />
-              <span>{t(data.status)}</span>
-            </StatusTag>
-          )}
-      </div>
-      {data.inputs.map((port: string, i: number) => (
-        <Handle
-          key={"in" + port}
-          type="target"
-          position={Position.Left}
-          id={port}
-          style={{
-            top: portPosition(i, data.inputs.length).top,
-            left: portPosition(i, data.inputs.length).inset,
-          }}
-          className={
-            data.missingInputs.includes(port) ? "missing-input" : undefined
-          }
-          title={
-            data.missingInputs.includes(port)
-              ? `${t("connectSource")}: ${port}`
-              : port
-          }
-          aria-label={`${t("inputs")}: ${port}${data.missingInputs.includes(port) ? ` · ${t("connectSource")}` : ""}`}
-        >
-          <span className="handle-label in">{port}</span>
-        </Handle>
-      ))}
-      {data.outputs.map((port: string, i: number) => (
-        <Handle
-          key={"out" + port}
-          type="source"
-          position={Position.Right}
-          id={port}
-          style={{
-            top: portPosition(i, data.outputs.length).top,
-            right: portPosition(i, data.outputs.length).inset,
-          }}
-          title={port}
-          aria-label={`${t("output")}: ${port}`}
-        >
-          <span className="handle-label out">{port}</span>
-        </Handle>
-      ))}
-    </div>
-  );
-});
+import type { FlowEdge, FlowNode } from "./types";
+import { useCanvasFrame } from "./useCanvasFrame";
+import { useCanvasNodes } from "./useCanvasNodes";
+import { useDoubleClickGuard } from "./useDoubleClickGuard";
 PipelineNode.displayName = "PipelineNode";
 const nodeTypes = { pipeline: PipelineNode };
-export interface CanvasHandle {
-  newNodePosition: (nodes: FlowNode[]) => FlowNode["position"];
-}
-export interface FocusRequest {
-  id: string;
-  key: string;
-  /** Keep the zoom and pan only if the node is hidden, as for a new node. */
-  reveal?: boolean;
-}
-interface CanvasProps {
-  names?: NodeNames;
-  ref?: Ref<CanvasHandle>;
-  readOnly?: boolean;
-  nodes: FlowNode[];
-  edges: FlowEdge[];
-  parsed: Record<string, ParsedTemplate>;
-  local?: Record<string, ParsedTemplate>;
-  components: Record<string, ComponentDefinition>;
-  excludedComponents: string[];
-  valueProducers?: string[];
-  statuses: Statuses;
-  prefix: string;
-  viewKey: string;
-  selected: string | null;
-  focusRequest?: FocusRequest | null;
-  onSelect: (id: string | null) => void;
-  onMove: (nodes: FlowNode[]) => Promise<void>;
-  onConnect: (edge: Omit<FlowEdge, "id">) => void;
-  /** Resolve once the deletion is saved; reject if it failed. */
-  onDelete: (nodes: string[], edges: string[]) => Promise<void>;
-  onAdd: (
-    kind: NodeKind,
-    id: string,
-    position?: { x: number; y: number },
-    connection?: NodeConnection,
-  ) => void;
-  onFiles?: (files: File[], position: { x: number; y: number }) => void;
-  actionsFor: (id: string) => ActionItem[];
-  /** Inputs of the opened component definition, connected from outside it. */
-  exposedInputs?: Record<string, ComponentPort>;
-  onOpen: (id: string) => void;
-  onSelection: (ids: string[]) => void;
-  /** Show the results log of a node whose warning badge was clicked. */
-  onWarnings?: (id: string) => void;
-  /** Show the error of a node whose Failed badge was clicked. */
-  onFailure?: (id: string) => void;
-}
 function CanvasInner({ ref, ...props }: CanvasProps) {
-  const worktree = useOptionalWorktree();
-  const partitions =
-    worktree?.snapshot?.partitions?.[worktree.environment]?.nodes;
   const t = useT();
   const [context, setContext] = useState<{
     id: string;
     position: { x: number; y: number };
     trigger: HTMLElement;
   } | null>(null);
-  const { getNodes, getViewport, setViewport, screenToFlowPosition } =
-    useReactFlow();
+  const { getNodes, screenToFlowPosition } = useReactFlow();
   const initialized = useNodesInitialized();
   const safeArea = useRef<HTMLDivElement>(null);
-  const [frame, setFrame] = useState({ x: 0, y: 0, width: 0, height: 0 });
   const viewportTouched = useRef(false);
   useImperativeHandle(ref, () => ({
     newNodePosition: (graphNodes) => {
@@ -348,6 +85,7 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
     setHandledRequest(props.focusRequest);
     if (props.focusRequest) setFocus(props.focusRequest);
   }
+  const { frame, fitGraph } = useCanvasFrame(safeArea, focus, viewportTouched);
   const [pendingConnection, setPendingConnection] = useState<{
     endpoint: Omit<NodeConnection, "port">;
     position: { x: number; y: number };
@@ -358,205 +96,8 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
     [],
   );
   const flow = useRef<HTMLDivElement>(null);
-  const openNode = useEffectEvent((id: string) => props.onOpen(id));
-  useEffect(() => {
-    // A double-click acts on the node its first click hit. Selecting that node
-    // opens panels that can refit the graph, so the second click may land on
-    // the pane, another node or a panel: there, it must neither act nor zoom.
-    let first: string | null = null;
-    const click = (event: MouseEvent) => {
-      const element =
-        event.target instanceof Element
-          ? event.target.closest(".react-flow__node")
-          : null;
-      const node =
-        element && flow.current?.contains(element)
-          ? element.getAttribute("data-id")
-          : null;
-      if (event.detail <= 1) first = node;
-      else if (first && node !== first) {
-        event.preventDefault();
-        event.stopPropagation();
-      }
-    };
-    const doubleClick = (event: MouseEvent) => {
-      if (!first) return;
-      event.preventDefault();
-      event.stopPropagation();
-      openNode(first);
-    };
-    // Capture on the window to run before React and the pane's zoom handler.
-    window.addEventListener("click", click, true);
-    window.addEventListener("dblclick", doubleClick, true);
-    return () => {
-      window.removeEventListener("click", click, true);
-      window.removeEventListener("dblclick", doubleClick, true);
-    };
-  }, []);
-  useEffect(() => {
-    const element = safeArea.current!;
-    const measure = () => {
-      const next = {
-        x: element.offsetLeft,
-        y: element.offsetTop,
-        width: element.clientWidth,
-        height: element.clientHeight,
-      };
-      setFrame((previous) =>
-        Object.keys(next).every(
-          (key) =>
-            previous[key as keyof typeof next] ===
-            next[key as keyof typeof next],
-        )
-          ? previous
-          : next,
-      );
-    };
-    const observer = new ResizeObserver(measure);
-    observer.observe(element);
-    measure();
-    return () => observer.disconnect();
-  }, []);
-  const fitGraph = useCallback(
-    (graphNodes = getNodes()) => {
-      if (!initialized || !frame.width || !frame.height) return;
-      // Frame the unobscured area while keeping the graph surface behind every panel.
-      const viewport = getViewportForBounds(
-        getNodesBounds(graphNodes),
-        frame.width,
-        frame.height,
-        0.1,
-        1,
-        0.12,
-      );
-      void setViewport({
-        ...viewport,
-        x: viewport.x + frame.x,
-        y: viewport.y + frame.y,
-      });
-    },
-    [initialized, frame, getNodes, setViewport],
-  );
-  const connectedInputs = useMemo(
-    () =>
-      new Set([
-        ...props.edges.map((edge) => `${edge.target}\0${edge.targetHandle}`),
-        ...Object.values(props.exposedInputs || {}).map(
-          (input) => `${input.node}\0${input.port}`,
-        ),
-      ]),
-    [props.edges, props.exposedInputs],
-  );
-  const displayNodes = useMemo(
-    () =>
-      props.nodes.map((node): PipelineNode => {
-        const signature = nodeInterface(
-          node,
-          props.parsed,
-          props.components,
-          props.local,
-        );
-        const { kind, inputs, outputs } = signature;
-        const result = props.statuses.nodes?.[props.prefix + node.id];
-        const nested = Object.entries(props.statuses.nodes || {})
-          .filter(([id]) => id.startsWith(props.prefix + node.id + "::"))
-          .map(([, v]) => v);
-        const states = result ? [result, ...nested] : nested;
-        const active = Object.entries(props.statuses.active?.nodes || {})
-          .filter(
-            ([id]) =>
-              id === props.prefix + node.id ||
-              id.startsWith(props.prefix + node.id + "::"),
-          )
-          .map(([, v]) => v.status as string);
-        // A partitioned node whose keys failed has a failed status but no single error.
-        const status = active.includes("running")
-          ? "running"
-          : active.includes("failed")
-            ? "failed"
-            : active.includes("blocked") ||
-                states.some((s) => s.execution_status === "blocked")
-              ? "blocked"
-              : states.some((s) => s.execution_status === "canceled")
-                ? "canceled"
-                : states.some((s) => s.error || s.execution_status === "failed")
-                  ? "failed"
-                  : states.some((s) =>
-                        Object.values(s.outputs || {}).some(
-                          (o) => o.status === "stale",
-                        ),
-                      )
-                    ? "stale"
-                    : states.some((s) => Object.keys(s.outputs || {}).length)
-                      ? "valid"
-                      : active.includes("success") ||
-                          states.some((s) => s.execution_status === "success")
-                        ? "success"
-                        : "";
-        return {
-          id: node.id,
-          type: "pipeline" as const,
-          position: node.position || { x: 0, y: 0 },
-          selected: node.id === props.selected,
-          data: {
-            fullNode: props.prefix + node.id,
-            partition: partitions?.[props.prefix + node.id],
-            valueProducer: props.valueProducers?.includes(
-              props.prefix + node.id,
-            ),
-            label: displayNodeName(
-              props.names?.[props.prefix + node.id]?.slice(-1),
-              nodeLabel(node, signature, t),
-              t,
-            ),
-            kind,
-            inputs,
-            missingInputs: inputs.filter(
-              (port) => !connectedInputs.has(`${node.id}\0${port}`),
-            ),
-            outputs,
-            status,
-            count: primaryOutputCount(
-              node,
-              props.prefix + node.id,
-              outputs,
-              props.components,
-              props.statuses,
-            ),
-            warnings: states.reduce(
-              (count, state) => count + warningCount(state.results),
-              0,
-            ),
-            icon: node.component
-              ? "component"
-              : node.language === "python"
-                ? "python"
-                : node.preset || node.template || node.origin || "",
-            linked: node.template
-              ? templateLabel(
-                  node.template,
-                  props.parsed[node.template]?.label,
-                  t,
-                )
-              : undefined,
-          },
-        };
-      }),
-    [
-      props.nodes,
-      partitions,
-      connectedInputs,
-      props.valueProducers,
-      props.parsed,
-      props.names,
-      props.local,
-      props.components,
-      props.statuses,
-      props.prefix,
-      props.selected,
-      t,
-    ],
-  );
+  useDoubleClickGuard(flow, props.onOpen);
+  const displayNodes = useCanvasNodes(props);
   const [nodes, setNodes] = useState<PipelineNode[]>(displayNodes);
   const matches = useMemo(() => {
     const terms = query.trim().toLocaleLowerCase().split(/\s+/);
@@ -575,35 +116,6 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
       return terms.every((term) => text.includes(term));
     });
   }, [query, displayNodes, props.nodes, t]);
-  useEffect(() => {
-    if (!focus || !initialized || !frame.width || !frame.height) return;
-    const target = getNodes().filter((node) => node.id === focus.id);
-    if (!target.length) return;
-    if (focus.reveal) {
-      const bounds = getNodesBounds(target);
-      const { x, y, zoom } = getViewport();
-      const left = x + bounds.x * zoom;
-      const top = y + bounds.y * zoom;
-      const width = bounds.width * zoom;
-      const height = bounds.height * zoom;
-      if (
-        left >= frame.x &&
-        top >= frame.y &&
-        left + width <= frame.x + frame.width &&
-        top + height <= frame.y + frame.height
-      )
-        return;
-      viewportTouched.current = true;
-      void setViewport({
-        x: x + frame.x + (frame.width - width) / 2 - left,
-        y: y + frame.y + (frame.height - height) / 2 - top,
-        zoom,
-      });
-      return;
-    }
-    viewportTouched.current = true;
-    fitGraph(target);
-  }, [focus, initialized, frame, getNodes, getViewport, setViewport, fitGraph]);
   if (pendingConnection) {
     // Close the palette once its endpoint is gone or the graph became read-only.
     const { nodeId, handleId, handleType } = pendingConnection.endpoint;

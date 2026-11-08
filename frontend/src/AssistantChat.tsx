@@ -1,289 +1,43 @@
+import {
+  ArrowDown,
+  Maximize2,
+  Minimize2,
+  Plus,
+  Sparkles,
+  Trash2,
+  X,
+} from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router";
+import { api, send } from "./api";
 import { DEBUG_ASSISTANT_EVENT, type DebugRequest } from "./AskAssistant";
+import AssistantComposer from "./AssistantComposer";
+import { assistantContext } from "./assistantContext";
+import { useAssistantError } from "./assistantErrors";
 import {
   AssistantLauncher,
   chatPlacement,
   useLauncherPosition,
 } from "./AssistantLauncher";
+import {
+  ActionControls,
+  AssistantMessage,
+  AssistantThinking,
+} from "./AssistantMessage";
 import { useDefaultPrompts } from "./AssistantPrompts";
 import { useProviderName } from "./assistantProviders";
-import { AssistantRun, type RunControls } from "./AssistantRun";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import {
-  ArrowDown,
-  ArrowUp,
-  ChevronRight,
-  CircleAlert,
-  CircleCheck,
-  CirclePause,
-  CircleX,
-  LoaderCircle,
-  Maximize2,
-  Minimize2,
-  Plus,
-  Sparkles,
-  Square,
-  Trash2,
-  Undo2,
-  X,
-  type LucideIcon,
-} from "lucide-react";
-import { useNavigate } from "react-router";
-import MarkdownText from "./MarkdownText";
-import { useAssistantError } from "./assistantErrors";
-import { api, send, streamAssistant } from "./api";
-import type {
-  AssistantContext,
-  AssistantAction,
-  AssistantEvent,
-  AssistantTool,
-  AssistantTurn,
-  Conversation,
-} from "./assistantTypes";
-import { useT, type TranslationKey } from "./i18n";
+import type { AssistantTurn, Conversation } from "./assistantTypes";
+import AssistantWelcome from "./AssistantWelcome";
+import ConversationSidebar from "./ConversationSidebar";
+import { resolveNodePath } from "./graph";
+import { useT } from "./i18n";
 import { trapFocus } from "./modals";
-import { usePageRoute, worktreeUrl } from "./navigation";
+import { projectSettingsUrl, usePageRoute, worktreeUrl } from "./navigation";
 import { useShell } from "./shell";
-import type { Graph } from "./types";
+import { useAssistantStream } from "./useAssistantStream";
+import { useConversations } from "./useConversations";
+import { useFollowScroll } from "./useFollowScroll";
 import { useWorktree } from "./worktree";
-
-const toolLabels: Record<string, TranslationKey> = {
-  read_flow: "assistantReadFlow",
-  read_file: "assistantReadFile",
-  read_sql: "assistantReadSql",
-  read_documentation: "assistantReadDocs",
-  read_guide: "assistantReadGuide",
-  read_variables: "assistantReadVariables",
-  read_schemas: "assistantReadSchemas",
-  read_runs: "assistantReadRuns",
-  search_project: "assistantSearch",
-  read_history: "assistantReadHistory",
-  preview_output: "assistantPreview",
-  explain_value: "assistantLineage",
-  edit_flow: "assistantEditFlow",
-  write_sql: "assistantWriteSql",
-  write_documentation: "assistantWriteDocs",
-  edit_variable: "assistantEditVariable",
-  group_nodes: "assistantGroupNodes",
-  launch_run: "assistantLaunchRun",
-  cancel_run: "assistantCancelRun",
-  wait_for_run: "assistantWaitRun",
-  inspect_run: "assistantInspectRun",
-  read_run_sql: "assistantRunSql",
-  compare_run: "assistantCompareRun",
-};
-
-const statusIcons: Partial<Record<TranslationKey, LucideIcon>> = {
-  assistantRunConfirmation: CirclePause,
-  assistantRunApproved: CircleCheck,
-  assistantRunDeclined: CircleX,
-  assistantReading: LoaderCircle,
-  assistantComplete: CircleCheck,
-  assistantStopped: CircleX,
-};
-// Within this distance of the end, the log follows new content.
-const FOLLOW_DISTANCE = 48;
-
-interface ActionControls extends RunControls {
-  canUndo?: boolean;
-  onUndo?: (action?: string) => void;
-  onCompare?: (action: AssistantAction) => void;
-  onConflict?: (conflict: string) => void;
-}
-
-function ToolCard({
-  tool,
-  canUndo,
-  onUndo,
-  onCompare,
-  onConflict,
-  canApprove,
-  canCancel,
-  onDecision,
-}: { tool: AssistantTool } & ActionControls) {
-  const t = useT();
-  const action = tool.action;
-  const target =
-    tool.args.node ||
-    tool.args.path ||
-    tool.args.template ||
-    tool.args.section ||
-    "";
-  const status =
-    tool.approval?.decision === null
-      ? "assistantRunConfirmation"
-      : tool.status === "approved"
-        ? "assistantRunApproved"
-        : tool.status === "denied"
-          ? "assistantRunDeclined"
-          : tool.status === "running"
-            ? "assistantReading"
-            : tool.status === "complete"
-              ? "assistantComplete"
-              : tool.status === "stopped"
-                ? "assistantStopped"
-                : "assistantFailed";
-  const Icon = statusIcons[status] || CircleAlert;
-  return (
-    <div className="assistant-tool">
-      <details open={action || tool.approval ? true : undefined}>
-        <summary>
-          <span className="assistant-tool-icon" data-status={status}>
-            <Icon
-              size={14}
-              className={status === "assistantReading" ? "spin" : undefined}
-            />
-          </span>
-          <span className="assistant-tool-label">
-            {t(toolLabels[tool.name] || "assistantReadFlow")}
-            {target ? ` · ${String(target)}` : ""}
-          </span>
-          <small>
-            {t(
-              action?.status === "undone"
-                ? "assistantUndone"
-                : action?.status === "discarded"
-                  ? "assistantDiscarded"
-                  : status,
-            )}
-          </small>
-          <ChevronRight size={14} className="assistant-tool-chevron" />
-        </summary>
-        {tool.approval ? (
-          <AssistantRun
-            tool={tool}
-            canApprove={canApprove}
-            canCancel={canCancel}
-            onDecision={onDecision}
-          />
-        ) : action ? (
-          <>
-            <ul className="assistant-changes">
-              {action.changes.map((change) => (
-                <li key={change.id}>
-                  {t(change.status)} · {change.name}
-                </li>
-              ))}
-            </ul>
-            {action.change_count > action.changes.length && (
-              <p className="muted">{t("assistantMoreChanges")}</p>
-            )}
-            {action.affected_nodes !== undefined && (
-              <p>
-                {t("assistantAffectedNodes").replace(
-                  "{count}",
-                  String(action.affected_nodes),
-                )}
-              </p>
-            )}
-            {action.sql_diffs.map((diff) => (
-              <div key={diff.path}>
-                <code>{diff.path}</code>
-                <pre>{diff.diff}</pre>
-                {diff.truncated && <small>{t("assistantMoreChanges")}</small>}
-              </div>
-            ))}
-          </>
-        ) : (
-          <pre>{tool.summary || t(status)}</pre>
-        )}
-      </details>
-      {action && (
-        <div className="assistant-action-buttons">
-          {action.commit && (
-            <button
-              className="button secondary small"
-              onClick={() => onCompare?.(action)}
-              disabled={!onCompare}
-            >
-              {t("compareVersions")}
-            </button>
-          )}
-          {action.commit && action.status !== "undone" && (
-            <button
-              className="button secondary small"
-              disabled={!canUndo || !!action.conflict}
-              onClick={() => onUndo?.(action.id)}
-            >
-              <Undo2 size={14} />
-              {t("assistantUndo")}
-            </button>
-          )}
-          {action.conflict && (
-            <button
-              className="button secondary small"
-              disabled={!onConflict}
-              onClick={() => onConflict?.(action.conflict!)}
-            >
-              {t("assistantResolveConflict")}
-            </button>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-/** The answer is on its way: a morphing gradient orb and a shimmering label. */
-function AssistantThinking() {
-  const t = useT();
-  return (
-    <p className="assistant-thinking" role="status">
-      <span className="assistant-orb" aria-hidden="true" />
-      <span className="assistant-shimmer">{t("assistantThinking")}</span>
-    </p>
-  );
-}
-
-export function AssistantMessage({
-  turn,
-  thinking = false,
-  entering = false,
-  ...controls
-}: {
-  turn: AssistantTurn;
-  thinking?: boolean;
-  entering?: boolean;
-} & ActionControls) {
-  const t = useT();
-  const explainError = useAssistantError();
-  const remaining = turn.tools.filter(
-    (tool) => tool.action?.commit && tool.action.status === "applied",
-  ).length;
-  return (
-    <article className={`assistant-turn${entering ? " entering" : ""}`}>
-      <p className="assistant-question">{turn.user}</p>
-      <div className="assistant-answer">
-        {turn.tools.map((tool) => (
-          <ToolCard key={tool.id} tool={tool} {...controls} />
-        ))}
-        {remaining > 1 && (
-          <button
-            className="button secondary small"
-            disabled={!controls.canUndo}
-            onClick={() => controls.onUndo?.()}
-          >
-            <Undo2 size={14} />
-            {t("assistantUndoTurn").replace("{count}", String(remaining))}
-          </button>
-        )}
-        {turn.text && (
-          <div className="assistant-markdown">
-            <MarkdownText>{turn.text}</MarkdownText>
-          </div>
-        )}
-        {turn.error && (
-          <p className="notice error" role="alert">
-            {explainError(turn.error)}
-          </p>
-        )}
-        {turn.status === "stopped" && (
-          <p className="muted">{t("assistantStopped")}</p>
-        )}
-        {thinking && <AssistantThinking />}
-      </div>
-    </article>
-  );
-}
 
 export default function AssistantChat() {
   const t = useT();
@@ -296,119 +50,43 @@ export default function AssistantChat() {
   const options = workspace?.assistant;
   const [open, setOpen] = useState(false);
   const [maximized, setMaximized] = useState(false);
-  const [conversation, setConversation] = useState<Conversation | null>(null);
-  const [conversations, setConversations] = useState<Conversation[]>([]);
-  const [nextOffset, setNextOffset] = useState<number | null>(null);
+  const {
+    conversation,
+    setConversation,
+    conversations,
+    nextOffset,
+    title,
+    setTitle,
+    list,
+  } = useConversations();
   const [draft, setDraft] = useState("");
-  const [title, setTitle] = useState("");
   const [model, setModel] = useState("");
-  const [busy, setBusy] = useState(false);
   const [undoing, setUndoing] = useState(false);
-  const [error, setError] = useState("");
   // An "Ask the assistant" request arrived during a response; told until idle.
   const [waiting, setWaiting] = useState(false);
-  if (waiting && !busy && !undoing) setWaiting(false);
-  const [pending, setPending] = useState<AssistantTurn | null>(null);
   // The turn that streams again after a run approval.
-  const [continuing, setContinuing] = useState("");
-  const [answers, setAnswers] = useState(0);
   const [seenAnswers, setSeenAnswers] = useState(0);
-  const [atEnd, setAtEnd] = useState(true);
   const launcherPosition = useLauncherPosition();
   const [debug, setDebug] = useState<
     (DebugRequest & { worktree: string }) | null
   >(null);
   const defaultPrompts = useDefaultPrompts();
   // Whether the log follows new content, and where the reader left it.
-  const following = useRef(true);
-  const readingAt = useRef(0);
+  const { log, followingRef, atEnd, followLog, showLatest } =
+    useFollowScroll<HTMLDivElement>(open);
   const awaitingApproval =
     conversation?.turns.at(-1)?.status === "awaiting_approval";
-  useEffect(() => {
-    const receive = (event: Event) => {
-      setOpen(true);
-      if (busy || undoing) {
-        setWaiting(true);
-        return;
-      }
-      const detail = (event as CustomEvent<DebugRequest>).detail;
-      setDebug({ ...detail, worktree: worktree.id });
-      setConversation(null);
-      setPending(null);
-      setDraft(detail.prompt);
-      following.current = true;
-    };
-    window.addEventListener(DEBUG_ASSISTANT_EVENT, receive);
-    return () => window.removeEventListener(DEBUG_ASSISTANT_EVENT, receive);
-  }, [busy, undoing, worktree.id]);
-  const controller = useRef<AbortController | null>(null);
   const launcher = useRef<HTMLButtonElement>(null);
   const input = useRef<HTMLTextAreaElement>(null);
-  const log = useRef<HTMLDivElement>(null);
-  const identity = useRef("");
-  useEffect(() => () => controller.current?.abort(), []);
-  useEffect(() => {
-    if (!options?.enabled) controller.current?.abort();
-  }, [options?.enabled]);
   useEffect(() => {
     if (open) input.current?.focus();
   }, [open]);
-  // Reopening the chat returns to where the reader left the conversation.
-  useLayoutEffect(() => {
-    const element = log.current;
-    if (!open || !element) return;
-    element.scrollTop = following.current
-      ? element.scrollHeight
-      : readingAt.current;
-  }, [open]);
-  useLayoutEffect(() => {
-    const element = log.current;
-    if (element && following.current) element.scrollTop = element.scrollHeight;
-  }, [pending, conversation, busy, error, maximized]);
-  const followLog = () => {
-    const element = log.current;
-    if (!element) return;
-    following.current =
-      element.scrollHeight - element.scrollTop - element.clientHeight <
-      FOLLOW_DISTANCE;
-    readingAt.current = element.scrollTop;
-    setAtEnd(following.current);
-  };
-  const showLatest = () => {
-    following.current = true;
-    log.current?.scrollTo({
-      top: log.current.scrollHeight,
-      behavior: "smooth",
-    });
-  };
-  const context: AssistantContext = {
-    page: route.area,
-    ...(route.tab ? { tab: route.tab } : {}),
-    section: route.section || "",
-    project: worktree.snapshot?.worktree.project || route.projectId || null,
-    worktree: worktree.id,
-    branch: worktree.snapshot?.worktree.branch || "",
-    node: route.tab === "flow" ? worktree.assistantNode : "",
-    file: route.tab === "code" ? worktree.assistantFile : "",
-    environment,
-    ...(debug?.worktree === worktree.id
-      ? {
-          run: debug.run,
-          node: debug.node || "",
-          environment: debug.environment,
-        }
-      : {}),
-  };
-  let nodeLabel = context.node;
-  let graph: Graph | undefined = worktree.snapshot?.bundle?.flow;
-  for (const part of context.node.split("::")) {
-    const node = graph?.nodes.find((item) => item.id === part);
-    if (!node) break;
-    nodeLabel = node.label || part;
-    graph = node.component
-      ? worktree.snapshot?.bundle?.components[node.component]
-      : undefined;
-  }
+  const context = assistantContext(route, worktree, environment, debug);
+  const resolvedNode =
+    context.node && worktree.snapshot?.bundle
+      ? resolveNodePath(worktree.snapshot.bundle, context.node)?.node
+      : null;
+  const nodeLabel = resolvedNode?.label || resolvedNode?.id || context.node;
   const choices = options?.models || [];
   const selected =
     choices.find((m) => JSON.stringify([m.provider, m.model]) === model) ||
@@ -426,19 +104,66 @@ export default function AssistantChat() {
     (conversation.worktree === context.worktree &&
       conversation.project === context.project &&
       conversation.branch === context.branch);
+  const {
+    busy,
+    error,
+    setError,
+    pending,
+    setPending,
+    continuing,
+    answers,
+    submit,
+    handleDecision,
+    stop,
+  } = useAssistantStream({
+    conversation,
+    setConversation,
+    setTitle,
+    list,
+    bound,
+    worktree,
+    drafts,
+    context,
+    selected,
+    undoing,
+    draft,
+    setDraft,
+    maximized,
+    followingRef,
+    enabled: !!options?.enabled,
+  });
+  if (waiting && !busy && !undoing) setWaiting(false);
+  useEffect(() => {
+    const receive = (event: Event) => {
+      setOpen(true);
+      if (busy || undoing) {
+        setWaiting(true);
+        return;
+      }
+      const detail = (event as CustomEvent<DebugRequest>).detail;
+      setDebug({ ...detail, worktree: worktree.id });
+      setConversation(null);
+      setPending(null);
+      setDraft(detail.prompt);
+      followingRef.current = true;
+    };
+    window.addEventListener(DEBUG_ASSISTANT_EVENT, receive);
+    return () => window.removeEventListener(DEBUG_ASSISTANT_EVENT, receive);
+  }, [busy, undoing, worktree.id, followingRef, setConversation, setPending]);
   // Conflict resolutions happen in the existing workspace dialog.
   useEffect(() => {
     if (!conversation?.id || busy || undoing) return;
-    let cancelled = false;
-    void api<Conversation>(`/assistant/conversations/${conversation.id}`)
+    const controller = new AbortController();
+    void api<Conversation>(`/assistant/conversations/${conversation.id}`, {
+      signal: controller.signal,
+    })
       .then((value) => {
-        if (!cancelled) setConversation(value);
+        if (!controller.signal.aborted) setConversation(value);
       })
       .catch(() => undefined);
-    return () => {
-      cancelled = true;
-    };
+    return () => controller.abort();
   }, [
+    setConversation,
     conversation?.id,
     busy,
     undoing,
@@ -446,22 +171,12 @@ export default function AssistantChat() {
     worktree.snapshot?.conflicts,
   ]);
 
-  async function list(offset = 0) {
-    const result = await api<{
-      items: Conversation[];
-      next_offset: number | null;
-    }>(`/assistant/conversations?offset=${offset}`);
-    setConversations((current) =>
-      offset ? [...current, ...result.items] : result.items,
-    );
-    setNextOffset(result.next_offset);
-  }
   async function resume(item: Conversation) {
     try {
       const value = await api<Conversation>(
         `/assistant/conversations/${item.id}`,
       );
-      following.current = true;
+      followingRef.current = true;
       setConversation(value);
       setDebug(null);
       setTitle(value.title);
@@ -469,150 +184,10 @@ export default function AssistantChat() {
       setError("");
       if (value.worktree)
         void navigate(worktreeUrl(value.worktree, "flow", environment));
-      else if (value.project)
-        void navigate(`/projects/${value.project}/settings`);
+      else if (value.project) void navigate(projectSettingsUrl(value.project));
       else void navigate("/projects");
     } catch (e) {
       setError((e as Error).message);
-    }
-  }
-  async function submit(message = draft) {
-    if (busy || undoing || awaitingApproval || !message.trim() || !selected)
-      return;
-    setBusy(true);
-    setError("");
-    const abort = new AbortController();
-    controller.current = abort;
-    let value = conversation;
-    let current: AssistantTurn = {
-      user: message.trim(),
-      text: "",
-      tools: [],
-      context,
-      provider: selected.provider,
-      model: selected.model,
-      status: "running",
-      error: "",
-    };
-    try {
-      if (worktree.id) {
-        await drafts.persist();
-        await worktree.flush();
-      }
-      abort.signal.throwIfAborted();
-      if (!value || !bound) {
-        value = await api<Conversation>("/assistant/conversations", {
-          ...send(context),
-          signal: abort.signal,
-        });
-        setConversation(value);
-      }
-      abort.signal.throwIfAborted();
-      identity.current = value.id;
-      following.current = true;
-      setPending(current);
-      setDraft("");
-      const receive = (event: AssistantEvent) => {
-        if (event.type === "text")
-          current = { ...current, text: current.text + event.text };
-        else if (event.type === "tool")
-          current = {
-            ...current,
-            tools: [
-              ...current.tools.filter((tool) => tool.id !== event.tool.id),
-              event.tool,
-            ],
-          };
-        else if (event.type === "done") current = event.turn;
-        if (
-          (event.type === "tool" && event.tool.action) ||
-          event.type === "done"
-        )
-          void worktree.refresh();
-        setPending(current);
-      };
-      await streamAssistant(
-        `/assistant/conversations/${value.id}/messages`,
-        {
-          message: current.user,
-          provider: selected.provider,
-          model: selected.model,
-          context,
-        },
-        receive,
-        abort.signal,
-      );
-      const updated = await api<Conversation>(
-        `/assistant/conversations/${value.id}`,
-      );
-      setConversation(updated);
-      setTitle(updated.title);
-      setPending(null);
-      setAnswers((count) => count + 1);
-      if (maximized) void list().catch((e: Error) => setError(e.message));
-    } catch (e) {
-      if (!abort.signal.aborted) setError((e as Error).message);
-    } finally {
-      controller.current = null;
-      identity.current = "";
-      setBusy(false);
-    }
-  }
-  async function handleDecision(
-    turn: AssistantTurn,
-    tool: string,
-    approved: boolean,
-  ) {
-    if (!conversation || !turn.id || busy || undoing || !bound) return;
-    setBusy(true);
-    setContinuing(turn.id);
-    setError("");
-    const abort = new AbortController();
-    controller.current = abort;
-    identity.current = conversation.id;
-    let current = { ...turn };
-    try {
-      if (approved) {
-        await drafts.persist();
-        await worktree.flush();
-      }
-      await streamAssistant(
-        `/assistant/conversations/${conversation.id}/approvals`,
-        { turn: turn.id, tool, approved },
-        (event) => {
-          if (event.type === "text")
-            current = { ...current, text: current.text + event.text };
-          else if (event.type === "tool")
-            current = {
-              ...current,
-              tools: [
-                ...current.tools.filter((t) => t.id !== event.tool.id),
-                event.tool,
-              ],
-            };
-          else if (event.type === "done") current = event.turn;
-          setConversation(
-            (value) =>
-              value && {
-                ...value,
-                turns: value.turns.map((t) => (t.id === turn.id ? current : t)),
-              },
-          );
-        },
-        abort.signal,
-      );
-      setConversation(
-        await api<Conversation>(`/assistant/conversations/${conversation.id}`),
-      );
-      setAnswers((count) => count + 1);
-    } catch (e) {
-      if (!abort.signal.aborted) setError((e as Error).message);
-    } finally {
-      controller.current = null;
-      identity.current = "";
-      setContinuing("");
-      setBusy(false);
-      void worktree.refresh();
     }
   }
   async function undo(turn: AssistantTurn, action = "") {
@@ -661,18 +236,6 @@ export default function AssistantChat() {
             })
         : undefined,
   });
-  async function stop() {
-    if (!identity.current) {
-      controller.current?.abort();
-      return;
-    }
-    try {
-      await api(`/assistant/conversations/${identity.current}/stop`, send({}));
-    } catch (e) {
-      controller.current?.abort();
-      setError((e as Error).message);
-    }
-  }
   const close = () => {
     setOpen(false);
     setSeenAnswers(answers);
@@ -741,7 +304,7 @@ export default function AssistantChat() {
                 aria-label={t("assistantNew")}
                 disabled={busy || undoing}
                 onClick={() => {
-                  following.current = true;
+                  followingRef.current = true;
                   setConversation(null);
                   setDebug(null);
                   setPending(null);
@@ -776,37 +339,16 @@ export default function AssistantChat() {
           </header>
           <div className="assistant-body">
             {maximized && (
-              <aside
-                className="assistant-history"
-                aria-label={t("assistantConversations")}
-              >
-                <h3>{t("assistantConversations")}</h3>
-                {conversations.length === 0 && (
-                  <p className="muted">{t("assistantNoConversations")}</p>
-                )}
-                {conversations.map((item) => (
-                  <button
-                    key={item.id}
-                    disabled={busy || undoing}
-                    className={item.id === conversation?.id ? "active" : ""}
-                    onClick={() => void resume(item)}
-                  >
-                    <strong>{item.title}</strong>
-                    <small>{item.branch}</small>
-                  </button>
-                ))}
-                {nextOffset !== null && (
-                  <button
-                    onClick={() =>
-                      void list(nextOffset).catch((e: Error) =>
-                        setError(e.message),
-                      )
-                    }
-                  >
-                    {t("assistantMore")}
-                  </button>
-                )}
-              </aside>
+              <ConversationSidebar
+                conversations={conversations}
+                busy={busy}
+                undoing={undoing}
+                conversation={conversation}
+                resume={resume}
+                nextOffset={nextOffset}
+                list={list}
+                setError={setError}
+              />
             )}
             <div className="assistant-main">
               {maximized && conversation && (
@@ -879,38 +421,14 @@ export default function AssistantChat() {
                   onScroll={followLog}
                 >
                   {!conversation?.turns.length && !pending && (
-                    <div className="assistant-welcome">
-                      <span
-                        className="assistant-welcome-mark"
-                        aria-hidden="true"
-                      >
-                        <Sparkles size={24} />
-                      </span>
-                      <h3>{t("assistantWelcome")}</h3>
-                      <p>{t("assistantWelcomeHint")}</p>
-                      <div className="assistant-quick-prompts">
-                        {(options.quick_prompts ?? defaultPrompts).map(
-                          (prompt, index) => (
-                            <button
-                              key={index}
-                              type="button"
-                              className="assistant-chip"
-                              disabled={busy || undoing || !selected}
-                              onClick={() => void submit(prompt.prompt)}
-                            >
-                              {prompt.label}
-                            </button>
-                          ),
-                        )}
-                      </div>
-                      <small>
-                        {t(
-                          options.allow_data
-                            ? "assistantDataOn"
-                            : "assistantDataOff",
-                        )}
-                      </small>
-                    </div>
+                    <AssistantWelcome
+                      options={options}
+                      defaultPrompts={defaultPrompts}
+                      busy={busy}
+                      undoing={undoing}
+                      selected={selected}
+                      submit={submit}
+                    />
                   )}
                   {conversation?.turns.map((turn, index) => (
                     <AssistantMessage
@@ -966,80 +484,22 @@ export default function AssistantChat() {
                   {t("assistantAnswerConfirmation")}
                 </p>
               )}
-              <form
-                className="assistant-composer"
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  void submit();
-                }}
-              >
-                <div className={`assistant-input${busy ? " busy" : ""}`}>
-                  <textarea
-                    id="assistant-prompt"
-                    ref={input}
-                    rows={2}
-                    maxLength={16000}
-                    value={draft}
-                    disabled={undoing}
-                    aria-label={t("assistantMessage")}
-                    placeholder={t("assistantMessageHint")}
-                    onChange={(e) => setDraft(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (
-                        e.key === "Enter" &&
-                        !e.shiftKey &&
-                        !e.nativeEvent.isComposing
-                      ) {
-                        e.preventDefault();
-                        void submit();
-                      }
-                    }}
-                  />
-                  <footer>
-                    <select
-                      aria-label={t("assistantModel")}
-                      disabled={busy || undoing}
-                      value={selectedKey}
-                      onChange={(e) => setModel(e.target.value)}
-                    >
-                      {choices.map((m) => (
-                        <option
-                          key={`${m.provider}/${m.model}`}
-                          value={JSON.stringify([m.provider, m.model])}
-                        >
-                          {providerName(m.kind)} · {m.model}
-                        </option>
-                      ))}
-                    </select>
-                    {busy ? (
-                      <button
-                        className="assistant-send stop"
-                        type="button"
-                        title={t("assistantStop")}
-                        aria-label={t("assistantStop")}
-                        onClick={() => void stop()}
-                      >
-                        <Square size={12} fill="currentColor" />
-                      </button>
-                    ) : (
-                      <button
-                        className="assistant-send"
-                        title={t("assistantSend")}
-                        aria-label={t("assistantSend")}
-                        disabled={
-                          awaitingApproval ||
-                          !draft.trim() ||
-                          !selected ||
-                          undoing ||
-                          (!!worktree.id && !worktree.snapshot)
-                        }
-                      >
-                        <ArrowUp size={17} />
-                      </button>
-                    )}
-                  </footer>
-                </div>
-              </form>
+              <AssistantComposer
+                submit={submit}
+                busy={busy}
+                input={input}
+                draft={draft}
+                undoing={undoing}
+                setDraft={setDraft}
+                selectedKey={selectedKey}
+                setModel={setModel}
+                choices={choices}
+                providerName={providerName}
+                stop={stop}
+                awaitingApproval={awaitingApproval}
+                selected={selected}
+                worktree={worktree}
+              />
             </div>
           </div>
         </section>

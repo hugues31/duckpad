@@ -849,17 +849,17 @@ test("closing the dialog during an action neither navigates nor closes the next 
     .getByRole("button", { name: "Open isolated worktree", exact: true })
     .click();
   await holding;
+  const aborted = page.waitForEvent("requestfailed", (request) =>
+    request.url().endsWith(`/worktrees/${main.id}/git/branches`),
+  );
   await page.keyboard.press("Escape");
+  await aborted;
   await expect(dialog).toBeHidden();
   await page.getByTitle("New working branch", { exact: true }).click();
   const next = page.getByRole("dialog", { name: "New working branch" });
   await expect(next).toBeVisible();
-  const settled = page.waitForResponse((response) =>
-    response.url().endsWith(`/worktrees/${main.id}/git/branches`),
-  );
   release();
-  await (await settled).finished();
-  // Let the late action finish before checking that it changed nothing.
+  // The closed dialog aborts its refresh; releasing the held route must not affect its successor.
   await page.evaluate(() => new Promise((resolve) => setTimeout(resolve, 500)));
   await expect(next).toBeVisible();
   await expect(page).toHaveURL(new RegExp(`/worktrees/${main.id}/history`));
