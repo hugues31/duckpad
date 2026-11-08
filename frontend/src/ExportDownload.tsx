@@ -1,4 +1,4 @@
-import { usePartitionQuery } from "./worktree";
+import { useOptionalWorktree, usePartitionQuery } from "./worktree";
 import { Download } from "lucide-react";
 import { api, apiUrl, withQuery } from "./api";
 import { useT } from "./i18n";
@@ -63,6 +63,8 @@ export default function ExportDownload({
 }) {
   const t = useT();
   const partition = usePartitionQuery(node);
+  // Idle polls are slow: a run starting or ending reloads the status at once.
+  const activeRun = useOptionalWorktree()?.statuses.active?.id;
   const endpoint = `/worktrees/${encodeURIComponent(worktree)}/exports/${encodeURIComponent(node)}`;
   const {
     data: result,
@@ -72,6 +74,7 @@ export default function ExportDownload({
     withQuery(endpoint, { environment, ...partition }),
     {
       interval: 1500,
+      refresh: activeRun,
       nextInterval: (value) =>
         value.status === "unsupported"
           ? false

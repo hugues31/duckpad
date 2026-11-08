@@ -84,12 +84,9 @@ export default function HistoryPanel({
     if (found) setSelected(found);
   }
   const commits = gitHistory.data?.items || [];
+  // A `?run=` link to a run that no longer exists opens nothing, as before.
   const error =
-    runHistory.error ||
-    requestedRun.error ||
-    gitHistory.error ||
-    tags.error ||
-    more.error;
+    runHistory.error || gitHistory.error || tags.error || more.error;
   const tagNames = (commit: string) =>
     (tags.data || [])
       .filter((tag) => tag.commit === commit)

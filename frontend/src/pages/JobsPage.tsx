@@ -272,10 +272,14 @@ function JobDetails({
     nextInterval: (value) => (active(value) ? 2000 : false),
   });
   const selected = detail.data;
+  const activeRun = active(job.last_run) ? job.last_run!.id : null;
+  // The open run's details already poll the active run.
   const running = useApiResource<Run>(
-    active(job.last_run) ? `/runs/${job.last_run!.id}` : null,
+    activeRun && activeRun !== runId ? `/runs/${activeRun}` : null,
     { interval: 2000 },
   );
+  const progress =
+    activeRun && activeRun === runId ? detail.data : running.data;
   const busy = active(job.last_run);
   const canRun = project.role !== "reader";
   const launch = async (
@@ -364,7 +368,7 @@ function JobDetails({
             ))}
         </div>
       </div>
-      {busy && running.data && <RunProgress run={running.data} />}
+      {busy && progress && <RunProgress run={progress} />}
       {action.error && (
         <p className="notice error" role="alert">
           {action.error}
