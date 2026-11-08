@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Query, Request, Response
 
 from .. import schemas
 from ..types import Record
@@ -37,7 +37,7 @@ def router(ctx: Context) -> APIRouter:
         "/api/projects/{project}/jobs", response_model=None, dependencies=[Depends(project_role("reader"))]
     )
     def list_jobs(project: str) -> list[Record]:
-        return [jobs.public(job) for job in store.all("job") if job["project"] == project]
+        return jobs.listing(project)
 
     @api.post(
         "/api/projects/{project}/jobs",
@@ -70,8 +70,13 @@ def router(ctx: Context) -> APIRouter:
         return jobs.promote(slug, data, request.state.user)
 
     @api.get("/api/jobs/{slug}/runs", response_model=None, dependencies=[Depends(job_role("reader"))])
-    def job_runs(slug: str) -> list[Record]:
-        return jobs.runs(jobs.get(slug))
+    def job_runs(
+        slug: str, response: Response, limit: int = Query(50, ge=1, le=100), cursor: str | None = None
+    ) -> list[Record]:
+        rows = jobs.runs(jobs.get(slug), limit=limit + 1, cursor=cursor)
+        if len(rows) > limit:
+            response.headers["X-Next-Cursor"] = store.run_cursor(rows[limit - 1])
+        return rows[:limit]
 
     @api.post(
         "/api/jobs/{slug}/runs",

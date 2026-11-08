@@ -4,6 +4,7 @@ import { CalendarClock, Play, Plus, Square } from "lucide-react";
 import { api, errorDetail, send, withQuery } from "../api";
 import ComparisonView from "../ComparisonView";
 import type { Branch, Comparison, GitTag } from "../gitTypes";
+import { useRunHistory } from "../useRunHistory";
 import { RunDetails } from "../HistoryPanel";
 import RunProgress from "../RunProgress";
 import { useT } from "../i18n";
@@ -69,6 +70,8 @@ function ProjectJobs({ project }: { project: Project }) {
   const { refreshWorkspace } = useShell();
   const jobs = useApiResource<Job[]>(`/projects/${project.id}/jobs`, {
     interval: 2000,
+    nextInterval: (values) =>
+      values.some((job) => active(job.last_run)) ? 2000 : 10000,
   });
   const [selected, setSelected] = useState<string | null>(null);
   const [editing, setEditing] = useState<Job | "new" | null>(null);
@@ -253,9 +256,10 @@ function JobDetails({
   const t = useT();
   const workspace = useWorkspace();
   const action = useAsyncAction();
-  const runs = useApiResource<Run[]>(`/jobs/${job.slug}/runs`, {
-    interval: 2000,
-  });
+  const runs = useRunHistory(
+    withQuery(`/jobs/${job.slug}/runs`, { limit: 20 }),
+    2000,
+  );
   const names = useApiResource<NodeNames>(
     job.scope ? `/jobs/${job.slug}/nodes` : null,
   );
@@ -263,7 +267,19 @@ function JobDetails({
   const [confirmation, setConfirmation] = useState<
     (Environment & { job_revision: string; failedPartitions?: boolean }) | null
   >(null);
-  const selected = runs.data?.find((run) => run.id === runId);
+  const detail = useApiResource<Run>(runId ? `/runs/${runId}` : null, {
+    interval: 2000,
+    nextInterval: (value) => (active(value) ? 2000 : false),
+  });
+  const selected = detail.data;
+  const activeRun = active(job.last_run) ? job.last_run!.id : null;
+  // The open run's details already poll the active run.
+  const running = useApiResource<Run>(
+    activeRun && activeRun !== runId ? `/runs/${activeRun}` : null,
+    { interval: 2000 },
+  );
+  const progress =
+    activeRun && activeRun === runId ? detail.data : running.data;
   const busy = active(job.last_run);
   const canRun = project.role !== "reader";
   const launch = async (
@@ -352,7 +368,7 @@ function JobDetails({
             ))}
         </div>
       </div>
-      {busy && job.last_run && <RunProgress run={job.last_run} />}
+      {busy && progress && <RunProgress run={progress} />}
       {action.error && (
         <p className="notice error" role="alert">
           {action.error}
@@ -411,7 +427,7 @@ function JobDetails({
       <h3>{t("jobRecentRuns")}</h3>
       {runs.error && <p className="notice error">{runs.error}</p>}
       {runs.data?.length === 0 && <p className="muted">{t("noHistory")}</p>}
-      {runs.data?.slice(0, 20).map((run) => (
+      {runs.data?.map((run) => (
         <button
           className="history-row"
           key={run.id}
@@ -425,6 +441,15 @@ function JobDetails({
           <code>{run.commit.slice(0, 8)}</code>
         </button>
       ))}
+      {runs.hasMore && (
+        <button
+          className="button secondary"
+          disabled={runs.loadingMore}
+          onClick={() => void runs.loadMore()}
+        >
+          {t("loadMore")}
+        </button>
+      )}
       <details>
         <summary>{t("jobVersionHistory")}</summary>
         {[...job.versions].reverse().map((entry, index) => (
@@ -452,27 +477,39 @@ function JobDetails({
           </div>
         ))}
       </details>
-      {selected && (
+      {runId && (
         <Modal title={t("goToRun")} onClose={() => setRunId(null)} wide>
           <div className="modal-content">
-            <p>
-              <span className={`badge ${selected.status}`}>
-                {t(selected.status)}
-              </span>{" "}
-              · <code>{selected.id}</code>
-            </p>
-            <RunDetails
-              run={selected}
-              onClose={() => setRunId(null)}
-              onPartitionRetry={
-                canRun && !busy && !action.pending
-                  ? () => {
-                      setRunId(null);
-                      void action.run(() => launch(false, job.revision, true));
-                    }
-                  : undefined
-              }
-            />
+            {selected ? (
+              <>
+                <p>
+                  <span className={`badge ${selected.status}`}>
+                    {t(selected.status)}
+                  </span>{" "}
+                  · <code>{selected.id}</code>
+                </p>
+                <RunDetails
+                  run={selected}
+                  onClose={() => setRunId(null)}
+                  onPartitionRetry={
+                    canRun && !busy && !action.pending
+                      ? () => {
+                          setRunId(null);
+                          void action.run(() =>
+                            launch(false, job.revision, true),
+                          );
+                        }
+                      : undefined
+                  }
+                />
+              </>
+            ) : detail.error ? (
+              <p className="notice error" role="alert">
+                {detail.error}
+              </p>
+            ) : (
+              <p>{t("loading")}</p>
+            )}
           </div>
         </Modal>
       )}

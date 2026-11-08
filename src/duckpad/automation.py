@@ -219,7 +219,7 @@ def router(jobs, access):
     api.dependencies.append(Depends(authorize))
 
     def public_job(job):
-        runs = jobs.runs(job, limit=1)
+        runs = jobs.runs(job, limit=1, summary=False)
         return {
             **{key: job[key] for key in ("name", "description", "project", "target", "environment", "scope")},
             "slug": job["id"],

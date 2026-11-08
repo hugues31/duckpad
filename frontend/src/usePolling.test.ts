@@ -20,7 +20,7 @@ const advance = (ms: number) =>
     await vi.advanceTimersByTimeAsync(ms);
   });
 
-type Task = (signal: AbortSignal) => Promise<boolean | void>;
+type Task = (signal: AbortSignal) => Promise<boolean | void | number>;
 
 interface Props {
   task: Task;
@@ -59,6 +59,40 @@ describe("isFinal", () => {
 });
 
 describe("usePolling", () => {
+  it("pauses hidden tabs and resumes once without overlapping a pending request", async () => {
+    const slow = deferred();
+    const task = vi
+      .fn<Task>()
+      .mockReturnValueOnce(slow.promise)
+      .mockResolvedValue(undefined);
+    poll(task, { interval: 1000 });
+    const hidden = vi.spyOn(document, "hidden", "get").mockReturnValue(true);
+    act(() => document.dispatchEvent(new Event("visibilitychange")));
+    await advance(10000);
+    expect(task).toHaveBeenCalledTimes(1);
+    hidden.mockReturnValue(false);
+    act(() => document.dispatchEvent(new Event("visibilitychange")));
+    expect(task).toHaveBeenCalledTimes(1);
+    await act(async () => slow.resolve());
+    hidden.mockReturnValue(true);
+    act(() => document.dispatchEvent(new Event("visibilitychange")));
+    await advance(10000);
+    expect(task).toHaveBeenCalledTimes(1);
+    hidden.mockReturnValue(false);
+    act(() => document.dispatchEvent(new Event("visibilitychange")));
+    expect(task).toHaveBeenCalledTimes(2);
+    hidden.mockRestore();
+  });
+
+  it("uses the delay returned by an idle response", async () => {
+    const task = vi.fn(async () => 10000);
+    poll(task, { interval: 1000 });
+    await advance(9999);
+    expect(task).toHaveBeenCalledTimes(1);
+    await advance(1);
+    expect(task).toHaveBeenCalledTimes(2);
+  });
+
   it("runs once when no interval is given", async () => {
     const task = vi.fn(async () => undefined);
     poll(task, {});

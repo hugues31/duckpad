@@ -5,6 +5,7 @@ import json
 import logging
 import threading
 import time
+from contextlib import suppress
 
 from sqlalchemy.exc import IntegrityError
 
@@ -132,12 +133,39 @@ class Jobs:
             commit,
         )
 
-    def public(self, job):
+    def listing(self, project):
+        refs = {}
+        path = self.path(project)
+        for row in self.projects.git(
+            path,
+            "for-each-ref",
+            "--format=%(refname)%09%(objecttype)%09%(objectname)%09%(*objecttype)%09%(*objectname)%09end",
+            "refs/heads",
+            "refs/tags",
+        ).splitlines():
+            name, kind, commit, peeled_kind, peeled, _ = row.split("\t")
+            if kind == "commit":
+                refs[name] = commit
+            elif peeled_kind == "commit":
+                refs[name] = peeled
+            elif kind == "tag":
+                # Nested annotated tags are rare; Git must peel these recursively.
+                with suppress(Problem):
+                    refs[name] = self.projects.versioning.resolve(path, name)
+        return [self.public(job, refs=refs) for job in self.store.jobs(project)]
+
+    def public(self, job, *, refs=None):
         target = job["target"]
         warning = None
         resolved = None
         try:
-            _, resolved = self.resolve(job["project"], target["kind"], target[target["kind"]])
+            if refs is None:
+                _, resolved = self.resolve(job["project"], target["kind"], target[target["kind"]])
+            else:
+                prefix = "refs/tags/" if target["kind"] == "tag" else "refs/heads/"
+                resolved = refs.get(prefix + target[target["kind"]])
+                if resolved is None:
+                    raise Problem("Job target is unavailable", 409)
             if target["kind"] == "tag" and resolved != target["commit"]:
                 warning = "tag_moved"
         except Problem:
@@ -151,8 +179,10 @@ class Jobs:
             "last_run": runs[0] if runs else None,
         }
 
-    def runs(self, job, limit=50):
-        return self.store.runs({"role": "admin"}, job["worktree"], limit=limit)
+    def runs(self, job, limit=50, cursor=None, *, summary=True):
+        return self.store.runs(
+            {"role": "admin"}, job["worktree"], limit=limit, cursor=cursor, summary=summary
+        )
 
     def idle(self, job, *, launch=False):
         with self.engine.lock:

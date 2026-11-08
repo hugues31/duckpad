@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import logging
+import threading
+from collections import OrderedDict
 
 from .. import partitions, processing
 from ..catalog import Catalog
 from ..components import expand_for
 from ..datasets import Context
-from ..graph import connection_references, topological
+from ..graph import connection_references, reachable, topological
 from ..partition_storage import PartitionStorage
 from ..projects import Projects
 from ..python_environment import runtime_signature
@@ -22,6 +24,40 @@ logger = logging.getLogger(__name__)
 class Fingerprints:
     def __init__(self, projects: Projects, catalog: Catalog, pool: ContextPool) -> None:
         self.projects, self.catalog, self.pool = projects, catalog, pool
+        self.cache: OrderedDict[str, tuple[dict[str, str], dict[str, dict[str, str]]]] = OrderedDict()
+        self.cache_lock = threading.Lock()
+
+    def cached_batch(
+        self, snapshot: Record, environment: str, node: str | None = None
+    ) -> tuple[dict[str, str], dict[str, dict[str, str]]]:
+        bundle = snapshot["bundle"]
+        if not bundle:
+            return {}, {}
+        computed = self.pool.computed(snapshot["worktree"]["id"], environment, bundle)
+        manifest = self.manifest(snapshot["worktree"]["id"], environment, bundle)
+        key = digest(
+            [
+                snapshot["worktree"]["id"],
+                snapshot["revision"],
+                environment,
+                manifest,
+                computed,
+                self.projects.store.configuration_revision,
+                node,
+            ]
+        )
+        with self.cache_lock:
+            if key in self.cache:
+                self.cache.move_to_end(key)
+                return self.cache[key]
+        result = self.batch(
+            bundle, environment, computed=computed, manifest=manifest, targets={node} if node else None
+        )
+        with self.cache_lock:
+            self.cache[key] = result
+            while len(self.cache) > 8:
+                self.cache.popitem(last=False)
+        return result
 
     def of(
         self,
@@ -43,6 +79,9 @@ class Fingerprints:
         computed: Record | None = None,
         manifest: list[Record] | None = None,
         partition: Record | None = None,
+        *,
+        variants: dict[str, dict[str, Record]] | None = None,
+        targets: set[str] | None = None,
     ) -> tuple[dict[str, str], dict[str, dict[str, str]]]:
         """One expansion per key, one topological pass, including successive collection barriers.
 
@@ -50,13 +89,17 @@ class Fingerprints:
         consume already computed per-key inputs instead of recursively expanding the graph.
         """
         nodes, edges, _ = expand_for(bundle, environment, computed=computed)
+        if targets is not None:
+            wanted = reachable(targets, edges, upstream=True)
+            nodes = {key: value for key, value in nodes.items() if key in wanted}
+            edges = [edge for edge in edges if edge["source"] in nodes and edge["target"] in nodes]
         entries = {partitions.identity(e["key"]): e for e in manifest or []}
         if partition:
             entries.setdefault(partitions.identity(partition["key"]), partition)
-        variants = {
-            key: expand_for(bundle, environment, computed=computed, partition=entry)[0]
-            for key, entry in entries.items()
-        }
+        variants = variants if variants is not None else {}
+        for key, entry in entries.items():
+            if key not in variants:
+                variants[key] = expand_for(bundle, environment, computed=computed, partition=entry)[0]
         shared: dict[str, str] = {}
         values: dict[str, dict[str, str]] = {key: {} for key in entries}
         incoming = {key: [] for key in nodes}
@@ -147,12 +190,7 @@ class Fingerprints:
         if snapshot["bundle"] is None:
             return {}
         try:
-            return self.of(
-                snapshot["bundle"],
-                environment,
-                computed=self.pool.computed(worktree, environment, snapshot["bundle"]),
-                manifest=self.manifest(worktree, environment, snapshot["bundle"]),
-            )
+            return self.cached_batch(snapshot, environment)[0]
         except Exception:
             # Unreadable definitions invalidate every result rather than blocking the caller.
             logger.warning("Cannot fingerprint worktree %s", worktree, exc_info=True)
@@ -169,9 +207,7 @@ class Fingerprints:
         if bundle is None:
             self.pool.mark_stale(context, {})
             return
-        computed = self.pool.computed(context.worktree, context.environment, bundle)
-        manifest = self.manifest(context.worktree, context.environment, bundle)
-        current, per_key = self.batch(bundle, context.environment, computed=computed, manifest=manifest)
+        current, per_key = self.cached_batch(snapshot, context.environment)
         previous: dict[str, dict[str, str]] = {}
         with context.lock:
             generations = {}

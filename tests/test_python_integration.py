@@ -134,14 +134,14 @@ def test_native_cpu_crash_reports_compatible_wheel(services):
     tree = single(
         services,
         """import duckpad as dp
-import os
 import signal
 import resource
 class NativeCrash(dp.Node):
     def run(self) -> None:
         resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
         signal.pthread_sigmask(signal.SIG_UNBLOCK, {signal.SIGILL})
-        os.kill(os.getpid(), signal.SIGILL)
+        # Deliver on this thread before the worker can report a successful return.
+        signal.raise_signal(signal.SIGILL)
 """,
     )
     result = wait_run(store, engine.launch(tree["id"], "dev"), timeout=30)

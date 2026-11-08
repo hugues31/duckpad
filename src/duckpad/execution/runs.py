@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import threading
 import time
 from contextlib import suppress
@@ -23,6 +24,10 @@ from .journal import RunJournal, execution_outcome
 from .launches import LaunchPlanner
 from .nodes import NodeExecutor
 from .values import RunValues
+
+logger = logging.getLogger(__name__)
+# Expiring runs scans every retained reference, so it waits for this many excess runs.
+RETENTION_SLACK = 100
 
 
 class Runner:
@@ -200,6 +205,16 @@ class Runner:
                 finally:
                     self.active.pop(context.worktree, None)
                     self.journal.partitions.pop(run["id"], None)
+
+            # Disk-backed retention runs after releasing the engine-wide admission lock.
+            try:
+                with context.lock:
+                    protected = {dataset.run for dataset in context.datasets.values()}
+                self.store.prune_runs(
+                    context.worktree, context.environment, slack=RETENTION_SLACK, protected=protected
+                )
+            except Exception:
+                logger.exception("Cannot expire old execution history")
 
     def close(self) -> None:
         """Cancel active runs and wait for their workers."""

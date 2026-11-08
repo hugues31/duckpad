@@ -98,11 +98,12 @@ def router(ctx: Context) -> APIRouter:
     def git_cleanup(worktree: str, data: schemas.BranchCleanup) -> Record:
         with engine.exclusive(projects.get(worktree)["project"]):
             engine.require_idle(data.remove_worktree)
-            result = projects.versioning.cleanup(
+            removed = projects.versioning.cleanup_records(
                 worktree, data.remove_worktree, data.integrated_worktree, data.expected_head
             )
             engine.discard_worktree(data.remove_worktree)
-            return result
+        projects.versioning.cleanup_files(*removed)
+        return {"ok": True}
 
     @api.post(
         "/api/worktrees/{worktree}/git/reviews",

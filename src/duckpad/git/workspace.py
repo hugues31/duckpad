@@ -207,30 +207,28 @@ class GitWorkspace:
         path = worktree["path"]
         head = self.resolve(path, ref)
         limit = min(max(limit, 1), 100)
-        commits = self.git(
-            path, "rev-list", f"--skip={max(offset, 0)}", f"--max-count={limit + 1}", head, "--"
-        ).splitlines()
+        offset = max(offset, 0)
+        if entity:
+            graph, code, node = entity_sources(entity)
+            rows = self.git(path, "rev-list", "--parents", head, "--").splitlines()
+            # Read only the element's blobs, once each, rather than every project archive.
+            versions = self.versions(path, {c for row in rows for c in row.split()}, graph, code, node)
+            commits = []
+            for row in rows:
+                commit, *parents = row.split()
+                value = versions[commit]
+                before = [versions[parent] for parent in parents] or [None]
+                if value is not UNREADABLE and UNREADABLE not in before and any(v != value for v in before):
+                    commits.append(commit)
+            commits = commits[offset : offset + limit + 1]
+        else:
+            commits = self.git(
+                path, "rev-list", f"--skip={offset}", f"--max-count={limit + 1}", head, "--"
+            ).splitlines()
         tags = {}
         for tag in self.tags(worktree_id):
             tags.setdefault(tag["commit"], []).append(tag["name"])
-        items = []
-        for commit in commits[:limit]:
-            metadata = {**self.metadata(path, commit), "tags": tags.get(commit, [])}
-            if entity:
-                parents = metadata["parents"] or [None]
-                if not any(
-                    any(
-                        c["id"] == entity and c["status"] != "unchanged"
-                        for c in compare_files(
-                            self.projects.revision_files(path, parent) if parent else {},
-                            self.projects.revision_files(path, commit),
-                            impact=False,
-                        )["entities"]
-                    )
-                    for parent in parents
-                ):
-                    continue
-            items.append(metadata)
+        items = [{**self.metadata(path, commit), "tags": tags.get(commit, [])} for commit in commits[:limit]]
         return {"items": items, "head": head, "next": offset + limit if len(commits) > limit else None}
 
     def element_summary(self, worktree_id, entity, ref="HEAD"):
@@ -445,6 +443,13 @@ class GitWorkspace:
             )
             return next(tag for tag in self.tags(worktree_id) if tag["name"] == name)
 
+    def dirty(self, worktree, head, files=None):
+        files = self.projects.read_files(worktree) if files is None else files
+        return (
+            files != self.projects.revision_files(worktree["path"], head)
+            or worktree["id"] in self.projects.pending
+        )
+
     def clean(self, worktree):
         self.projects.writable(worktree)
         if (
@@ -457,10 +462,7 @@ class GitWorkspace:
             )
         head = self.resolve(worktree["path"], "HEAD")
         files = self.projects.read_files(worktree)
-        if (
-            files != self.projects.revision_files(worktree["path"], head)
-            or worktree["id"] in self.projects.pending
-        ):
+        if self.dirty(worktree, head, files):
             raise Problem(
                 "Pending external saves: wait for automatic versioning, then reload the review.", 409
             )
@@ -485,17 +487,30 @@ class GitWorkspace:
         target = self.projects.get(integrated_id) if integrated_id else None
         if target and target["project"] != worktree["project"]:
             raise Problem("Choose worktrees from this project", 404)
+        refs = dict(row.split("\t") for row in rows)
+        config = self.projects.remotes.config(worktree)
+        actual = self.git(worktree["path"], "config", "--get", "remote.origin.url", check=False)
+        target_head, target_error = None, None
+        if target:
+            try:
+                with self.projects.repository(worktree["project"]):
+                    target_head, _ = self.clean(target)
+            except Problem as error:
+                target_error = str(error)
         result = []
         for row in rows:
             ref, head = row.split("\t")
             remote = ref.startswith("refs/remotes/")
             name = ref.removeprefix("refs/remotes/").removeprefix("refs/heads/")
             tree = trees.get(name) if not remote else None
-            dirty = tree and (
-                self.projects.read_files(tree) != self.projects.revision_files(tree["path"], head)
-                or tree["id"] in self.projects.pending
+            dirty = tree and self.dirty(tree, head)
+            tracking = (
+                self.projects.remotes.tracking(
+                    tree["id"], local=head, refs=refs, config=config, actual=actual
+                )
+                if tree
+                else None
             )
-            tracking = self.projects.remotes.status(tree["id"]) if tree else None
             result.append(
                 {
                     "ref": ref,
@@ -515,11 +530,12 @@ class GitWorkspace:
                 # Lock each check rather than the listing, so saves never wait for every branch.
                 try:
                     with self.projects.repository(worktree["project"]):
+                        if target_error:
+                            raise Problem(target_error, 409)
                         if tree:
-                            self.check_cleanup(worktree, tree, target, head)
+                            self.check_cleanup(worktree, tree, target, head, target_head=target_head)
                         else:
                             # Closed local branches are opened before cleanup by the client.
-                            target_head, _ = self.clean(target)
                             if not self.ancestor(worktree["path"], head, target_head):
                                 raise Problem(UNMERGED.format(target["branch"]), 409)
                     result[-1]["cleanup_error"] = None
@@ -536,7 +552,7 @@ class GitWorkspace:
             self.resolve(worktree["path"], "refs/heads/" + name)
             return self.projects.open_worktree(worktree, name)
 
-    def check_cleanup(self, current, remove, target, expected_head):
+    def check_cleanup(self, current, remove, target, expected_head, *, target_head=None):
         """Validate removal without changing files, also explaining disabled branch actions."""
         current_id, remove_id, integrated_id = (w["id"] for w in (current, remove, target))
         if len({w["project"] for w in (current, remove, target)}) != 1:
@@ -545,7 +561,8 @@ class GitWorkspace:
         if remove_id in (current_id, integrated_id, project["main"]):
             raise Problem("Main, current and destination worktrees are protected", 409)
         head, _ = self.clean(remove)
-        target_head, _ = self.clean(target)
+        if target_head is None:
+            target_head, _ = self.clean(target)
         if head != expected_head:
             raise Problem("The branch changed. Review it again.", 409)
         if not self.ancestor(remove["path"], head, target_head):
@@ -559,6 +576,11 @@ class GitWorkspace:
         return head
 
     def cleanup(self, current_id, remove_id, integrated_id, expected_head):
+        removed = self.cleanup_records(current_id, remove_id, integrated_id, expected_head)
+        self.cleanup_files(*removed)
+        return {"ok": True}
+
+    def cleanup_records(self, current_id, remove_id, integrated_id, expected_head):
         with self.projects.locked(current_id):
             current, remove, target = (
                 self.projects.get(key) for key in (current_id, remove_id, integrated_id)
@@ -569,6 +591,10 @@ class GitWorkspace:
             with self.store.transaction():
                 artifacts = self.store.artifacts(worktree=remove_id)
                 self.store.delete("worktree", remove_id)
+            return current, remove, artifacts, head
+
+    def cleanup_files(self, current, remove, artifacts, head):
+        with self.projects.repository(current["project"]):
             self.projects.discard([remove], artifacts)
             # Git logs each failure; a branch left behind is only listed as closed.
             for args in (
