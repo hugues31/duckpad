@@ -36,6 +36,16 @@ def router(ctx: Context) -> APIRouter:
         set_session_cookie(response, request, token)
         return response
 
+    @api.post("/api/setup", response_model=None)
+    def setup(data: schemas.Setup, request: Request) -> JSONResponse:
+        token = auth.finish_setup(
+            data.token, data.password, request.client.host if request.client else "local"
+        )
+        response = JSONResponse(auth.check(token))
+        auth.logout(session_token(request))
+        set_session_cookie(response, request, token)
+        return response
+
     @api.get("/api/sso", response_model=None, dependencies=[Depends(instance_admin)])
     def sso_settings() -> Record:
         return oidc.public_settings()
