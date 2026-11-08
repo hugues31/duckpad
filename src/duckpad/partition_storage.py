@@ -46,7 +46,28 @@ class PartitionStorage:
             return row.evidence if row else None
 
     def publish_manifest(self, metadata, entries):
+        content = digest(
+            [
+                metadata["source"],
+                metadata["dimension"],
+                metadata["schema"],
+                [
+                    {
+                        "key": {k: entry["key"][k] for k in ("type", "value")},
+                        "attributes": {
+                            name: {k: value[k] for k in ("type", "value")}
+                            for name, value in entry["attributes"].items()
+                        },
+                    }
+                    for entry in entries
+                ],
+            ]
+        )
+        metadata = {**metadata, "digest": content}
         with self.store.transaction() as session:
+            previous = self.manifest(signature=metadata["signature"])
+            if previous and previous.get("digest") == content:
+                return previous, self.entries(previous["id"])
             session.add(
                 m.PartitionManifest(
                     id=metadata["id"],
@@ -73,6 +94,8 @@ class PartitionStorage:
                         for e in entries
                     ],
                 )
+
+        return metadata, entries
 
     def entries(self, manifest, offset=0, limit=None):
         with self.store.session() as session:

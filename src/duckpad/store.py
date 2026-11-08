@@ -5,7 +5,10 @@ entity kinds cannot be persisted, and there is no generic document table.
 Secrets are sealed on write and opened on read (see `sealing`).
 """
 
+import base64
 import copy
+import json
+import math
 import threading
 from contextlib import contextmanager
 from pathlib import Path
@@ -18,7 +21,7 @@ from . import models as m
 from .migrations import upgrade
 from .paths import InstancePaths
 from .sealing import MasterKeys, sealable, sealed_fields, sealed_with
-from .util import dumps
+from .util import Problem, dumps
 
 MODELS = {
     "assistant_conversation": m.AssistantConversation,
@@ -45,6 +48,8 @@ MODELS = {
 SNAPSHOTS = {"connector": "definition", "conflict": "snapshot", "run": "snapshot"}
 # Kinds whose records can hold secrets.
 SEALED_KINDS = ("connection", "settings", "ssh_key")
+# Completed runs kept per worktree and environment, besides the ones still referenced.
+RUN_RETENTION = 1000
 
 
 def reject_unknown_fields(kind, data, fields):
@@ -82,6 +87,7 @@ class Store:
         self.home.mkdir(parents=True, exist_ok=True, mode=0o700)
         self.paths = InstancePaths(self.home)
         self.lock = threading.RLock()
+        self.configuration_revision = 0
         self._local = threading.local()
         path = self.home / "instance.sqlite"
         path.touch(mode=0o600, exist_ok=True)
@@ -305,6 +311,8 @@ class Store:
     def put(self, kind, key, value):
         stored = self._seal(kind, key, value)
         with self.session() as session:
+            if kind in ("connection", "connector", "environment", "settings"):
+                self.configuration_revision += 1
             if kind == "access":
                 reject_unknown_fields(kind, value, {"members", "connections"})
                 session.exec(delete(m.ProjectMember).where(m.ProjectMember.project == key))
@@ -360,6 +368,8 @@ class Store:
 
     def delete(self, kind, key):
         with self.session() as session:
+            if kind in ("connection", "connector", "environment", "settings"):
+                self.configuration_revision += 1
             row = session.get(MODELS[kind], self._key(kind, key))
             if row is not None:
                 session.delete(row)
@@ -436,6 +446,26 @@ class Store:
             )
             return [self._record("worktree", row, session) for row in rows]
 
+    def connection_summaries(self, project):
+        """Granted connection labels, without loading any encrypted parameters."""
+        with self.session() as session:
+            rows = session.exec(
+                select(m.Connection.id, m.Connection.name, m.Connection.connector)
+                .join(m.ProjectConnection, m.ProjectConnection.connection == m.Connection.id)
+                .where(m.ProjectConnection.project == project)
+                .order_by(literal_column("connection.rowid"))
+            )
+            return [dict(zip(("id", "name", "connector"), row, strict=True)) for row in rows]
+
+    def jobs(self, project):
+        with self.session() as session:
+            return [
+                self._record("job", row, session)
+                for row in session.exec(
+                    select(m.Job).where(m.Job.project == project).order_by(literal_column("rowid"))
+                )
+            ]
+
     def find_worktree(self, project, branch):
         with self.session() as session:
             row = session.exec(
@@ -480,9 +510,38 @@ class Store:
         with self.session() as session:
             session.exec(delete(m.OIDCTransaction))
 
-    def runs(self, user, worktree=None, include_jobs=False, limit=None):
+    def runs(self, user, worktree=None, include_jobs=False, limit=None, *, cursor=None, summary=False):
         with self.session() as session:
-            statement = select(m.Run)
+            # SQLite drops captured definitions before materializing JSON in Python.
+            omitted = (
+                "connections",
+                "definitions",
+                "node_sql",
+                "components",
+                "flow",
+                "variable_declarations",
+                "extensions",
+                "nodes",
+                "variables",
+            )
+            columns = [col(getattr(m.Run, name)) for name in m.Run.model_fields if name != "snapshot"]
+            statement = (
+                sql_select(
+                    *columns, func.json_remove(m.Run.snapshot, *["$." + k for k in omitted]).label("summary")
+                )
+                if summary
+                else select(m.Run)
+            )
+            if cursor:
+                try:
+                    started, identity = json.loads(base64.urlsafe_b64decode(cursor))
+                    if not isinstance(started, str) or not isinstance(identity, str):
+                        raise ValueError
+                except (ValueError, TypeError, UnicodeError) as error:
+                    raise Problem("Invalid run cursor", 422) from error
+                statement = statement.where(
+                    or_(m.Run.started < started, and_(m.Run.started == started, m.Run.id < identity))
+                )
             if user["role"] != "admin":
                 statement = statement.join(m.ProjectMember, m.ProjectMember.project == m.Run.project).where(
                     m.ProjectMember.user == user["id"]
@@ -502,27 +561,151 @@ class Store:
             statement = statement.order_by(m.Run.started.desc(), m.Run.id.desc())
             if limit is not None:
                 statement = statement.limit(limit)
+            if summary:
+                return [
+                    {
+                        **json.loads(row["summary"]),
+                        **{k: row[k] for k in m.Run.model_fields if k != "snapshot"},
+                    }
+                    for row in session.execute(statement).mappings()
+                ]
             rows = session.exec(statement)
             return [self._record("run", row, session) for row in rows]
 
-    def test_history(self, worktree, environment, node, limit=10):
-        """Recent executions of this node's tests, including failures without published outputs."""
-        history = []
+    @staticmethod
+    def run_cursor(run):
+        return base64.urlsafe_b64encode(dumps([run["started"], run["id"]]).encode()).decode()
+
+    def node_duration_estimates(self, worktree, environment):
+        """Latest successful node timings from a bounded, environment-local history.
+
+        Partition summaries are not timings of single executions. Read only the
+        snapshots: estimates do not need decrypted connection settings.
+        """
+        estimates = {}
         with self.session() as session:
             statement = (
-                select(m.Run)
+                select(m.Run.snapshot)
                 .where(m.Run.worktree == worktree, m.Run.environment == environment)
                 .order_by(m.Run.started.desc(), m.Run.id.desc())
+                .limit(20)
             )
-            for run in session.exec(statement):
-                state = run.snapshot.get("nodes", {}).get(node, {})
-                results = [r for r in state.get("results", []) if r["origin"]["kind"] == "test"]
-                if not results or state.get("status") in ("pending", "running"):
-                    continue
-                history.append({"run": run.id, "started": run.started, "results": results})
-                if len(history) >= max(1, min(limit, 50)):
-                    break
-        return history
+            for snapshot in session.exec(statement):
+                for key, state in snapshot.get("nodes", {}).items():
+                    duration = state.get("duration")
+                    if (
+                        key not in estimates
+                        and state.get("status") == "success"
+                        and not state.get("partitioned")
+                        and isinstance(duration, (int, float))
+                        and math.isfinite(duration)
+                        and duration > 0
+                    ):
+                        estimates[key] = duration
+        return estimates
+
+    def test_history(self, worktree, environment, node, limit=10):
+        """Recent executions of this node's tests, including failures without published outputs."""
+        state = m.Run.snapshot["nodes"][node]
+        results = func.json_each(state["results"]).table_valued("key", "value").alias("results")
+        has_tests = (
+            sql_select(1)
+            .select_from(results)
+            .where(func.json_extract(results.c.value, "$.origin.kind") == "test")
+            .correlate(m.Run)
+            .exists()
+        )
+        statement = (
+            sql_select(col(m.Run.id), col(m.Run.started), state.label("state"))
+            .where(
+                m.Run.worktree == worktree,
+                m.Run.environment == environment,
+                state["status"].as_string().not_in(("pending", "running")),
+                has_tests,
+            )
+            .order_by(m.Run.started.desc(), m.Run.id.desc())
+            .limit(max(1, min(limit, 50)))
+        )
+        with self.session() as session:
+            return [
+                {
+                    "run": identity,
+                    "started": started,
+                    "results": [r for r in value.get("results", []) if r["origin"]["kind"] == "test"],
+                }
+                for identity, started, value in session.execute(statement)
+            ]
+
+    def prune_runs(self, worktree, environment, *, keep=RUN_RETENTION, slack=0, protected=()):
+        """Keep recent runs and the evidence still used by results, exports, manifests or Job launches.
+
+        The limit counts completed runs per worktree/environment; referenced runs and
+        unfinished runs are exempt. Nothing expires until more than `keep + slack` exist.
+        Cascades remove attempts and obsolete manifests.
+        No artifact file is removed here: every artifact owner is protected.
+        """
+        keep = max(1, int(keep))
+        with self.transaction() as session:
+            rows = list(
+                session.exec(
+                    select(m.Run.id)
+                    .where(
+                        m.Run.worktree == worktree,
+                        m.Run.environment == environment,
+                        m.Run.status.not_in(("preparing", "running", "canceling")),
+                    )
+                    .order_by(m.Run.started.desc(), m.Run.id.desc())
+                )
+            )
+            if len(rows) <= keep + slack:
+                return 0
+            candidates = set(rows[keep:])
+            retained = set(protected) | set(rows[:keep])
+            # A Job launch retried with its idempotency key must still find its run.
+            retained.update(session.exec(select(m.JobIdempotency.run)))
+            retained.update(session.exec(select(m.Artifact.run).where(m.Artifact.worktree == worktree)))
+            retained.update(
+                session.exec(select(m.ExportResult.run).where(m.ExportResult.worktree == worktree))
+            )
+            for state in session.exec(
+                select(m.PartitionResult.state).where(m.PartitionResult.worktree == worktree)
+            ):
+                retained.update(value.get("run") for value in state.values() if isinstance(value, dict))
+            # The latest manifest remains the current key list even if no run retained outputs.
+            manifests = list(
+                session.exec(
+                    select(m.PartitionManifest)
+                    .where(
+                        m.PartitionManifest.worktree == worktree,
+                    )
+                    .order_by(col(m.PartitionManifest.created).desc())
+                )
+            )
+            latest = set()
+            for manifest in manifests:
+                key = manifest.environment
+                if key not in latest:
+                    retained.add(manifest.run)
+                    latest.add(key)
+            # A reused manifest may be owned by a much older run than its consumers.
+            owners = {manifest.id: manifest.run for manifest in manifests}
+            references = dict(
+                session.exec(
+                    select(m.Run.id, m.Run.snapshot["partitions"]["manifest"].as_string()).where(
+                        m.Run.worktree == worktree
+                    )
+                ).all()
+            )
+            pending = set(references) - candidates | retained
+            while pending:
+                owner = owners.get(references.get(pending.pop()))
+                if owner and owner not in retained:
+                    retained.add(owner)
+                    pending.add(owner)
+            removed = candidates - retained
+            for identity in removed:
+                session.exec(delete(m.Run).where(m.Run.id == identity))
+            return len(removed)
 
     def previous_outputs(self, worktree, environment, node, run_id):
         """The node's outputs in the latest successful run before `run_id`, with that run's id."""

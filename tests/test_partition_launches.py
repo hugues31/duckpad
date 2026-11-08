@@ -86,7 +86,8 @@ def test_failed_retry_refreshes_manifest_and_skips_successful_exports(services, 
     second = join_run(store, launched["id"])
     assert second["status"] == "success", second
     assert second["partitions"]["selected"] == 1
-    assert first["partitions"]["manifest"] != second["partitions"]["manifest"]
+    # Refresh the key source, retaining the immutable manifest when its values are unchanged.
+    assert first["partitions"]["manifest"] == second["partitions"]["manifest"]
     assert calls["keys", None] == 2
     assert calls["transform", "a"] == 1
     assert calls["transform", "b"] == 2

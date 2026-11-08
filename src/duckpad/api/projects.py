@@ -154,7 +154,8 @@ def router(ctx: Context) -> APIRouter:
     def delete_project(project: str) -> Record:
         with engine.exclusive(project):
             engine.reset_project(project)
-            projects.delete(project)
+            removed = projects.delete_records(project)
+        projects.delete_files(project, *removed)
         return {"ok": True}
 
     @api.get("/api/library", response_model=None, dependencies=[Depends(signed_in)])

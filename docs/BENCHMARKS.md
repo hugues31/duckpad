@@ -123,3 +123,36 @@ describes operator measurements. Its [PostgreSQL extension documentation](https:
 describes scanner filtering; do not assume a source predicate executes remotely
 without inspecting its plan. PostgreSQL documents [EXPLAIN's instrumentation overhead](https://www.postgresql.org/docs/16/sql-explain.html),
 which is why the ordinary SELECT timings are recorded separately.
+
+## Polling and history
+
+Run `uv run python scripts/benchmark_polling.py --output polling.json` to create
+an isolated instance and measure HTTP responses. The report includes elapsed time,
+response bytes and actual Git subprocess counts. Set `PYTHONPATH` to another
+revision's `src` directory when comparing the same fixture against that revision.
+The script never connects to external data sources.
+
+The following comparison uses baseline `ed87b52`, Python 3.12.12 and DuckDB 2.0.0
+on Linux. Values are medians of three requests after warming each endpoint. These
+are measurements on a shared development machine, not latency guarantees.
+
+| Request / fixture | Before | After | Additional result |
+| --- | ---: | ---: | --- |
+| Worktree snapshot, Northstar example | 79.54 ms | 25.08 ms | 3 → 1 Git processes |
+| Worktree snapshot, 105 nodes | 54.87 ms | 30.21 ms | 3 → 1 Git processes |
+| Branch listing, 10 open branches | 238.28 ms | 44.48 ms | 61 → 2 Git processes |
+| Job listing, 10 jobs | 160.10 ms | 65.25 ms | 30 → 1 Git processes; 1,280,921 → 16,811 bytes |
+| Job history, 50 runs | 158.24 ms | 20.83 ms | 6,374,451 → 53,901 bytes |
+| Selected partition preview, 1,000 keys, 105 nodes | 5,358.22 ms | 74.58 ms | 4 → 1 Git processes |
+
+The partition fixture retains a real result for the selected key and creates a
+synthetic 1,000-key manifest. It measures reading and validity checks, excluding
+execution of the other keys. Job records contain representative captured SQL;
+only their summaries are returned by the history endpoint. Detailed records
+remain available separately.
+
+`frontend/e2e/polling.spec.ts` counts React fiber renders on a 105-node canvas.
+After initial layout, another workspace poll produces **zero additional node
+renders**. The test observes the real production build, including snapshot and
+status polling. Unit regressions also check hidden-tab suspension, idle polling
+intervals and protection against a status response older than a newly started run.

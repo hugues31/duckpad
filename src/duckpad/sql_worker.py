@@ -55,6 +55,8 @@ def serve(stream, channel, message):
             elif operation == "setup":
                 setup_connections(cursor, message["captured"], message["offline"])
                 result = None
+            elif operation == "fetchmany":
+                result = cursor.fetchmany(message["size"])
             elif operation in ("fetchone", "fetchall"):
                 result = getattr(cursor, operation)()
             elif operation == "interrupt":

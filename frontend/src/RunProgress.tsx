@@ -1,10 +1,28 @@
 import { Loader2 } from "lucide-react";
+import { useEffect, useState } from "react";
 import { useT } from "./i18n";
+import { remainingDuration, remainingSeconds } from "./runEstimate";
 import type { Run } from "./types";
 
 /** Keep live execution details out of the project navigation and run controls. */
 export default function RunProgress({ run }: { run: Run }) {
   const t = useT();
+  const [now, setNow] = useState(Date.now);
+  useEffect(() => {
+    if (run.status !== "running") return;
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [run.id, run.status]);
+  const seconds = remainingSeconds(run, now);
+  const remaining =
+    run.status === "running" || run.status === "preparing"
+      ? seconds === null
+        ? t("estimatingRemaining")
+        : t("estimatedRemaining").replace(
+            "{duration}",
+            remainingDuration(seconds),
+          )
+      : "";
   const nodes = Object.values(run.nodes);
   const partitions = run.partitions;
   const total = partitions ? partitions.selected : nodes.length;
@@ -50,6 +68,11 @@ export default function RunProgress({ run }: { run: Run }) {
         {details}
       </span>
       {outcome && <span className="run-progress-count">{outcome}</span>}
+      {remaining && (
+        <span className="run-progress-remaining" title={t("remainingTimeHint")}>
+          {remaining}
+        </span>
+      )}
       <div
         className="progress-track"
         role="progressbar"
@@ -57,7 +80,9 @@ export default function RunProgress({ run }: { run: Run }) {
         aria-valuemin={0}
         aria-valuemax={100}
         aria-valuenow={percent}
-        aria-valuetext={[details, outcome].filter(Boolean).join(" · ")}
+        aria-valuetext={[details, outcome, remaining]
+          .filter(Boolean)
+          .join(" · ")}
         data-indeterminate={percent === undefined}
       >
         <div

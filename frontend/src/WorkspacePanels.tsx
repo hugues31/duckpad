@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useT } from "./i18n";
 
 // The code panel takes the inspector's place, with its own width.
@@ -128,7 +128,7 @@ export function usePanelVisibility() {
       setOpen((current) => ({ ...current, ...change })),
     [],
   );
-  return { open, set };
+  return useMemo(() => ({ open, set }), [open, set]);
 }
 export type PanelVisibility = ReturnType<typeof usePanelVisibility>;
 

@@ -53,7 +53,8 @@
   flex-shrink: 0;
 }
 .run-progress > svg,
-.run-progress-count {
+.run-progress-count,
+.run-progress-remaining {
   flex-shrink: 0;
 }
 .run-progress-details {
@@ -64,8 +65,14 @@
 }
 .run-progress-count {
   margin-left: auto;
+}
+.run-progress-count,
+.run-progress-remaining {
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+}
+.run-progress-details + .run-progress-remaining {
+  margin-left: auto;
 }
 .progress-track {
   position: absolute;

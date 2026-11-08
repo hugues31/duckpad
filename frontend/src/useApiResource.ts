@@ -2,9 +2,11 @@ import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import { api } from "./api";
 import { usePolling, type PollingOptions } from "./usePolling";
 
-export interface ResourceOptions extends PollingOptions {
+export interface ResourceOptions<T = unknown> extends PollingOptions {
   /** Load again, keeping the current data meanwhile, whenever this value changes. */
   refresh?: string | number;
+  /** Delay after a successful response, or false to stop until a reload. */
+  nextInterval?: (data: T) => number | false;
 }
 
 interface Settled<T> {
@@ -23,7 +25,12 @@ interface Settled<T> {
 export function useResource<T>(
   key: string | null,
   load: (signal: AbortSignal) => Promise<T>,
-  { refresh, enabled = true, ...polling }: ResourceOptions = {},
+  {
+    refresh,
+    enabled = true,
+    nextInterval,
+    ...polling
+  }: ResourceOptions<T> = {},
 ) {
   const [attempt, setAttempt] = useState(0);
   const [settled, setSettled] = useState<Settled<T> | null>(null);
@@ -31,8 +38,10 @@ export function useResource<T>(
     key === null ? null : JSON.stringify([key, refresh ?? null, attempt]);
   // The request identifies what to load; a new `load` alone does not reload.
   const latestLoad = useRef(load);
+  const cadence = useRef(nextInterval);
   useLayoutEffect(() => {
     latestLoad.current = load;
+    cadence.current = nextInterval;
   });
   usePolling(
     useCallback(
@@ -42,7 +51,9 @@ export function useResource<T>(
             setSettled({ key: key!, request: request!, data, error });
         };
         try {
-          done(await latestLoad.current(signal), "");
+          const data = await latestLoad.current(signal);
+          done(data, "");
+          return cadence.current?.(data);
         } catch (e) {
           done(null, (e as Error).message);
           throw e;
@@ -80,7 +91,7 @@ export function useResource<T>(
 /** Load an API path with `useResource`; a null path loads nothing. */
 export function useApiResource<T>(
   path: string | null,
-  options?: ResourceOptions,
+  options?: ResourceOptions<T>,
 ) {
   return useResource<T>(path, (signal) => api<T>(path!, { signal }), options);
 }

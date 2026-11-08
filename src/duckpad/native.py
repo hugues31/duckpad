@@ -25,6 +25,9 @@ class Cursor:
     def fetchone(self) -> tuple[Any, ...] | None:
         return self.cursor.fetchone()
 
+    def fetchmany(self, size: int = 1000) -> list[tuple[Any, ...]]:
+        return self.cursor.fetchmany(size)
+
     def fetchall(self) -> list[tuple[Any, ...]]:
         return self.cursor.fetchall()
 

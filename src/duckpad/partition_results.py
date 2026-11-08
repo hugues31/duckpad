@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import base64
+import copy
 import json
+import threading
+from collections import OrderedDict
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -20,36 +23,52 @@ from .util import Problem, digest
 class PartitionResults:
     def __init__(self, engine: Engine):
         self.engine = engine
+        self.descriptions = OrderedDict()
+        self.lock = threading.Lock()
 
-    def describe(self, worktree, environment):
+    def describe(self, worktree, environment, *, bundle=None):
         self.engine.catalog.environment(environment)
-        bundle = self.engine.projects.snapshot(worktree)["bundle"]
+        bundle = (
+            bundle
+            if bundle is not None
+            else self.engine.projects.snapshot(worktree, committed=True)["bundle"]
+        )
         if not bundle:
             return {"dimension": None, "manifest": None, "nodes": {}}
-        nodes, edges, boundaries = expand(bundle, tolerant=True)
-        plan = partitions.plan(bundle, nodes, edges, boundaries)
-        dimension = plan["dimension"]
-        manifest = None
-        if dimension:
-            manifest = PartitionStorage(self.engine.store, worktree, environment).manifest(
+        key = digest(bundle)
+        with self.lock:
+            description = self.descriptions.get(key)
+        if description is None:
+            nodes, edges, boundaries = expand(bundle, tolerant=True)
+            plan = partitions.plan(bundle, nodes, edges, boundaries)
+            description = {
+                "dimension": plan["dimension"],
+                "nodes": {
+                    k: {
+                        "partitioned": n.get("partitioned", False),
+                        "dimension": n.get("partition_dimension"),
+                        "origin": n.get("partition_origin"),
+                        "filters": n.get("partition_filters", {}),
+                        "collect": n.get("partition_collect_inputs", []),
+                        "error": n.get("partition_error"),
+                    }
+                    for k, n in nodes.items()
+                },
+                "errors": plan["errors"],
+            }
+            with self.lock:
+                self.descriptions[key] = description
+                while len(self.descriptions) > 16:
+                    self.descriptions.popitem(last=False)
+        dimension = description["dimension"]
+        manifest = (
+            PartitionStorage(self.engine.store, worktree, environment).manifest(
                 signature=partitions.signature(dimension)
             )
-        return {
-            "dimension": dimension,
-            "manifest": manifest,
-            "nodes": {
-                k: {
-                    "partitioned": n.get("partitioned", False),
-                    "dimension": n.get("partition_dimension"),
-                    "origin": n.get("partition_origin"),
-                    "filters": n.get("partition_filters", {}),
-                    "collect": n.get("partition_collect_inputs", []),
-                    "error": n.get("partition_error"),
-                }
-                for k, n in nodes.items()
-            },
-            "errors": plan["errors"],
-        }
+            if dimension
+            else None
+        )
+        return {**copy.deepcopy(description), "manifest": manifest}
 
     def selected(self, worktree, environment, context):
         if not context or not isinstance(context.get("manifest"), str):
@@ -66,16 +85,9 @@ class PartitionResults:
             storage.entry(manifest["id"], context["partition_id"]) if context.get("partition_id") else None,
         )
 
-    def fingerprints(self, worktree, environment):
-        bundle = self.engine.projects.snapshot(worktree, committed=True)["bundle"]
-        if not bundle:
-            return {}
-        return self.engine.fingerprints.batch(
-            bundle,
-            environment,
-            computed=self.engine.pool.computed(worktree, environment, bundle),
-            manifest=self.engine.fingerprints.manifest(worktree, environment, bundle),
-        )[1]
+    def fingerprints(self, worktree, environment, *, snapshot=None, node=None):
+        snapshot = snapshot or self.engine.projects.snapshot(worktree, committed=True)
+        return self.engine.fingerprints.cached_batch(snapshot, environment, node)[1]
 
     def validity(self, node, entry, result, fingerprints):
         if result.get("attempt", {}).get("status") in ("failed", "blocked"):
@@ -101,7 +113,8 @@ class PartitionResults:
         run=None,
         key_hash=None,
     ):
-        description = self.describe(worktree, environment)
+        snapshot = self.engine.projects.snapshot(worktree, committed=True)
+        description = self.describe(worktree, environment, bundle=snapshot["bundle"])
         manifest = manifest or (description.get("manifest") or {}).get("id")
         if not manifest:
             return {**description, "entries": [], "next_cursor": None, "total": 0}
@@ -123,7 +136,7 @@ class PartitionResults:
         if run and not node:
             record = self.engine.store.get("run", run) or {}
             selected = [k for k, value in record.get("nodes", {}).items() if value.get("partitioned")]
-        fingerprints = self.fingerprints(worktree, environment)
+        fingerprints = self.fingerprints(worktree, environment, snapshot=snapshot, node=node)
         page, next_offset = [], offset
         limit = max(1, min(int(limit), 200))
         # Bound each database read; filters scan pages, never inline all node/key logs.
@@ -196,24 +209,25 @@ class PartitionResults:
 
     def load(self, worktree, environment, node, port, selection) -> tuple[Context, Dataset] | None:
         # Every preview reads through here: flows without partitions skip expansion.
-        bundle = self.engine.projects.snapshot(worktree)["bundle"]
+        snapshot = self.engine.projects.snapshot(worktree, committed=True)
+        bundle = snapshot["bundle"]
         if not bundle or not bundle["flow"].get("partitions"):
             if selection:
                 self.selected(worktree, environment, selection)
             return None
-        description = self.describe(worktree, environment)
+        description = self.describe(worktree, environment, bundle=bundle)
         _nodes, _, boundaries = expand(bundle, tolerant=True)
         node, port = boundaries.get(node, {}).get("outputs", {}).get(port, (node, port))
         if not description["nodes"].get(node, {}).get("partitioned"):
             if selection:
                 self.selected(worktree, environment, selection)
             return None
-        self.authorize(worktree, node)
+        self.authorize(worktree, node, snapshot=snapshot)
         if not selection and description["manifest"] is None:
             raise Problem("partition_not_calculated: Partition values not calculated; run the pipeline", 409)
         storage, manifest, entry = self.selected(worktree, environment, selection)
         entries = [entry] if entry else storage.entries(manifest["id"])
-        fingerprints = self.fingerprints(worktree, environment)
+        fingerprints = self.fingerprints(worktree, environment, snapshot=snapshot, node=node)
         artifacts, validities = [], []
         for key in entries:
             result = storage.result(node, key["key_hash"])
@@ -290,9 +304,9 @@ class PartitionResults:
             raise Problem("No attempt for this key", 404)
         return {**run, "nodes": {node: state}, "partition": entry}
 
-    def authorize(self, worktree, node):
+    def authorize(self, worktree, node, *, snapshot=None):
         if self.engine.enforce_access:
-            snapshot = self.engine.projects.snapshot(worktree)
+            snapshot = snapshot or self.engine.projects.snapshot(worktree, committed=True)
             nodes, edges, _ = expand(snapshot["bundle"], tolerant=True)
             references = [
                 r
@@ -303,13 +317,16 @@ class PartitionResults:
             self.engine.access.connections(snapshot["worktree"]["project"], references)
 
     def export_result(self, worktree, environment, node, selection):
-        self.authorize(worktree, node)
+        snapshot = self.engine.projects.snapshot(worktree, committed=True)
+        self.authorize(worktree, node, snapshot=snapshot)
         storage, _, entry = self.selected(worktree, environment, selection)
         if entry is None:
             return {"status": "unsupported"}
         result = storage.result(node, entry["key_hash"])
         success = result.get("success", {})
-        valid = self.validity(node, entry, result, self.fingerprints(worktree, environment))
+        valid = self.validity(
+            node, entry, result, self.fingerprints(worktree, environment, snapshot=snapshot, node=node)
+        )
         if valid != "valid":
             return {"status": "not_run" if valid == "missing" else valid}
         record = self.engine.store.get("artifact", success.get("artifact", ""))

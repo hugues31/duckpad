@@ -5,6 +5,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useMemo,
   useRef,
   useState,
   type ReactNode,
@@ -245,15 +246,27 @@ export function WorktreeProvider({
     selectedPartition.manifest === manifest || remapped.pending
       ? selected
       : remapped.data?.entries[0] || null;
-  const partition: PartitionContext | null = manifest
-    ? {
-        manifest:
-          remapped.pending && selected ? selectedPartition.manifest! : manifest,
-        ...(partitionEntry
-          ? { partition_id: partitionEntry.partition_id }
-          : { partition_mode: "all" as const }),
-      }
-    : null;
+  const partition = useMemo<PartitionContext | null>(
+    () =>
+      manifest
+        ? {
+            manifest:
+              remapped.pending && selected
+                ? selectedPartition.manifest!
+                : manifest,
+            ...(partitionEntry
+              ? { partition_id: partitionEntry.partition_id }
+              : { partition_mode: "all" as const }),
+          }
+        : null,
+    [
+      manifest,
+      remapped.pending,
+      selected,
+      selectedPartition.manifest,
+      partitionEntry,
+    ],
+  );
   const canEdit =
     !snapshot?.worktree.read_only &&
     (snapshot?.role === "admin" || snapshot?.role === "editor");
@@ -268,260 +281,295 @@ export function WorktreeProvider({
     await refresh();
   }, [refreshWorkspace, refresh]);
 
-  async function write<T extends Snapshot>(
-    worktree: string,
-    request: () => Promise<T>,
-  ) {
-    if (!canEdit) throw new Error(t("readerNotice"));
-    setSaves((count) => count + 1);
-    const pending = Promise.resolve()
-      .then(request)
-      .finally(async () => {
-        // Show the saved revision, or the one that rejected the change.
-        await refresh(worktree);
-        pendingWrites.current.delete(pending);
-        setSaves((count) => count - 1);
-      });
-    pendingWrites.current.add(pending);
-    return pending;
-  }
-
-  const put = (
-    base: Snapshot,
-    change: { bundle: Bundle } | { files: Record<string, string> },
-  ) =>
-    write(base.worktree.id, async () =>
-      remember(
-        base.worktree.id,
-        await api<Snapshot>(
-          `/worktrees/${base.worktree.id}`,
-          send({ revision: base.revision, ...change }, "PUT"),
-        ),
-      ),
-    );
-
-  const history = (worktree: string) => {
-    let entry = histories.current.get(worktree);
-    if (!entry)
-      histories.current.set(worktree, (entry = { undo: [], redo: [] }));
-    return entry;
-  };
-
-  function remember<T extends Snapshot>(worktree: string, result: T): T {
-    if (result.change) {
-      const entry = history(worktree);
-      entry.undo.push(result.change);
-      entry.undo.splice(0, Math.max(0, entry.undo.length - HISTORY_LIMIT));
-      entry.redo.length = 0;
-    }
-    return result;
-  }
-
-  function commit<T extends Snapshot>(
-    request: (base: Snapshot) => Promise<T>,
-    { conflict }: { conflict?: string } = {},
-  ) {
-    // Track preparation too: navigation and runs must wait even before the POST.
-    setSaves((count) => count + 1);
-    const pending = commits.current
-      .catch(() => undefined)
-      .then(async () => {
-        await flushWrites();
-        // A resolution already contains the retained proposal. Retrying its
-        // rejected editor draft would create another conflict before resolving it.
-        if (!conflict) await drafts.persist();
-        await flushWrites();
-        return write(id, async () => {
-          const base = await api<Snapshot>(`/worktrees/${id}`);
-          const result = await request(base);
-          if (conflict)
-            drafts.discardRejected(
-              (error) => retainedConflict(error) === conflict,
-            );
-          return remember(id, result);
+  const value = useMemo<Worktree>(() => {
+    async function write<T extends Snapshot>(
+      worktree: string,
+      request: () => Promise<T>,
+    ) {
+      if (!canEdit) throw new Error(t("readerNotice"));
+      setSaves((count) => count + 1);
+      const pending = Promise.resolve()
+        .then(request)
+        .finally(async () => {
+          // Show the saved revision, or the one that rejected the change.
+          await refresh(worktree);
+          pendingWrites.current.delete(pending);
+          setSaves((count) => count - 1);
         });
-      })
-      .finally(() => {
-        pendingCommits.current.delete(pending);
-        setSaves((count) => count - 1);
-      });
-    commits.current = pending;
-    pendingCommits.current.add(pending);
-    return pending;
-  }
-
-  async function revertNow(direction: keyof History, change?: string) {
-    if (!canEdit) return false;
-    // Pending edits are saved first, so they are the latest change.
-    await settle();
-    const commits = history(id)[direction];
-    const index = change ? commits.lastIndexOf(change) : commits.length - 1;
-    if (index < 0) return false;
-    const [commit] = commits.splice(index, 1);
-    try {
-      const result = await write(id, () =>
-        api<Snapshot>(`/worktrees/${id}/revert`, send({ commit })),
-      );
-      if (result.change)
-        history(id)[direction === "undo" ? "redo" : "undo"].push(result.change);
-      return true;
-    } catch (error) {
-      // A conflict retains both versions for resolution, which settles the change.
-      if (!(error instanceof ApiError && error.status === 409))
-        commits.splice(index, 0, commit);
-      throw error;
+      pendingWrites.current.add(pending);
+      return pending;
     }
-  }
 
-  function revert(direction: keyof History, change?: string) {
-    const next = reverts.current
-      .catch(() => undefined)
-      .then(() => revertNow(direction, change));
-    reverts.current = next;
-    return next;
-  }
-
-  async function flushWrites() {
-    while (pendingWrites.current.size)
-      await Promise.all([...pendingWrites.current]);
-  }
-
-  async function flush() {
-    while (pendingWrites.current.size || pendingCommits.current.size)
-      await Promise.all([...pendingWrites.current, ...pendingCommits.current]);
-  }
-
-  async function settle() {
-    // Observe failures from saves already in flight before persisting drafts.
-    await flush();
-    await drafts.persist();
-    await flush();
-  }
-
-  async function launch(
-    environment: string,
-    node?: string,
-    confirmed = false,
-    options?: PartitionLaunchOptions,
-  ) {
-    if (launching.current) return;
-    launching.current = true;
-    setStarting(true);
-    try {
-      await settle();
-      const run = await api<Run>(
-        `/worktrees/${id}/runs`,
-        send({ environment, node, entry_point: "ui", confirmed, ...options }),
+    const put = (
+      base: Snapshot,
+      change: { bundle: Bundle } | { files: Record<string, string> },
+    ) =>
+      write(base.worktree.id, async () =>
+        remember(
+          base.worktree.id,
+          await api<Snapshot>(
+            `/worktrees/${base.worktree.id}`,
+            send({ revision: base.revision, ...change }, "PUT"),
+          ),
+        ),
       );
-      setActive(id, run);
-      setValidation({ worktree: id, diagnostics: [] });
-    } catch (error) {
-      const missing = refusedInputs(error);
-      if (missing.length) {
-        // The banner now shows these inputs; select the first node to connect.
-        setValidation({ worktree: id, diagnostics: missing });
-        void navigate(
-          worktreeUrl(id, "flow", environment, { node: missing[0].node! }),
-        );
+
+    const history = (worktree: string) => {
+      let entry = histories.current.get(worktree);
+      if (!entry)
+        histories.current.set(worktree, (entry = { undo: [], redo: [] }));
+      return entry;
+    };
+
+    function remember<T extends Snapshot>(worktree: string, result: T): T {
+      if (result.change) {
+        const entry = history(worktree);
+        entry.undo.push(result.change);
+        entry.undo.splice(0, Math.max(0, entry.undo.length - HISTORY_LIMIT));
+        entry.redo.length = 0;
       }
-      throw error;
-    } finally {
-      launching.current = false;
-      setStarting(false);
+      return result;
     }
-  }
 
-  const confirmRun = (
-    settings: Environment,
-    node?: string,
-    options?: PartitionLaunchOptions,
-  ) =>
-    openModal({
-      kind: "runConfirmation",
-      options,
-      worktree: id,
-      environment: settings,
-      node,
-    });
+    function commit<T extends Snapshot>(
+      request: (base: Snapshot) => Promise<T>,
+      { conflict }: { conflict?: string } = {},
+    ) {
+      // Track preparation too: navigation and runs must wait even before the POST.
+      setSaves((count) => count + 1);
+      const pending = commits.current
+        .catch(() => undefined)
+        .then(async () => {
+          await flushWrites();
+          // A resolution already contains the retained proposal. Retrying its
+          // rejected editor draft would create another conflict before resolving it.
+          if (!conflict) await drafts.persist();
+          await flushWrites();
+          return write(id, async () => {
+            const base = await api<Snapshot>(`/worktrees/${id}`);
+            const result = await request(base);
+            if (conflict)
+              drafts.discardRejected(
+                (error) => retainedConflict(error) === conflict,
+              );
+            return remember(id, result);
+          });
+        })
+        .finally(() => {
+          pendingCommits.current.delete(pending);
+          setSaves((count) => count - 1);
+        });
+      commits.current = pending;
+      pendingCommits.current.add(pending);
+      return pending;
+    }
 
-  const value: Worktree = {
-    partition,
-    partitionEntry,
-    selectPartition: (entry) =>
-      setSelectedPartition({ scope: partitionScope, manifest, entry }),
+    async function revertNow(direction: keyof History, change?: string) {
+      if (!canEdit) return false;
+      // Pending edits are saved first, so they are the latest change.
+      await settle();
+      const commits = history(id)[direction];
+      const index = change ? commits.lastIndexOf(change) : commits.length - 1;
+      if (index < 0) return false;
+      const [commit] = commits.splice(index, 1);
+      try {
+        const result = await write(id, () =>
+          api<Snapshot>(`/worktrees/${id}/revert`, send({ commit })),
+        );
+        if (result.change)
+          history(id)[direction === "undo" ? "redo" : "undo"].push(
+            result.change,
+          );
+        return true;
+      } catch (error) {
+        // A conflict retains both versions for resolution, which settles the change.
+        if (!(error instanceof ApiError && error.status === 409))
+          commits.splice(index, 0, commit);
+        throw error;
+      }
+    }
+
+    function revert(direction: keyof History, change?: string) {
+      const next = reverts.current
+        .catch(() => undefined)
+        .then(() => revertNow(direction, change));
+      reverts.current = next;
+      return next;
+    }
+
+    async function flushWrites() {
+      while (pendingWrites.current.size)
+        await Promise.all([...pendingWrites.current]);
+    }
+
+    async function flush() {
+      while (pendingWrites.current.size || pendingCommits.current.size)
+        await Promise.all([
+          ...pendingWrites.current,
+          ...pendingCommits.current,
+        ]);
+    }
+
+    async function settle() {
+      // Observe failures from saves already in flight before persisting drafts.
+      await flush();
+      await drafts.persist();
+      await flush();
+    }
+
+    async function launch(
+      environment: string,
+      node?: string,
+      confirmed = false,
+      options?: PartitionLaunchOptions,
+    ) {
+      if (launching.current) return;
+      launching.current = true;
+      setStarting(true);
+      try {
+        await settle();
+        const run = await api<Run>(
+          `/worktrees/${id}/runs`,
+          send({ environment, node, entry_point: "ui", confirmed, ...options }),
+        );
+        setActive(id, run);
+        setValidation({ worktree: id, diagnostics: [] });
+      } catch (error) {
+        const missing = refusedInputs(error);
+        if (missing.length) {
+          // The banner now shows these inputs; select the first node to connect.
+          setValidation({ worktree: id, diagnostics: missing });
+          void navigate(
+            worktreeUrl(id, "flow", environment, { node: missing[0].node! }),
+          );
+        }
+        throw error;
+      } finally {
+        launching.current = false;
+        setStarting(false);
+      }
+    }
+
+    const confirmRun = (
+      settings: Environment,
+      node?: string,
+      options?: PartitionLaunchOptions,
+    ) =>
+      openModal({
+        kind: "runConfirmation",
+        options,
+        worktree: id,
+        environment: settings,
+        node,
+      });
+
+    return {
+      partition,
+      partitionEntry,
+      selectPartition: (entry) =>
+        setSelectedPartition({ scope: partitionScope, manifest, entry }),
+      id,
+      assistantNode:
+        assistantSelection.worktree === id ? assistantSelection.node : "",
+      assistantFile:
+        assistantSelection.worktree === id ? assistantSelection.file : "",
+      setAssistantNode,
+      setAssistantFile,
+      environment,
+      snapshot,
+      statuses,
+      statusesLoaded,
+      loadError,
+      runDiagnostics: validation.worktree === id ? validation.diagnostics : [],
+      canEdit,
+      saving: saves > 0,
+      starting,
+      gitVersion,
+      refresh: () => refresh(),
+      flush,
+      settle,
+      commit,
+      save: async (base, change) => {
+        const bundle = structuredClone(base.bundle!);
+        change(bundle);
+        return put(base, { bundle });
+      },
+      saveFiles: (files, base) => put(base, { files }),
+      undo: (change) => revert("undo", change),
+      redo: () => revert("redo"),
+      run: async (node, options) => {
+        if (node && !options && partitionEntry)
+          options = {
+            partitions: {
+              mode: "selected",
+              keys: [
+                {
+                  type: partitionEntry.key.type,
+                  value: partitionEntry.key.value,
+                },
+              ],
+            },
+          };
+        if (!canEdit || starting) return;
+        const settings = workspace?.catalog.environment_details.find(
+          (item) => item.id === environment,
+        );
+        if (settings?.confirm_before_run)
+          return confirmRun(settings, node, options);
+        try {
+          await launch(environment, node, false, options);
+        } catch (e) {
+          const required = errorDetail(e).confirmation_required as
+            Environment | undefined;
+          if (required) confirmRun(required, node, options);
+          else if (!refusedInputs(e).length) notify((e as Error).message, true);
+        }
+      },
+      runConfirmed: (environment, node, options) =>
+        launch(environment, node, true, options),
+      stop: async () => {
+        if (!statuses.active) return;
+        try {
+          const run = await api<Run>(
+            `/runs/${statuses.active.id}/cancel`,
+            send({}),
+          );
+          setActive(id, run);
+        } catch (e) {
+          notify((e as Error).message, true);
+        }
+      },
+      gitChanged,
+    };
+  }, [
+    canEdit,
+    t,
+    refresh,
+    drafts,
     id,
-    assistantNode:
-      assistantSelection.worktree === id ? assistantSelection.node : "",
-    assistantFile:
-      assistantSelection.worktree === id ? assistantSelection.file : "",
+    environment,
+    navigate,
+    setActive,
+    workspace,
+    starting,
+    notify,
+    openModal,
+    partitionEntry,
+    partitionScope,
+    manifest,
+    assistantSelection,
     setAssistantNode,
     setAssistantFile,
-    environment,
     snapshot,
     statuses,
     statusesLoaded,
     loadError,
-    runDiagnostics: validation.worktree === id ? validation.diagnostics : [],
-    canEdit,
-    saving: saves > 0,
-    starting,
+    validation,
+    saves,
     gitVersion,
-    refresh: () => refresh(),
-    flush,
-    settle,
-    commit,
-    save: async (base, change) => {
-      const bundle = structuredClone(base.bundle!);
-      change(bundle);
-      return put(base, { bundle });
-    },
-    saveFiles: (files, base) => put(base, { files }),
-    undo: (change) => revert("undo", change),
-    redo: () => revert("redo"),
-    run: async (node, options) => {
-      if (node && !options && partitionEntry)
-        options = {
-          partitions: {
-            mode: "selected",
-            keys: [
-              {
-                type: partitionEntry.key.type,
-                value: partitionEntry.key.value,
-              },
-            ],
-          },
-        };
-      if (!canEdit || starting) return;
-      const settings = workspace?.catalog.environment_details.find(
-        (item) => item.id === environment,
-      );
-      if (settings?.confirm_before_run)
-        return confirmRun(settings, node, options);
-      try {
-        await launch(environment, node, false, options);
-      } catch (e) {
-        const required = errorDetail(e).confirmation_required as
-          Environment | undefined;
-        if (required) confirmRun(required, node, options);
-        else if (!refusedInputs(e).length) notify((e as Error).message, true);
-      }
-    },
-    runConfirmed: (environment, node, options) =>
-      launch(environment, node, true, options),
-    stop: async () => {
-      if (!statuses.active) return;
-      try {
-        const run = await api<Run>(
-          `/runs/${statuses.active.id}/cancel`,
-          send({}),
-        );
-        setActive(id, run);
-      } catch (e) {
-        notify((e as Error).message, true);
-      }
-    },
     gitChanged,
-  };
+    partition,
+  ]);
   return (
     <WorktreeContext.Provider value={value}>
       {children}

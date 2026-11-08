@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Moon, Sun } from "lucide-react";
 import { languages, useT, type Language } from "./i18n";
 import type { Theme } from "./types";
@@ -55,7 +55,10 @@ export function usePreferences(): Preferences {
     localStorage.setItem(THEME_KEY, value);
     setThemeState(value);
   }, []);
-  return { language, setLanguage, theme, setTheme };
+  return useMemo(
+    () => ({ language, setLanguage, theme, setTheme }),
+    [language, setLanguage, theme, setTheme],
+  );
 }
 
 /** A preference and its options, labelled in the interface language. */

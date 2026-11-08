@@ -279,18 +279,36 @@ class Remotes:
 
     def status(self, worktree_id):
         with self.projects.locked(worktree_id) as worktree:
-            config = self.config(worktree)
+            result = self.tracking(worktree_id)
+            try:
+                self.workspace.clean(worktree)
+                result["pending"] = None
+            except Problem as error:
+                result["pending"] = str(error)
+            return result
+
+    def tracking(self, worktree_id, *, local=None, refs=None, config=None, actual=None):
+        with self.projects.locked(worktree_id) as worktree:
+            config = config if config is not None else self.config(worktree)
             path = worktree["path"]
-            local = self.workspace.resolve(path, "HEAD")
+            local = local or self.workspace.resolve(path, "HEAD")
             branch = config["mappings"].get(worktree["branch"])
             remote_ref = "refs/remotes/origin/" + branch if branch else None
             remote = (
-                self.git(path, "rev-parse", "--verify", "--end-of-options", remote_ref, check=False)
-                if remote_ref
-                else None
+                refs.get(remote_ref)
+                if refs is not None
+                else (
+                    self.git(path, "rev-parse", "--verify", "--end-of-options", remote_ref, check=False)
+                    if remote_ref
+                    else None
+                )
             )
             remote = remote or None
-            actual = self.git(path, "config", "--get", "remote.origin.url", check=False)
+            actual = (
+                actual
+                if actual is not None
+                else self.git(path, "config", "--get", "remote.origin.url", check=False)
+            )
             state, ahead, behind = "disconnected", None, None
             if config["url"]:
                 state = "unverified"
@@ -315,11 +333,6 @@ class Remotes:
                             if behind
                             else "up_to_date"
                         )
-            try:
-                self.workspace.clean(worktree)
-                pending = None
-            except Problem as error:
-                pending = str(error)
             return {
                 "name": "origin",
                 "url": config["url"],
@@ -333,7 +346,6 @@ class Remotes:
                 "ahead": ahead,
                 "behind": behind,
                 "checked": config.get("checked"),
-                "pending": pending,
                 "transport": transport(config["url"]),
             }
 

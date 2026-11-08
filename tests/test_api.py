@@ -2,6 +2,7 @@ import copy
 import io
 import json
 import logging
+import threading
 import tomllib
 import zipfile
 from pathlib import Path
@@ -66,6 +67,67 @@ def test_session_reports_the_packaged_version(client):
     assert (
         client.get("/api/session").json()["version"] == duckpad.__version__ == pyproject["project"]["version"]
     )
+
+
+def test_project_file_deletion_releases_the_engine_lock(app, client, worktree, monkeypatch):
+    services = app.state.services
+    project = services.projects.get(worktree)["project"]
+    original = services.projects.delete_files
+
+    def delete_files(*args):
+        acquired = []
+
+        def other_request():
+            available = services.engine.lock.acquire(blocking=False)
+            acquired.append(available)
+            if available:
+                services.engine.lock.release()
+
+        thread = threading.Thread(target=other_request)
+        thread.start()
+        thread.join(5)
+        assert acquired == [True]
+        assert services.store.get("project", project) is None
+        original(*args)
+
+    monkeypatch.setattr(services.projects, "delete_files", delete_files)
+    response = client.delete(f"/api/projects/{project}")
+    assert response.status_code == 200, response.text
+
+
+def test_run_list_is_bounded_and_cursors_preserve_detail(app, client, worktree):
+    store = app.state.services.store
+    tree = app.state.services.projects.get(worktree)
+    for index in range(53):
+        identity = f"run_{index:03}"
+        store.put(
+            "run",
+            identity,
+            {
+                "id": identity,
+                "project": tree["project"],
+                "worktree": worktree,
+                "environment": "dev",
+                "started": "2026-01-01T00:00:00Z",
+                "status": "success",
+                "definitions": {"source": "SELECT 1;"},
+                "nodes": {},
+                "connections": {},
+            },
+        )
+    response = client.get("/api/runs", params={"worktree": worktree})
+    assert response.status_code == 200
+    assert len(response.json()) == 50
+    assert "definitions" not in response.json()[0]
+    second = client.get(
+        "/api/runs", params={"worktree": worktree, "cursor": response.headers["X-Next-Cursor"]}
+    )
+    assert len(second.json()) == 3
+    assert "X-Next-Cursor" not in second.headers
+    assert len({run["id"] for run in response.json() + second.json()}) == 53
+    assert client.get("/api/runs/run_052").json()["definitions"] == {"source": "SELECT 1;"}
+    for params in ({"limit": 0}, {"limit": 101}, {"cursor": "invalid"}):
+        assert client.get("/api/runs", params=params).status_code == 422
 
 
 def test_project_activity_returns_latest_run_summary_only_for_visible_projects(app, client, worktree):

@@ -414,6 +414,8 @@ export interface NodeRun {
   outputs?: Record<string, Dataset & { duration: number }>;
   error?: string;
   duration?: number;
+  /** Previous successful duration in this worktree and environment, in seconds. */
+  estimated_duration?: number;
   external_outcome?: "completed" | "failed" | "partial or unknown" | "unknown";
   started?: string;
   finished?: string;
@@ -430,6 +432,7 @@ export interface NodeRun {
 }
 export interface Run {
   partitions?: {
+    started?: string;
     manifest?: string;
     total: number;
     selected: number;

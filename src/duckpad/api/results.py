@@ -8,7 +8,7 @@ from contextlib import ExitStack
 from typing import Annotated
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Query, Request, Response
 from fastapi.responses import StreamingResponse
 from starlette.background import BackgroundTask
 
@@ -72,10 +72,22 @@ def router(ctx: Context) -> APIRouter:
         return engine.input_columns(worktree, environment, node)
 
     @api.get("/api/runs", response_model=None, dependencies=[Depends(signed_in)])
-    def runs(request: Request, worktree: str | None = None, include_jobs: bool = False) -> list[Record]:
+    def runs(
+        request: Request,
+        response: Response,
+        worktree: str | None = None,
+        include_jobs: bool = False,
+        limit: int = Query(50, ge=1, le=100),
+        cursor: str | None = None,
+    ) -> list[Record]:
         if worktree:
             access.worktree(request.state.user, worktree)
-        return store.runs(request.state.user, worktree, include_jobs)
+        rows = store.runs(
+            request.state.user, worktree, include_jobs, limit=limit + 1, cursor=cursor, summary=True
+        )
+        if len(rows) > limit:
+            response.headers["X-Next-Cursor"] = store.run_cursor(rows[limit - 1])
+        return rows[:limit]
 
     @api.get(
         "/api/worktrees/{worktree}/test-history/{node}",

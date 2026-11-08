@@ -24,26 +24,43 @@ export interface PollingOptions {
  * failures are retried.
  */
 export function usePolling(
-  task: (signal: AbortSignal) => Promise<boolean | void>,
+  task: (signal: AbortSignal) => Promise<boolean | void | number>,
   { interval, delay = 0, enabled = true }: PollingOptions,
 ) {
   useEffect(() => {
     if (!enabled) return;
     const controller = new AbortController();
     let timer: number | undefined;
+    let pending = false;
+    let stopped = false;
+    // Recurring requests pause while the tab is hidden.
+    const paused = () => interval !== undefined && document.hidden;
     const run = async () => {
-      let next: boolean;
+      if (paused() || pending || stopped || controller.signal.aborted) return;
+      pending = true;
+      let next: boolean | void | number;
       try {
-        next = (await task(controller.signal)) !== false;
+        next = await task(controller.signal);
       } catch (e) {
         next = !isFinal(e);
       }
-      if (next && interval !== undefined && !controller.signal.aborted)
-        timer = window.setTimeout(run, interval);
+      pending = false;
+      stopped = next === false || interval === undefined;
+      if (!stopped && !paused() && !controller.signal.aborted)
+        timer = window.setTimeout(
+          run,
+          typeof next === "number" ? next : interval,
+        );
     };
+    const visibility = () => {
+      clearTimeout(timer);
+      if (!paused()) void run();
+    };
+    document.addEventListener("visibilitychange", visibility);
     if (delay) timer = window.setTimeout(run, delay);
     else void run();
     return () => {
+      document.removeEventListener("visibilitychange", visibility);
       controller.abort();
       clearTimeout(timer);
     };

@@ -263,6 +263,9 @@ class Cursor:
         )
         return self
 
+    def fetchmany(self, size: int = 1000) -> list[tuple[Any, ...]]:
+        return [tuple(row) for row in self.database.call("fetchmany", cursor=self.identity, size=size)]
+
     def fetchall(self) -> list[tuple[Any, ...]]:
         return [tuple(row) for row in self.database.call("fetchall", cursor=self.identity)]
 
