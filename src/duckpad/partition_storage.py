@@ -16,6 +16,14 @@ from .datasets import Dataset
 from .util import Problem, clean, digest, literal, qi, uid
 
 
+def run_manifest(run, *, detail=None):
+    """Require the immutable partition evidence retained by a run."""
+    manifest = run.get("partitions", {}).get("manifest")
+    if not manifest:
+        raise Problem("This run has no partition manifest", 404, detail)
+    return manifest
+
+
 class PartitionStorage:
     def __init__(self, store, worktree, environment):
         self.store, self.worktree, self.environment = store, worktree, environment

@@ -10,7 +10,9 @@ Paths below are relative to `src/duckpad/`.
 
 | Modules | Responsibility |
 | --- | --- |
-| `app.py`, `schemas.py`, `auth.py`, `access.py`, `cli.py` | HTTP routes, accounts, authorization, startup and instance process lease |
+| `app.py`, `cli.py` | Application wiring, lifecycle, static interface, startup and instance process lease |
+| `api/`, `schemas.py` | Session, account, admin, project, worktree, Git, Job and result routes; HTTP errors and request dependencies |
+| `auth.py`, `access.py`, `project_view.py` | Accounts, project authorization, membership views and editor snapshots |
 | `services.py` | Service wiring shared by the API, tests and scripts |
 | `models.py`, `store.py`, `migrations/`, `paths.py` | Instance schema, transactions and directory layout |
 | `catalog.py`, `sealing.py`, `secret_references.py` | Connections, environments, secret encryption and server references |
@@ -203,8 +205,18 @@ lineage requests remain active.
 The stable `/api/v1` contract covers Job discovery, launch, waiting, cancellation,
 partitions and text logs. Its schema is `/api/v1/openapi.json`.
 `duckpad run` uses this contract without importing the server or DuckDB.
-Other `/api` routes are internal UI contracts; request shapes live in `app.py`
-and the subsystem routers.
+Other `/api` routes are internal UI contracts; request shapes live in `schemas.py`
+and the `api/` routers. Each router accepts a shared `Context` and declares its
+resource permissions through dependencies in `api/security.py`. Authentication
+and origin checks run before dispatch; blocking authentication and authorization
+use the thread pool. `tests/test_access.py` inventories the access level of every
+internal and automation route.
+
+`api/http.py` owns cookies, error responses, upload admission and security headers.
+The export download route explicitly permits same-origin framing, including its
+JSON errors. Other responses deny framing. `api/deps.py` shares partition query
+selection and requester identity with the automation API. Structural project
+edits use `Projects.transform` to check and write one revision under the same lock.
 
 Protected routes accept session authentication or a bearer API token. API tokens
 use their owner's current permissions and cannot manage SSH keys or perform

@@ -11,8 +11,9 @@ from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from . import schemas
+from .api.deps import requester
 from .execution.runs import UNFINISHED_RUN_STATUSES
-from .partition_storage import PartitionStorage
+from .partition_storage import PartitionStorage, run_manifest
 from .types import Record
 from .util import Problem
 
@@ -242,16 +243,11 @@ def router(jobs, access):
         data: Annotated[LaunchRequest, Body(default_factory=LaunchRequest)],
         idempotency_key: Annotated[str | None, Header(min_length=1, max_length=256)] = None,
     ):
-        requester = {
-            "id": request.state.user["id"],
-            "username": request.state.user["username"],
-            "token_name": request.state.token_name,
-        }
         try:
             run = jobs.launch(
                 slug,
                 schemas.JobLaunch(partitions=data.partitions, partition_execution=data.partition_execution),
-                requester,
+                requester(request),
                 external_trigger=data.trigger.model_dump() if data.trigger else None,
                 idempotency_key=idempotency_key,
                 body=data.model_dump(),
@@ -303,9 +299,7 @@ def router(jobs, access):
         status: str | None = None,
     ):
         run = request.state.automation_record
-        manifest = run.get("partitions", {}).get("manifest")
-        if not manifest:
-            raise Problem("This run has no partition manifest", 404, {"code": "run_not_found"})
+        manifest = run_manifest(run, detail={"code": "run_not_found"})
         return jobs.engine.partitions.page(
             run["worktree"],
             run["environment"],

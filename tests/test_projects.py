@@ -2,6 +2,7 @@ import copy
 import json
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pytest
@@ -569,3 +570,32 @@ def test_example_deletion_removes_owned_settings_and_connection_atomically(servi
     assert bool(store.get("settings", "python:" + project)) is fail
     assert root.exists() is fail
     assert store.get("connection", "sample_" + other["project"])
+
+
+def test_transform_serializes_competing_edits_from_one_revision(services):
+    _, projects, _, _ = services
+    worktree = projects.create("Concurrent transformations")
+    initial = projects.snapshot(worktree["id"])
+    barrier = threading.Barrier(2)
+
+    def edit(label):
+        def transform(bundle):
+            bundle["flow"]["name"] = label
+            return bundle, {"selected": label}
+
+        barrier.wait(timeout=10)
+        try:
+            return projects.transform(worktree["id"], initial["revision"], transform, "Reload before editing")
+        except Problem as error:
+            return error
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(edit, ["First", "Second"]))
+    rejected = [result for result in results if isinstance(result, Problem)]
+    assert len(rejected) == 1 and rejected[0].status == 409
+    accepted = [result for result in results if not isinstance(result, Problem)]
+    assert len(accepted) == 1
+    final = projects.snapshot(worktree["id"])
+    assert final["bundle"]["flow"]["name"] == accepted[0]["selected"]
+    assert final["revision"] == accepted[0]["revision"]
+    assert final["commit"] != initial["commit"]

@@ -96,6 +96,25 @@ class Projects:
         with self.repository(self.get(worktree_id)["project"]):
             yield self.get(worktree_id)
 
+    def activity(self, user: Record) -> list[Record]:
+        visible = self.store.visible_projects(user)
+        latest = self.store.latest_project_runs([project["id"] for project in visible])
+        paths = {worktree["id"]: worktree["path"] for worktree in self.store.all("worktree")}
+        # One git call per project: the dashboard loads this once, without polling.
+        for project in visible:
+            dates = self.git(
+                paths[project["main"]],
+                "for-each-ref",
+                "--sort=-committerdate",
+                "--count=1",
+                "--format=%(committerdate:iso-strict)",
+                "refs/heads",
+                check=False,
+            )
+            project["updated"] = dates.strip() or project["created"]
+            project["last_run"] = latest.get(project["id"])
+        return visible
+
     def identity(self) -> dict[str, str]:
         """The request's account, or the system for changes made outside a request."""
         return current_identity.get() or SYSTEM_IDENTITY
@@ -495,6 +514,25 @@ class Projects:
             if digest(files) == revision:
                 return files
         return None
+
+    def transform(
+        self,
+        worktree: str,
+        revision: str,
+        fn: Callable[[Record], tuple[Record, Record]],
+        message: str,
+        *,
+        context: CommitContext = CommitContext.SAVE,
+    ) -> Record:
+        """Read, validate and transform one revision under the same repository lock."""
+        with self.locked(worktree):
+            snapshot = self.snapshot(worktree)
+            if revision != snapshot["revision"]:
+                raise Problem(message, 409)
+            if snapshot["bundle"] is None:
+                raise Problem("Project files are invalid", 422, snapshot["diagnostics"])
+            bundle, metadata = fn(snapshot["bundle"])
+            return {**self.write(worktree, revision, bundle_to_files(bundle), context), **metadata}
 
     def write(
         self,

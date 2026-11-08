@@ -105,6 +105,7 @@ def test_contents_options_and_response_metadata(instance, excel_cache, format_na
     assert int(response.headers["content-length"]) == len(response.content)
     assert response.headers["cache-control"] == "no-store"
     assert response.headers["x-content-type-options"] == "nosniff"
+    assert response.headers["x-frame-options"] == "SAMEORIGIN"
     original = services.store.paths.exports(worktree["id"], "dev") / filename
     assert response.content == original.read_bytes()
     if format_name == "csv":
@@ -452,3 +453,23 @@ def test_two_nodes_sharing_a_destination_keep_their_own_export(instance):
     run = execute(services, worktree)
     assert download(client, endpoint, run).text.startswith("id,label\n")
     assert download(client, endpoint.rsplit("/", 1)[0] + "/second", run).text == "other_value\n42\n"
+
+
+def test_download_frame_policy_survives_handler_renames_and_errors(instance):
+    services, client = instance
+    worktree, endpoint = create(instance)
+    run = execute(services, worktree)
+    route = next(route for route in client.app.routes if getattr(route, "name", "") == "download_export")
+    route.name = "renamed_attachment_handler"
+    assert download(client, endpoint, run).headers["x-frame-options"] == "SAMEORIGIN"
+    stale = download(client, endpoint, {"id": "missing"})
+    assert stale.status_code == 409
+    assert stale.headers["x-frame-options"] == "SAMEORIGIN"
+    invalid = client.get(endpoint + "/download")
+    assert invalid.status_code == 422
+    assert invalid.headers["x-frame-options"] == "SAMEORIGIN"
+    for path in ("/", "/api/session", endpoint + "?environment=dev", "/api/missing"):
+        assert client.get(path).headers["x-frame-options"] == "DENY"
+    unauthorized = download(client, endpoint, run, headers={"cookie": ""})
+    assert unauthorized.status_code == 401
+    assert unauthorized.headers["x-frame-options"] == "DENY"

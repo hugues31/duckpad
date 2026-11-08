@@ -6,6 +6,7 @@ from pathlib import Path
 from .auth import Auth
 from .catalog import database_files
 from .git.credentials import KEY_KIND
+from .python_policy import get_policy
 from .templates import URI
 from .util import Problem
 
@@ -26,6 +27,35 @@ class Access:
 
     def record(self, project):
         return self.store.get("access", project, {"members": {}, "connections": []})
+
+    def settings(self, project, user):
+        role = self.role(user, project)
+        record = self.record(project)
+        directory = [Auth.public(u) for u in self.store.all("user")]
+        return {
+            "project": self.store.get("project", project),
+            "role": role,
+            "members": [
+                {
+                    "id": u["id"],
+                    "username": u["username"],
+                    "active": u["active"],
+                    "auth_method": u.get("auth_method"),
+                    "role": record["members"][u["id"]],
+                }
+                for u in directory
+                if u["id"] in record["members"]
+            ],
+            "users": [
+                {"id": u["id"], "username": u["username"], "auth_method": u.get("auth_method")}
+                for u in directory
+                if u["active"]
+            ]
+            if role == "admin"
+            else [],
+            "connections": record["connections"],
+            "python": get_policy(self.store, project),
+        }
 
     def require(self, user, project, role="reader"):
         actual = self.role(user, project)
