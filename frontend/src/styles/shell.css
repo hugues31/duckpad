@@ -431,7 +431,14 @@
   /* The scrolling tab bar clips anything drawn outside the tabs. */
   outline-offset: -2px;
 }
+/* On one row the tabs stay whole and the save label gives up its room first. */
+.flow-toolbar[data-stacked="false"] .main-tabs {
+  flex-shrink: 0;
+}
 .flow-toolbar > .row {
+  min-width: 0;
+}
+.flow-toolbar > .row > * {
   flex-shrink: 0;
 }
 .save-status {
@@ -442,28 +449,31 @@
   color: var(--muted);
   margin-right: 8px;
 }
-/* Give navigation and execution controls their own row before they compete for
-   space. Keep the height shared with the canvas and floating panels. */
-@media (min-width: 601px) and (max-width: 1450px) {
-  .app-shell {
-    --toolbar-height: 78px;
-  }
-  .flow-toolbar {
-    flex-wrap: wrap;
-    padding-block: 5px;
-    gap: 3px;
-  }
-  .flow-toolbar > .row {
-    width: 100%;
-    justify-content: flex-end;
-  }
-  .flow-toolbar .partition-selector {
-    margin-right: auto;
-  }
-  .main-tabs {
-    width: 100%;
-    flex-shrink: 0;
-  }
+.flow-toolbar > .row > .save-status {
+  flex-shrink: 1;
+  min-width: 0;
+}
+.save-status-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* FlowToolbar moves the run controls under the tabs when one row cannot hold
+   both; the canvas and floating panels follow the taller toolbar. */
+.workspace-shell:has(> .flow-toolbar[data-stacked="true"]) {
+  --toolbar-height: 78px;
+}
+.flow-toolbar[data-stacked="true"] {
+  flex-wrap: wrap;
+  padding-block: 5px;
+  row-gap: 3px;
+}
+.flow-toolbar[data-stacked="true"] .main-tabs {
+  flex-basis: 100%;
+}
+.flow-toolbar[data-stacked="true"] > .row {
+  margin-left: auto;
 }
 @media (max-width: 1200px) {
   .project-picker select {

@@ -77,8 +77,8 @@ completed nodes and total, with a gently animated progress bar. Partitioned runs
 show completed and failed partitions out of the selected total; failed partitions
 count toward progress but remain identified separately. Preparation uses an
 indeterminate bar until the total is known. The animation respects reduced-motion
-preferences and pauses while stopping. On narrower screens, project tabs and run
-controls occupy separate rows so partition controls do not crowd navigation.
+preferences and pauses while stopping. When the project tabs and run controls
+do not fit on one row, the controls move to a second row instead of hiding tabs.
 The same progress strip appears in a running Job's details on the **Jobs** page.
 
 Results belong to a branch and environment. A change can mark previous results

@@ -11,11 +11,54 @@ import {
   Play,
   Square,
 } from "lucide-react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { useT } from "./i18n";
 import { useShell } from "./shell";
 import type { Diagnostic, Run, Snapshot } from "./types";
 import { sameInput, useLoadedWorktree } from "./worktree";
 import { useAsyncAction } from "./useAsyncAction";
+
+/** Room kept for the save label before the run controls move under the tabs. */
+const SAVE_LABEL_RESERVE = 48;
+
+/**
+ * Stack the run controls under the tabs only when one row cannot hold both.
+ * The save label shrinks instead and is left out of the decision, so autosave
+ * state changes never move the canvas.
+ */
+function useStackedToolbar() {
+  const toolbar = useRef<HTMLDivElement>(null);
+  const [stacked, setStacked] = useState(false);
+  useLayoutEffect(() => {
+    const bar = toolbar.current!;
+    const tabs = bar.querySelector(".main-tabs")!;
+    const links = [...tabs.children];
+    const controls = bar.querySelector(":scope > .row")!;
+    const label = bar.querySelector(".save-status-label")!;
+    const width = (element: Element) => element.getBoundingClientRect().width;
+    const measure = () => {
+      const style = getComputedStyle(bar);
+      const needed =
+        parseFloat(style.paddingLeft) +
+        parseFloat(style.paddingRight) +
+        links.reduce((total, link) => total + width(link), 0) +
+        (links.length - 1) *
+          (parseFloat(getComputedStyle(tabs).columnGap) || 0) +
+        (parseFloat(style.columnGap) || 0) +
+        width(controls) -
+        width(label) +
+        SAVE_LABEL_RESERVE;
+      setStacked(needed > bar.clientWidth + 0.5);
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    // Links keep their natural width, unlike the tab bar once it is stacked.
+    for (const element of [bar, controls, label, ...links])
+      observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+  return { toolbar, stacked };
+}
 
 /** Tabs, save state and run controls of the open working branch. */
 export function FlowToolbar() {
@@ -36,8 +79,9 @@ export function FlowToolbar() {
   } = useLoadedWorktree();
   const dirty = drafts.dirty();
   const saveState = t(saving ? "saving" : dirty ? "unsavedChanges" : "saved");
+  const { toolbar, stacked } = useStackedToolbar();
   return (
-    <div className="flow-toolbar">
+    <div ref={toolbar} className="flow-toolbar" data-stacked={stacked}>
       <ProjectTabs
         project={snapshot.worktree.project}
         worktree={id}

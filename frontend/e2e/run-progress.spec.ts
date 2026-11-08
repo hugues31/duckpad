@@ -43,7 +43,16 @@ test("a Job shows live progress in its details until it finishes", async ({
     }
     return route.fulfill({ json: active ? [active] : [] });
   });
+  // Tabs and run controls that fit a laptop row keep the canvas height.
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto(`/worktrees/${tree.id}/flow`);
+  const toolbar = page.locator(".flow-toolbar");
+  await expect(toolbar).toHaveAttribute("data-stacked", "false");
+  expect((await toolbar.boundingBox())!.height).toBeLessThan(43);
   await page.goto(`/projects/${tree.project}/jobs`);
+  expect(
+    (await page.locator(".project-toolbar").boundingBox())!.height,
+  ).toBeLessThan(43);
   await page.getByRole("button", { name: "Progress Job", exact: true }).click();
   const details = page.locator(".job-details");
   await details.getByRole("button", { name: "Run Job", exact: true }).click();
@@ -87,8 +96,9 @@ async function expectToolbarFits(page: Page, width: number) {
   await expect(page.locator("html")).toHaveJSProperty("scrollWidth", width);
   const tabsBox = (await tabs.boundingBox())!;
   const controlsBox = (await toolbar.locator(":scope > .row").boundingBox())!;
-  if (width <= 1450)
+  if ((await toolbar.getAttribute("data-stacked")) === "true")
     expect(controlsBox.y).toBeGreaterThanOrEqual(tabsBox.y + tabsBox.height);
+  else expect((await toolbar.boundingBox())!.height).toBeLessThan(43);
 }
 
 for (const [language, labels] of [

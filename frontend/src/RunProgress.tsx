@@ -14,6 +14,11 @@ export default function RunProgress({ run }: { run: Run }) {
   const failed = partitions
     ? partitions.failed
     : nodes.filter((node) => node.status === "failed").length;
+  // Nodes blocked by a failure or a cancellation also end their part of the run.
+  const settled = partitions
+    ? completed + failed
+    : nodes.filter((node) => !["pending", "running"].includes(node.status))
+        .length;
   const count = total
     ? `${completed}/${total} ${t(partitions ? "partitions" : "nodes")}`
     : "";
@@ -36,7 +41,7 @@ export default function RunProgress({ run }: { run: Run }) {
     .filter(Boolean)
     .join(" · ");
   const percent = total
-    ? Math.min(100, (100 * (completed + failed)) / total)
+    ? Math.min(100, Math.round((100 * settled) / total))
     : undefined;
   return (
     <div className="run-progress" data-paused={run.status === "canceling"}>
