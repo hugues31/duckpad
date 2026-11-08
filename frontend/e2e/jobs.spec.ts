@@ -2,6 +2,58 @@ import { expect, test } from "@playwright/test";
 import { signIn } from "./helpers";
 import { jobsFlow } from "./jobs-flow";
 
+test("job history displays every loaded summary and requests older pages explicitly", async ({
+  page,
+}) => {
+  await signIn(page);
+  const tree = await (
+    await page.request.post("/api/projects", {
+      data: { name: "Paged job history" },
+    })
+  ).json();
+  const slug = `history-${Date.now()}`;
+  const created = await page.request.post(
+    `/api/projects/${tree.project}/jobs`,
+    {
+      data: {
+        slug,
+        name: "History Job",
+        environment: "dev",
+        target: { kind: "branch", ref: "main" },
+      },
+    },
+  );
+  expect(created.ok()).toBe(true);
+  const job = await created.json();
+  const summaries = Array.from({ length: 51 }, (_, index) => ({
+    id: `run-${index}`,
+    status: "success",
+    started: "2026-01-01T00:00:00Z",
+    environment: "dev",
+    commit: job.resolved_commit,
+  }));
+  const requests: string[] = [];
+  await page.route(`**/api/jobs/${slug}/runs*`, (route) => {
+    const cursor = new URL(route.request().url()).searchParams.get("cursor");
+    requests.push(cursor || "first");
+    return route.fulfill({
+      json: cursor ? summaries.slice(50) : summaries.slice(0, 50),
+      headers: cursor ? {} : { "X-Next-Cursor": "older" },
+    });
+  });
+  await page.goto(`/projects/${tree.project}/jobs`);
+  await page.getByRole("button", { name: "History Job", exact: true }).click();
+  const details = page.locator(".job-details");
+  await expect(details.locator(".history-row")).toHaveCount(50);
+  expect(requests).not.toContain("older");
+  await details.getByRole("button", { name: "Load more", exact: true }).click();
+  await expect(details.locator(".history-row")).toHaveCount(51);
+  await expect(
+    details.getByRole("button", { name: "Load more", exact: true }),
+  ).toHaveCount(0);
+  expect(requests.filter((cursor) => cursor === "older")).toHaveLength(1);
+});
+
 test("admins create and promote tagged Jobs; Operators confirm production runs and inspect read-only results", async ({
   page,
 }) => {

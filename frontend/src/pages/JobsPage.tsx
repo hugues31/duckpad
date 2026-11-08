@@ -425,7 +425,7 @@ function JobDetails({
         </p>
       )}
       {runs.data?.length === 0 && <p className="muted">{t("noHistory")}</p>}
-      {runs.data?.slice(0, 20).map((run) => (
+      {runs.data?.map((run) => (
         <button
           className="history-row"
           key={run.id}
