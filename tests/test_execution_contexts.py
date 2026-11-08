@@ -242,9 +242,9 @@ def test_extension_installation_failure_is_reported_without_secrets(isolated, tm
         create=True,
     )
     worktree = project(isolated, "Extensions", ["custom"])
-    with pytest.raises(Problem, match="Cannot install the extensions of connection Custom data") as error:
+    with pytest.raises(Problem, match="Cannot load the extensions of connection Custom data") as error:
         engine.context(worktree["id"], "dev", create=True)
-    assert error.value.status == 503
+    assert error.value.status == 422
     assert "t0ken" not in str(error.value)
     assert engine.context(worktree["id"], "dev").db is None
 

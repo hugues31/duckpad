@@ -114,7 +114,7 @@ def test_an_administrator_declared_database_works_through_load_table_and_export_
     store, projects, catalog, engine = database_services
     warehouse(catalog, tmp_path)
     worktree = projects.create("Tables", table_bundle())["id"]
-    if engine.access:
+    if engine.enforce_access:
         engine.access.grant_connections(projects.get(worktree)["project"], ["warehouse"])
     # Before any run, a separate process attaches the database to list it.
     listed = engine.connection_objects(worktree, "warehouse", "dev")
@@ -437,9 +437,9 @@ def test_isolated_sessions_install_connector_extensions_in_a_child_first(tmp_pat
         instance.engine.access.grant_connections(worktree["project"], ["warehouse"])
         monkeypatch.setattr(connection_probe, "COMMAND", CRASH)
         # The server used to load the extension itself before starting the worker.
-        with pytest.raises(Problem, match="Cannot install the extensions of connection Warehouse") as crashed:
+        with pytest.raises(Problem, match="Cannot load the extensions of connection Warehouse") as crashed:
             instance.engine.context(worktree["id"], "dev", create=True)
-        assert crashed.value.status == 503
+        assert crashed.value.status == 422
         assert "SIGILL" in str(crashed.value)
     finally:
         instance.close()

@@ -83,7 +83,7 @@ def keyed_project(services, tmp_path):
         "documentation": {},
     }
     worktree = services.projects.create("Rotation", bundle)["id"]
-    if services.engine.access:
+    if services.engine.enforce_access:
         services.engine.access.grant_connections(services.projects.get(worktree)["project"], ["warehouse"])
     run = wait_run(services.store, services.engine.launch(worktree, "dev"), timeout=30)
     assert run["status"] == "success", run

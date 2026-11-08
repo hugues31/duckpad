@@ -63,7 +63,7 @@ def source_bundle(params=None):
 
 def project(instance, bundle, connections=()):
     worktree = instance.projects.create("Spreadsheets", bundle)
-    if instance.engine.access:
+    if instance.engine.enforce_access:
         Auth(instance.store)
         instance.engine.access.own(worktree, {"id": "admin"}, list(connections))
     return worktree["id"]

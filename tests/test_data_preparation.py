@@ -204,7 +204,7 @@ def test_save_reload_replacement_schema_change_failure_and_downstream_export(pre
         "documentation": {},
     }
     worktree = instance.projects.create("Data preparation", bundle)
-    if instance.engine.access:
+    if instance.engine.enforce_access:
         Auth(instance.store)
         instance.engine.access.own(worktree, {"id": "admin"}, ["input_files"])
     wt = worktree["id"]

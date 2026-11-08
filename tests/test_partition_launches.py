@@ -235,7 +235,7 @@ def test_restart_marks_running_keys_interrupted_and_preserves_success(services):
     partial.write_bytes(b"incomplete")
     run["status"] = "running"
     store.put("run", run["id"], run)
-    engine.runs.recover()
+    engine.runs.journal.recover()
     recovered = storage.result("transform", entry["key_hash"])
     assert recovered["attempt"]["status"] == "interrupted"
     assert recovered["attempt"]["external_outcome"] == "unknown"

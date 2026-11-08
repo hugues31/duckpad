@@ -34,7 +34,7 @@ def granted_project(instance, nodes, connections):
             "documentation": {},
         }
     )
-    if not instance.engine.access:
+    if not instance.engine.enforce_access:
         return instance.projects.create("Finance", bundle)
     Auth(instance.store)
     owner = instance.store.get("user", "admin")
@@ -159,7 +159,7 @@ def test_uri_roots_open_their_prefix_in_the_isolated_worker(tmp_path, monkeypatc
                 pass
 
         monkeypatch.setattr(sandbox, "Database", Recorded)
-        monkeypatch.setattr(instance.engine.pool, "_install_extensions", lambda *_: None)
+        monkeypatch.setattr(instance.engine.pool.connections, "check_extensions", lambda *_: None)
         worktree = granted_project(instance, [], ["landing", "lake"])
         instance.engine.context(worktree["id"], "dev", create=True)
         # Remote roots are not local folders: they never need to exist on the server.
