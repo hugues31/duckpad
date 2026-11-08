@@ -56,7 +56,7 @@ def verify(binary):
         for isolated in (False, True):
             mode = "isolated" if isolated else "embedded"
             home = root / mode
-            instance = Services.open(home, enforce_access=isolated)
+            instance = Services.open(home, enforce_access=isolated, isolated=isolated)
             bundle = {
                 "flow": {"nodes": [{"id": "source", "template": "statistics", "params": {}}], "edges": []},
                 "templates": {"statistics": "-- @output result\n" + QUERY + ";"},
@@ -130,14 +130,16 @@ def verify(binary):
             finally:
                 instance.close()
             for _ in range(2):
-                instance = Services.open(home, enforce_access=isolated)
+                instance = Services.open(home, enforce_access=isolated, isolated=isolated)
                 try:
                     assert wait(instance, identity)["status"] == "success"
                     assert instance.engine.preview(identity, "dev", "source")["rows"][0]["values"] == EXPECTED
                 finally:
                     instance.close()
             report["checks"].append(f"{mode}_scheduled_entry_after_two_restarts")
-            destination = Services.open(root / (mode + "-destination"), enforce_access=isolated)
+            destination = Services.open(
+                root / (mode + "-destination"), enforce_access=isolated, isolated=isolated
+            )
             try:
                 imported = destination.projects.create(
                     "Shared statistics", files_to_bundle(read_archive(io.BytesIO(archived)))

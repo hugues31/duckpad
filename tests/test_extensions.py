@@ -22,7 +22,7 @@ def bundle(query="SELECT current_setting('allow_unsigned_extensions') AS allowed
 @pytest.mark.parametrize("isolated", [False, True], ids=["embedded", "isolated"])
 def test_extension_policy_recreates_databases_and_persists_across_restarts(tmp_path, isolated):
     home = tmp_path / "instance"
-    instance = Services.open(home, enforce_access=isolated)
+    instance = Services.open(home, enforce_access=isolated, isolated=isolated)
     try:
         worktree = instance.projects.create("Extension policy", bundle())
         if isolated:
@@ -44,7 +44,7 @@ def test_extension_policy_recreates_databases_and_persists_across_restarts(tmp_p
                 finally:
                     cursor.close()
             instance.close()
-            instance = Services.open(home, enforce_access=isolated)
+            instance = Services.open(home, enforce_access=isolated, isolated=isolated)
             assert instance.engine.extension_settings() == {"allow_unsigned_extensions": enabled}
             run = wait_run(instance.store, instance.engine.launch(identity, "dev"))
             assert run["status"] == "success", run

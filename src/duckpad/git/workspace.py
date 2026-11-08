@@ -567,7 +567,7 @@ class GitWorkspace:
             # The record goes first: an interrupted cleanup leaves files to remove again, never a
             # record whose directory is gone.
             with self.store.transaction():
-                artifacts = self.store.artifact_ids(worktree=remove_id)
+                artifacts = self.store.artifacts(worktree=remove_id)
                 self.store.delete("worktree", remove_id)
             self.projects.discard([remove], artifacts)
             # Git logs each failure; a branch left behind is only listed as closed.

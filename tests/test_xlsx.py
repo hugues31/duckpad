@@ -21,7 +21,7 @@ from duckpad.util import Problem
 
 @pytest.fixture(params=[False, True], ids=["embedded", "isolated"])
 def xlsx_services(tmp_path, excel_cache, request):
-    instance = Services.open(tmp_path / "instance", enforce_access=request.param)
+    instance = Services.open(tmp_path / "instance", enforce_access=request.param, isolated=request.param)
     shutil.copytree(excel_cache, instance.store.home / "extensions")
     yield instance
     instance.close()
@@ -63,7 +63,7 @@ def source_bundle(params=None):
 
 def project(instance, bundle, connections=()):
     worktree = instance.projects.create("Spreadsheets", bundle)
-    if instance.engine.access:
+    if instance.engine.enforce_access:
         Auth(instance.store)
         instance.engine.access.own(worktree, {"id": "admin"}, list(connections))
     return worktree["id"]

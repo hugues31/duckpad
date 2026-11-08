@@ -180,7 +180,7 @@ class Source(dp.Node):
     python_call = WorkerCursor.python
     outputs = []
     statements = []
-    compute_python = engine.runs._compute_python
+    compute_python = engine.runs.nodes.python.compute
     publishing = False
 
     def observe_publication(*args, **kwargs):
@@ -208,7 +208,7 @@ class Source(dp.Node):
             statements.append(query)
         return execute_sql(cursor, query, parameters)
 
-    monkeypatch.setattr(engine.runs, "_compute_python", observe_publication)
+    monkeypatch.setattr(engine.runs.nodes.python, "compute", observe_publication)
     monkeypatch.setattr(WorkerCursor, "python", observe_python)
     monkeypatch.setattr(WorkerCursor, "execute", observe_sql)
     run = wait_run(store, engine.launch(tree["id"], "dev"), timeout=60)

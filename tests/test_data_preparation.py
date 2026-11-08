@@ -141,7 +141,7 @@ def test_preparation_parameters_reference_declared_inputs_and_validate_types():
 
 @pytest.fixture(params=[False, True], ids=["embedded", "isolated"])
 def preparation_services(tmp_path, request):
-    instance = Services.open(tmp_path / "instance", enforce_access=request.param)
+    instance = Services.open(tmp_path / "instance", enforce_access=request.param, isolated=request.param)
     (tmp_path / "data").mkdir()
     instance.catalog.save(
         "connection",
@@ -204,7 +204,7 @@ def test_save_reload_replacement_schema_change_failure_and_downstream_export(pre
         "documentation": {},
     }
     worktree = instance.projects.create("Data preparation", bundle)
-    if instance.engine.access:
+    if instance.engine.enforce_access:
         Auth(instance.store)
         instance.engine.access.own(worktree, {"id": "admin"}, ["input_files"])
     wt = worktree["id"]

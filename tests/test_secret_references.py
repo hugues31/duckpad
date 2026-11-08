@@ -125,7 +125,7 @@ def test_secret_files_stay_in_their_directory(directory, tmp_path, monkeypatch):
 
 @pytest.fixture(params=[False, True], ids=["embedded", "isolated"])
 def instance(tmp_path, request):
-    services = Services.open(tmp_path / "instance", enforce_access=request.param)
+    services = Services.open(tmp_path / "instance", enforce_access=request.param, isolated=request.param)
     try:
         yield services
     finally:

@@ -47,7 +47,7 @@ def verify_loaded(db):
 
 
 def verify_duckpad(home, cache, isolated, allow_unsigned=False, import_file=None):
-    instance = Services.open(home, enforce_access=isolated)
+    instance = Services.open(home, enforce_access=isolated, isolated=isolated)
     try:
         instance.engine.configure_extensions(allow_unsigned)
         if import_file:
@@ -94,7 +94,7 @@ def verify_duckpad(home, cache, isolated, allow_unsigned=False, import_file=None
 
     # Reopen the entire instance twice: success must survive process-local caches.
     for _ in range(2):
-        instance = Services.open(home, enforce_access=isolated)
+        instance = Services.open(home, enforce_access=isolated, isolated=isolated)
         try:
             run = instance.engine.launch(worktree_id, "dev")
             deadline = time.monotonic() + 30

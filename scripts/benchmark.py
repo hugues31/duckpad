@@ -50,7 +50,7 @@ def generate(folder, rows):
 
 
 def worker(folder):
-    instance = Services.open(folder / "instance")
+    instance = Services.open(folder / "instance", isolated=False, enforce_access=False)
     projects, engine = instance.projects, instance.engine
     nodes = [
         {"id": "facts", "template": "load_parquet", "params": {"file": str(folder / "facts.parquet")}},

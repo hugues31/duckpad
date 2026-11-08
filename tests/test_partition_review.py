@@ -49,7 +49,7 @@ def test_retry_does_not_skip_an_export_whose_latest_attempt_failed(services, mon
     )
     worktree = projects.create("Latest export evidence", project)["id"]
     assert join_run(store, engine.launch(worktree, "dev")["id"])["status"] == "success"
-    compute, calls = engine.runs._compute, Counter()
+    compute, calls = engine.runs.nodes.compute, Counter()
 
     def fail(execution, key, tables):
         if key == "export" and execution.partition["key"]["value"] == "b":
@@ -57,14 +57,14 @@ def test_retry_does_not_skip_an_export_whose_latest_attempt_failed(services, mon
             raise Problem("Export destination failed after replacement")
         return compute(execution, key, tables)
 
-    monkeypatch.setattr(engine.runs, "_compute", fail)
+    monkeypatch.setattr(engine.runs.nodes, "compute", fail)
     assert join_run(store, engine.launch(worktree, "dev")["id"])["status"] == "partial_failure"
 
     def count(execution, key, tables):
         calls[key, (execution.partition or {}).get("key", {}).get("value")] += 1
         return compute(execution, key, tables)
 
-    monkeypatch.setattr(engine.runs, "_compute", count)
+    monkeypatch.setattr(engine.runs.nodes, "compute", count)
     run = join_run(store, engine.launch(worktree, "dev", partition_selection={"mode": "failed"})["id"])
     assert run["status"] == "success", run
     assert calls["export", "b"] == 1
@@ -188,7 +188,7 @@ def test_isolated_worker_can_read_but_cannot_overwrite_partition_artifacts(tmp_p
     from duckpad.services import Services
     from duckpad.util import literal
 
-    instance = Services.open(tmp_path / "instance", enforce_access=True)
+    instance = Services.open(tmp_path / "instance", enforce_access=True, isolated=True)
     try:
         ordinary = bundle()
         ordinary["flow"] = {"nodes": [ordinary["flow"]["nodes"][0]], "edges": []}
@@ -272,7 +272,7 @@ def test_older_parallel_key_does_not_copy_an_unneeded_preview(services, monkeypa
     store.put("settings", "sql_resources", {"threads": 2})
     worktree = projects.create("Skip superseded preview writes", bundle())["id"]
     retained = threading.Event()
-    compute, save = engine.runs._compute, PartitionStorage.save
+    compute, save = engine.runs.nodes.compute, PartitionStorage.save
     copied = []
 
     def wait_for_newer(execution, key, tables):
@@ -288,7 +288,7 @@ def test_older_parallel_key_does_not_copy_an_unneeded_preview(services, monkeypa
                 retained.set()
         return result
 
-    monkeypatch.setattr(engine.runs, "_compute", wait_for_newer)
+    monkeypatch.setattr(engine.runs.nodes, "compute", wait_for_newer)
     monkeypatch.setattr(PartitionStorage, "save", saved)
     run = join_run(store, engine.launch(worktree, "dev", partition_execution={"parallelism": 2})["id"])
     assert run["status"] == "success", run
@@ -387,14 +387,14 @@ def test_blocked_collector_status_keeps_its_reason(services, monkeypatch):
     project = bundle()
     project["flow"]["partitions"]["batch"]["execution"] = {"on_error": "continue"}
     worktree = projects.create("Blocked collector reason", project)["id"]
-    compute = engine.runs._compute
+    compute = engine.runs.nodes.compute
 
     def fail(execution, key, tables):
         if key == "transform" and execution.partition["key"]["value"] == "b":
             raise Problem("Conversion failed")
         return compute(execution, key, tables)
 
-    monkeypatch.setattr(engine.runs, "_compute", fail)
+    monkeypatch.setattr(engine.runs.nodes, "compute", fail)
     assert join_run(store, engine.launch(worktree, "dev")["id"])["status"] == "partial_failure"
     status = engine.statuses(worktree, "dev")["nodes"]["collect"]
     assert status["execution_status"] == "blocked"

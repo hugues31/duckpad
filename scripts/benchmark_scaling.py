@@ -289,7 +289,9 @@ def worker(args):
     timings, expected, selected_expected, profiles, postgres = native(
         args.worker, args.rows[0], config, args.source, args.schema, args.timeout, args.profile
     )
-    instance = Services.open(args.worker / ("instance-" + uuid.uuid4().hex))
+    instance = Services.open(
+        args.worker / ("instance-" + uuid.uuid4().hex), isolated=False, enforce_access=False
+    )
     engine = instance.engine
     engine.configure_sql_resources(config)
     try:

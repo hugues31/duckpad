@@ -14,7 +14,7 @@ from duckpad.services import Services
 
 @pytest.fixture(params=[False, True], ids=["embedded", "isolated"])
 def instance(tmp_path, excel_cache, request):
-    services = Services.open(tmp_path / "instance", enforce_access=request.param)
+    services = Services.open(tmp_path / "instance", enforce_access=request.param, isolated=request.param)
     shutil.copytree(excel_cache, services.store.home / "extensions")
     yield services
     services.close()
@@ -34,7 +34,7 @@ def granted_project(instance, nodes, connections):
             "documentation": {},
         }
     )
-    if not instance.engine.access:
+    if not instance.engine.enforce_access:
         return instance.projects.create("Finance", bundle)
     Auth(instance.store)
     owner = instance.store.get("user", "admin")
@@ -121,7 +121,7 @@ def test_a_custom_storage_type_works_as_a_location(instance, tmp_path):
 
 
 def test_uri_roots_open_their_prefix_in_the_isolated_worker(tmp_path, monkeypatch):
-    instance = Services.open(tmp_path / "instance", enforce_access=True)
+    instance = Services.open(tmp_path / "instance", enforce_access=True, isolated=True)
     try:
         instance.catalog.save(
             "connector",
@@ -159,7 +159,7 @@ def test_uri_roots_open_their_prefix_in_the_isolated_worker(tmp_path, monkeypatc
                 pass
 
         monkeypatch.setattr(sandbox, "Database", Recorded)
-        monkeypatch.setattr(instance.engine.pool, "_install_extensions", lambda *_: None)
+        monkeypatch.setattr(instance.engine.pool.connections, "check_extensions", lambda *_: None)
         worktree = granted_project(instance, [], ["landing", "lake"])
         instance.engine.context(worktree["id"], "dev", create=True)
         # Remote roots are not local folders: they never need to exist on the server.

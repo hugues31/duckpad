@@ -1,145 +1,28 @@
-"""Run admission, immutable launch snapshots, node execution and output publication."""
+"""Run lifecycle and orchestration of execution services."""
 
 from __future__ import annotations
 
-import copy
-import shutil
 import threading
 import time
-import zipfile
 from contextlib import suppress
 from contextvars import copy_context
-from dataclasses import dataclass, field
-from pathlib import Path
-from typing import Any, cast
+from typing import cast
 
 import duckdb
 
-from .. import connection_probe, partitions, project_extensions, value_sources, variables
-from ..bundle import files_to_bundle
 from ..catalog import Catalog, redact
-from ..components import expand, expand_for, in_subtree
-from ..data_preparation import failure_hint
-from ..datasets import Context, Dataset
-from ..graph import connection_references, reachable, topological
-from ..materialize import (
-    collected_pass_through,
-    drop_dataset,
-    drop_relations,
-    plan_materialization,
-    publish_view,
-)
-from ..node_names import node_name_parts
-from ..partition_filters import filter_statements
 from ..partition_runs import PartitionRun
-from ..partition_storage import PartitionStorage
 from ..projects import Projects
-from ..python_policy import get_policy
-from ..sql_errors import SqlSourceError
 from ..store import Store
-from ..templates import compile_template
-from ..types import Connections, Record, RunToken, SQLCursor
-from ..util import Problem, now, qi, uid
-from ..value_types import base_type
-from .contexts import ContextPool, cancel_lineage, interrupt, wait_for_readers
+from ..types import Record, RunToken
+from ..util import Problem, now, uid
+from .contexts import ContextPool, interrupt
 from .exports import Exports
 from .fingerprints import Fingerprints
-from .messages import execute_messages, execute_test, result_counts
-
-UNFINISHED_RUN_STATUSES = ("preparing", "running", "canceling")
-
-
-@dataclass
-class Admission:
-    """Definitions and options of a launch, checked before any setup."""
-
-    bundle: Record
-    nodes: dict[str, Record]
-    edges: list[Record]
-    boundaries: Record
-    plan: Record
-    selection: Record | None
-    policy: Record | None
-    scope: set[str]
-    python: bool
-
-
-def blocking_error(node: Record) -> str | None:
-    """A node error that refuses a targeted run; values calculated during the run come later."""
-    deferred = any(
-        binding.get("source") == "node" and "error" in binding
-        for binding in [*node.get("variables", {}).values(), *variables.expression_bindings(node)]
-    ) or str(node.get("error", "")).startswith("Partition values not calculated")
-    return None if deferred or not node.get("error") else str(node["error"])
-
-
-@dataclass
-class Execution:
-    """State of one accepted run, owned by its worker thread."""
-
-    token: RunToken
-    context: Context
-    run: Record
-    nodes: dict[str, Record]
-    edges: list[Record]
-    order: list[str]
-    captured: Connections
-    secrets: list[str]
-    fingerprints: dict[str, str]
-    bundle: Record = field(default_factory=dict)
-    sources: Record = field(default_factory=dict)
-    values: Record = field(default_factory=dict)
-    value_phase: set[str] = field(default_factory=set)
-    validation_errors: Record = field(default_factory=dict)
-    cursor: SQLCursor | None = None
-    prepared: dict[str, Exception | None] = field(default_factory=dict)
-    # Parallel partition keys share one database: each connection is attached once.
-    preparing: threading.Lock = field(default_factory=threading.Lock)
-    published: dict[str, dict[str, Dataset]] = field(default_factory=dict)
-    partition_plan: Record = field(default_factory=dict)
-    partition: Record | None = None
-    schema_only: bool = False
-
-    @property
-    def canceled(self) -> bool:
-        return self.token["cancel"].is_set()
-
-
-def run_outcome(statuses: set[str], canceled: bool) -> str:
-    if canceled:
-        return "canceled"
-    failed = bool(statuses & {"failed", "blocked"})
-    if failed and "success" in statuses:
-        return "partial_failure"
-    return "failed" if failed else "success"
-
-
-def failure_message(error: BaseException, node: Record, secrets: list[str]) -> str:
-    """The error of a node's code as displayed: secrets masked, with guidance for its parameters."""
-    types = {base_type(p["type"]) for p in node["parsed"]["parameters"]}
-    return project_extensions.explain_missing(redact(str(error), secrets)) + failure_hint(types)
-
-
-def launch_scope(
-    nodes: dict[str, Record], edges: list[Record], target: str | None = None, ancestors: bool = False
-) -> set[str]:
-    """The nodes a launch computes: the whole project, or a node subtree and its upstream nodes.
-
-    `ancestors` computes only the upstream nodes, which a node's preview reads.
-    """
-    if not target:
-        if ancestors:
-            raise Problem("Choose the node whose ancestors to run", 422)
-        return set(nodes)
-    scope = {n for n in nodes if in_subtree(n, target)}
-    if not scope:
-        raise Problem("Node not found", 404)
-    upstream = reachable(scope, edges, upstream=True)
-    if not ancestors:
-        return upstream
-    if not upstream - scope:
-        raise Problem("This node has no upstream nodes to run", 422)
-    return upstream - scope
+from .journal import RunJournal, execution_outcome
+from .launches import LaunchPlanner
+from .nodes import NodeExecutor
+from .values import RunValues
 
 
 class Runner:
@@ -153,43 +36,18 @@ class Runner:
         fingerprints: Fingerprints,
         lock: threading.RLock,
         active: dict[str, RunToken],
-        *,
-        isolated: bool,
     ) -> None:
         self.store, self.projects, self.catalog = store, projects, catalog
         self.pool, self.exports, self.fingerprints = pool, exports, fingerprints
-        # The engine lock and the active run tokens by worktree that it guards.
         self.lock, self.active = lock, active
-        self.isolated = isolated
+        self.journal = RunJournal(store, pool, exports, active)
+        self.planner = LaunchPlanner(
+            store, projects, catalog, pool, exports, fingerprints, lock, self.journal
+        )
+        self.nodes = NodeExecutor(store, projects, pool, exports, fingerprints, lock, self.journal)
+        self.values = RunValues(fingerprints, lock, self.journal)
         self.threads: list[threading.Thread] = []
-        self.partition_runs: dict[str, PartitionRun] = {}
         self.closing = False
-
-    def recover(self) -> None:
-        """Close runs left unfinished by a stopped backend; nothing is replayed."""
-        for run in self.store.runs_with_statuses(UNFINISHED_RUN_STATUSES):
-            run["status"] = "interrupted"
-            run["error"] = (
-                "The backend stopped before completion was confirmed. Manual recomputation is required."
-            )
-            for node in run["nodes"].values():
-                if node["status"] in ("pending", "running"):
-                    if node["status"] == "running" and node.get("writes_external"):
-                        node["external_outcome"] = "unknown"
-                    node["status"] = "interrupted"
-            if manifest := run.get("partitions", {}).get("manifest"):
-                storage = PartitionStorage(self.store, run["worktree"], run["environment"])
-                for entry in storage.entries(manifest):
-                    for key, state in storage.attempts(run["id"], entry["partition_id"]).items():
-                        if state["status"] in ("pending", "running"):
-                            state["status"] = "interrupted"
-                            if state.get("writes_external"):
-                                state["external_outcome"] = "unknown"
-                            storage.attempt(run["id"], entry["partition_id"], key, state)
-                            storage.record(key, entry, state)
-                for partial in storage.temporary.glob("partition_*.partial"):
-                    partial.unlink(missing_ok=True)
-            self._persist(run, [])
 
     def launch(
         self,
@@ -209,47 +67,35 @@ class Runner:
         record = self.projects.get(worktree)
         if record.get("read_only") and job is None:
             raise Problem("Launch this worktree from its Job", 403)
-        admission = self._check_launch(
+        admission = self.planner.check_launch(
             worktree, environment, target, entry_point, partition_selection, partition_execution, ancestors
         )
         token: RunToken = {"id": uid("run_"), "cancel": threading.Event(), "cursor": None}
-        run: Record = {
-            "id": token["id"],
-            "worktree": worktree,
-            "project": record["project"],
-            "branch": record["branch"],
-            "environment": environment,
-            "commit": "",
-            "revision": "",
-            "scope": target or "project",
-            "scope_name": node_name_parts(admission.bundle, target) if target else [],
-            "trigger": "manual",
-            "entry_point": entry_point,
-            "status": "preparing",
-            "started": now(),
-            "nodes": {},
-            "variables": {},
-            "connections": {},
-            "requester": copy.deepcopy(requester),
-            **({"ancestors": True} if ancestors else {}),
-            **({"partition_selection": admission.selection} if admission.selection else {}),
-            **({"partition_execution": admission.policy} if admission.policy else {}),
-        }
-        if job is not None:
-            run.update(trigger="job", job=copy.deepcopy(job), tag=job.get("tag"))
-            run["commit"] = job["commit"]
-            run["external_trigger"] = copy.deepcopy(external_trigger)
+        run = self.planner.pending(
+            record,
+            admission,
+            token,
+            worktree,
+            environment,
+            target,
+            entry_point,
+            requester,
+            job,
+            external_trigger,
+            ancestors,
+        )
         # Reservation, visible record, and thread registration are atomic with cancellation/close.
         with self.lock:
             if self.closing:
                 raise Problem("The execution service is shutting down", 503)
-            self._admit(worktree, environment, token)
+            self.planner.reserve(worktree, environment, token)
+
             try:
-                self._persist(run, [], idempotency=idempotency)
+                self.journal.persist(run, [], idempotency=idempotency)
                 thread = threading.Thread(
                     target=copy_context().run,
                     args=(
-                        self._start,
+                        self._execute,
                         token,
                         run,
                         target,
@@ -266,401 +112,6 @@ class Runner:
                 self.active.pop(worktree, None)
                 raise
         return cast(Record, self.store.get("run", token["id"]))
-
-    def _check_launch(
-        self,
-        worktree: str,
-        environment: str,
-        target: str | None,
-        entry_point: str,
-        selection: Record | None,
-        policy: Record | None,
-        ancestors: bool,
-    ) -> Admission:
-        """Refuse an invalid request before recording a run, without starting any setup.
-
-        Preparation checks the definitions again once pending saves are flushed.
-        """
-        self.catalog.environment(environment)
-        snapshot = self.projects.snapshot(worktree, committed=True)
-        admission = self._validate(
-            snapshot, worktree, environment, target, entry_point, selection, policy, ancestors
-        )
-        self._check_conflicts(snapshot["conflicts"], admission.scope, environment)
-        if target:
-            values = self.pool.computed(worktree, environment, admission.bundle)
-            nodes, _, _ = expand_for(admission.bundle, environment, computed=values)
-            for key in admission.scope:
-                try:
-                    self.pool.capture(worktree, connection_references(nodes[key]), environment)
-                except Problem as error:
-                    raise Problem(str(error), 422) from error
-                if error := blocking_error(nodes[key]):
-                    raise Problem(error, 422)
-        return admission
-
-    def _validate(
-        self,
-        snapshot: Record,
-        worktree: str,
-        environment: str,
-        target: str | None,
-        entry_point: str,
-        partition_selection: Record | None,
-        partition_execution: Record | None,
-        ancestors: bool,
-    ) -> Admission:
-        """Refuse definitions, options or settings a launch cannot run; reads no worker state."""
-        if snapshot["bundle"] is None:
-            raise Problem(
-                "Project files are invalid; correct them before execution", 422, snapshot["diagnostics"]
-            )
-        bundle = copy.deepcopy(snapshot["bundle"])
-        nodes, edges, boundaries = expand(bundle, tolerant=True)
-        plan = partitions.plan(bundle, nodes, edges, boundaries)
-        # Refuse invalid options before marking any result stale.
-        selection, policy = partitions.launch_options(
-            plan.get("dimension"), partition_selection, partition_execution
-        )
-        scope = self._partition_scope(
-            worktree, environment, nodes, edges, launch_scope(nodes, edges, target, ancestors), plan
-        )
-        missing_inputs = []
-        for diagnostic in snapshot["diagnostics"]:
-            if diagnostic.get("code") != "missing_input":
-                continue
-            # A component input names its instance; the run needs the node behind it.
-            exposed = boundaries.get(diagnostic["node"], {}).get("inputs", {}).get(diagnostic["port"])
-            if (exposed[0] if exposed else diagnostic["node"]) in scope:
-                missing_inputs.append(diagnostic)
-        if entry_point == "ui" and missing_inputs:
-            raise Problem(missing_inputs[0]["message"], 422, missing_inputs)
-        python = any(nodes[key].get("language") == "python" for key in scope)
-        if python and not get_policy(self.store, snapshot["worktree"]["project"]).get("enabled"):
-            raise Problem("Python execution is disabled; ask an instance administrator to enable it", 403)
-        return Admission(bundle, nodes, edges, boundaries, plan, selection, policy, scope, python)
-
-    @staticmethod
-    def _check_canceled(token: RunToken) -> None:
-        if token["cancel"].is_set():
-            raise Problem("Execution canceled", 409)
-
-    def _start(
-        self,
-        token: RunToken,
-        run: Record,
-        target: str | None,
-        partition_selection: Record | None,
-        partition_execution: Record | None,
-        ancestors: bool,
-    ) -> None:
-        from ..python_environment import preparation_cancellation
-
-        started = time.monotonic()
-        try:
-            with preparation_cancellation(token["cancel"]):
-                self._check_canceled(token)
-                execution = self._prepare(
-                    token,
-                    run["worktree"],
-                    run["environment"],
-                    target,
-                    run["entry_point"],
-                    partition_selection,
-                    partition_execution,
-                    ancestors,
-                )
-                self._check_canceled(token)
-            for key in ("started", "requester", "trigger", "job", "tag", "external_trigger"):
-                if key in run:
-                    execution.run[key] = run[key]
-            self._persist(execution.run, execution.secrets)
-        except Exception as error:
-            context = self.pool.find(run["worktree"], run["environment"])
-            secrets = context.secrets if context else []
-            with self.lock:
-                try:
-                    run.update(
-                        status="canceled" if token["cancel"].is_set() else "failed",
-                        error=redact(str(error), secrets),
-                        finished=now(),
-                        duration=time.monotonic() - started,
-                    )
-                    if isinstance(error, Problem):
-                        run["error_detail"] = error.detail
-                    self._persist(run, secrets)
-                finally:
-                    self.active.pop(run["worktree"], None)
-            return
-        self._execute(execution)
-
-    def _partition_scope(
-        self,
-        worktree: str,
-        environment: str,
-        nodes: dict[str, Record],
-        edges: list[Record],
-        scope: set[str],
-        plan: Record,
-    ) -> set[str]:
-        """A targeted run in a zone also calculates the key list while none is retained."""
-        source, dimension = plan.get("source"), plan.get("dimension")
-        if (
-            not source
-            or not dimension
-            or source["node"] in scope
-            or not any(nodes[k].get("partitioned") or nodes[k].get("partition_collect_inputs") for k in scope)
-            or PartitionStorage(self.store, worktree, environment).manifest(
-                signature=partitions.signature(dimension)
-            )
-        ):
-            return scope
-        return scope | reachable({source["node"]}, edges, upstream=True)
-
-    def _admit(self, worktree: str, environment: str, token: RunToken) -> None:
-        """Reserve the worktree for a run; a busy worktree refuses it instead of queuing it."""
-        with self.lock:
-            self.catalog.environment(environment)
-            if worktree in self.active:
-                raise Problem(
-                    "This worktree already has an active execution. Wait or stop it before running again.",
-                    409,
-                    {"run": self.active[worktree]["id"]},
-                )
-            self.active[worktree] = token
-
-    def _prepare(
-        self,
-        token: RunToken,
-        worktree: str,
-        environment: str,
-        target: str | None,
-        entry_point: str,
-        partition_selection: Record | None = None,
-        partition_execution: Record | None = None,
-        ancestors: bool = False,
-    ) -> Execution:
-        """Capture the committed definitions and connection settings the run will use."""
-        self._check_canceled(token)
-        snapshot = self.projects.flush(worktree)
-        self._check_canceled(token)
-        admission = self._validate(
-            snapshot,
-            worktree,
-            environment,
-            target,
-            entry_point,
-            partition_selection,
-            partition_execution,
-            ancestors,
-        )
-        bundle, partition_plan, needs_python = admission.bundle, admission.plan, admission.python
-        sources = value_sources.sources(bundle, admission.nodes, admission.boundaries)
-        phase, validation_errors = value_sources.dependencies(admission.nodes, admission.edges, sources)
-        phase |= partition_plan["value_phase"]
-        if needs_python:
-            from ..python_environment import lock_files
-
-            settings = get_policy(self.store, snapshot["worktree"]["project"])
-            files = snapshot["files"]
-            locked = lock_files(
-                files,
-                self.store.home,
-                read_only=bool(snapshot["worktree"].get("read_only")),
-                project=snapshot["worktree"]["project"],
-                allow_builds=settings.get("allow_builds", False),
-            )
-            self._check_canceled(token)
-            if locked != files.get("uv.lock"):
-                snapshot = self.projects.write(
-                    worktree,
-                    snapshot["revision"],
-                    {**files, "uv.lock": locked},
-                    message="build(project): lock Python dependencies",
-                )
-        if needs_python:
-            bundle["python_lock"] = snapshot["files"].get("uv.lock")
-        requirements = project_extensions.enabled(bundle.get("extensions"))
-        self._check_canceled(token)
-        context = self.pool.restart_for_run(
-            worktree, environment, requirements=requirements, python=needs_python
-        )
-        self._check_canceled(token)
-        self.pool.renew(context, python=needs_python)
-        self._check_canceled(token)
-        if getattr(context.db, "closed", False):
-            # The results could not move to a worker with the new connections or environment.
-            context = self.pool.restart_for_run(
-                worktree, environment, requirements=requirements, python=needs_python
-            )
-        self._check_canceled(token)
-        values = self.pool.computed(worktree, environment, bundle)
-        nodes, edges, _ = expand_for(bundle, environment, computed=values)
-        scope = self._partition_scope(
-            worktree, environment, nodes, edges, launch_scope(nodes, edges, target, ancestors), partition_plan
-        )
-        order = [n for n in topological(nodes, edges, tolerant=True) if n in scope]
-        self._check_conflicts(snapshot["conflicts"], scope, environment)
-        captured, secrets = self._capture_connections(context, nodes, scope, strict=bool(target))
-        fingerprints = self.fingerprints.of(bundle, environment, captured, values)
-        affected = reachable(scope, edges, upstream=False)
-        self.exports.mark_stale(worktree, environment, affected - scope)
-        with context.lock:
-            cancel_lineage(context, affected)
-            for dataset in context.datasets.values():
-                if dataset.node in affected:
-                    dataset.status = "stale"
-                    dataset.value_stale = False
-        run = {
-            "id": token["id"],
-            "worktree": worktree,
-            "project": snapshot["worktree"]["project"],
-            "branch": snapshot["worktree"]["branch"],
-            "environment": environment,
-            "commit": snapshot["commit"],
-            "revision": snapshot["revision"],
-            "scope": target or "project",
-            "scope_name": node_name_parts(bundle, target) if target else [],
-            **({"ancestors": True} if ancestors else {}),
-            "trigger": "manual",
-            "entry_point": entry_point,
-            "status": "preparing",
-            "started": now(),
-            "nodes": {
-                n: {
-                    "status": "pending",
-                    "label": nodes[n]["display_name"],
-                    "writes_external": nodes[n]["parsed"]["writes_external"],
-                    "fingerprint": fingerprints[n],
-                    "results": [],
-                    **variables.run_usages(nodes[n]),
-                }
-                for n in order
-            },
-            "variables": variables.used(bundle, nodes, scope, environment, values),
-            "connections": {
-                ref: {"definition": c["definition"], "settings": c["settings"], "name": c["name"]}
-                for ref, c in captured.items()
-            },
-            "definitions": bundle["templates"],
-            "node_sql": bundle.get("node_sql", {}),
-            "components": bundle["components"],
-            "flow": bundle["flow"],
-            "variable_declarations": bundle.get("variables"),
-            "extensions": bundle.get("extensions"),
-        }
-        if admission.selection:
-            run["partition_selection"] = admission.selection
-        if admission.policy:
-            run["partition_execution"] = admission.policy
-        for name, source in sources.items():
-            if source.get("node") in scope:
-                run["variables"][name] = {
-                    "type": source["type"],
-                    "from": source["from"],
-                    "source": "node",
-                    "state": "pending",
-                    "resolution": "calculated",
-                }
-        return Execution(
-            token,
-            context,
-            run,
-            nodes,
-            edges,
-            order,
-            captured,
-            secrets,
-            fingerprints,
-            bundle=bundle,
-            sources=sources,
-            values=values,
-            value_phase=phase & scope,
-            validation_errors=validation_errors,
-            partition_plan=partition_plan,
-        )
-
-    def scope_variables(
-        self, worktree: str, environment: str, target: str | None = None, ancestors: bool = False
-    ) -> Record:
-        """Variables a launch would use, with their values and sources in this environment."""
-        self.catalog.environment(environment)
-        snapshot = self.projects.snapshot(worktree)
-        if snapshot["bundle"] is None:
-            return {}
-        bundle = snapshot["bundle"]
-        values = self.pool.computed(worktree, environment, bundle)
-        nodes, edges, boundaries = expand_for(bundle, environment, computed=values)
-        plan = partitions.plan(bundle, nodes, edges, boundaries)
-        scope = self._partition_scope(
-            worktree, environment, nodes, edges, launch_scope(nodes, edges, target, ancestors), plan
-        )
-        result = variables.used(bundle, nodes, scope, environment, values)
-        for name, source in value_sources.sources(bundle, nodes, boundaries).items():
-            if source.get("node") in scope:
-                result[name] = {
-                    "type": source["type"],
-                    "from": source["from"],
-                    "source": "node",
-                    "state": "pending",
-                    "resolution": "calculated",
-                }
-        dimension = partitions.definition(bundle["flow"])
-        if dimension:
-            manifest = PartitionStorage(self.store, worktree, environment).manifest(
-                signature=partitions.signature(dimension)
-            )
-            source = plan.get("source")
-            pending = bool(source and source["node"] in scope)
-            result["$partition"] = {
-                "type": dimension["type"],
-                "from": source.get("from") if source else dimension["values"],
-                "source": "node",
-                "state": "pending" if pending else "ready" if manifest else "unavailable",
-                "resolution": "calculated" if pending else "retained",
-                "manifest": manifest["id"] if manifest else None,
-                "count": manifest["count"] if manifest else None,
-            }
-        return result
-
-    def _check_conflicts(self, conflicts: list[Record], scope: set[str], environment: str) -> None:
-        """Reject a run when a pending edit conflict would change a node in its scope."""
-        for conflict in conflicts:
-            try:
-                current = self.fingerprints.of(files_to_bundle(conflict["current"]), environment)
-                proposed = self.fingerprints.of(files_to_bundle(conflict["proposal"]), environment)
-                computation_conflict = any(current.get(n) != proposed.get(n) for n in scope)
-            except Exception:
-                computation_conflict = True
-            if computation_conflict:
-                raise Problem("Resolve computation-affecting edit conflicts before running", 409)
-
-    def _capture_connections(
-        self, context: Context, nodes: dict[str, Record], scope: set[str], strict: bool
-    ) -> tuple[Connections, list[str]]:
-        """Freeze connection settings for the scope; invalid ones block their nodes (or the run if strict).
-
-        An isolated run uses the settings its worker attached, which its fingerprints then describe.
-        """
-        captured: Connections = {}
-        secrets: list[str] = list(context.secrets)
-        for key in scope:
-            node = nodes[key]
-            references = connection_references(node)
-            try:
-                if self.isolated and all(r in context.connections for r in references):
-                    captured.update({r: context.connections[r] for r in references})
-                else:
-                    values, hidden = self.pool.capture(context.worktree, references, context.environment)
-                    captured.update(values)
-                    secrets.extend(hidden)
-            except Problem as error:
-                node["error"] = str(error)
-                if strict:
-                    raise Problem(str(error), 422) from error
-            if strict and (error := blocking_error(node)):
-                raise Problem(error, 422)
-        return captured, secrets
 
     def cancel(self, run_id: str) -> Record:
         run = self.store.get("run", run_id)
@@ -682,45 +133,20 @@ class Runner:
                 self.store.put("run", run_id, run)
         return cast(Record, run)
 
-    def _persist(self, run: Record, secrets: list[str], *, idempotency: Record | None = None) -> None:
-        if run.get("partition_attempt"):
-            if run["partition_attempt"] != "empty":
-                self.partition_runs[run["id"]].persist(run)
-            return
-        run["warning_count"] = sum(
-            result_counts(state.get("results", []))["warning"] for state in run["nodes"].values()
+    def _execute(
+        self,
+        token: RunToken,
+        pending: Record,
+        target: str | None,
+        partition_selection: Record | None,
+        partition_execution: Record | None,
+        ancestors: bool,
+    ) -> None:
+        execution = self.planner.start(
+            token, pending, target, partition_selection, partition_execution, ancestors
         )
-
-        def sanitize(value: Any) -> Any:
-            if isinstance(value, str):
-                return redact(value, secrets)
-            if isinstance(value, dict):
-                return {key: sanitize(item) for key, item in value.items()}
-            if isinstance(value, list):
-                return [sanitize(item) for item in value]
-            return value
-
-        with self.store.transaction():
-            # Check inside the write, which serializes with a cancellation request's own update.
-            token = self.active.get(run["worktree"])
-            if (
-                token
-                and token["id"] == run["id"]
-                and token["cancel"].is_set()
-                and run["status"] in ("preparing", "running")
-            ):
-                run["status"] = "canceling"
-            self.store.put("run", run["id"], sanitize(run))
-            if idempotency is not None:
-                self.store.remember_job_launch(idempotency, run["id"], time.time())
-            replaced = self.exports.record(run)
-        self.exports.discard(replaced)
-        context = self.pool.find(run["worktree"], run["environment"])
-        if context:
-            with context.lock:
-                context.node_status.update({key: state["status"] for key, state in run["nodes"].items()})
-
-    def _execute(self, execution: Execution) -> None:
+        if execution is None:
+            return
         run, secrets, context = execution.run, execution.secrets, execution.context
         started = time.monotonic()
         try:
@@ -728,37 +154,29 @@ class Runner:
             execution.cursor = context.db.cursor()
             execution.token["cursor"] = execution.cursor
             run["status"] = "running"
-            self._persist(run, secrets)
+            self.journal.persist(run, secrets)
             self.pool.forget_removed(context, execution.nodes)
             # Only runs that calculate values report phases, so ordinary runs show no progress label.
             if execution.value_phase:
                 run["phase"] = "values"
             for key, error in execution.validation_errors.items():
                 execution.nodes[key]["error"] = error["error"]
-            self._execute_nodes(execution, [k for k in execution.order if k in execution.value_phase])
-            self._freeze_values(execution)
+            self.nodes.execute_nodes(execution, [k for k in execution.order if k in execution.value_phase])
+            self.values.freeze(execution)
             if execution.value_phase:
                 run["phase"] = "consumers"
-            self._persist(run, secrets)
+            self.journal.persist(run, secrets)
             if (
                 any(execution.nodes[k].get("partitioned") for k in execution.order)
                 or (execution.partition_plan.get("source") or {}).get("node") in execution.order
             ):
-                controller = self.partition_runs[run["id"]] = PartitionRun(self, execution)
+                controller = self.journal.partitions[run["id"]] = PartitionRun(self, execution)
                 controller.execute()
             else:
-                self._execute_nodes(execution, [k for k in execution.order if k not in execution.value_phase])
-            statuses = {n["status"] for n in run["nodes"].values()}
-            if any(v.get("resolution") == "calculated" and v.get("error") for v in run["variables"].values()):
-                statuses.add("failed")
-            run["status"] = run_outcome(statuses, execution.canceled)
-            partition_summary = run.get("partitions", {})
-            if (
-                partition_summary.get("selected")
-                and not execution.canceled
-                and (partition_summary.get("failed") or partition_summary.get("not_started"))
-            ):
-                run["status"] = "partial_failure" if partition_summary.get("completed") else "failed"
+                self.nodes.execute_nodes(
+                    execution, [k for k in execution.order if k not in execution.value_phase]
+                )
+            run["status"] = execution_outcome(execution)
         except Exception as error:
             run.update(
                 status="canceled" if execution.canceled else "failed",
@@ -778,611 +196,10 @@ class Runner:
                     if execution.canceled:
                         run["status"] = "canceled"
                     run.update(finished=now(), duration=time.monotonic() - started)
-                    self._persist(run, secrets)
+                    self.journal.persist(run, secrets)
                 finally:
                     self.active.pop(context.worktree, None)
-                    self.partition_runs.pop(run["id"], None)
-
-    def _execute_nodes(self, execution: Execution, order: list[str]) -> None:
-        for key in order:
-            state = execution.run["nodes"][key]
-            skipped = self._skip_reason(execution, key)
-            if skipped:
-                state.update(skipped)
-                if "error" in skipped:
-                    with execution.context.lock:
-                        execution.context.errors[key] = skipped["error"]
-                        execution.context.result_runs[key] = execution.run["id"]
-                self._persist(execution.run, execution.secrets)
-            else:
-                self._run_node(execution, key)
-
-    def _freeze_values(self, execution: Execution) -> None:
-        """Publish all successful extractions at the phase boundary, then bind consumers."""
-        if not execution.sources:
-            return
-        run, context = execution.run, execution.context
-        extracted = {}
-        for name, source in execution.sources.items():
-            key = source.get("node")
-            if key not in execution.value_phase:
-                continue
-            upstream = reachable({key}, execution.edges, upstream=True)
-            invalid = next(
-                (execution.validation_errors[n] for n in upstream if n in execution.validation_errors), None
-            )
-            if invalid:
-                entry = value_sources.unavailable(source, invalid["code"], invalid["error"])
-            elif run["nodes"][key]["status"] != "success" or execution.canceled:
-                entry = value_sources.unavailable(
-                    source, "value_source_failed", f"{name}: source {source['from']['node']} failed"
-                )
-            else:
-                dataset = execution.published[key].get(source["port"])
-                entry = (
-                    value_sources.extract(execution.cursor, dataset, source)
-                    if dataset
-                    else value_sources.unavailable(
-                        source, "value_source_failed", "Source output was not published"
-                    )
-                )
-            if "error" in entry:
-                origin = source["from"]
-                entry["error"] = (
-                    f"{name}: {origin['node']}.{origin['port']}.{origin['column']}: {entry['error']}"
-                )
-            entry.update(resolution="calculated", producer_run=run["id"], producer_commit=run["commit"])
-            extracted[name] = entry
-        with self.lock, context.lock:
-            if execution.canceled:
-                for entry in extracted.values():
-                    entry.pop("value", None)
-                    entry.update(
-                        state="unavailable", code="value_source_failed", error="Value phase canceled"
-                    )
-            execution.values.update(extracted)
-            run["variables"].update(extracted)
-            # Persist evidence before any value becomes available to subsequent requests.
-            self._persist(run, execution.secrets)
-            if not execution.canceled:
-                for name, entry in extracted.items():
-                    signature = value_sources.identity(execution.sources[name])
-                    context.value_attempts[signature] = copy.deepcopy(entry)
-                    if entry["state"] == "ready":
-                        context.retained_values[signature] = copy.deepcopy(entry)
-        rebound, _, _ = expand_for(execution.bundle, context.environment, computed=execution.values)
-        for key in execution.order:
-            if key not in execution.value_phase:
-                # Connection failures captured at admission remain failures after binding.
-                for reference in connection_references(rebound[key]):
-                    if reference not in execution.captured:
-                        rebound[key]["error"] = execution.nodes[key].get("error", "Connection unavailable")
-                execution.nodes[key] = rebound[key]
-        execution.fingerprints = self.fingerprints.of(
-            execution.bundle, context.environment, execution.captured, execution.values
-        )
-        for key in execution.order:
-            run["nodes"][key]["fingerprint"] = execution.fingerprints[key]
-        run["variables"].update(
-            variables.used(
-                execution.bundle, execution.nodes, execution.order, context.environment, execution.values
-            )
-        )
-        self.fingerprints.invalidate(context)
-
-    @staticmethod
-    def _skip_reason(execution: Execution, key: str) -> dict[str, str] | None:
-        """Return the state update for a node that must not start, if any."""
-        if execution.canceled:
-            return {"status": "canceled"}
-        node = execution.nodes[key]
-        if node.get("error"):
-            return {"status": "blocked", "error": node["error"]}
-        failed = [
-            e["source"]
-            for e in execution.edges
-            if e["target"] == key and execution.run["nodes"][e["source"]]["status"] != "success"
-        ]
-        if failed:
-            return {"status": "blocked", "error": "Blocked by " + ", ".join(failed)}
-        return None
-
-    def _run_node(self, execution: Execution, key: str) -> None:
-        run, secrets, context = execution.run, execution.secrets, execution.context
-        node, state = execution.nodes[key], run["nodes"][key]
-        state.update(status="running", started=now(), parameters=node.get("params", {}))
-        if node["parsed"]["writes_external"]:
-            state["external_outcome"] = "unknown"
-        self._persist(run, secrets)
-        node_start = time.monotonic()
-        created_tables: list[tuple[str, str]] = []
-        try:
-            staged = self._compute(execution, key, created_tables)
-            if execution.canceled:
-                raise Problem("Execution canceled after the active SQL operation ended")
-            previous = self._publish(execution, key, staged)
-            created_tables.clear()
-            self._retire(execution, key, previous)
-            state.update(
-                status="success",
-                outputs={p: {**d.public(), "duration": d.duration} for p, d in staged.items()},
-            )
-            try:
-                self._prune_documentation(execution, key, staged)
-            except Exception as error:
-                state["documentation_error"] = str(error)
-        except Exception as error:
-            if state.get("artifact"):
-                artifact = state.pop("artifact")
-                self.store.delete("artifact", artifact)
-                self.exports.discard([artifact])
-            self._drop_staged(context, created_tables)
-            message = failure_message(error, node, secrets)
-            if isinstance(error, SqlSourceError) and not execution.canceled:
-                state["diagnostic"] = {**error.diagnostic, "message": message, "source": node["template_sql"]}
-            state.update(status="canceled" if execution.canceled else "failed", error=message)
-            with context.lock:
-                context.errors[key] = message
-            if state.get("writes_external") and state.get("external_outcome") != "completed":
-                state["external_outcome"] = (
-                    "partial or unknown" if state.get("external_started") else "failed"
-                )
-        state.update(finished=now(), duration=time.monotonic() - node_start)
-        self._persist(run, secrets)
-        with context.lock:
-            context.result_runs[key] = run["id"]
-
-    @staticmethod
-    def _drop_staged(context: Context, created_tables: list[tuple[str, str]]) -> None:
-        """Drop the tables of a node that failed before publication."""
-        if not created_tables:
-            return
-        try:
-            assert context.db is not None
-            cleanup = context.db.cursor()
-            try:
-                for table, storage in created_tables:
-                    drop_relations(cleanup, table, storage)
-            finally:
-                cleanup.close()
-        except (duckdb.Error, Problem):
-            # A dead worker has already discarded its tables.
-            pass
-
-    def _prepare_connections(self, execution: Execution, node: Record) -> None:
-        """Prepare each logical connection once per run, replaying its first failure."""
-        with execution.preparing:
-            for reference in connection_references(node):
-                if reference not in execution.prepared:
-                    try:
-                        if not self.isolated:
-                            connection = execution.captured[reference]
-                            # An extension that stops its process must not stop the server.
-                            try:
-                                connection_probe.check_extensions(
-                                    self.pool.probe_config(),
-                                    connection,
-                                    self.store.get("settings", "offline_extensions", {}),
-                                    execution.secrets,
-                                )
-                            except Problem as error:
-                                raise Problem(
-                                    f"Cannot load the extensions of connection {connection['name']}: {error}",
-                                    422,
-                                ) from None
-                            self.catalog.prepare(execution.cursor, {reference: connection})
-                        execution.prepared[reference] = None
-                    except Exception as error:
-                        execution.prepared[reference] = error
-                failure = execution.prepared[reference]
-                if failure is not None:
-                    raise failure
-
-    def _compute(
-        self, execution: Execution, key: str, created_tables: list[tuple[str, str]]
-    ) -> dict[str, Dataset]:
-        """Execute a node's statements into freshly named tables; return its staged outputs."""
-        cursor, context, run = execution.cursor, execution.context, execution.run
-        assert cursor is not None
-        node, state = execution.nodes[key], run["nodes"][key]
-        self._prepare_connections(execution, node)
-        input_datasets = {
-            e["targetHandle"]: execution.published[e["source"]][e["sourceHandle"]]
-            for e in execution.edges
-            if e["target"] == key
-        }
-        physical = {port: uid("data_") for port in node["parsed"]["outputs"]}
-        project_files = self.store.paths.project_files(run["project"], context.worktree, context.environment)
-        project_files["destination"].mkdir(parents=True, exist_ok=True)
-        if node.get("language") == "python":
-            return self._compute_python(
-                execution, key, input_datasets, physical, project_files, created_tables
-            )
-        statements = compile_template(
-            node["parsed"],
-            node.get("params", {}),
-            {port: qi(data.table) for port, data in input_datasets.items()},
-            physical,
-            execution.captured,
-            project_files,
-            input_schemas={port: data.columns for port, data in input_datasets.items()},
-            variables=variables.expression_values(node),
-            bound=node.get("variables"),
-        )
-        # Locations map DuckDB errors back to the authored code; runs do not record them.
-        locations = [statement.pop("source_location") for statement in statements]
-        state["statements"] = variables.annotate(statements, node)
-        self._persist(run, execution.secrets)
-        staged: dict[str, Dataset] = {}
-        check_failure = None
-        location: Record | None = None
-        executed = ""
-        try:
-            for index, statement in enumerate(statements):
-                location, executed = locations[index], statement["sql"]
-                if execution.canceled:
-                    raise Problem("Execution canceled")
-                if statement.get("message_block") or statement.get("test_name"):
-                    if execution.schema_only:
-                        continue
-                    execute_check = execute_test if statement.get("test_name") else execute_messages
-                    failure = execute_check(
-                        cursor, statement, run, key, execution.secrets, lambda: execution.canceled
-                    )
-                    if check_failure is None:
-                        check_failure = failure
-                    self._persist(run, execution.secrets)
-                    continue
-                if not statement["output"]:
-                    if execution.schema_only:
-                        continue
-                    if check_failure is not None:
-                        raise Problem(check_failure or "An execution check reported an error")
-                    self._export(execution, key, statement)
-                    continue
-                table = statement["table"]
-                if execution.partition is not None:
-                    filter_statements([statement], node, execution.partition, cursor)
-                if execution.schema_only:
-                    statement["sql"] = f"SELECT * FROM ({statement['sql']}) AS empty_partition LIMIT 0"
-                output_start = time.monotonic()
-                data_inputs = {data.table: data for data in [*input_datasets.values(), *staged.values()]}
-                collected = collected_pass_through(statement["sql"], data_inputs)
-                if collected and not execution.schema_only:
-                    storage = table + "_disk"
-                    cursor.execute(f"CREATE VIEW {qi(storage)} AS SELECT * FROM {qi(collected.storage)}")
-                    created_tables.append((table, storage))
-                    projection = ", ".join(
-                        f"{qi(collected.stored(c['name']))} AS {qi(c['name'])}" for c in collected.columns
-                    )
-                    cursor.execute(f"CREATE VIEW {qi(table)} AS SELECT {projection} FROM {qi(storage)}")
-                    staged[statement["output"]] = Dataset(
-                        id=table,
-                        node=key,
-                        port=statement["output"],
-                        columns=collected.columns,
-                        count=collected.count,
-                        run=run["id"],
-                        query=statement["sql"],
-                        bindings=statement["bindings"],
-                        dependencies={collected.table: collected.id},
-                        fingerprint=execution.fingerprints[key],
-                        storage=storage,
-                        disk=True,
-                        column_map=collected.column_map,
-                        origins=copy.deepcopy(collected.origins),
-                        duration=time.monotonic() - output_start,
-                    )
-                    continue
-                executed = "DESCRIBE " + statement["sql"]
-                plan = plan_materialization(
-                    cursor, statement, data_inputs, instrument=not statement["source"]
-                )
-                statement["materialization_sql"] = [plan["sql"]]
-                self._persist(run, execution.secrets)
-                executed = plan["sql"]
-                cursor.execute(plan["sql"], statement["bindings"])
-                created_tables.append((table, plan["storage"]))
-                columns, column_map, view_sql = publish_view(cursor, table, plan)
-                statement["materialization_sql"].extend(view_sql)
-                count_row = cursor.execute(f"SELECT count(*) FROM {qi(table)}").fetchone()
-                assert count_row is not None
-                count = count_row[0]
-                source_columns = plan["columns"]
-                if source_columns is None and any(
-                    s.get("node") == key and s.get("port") == statement["output"]
-                    for s in [*execution.sources.values(), execution.partition_plan.get("source") or {}]
-                ):
-                    source_columns = [
-                        {"name": c[0], "type": c[1]}
-                        for c in cursor.execute(
-                            "DESCRIBE " + statement["sql"], statement["bindings"]
-                        ).fetchall()
-                    ]
-                staged[statement["output"]] = Dataset(
-                    id=table,
-                    node=key,
-                    port=statement["output"],
-                    columns=columns,
-                    count=count,
-                    run=run["id"],
-                    query=statement["sql"],
-                    bindings=statement["bindings"],
-                    labels=statement.get("variable_bindings", {}),
-                    dependencies={data.table: data.id for data in data_inputs.values()},
-                    fingerprint=execution.fingerprints[key],
-                    storage=plan["storage"],
-                    source_columns=source_columns or columns,
-                    bound_values=copy.deepcopy(execution.values),
-                    source=statement["source"],
-                    column_map=column_map,
-                    witnesses=plan["witnesses"],
-                    groups=plan["groups"],
-                    duration=time.monotonic() - output_start,
-                )
-        except duckdb.Error as error:
-            if location is None:
-                raise
-            raise SqlSourceError(error, location, executed) from error
-
-        if check_failure is not None:
-            raise Problem(check_failure or "An execution check reported an error")
-        return staged
-
-    def _compute_python(
-        self,
-        execution: Execution,
-        key: str,
-        inputs: dict[str, Dataset],
-        physical: dict[str, str],
-        project_files: dict[str, Path],
-        created_tables: list[tuple[str, str]],
-    ) -> dict[str, Dataset]:
-        from ..python_nodes import parameters
-        from .messages import record_result
-
-        if execution.schema_only:
-            raise Problem(
-                "Python does not support schema-only or empty-manifest execution; no user code was run", 422
-            )
-        node = execution.nodes[key]
-        state = execution.run["nodes"][key]
-        values = parameters(
-            node,
-            {p: d.columns for p, d in inputs.items()},
-            execution.captured,
-            project_files,
-            variables.expression_values(node),
-            bindings=node.get("variables"),
-        )
-        state["parameters"] = values
-        workspace = (
-            self.store.paths.exports(execution.context.worktree, execution.context.environment)
-            / ".temporary"
-            / uid("python_")
-        )
-        workspace.mkdir(parents=True)
-        policy = get_policy(self.store, execution.run["project"])
-        if not policy.get("enabled"):
-            raise Problem("Python execution is disabled", 403)
-        staged = {}
-        try:
-            state["external_started"] = True
-            self._persist(execution.run, execution.secrets)
-            cursor = execution.cursor
-            from ..sandbox import Cursor as WorkerCursor
-
-            assert isinstance(cursor, WorkerCursor)
-            python_start = time.monotonic()
-            response = cursor.python(
-                {
-                    "code": node["template_sql"],
-                    "parameters": values,
-                    "inputs": {p: inputs[p].table for p in node["parsed"]["inputs"]},
-                    "outputs": {p: name + "_storage" for p, name in physical.items()},
-                    "workspace": str(workspace),
-                    "partition": execution.partition,
-                    "partition_filters": node.get("partition_filters", {}),
-                    "filename": "nodes/" + key.replace("::", "/") + ".py",
-                    "helpers": execution.bundle.get("python_helpers", {}),
-                    "connections": {r: execution.captured[r]["values"] for r in connection_references(node)},
-                }
-            )
-            for result in response.get("messages", []):
-                record_result(
-                    execution.run,
-                    key,
-                    {
-                        **result,
-                        "message": redact(result["message"], execution.secrets),
-                        "origin": {"kind": "message", "block": "Python"},
-                        "output": None,
-                    },
-                )
-            if response.get("log"):
-                record_result(
-                    execution.run,
-                    key,
-                    {
-                        "level": "info",
-                        "message": redact(response["log"], execution.secrets),
-                        "origin": {"kind": "message", "block": "Python stdout/stderr"},
-                        "output": None,
-                    },
-                )
-            for check in response.get("checks", []):
-                # Recorded like SQL tests, so the Tests tab, badges and history read them the same way.
-                name, observed = redact(check["name"], execution.secrets), check["count"]
-                record_result(
-                    execution.run,
-                    key,
-                    {
-                        "level": check["severity"] if observed else "info",
-                        "status": check["severity"] if observed else "ok",
-                        "message": f"Test {name} failed: {observed} failing rows"
-                        if observed
-                        else f"Test {name} passed",
-                        "origin": {"kind": "test", "name": name, "block": "Python"},
-                        "output": None,
-                        "observed": observed,
-                    },
-                )
-            if response.get("error"):
-                raise Problem(response["error"].replace(str(self.store.home), "<instance>"), 422)
-            created_tables.extend((table, table + "_storage") for table in physical.values())
-            for port, table in physical.items():
-                storage = table + "_storage"
-                columns, mapping, _ = publish_view(cursor, table, {"storage": storage, "columns": None})
-                count_row = cursor.execute(f"SELECT count(*) FROM {qi(table)}").fetchone()
-                assert count_row is not None
-                staged[port] = Dataset(
-                    id=table,
-                    node=key,
-                    port=port,
-                    columns=columns,
-                    count=count_row[0],
-                    run=execution.run["id"],
-                    query="",
-                    bindings={},
-                    dependencies={d.table: d.id for d in inputs.values()},
-                    fingerprint=execution.fingerprints[key],
-                    storage=storage,
-                    source_columns=columns,
-                    column_map=mapping,
-                    opaque_python=True,
-                    duration=time.monotonic() - python_start,
-                    bound_values=copy.deepcopy(execution.values),
-                )
-            artifacts = response.get("artifacts", {})
-            if artifacts:
-                # One download per node: several managed files are bundled without loading them into memory.
-                for name, path in artifacts.items():
-                    if Path(path) != workspace / "artifacts" / name or Path(name).name != name:
-                        raise Problem("Invalid managed artifact path", 422)
-                if len(artifacts) == 1:
-                    path = Path(next(iter(artifacts.values())))
-                else:
-                    path = workspace / "artifacts.zip"
-                    with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as archive:
-                        from ..artifacts import open_regular
-
-                        for name, source in artifacts.items():
-                            with open_regular(Path(source)) as reader, archive.open(name, "w") as writer:
-                                shutil.copyfileobj(reader, writer, 65536)
-                state["artifact"] = self.exports.artifacts.capture(
-                    {"path": str(path), "format": path.suffix.lstrip(".") or "bin"},
-                    execution.run,
-                    key,
-                    [workspace],
-                )
-            state["external_outcome"] = "completed"
-            return staged
-        finally:
-            shutil.rmtree(workspace, ignore_errors=True)
-
-    def _export(self, execution: Execution, key: str, statement: Record) -> None:
-        """Run an export statement, then keep a private copy of the file it wrote for download."""
-        state = execution.run["nodes"][key]
-        # Serialize file writes and capture across worktrees sharing a destination.
-        with self.exports.write_lock:
-            if execution.canceled:
-                raise Problem("Execution canceled")
-            state["external_started"] = True
-            assert execution.cursor is not None
-            execution.cursor.execute(statement["sql"], statement["bindings"])
-            if statement.get("export_file"):
-                state["artifact"] = self.exports.capture(
-                    statement["export_file"], execution.run, key, execution.captured
-                )
-        state["external_outcome"] = "completed"
-
-    def _publish(self, execution: Execution, key: str, staged: dict[str, Dataset]) -> dict[str, Dataset]:
-        """Atomically replace a node's outputs; return the previous output set."""
-        context = execution.context
-        if execution.partition is not None:
-            return self.partition_runs[execution.run["id"]].publish(execution, key, staged)
-        # A later edit must not turn a result for the old snapshot valid.
-        with self.projects.locked(context.worktree):
-            current = self.fingerprints.current(context.worktree, context.environment)
-            with self.lock, context.lock:
-                if execution.canceled:
-                    raise Problem("Execution canceled before publication")
-                previous = context.outputs.get(key, {})
-                for dataset in staged.values():
-                    if current.get(key) != dataset.fingerprint:
-                        dataset.status = "stale"
-                    context.datasets[dataset.id] = dataset
-                context.outputs[key] = staged
-                context.errors.pop(key, None)
-                execution.published[key] = staged
-        return previous
-
-    def _retire(self, execution: Execution, key: str, previous: dict[str, Dataset]) -> None:
-        """Drop replaced outputs and their lineage tables once no lineage reader uses them."""
-        context = execution.context
-        protected = set()
-
-        def retain(identity: str) -> None:
-            if identity in protected or identity not in context.datasets:
-                return
-            protected.add(identity)
-            for parent in context.datasets[identity].dependencies.values():
-                retain(parent)
-
-        for outputs in context.outputs.values():
-            for current in outputs.values():
-                if current.opaque_python:
-                    retain(current.id)
-        for identity in protected:
-            context.datasets[identity].historical = True
-        current_ids = {data.id for outputs in context.outputs.values() for data in outputs.values()}
-        retired = {data.id: data for data in previous.values()}
-        retired.update(
-            {
-                identity: data
-                for identity, data in context.datasets.items()
-                if data.historical and identity not in protected | current_ids
-            }
-        )
-        for dataset in retired.values():
-            if dataset.id in protected:
-                continue
-            with context.lock:
-                cancel_lineage(context, {dataset.node}, dropping=True)
-            wait_for_readers(context, {dataset.node})
-            with context.lock:
-                traces = [
-                    d
-                    for d in context.datasets.values()
-                    if d.id.startswith("trace_") and d.node == dataset.node and d.run != execution.run["id"]
-                ]
-                assert context.db is not None
-                cleanup = context.db.cursor()
-                try:
-                    for old in [dataset, *traces]:
-                        drop_dataset(cleanup, old)
-                        context.datasets.pop(old.id, None)
-                finally:
-                    cleanup.close()
-
-    def _prune_documentation(self, execution: Execution, key: str, staged: dict[str, Dataset]) -> None:
-        """Remove documentation of columns that the node's current outputs no longer have."""
-        context = execution.context
-        columns = {
-            port: [c["name"] for c in data.columns] for port, data in staged.items() if data.status == "valid"
-        }
-        if not columns:
-            return
-
-        def current(bundle: Record) -> bool:
-            fingerprint = self.fingerprints.of(
-                bundle,
-                context.environment,
-                computed=self.pool.computed(context.worktree, context.environment, bundle),
-            ).get(key)
-            return fingerprint == execution.fingerprints[key]
-
-        self.projects.prune_column_documentation(context.worktree, key, columns, current)
+                    self.journal.partitions.pop(run["id"], None)
 
     def close(self) -> None:
         """Cancel active runs and wait for their workers."""

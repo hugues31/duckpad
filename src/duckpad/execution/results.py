@@ -22,7 +22,7 @@ from ..partition_results import PartitionResults
 from ..projects import Projects
 from ..sqlast import sql
 from ..store import Store
-from ..templates import VARIABLE_REFERENCE, compile_template
+from ..templates import VARIABLE_REFERENCE
 from ..trace.normalize import rename_tables
 from ..types import Record, RunToken, SQLCursor
 from ..util import Problem, clean, now, qi
@@ -37,6 +37,7 @@ from .samples import (
     sample_order,
     sample_query,
 )
+from .statements import compile_node
 
 MAX_PREVIEW_ROWS = 10_000
 HISTOGRAM_BINS = 12
@@ -556,7 +557,9 @@ class Results:
                 raise Problem(
                     "Python has no compiled SQL; inspect its code and the opaque lineage boundary", 422
                 )
-            captured, secrets = self.pool.capture(worktree, connection_references(node), environment)
+            captured, secrets = self.pool.connections.capture(
+                worktree, connection_references(node), environment
+            )
             inputs = {
                 e["targetHandle"]: qi("input_" + e["source"].replace("::", "_") + "_" + e["sourceHandle"])
                 for e in edges
@@ -574,16 +577,13 @@ class Results:
                             dataset = context.outputs.get(edge["source"], {}).get(edge["sourceHandle"])
                             if dataset:
                                 input_schemas[edge["targetHandle"]] = dataset.columns
-            statements = compile_template(
-                node["parsed"],
-                node.get("params", {}),
+            statements = compile_node(
+                node,
                 inputs,
                 {p: "output_" + p for p in node["parsed"]["outputs"]},
                 captured,
                 self.store.paths.project_files(snapshot["worktree"]["project"], worktree, environment),
-                input_schemas=input_schemas,
-                variables=variables.expression_values(node),
-                bound=node.get("variables"),
+                input_schemas,
             )
             filter_statements(statements, node, partition)
             for statement in statements:

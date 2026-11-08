@@ -14,7 +14,7 @@ from helpers import join_run, wait_until
 
 from duckpad import cli
 from duckpad.app import create_app
-from duckpad.execution import runs as runs_module
+from duckpad.execution import nodes as nodes_module
 from duckpad.native import Cursor as NativeCursor
 from duckpad.sandbox import Database as WorkerDatabase
 from duckpad.util import Problem
@@ -203,7 +203,7 @@ def test_trusted_mode_preserves_cancellation_before_native_execute(local, monkey
         == 200
     )
     planned, proceed = threading.Event(), threading.Event()
-    original = runs_module.plan_materialization
+    original = nodes_module.plan_materialization
 
     def hold(*args, **kwargs):
         plan = original(*args, **kwargs)
@@ -211,7 +211,7 @@ def test_trusted_mode_preserves_cancellation_before_native_execute(local, monkey
         assert proceed.wait(10)
         return plan
 
-    monkeypatch.setattr(runs_module, "plan_materialization", hold)
+    monkeypatch.setattr(nodes_module, "plan_materialization", hold)
     run = client.post(endpoint + "/runs", json={"environment": "dev"}).json()
     try:
         assert planned.wait(10)

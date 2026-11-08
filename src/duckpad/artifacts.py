@@ -7,9 +7,9 @@ import re
 import shutil
 import stat
 from collections.abc import Generator
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from pathlib import Path
-from typing import BinaryIO
+from typing import BinaryIO, Literal
 
 from .store import Store
 from .types import Record
@@ -64,7 +64,15 @@ class Artifacts:
         self.directory = store.paths.artifacts
         self.directory.mkdir(mode=0o700, exist_ok=True)
 
-    def capture(self, spec: Record, run: Record, node: str, roots: list[Path]) -> str:
+    def capture(
+        self,
+        spec: Record,
+        run: Record,
+        node: str,
+        roots: list[Path],
+        *,
+        storage_kind: Literal["download", "partition"] = "download",
+    ) -> str:
         """Copy the actual exported bytes, bounded in memory, before another export can overwrite them."""
         path = Path(spec["path"]).absolute()
         if ".." in path.parts or not any(path.is_relative_to(root) for root in roots):
@@ -72,7 +80,7 @@ class Artifacts:
         identity = uid("artifact_")
         directory = (
             self.store.paths.partition_artifacts(run["worktree"], run["environment"])
-            if spec["format"] == "parquet"
+            if storage_kind == "partition"
             else self.directory
         )
         directory.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -102,6 +110,7 @@ class Artifacts:
                 "media_type": MEDIA_TYPES.get(spec["format"], "application/octet-stream"),
                 "size": before[2],
                 "signature": captured_signature,
+                "storage_kind": storage_kind,
             }
             self.store.put("artifact", identity, record)
             return identity
@@ -112,10 +121,19 @@ class Artifacts:
     def path(self, record: Record) -> Path:
         directory = (
             self.store.paths.partition_artifacts(record["worktree"], record["environment"])
-            if record["media_type"] == MEDIA_TYPES["parquet"]
+            if record["storage_kind"] == "partition"
             else self.directory
         )
         return directory / record["id"]
+
+    def remove(self, identity: str, *, record: Record | None = None) -> None:
+        """Remove an artifact using its storage metadata, including after a cascading deletion."""
+        record = record or self.store.get("artifact", identity)
+        if record:
+            # Windows keeps a file while a download is reading it.
+            with suppress(OSError):
+                self.path(record).unlink(missing_ok=True)
+            self.store.delete("artifact", identity)
 
     @contextmanager
     def open(

@@ -16,7 +16,7 @@ from duckpad.util import Problem
 
 @pytest.fixture(params=[False, True], ids=["embedded", "isolated"])
 def instance(tmp_path, excel_cache, request):
-    services = Services.open(tmp_path / "instance", enforce_access=request.param)
+    services = Services.open(tmp_path / "instance", enforce_access=request.param, isolated=request.param)
     shutil.copytree(excel_cache, services.store.home / "extensions")
     yield services
     services.close()
@@ -57,7 +57,7 @@ def budget_bundle():
 
 def create(instance, bundle):
     """Create the project as its owner would; access policies grant it no connection."""
-    if not instance.engine.access:
+    if not instance.engine.enforce_access:
         return instance.projects.create("Budget", bundle)
     Auth(instance.store)
     owner = instance.store.get("user", "admin")
@@ -70,7 +70,7 @@ def test_file_nodes_read_uploads_and_write_exports_without_a_connection(instance
     assert instance.store.all("connection") == []
     worktree = create(instance, budget_bundle())
     project, identity = worktree["project"], worktree["id"]
-    if instance.engine.access:
+    if instance.engine.enforce_access:
         assert instance.engine.access.record(project)["connections"] == []
     resources = instance.store.paths.resources(project)
     (resources / "inbox").mkdir(parents=True)
@@ -118,8 +118,8 @@ def test_a_connection_not_granted_to_the_project_stays_refused(instance, tmp_pat
     bundle["flow"]["nodes"] = [node("orders", "load_csv", connection="share", file="orders.csv")]
     bundle["flow"]["edges"] = []
     worktree = create(instance, bundle)
-    if not instance.engine.access:
-        # Trusted in-process clients have no access policy: every connection is available.
+    if not instance.engine.enforce_access:
+        # Callers can explicitly disable connection grants independently of isolation.
         assert instance.engine.compile(worktree["id"], "dev", "orders")
         return
     with pytest.raises(Problem, match="not authorized") as refused:

@@ -182,7 +182,7 @@ def test_preview_returns_timestamps_with_time_zones(services, tmp_path):
 
 def test_startup_loads_only_unfinished_runs(services, monkeypatch):
     from duckpad.engine import Engine
-    from duckpad.execution.runs import UNFINISHED_RUN_STATUSES
+    from duckpad.execution.journal import UNFINISHED_RUN_STATUSES
 
     store, projects, catalog, _ = services
     tree = projects.create("Recovery")
@@ -214,7 +214,7 @@ def test_startup_loads_only_unfinished_runs(services, monkeypatch):
 
     with monkeypatch.context() as patch:
         patch.setattr(store, "_record", record)
-        recovered = Engine(store, projects, catalog)
+        recovered = Engine(store, projects, catalog, isolated=False, enforce_access=False)
         recovered.close()
     assert set(loaded) == set(UNFINISHED_RUN_STATUSES)
     for status in UNFINISHED_RUN_STATUSES:
@@ -229,7 +229,7 @@ def test_startup_loads_only_unfinished_runs(services, monkeypatch):
 
 
 def test_final_persistence_failure_releases_worktree_for_runs_and_cleanup(services, monkeypatch):
-    from duckpad.execution.runs import Execution
+    from duckpad.execution.launches import Execution
 
     store, projects, _, engine = services
     tree = projects.create("Persistence failure")
@@ -246,7 +246,7 @@ def test_final_persistence_failure_releases_worktree_for_runs_and_cleanup(servic
         "nodes": {},
     }
     execution = Execution(token, context, run, {}, [], [], {}, [], {})
-    original = engine.runs._persist
+    original = engine.runs.journal.persist
 
     def fail_final_write(run, secrets):
         if run.get("finished"):
@@ -254,9 +254,10 @@ def test_final_persistence_failure_releases_worktree_for_runs_and_cleanup(servic
         original(run, secrets)
 
     with monkeypatch.context() as patch:
-        patch.setattr(engine.runs, "_persist", fail_final_write)
+        patch.setattr(engine.runs.journal, "persist", fail_final_write)
+        patch.setattr(engine.runs.planner, "start", lambda *args: execution)
         with pytest.raises(OSError, match="Simulated final persistence failure"):
-            engine.runs._execute(execution)
+            engine.runs._execute(token, run, None, None, None, False)
     assert token["cursor"] is None
     assert tree["id"] not in engine.active
     assert wait_run(store, engine.launch(tree["id"], "dev"))["status"] == "success"

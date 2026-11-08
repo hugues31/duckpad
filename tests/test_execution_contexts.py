@@ -11,6 +11,7 @@ from helpers import example_bundle, pipeline, wait_run, wait_until
 
 from duckpad import sandbox
 from duckpad.bundle import bundle_to_files
+from duckpad.engine import Engine
 from duckpad.services import Services
 from duckpad.util import Problem
 
@@ -19,9 +20,25 @@ SLOW = "-- @output result\nSELECT SUM(random()) AS value FROM range(10000000000)
 PROMPT = 10
 
 
+def test_service_defaults_keep_isolation_and_access_enabled(tmp_path):
+    instance = Services.open(tmp_path / "instance")
+    try:
+        assert instance.engine.isolated
+        assert instance.engine.enforce_access
+        assert instance.engine.access.store is instance.store
+        # A sandbox reads only granted local roots: it cannot run without connection grants.
+        with pytest.raises(ValueError, match="requires enforce_access"):
+            Engine(instance.store, instance.projects, instance.catalog, isolated=True, enforce_access=False)
+        tree = instance.projects.create("Default isolation")
+        run = wait_run(instance.store, instance.engine.launch(tree["id"], "dev"))
+        assert run["status"] == "success"
+    finally:
+        instance.close()
+
+
 @pytest.fixture
 def isolated(tmp_path):
-    instance = Services.open(tmp_path / "instance", enforce_access=True)
+    instance = Services.open(tmp_path / "instance", enforce_access=True, isolated=True)
     yield instance
     instance.close()
 
@@ -229,9 +246,9 @@ def test_extension_installation_failure_is_reported_without_secrets(isolated, tm
         create=True,
     )
     worktree = project(isolated, "Extensions", ["custom"])
-    with pytest.raises(Problem, match="Cannot install the extensions of connection Custom data") as error:
+    with pytest.raises(Problem, match="Cannot load the extensions of connection Custom data") as error:
         engine.context(worktree["id"], "dev", create=True)
-    assert error.value.status == 503
+    assert error.value.status == 422
     assert "t0ken" not in str(error.value)
     assert engine.context(worktree["id"], "dev").db is None
 
@@ -301,12 +318,12 @@ def test_cancellation_keeps_newer_run_progress(services, monkeypatch):
         "commit": "commit",
         "nodes": {"first": {"status": "running"}, "second": {"status": "pending"}},
     }
-    engine.runs._persist(run, [])
+    engine.runs.journal.persist(run, [])
     progressed = copy.deepcopy(run)
     progressed["nodes"]["first"]["status"] = "success"
     progressed["nodes"]["second"]["status"] = "running"
     # The run thread writes its progress while the cancellation request updates the record.
-    writer = threading.Thread(target=engine.runs._persist, args=(progressed, []))
+    writer = threading.Thread(target=engine.runs.journal.persist, args=(progressed, []))
     original = store.put
 
     def put(kind, key, value):

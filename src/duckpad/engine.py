@@ -37,17 +37,27 @@ class Engine:
         catalog: Catalog,
         access: Access | None = None,
         *,
-        trusted_local: bool = False,
+        isolated: bool = True,
+        enforce_access: bool = True,
     ) -> None:
-        self.store, self.projects, self.catalog, self.access = store, projects, catalog, access
+        if isolated and not enforce_access:
+            # Isolated workers only read the local roots of the connections granted to a project.
+            raise ValueError("Isolated execution requires enforce_access")
+        self.store, self.projects, self.catalog = store, projects, catalog
+        self.access = access if access is not None else Access(store)
+        self.enforce_access = enforce_access
         # API authorization is independent of the explicitly selected SQL execution mode.
-        self.isolated = access is not None and not trusted_local
+        self.isolated = isolated
         self.lock = threading.RLock()
         # The token of each worktree's active run, admitted by the runner under the lock.
         self.active: dict[str, RunToken] = {}
-        self.pool = ContextPool(store, projects, catalog, access, self.isolated, self.lock)
+        self.pool = ContextPool(
+            store, projects, catalog, self.access, isolated, self.lock, enforce_access=enforce_access
+        )
         self.fingerprints = Fingerprints(projects, catalog, self.pool)
-        self.exports = Exports(store, projects, catalog, access, self.fingerprints, self.lock, self.active)
+        self.exports = Exports(
+            store, projects, catalog, self.pool.connections, self.fingerprints, self.lock, self.active
+        )
         self.partitions = PartitionResults(self)
         self.results = Results(store, projects, catalog, self.pool, self.lock, self.active)
         self.results.partitions = self.partitions
@@ -60,12 +70,9 @@ class Engine:
             self.fingerprints,
             self.lock,
             self.active,
-            isolated=self.isolated,
         )
-        self.drafts = DraftPreviews(
-            store, projects, catalog, self.pool, self.lock, self.active, isolated=self.isolated
-        )
-        self.runs.recover()
+        self.drafts = DraftPreviews(store, projects, catalog, self.pool, self.lock, self.active)
+        self.runs.journal.recover()
 
     def context(self, worktree: str, environment: str, create: bool = False) -> Context:
         return self.pool.get(worktree, environment, create)
@@ -96,7 +103,7 @@ class Engine:
     def scope_variables(
         self, worktree: str, environment: str, target: str | None = None, ancestors: bool = False
     ) -> Record:
-        return self.runs.scope_variables(worktree, environment, target, ancestors)
+        return self.runs.planner.scope_variables(worktree, environment, target, ancestors)
 
     def cancel(self, run_id: str) -> Record:
         return self.runs.cancel(run_id)
@@ -243,7 +250,8 @@ class Engine:
                 *(
                     project["id"]
                     for project in self.store.all("project")
-                    if self.access is None or reference in self.access.record(project["id"])["connections"]
+                    if not self.enforce_access
+                    or reference in self.access.record(project["id"])["connections"]
                 )
             )
 
@@ -260,7 +268,7 @@ class Engine:
             self.fingerprints.invalidate(context)
 
     def extension_settings(self) -> dict[str, bool]:
-        return self.pool.extension_settings()
+        return self.pool.connections.extension_settings()
 
     def extension_runtime(self) -> Record:
         version, platform = runtime()
@@ -302,20 +310,16 @@ class Engine:
     def test_connection(self, data: Record, environment: str) -> Record:
         """Run a connection's setup for one environment, as edited and saved or not, in a child process."""
         captured, secrets = self.catalog.capture_draft(data, environment)
-        if self.pool.isolated:
-            assert self.access is not None
-            self.access.database_roots(captured)
+        self.pool.connections.validate_roots(captured)
         imports = self.store.get("settings", "offline_extensions", {})
-        return connection_probe.run(self.pool.probe_config(), captured, imports, secrets)
+        return connection_probe.run(self.pool.connections.probe_config(), captured, imports, secrets)
 
     def connection_objects(
         self, worktree: str, reference: str, environment: str, table: tuple[str, str] | None = None
     ) -> Record:
         """The schemas and tables of a database connection granted to the worktree's project."""
-        captured, secrets = self.pool.capture(worktree, [reference], environment)
-        if self.pool.isolated:
-            assert self.access is not None
-            self.access.database_roots(captured, self.projects.get(worktree)["project"])
+        captured, secrets = self.pool.connections.capture(worktree, [reference], environment)
+        self.pool.connections.validate_roots(captured, self.projects.get(worktree)["project"])
         connection = captured[reference]
         if connection["definition"].get("family") != "database":
             raise Problem(f"Connection {reference} is not a database", 422)
@@ -323,7 +327,9 @@ class Engine:
         try:
             # A new attachment lists the tables created since a session attached the database:
             # attached catalogs, such as PostgreSQL's, are cached.
-            return connection_probe.run(self.pool.probe_config(), captured, imports, secrets, table=table)
+            return connection_probe.run(
+                self.pool.connections.probe_config(), captured, imports, secrets, table=table
+            )
         except Problem:
             # A database file that a session attached is locked: list the session's attachment.
             listed = self._session_objects(worktree, environment, connection["alias"], table)

@@ -13,7 +13,7 @@ from duckpad.services import Services
 
 
 def measure(keys, rows, home):
-    instance = Services.open(home)
+    instance = Services.open(home, isolated=False, enforce_access=False)
     peak = {"rss": 0, "duckdb": 0, "spill": 0}
     finished = threading.Event()
     try:

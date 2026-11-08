@@ -18,14 +18,14 @@ def test_partition_reads_preserve_live_results_after_resource_changes(services, 
     database = context.db
     retained = set(context.datasets)
     entered, release = threading.Event(), threading.Event()
-    compute = engine.runs._compute
+    compute = engine.runs.nodes.compute
 
     def pause(*args, **kwargs):
         entered.set()
         assert release.wait(10)
         return compute(*args, **kwargs)
 
-    monkeypatch.setattr(engine.runs, "_compute", pause)
+    monkeypatch.setattr(engine.runs.nodes, "compute", pause)
     active = engine.launch(worktree, "dev")
     try:
         assert entered.wait(10)
@@ -49,7 +49,7 @@ def test_explicit_contexts_paging_and_retained_reads(services, monkeypatch):
     def never(*args, **kwargs):
         raise AssertionError("Inspection must not execute nodes")
 
-    monkeypatch.setattr(engine.runs, "_compute", never)
+    monkeypatch.setattr(engine.runs.nodes, "compute", never)
     page = engine.partitions.page(worktree, "dev", node="transform", limit=1)
     assert page["entries"][0]["key"]["value"] == "a"
     second = engine.partitions.page(worktree, "dev", node="transform", limit=1, cursor=page["next_cursor"])

@@ -457,16 +457,16 @@ class Store:
                 is not None
             )
 
-    def artifact_ids(self, *, project=None, worktree=None):
+    def artifacts(self, *, project=None, worktree=None):
         if project is None and worktree is None:
             raise ValueError("Specify a project or worktree for artifact lookup")
-        statement = select(m.Artifact.id)
+        statement = select(m.Artifact)
         if project is not None:
             statement = statement.where(m.Artifact.project == project)
         if worktree is not None:
             statement = statement.where(m.Artifact.worktree == worktree)
         with self.session() as session:
-            return list(session.exec(statement))
+            return [self._record("artifact", row, session) for row in session.exec(statement)]
 
     def delete_git_consents(self, project):
         with self.session() as session:

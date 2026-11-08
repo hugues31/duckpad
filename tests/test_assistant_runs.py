@@ -353,14 +353,14 @@ def test_cancel_active_run_and_bounded_wait(instance, monkeypatch):
     bundle["node_sql"] = {"nodes/source.sql": "-- @output result\nSELECT 1 AS value;"}
     services.projects.write(context["worktree"], snapshot["revision"], bundle_to_files(bundle))
     entered, release = threading.Event(), threading.Event()
-    compute = services.engine.runs._compute
+    compute = services.engine.runs.nodes.compute
 
     def blocked(*args):
         entered.set()
         assert release.wait(10)
         return compute(*args)
 
-    monkeypatch.setattr(services.engine.runs, "_compute", blocked)
+    monkeypatch.setattr(services.engine.runs.nodes, "compute", blocked)
     run = services.engine.launch(context["worktree"], "dev")
     try:
         assert entered.wait(10)

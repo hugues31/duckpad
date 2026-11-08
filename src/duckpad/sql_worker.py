@@ -11,7 +11,6 @@ from .native import Cursor
 from .python_execution import execute as execute_python
 from .util import clean, literal
 from .worker_connections import setup_connections
-from .worker_policy import restrict_files as restrict_files  # Re-export for existing policy probes.
 
 
 def serve(stream, channel, message):

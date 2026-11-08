@@ -65,7 +65,7 @@ def router(ctx: Context) -> APIRouter:
             store.paths.resources(snapshot["worktree"]["project"]),
             data.file,
             data.model_dump(exclude_none=True, exclude={"file"}),
-            engine.pool.probe_config(),
+            engine.pool.connections.probe_config(),
             enabled_extensions((snapshot.get("bundle") or {}).get("extensions")),
             store.get("settings", "offline_extensions", {}),
         )

@@ -31,7 +31,7 @@ import duckdb
 
 from duckpad.auth import Auth
 from duckpad.builtin_templates import BUILTINS
-from duckpad.execution.runs import UNFINISHED_RUN_STATUSES
+from duckpad.execution.journal import UNFINISHED_RUN_STATUSES
 from duckpad.lineage import Lineage
 from duckpad.services import Services
 from duckpad.util import Problem, dumps, literal, qi
@@ -82,7 +82,7 @@ def oracle(home):
     suffix = uuid.uuid4().hex[:8].upper()
     source, destination, native = [f"DP_TEST_{role}_{suffix}" for role in ("SRC", "DST", "NATIVE")]
     created = []
-    instance = Services.open(home)
+    instance = Services.open(home, isolated=False, enforce_access=False)
     store, projects, catalog, engine = instance.store, instance.projects, instance.catalog, instance.engine
     try:
         for name in (source, destination, native):
@@ -197,7 +197,7 @@ def s3(home):
         aws_secret_access_key="duckpad-test-secret",
         region_name="us-east-1",
     )
-    instance = Services.open(home)
+    instance = Services.open(home, isolated=False, enforce_access=False)
     store, projects, catalog, engine = instance.store, instance.projects, instance.catalog, instance.engine
     try:
         client.create_bucket(Bucket="duckpad-acceptance")
@@ -394,7 +394,7 @@ def database_run(home, mode, connector, environments, tables, attach, extra=None
     """Run the table flow through a connection in one execution mode, then check every write."""
     schema, source, destination = tables
     isolated = mode == "isolated"
-    instance = Services.open(home / mode, enforce_access=isolated)
+    instance = Services.open(home / mode, enforce_access=isolated, isolated=isolated)
     store, projects, catalog, engine = instance.store, instance.projects, instance.catalog, instance.engine
     try:
         if connector != "postgres":

@@ -13,7 +13,7 @@ from xml.etree import ElementTree
 import duckdb
 import pytest
 from fastapi.testclient import TestClient
-from helpers import enable_excel, files_connection, join_run
+from helpers import enable_excel, files_connection, join_run, wait_until
 
 from duckpad.app import create_app
 from duckpad.artifacts import CHUNK_SIZE, open_regular
@@ -201,14 +201,14 @@ def test_stale_failed_running_and_replaced_results(instance, monkeypatch):
         lambda b: b["templates"].update(rows="-- @output result\nSELECT 42 AS id;"),
     )
     entered, release = threading.Event(), threading.Event()
-    original = services.engine.runs._compute
+    original = services.engine.runs.nodes.compute
 
     def delayed(*args):
         entered.set()
         assert release.wait(10)
         return original(*args)
 
-    monkeypatch.setattr(services.engine.runs, "_compute", delayed)
+    monkeypatch.setattr(services.engine.runs.nodes, "compute", delayed)
     pending = services.engine.launch(worktree["id"], "dev")
     try:
         assert entered.wait(5)
@@ -239,6 +239,78 @@ def test_a_new_export_run_purges_the_copy_it_replaces(instance):
     assert join_run(services.store, services.engine.launch(worktree["id"], "dev")["id"])["status"] == "failed"
     assert not services.store.all("artifact")
     assert not list(services.store.paths.artifacts.iterdir())
+
+
+def test_exports_to_different_destinations_run_concurrently(instance, monkeypatch):
+    services, _ = instance
+    first, _ = create(instance)
+    second, _ = create(instance)
+    entered, release = threading.Event(), threading.Event()
+    capture = services.engine.exports.capture
+
+    def held(spec, run, *args):
+        if run["worktree"] == first["id"]:
+            entered.set()
+            assert release.wait(20)
+        return capture(spec, run, *args)
+
+    monkeypatch.setattr(services.engine.exports, "capture", held)
+    pending = services.engine.launch(first["id"], "dev")
+    try:
+        assert entered.wait(10)
+        # This finishes while the first export still owns its destination lock.
+        other = services.engine.launch(second["id"], "dev")
+        assert join_run(services.store, other["id"], 10)["status"] == "success"
+        assert services.store.get("run", pending["id"])["status"] == "running"
+    finally:
+        release.set()
+        assert join_run(services.store, pending["id"], 20)["status"] == "success"
+
+
+def test_waiting_for_a_shared_export_destination_can_be_canceled(instance, tmp_path, monkeypatch):
+    services, client = instance
+    shared = tmp_path / "shared"
+    shared.mkdir()
+    connection = files_connection(services.catalog, root=str(shared))
+    first, _ = create(instance, connection=connection)
+    second, _ = create(instance, connection=connection)
+    for tree in (first, second):
+        assert (
+            client.put(
+                f"/api/projects/{tree['project']}/connections", json={"connections": ["files"]}
+            ).status_code
+            == 200
+        )
+    entered, waiting, release = threading.Event(), threading.Event(), threading.Event()
+    capture, export = services.engine.exports.capture, services.engine.runs.nodes.export
+
+    def held(spec, run, *args):
+        if run["worktree"] == first["id"]:
+            entered.set()
+            assert release.wait(20)
+        return capture(spec, run, *args)
+
+    def observe(execution, *args):
+        if execution.run["worktree"] == second["id"]:
+            waiting.set()
+        return export(execution, *args)
+
+    monkeypatch.setattr(services.engine.exports, "capture", held)
+    monkeypatch.setattr(services.engine.runs.nodes, "export", observe)
+    pending = services.engine.launch(first["id"], "dev")
+    try:
+        assert entered.wait(10)
+        other = services.engine.launch(second["id"], "dev")
+        assert waiting.wait(10)
+        services.engine.cancel(other["id"])
+        canceled = join_run(services.store, other["id"], 5)
+        assert canceled["status"] == "canceled"
+        assert not canceled["nodes"]["export"].get("external_started")
+        wait_until(lambda: second["id"] not in services.engine.active)
+        assert services.store.get("run", pending["id"])["status"] == "running"
+    finally:
+        release.set()
+        assert join_run(services.store, pending["id"], 20)["status"] == "success"
 
 
 @pytest.mark.parametrize("replacement", ["missing", "symlink", "modified", "directory", "parent_symlink"])
@@ -301,7 +373,14 @@ def test_restart_and_project_deletion(instance):
     services.engine.close()
     from duckpad.engine import Engine
 
-    restarted = Engine(services.store, services.projects, services.catalog, services.engine.access)
+    restarted = Engine(
+        services.store,
+        services.projects,
+        services.catalog,
+        services.engine.access,
+        isolated=services.engine.isolated,
+        enforce_access=services.engine.enforce_access,
+    )
     try:
         assert restarted.export_result(worktree["id"], "dev", "export")["status"] == "available"
     finally:

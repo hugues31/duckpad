@@ -12,7 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from . import schemas
 from .api.deps import requester
-from .execution.runs import UNFINISHED_RUN_STATUSES
+from .execution.journal import UNFINISHED_RUN_STATUSES
 from .partition_storage import PartitionStorage, run_manifest
 from .types import Record
 from .util import Problem

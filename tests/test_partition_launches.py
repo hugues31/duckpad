@@ -19,7 +19,7 @@ def test_parallel_keys_share_database_budget_and_collect_in_manifest_order(servi
     worktree = projects.create("Parallel keys", bundle())["id"]
     barrier = threading.Barrier(2)
     contexts, settings, calls = [], [], Counter()
-    compute = engine.runs._compute
+    compute = engine.runs.nodes.compute
 
     def counted(execution, key, tables):
         calls[key] += 1
@@ -33,7 +33,7 @@ def test_parallel_keys_share_database_budget_and_collect_in_manifest_order(servi
             barrier.wait(timeout=10)
         return compute(execution, key, tables)
 
-    monkeypatch.setattr(engine.runs, "_compute", counted)
+    monkeypatch.setattr(engine.runs.nodes, "compute", counted)
     run = join_run(store, engine.launch(worktree, "dev", partition_execution={"parallelism": 8})["id"])
     assert run["status"] == "success", run
     assert run["partitions"]["effective_parallelism"] == 2
@@ -67,7 +67,7 @@ def test_failed_retry_refreshes_manifest_and_skips_successful_exports(services, 
     worktree = projects.create("Retry keys", project)["id"]
     calls = Counter()
     fail = True
-    compute = engine.runs._compute
+    compute = engine.runs.nodes.compute
 
     def counted(execution, key, tables):
         value = (execution.partition or {}).get("key", {}).get("value")
@@ -76,7 +76,7 @@ def test_failed_retry_refreshes_manifest_and_skips_successful_exports(services, 
             raise Problem("Temporary source failure")
         return compute(execution, key, tables)
 
-    monkeypatch.setattr(engine.runs, "_compute", counted)
+    monkeypatch.setattr(engine.runs.nodes, "compute", counted)
     first = join_run(store, engine.launch(worktree, "dev")["id"])
     assert first["status"] == "partial_failure", first
     fail = False
@@ -154,7 +154,7 @@ def test_stop_finishes_active_keys_and_marks_others_missing(services, monkeypatc
     worktree = projects.create("Stop admission", project)["id"]
     barrier = threading.Barrier(2)
     calls = []
-    compute = engine.runs._compute
+    compute = engine.runs.nodes.compute
 
     def fail(execution, key, tables):
         if key == "source":
@@ -165,12 +165,12 @@ def test_stop_finishes_active_keys_and_marks_others_missing(services, monkeypatc
                 raise Problem("Fail one active key")
         return compute(execution, key, tables)
 
-    monkeypatch.setattr(engine.runs, "_compute", fail)
+    monkeypatch.setattr(engine.runs.nodes, "compute", fail)
     run = join_run(store, engine.launch(worktree, "dev", partition_execution={"parallelism": 2})["id"])
     assert set(calls) == {"a", "b"}
     assert run["partitions"]["completed"] == 1
     assert run["partitions"]["not_started"] == 1
-    monkeypatch.setattr(engine.runs, "_compute", compute)
+    monkeypatch.setattr(engine.runs.nodes, "compute", compute)
     missing = join_run(store, engine.launch(worktree, "dev", partition_selection={"mode": "missing"})["id"])
     assert missing["status"] == "success", missing
     assert missing["partitions"]["selected"] == 2
@@ -181,7 +181,7 @@ def test_cancel_interrupts_every_admitted_cursor(services, monkeypatch):
     store.put("settings", "sql_resources", {"threads": 2})
     worktree = projects.create("Cancel parallel", bundle())["id"]
     admitted, release = threading.Barrier(3), threading.Event()
-    compute = engine.runs._compute
+    compute = engine.runs.nodes.compute
 
     def paused(execution, key, tables):
         if key == "source":
@@ -189,7 +189,7 @@ def test_cancel_interrupts_every_admitted_cursor(services, monkeypatch):
             assert release.wait(10)
         return compute(execution, key, tables)
 
-    monkeypatch.setattr(engine.runs, "_compute", paused)
+    monkeypatch.setattr(engine.runs.nodes, "compute", paused)
     run = engine.launch(worktree, "dev", partition_execution={"parallelism": 2})
     try:
         admitted.wait(timeout=10)
@@ -235,7 +235,7 @@ def test_restart_marks_running_keys_interrupted_and_preserves_success(services):
     partial.write_bytes(b"incomplete")
     run["status"] = "running"
     store.put("run", run["id"], run)
-    engine.runs.recover()
+    engine.runs.journal.recover()
     recovered = storage.result("transform", entry["key_hash"])
     assert recovered["attempt"]["status"] == "interrupted"
     assert recovered["attempt"]["external_outcome"] == "unknown"

@@ -13,12 +13,11 @@ from pathlib import Path
 
 import duckdb
 
-from .. import connection_probe, project_extensions, value_sources
+from .. import project_extensions, value_sources
 from ..access import Access
 from ..catalog import Catalog, database_files, executable, redact
 from ..components import expand
 from ..datasets import Context
-from ..extensions import database_config
 from ..materialize import drop_dataset
 from ..projects import Projects
 from ..python_policy import get_policy
@@ -26,6 +25,7 @@ from ..store import Store
 from ..templates import URI
 from ..types import Connections, Record, SQLCursor, SQLDatabase
 from ..util import Problem, digest, literal, qi, uid
+from .connections import ConnectionConfig
 
 logger = logging.getLogger(__name__)
 
@@ -138,12 +138,18 @@ class ContextPool:
         store: Store,
         projects: Projects,
         catalog: Catalog,
-        access: Access | None,
+        access: Access,
         isolated: bool,
         lock: threading.RLock,
+        *,
+        enforce_access: bool,
     ) -> None:
         self.store, self.projects, self.catalog, self.access = store, projects, catalog, access
         self.isolated = isolated
+        self.enforce_access = enforce_access
+        self.connections = ConnectionConfig(
+            store, projects, catalog, access, isolated=isolated, enforce_access=enforce_access
+        )
         # The engine lock, which guards the pool's mapping.
         self.lock = lock
         self.contexts: dict[tuple[str, str], Context] = {}
@@ -182,7 +188,7 @@ class ContextPool:
         never wait for a worker, extension installation or connection setup.
         """
         key = (worktree, environment)
-        opening = create or not self.access
+        opening = create or not self.enforce_access
         with self.lock:
             existing = self.contexts.get(key)
         partition_artifacts = existing.partition_artifacts if existing else False
@@ -230,7 +236,7 @@ class ContextPool:
             if stopped:
                 # Reap the replaced worker's process and release its descriptors.
                 stopped.close()
-            if context.db is not None or (self.access and not create):
+            if context.db is not None or (self.enforce_access and not create):
                 return context
             database, connections, secrets = self._open(
                 worktree,
@@ -286,22 +292,6 @@ class ContextPool:
         with self.lock:
             return [c for c in self.contexts.values() if worktree is None or c.worktree == worktree]
 
-    def capture(
-        self, worktree: str, references: list[str], environment: str
-    ) -> tuple[Connections, list[str]]:
-        """Settings of connections the worktree's project may use, with the secrets to redact."""
-        if self.access:
-            self.access.connections(self.projects.get(worktree)["project"], references)
-        return self.catalog.capture(references, environment)
-
-    def extension_settings(self) -> dict[str, bool]:
-        return {"allow_unsigned_extensions": self.store.get("settings", "allow_unsigned_extensions", False)}
-
-    def probe_config(self) -> Record:
-        """DuckDB settings of connection setup in a child process, outside an execution session."""
-        self.store.paths.extensions.mkdir(exist_ok=True)
-        return {**database_config(self.store.paths.extensions), **self.extension_settings()}
-
     def sql_resources(self) -> Record:
         """DuckDB threads and memory limit of new SQL sessions; None leaves DuckDB's automatic sizing."""
         return {**SQL_RESOURCES, **self.store.get("settings", "sql_resources", {})}
@@ -335,7 +325,7 @@ class ContextPool:
         changed = python_signature != context.python_signature
         if self.isolated:
             project = self.projects.get(context.worktree)["project"]
-            connections, secrets = self._configured_connections(project, context.environment)
+            connections, secrets = self.connections.configured(project, context.environment)
             # Secret values only reach this in-memory comparison, never a stored fingerprint.
             if attached(connections) == attached(context.connections):
                 # A new name or description changes no setup: runs only report it.
@@ -411,15 +401,13 @@ class ContextPool:
         """Start a context's database, with the connections an isolated worker attached."""
         extensions = self.store.paths.extensions
         extensions.mkdir(exist_ok=True)
-        config = {**database_config(extensions), **self.extension_settings()}
+        allow_unsigned = self.connections.extension_settings()["allow_unsigned_extensions"]
         imports = self.store.get("settings", "offline_extensions", {})
         from ..sandbox import Database
 
         project = self.projects.get(worktree)["project"]
-        captured, secrets = (
-            (connections or self._configured_connections(project, environment)) if self.isolated else ({}, [])
-        )
-        roots, writable = self.access.local_roots(project, captured) if self.access else ([], [])
+        captured, secrets = connections or self.connections.configured(project, environment)
+        roots, writable = self.access.local_roots(project, captured) if self.enforce_access else ([], [])
         files = self.projects.read_files(self.projects.get(worktree))
         runtime = {}
         policy = get_policy(self.store, project)
@@ -439,7 +427,7 @@ class ContextPool:
             partition_data = self.store.paths.partition_artifacts(worktree, environment)
             partition_data.mkdir(parents=True, exist_ok=True, mode=0o700)
             roots = [*roots, partition_data]
-        self._install_extensions(captured, config, secrets)
+        self.connections.check_extensions(captured, secrets)
         try:
             database = Database(
                 {
@@ -447,7 +435,7 @@ class ContextPool:
                     **runtime,
                     "captured": captured,
                     "extensions": str(extensions),
-                    "allow_unsigned_extensions": config["allow_unsigned_extensions"],
+                    "allow_unsigned_extensions": allow_unsigned,
                     "offline_extensions": imports,
                     "project_extensions": requirements,
                     "read_paths": [str(p) for p in roots],
@@ -464,39 +452,6 @@ class ContextPool:
                 names = ", ".join(item["name"] for item in requirements)
                 message += f" Project extensions: {names}. Check their binaries, server CPU and native dependencies in Instance settings → Extensions."
             raise Problem(message, error.status, error.detail) from None
-
-    def _configured_connections(self, project: str, environment: str) -> tuple[Connections, list[str]]:
-        """Capture the project's authorized connections that are fully configured for the environment.
-
-        Creating an environment adds an empty configuration to every connection. A connection
-        still missing required settings stays unavailable instead of failing every run; nodes
-        that use it are blocked by their own capture error.
-        """
-        captured: Connections = {}
-        secrets: list[str] = []
-        assert self.access is not None
-        for reference in self.access.record(project)["connections"]:
-            try:
-                values, hidden = self.catalog.capture([reference], environment)
-            except Problem:
-                continue
-            captured.update(values)
-            secrets.extend(hidden)
-        return captured, secrets
-
-    def _install_extensions(self, captured: Connections, config: Record, secrets: list[str]) -> None:
-        """Provision trusted administrator-declared extensions before the worker gets read-only
-        access to their cache. A child process installs and loads them, so that a binary that
-        stops its process never stops the server. Connection setup, such as ATTACH, runs only
-        in the worker."""
-        imports = self.store.get("settings", "offline_extensions", {})
-        for connection in captured.values():
-            try:
-                connection_probe.check_extensions(config, connection, imports, secrets)
-            except Problem as error:
-                raise Problem(
-                    f"Cannot install the extensions of connection {connection['name']}: {error}", 503
-                ) from None
 
     def mark_stale(
         self, context: Context, fingerprints: dict[str, str], generations: dict[str, str] | None = None

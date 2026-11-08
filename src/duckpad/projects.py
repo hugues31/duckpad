@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Literal, Unpack, cast, overload
 
 from . import python_environment, views
+from .artifacts import Artifacts
 from .builtin_templates import BUILTINS
 from .bundle import bundle_to_files, file_node_names, files_to_bundle
 from .comparison import CommitContext, commit_message
@@ -209,7 +210,7 @@ class Projects:
         with self.repository(project_id):
             with self.store.transaction():
                 worktrees = self.store.worktrees(project_id)
-                artifacts = self.store.artifact_ids(project=project_id)
+                artifacts = self.store.artifacts(project=project_id)
                 # Example connections own files inside this project's resources directory.
                 self.store.delete("connection", "sample_" + project_id)
                 self.store.delete("settings", "python:" + project_id)
@@ -255,13 +256,14 @@ class Projects:
         self.observed[key] = files
         return result
 
-    def discard(self, worktrees: Iterable[Record], artifacts: Iterable[str]) -> None:
+    def discard(self, worktrees: Iterable[Record], artifacts: Iterable[Record]) -> None:
         """Remove the files of deleted worktree and artifact records, after their deletion.
 
         Every step tolerates files that are already gone, so an interrupted cleanup can run again.
         """
-        for identity in artifacts:
-            (self.store.paths.artifacts / identity).unlink(missing_ok=True)
+        storage = Artifacts(self.store)
+        for record in artifacts:
+            storage.remove(record["id"], record=record)
         for worktree in worktrees:
             self.observed.pop(worktree["id"], None)
             self.pending.pop(worktree["id"], None)

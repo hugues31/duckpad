@@ -22,7 +22,7 @@ def bundle(query="SELECT current_setting('threads') AS threads, current_setting(
 @pytest.mark.parametrize("isolated", [False, True], ids=["embedded", "isolated"])
 def test_sql_resources_restart_sessions_at_their_next_run_and_persist(tmp_path, isolated):
     home = tmp_path / "instance"
-    instance = Services.open(home, enforce_access=isolated)
+    instance = Services.open(home, enforce_access=isolated, isolated=isolated)
     automatic = automatic_resources()
     try:
         worktree = instance.projects.create("SQL resources", bundle())
@@ -57,7 +57,7 @@ def test_sql_resources_restart_sessions_at_their_next_run_and_persist(tmp_path, 
         assert instance.engine.context(identity, "dev").db is session
 
         instance.close()
-        instance = Services.open(home, enforce_access=isolated)
+        instance = Services.open(home, enforce_access=isolated, isolated=isolated)
         assert instance.engine.sql_resources() == {
             "threads": 3,
             "memory_limit": "1GiB",

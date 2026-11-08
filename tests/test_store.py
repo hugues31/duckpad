@@ -54,7 +54,7 @@ def test_initial_migration_matches_models_and_survives_restart(store):
     with store.engine.connect() as connection:
         assert (
             connection.exec_driver_sql("SELECT version_num FROM alembic_version").scalar_one()
-            == "0001_baseline"
+            == "0002_artifact_storage"
         )
         assert "records" not in inspect(connection).get_table_names()
         assert len(SQLModel.metadata.tables) == 29
@@ -470,8 +470,8 @@ def test_scoped_queries_and_bulk_deletes_leave_other_projects_untouched(store):
         assert [c["id"] for c in projects.snapshot(first["id"])["conflicts"]] == [first["id"]]
         assert store.has_conflicts(first["id"])
         assert not store.has_conflicts("missing")
-        assert store.artifact_ids(project=first["project"]) == [first["id"]]
-        assert store.artifact_ids(worktree=second["id"]) == [second["id"]]
+        assert [a["id"] for a in store.artifacts(project=first["project"])] == [first["id"]]
+        assert [a["id"] for a in store.artifacts(worktree=second["id"])] == [second["id"]]
         credentials.forget_project(first["project"])
         assert not credentials.consented("admin", first["project"], "https://example.com/repo.git")
         assert credentials.consented("admin", second["project"], "https://example.com/repo.git")

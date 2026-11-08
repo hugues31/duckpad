@@ -10,10 +10,10 @@ from . import partitions, variables
 from .catalog import redact
 from .components import expand_for
 from .datasets import Dataset
+from .execution.statements import compile_node
 from .graph import reachable, topological
 from .materialize import drop_dataset
 from .partition_storage import PartitionStorage
-from .templates import compile_template
 from .types import Record
 from .util import Problem, digest, now, qi, uid
 
@@ -159,17 +159,14 @@ class PartitionRun:
                 node = nodes[key]
                 if not node["parsed"]["writes_external"] or node.get("error"):
                     continue
-                statements = compile_template(
-                    node["parsed"],
-                    node.get("params", {}),
+                statements = compile_node(
+                    node,
                     {p: qi("preflight_" + p) for p in node["parsed"]["inputs"]},
                     {},
                     execution.captured,
                     self.runner.store.paths.project_files(
                         self.root["project"], execution.context.worktree, execution.context.environment
                     ),
-                    variables=variables.expression_values(node),
-                    bound=node.get("variables"),
                 )
                 for statement in statements:
                     file = statement.get("export_file")
@@ -221,7 +218,7 @@ class PartitionRun:
             self.root["partitions"].update(error=str(error), phase="failed")
             for key in self.partitioned:
                 execution.nodes[key]["error"] = str(error)
-            self.runner._execute_nodes(
+            self.runner.nodes.execute_nodes(
                 execution, [k for k in execution.order if k not in execution.value_phase]
             )
             return
@@ -249,7 +246,7 @@ class PartitionRun:
                 try:
                     self.collect_inputs(execution, key)
                     execution.schema_only = not self.entries and key in only_empty
-                    self.runner._execute_nodes(execution, unit)
+                    self.runner.nodes.execute_nodes(execution, unit)
                 except Problem as error:
                     self.root["nodes"][key].update(status="blocked", error=str(error))
                     with execution.context.lock:
@@ -326,7 +323,7 @@ class PartitionRun:
         with self.lock:
             self.active.add(entry["partition_id"])
             self.update_active()
-            self.runner._persist(self.root, execution.secrets)
+            self.runner.journal.persist(self.root, execution.secrets)
         remaining = Counter(
             (e["source"], e["sourceHandle"])
             for e in execution.edges
@@ -351,7 +348,7 @@ class PartitionRun:
                             "reason": "Export already succeeded for this key and fingerprint",
                         }
                     else:
-                        self.runner._execute_nodes(execution, [key])
+                        self.runner.nodes.execute_nodes(execution, [key])
                 except Problem as error:
                     execution.run["nodes"][key].update(status="blocked", error=str(error))
                 state = execution.run["nodes"][key]
@@ -595,7 +592,7 @@ class PartitionRun:
                     )
                     continue
                 tables = []
-                staged = self.runner._compute(execution, key, tables)
+                staged = self.runner.nodes.compute(execution, key, tables)
                 execution.published[key] = staged
                 for port, dataset in staged.items():
                     self.schemas[key, port] = dataset.columns
@@ -639,7 +636,7 @@ class PartitionRun:
                     self.execution.context.result_runs[key] = self.root["id"]
                     if self.root["nodes"][key]["status"] == "success":
                         self.execution.context.errors.pop(key, None)
-        self.runner._persist(self.root, self.execution.secrets)
+        self.runner.journal.persist(self.root, self.execution.secrets)
 
     def prune(self):
         context = self.execution.context

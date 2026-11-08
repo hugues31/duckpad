@@ -9,13 +9,13 @@ from pathlib import Path
 import psutil
 
 from duckpad.bundle import bundle_to_files
-from duckpad.execution.runs import UNFINISHED_RUN_STATUSES
+from duckpad.execution.journal import UNFINISHED_RUN_STATUSES
 from duckpad.services import Services
 
 
 def benchmark(rows):
     with tempfile.TemporaryDirectory() as folder:
-        instance = Services.open(Path(folder), enforce_access=False)
+        instance = Services.open(Path(folder), enforce_access=False, isolated=False)
         try:
             projects, engine, store = instance.projects, instance.engine, instance.store
             worktree = projects.create("Python performance")

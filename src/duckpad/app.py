@@ -27,7 +27,7 @@ STATIC = Path(__file__).parent / "static"
 
 
 def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -> FastAPI:
-    services = Services.open(home, enforce_access=True, trusted_local=trusted_local)
+    services = Services.open(home, isolated=not trusted_local)
     auth = Auth(services.store)
     ctx = Context(
         services=services,

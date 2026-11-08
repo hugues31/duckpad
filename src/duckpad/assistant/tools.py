@@ -72,7 +72,6 @@ class Dependencies:
         if data and not config["allow_data"]:
             raise Problem("The assistant cannot read data", 403)
         access = self.services.engine.access
-        assert access is not None
         worktree = self.context.get("worktree")
         if worktree:
             access.worktree(user, worktree, "editor" if write else "reader")
@@ -94,7 +93,6 @@ class Dependencies:
     def can_write(self):
         user, _ = self.check()
         access = self.services.engine.access
-        assert access is not None
         worktree = self.context.get("worktree")
         # Job results are read-only for every role; their runs start from the Job.
         return (
@@ -123,7 +121,6 @@ class Dependencies:
         references = [ref for node in nodes.values() for ref in connection_references(node)]
         # Also recheck old result reads after a grant has been revoked.
         access = self.services.engine.access
-        assert access is not None
         access.connections(self.context["project"], references)
         return self.context["worktree"], environment
 
@@ -139,7 +136,6 @@ class Dependencies:
 def validate_context(services, user, context: PageContext):
     value = context.model_dump()
     access = services.engine.access
-    assert access is not None
     if context.project:
         access.require(user, context.project)
     if not context.worktree:
