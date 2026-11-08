@@ -1,11 +1,13 @@
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 
 import pytest
-from conftest import example_bundle, wait_run
+from helpers import example_bundle, wait_run, wait_until
 
-from duckpad.lineage import Lineage, TraceQuery
-from duckpad.projects import bundle_to_files
+from duckpad.bundle import bundle_to_files
+from duckpad.lineage import Lineage
+from duckpad.trace import TraceQuery
 from duckpad.util import Problem
 
 
@@ -32,13 +34,16 @@ def test_cancel_interrupts_active_duckdb_and_prevents_later_branch(services, tmp
     )
     projects.write(worktree, snapshot["revision"], bundle_to_files(snapshot["bundle"]))
     run = engine.launch(worktree, "dev")
-    deadline = time.monotonic() + 5
-    while time.monotonic() < deadline:
-        state = store.get("run", run["id"])["nodes"]["filter"]
-        if state.get("statements", [{}])[0].get("materialization_sql"):
-            break
-        time.sleep(0.01)
-    time.sleep(0.03)
+    wait_until(
+        lambda: (
+            store.get("run", run["id"])["nodes"]
+            .get("filter", {})
+            .get("statements", [{}])[0]
+            .get("materialization_sql")
+        ),
+        message="The long query did not start",
+    )
+    time.sleep(0.03)  # Let DuckDB enter the query that cancellation must interrupt.
     engine.cancel(run["id"])
     engine.cancel(run["id"])
     result = wait_run(store, run)
@@ -79,6 +84,12 @@ def test_recalculation_cancels_only_dependent_lineage_and_rejects_old_generation
     thread.start()
     assert entered.wait(2)
     run = engine.launch(worktree, "dev", "filter")
+    wait_until(
+        lambda: (
+            old["id"] in engine.context(worktree, "dev").datasets
+            and engine.context(worktree, "dev").datasets[old["id"]].status == "stale"
+        )
+    )
     with pytest.raises(Problem, match="unavailable or stale"):
         Lineage(engine).explain(worktree, "dev", old["id"], 0, "total")
     release.set()
@@ -89,7 +100,6 @@ def test_recalculation_cancels_only_dependent_lineage_and_rejects_old_generation
 
 
 def test_simultaneous_entry_points_admit_exactly_one_run(services, tmp_path, monkeypatch):
-    from concurrent.futures import ThreadPoolExecutor
 
     store, projects, catalog, engine = services
     worktree = projects.create("Admission race", example_bundle(tmp_path / "race.csv"))["id"]
@@ -164,3 +174,129 @@ def test_unrelated_lineage_in_same_context_is_not_canceled(services, tmp_path, m
     release.set()
     thread.join(5)
     assert result[0]["complete"] and result[0]["total"] == 2
+
+
+@pytest.mark.parametrize("close", [False, True])
+def test_preparing_run_is_visible_and_cancellable_during_uv_lock(services, tmp_path, monkeypatch, close):
+    import os
+    import sys
+
+    from duckpad import python_environment
+
+    store, projects, _, engine = services
+    tree = projects.create("Preparing Python")
+    snapshot = projects.snapshot(tree["id"])
+    bundle = snapshot["bundle"]
+    bundle["flow"]["nodes"] = [{"id": "python", "language": "python", "params": {}}]
+    bundle["node_sql"] = {
+        "nodes/python.py": "import duckpad as dp\nclass Slow(dp.Node):\n    def run(self) -> None: pass\n"
+    }
+    projects.write(tree["id"], snapshot["revision"], bundle_to_files(bundle))
+    store.put("settings", "python:" + tree["project"], {"enabled": True})
+    marker = tmp_path / "uv-started"
+    uv = tmp_path / "uv"
+    uv.write_text(
+        f"#!{sys.executable}\nimport os, sys, time\nfrom pathlib import Path\nassert sys.argv[1] == 'lock'\nPath({str(marker)!r}).write_text(str(os.getpid()))\ntime.sleep(60)\n"
+    )
+    uv.chmod(0o755)
+    monkeypatch.setattr(python_environment, "uv_executable", lambda: str(uv))
+    # Supply a tiny wheel to keep the fixture focused on the real uv command lifecycle.
+    wheel = tmp_path / python_environment.runtime_tag()
+    wheel.write_bytes(b"test runtime")
+    monkeypatch.setattr(python_environment, "runtime_wheel", lambda _: wheel)
+    before = projects.snapshot(tree["id"])["commit"]
+    run = engine.launch(tree["id"], "dev")
+    wait_until(marker.exists, timeout=10)
+    child = int(marker.read_text())
+    assert store.get("run", run["id"])["status"] == "preparing"
+    assert engine.statuses(tree["id"], "dev")["active"]["id"] == run["id"]
+    with pytest.raises(Problem) as busy:
+        engine.launch(tree["id"], "dev")
+    assert busy.value.status == 409 and busy.value.detail["run"] == run["id"]
+    if close:
+        with ThreadPoolExecutor(1) as pool:
+            pool.submit(engine.close).result(5)
+        assert not engine.pool.all()
+    else:
+        assert engine.cancel(run["id"])["status"] == "canceling"
+    assert wait_run(store, run, timeout=5)["status"] == "canceled"
+    assert not engine.active
+    with pytest.raises(ProcessLookupError):
+        os.kill(child, 0)
+    assert projects.snapshot(tree["id"])["commit"] == before
+    assert not any(t.is_alive() for t in engine.runs.threads)
+    # Stopping the run neither prepared nor broke the environment: no error is left in settings.
+    assert python_environment.environment_status(store.home, tree["project"])["state"] == "unprepared"
+
+
+def test_retirement_holds_context_lock_while_lineage_adds_datasets(services, tmp_path, monkeypatch):
+    store, projects, _, engine = services
+    bundle = example_bundle(tmp_path / "rows.csv")
+    bundle["flow"]["nodes"].extend(
+        [
+            {"id": "other_source", "template": "source", "params": {"file": str(tmp_path / "rows.csv")}},
+            {"id": "other_total", "template": "total", "params": {}},
+        ]
+    )
+    bundle["flow"]["edges"].append(
+        {
+            "id": "other_edge",
+            "source": "other_source",
+            "sourceHandle": "result",
+            "target": "other_total",
+            "targetHandle": "source",
+        }
+    )
+    worktree = projects.create("Concurrent retirement", bundle)["id"]
+    assert wait_run(store, engine.launch(worktree, "dev"))["status"] == "success"
+    context = engine.context(worktree, "dev")
+    output = context.outputs["other_total"]["result"]
+    inspecting = threading.local()
+    entered, release = threading.Event(), threading.Event()
+    retire = engine.runs.nodes.publication.retire
+
+    class CheckedDatasets(dict):
+        def items(self):
+            # Retirement must take its whole dependency snapshot under the same lock
+            # used by TraceQuery when it adds intermediate lineage datasets.
+            if getattr(inspecting, "retiring", False):
+                assert context.lock._is_owned()
+                entered.set()
+            return super().items()
+
+        def values(self):
+            if getattr(inspecting, "retiring", False):
+                assert context.lock._is_owned()
+            return super().values()
+
+    context.datasets = CheckedDatasets(context.datasets)
+
+    def observed(*args):
+        inspecting.retiring = True
+        try:
+            return retire(*args)
+        finally:
+            inspecting.retiring = False
+            release.set()
+
+    monkeypatch.setattr(engine.runs.nodes.publication, "retire", observed)
+    # An unrelated branch's lineage is allowed to read while source outputs retire.
+    lineage = Lineage(engine)
+    tracing = threading.Event()
+    trace = TraceQuery.trace
+
+    def held_trace(self, *args, **kwargs):
+        tracing.set()
+        assert release.wait(10)
+        return trace(self, *args, **kwargs)
+
+    monkeypatch.setattr(TraceQuery, "trace", held_trace)
+    with ThreadPoolExecutor(max_workers=1) as readers:
+        request = readers.submit(lineage.explain, worktree, "dev", output.id, 0, "total")
+        assert tracing.wait(5)
+        run = engine.launch(worktree, "dev", "source")
+        assert wait_run(store, run)["status"] == "success"
+        assert entered.is_set() and release.is_set()
+        assert request.result(10)["complete"]
+    current = context.outputs["source"]["result"]
+    assert current.run == run["id"]
