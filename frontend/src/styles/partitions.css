@@ -102,13 +102,8 @@
   border-style: dashed;
   color: var(--muted);
 }
-/* The partition selector takes room from the tabs and the save label, only in
-   partitioned projects; the save state keeps its icon and tooltip. */
-@media (min-width: 1051px) and (max-width: 1450px) {
-  .flow-toolbar:has(.partition-trigger) .main-tabs a {
-    padding-inline: 7px;
-    gap: 4px;
-  }
+/* Phones keep the save state as an icon with its tooltip. */
+@media (max-width: 600px) {
   .flow-toolbar .partition-trigger {
     max-width: 150px;
   }

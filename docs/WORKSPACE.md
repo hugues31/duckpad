@@ -72,6 +72,15 @@ refused while an input in its scope has no source: the banner names the input
 and the node is selected. **Stop execution** requests cancellation of active
 SQL. A protected environment asks for confirmation.
 
+While a run is active, the strip below the project tabs shows its environment,
+completed nodes and total, with a gently animated progress bar. Partitioned runs
+show completed and failed partitions out of the selected total; failed partitions
+count toward progress but remain identified separately. Preparation uses an
+indeterminate bar until the total is known. The animation respects reduced-motion
+preferences and pauses while stopping. When the project tabs and run controls
+do not fit on one row, the controls move to a second row instead of hiding tabs.
+The same progress strip appears in a running Job's details on the **Jobs** page.
+
 Results belong to a branch and environment. A change can mark previous results
 **Stale**, and a failed run retains the previous successful data. Successful canvas
 nodes show the primary output's row count. Stale, failed and warning indicators
