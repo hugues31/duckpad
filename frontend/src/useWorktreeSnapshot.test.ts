@@ -93,6 +93,22 @@ afterEach(() => {
 });
 
 describe("useWorktreeSnapshot", () => {
+  it("does not let a status read started before launch erase the new run", async () => {
+    let answer!: (value: Response) => void;
+    serve((path) =>
+      path === "/worktrees/main"
+        ? json(snapshot("main", "r1"))
+        : new Promise<Response>((resolve) => {
+            answer = resolve;
+          }),
+    );
+    const { result } = watch({ worktree: "main", environment: "dev" });
+    await advance();
+    act(() => result.current.setActive("main", run("new-run", "main")));
+    await act(async () => answer(json(statuses)));
+    expect(result.current.statuses.active?.id).toBe("new-run");
+  });
+
   it("loads the snapshot and the statuses of the environment", async () => {
     const fetch = serve((path) =>
       path === "/worktrees/main"

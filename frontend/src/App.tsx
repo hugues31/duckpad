@@ -2,6 +2,7 @@ import {
   useCallback,
   useEffect,
   useEffectEvent,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -52,13 +53,15 @@ const WORKSPACE_INTERVAL = 5000;
 export default function App() {
   const preferences = usePreferences();
   const drafts = useDraftRegistry();
+  const language = useMemo(
+    () => ({
+      language: preferences.language,
+      setLanguage: preferences.setLanguage,
+    }),
+    [preferences.language, preferences.setLanguage],
+  );
   return (
-    <I18n.Provider
-      value={{
-        language: preferences.language,
-        setLanguage: preferences.setLanguage,
-      }}
-    >
+    <I18n.Provider value={language}>
       <DraftContext.Provider value={drafts.register}>
         <ErrorBoundary>
           <Session preferences={preferences} drafts={drafts} />
@@ -189,20 +192,22 @@ function SignedIn({
 
   const refreshWorkspace = useCallback(async () => {
     const value = await api<Workspace>("/workspace");
-    setWorkspace(value);
+    setWorkspace((previous) =>
+      JSON.stringify(previous) === JSON.stringify(value) ? previous : value,
+    );
     return value;
   }, []);
-  useEffect(() => {
-    api<Workspace>("/workspace").then(setWorkspace, (e) =>
-      notify(e.message, true),
-    );
-  }, [notify, location.key]);
   // Membership and branch changes made elsewhere appear without a reload.
   usePolling(
     useCallback(async () => {
-      await refreshWorkspace();
-    }, [refreshWorkspace]),
-    { interval: WORKSPACE_INTERVAL, delay: WORKSPACE_INTERVAL },
+      try {
+        await refreshWorkspace();
+      } catch (error) {
+        notify((error as Error).message, true);
+        throw error;
+      }
+    }, [refreshWorkspace, notify]),
+    { interval: WORKSPACE_INTERVAL },
   );
   const unknownEnvironment =
     !!workspace &&
@@ -221,21 +226,36 @@ function SignedIn({
     setModal(null);
   }
 
-  const shell: Shell = {
-    workspace,
-    refreshWorkspace,
-    environment,
-    preferences,
-    drafts,
-    flowPanels,
-    signInDestination,
-    notify,
-    openModal: setModal,
-    closeModal,
-    openWorktree: (id: string, target: WorkspaceTab = "flow") =>
-      void navigate(worktreeUrl(id, target, environment)),
-    endSession,
-  };
+  const shell = useMemo<Shell>(
+    () => ({
+      workspace,
+      refreshWorkspace,
+      environment,
+      preferences,
+      drafts,
+      flowPanels,
+      signInDestination,
+      notify,
+      openModal: setModal,
+      closeModal,
+      openWorktree: (id: string, target: WorkspaceTab = "flow") =>
+        void navigate(worktreeUrl(id, target, environment)),
+      endSession,
+    }),
+    [
+      workspace,
+      refreshWorkspace,
+      environment,
+      preferences,
+      drafts,
+      flowPanels,
+      signInDestination,
+      notify,
+      closeModal,
+      navigate,
+      endSession,
+    ],
+  );
   const signOut = async () => {
     try {
       await api("/logout", send({}));

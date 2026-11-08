@@ -72,6 +72,12 @@ export default function ExportDownload({
     withQuery(endpoint, { environment, ...partition }),
     {
       interval: 1500,
+      nextInterval: (value) =>
+        value.status === "unsupported"
+          ? false
+          : value.status === "running"
+            ? 1500
+            : 10000,
     },
   );
   // A download failure stays until the next attempt; a polling failure until the next poll.

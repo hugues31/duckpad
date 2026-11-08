@@ -27,7 +27,14 @@ test("a Job shows live progress in its details until it finishes", async ({
   const job = await response.json();
   let active: Record<string, unknown> | null = null;
   await page.route(`**/api/projects/${tree.project}/jobs`, (route) =>
-    route.fulfill({ json: [{ ...job, last_run: active }] }),
+    route.fulfill({
+      json: [
+        { ...job, last_run: active ? { ...active, nodes: undefined } : null },
+      ],
+    }),
+  );
+  await page.route("**/api/runs/job-progress", (route) =>
+    route.fulfill({ json: active }),
   );
   await page.route(`**/api/jobs/${slug}/runs`, (route) => {
     if (route.request().method() === "POST") {
@@ -41,7 +48,9 @@ test("a Job shows live progress in its details until it finishes", async ({
       };
       return route.fulfill({ json: active });
     }
-    return route.fulfill({ json: active ? [active] : [] });
+    return route.fulfill({
+      json: active ? [{ ...active, nodes: undefined }] : [],
+    });
   });
   // Tabs and run controls that fit a laptop row keep the canvas height.
   await page.setViewportSize({ width: 1280, height: 900 });

@@ -104,49 +104,59 @@ export default function GitCompareTab({
     const controller = new AbortController();
     const { base, storageKey, selection } = comparison;
     const frozen = frozenFor(resolved.current, selection);
-    api<Comparison>(
-      withQuery(`${base}/compare`, {
-        a: frozen?.a || selection.a,
-        b: frozen?.b || selection.b,
-      }),
-      { signal: controller.signal },
-    )
-      .then((result) => {
-        if (controller.signal.aborted) return;
-        resolved.current = { selection, a: result.a.ref, b: result.b.ref };
-        setReport(result);
-        setSettled({ comparison, error: "" });
-        // Resolved revisions go stale and frozen ones expire: only names are kept.
-        sessionStorage.setItem(
-          selectionKey(storageKey),
-          JSON.stringify({ a: selection.a, b: selection.b }),
-        );
-      })
-      .catch((e) => {
-        if (!controller.signal.aborted)
-          setSettled({ comparison, error: e.message });
-      });
-    return () => controller.abort();
+    const timer = window.setTimeout(() => {
+      void api<Comparison>(
+        withQuery(`${base}/compare`, {
+          a: frozen?.a || selection.a,
+          b: frozen?.b || selection.b,
+        }),
+        { signal: controller.signal },
+      )
+        .then((result) => {
+          if (controller.signal.aborted) return;
+          resolved.current = { selection, a: result.a.ref, b: result.b.ref };
+          setReport(result);
+          setSettled({ comparison, error: "" });
+          // Resolved revisions go stale and frozen ones expire: only names are kept.
+          sessionStorage.setItem(
+            selectionKey(storageKey),
+            JSON.stringify({ a: selection.a, b: selection.b }),
+          );
+        })
+        .catch((e) => {
+          if (!controller.signal.aborted)
+            setSettled({ comparison, error: e.message });
+        });
+    }, 300);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
   }, [comparison, ready]);
 
   useEffect(() => {
     const controller = new AbortController();
-    api<HistoryPage>(
-      withQuery(`${base}/history`, { entity: entity || undefined }),
-      { signal: controller.signal },
-    )
-      .then((page) => {
-        if (!controller.signal.aborted) setHistory(page);
-      })
-      .catch((e) => {
-        if (!controller.signal.aborted)
-          setHistoryFailure({
-            request: historyRequest,
-            message: e.message,
-            retry: () => setHistoryAttempt((value) => value + 1),
-          });
-      });
-    return () => controller.abort();
+    const timer = window.setTimeout(() => {
+      void api<HistoryPage>(
+        withQuery(`${base}/history`, { entity: entity || undefined }),
+        { signal: controller.signal },
+      )
+        .then((page) => {
+          if (!controller.signal.aborted) setHistory(page);
+        })
+        .catch((e) => {
+          if (!controller.signal.aborted)
+            setHistoryFailure({
+              request: historyRequest,
+              message: e.message,
+              retry: () => setHistoryAttempt((value) => value + 1),
+            });
+        });
+    }, 300);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
   }, [base, entity, historyRequest]);
 
   async function loadMore() {

@@ -4,6 +4,7 @@ import { CalendarClock, Play, Plus, Square } from "lucide-react";
 import { api, errorDetail, send, withQuery } from "../api";
 import ComparisonView from "../ComparisonView";
 import type { Branch, Comparison, GitTag } from "../gitTypes";
+import { useRunHistory } from "../useRunHistory";
 import { RunDetails } from "../HistoryPanel";
 import RunProgress from "../RunProgress";
 import { useT } from "../i18n";
@@ -69,6 +70,8 @@ function ProjectJobs({ project }: { project: Project }) {
   const { refreshWorkspace } = useShell();
   const jobs = useApiResource<Job[]>(`/projects/${project.id}/jobs`, {
     interval: 2000,
+    nextInterval: (values) =>
+      values.some((job) => active(job.last_run)) ? 2000 : 10000,
   });
   const [selected, setSelected] = useState<string | null>(null);
   const [editing, setEditing] = useState<Job | "new" | null>(null);
@@ -253,9 +256,7 @@ function JobDetails({
   const t = useT();
   const workspace = useWorkspace();
   const action = useAsyncAction();
-  const runs = useApiResource<Run[]>(`/jobs/${job.slug}/runs`, {
-    interval: 2000,
-  });
+  const runs = useRunHistory(`/jobs/${job.slug}/runs`, 2000);
   const names = useApiResource<NodeNames>(
     job.scope ? `/jobs/${job.slug}/nodes` : null,
   );
@@ -263,7 +264,15 @@ function JobDetails({
   const [confirmation, setConfirmation] = useState<
     (Environment & { job_revision: string; failedPartitions?: boolean }) | null
   >(null);
-  const selected = runs.data?.find((run) => run.id === runId);
+  const detail = useApiResource<Run>(runId ? `/runs/${runId}` : null, {
+    interval: 2000,
+    nextInterval: (value) => (active(value) ? 2000 : false),
+  });
+  const selected = detail.data;
+  const running = useApiResource<Run>(
+    active(job.last_run) ? `/runs/${job.last_run!.id}` : null,
+    { interval: 2000 },
+  );
   const busy = active(job.last_run);
   const canRun = project.role !== "reader";
   const launch = async (
@@ -352,7 +361,7 @@ function JobDetails({
             ))}
         </div>
       </div>
-      {busy && job.last_run && <RunProgress run={job.last_run} />}
+      {busy && running.data && <RunProgress run={running.data} />}
       {action.error && (
         <p className="notice error" role="alert">
           {action.error}
@@ -410,6 +419,11 @@ function JobDetails({
       </details>
       <h3>{t("jobRecentRuns")}</h3>
       {runs.error && <p className="notice error">{runs.error}</p>}
+      {detail.error && (
+        <p className="notice error" role="alert">
+          {detail.error}
+        </p>
+      )}
       {runs.data?.length === 0 && <p className="muted">{t("noHistory")}</p>}
       {runs.data?.slice(0, 20).map((run) => (
         <button
@@ -452,6 +466,15 @@ function JobDetails({
           </div>
         ))}
       </details>
+      {runs.hasMore && (
+        <button
+          className="button secondary"
+          disabled={runs.loadingMore}
+          onClick={() => void runs.loadMore()}
+        >
+          {t("loadMore")}
+        </button>
+      )}
       {selected && (
         <Modal title={t("goToRun")} onClose={() => setRunId(null)} wide>
           <div className="modal-content">

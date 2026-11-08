@@ -4,6 +4,7 @@ import { primaryOutputCount, showMinimap } from "./canvasResults";
 import { displayNodeName, type NodeNames } from "./nodeNames";
 import { useOptionalWorktree } from "./worktree";
 import {
+  memo,
   useCallback,
   useEffect,
   useEffectEvent,
@@ -119,16 +120,22 @@ type PipelineData = {
   icon: string;
   linked?: string;
   warnings: number;
+  partition?: {
+    partitioned: boolean;
+    collect: string[];
+    dimension?: string | null;
+    filters: Record<string, unknown>;
+  };
 };
 type PipelineNode = Node<PipelineData, "pipeline">;
 
-function PipelineNode({ id, data, selected }: NodeProps<PipelineNode>) {
+const PipelineNode = memo(function PipelineNode({
+  id,
+  data,
+  selected,
+}: NodeProps<PipelineNode>) {
   const t = useT();
-  const worktree = useOptionalWorktree();
-  const partition =
-    worktree?.snapshot?.partitions?.[worktree.environment]?.nodes[
-      data.fullNode
-    ];
+  const partition = data.partition;
   const updateNodeInternals = useUpdateNodeInternals();
   const portLayout = JSON.stringify([data.kind, data.inputs, data.outputs]);
   useEffect(() => {
@@ -241,7 +248,8 @@ function PipelineNode({ id, data, selected }: NodeProps<PipelineNode>) {
       ))}
     </div>
   );
-}
+});
+PipelineNode.displayName = "PipelineNode";
 const nodeTypes = { pipeline: PipelineNode };
 export interface CanvasHandle {
   newNodePosition: (nodes: FlowNode[]) => FlowNode["position"];
@@ -291,6 +299,9 @@ interface CanvasProps {
   onFailure?: (id: string) => void;
 }
 function CanvasInner({ ref, ...props }: CanvasProps) {
+  const worktree = useOptionalWorktree();
+  const partitions =
+    worktree?.snapshot?.partitions?.[worktree.environment]?.nodes;
   const t = useT();
   const [context, setContext] = useState<{
     id: string;
@@ -493,6 +504,7 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
           selected: node.id === props.selected,
           data: {
             fullNode: props.prefix + node.id,
+            partition: partitions?.[props.prefix + node.id],
             valueProducer: props.valueProducers?.includes(
               props.prefix + node.id,
             ),
@@ -536,6 +548,7 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
       }),
     [
       props.nodes,
+      partitions,
       connectedInputs,
       props.valueProducers,
       props.parsed,

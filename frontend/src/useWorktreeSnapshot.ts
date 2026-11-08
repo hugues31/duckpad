@@ -72,6 +72,7 @@ export function useWorktreeSnapshot(
   usePolling(
     useCallback(
       async (signal: AbortSignal) => {
+        const started = epoch.current;
         try {
           const [status] = await Promise.all([
             // Statuses need an environment; the snapshot is read without one.
@@ -96,7 +97,7 @@ export function useWorktreeSnapshot(
               throw e;
             }),
           ]);
-          if (status && !signal.aborted)
+          if (status && !signal.aborted && started === epoch.current)
             setStatuses((old) =>
               old !== EMPTY_STATUSES &&
               JSON.stringify(old) === JSON.stringify(status)
@@ -129,8 +130,10 @@ export function useWorktreeSnapshot(
     ),
     /** Show a run started or cancelled on the given branch as its active run. */
     setActive: useCallback((id: string, run: Run) => {
-      if (id === current.current)
+      if (id === current.current) {
+        epoch.current++;
         setStatuses((old) => ({ ...old, active: run }));
+      }
     }, []),
   };
 }

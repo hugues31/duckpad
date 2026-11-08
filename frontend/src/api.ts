@@ -65,6 +65,7 @@ async function readError(response: Response) {
 export async function api<T = unknown>(
   path: string,
   options?: RequestInit,
+  onResponse?: (response: Response) => void,
 ): Promise<T> {
   const response = await fetch(apiUrl(path), {
     credentials: "same-origin",
@@ -72,6 +73,7 @@ export async function api<T = unknown>(
     headers: { "Content-Type": "application/json", ...options?.headers },
   });
   if (!response.ok) throw await readError(response);
+  onResponse?.(response);
   return response.json();
 }
 

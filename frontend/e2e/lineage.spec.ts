@@ -234,14 +234,14 @@ test("verification stops after a missing result and an expired session signs out
   });
   const dialog = page.getByRole("dialog");
   await expect(dialog.getByRole("alert")).toContainText("Dataset not found");
-  // Verification runs every 500 ms while it can still succeed.
-  await page.waitForTimeout(1500);
+  // Observe longer than the normal verification interval after a final error.
+  await page.waitForTimeout(2500);
   expect(checks).toEqual([404]);
 
   status = 401;
   await dialog.getByRole("button", { name: "Retry" }).click();
   await expect(page.getByLabel("Password", { exact: true })).toBeVisible();
-  await page.waitForTimeout(1500);
+  await page.waitForTimeout(2500);
   expect(checks).toEqual([404, 401]);
 });
 

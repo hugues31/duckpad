@@ -1,3 +1,4 @@
+import { useRunHistory } from "./useRunHistory";
 import { PartitionHistory } from "./PartitionHistory";
 import { partitionMessage } from "./partitions";
 import { Link, useSearchParams } from "react-router";
@@ -63,7 +64,7 @@ export default function HistoryPanel({
   const [tagCommit, setTagCommit] = useState<string | null>(null);
   const tags = useApiResource<GitTag[]>(`/worktrees/${worktree}/git/tags`);
   const more = useAsyncAction();
-  const runHistory = useApiResource<Run[]>(
+  const runHistory = useRunHistory(
     withQuery("/runs", { worktree, include_jobs: true }),
   );
   const gitHistory = useApiResource<HistoryPage>(
@@ -73,15 +74,22 @@ export default function HistoryPanel({
   // The results panel links to the run behind a result with `?run=`.
   const [params] = useSearchParams();
   const requested = params.get("run");
+  const requestedRun = useApiResource<Run>(
+    requested ? `/runs/${requested}` : null,
+  );
   const [opened, setOpened] = useState<string | null>(null);
-  if (requested && requested !== opened && runs.length) {
+  if (requested && requested !== opened && requestedRun.data) {
     setOpened(requested);
-    const found = runs.find((item) => item.id === requested);
+    const found = requestedRun.data;
     if (found) setSelected(found);
   }
   const commits = gitHistory.data?.items || [];
   const error =
-    runHistory.error || gitHistory.error || tags.error || more.error;
+    runHistory.error ||
+    requestedRun.error ||
+    gitHistory.error ||
+    tags.error ||
+    more.error;
   const tagNames = (commit: string) =>
     (tags.data || [])
       .filter((tag) => tag.commit === commit)
@@ -168,6 +176,15 @@ export default function HistoryPanel({
               <ArrowRight size={15} />
             </button>
           ))}
+          {runHistory.hasMore && (
+            <button
+              className="button secondary"
+              disabled={runHistory.loadingMore}
+              onClick={() => void runHistory.loadMore()}
+            >
+              {t("loadMore")}
+            </button>
+          )}
         </>
       ) : (
         <>
@@ -287,7 +304,20 @@ export default function HistoryPanel({
 }
 
 /** The captured requester, configuration and node logs of a run. */
-export function RunDetails({
+export function RunDetails(props: {
+  run: Run;
+  onClose: () => void;
+  onPartitionRetry?: () => void;
+}) {
+  const detail = useApiResource<Run>(
+    props.run.nodes ? null : `/runs/${props.run.id}`,
+  );
+  if (detail.error) return <p role="alert">{detail.error}</p>;
+  const run = props.run.nodes ? props.run : detail.data;
+  return run ? <RunDetailsContent {...props} run={run} /> : null;
+}
+
+function RunDetailsContent({
   run,
   onClose,
   onPartitionRetry,

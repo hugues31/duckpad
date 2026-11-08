@@ -578,7 +578,7 @@ function LineageDialog({
       },
       [worktree, environment, cell.dataset],
     ),
-    { interval: 500, enabled: !error },
+    { interval: 2000, enabled: !error },
   );
 
   useEffect(() => {
