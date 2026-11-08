@@ -2,6 +2,7 @@ import { ActionMenu, type ActionItem } from "./ActionMenu";
 import { PythonIcon } from "./AddIcon";
 import { primaryOutputCount, showMinimap } from "./canvasResults";
 import { displayNodeName, type NodeNames } from "./nodeNames";
+import type { PartitionNode } from "./partitions";
 import { useOptionalWorktree } from "./worktree";
 import {
   memo,
@@ -120,12 +121,7 @@ type PipelineData = {
   icon: string;
   linked?: string;
   warnings: number;
-  partition?: {
-    partitioned: boolean;
-    collect: string[];
-    dimension?: string | null;
-    filters: Record<string, unknown>;
-  };
+  partition?: PartitionNode;
 };
 type PipelineNode = Node<PipelineData, "pipeline">;
 

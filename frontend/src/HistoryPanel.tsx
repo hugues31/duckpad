@@ -309,12 +309,22 @@ export function RunDetails(props: {
   onClose: () => void;
   onPartitionRetry?: () => void;
 }) {
+  const t = useT();
   const detail = useApiResource<Run>(
     props.run.nodes ? null : `/runs/${props.run.id}`,
   );
-  if (detail.error) return <p role="alert">{detail.error}</p>;
+  if (detail.error)
+    return (
+      <p className="notice error" role="alert">
+        {detail.error}
+      </p>
+    );
   const run = props.run.nodes ? props.run : detail.data;
-  return run ? <RunDetailsContent {...props} run={run} /> : null;
+  return run ? (
+    <RunDetailsContent {...props} run={run} />
+  ) : (
+    <p>{t("loading")}</p>
+  );
 }
 
 function RunDetailsContent({

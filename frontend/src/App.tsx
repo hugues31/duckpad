@@ -197,17 +197,17 @@ function SignedIn({
     );
     return value;
   }, []);
+  useEffect(() => {
+    api<Workspace>("/workspace").then(setWorkspace, (e) =>
+      notify(e.message, true),
+    );
+  }, [notify]);
   // Membership and branch changes made elsewhere appear without a reload.
   usePolling(
     useCallback(async () => {
-      try {
-        await refreshWorkspace();
-      } catch (error) {
-        notify((error as Error).message, true);
-        throw error;
-      }
-    }, [refreshWorkspace, notify]),
-    { interval: WORKSPACE_INTERVAL },
+      await refreshWorkspace();
+    }, [refreshWorkspace]),
+    { interval: WORKSPACE_INTERVAL, delay: WORKSPACE_INTERVAL },
   );
   const unknownEnvironment =
     !!workspace &&

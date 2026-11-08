@@ -256,7 +256,10 @@ function JobDetails({
   const t = useT();
   const workspace = useWorkspace();
   const action = useAsyncAction();
-  const runs = useRunHistory(`/jobs/${job.slug}/runs`, 2000);
+  const runs = useRunHistory(
+    withQuery(`/jobs/${job.slug}/runs`, { limit: 20 }),
+    2000,
+  );
   const names = useApiResource<NodeNames>(
     job.scope ? `/jobs/${job.slug}/nodes` : null,
   );
@@ -419,11 +422,6 @@ function JobDetails({
       </details>
       <h3>{t("jobRecentRuns")}</h3>
       {runs.error && <p className="notice error">{runs.error}</p>}
-      {detail.error && (
-        <p className="notice error" role="alert">
-          {detail.error}
-        </p>
-      )}
       {runs.data?.length === 0 && <p className="muted">{t("noHistory")}</p>}
       {runs.data?.map((run) => (
         <button
@@ -439,6 +437,15 @@ function JobDetails({
           <code>{run.commit.slice(0, 8)}</code>
         </button>
       ))}
+      {runs.hasMore && (
+        <button
+          className="button secondary"
+          disabled={runs.loadingMore}
+          onClick={() => void runs.loadMore()}
+        >
+          {t("loadMore")}
+        </button>
+      )}
       <details>
         <summary>{t("jobVersionHistory")}</summary>
         {[...job.versions].reverse().map((entry, index) => (
@@ -466,36 +473,39 @@ function JobDetails({
           </div>
         ))}
       </details>
-      {runs.hasMore && (
-        <button
-          className="button secondary"
-          disabled={runs.loadingMore}
-          onClick={() => void runs.loadMore()}
-        >
-          {t("loadMore")}
-        </button>
-      )}
-      {selected && (
+      {runId && (
         <Modal title={t("goToRun")} onClose={() => setRunId(null)} wide>
           <div className="modal-content">
-            <p>
-              <span className={`badge ${selected.status}`}>
-                {t(selected.status)}
-              </span>{" "}
-              · <code>{selected.id}</code>
-            </p>
-            <RunDetails
-              run={selected}
-              onClose={() => setRunId(null)}
-              onPartitionRetry={
-                canRun && !busy && !action.pending
-                  ? () => {
-                      setRunId(null);
-                      void action.run(() => launch(false, job.revision, true));
-                    }
-                  : undefined
-              }
-            />
+            {selected ? (
+              <>
+                <p>
+                  <span className={`badge ${selected.status}`}>
+                    {t(selected.status)}
+                  </span>{" "}
+                  · <code>{selected.id}</code>
+                </p>
+                <RunDetails
+                  run={selected}
+                  onClose={() => setRunId(null)}
+                  onPartitionRetry={
+                    canRun && !busy && !action.pending
+                      ? () => {
+                          setRunId(null);
+                          void action.run(() =>
+                            launch(false, job.revision, true),
+                          );
+                        }
+                      : undefined
+                  }
+                />
+              </>
+            ) : detail.error ? (
+              <p className="notice error" role="alert">
+                {detail.error}
+              </p>
+            ) : (
+              <p>{t("loading")}</p>
+            )}
           </div>
         </Modal>
       )}

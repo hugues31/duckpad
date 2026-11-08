@@ -14,8 +14,6 @@ export interface PollingOptions {
   /** Milliseconds to wait before the first run. */
   delay?: number;
   enabled?: boolean;
-  /** Pause recurring requests while the tab is hidden. */
-  pauseWhenHidden?: boolean;
 }
 
 /**
@@ -27,12 +25,7 @@ export interface PollingOptions {
  */
 export function usePolling(
   task: (signal: AbortSignal) => Promise<boolean | void | number>,
-  {
-    interval,
-    delay = 0,
-    enabled = true,
-    pauseWhenHidden = true,
-  }: PollingOptions,
+  { interval, delay = 0, enabled = true }: PollingOptions,
 ) {
   useEffect(() => {
     if (!enabled) return;
@@ -40,8 +33,8 @@ export function usePolling(
     let timer: number | undefined;
     let pending = false;
     let stopped = false;
-    const paused = () =>
-      pauseWhenHidden && interval !== undefined && document.hidden;
+    // Recurring requests pause while the tab is hidden.
+    const paused = () => interval !== undefined && document.hidden;
     const run = async () => {
       if (paused() || pending || stopped || controller.signal.aborted) return;
       pending = true;
@@ -71,5 +64,5 @@ export function usePolling(
       controller.abort();
       clearTimeout(timer);
     };
-  }, [task, enabled, interval, delay, pauseWhenHidden]);
+  }, [task, enabled, interval, delay]);
 }
