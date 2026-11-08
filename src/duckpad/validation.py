@@ -78,6 +78,7 @@ def validate(bundle):
         except Problem as error:
             errors.append({"file": name, "message": str(error)})
     errors.extend(project_extensions.problems(bundle))
+    errors.extend(variables.problems(bundle))
     try:
         nodes, edges, boundaries = expand(bundle)
         errors.extend(partitions.plan(bundle, nodes, edges, boundaries)["errors"])
@@ -111,6 +112,5 @@ def validate(bundle):
         topological(nodes, edges)
     except Problem as error:
         errors.append({"file": "flow.json", "message": str(error)})
-    errors.extend(variables.problems(bundle))
     errors.extend(views.problems(bundle))
     return errors

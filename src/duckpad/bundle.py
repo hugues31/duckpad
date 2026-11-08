@@ -45,14 +45,14 @@ def files_to_bundle(files, *, check_structure=True):
             result[spec.section] = value
     if errors:
         raise Problem("Cannot read declarative project files", 422, errors)
-    if check_structure:
-        require_structure(result)
     documentation = result["documentation"]
     if isinstance(documentation, dict) and "project" in documentation:
         raise Problem(
             'Move project documentation from documentation.json to README.md and remove the "project" key.',
             422,
         )
+    if check_structure:
+        require_structure(result)
     readme = result.pop("readme")
     if readme and isinstance(documentation, dict):
         documentation["project"] = readme
