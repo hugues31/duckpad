@@ -425,6 +425,7 @@ and isolated execution, checking Load table, Export table and different dev/prod
 values (`docs/validation/sqlite.json`).
 
 On x86-64 processors without AVX2, the `mysql` and `sqlite` binaries published for DuckDB 2.0.0 stop their process when they load. Test connection reports it; such a server needs a compatible build of the extension, as Duckpad's container image provides for `postgres`.
+
 ## Validated scope
 
 | Preset | Required operations | Recorded validation |

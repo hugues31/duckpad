@@ -50,11 +50,6 @@ For air-gapped deployments, [download extensions on any connected computer and
 import them into Duckpad](OFFLINE_EXTENSIONS.md) before running connectors that
 need them.
 
-Successful GET requests used for background polling (workspace, resources, worktree
-snapshots, status, and generations) are logged at DEBUG. The default INFO level
-still shows other requests, including failed polling requests. Use
-`duckpad start --log-level debug` to include polling in the server logs.
-
 ## Upgrades and backups
 
 Before upgrading, stop the server and keep a private backup of the entire
@@ -93,6 +88,12 @@ memory can reflect the host rather than a container's quota. Backend memory
 excludes SQL worker processes. Unavailable counters are reported independently.
 A warning appears when at most 10% of the data disk remains available.
 
+Instance admins can monitor server CPU and RAM in the top bar. Click either
+indicator for two minutes of history; samples refresh every two seconds. Values
+are machine-wide and include other applications. In a container they follow what
+its runtime exposes, usually the host rather than the container's limits. Missing
+measurements appear as unavailable. History resets on reload or sign-out.
+
 The same page shows recent Duckpad and Uvicorn logs, newest first, with minimum
 severity and case-insensitive text filters. While the page is open, it refreshes
 every 5 seconds by default; choose another interval or Manual next to the
@@ -108,6 +109,11 @@ retention, and access-log query strings and client addresses are omitted.
 Application messages and exception traces may still contain sensitive data;
 only instance administrators can access either monitoring endpoint. Use the
 deployment's existing log collection for durable history and alerting.
+
+Successful GET requests used for background polling (workspace, resources, worktree
+snapshots, status, and generations) are logged at DEBUG. The default INFO level
+still shows other requests, including failed polling requests. Use
+`duckpad start --log-level debug` to include polling in the server logs.
 
 Debug also logs complete tracebacks of assistant provider failures. Credentials
 are masked, but these traces can contain prompts, responses and project data:
@@ -341,18 +347,6 @@ Memberships, password hashes and connection grants remain in instance SQLite,
 outside project Git.
 See [authorization and execution isolation](ARCHITECTURE.md#authorization-and-execution-isolation)
 for deployment requirements and file access boundaries.
-
-## Preferences and result lifetime
-
-Instance admins can monitor server CPU and RAM in the top bar. Click either
-indicator for two minutes of history; samples refresh every two seconds. Values
-are machine-wide and include other applications. In a container they follow what
-its runtime exposes, usually the host rather than the container's limits. Missing
-measurements appear as unavailable. History resets on reload or sign-out.
-
-Choose language and theme in **Account menu → User settings**; see
-[workspace preferences](WORKSPACE.md#preferences-and-access). For retained data,
-restarts and stale results, see [result lifetime](RESULTS.md#result-lifetime).
 
 ## Python node environments
 

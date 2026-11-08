@@ -15,31 +15,6 @@ import { sections, url } from "../../lib/docs";
       Start with a small pipeline, bring your own data, then find the guide for
       the task you want to complete.
     </p>
-    <ol>
-      <li>
-        <a href={url("docs/installation/")}>
-          Install Duckpad or join a team instance
-        </a>
-        .
-      </li>
-      <li>
-        <a href={url("docs/quickstart/")}>
-          Build your first pipeline in 15 minutes
-        </a>
-        .
-      </li>
-      <li>
-        <a href={url("docs/your_data/")}>
-          Upload your own data and download a result
-        </a>
-        .
-      </li>
-    </ol>
-    <p>
-      Something went wrong? Start with{" "}
-      <a href={url("docs/troubleshooting/")}>troubleshooting</a> for sign-in,
-      sources, saves, runs and results.
-    </p>
     {sections.map((section) => (
       <section>
         <h2>{section.label}</h2>
