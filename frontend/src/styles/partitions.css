@@ -1,0 +1,131 @@
+.partition-selector {
+  position: relative;
+}
+.partition-menu {
+  position: absolute;
+  z-index: 40;
+  top: 100%;
+  right: 0;
+  width: min(650px, 85vw);
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: 0 8px 24px #0003;
+}
+.partition-strip {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+}
+.partition-strip input {
+  min-width: 120px;
+}
+.partition-segments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  max-height: 160px;
+  overflow: auto;
+  padding: 8px 0;
+}
+.partition-segment[aria-pressed="true"] {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.partition-inspector {
+  padding-block: 8px;
+  border-block: 1px solid var(--border);
+}
+.partition-settings fieldset {
+  min-width: 0;
+  padding: 0;
+  border: 0;
+}
+.partition-settings-actions {
+  flex-wrap: wrap;
+}
+.node-partition-badge {
+  position: absolute;
+  top: -24px;
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  font-size: 10px;
+  padding: 2px 6px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+}
+.partition-lineage-replay {
+  display: grid;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.partition-lineage-replay p {
+  margin: 0;
+}
+
+.run-control {
+  display: flex;
+  flex-shrink: 0;
+}
+.run-control:has(.run-options-trigger) > .button:first-child {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+.run-control .run-options-trigger {
+  border-left: 1px solid currentColor;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  padding-inline: 7px;
+}
+.partition-trigger {
+  max-width: 210px;
+  min-width: 0;
+}
+.partition-trigger-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.partition-segment.valid {
+  border-color: light-dark(#187044, #7edba5);
+}
+.partition-segment.failed {
+  color: light-dark(#b43b43, #ff9aa3);
+  border-color: light-dark(#b43b43, #ff9aa3);
+  background: light-dark(#fff0f1, #3f2327);
+}
+.partition-segment.stale,
+.partition-segment.missing {
+  border-style: dashed;
+  color: var(--muted);
+}
+@media (min-width: 601px) and (max-width: 1450px) {
+  .partition-menu {
+    left: 0;
+    right: auto;
+  }
+}
+/* Between the two-row layout and a wide desktop, retain the save tooltip while
+   leaving room for longer translated tabs and partition keys. */
+@media (min-width: 1451px) and (max-width: 1650px) {
+  .flow-toolbar:has(.partition-trigger) .main-tabs a {
+    padding-inline: 7px;
+    gap: 4px;
+  }
+}
+@media (min-width: 1451px) and (max-width: 1650px), (max-width: 600px) {
+  .flow-toolbar .partition-trigger {
+    max-width: 150px;
+  }
+  .flow-toolbar:has(.partition-trigger) .save-status-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
