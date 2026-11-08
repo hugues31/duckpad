@@ -284,7 +284,7 @@ function InputColumnList({
       >
         <Toggle size={14} aria-hidden="true" />
         {t("inputColumns")}
-        {columns.pending && (
+        {columns.pending && !columns.data && (
           <Loader2 size={12} className="spin" aria-label={t("loading")} />
         )}
         <span className="muted small">{t("inputColumnsHint")}</span>

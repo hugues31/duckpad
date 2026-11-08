@@ -86,6 +86,7 @@ export default function GitCompareTab({
     entity,
     refresh: version,
     delay: 300,
+    limit: 50,
   });
   const history = gitHistory.data;
   useEffect(() => {
@@ -276,7 +277,7 @@ export default function GitCompareTab({
         {history && history.next !== null && !gitHistory.error && (
           <button
             className="button secondary"
-            disabled={gitHistory.loadingMore}
+            disabled={gitHistory.loadingMore || gitHistory.pending}
             onClick={() => void gitHistory.loadMore()}
           >
             {t(gitHistory.loadingMore ? "loading" : "loadMore")}

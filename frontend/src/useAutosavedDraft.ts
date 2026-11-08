@@ -33,5 +33,6 @@ export function useAutosavedDraft<T, Revision>(
   useIdleSave(draft.draft, draft.dirty && !readOnly, () => {
     if (!draft.rejected()) void saveNow();
   });
-  return { ...draft, error: draft.dirty ? error : "", saveNow };
+  const { persist: _persist, ...state } = draft;
+  return { ...state, error: draft.dirty ? error : "", saveNow };
 }

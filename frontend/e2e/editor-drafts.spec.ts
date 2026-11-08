@@ -491,3 +491,35 @@ test("a node whose deletion fails comes back on the canvas", async ({
   await expect(node(page, "upload")).toHaveCount(0);
   await expect.poll(ids).not.toContain("upload");
 });
+
+test("a save failure after hiding the Inspector is reported once", async ({
+  page,
+}) => {
+  const { endpoint } = await prepare(page);
+  await select(page, "filtered");
+  const inspector = page.locator(".inspector");
+  let fail!: () => void;
+  const released = new Promise<void>((resolve) => {
+    fail = resolve;
+  });
+  let writes = 0;
+  await page.route(`**${endpoint}`, async (route) => {
+    if (route.request().method() !== "PUT") return route.continue();
+    writes++;
+    await released;
+    await route.fulfill({
+      status: 503,
+      json: { error: "Late Inspector failure" },
+    });
+  });
+  await inspector
+    .getByRole("textbox", { name: "Display name", exact: true })
+    .fill("Pending label");
+  await expect.poll(() => writes).toBe(1);
+  await inspector.getByRole("button", { name: "Close", exact: true }).click();
+  await expect(page.locator("#node-inspector")).toBeHidden();
+  fail();
+  await expect(
+    page.getByRole("alert").filter({ hasText: "Late Inspector failure" }),
+  ).toHaveCount(1);
+});

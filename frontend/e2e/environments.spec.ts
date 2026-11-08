@@ -324,6 +324,18 @@ test("confirmation gates every pipeline and node run, including stale clients", 
       exact: true,
     });
     await expect(dialog).toContainText("prod");
+    await page.setViewportSize({ width: 1280, height: 720 });
+    // A long confirmation must scroll its content while keeping the action visible.
+    await dialog.locator(".modal-content").evaluate((content) => {
+      const details = document.createElement("div");
+      details.style.height = "1400px";
+      content.append(details);
+    });
+    const bounds = await dialog
+      .getByRole("button", { name: "Confirm and run", exact: true })
+      .boundingBox();
+    expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(720);
+
     await page.getByRole("button", { name: "Cancel", exact: true }).click();
     await expect(dialog).toHaveCount(0);
     expect(requests).toHaveLength(1);

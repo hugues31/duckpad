@@ -12,15 +12,43 @@ vi.mock("./api", async (original) => ({
 vi.mock("./worktree", () => ({
   usePartitionQuery: () => ({ manifest: "manifest", partition_id: "one" }),
 }));
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.mocked(api).mockReset();
+});
 
-it("loads expanded inputs once per revision or result generation and preserves partition selection", async () => {
+it("loads expanded inputs only when their inputs or result generation change and preserves partition selection", async () => {
   vi.mocked(api).mockResolvedValue({
     inputs: [
       { input: "source", columns: [{ name: "amount", type: "INTEGER" }] },
     ],
   });
-  const snapshot = { revision: "a", worktree: { id: "worktree" } } as Snapshot;
+  const snapshot = {
+    revision: "a",
+    worktree: { id: "worktree" },
+    parsed_templates: {},
+    parsed_nodes: { "components/group/leaf.sql": { inputs: ["data"] } },
+    bundle: {
+      flow: {
+        nodes: [{ id: "source" }, { id: "outer", component: "group" }],
+        edges: [
+          {
+            source: "source",
+            sourceHandle: "result",
+            target: "outer",
+            targetHandle: "external",
+          },
+        ],
+      },
+      components: {
+        group: {
+          nodes: [{ id: "leaf" }],
+          edges: [],
+          inputs: { external: { node: "leaf", port: "data" } },
+        },
+      },
+    },
+  } as unknown as Snapshot;
   const statuses: Statuses = { active: null, nodes: {} };
   const { result, rerender } = renderHook(
     ({ snapshot, statuses }) =>
@@ -37,5 +65,20 @@ it("loads expanded inputs once per revision or result generation and preserves p
   rerender({ snapshot: { ...snapshot }, statuses: { ...statuses, nodes: {} } });
   expect(api).toHaveBeenCalledTimes(1);
   rerender({ snapshot: { ...snapshot, revision: "b" }, statuses });
+  expect(api).toHaveBeenCalledTimes(1);
+  rerender({
+    snapshot,
+    statuses: {
+      ...statuses,
+      nodes: {
+        source: { outputs: { result: { id: "generation", status: "valid" } } },
+      },
+    } as unknown as Statuses,
+  });
   await waitFor(() => expect(api).toHaveBeenCalledTimes(2));
+  rerender({
+    snapshot,
+    statuses: { ...statuses, active: { id: "new-run" } as Statuses["active"] },
+  });
+  await waitFor(() => expect(api).toHaveBeenCalledTimes(3));
 });

@@ -32,6 +32,7 @@ export default function Pager({
     <div className={className}>
       {!between && label}
       <button
+        type="button"
         className="icon"
         disabled={disabled || offset === 0}
         title={t("previous")}
@@ -42,6 +43,7 @@ export default function Pager({
       </button>
       {between && label}
       <button
+        type="button"
         className="icon"
         disabled={disabled || offset + pageSize >= total}
         title={t("next")}

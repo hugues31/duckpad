@@ -34,7 +34,7 @@ import QueryBuilder from "./QueryBuilder";
 import type { ResultsTab } from "./results";
 import ResultSummary from "./ResultSummary";
 import Select from "./Select";
-import { useShell, useWorkspace } from "./shell";
+import { useWorkspace } from "./shell";
 import { isFileReader, sourceFileName } from "./SourceFileField";
 import SourcePreview from "./SourcePreview";
 import type {
@@ -133,7 +133,6 @@ export default function Inspector({
 }) {
   const t = useT();
   const workspace = useWorkspace();
-  const { notify } = useShell();
   const panel = useRef<HTMLElement>(null);
   const starting = useOptionalWorktree()?.starting;
   const partition = usePartitionQuery(fullNode);
@@ -145,7 +144,6 @@ export default function Inspector({
     draft,
     dirty,
     update,
-    persist: saveDraft,
     saveNow: persist,
     error: saveError,
     rejection,
@@ -179,10 +177,12 @@ export default function Inspector({
     },
     {
       readOnly,
-      onOrphanedError: (error) => notify((error as Error).message, true),
     },
   );
-  useSaveShortcut(persist, panel);
+  useSaveShortcut(() => {
+    if (tab === "parameters" && !retainedConflict(rejection()))
+      return persist();
+  }, panel);
   const worktree = snapshot.worktree.id;
   const inputColumns = useInputColumns(
     snapshot,
@@ -591,7 +591,7 @@ export default function Inspector({
                                 onCreate={async (name, declaration) => {
                                   declared.current[name] = declaration;
                                   setParameter(parameter.name, bindTo(name));
-                                  await saveDraft();
+                                  if (!(await persist())) throw rejection();
                                 }}
                               />
                             ),

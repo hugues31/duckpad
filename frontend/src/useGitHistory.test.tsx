@@ -81,3 +81,26 @@ it("aborts old pagination and keeps late errors out of a different history", asy
   expect(result.current.error).toBe("");
   expect(result.current.data?.items[0].commit).toBe("b");
 });
+
+it("keeps loaded history while filtering and after a failed refresh", async () => {
+  let fail!: (error: Error) => void;
+  vi.mocked(api)
+    .mockResolvedValueOnce(page("loaded", 1))
+    .mockImplementationOnce(
+      () =>
+        new Promise((_resolve, reject) => {
+          fail = reject;
+        }),
+    );
+  const { result, rerender } = renderHook(
+    ({ entity }) => useGitHistory("/history", { entity }),
+    { initialProps: { entity: "a" } },
+  );
+  await waitFor(() => expect(result.current.pending).toBe(false));
+  rerender({ entity: "b" });
+  expect(result.current.data?.head).toBe("loaded");
+  expect(result.current.pending).toBe(true);
+  await act(async () => fail(new Error("Offline")));
+  expect(result.current.data?.head).toBe("loaded");
+  expect(result.current.error).toBe("Offline");
+});

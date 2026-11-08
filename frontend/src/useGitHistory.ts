@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { api, withQuery } from "./api";
 import type { HistoryPage } from "./gitTypes";
-import { useApiResource } from "./useApiResource";
+import { useResource } from "./useApiResource";
 
 /** Load history pages against a frozen head, aborting when the view changes. */
 export function useGitHistory(
@@ -21,7 +21,15 @@ export function useGitHistory(
   const [attempt, setAttempt] = useState(0);
   const url = withQuery(path, { entity: entity || undefined, limit });
   const request = JSON.stringify([url, refresh, attempt]);
-  const first = useApiResource<HistoryPage>(url, { refresh: request, delay });
+  const first = useResource<HistoryPage>(
+    path,
+    (signal) => api(url, { signal }),
+    {
+      refresh: request,
+      delay,
+      keepDataOnError: true,
+    },
+  );
   const controller = useRef<AbortController | null>(null);
   const [more, setMore] = useState<{
     request: string;

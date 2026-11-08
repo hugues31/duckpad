@@ -208,7 +208,7 @@ export default function HistoryPanel({
           {gitHistory.data?.next != null && (
             <button
               className="button secondary"
-              disabled={gitHistory.loadingMore}
+              disabled={gitHistory.loadingMore || gitHistory.pending}
               onClick={() => void gitHistory.loadMore()}
             >
               {t(gitHistory.loadingMore ? "loading" : "loadMore")}

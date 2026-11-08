@@ -1040,17 +1040,20 @@ export default function FlowPage() {
             connections={connections}
             statuses={statuses}
             onSave={(updated, base, variables) =>
-              save(base, (value) => {
-                const target = graphAt(value, path);
-                target.nodes = target.nodes.map((n) =>
-                  n.id === updated.id ? updated : n,
-                );
-                if (!Object.keys(variables).length) return;
-                // A malformed file is never overwritten with new declarations.
-                const current = declarations(value);
-                if (!current) throw new Error(t("invalidVariablesFile"));
-                value.variables = { ...current, ...variables };
-              })
+              fromInspector(
+                inspected,
+                save(base, (value) => {
+                  const target = graphAt(value, path);
+                  target.nodes = target.nodes.map((n) =>
+                    n.id === updated.id ? updated : n,
+                  );
+                  if (!Object.keys(variables).length) return;
+                  // A malformed file is never overwritten with new declarations.
+                  const current = declarations(value);
+                  if (!current) throw new Error(t("invalidVariablesFile"));
+                  value.variables = { ...current, ...variables };
+                }),
+              )
             }
             onSaveDocumentation={(change, base) =>
               fromInspector(

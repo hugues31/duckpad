@@ -197,9 +197,8 @@ class DraftPreviews:
                     dataset = (
                         loaded[1] if loaded else self._retained(context, edge["source"], edge["sourceHandle"])
                     )
-                except Problem as error:
-                    if not str(error).startswith("partition_not_retained:"):
-                        raise
+                except Problem:
+                    # A failed or evicted partition must not hide healthy sibling inputs.
                     dataset = None
             else:
                 dataset = self._retained(context, edge["source"], edge["sourceHandle"])

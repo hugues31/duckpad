@@ -368,7 +368,7 @@ function CalculationCard({ data }: NodeProps<CardNode>) {
               disabled={disabled}
               count={
                 <>
-                  {result.total}{" "}
+                  {result.total.toLocaleString()}{" "}
                   {t(result.groups ? "valueGroups" : "contributions")}
                 </>
               }
