@@ -15,7 +15,7 @@ from .exports import Exports
 from .messages import result_counts
 
 if TYPE_CHECKING:
-    from .runs import Execution
+    from .launches import Execution
 
 UNFINISHED_RUN_STATUSES = ("preparing", "running", "canceling")
 

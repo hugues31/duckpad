@@ -22,6 +22,4 @@ class Context:
 
     @property
     def access(self) -> Access:
-        access = self.services.engine.access
-        assert access is not None
-        return access
+        return self.services.engine.access

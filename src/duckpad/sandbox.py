@@ -239,7 +239,10 @@ class Pipe:
         return -1 if self.stream.closed else self.stream.fileno()
 
     def close(self):
-        self.stream.close()
+        # A send that raced the worker's termination leaves its bytes buffered: closing
+        # flushes them again and fails, but still releases the descriptor.
+        with suppress(BrokenPipeError):
+            self.stream.close()
 
 
 class Cursor:

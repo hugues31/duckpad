@@ -28,7 +28,7 @@ from ..util import Problem, clean, qi, uid
 from .contexts import ContextPool, interrupt
 from .nodes import failure_message
 from .samples import reading
-from .statements import compile_node, statement_kind
+from .statements import compile_node, row_count, statement_kind
 
 # Rows read from each input; None reads every row.
 SAMPLE_SIZES = (100, 1_000, 10_000)
@@ -289,14 +289,7 @@ class DraftPreviews:
         return self.pool.ensure_started(worktree, environment)
 
     def _connections(
-        self,
-        cursor: SQLCursor,
-        context: Context,
-        worktree: str,
-        environment: str,
-        node: Record,
-        secrets: list[str],
-        setup: bool = True,
+        self, cursor: SQLCursor, context: Context, node: Record, secrets: list[str], setup: bool = True
     ) -> Connections:
         """The connections a node reads, set up the way a run sets them up.
 
@@ -306,7 +299,15 @@ class DraftPreviews:
         captured = self.pool.connections.for_context(
             context, connection_references(node), secrets, require_attached=True
         )
-        self.pool.connections.prepare(cursor, captured, secrets, reuse=True, setup=setup)
+        for reference, connection in captured.items():
+            try:
+                self.pool.connections.prepare(
+                    cursor, {reference: connection}, secrets, reuse=True, setup=setup
+                )
+            except duckdb.Error as error:
+                raise Problem(
+                    f"Cannot set up connection {connection['name']}: {redact(str(error), secrets)}", 422
+                ) from None
         return captured
 
     def _statements(
@@ -322,7 +323,7 @@ class DraftPreviews:
         setup: bool = True,
     ) -> tuple[list[Record], list[Record]]:
         """Compile a node against temporary relations; return its statements and source locations."""
-        captured = self._connections(cursor, context, worktree, environment, node, secrets, setup)
+        captured = self._connections(cursor, context, node, secrets, setup)
         project = self.projects.get(worktree)["project"]
         statements = compile_node(
             node,
@@ -398,20 +399,19 @@ class DraftPreviews:
             try:
                 cursor.execute(executed, statement["bindings"])
                 described = cursor.execute(f"DESCRIBE {table}").fetchall()
-                count_row = cursor.execute(f"SELECT count(*) FROM {table}").fetchone()
+                count = row_count(cursor, statement["table"])
                 shown = cursor.execute(f"SELECT * FROM {table} LIMIT {SHOWN_ROWS}").fetchall()
             except duckdb.InterruptException:
                 raise
             except duckdb.Error as error:
                 raise self._failure(SqlSourceError(error, location, executed), node, secrets) from None
-            assert count_row is not None
-            truncated = not read_later and count_row[0] > OUTPUT_ROWS
+            truncated = not read_later and count > OUTPUT_ROWS
             outputs.append(
                 {
                     "port": statement["output"],
                     "columns": [{"name": c[0], "type": c[1]} for c in described],
                     "rows": clean(shown),
-                    "count": OUTPUT_ROWS if truncated else count_row[0],
+                    "count": OUTPUT_ROWS if truncated else count,
                     "truncated": truncated,
                 }
             )

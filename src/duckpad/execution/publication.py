@@ -17,7 +17,7 @@ from .fingerprints import Fingerprints
 from .journal import RunJournal
 
 if TYPE_CHECKING:
-    from .runs import Execution
+    from .launches import Execution
 
 
 class Publication:

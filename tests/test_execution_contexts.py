@@ -11,6 +11,7 @@ from helpers import example_bundle, pipeline, wait_run, wait_until
 
 from duckpad import sandbox
 from duckpad.bundle import bundle_to_files
+from duckpad.engine import Engine
 from duckpad.services import Services
 from duckpad.util import Problem
 
@@ -25,6 +26,9 @@ def test_service_defaults_keep_isolation_and_access_enabled(tmp_path):
         assert instance.engine.isolated
         assert instance.engine.enforce_access
         assert instance.engine.access.store is instance.store
+        # A sandbox reads only granted local roots: it cannot run without connection grants.
+        with pytest.raises(ValueError, match="requires enforce_access"):
+            Engine(instance.store, instance.projects, instance.catalog, isolated=True, enforce_access=False)
         tree = instance.projects.create("Default isolation")
         run = wait_run(instance.store, instance.engine.launch(tree["id"], "dev"))
         assert run["status"] == "success"

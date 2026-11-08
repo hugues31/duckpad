@@ -10,10 +10,10 @@ from . import partitions, variables
 from .catalog import redact
 from .components import expand_for
 from .datasets import Dataset
+from .execution.statements import compile_node
 from .graph import reachable, topological
 from .materialize import drop_dataset
 from .partition_storage import PartitionStorage
-from .templates import compile_template
 from .types import Record
 from .util import Problem, digest, now, qi, uid
 
@@ -159,17 +159,14 @@ class PartitionRun:
                 node = nodes[key]
                 if not node["parsed"]["writes_external"] or node.get("error"):
                     continue
-                statements = compile_template(
-                    node["parsed"],
-                    node.get("params", {}),
+                statements = compile_node(
+                    node,
                     {p: qi("preflight_" + p) for p in node["parsed"]["inputs"]},
                     {},
                     execution.captured,
                     self.runner.store.paths.project_files(
                         self.root["project"], execution.context.worktree, execution.context.environment
                     ),
-                    variables=variables.expression_values(node),
-                    bound=node.get("variables"),
                 )
                 for statement in statements:
                     file = statement.get("export_file")

@@ -18,7 +18,6 @@ from ..access import Access
 from ..catalog import Catalog, database_files, executable, redact
 from ..components import expand
 from ..datasets import Context
-from ..extensions import database_config
 from ..materialize import drop_dataset
 from ..projects import Projects
 from ..python_policy import get_policy
@@ -293,17 +292,6 @@ class ContextPool:
         with self.lock:
             return [c for c in self.contexts.values() if worktree is None or c.worktree == worktree]
 
-    def capture(
-        self, worktree: str, references: list[str], environment: str
-    ) -> tuple[Connections, list[str]]:
-        return self.connections.capture(worktree, references, environment)
-
-    def extension_settings(self) -> dict[str, bool]:
-        return self.connections.extension_settings()
-
-    def probe_config(self) -> Record:
-        return self.connections.probe_config()
-
     def sql_resources(self) -> Record:
         """DuckDB threads and memory limit of new SQL sessions; None leaves DuckDB's automatic sizing."""
         return {**SQL_RESOURCES, **self.store.get("settings", "sql_resources", {})}
@@ -413,7 +401,7 @@ class ContextPool:
         """Start a context's database, with the connections an isolated worker attached."""
         extensions = self.store.paths.extensions
         extensions.mkdir(exist_ok=True)
-        config = {**database_config(extensions), **self.extension_settings()}
+        allow_unsigned = self.connections.extension_settings()["allow_unsigned_extensions"]
         imports = self.store.get("settings", "offline_extensions", {})
         from ..sandbox import Database
 
@@ -447,7 +435,7 @@ class ContextPool:
                     **runtime,
                     "captured": captured,
                     "extensions": str(extensions),
-                    "allow_unsigned_extensions": config["allow_unsigned_extensions"],
+                    "allow_unsigned_extensions": allow_unsigned,
                     "offline_extensions": imports,
                     "project_extensions": requirements,
                     "read_paths": [str(p) for p in roots],

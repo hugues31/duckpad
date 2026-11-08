@@ -557,7 +557,9 @@ class Results:
                 raise Problem(
                     "Python has no compiled SQL; inspect its code and the opaque lineage boundary", 422
                 )
-            captured, secrets = self.pool.capture(worktree, connection_references(node), environment)
+            captured, secrets = self.pool.connections.capture(
+                worktree, connection_references(node), environment
+            )
             inputs = {
                 e["targetHandle"]: qi("input_" + e["source"].replace("::", "_") + "_" + e["sourceHandle"])
                 for e in edges

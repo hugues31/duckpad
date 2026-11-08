@@ -5,7 +5,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from .access import Access
 from .catalog import Catalog
 from .engine import Engine
 from .lineage import Lineage
@@ -28,14 +27,7 @@ class Services:
         # A release can mark a built-in connector parameter secret.
         if catalog.track_secret_fields():
             store.compact()
-        engine = Engine(
-            store,
-            projects,
-            catalog,
-            access=Access(store),
-            isolated=isolated,
-            enforce_access=enforce_access,
-        )
+        engine = Engine(store, projects, catalog, isolated=isolated, enforce_access=enforce_access)
         # Definition and connection edits mark dependent results stale.
         projects.on_change = engine.invalidate
         catalog.on_change = engine.invalidate

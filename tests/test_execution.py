@@ -229,7 +229,7 @@ def test_startup_loads_only_unfinished_runs(services, monkeypatch):
 
 
 def test_final_persistence_failure_releases_worktree_for_runs_and_cleanup(services, monkeypatch):
-    from duckpad.execution.runs import Execution
+    from duckpad.execution.launches import Execution
 
     store, projects, _, engine = services
     tree = projects.create("Persistence failure")

@@ -470,8 +470,8 @@ def test_scoped_queries_and_bulk_deletes_leave_other_projects_untouched(store):
         assert [c["id"] for c in projects.snapshot(first["id"])["conflicts"]] == [first["id"]]
         assert store.has_conflicts(first["id"])
         assert not store.has_conflicts("missing")
-        assert store.artifact_ids(project=first["project"]) == [first["id"]]
-        assert store.artifact_ids(worktree=second["id"]) == [second["id"]]
+        assert [a["id"] for a in store.artifacts(project=first["project"])] == [first["id"]]
+        assert [a["id"] for a in store.artifacts(worktree=second["id"])] == [second["id"]]
         credentials.forget_project(first["project"])
         assert not credentials.consented("admin", first["project"], "https://example.com/repo.git")
         assert credentials.consented("admin", second["project"], "https://example.com/repo.git")

@@ -5,12 +5,12 @@ from __future__ import annotations
 import copy
 import threading
 import time
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import duckdb
 
 from .. import project_extensions, variables
-from ..catalog import Catalog, redact
+from ..catalog import redact
 from ..data_preparation import failure_hint
 from ..datasets import Context, Dataset
 from ..graph import connection_references
@@ -24,7 +24,7 @@ from ..partition_filters import filter_statements
 from ..projects import Projects
 from ..sql_errors import SqlSourceError
 from ..store import Store
-from ..types import Record, SQLCursor
+from ..types import Record
 from ..util import Problem, now, qi, uid
 from ..value_types import base_type
 from .contexts import ContextPool
@@ -34,10 +34,10 @@ from .journal import RunJournal
 from .messages import execute_messages, execute_test
 from .publication import Publication
 from .python_nodes import PythonNodes
-from .statements import compile_node, statement_kind
+from .statements import compile_node, row_count, staged_dataset, statement_kind
 
 if TYPE_CHECKING:
-    from .runs import Execution
+    from .launches import Execution
 
 
 def failure_message(error: BaseException, node: Record, secrets: list[str]) -> str:
@@ -46,51 +46,18 @@ def failure_message(error: BaseException, node: Record, secrets: list[str]) -> s
     return project_extensions.explain_missing(redact(str(error), secrets)) + failure_hint(types)
 
 
-def row_count(cursor: SQLCursor, table: str) -> int:
-    row = cursor.execute(f"SELECT count(*) FROM {qi(table)}").fetchone()
-    assert row is not None
-    return int(row[0])
-
-
-def staged_dataset(
-    execution: Execution,
-    key: str,
-    port: str,
-    table: str,
-    columns: list[dict[str, str]],
-    storage: str,
-    started: float,
-    **metadata: Any,
-) -> Dataset:
-    return Dataset(
-        id=table,
-        node=key,
-        port=port,
-        columns=columns,
-        run=execution.run["id"],
-        fingerprint=execution.fingerprints[key],
-        storage=storage,
-        bound_values=copy.deepcopy(execution.values),
-        duration=time.monotonic() - started,
-        **metadata,
-    )
-
-
 class NodeExecutor:
     def __init__(
         self,
         store: Store,
         projects: Projects,
-        catalog: Catalog,
         pool: ContextPool,
         exports: Exports,
         fingerprints: Fingerprints,
         lock: threading.RLock,
         journal: RunJournal,
     ) -> None:
-        self.store, self.projects, self.catalog = store, projects, catalog
-        self.pool, self.exports, self.fingerprints = pool, exports, fingerprints
-        self.lock, self.journal = lock, journal
+        self.store, self.pool, self.exports, self.journal = store, pool, exports, journal
         self.publication = Publication(projects, pool, fingerprints, lock, journal)
         self.python = PythonNodes(store, exports, journal)
 
@@ -244,10 +211,11 @@ class NodeExecutor:
                 location, executed = locations[index], statement["sql"]
                 if execution.canceled:
                     raise Problem("Execution canceled")
-                if statement_kind(statement) in ("messages", "tests"):
+                kind = statement_kind(statement)
+                if kind in ("messages", "tests"):
                     if execution.schema_only:
                         continue
-                    execute_check = execute_test if statement.get("test_name") else execute_messages
+                    execute_check = execute_test if kind == "tests" else execute_messages
                     failure = execute_check(
                         cursor, statement, run, key, execution.secrets, lambda: execution.canceled
                     )
@@ -255,7 +223,7 @@ class NodeExecutor:
                         check_failure = failure
                     self.journal.persist(run, execution.secrets)
                     continue
-                if statement_kind(statement) == "exports":
+                if kind == "exports":
                     if execution.schema_only:
                         continue
                     if check_failure is not None:
@@ -367,8 +335,6 @@ class NodeExecutor:
         state = execution.run["nodes"][key]
         # Serialize file writes and capture across worktrees sharing a destination.
         with self.exports.writing(statement.get("export_file"), lambda: execution.canceled):
-            if execution.canceled:
-                raise Problem("Execution canceled")
             state["external_started"] = True
             assert execution.cursor is not None
             execution.cursor.execute(statement["sql"], statement["bindings"])

@@ -6,17 +6,15 @@ import threading
 import time
 from contextlib import suppress
 from contextvars import copy_context
-from dataclasses import dataclass, field
 from typing import cast
 
 import duckdb
 
 from ..catalog import Catalog, redact
-from ..datasets import Context, Dataset
 from ..partition_runs import PartitionRun
 from ..projects import Projects
 from ..store import Store
-from ..types import Connections, Record, RunToken, SQLCursor
+from ..types import Record, RunToken
 from ..util import Problem, now, uid
 from .contexts import ContextPool, interrupt
 from .exports import Exports
@@ -25,38 +23,6 @@ from .journal import RunJournal, execution_outcome
 from .launches import LaunchPlanner
 from .nodes import NodeExecutor
 from .values import RunValues
-
-
-@dataclass
-class Execution:
-    """State of one accepted run, owned by its worker thread."""
-
-    token: RunToken
-    context: Context
-    run: Record
-    nodes: dict[str, Record]
-    edges: list[Record]
-    order: list[str]
-    captured: Connections
-    secrets: list[str]
-    fingerprints: dict[str, str]
-    bundle: Record = field(default_factory=dict)
-    sources: Record = field(default_factory=dict)
-    values: Record = field(default_factory=dict)
-    value_phase: set[str] = field(default_factory=set)
-    validation_errors: Record = field(default_factory=dict)
-    cursor: SQLCursor | None = None
-    prepared: dict[str, Exception | None] = field(default_factory=dict)
-    # Parallel partition keys share one database: each connection is attached once.
-    preparing: threading.Lock = field(default_factory=threading.Lock)
-    published: dict[str, dict[str, Dataset]] = field(default_factory=dict)
-    partition_plan: Record = field(default_factory=dict)
-    partition: Record | None = None
-    schema_only: bool = False
-
-    @property
-    def canceled(self) -> bool:
-        return self.token["cancel"].is_set()
 
 
 class Runner:
@@ -78,8 +44,8 @@ class Runner:
         self.planner = LaunchPlanner(
             store, projects, catalog, pool, exports, fingerprints, lock, self.journal
         )
-        self.nodes = NodeExecutor(store, projects, catalog, pool, exports, fingerprints, lock, self.journal)
-        self.values = RunValues(pool, fingerprints, lock, self.journal)
+        self.nodes = NodeExecutor(store, projects, pool, exports, fingerprints, lock, self.journal)
+        self.values = RunValues(fingerprints, lock, self.journal)
         self.threads: list[threading.Thread] = []
         self.closing = False
 

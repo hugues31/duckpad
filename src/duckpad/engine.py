@@ -40,6 +40,9 @@ class Engine:
         isolated: bool = True,
         enforce_access: bool = True,
     ) -> None:
+        if isolated and not enforce_access:
+            # Isolated workers only read the local roots of the connections granted to a project.
+            raise ValueError("Isolated execution requires enforce_access")
         self.store, self.projects, self.catalog = store, projects, catalog
         self.access = access if access is not None else Access(store)
         self.enforce_access = enforce_access
@@ -265,7 +268,7 @@ class Engine:
             self.fingerprints.invalidate(context)
 
     def extension_settings(self) -> dict[str, bool]:
-        return self.pool.extension_settings()
+        return self.pool.connections.extension_settings()
 
     def extension_runtime(self) -> Record:
         version, platform = runtime()
@@ -309,13 +312,13 @@ class Engine:
         captured, secrets = self.catalog.capture_draft(data, environment)
         self.pool.connections.validate_roots(captured)
         imports = self.store.get("settings", "offline_extensions", {})
-        return connection_probe.run(self.pool.probe_config(), captured, imports, secrets)
+        return connection_probe.run(self.pool.connections.probe_config(), captured, imports, secrets)
 
     def connection_objects(
         self, worktree: str, reference: str, environment: str, table: tuple[str, str] | None = None
     ) -> Record:
         """The schemas and tables of a database connection granted to the worktree's project."""
-        captured, secrets = self.pool.capture(worktree, [reference], environment)
+        captured, secrets = self.pool.connections.capture(worktree, [reference], environment)
         self.pool.connections.validate_roots(captured, self.projects.get(worktree)["project"])
         connection = captured[reference]
         if connection["definition"].get("family") != "database":
@@ -324,7 +327,9 @@ class Engine:
         try:
             # A new attachment lists the tables created since a session attached the database:
             # attached catalogs, such as PostgreSQL's, are cached.
-            return connection_probe.run(self.pool.probe_config(), captured, imports, secrets, table=table)
+            return connection_probe.run(
+                self.pool.connections.probe_config(), captured, imports, secrets, table=table
+            )
         except Problem:
             # A database file that a session attached is locked: list the session's attachment.
             listed = self._session_objects(worktree, environment, connection["alias"], table)

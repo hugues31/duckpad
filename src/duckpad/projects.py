@@ -210,10 +210,7 @@ class Projects:
         with self.repository(project_id):
             with self.store.transaction():
                 worktrees = self.store.worktrees(project_id)
-                artifacts = [
-                    self.store.get("artifact", identity)
-                    for identity in self.store.artifact_ids(project=project_id)
-                ]
+                artifacts = self.store.artifacts(project=project_id)
                 # Example connections own files inside this project's resources directory.
                 self.store.delete("connection", "sample_" + project_id)
                 self.store.delete("settings", "python:" + project_id)

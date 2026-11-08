@@ -38,14 +38,9 @@ class ConnectionConfig:
         """Freeze configured connections before an isolated worker locks its settings."""
         if not self.isolated:
             return {}, []
-        references = (
-            self.access.record(project)["connections"]
-            if self.enforce_access
-            else [c["id"] for c in self.store.all("connection")]
-        )
         captured: Connections = {}
         secrets: list[str] = []
-        for reference in references:
+        for reference in self.access.record(project)["connections"]:
             try:
                 values, hidden = self.catalog.capture([reference], environment)
             except Problem:

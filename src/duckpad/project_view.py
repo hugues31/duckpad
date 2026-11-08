@@ -12,7 +12,6 @@ from .types import Record
 def project_view(services: Services, user: Record, worktree: str) -> Record:
     store, projects, catalog, engine = services.store, services.projects, services.catalog, services.engine
     access = engine.access
-    assert access is not None
     result = projects.snapshot(worktree, committed=True)
     project = result["worktree"]["project"]
     result["role"] = access.role(user, project)

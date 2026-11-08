@@ -1,12 +1,14 @@
 """Worker transport failures must release callers without leaking thread exceptions."""
 
 import queue
+import subprocess
+import sys
 import threading
 from unittest.mock import MagicMock, Mock
 
 import pytest
 
-from duckpad.sandbox import Database
+from duckpad.sandbox import Database, Pipe
 from duckpad.util import Problem
 
 
@@ -83,3 +85,16 @@ def test_send_disconnect_releases_pending_calls_and_reports_unavailable(transpor
     with pytest.raises(Problem, match="worker is unavailable"):
         transport.call("cursor")
     transport.socket.sendall.assert_called_once()
+
+
+def test_closing_after_a_send_raced_termination_releases_the_pipe():
+    """An interrupt sent while the worker stops must not make closing the context fail."""
+    process = subprocess.Popen([sys.executable, "-c", "pass"], stdin=subprocess.PIPE)
+    process.wait()
+    pipe = Pipe(process.stdin)
+    with pytest.raises(BrokenPipeError):
+        pipe.sendall(b"interrupt\n")
+
+    pipe.close()
+
+    assert pipe.fileno() == -1

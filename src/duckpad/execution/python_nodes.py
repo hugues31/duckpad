@@ -22,9 +22,10 @@ from ..util import Problem, uid
 from .exports import Exports
 from .journal import RunJournal
 from .messages import check_result, record_result
+from .statements import row_count, staged_dataset
 
 if TYPE_CHECKING:
-    from .runs import Execution
+    from .launches import Execution
 
 
 class PythonNodes:
@@ -41,7 +42,6 @@ class PythonNodes:
         created_tables: list[tuple[str, str]],
     ) -> dict[str, Dataset]:
         from ..python_nodes import parameters
-        from .nodes import row_count, staged_dataset
 
         if execution.schema_only:
             raise Problem(

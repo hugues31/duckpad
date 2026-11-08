@@ -9,19 +9,16 @@ from typing import TYPE_CHECKING
 from .. import value_sources, variables
 from ..components import expand_for
 from ..graph import connection_references, reachable
-from .contexts import ContextPool
 from .fingerprints import Fingerprints
 from .journal import RunJournal
 
 if TYPE_CHECKING:
-    from .runs import Execution
+    from .launches import Execution
 
 
 class RunValues:
-    def __init__(
-        self, pool: ContextPool, fingerprints: Fingerprints, lock: threading.RLock, journal: RunJournal
-    ) -> None:
-        self.pool, self.fingerprints, self.lock, self.journal = pool, fingerprints, lock, journal
+    def __init__(self, fingerprints: Fingerprints, lock: threading.RLock, journal: RunJournal) -> None:
+        self.fingerprints, self.lock, self.journal = fingerprints, lock, journal
 
     def freeze(self, execution: Execution) -> None:
         """Publish all successful extractions at the phase boundary, then bind consumers."""

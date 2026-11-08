@@ -5,29 +5,25 @@ from __future__ import annotations
 import copy
 import threading
 import time
-from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from dataclasses import dataclass, field
 
 from .. import partitions, project_extensions, value_sources, variables
 from ..bundle import files_to_bundle
 from ..catalog import Catalog, redact
 from ..components import expand, expand_for, in_subtree
-from ..datasets import Context
+from ..datasets import Context, Dataset
 from ..graph import connection_references, reachable, topological
 from ..node_names import node_name_parts
 from ..partition_storage import PartitionStorage
 from ..projects import Projects
 from ..python_policy import get_policy
 from ..store import Store
-from ..types import Connections, Record, RunToken
+from ..types import Connections, Record, RunToken, SQLCursor
 from ..util import Problem, now
 from .contexts import ContextPool, cancel_lineage
 from .exports import Exports
 from .fingerprints import Fingerprints
 from .journal import RunJournal
-
-if TYPE_CHECKING:
-    from .runs import Execution
 
 
 @dataclass
@@ -86,6 +82,38 @@ def pending_value(source: Record) -> Record:
     }
 
 
+@dataclass
+class Execution:
+    """State of one accepted run, owned by its worker thread."""
+
+    token: RunToken
+    context: Context
+    run: Record
+    nodes: dict[str, Record]
+    edges: list[Record]
+    order: list[str]
+    captured: Connections
+    secrets: list[str]
+    fingerprints: dict[str, str]
+    bundle: Record = field(default_factory=dict)
+    sources: Record = field(default_factory=dict)
+    values: Record = field(default_factory=dict)
+    value_phase: set[str] = field(default_factory=set)
+    validation_errors: Record = field(default_factory=dict)
+    cursor: SQLCursor | None = None
+    prepared: dict[str, Exception | None] = field(default_factory=dict)
+    # Parallel partition keys share one database: each connection is attached once.
+    preparing: threading.Lock = field(default_factory=threading.Lock)
+    published: dict[str, dict[str, Dataset]] = field(default_factory=dict)
+    partition_plan: Record = field(default_factory=dict)
+    partition: Record | None = None
+    schema_only: bool = False
+
+    @property
+    def canceled(self) -> bool:
+        return self.token["cancel"].is_set()
+
+
 class LaunchPlanner:
     def __init__(
         self,
@@ -127,7 +155,7 @@ class LaunchPlanner:
             nodes, _, _ = expand_for(admission.bundle, environment, computed=values)
             for key in admission.scope:
                 try:
-                    self.pool.capture(worktree, connection_references(nodes[key]), environment)
+                    self.pool.connections.capture(worktree, connection_references(nodes[key]), environment)
                 except Problem as error:
                     raise Problem(str(error), 422) from error
                 if error := blocking_error(nodes[key]):
@@ -301,8 +329,6 @@ class LaunchPlanner:
                 if dataset.node in affected:
                     dataset.status = "stale"
                     dataset.value_stale = False
-        from .runs import Execution
-
         execution = Execution(
             token,
             context,
