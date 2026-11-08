@@ -8,9 +8,8 @@ Prefer to explore an existing pipeline? Open the [Northstar tour](EXAMPLE.md).
 
 ## 1. Install and sign in · 2 minutes
 
-Already have access to a team instance? Sign in at its address and skip to
-step 2. You need Editor access to build and run the pipeline in an existing
-project, or permission to create your own project.
+Already have an account on a team instance? Sign in at its address and skip to
+step 2: any account can create its own project.
 
 With **Python 3.11+** and **Git** installed, run:
 

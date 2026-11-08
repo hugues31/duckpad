@@ -35,7 +35,7 @@ either can show different results or none at all; it never starts a run.
 | No result | This context has not run, or its in-memory data was cleared, for example by a backend restart | Run the node with its ancestors, or choose **Run all** |
 | Valid | The retained data matches the saved processing configuration | Inspect, sample and explain cells |
 | Stale | The retained data is from an earlier configuration or attempt | Inspect the old rows if useful; rerun before using them as current results or exploring lineage |
-| Failed or canceled run | The attempt did not publish replacement outputs for affected nodes | Inspect Log; prior successful outputs can remain visible as stale |
+| Failed or canceled run | Nodes that finished before the failure published their results; the failed, blocked and canceled nodes did not | Inspect Log; their previous outputs can remain visible as stale |
 
 SQL, parameter and upstream processing changes can invalidate results. Editing
 layout or documentation does not. Saving never launches a run, and changing an

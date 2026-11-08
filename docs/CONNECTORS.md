@@ -145,9 +145,8 @@ project Git; projects store references to their connections.
 2. Choose a connector, give the connection an identifier and display name, and
    enter its values for the environment you want to use.
 3. Choose **Test connection** for that environment, then save the connection.
-4. Open **Project settings** and authorize it for the project. The source node's
-   **Create a connection** shortcut performs this grant for its project when you
-   save and returns you to the flow.
+4. Open **Project settings** and authorize it for the project. For a database,
+   the [Load table shortcut](#database-tables) combines these steps.
 5. In the node, select the connection and resource, then run. Configure and test
    each additional environment before using it.
 
