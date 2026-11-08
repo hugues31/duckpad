@@ -3,10 +3,11 @@ export interface History {
   undo: string[];
   redo: string[];
 }
-/** Save at most 100 undo entries; a new edit invalidates redo. */
+const HISTORY_LIMIT = 100;
+/** Save at most `HISTORY_LIMIT` undo entries; a new edit invalidates redo. */
 export function rememberChange(history: History, change: string) {
   history.undo.push(change);
-  history.undo.splice(0, Math.max(0, history.undo.length - 100));
+  history.undo.splice(0, Math.max(0, history.undo.length - HISTORY_LIMIT));
   history.redo.length = 0;
 }
 /** A conflict retains the rejected change on the server; other failures restore its place. */

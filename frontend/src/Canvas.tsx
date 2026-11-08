@@ -24,7 +24,7 @@ import {
 import { ActionMenu } from "./ActionMenu";
 import { PipelineNode } from "./CanvasNode";
 import { showMinimap } from "./canvasResults";
-import { CanvasProps, FocusRequest } from "./canvasTypes";
+import type { CanvasProps, FocusRequest } from "./canvasTypes";
 import ConnectionPalette from "./ConnectionPalette";
 import { DRAG_TYPE, type NodeConnection } from "./graph";
 import { findNodePosition, layoutNodes } from "./graphLayout";
@@ -34,7 +34,6 @@ import type { FlowEdge, FlowNode } from "./types";
 import { useCanvasFrame } from "./useCanvasFrame";
 import { useCanvasNodes } from "./useCanvasNodes";
 import { useDoubleClickGuard } from "./useDoubleClickGuard";
-PipelineNode.displayName = "PipelineNode";
 const nodeTypes = { pipeline: PipelineNode };
 function CanvasInner({ ref, ...props }: CanvasProps) {
   const t = useT();

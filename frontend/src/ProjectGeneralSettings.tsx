@@ -1,5 +1,5 @@
 import { useT } from "./i18n";
-import { Confirmation, Settings } from "./projectSettingsTypes";
+import type { Confirmation, Settings } from "./projectSettingsTypes";
 
 export default function ProjectGeneralSettings({
   onGit,
@@ -10,9 +10,7 @@ export default function ProjectGeneralSettings({
   onGit: (() => void) | undefined;
   settings: Settings | null;
   admin: boolean;
-  setConfirmation: import("react").Dispatch<
-    import("react").SetStateAction<Confirmation | null>
-  >;
+  setConfirmation: (confirmation: Confirmation) => void;
 }) {
   const t = useT();
   return (

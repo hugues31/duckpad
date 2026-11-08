@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 import { withQuery } from "./api";
 import { useT, useTranslateValue } from "./i18n";
-import { projectPageUrl } from "./navigation";
+import { projectPageUrl, worktreeUrl } from "./navigation";
 import { PageLoading, RouteError } from "./pages/PageStates";
 import { DimensionEditor } from "./PartitionDimensionEditor";
 import type { PartitionEntry, PartitionPage } from "./partitions";
@@ -131,7 +131,9 @@ export function PartitionStrip({
         <p>
           {t("partitionNotCalculated")} ·{" "}
           <Link
-            to={`/worktrees/${worktree.id}/flow?${new URLSearchParams({ environment: worktree.environment, node: description.dimension.values.node })}`}
+            to={worktreeUrl(worktree.id, "flow", worktree.environment, {
+              node: description.dimension.values.node,
+            })}
           >
             {worktree.snapshot?.bundle?.flow.nodes.find(
               (n) => n.id === description.dimension!.values.node,

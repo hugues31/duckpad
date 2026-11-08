@@ -20,8 +20,6 @@ import {
 import type { Dataset, FlowNode, Snapshot } from "./types";
 import { PAGE_SIZE, useResultsPage } from "./useResultsPage";
 
-/** A data test whose failing rows the Data tab shows instead of a sample. */
-
 /**
  * The rows of a dataset: a sample chosen by the user (first or random rows, a
  * filter and a sort) or shared as a view, or the failing rows of a test.
@@ -101,7 +99,6 @@ export default function ResultsData({
     inspected.fullNode,
     sample,
   );
-  const [editing, setEditing] = useState(false);
   const [dialog, setDialog] = useState<"view" | "test" | null>(null);
   const views = outputViews(
     snapshot.bundle?.views,
@@ -151,20 +148,14 @@ export default function ResultsData({
       </div>
     );
   }
-  const sampleLabel = sample.rows
-    ? t(
-        sample.method === "random" ? "sampleRandomRows" : "sampleFirstRows",
-      ).replace("{count}", sample.rows.toLocaleString())
-    : t("sampleAllRows");
   return (
     <div className="results-data">
       <ResultsToolbar
         failing={failing}
-        setOffset={setOffset}
-        onFailing={onFailing}
-        editing={editing}
-        setEditing={setEditing}
-        sampleLabel={sampleLabel}
+        onClearFailing={() => {
+          setOffset(0);
+          onFailing(null);
+        }}
         worktree={worktree}
         environment={environment}
         target={target}
@@ -173,14 +164,13 @@ export default function ResultsData({
         canEdit={canEdit}
         inspected={inspected}
         change={change}
-        setDialog={setDialog}
+        onDialog={setDialog}
         onAddFilter={onAddFilter}
-        order={order}
         views={views}
         view={view}
         onSave={onSave}
         search={search}
-        setSearch={setSearch}
+        onSearch={setSearch}
         pending={pending}
       />
       {(error || (!failureShown && page?.error)) && (

@@ -3,8 +3,9 @@ import { api } from "./api";
 import { usePolling, type PollingOptions } from "./usePolling";
 
 export interface ResourceOptions<T = unknown> extends PollingOptions {
-  /** Load again, keeping the current data meanwhile, whenever this value changes. */
-  refresh?: unknown;
+  /** Load again, keeping the current data meanwhile, whenever this value changes.
+   * Values compare by identity: pass a primitive or a stable object, never an inline one. */
+  refresh?: string | number | object;
   /** Preserve the last successful value when a refresh fails. */
   keepDataOnError?: boolean;
   /** Delay after a successful response, or false to stop until a reload. */

@@ -30,6 +30,9 @@ export default function ConnectionEditorModal({
 }) {
   const t = useT();
   const [selected, setSelectedState] = useState<Connection>(connection);
+  // A retry after a failed `onCreated` updates the connection created by the first attempt.
+  const [created, setCreated] = useState(false);
+  const isNew = creating && !created;
   const selectedRef = useRef<Connection>(connection);
   const setSelected = (value: Connection) => {
     selectedRef.current = value;
@@ -113,10 +116,7 @@ export default function ConnectionEditorModal({
           }
         }
         try {
-          await api(
-            `/catalog/connection?create=${creating}`,
-            send(data, "PUT"),
-          );
+          await api(`/catalog/connection?create=${isNew}`, send(data, "PUT"));
         } catch (error) {
           const { code } = errorDetail(error);
           if (code === "connection_exists")
@@ -129,20 +129,23 @@ export default function ConnectionEditorModal({
             });
           throw error;
         }
+        if (isNew) setCreated(true);
         await refresh();
-
         if (creating) await onCreated?.(data);
       }}
       actions={({ pending: saving }) => (
-        <button
-          type="button"
-          className="button secondary small"
-          disabled={saving || testing}
-          onClick={testConnection}
-        >
-          <PlugZap size={14} />
-          {t(testing ? "testingConnection" : "testConnection")}
-        </button>
+        <>
+          <button
+            type="button"
+            className="button secondary small"
+            disabled={saving || testing}
+            onClick={testConnection}
+          >
+            <PlugZap size={14} />
+            {t(testing ? "testingConnection" : "testConnection")}
+          </button>
+          <span className="spacer" />
+        </>
       )}
     >
       {({ pending: saving }) => (
@@ -154,7 +157,7 @@ export default function ConnectionEditorModal({
               aria-describedby="connection-identifier-hint"
               required
               pattern="[a-zA-Z][a-zA-Z0-9_-]*"
-              disabled={!creating || saving}
+              disabled={!isNew || saving}
               value={selected.id}
               onChange={(e) => setSelected({ ...selected, id: e.target.value })}
             />

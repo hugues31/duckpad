@@ -8,8 +8,8 @@ import { ConfirmModal } from "../modals";
 import { useShell, useWorkspace } from "../shell";
 import type { Project } from "../types";
 import { useApiResource } from "../useApiResource";
-import { JobDetails } from "./../JobDetails";
-import { JobForm, VersionModal } from "./../JobForms";
+import { JobDetails } from "../JobDetails";
+import { JobForm, VersionModal } from "../JobForms";
 import { PageLoading, RouteError } from "./PageStates";
 
 export default function JobsPage() {

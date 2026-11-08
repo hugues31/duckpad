@@ -1,8 +1,6 @@
 import { useState } from "react";
-import { type PathPart } from "./graph";
+import type { PathPart } from "./graph";
 import type { Cell } from "./lineageGraph";
-
-/** A Filter node's code when the project has no `filter` template to copy. */
 
 export interface FlowLocation {
   worktree: string;

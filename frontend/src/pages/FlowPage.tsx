@@ -43,8 +43,8 @@ import type { FlowNode } from "../types";
 import { useDraftPreview } from "../useDraftPreview";
 import { useFlowEditing } from "../useFlowEditing";
 import { useLoadedWorktree } from "../worktree";
-import FlowInspector from "./../FlowInspector";
-import { FlowView } from "./../useFlowView";
+import FlowInspector from "../FlowInspector";
+import type { FlowView } from "../useFlowView";
 import { InvalidProject } from "./PageStates";
 
 /** Height of each banner stacked under the toolbar, in pixels. */

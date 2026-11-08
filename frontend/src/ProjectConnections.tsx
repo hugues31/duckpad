@@ -7,13 +7,13 @@ export default function ProjectConnections({
   workspace,
   grants,
   pending,
-  act,
+  onSave,
 }: {
   instanceAdmin: boolean;
   workspace: Workspace;
   grants: ReturnType<typeof useSettingsForm<string[]>>;
   pending: boolean;
-  act: (action: () => Promise<unknown>) => Promise<boolean>;
+  onSave: () => void;
 }) {
   const t = useT();
   return (
@@ -45,7 +45,7 @@ export default function ProjectConnections({
         <button
           className="button secondary"
           disabled={!instanceAdmin || pending || !grants.dirty}
-          onClick={() => act(grants.persist)}
+          onClick={onSave}
         >
           {t("saveConnections")}
         </button>

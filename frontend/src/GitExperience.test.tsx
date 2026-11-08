@@ -106,6 +106,37 @@ it("shows only the changed leaf field and keeps unchanged code in a collapsed de
   );
 });
 
+it("never submits the dialog form that shows a comparison", () => {
+  const entity = (id: string) => ({
+    id,
+    name: id,
+    kind: "node",
+    file: "flow.json",
+    scope: "",
+    status: "added",
+    categories: ["processing"],
+    fields: [],
+  });
+  const report = {
+    entities: [entity("node/a"), entity("node/b")],
+    counts: { added: 2 },
+    categories: { processing: 2, documentation: 0, layout: 0 },
+    diagnostics: [],
+  } as unknown as ComparisonReport;
+  const submit = vi.fn((event: Event) => event.preventDefault());
+  render(
+    <form onSubmit={(event) => submit(event.nativeEvent)}>
+      <ComparisonView report={report} storageKey="test" onHistory={vi.fn()} />
+      <button>Confirm</button>
+    </form>,
+  );
+  for (const button of screen.getAllByRole("button"))
+    if (button.textContent !== "Confirm") fireEvent.click(button);
+  const search = screen.getByRole("searchbox");
+  fireEvent.keyDown(search, { key: "Enter" });
+  expect(submit).not.toHaveBeenCalled();
+});
+
 it("returns to the flow when a refreshed report no longer has the chosen component", () => {
   const entity = (id: string, kind: string, scope = "") => ({
     id,

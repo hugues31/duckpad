@@ -18,7 +18,7 @@ import ProjectExtensions from "./ProjectExtensions";
 import ProjectGeneralSettings from "./ProjectGeneralSettings";
 import ProjectParticipants from "./ProjectParticipants";
 import ProjectPythonSettings from "./ProjectPythonSettings";
-import { Confirmation, Settings } from "./projectSettingsTypes";
+import type { Confirmation, Settings } from "./projectSettingsTypes";
 import SettingsLayout from "./SettingsLayout";
 import type { Workspace } from "./types";
 import { useApiResource } from "./useApiResource";
@@ -58,7 +58,6 @@ export default function ProjectSettings({
 }) {
   const t = useT();
   const { search } = useLocation();
-  const [selectedUser, setSelectedUser] = useState("");
   const {
     data: settings,
     setData: setSettings,
@@ -94,13 +93,21 @@ export default function ProjectSettings({
         a.enabled === b.enabled && a.allow_builds === b.allow_builds,
     },
   );
-  const apply = async (action: () => Promise<unknown>) => {
-    await action();
-    setConfirmation(null);
+  const reload = async () => {
     setSettings(await read());
     await refresh();
   };
-  const act = (action: () => Promise<unknown>) => run(() => apply(action));
+  const act = (action: () => Promise<unknown>) =>
+    run(async () => {
+      await action();
+      await reload();
+    });
+  // Section saves publish the settings they wrote; only the workspace refreshes.
+  const saveSection = (persist: () => Promise<void>) =>
+    void run(async () => {
+      await persist();
+      await refresh();
+    });
   const deleteProject = async () => {
     await api(`/projects/${project}`, { method: "DELETE" });
     // Unsaved grants of a deleted project must not hold back leaving its page.
@@ -155,8 +162,6 @@ export default function ProjectSettings({
             admin={admin}
             act={act}
             project={project}
-            selectedUser={selectedUser}
-            setSelectedUser={setSelectedUser}
             available={available}
             pending={pending}
             settings={settings}
@@ -170,7 +175,7 @@ export default function ProjectSettings({
             workspace={workspace}
             grants={grants}
             pending={pending}
-            act={act}
+            onSave={() => saveSection(grants.persist)}
           />
         )}
         {section === "python" && settings && (
@@ -178,7 +183,7 @@ export default function ProjectSettings({
             instanceAdmin={instanceAdmin}
             python={python}
             pending={pending}
-            act={act}
+            onSave={() => saveSection(python.persist)}
             project={project}
           />
         )}
@@ -198,16 +203,15 @@ export default function ProjectSettings({
           )}
           confirmLabel={t("confirm")}
           onClose={() => setConfirmation(null)}
-          onConfirm={() =>
-            confirmation.kind === "delete"
-              ? deleteProject()
-              : apply(() =>
-                  api(
-                    `/projects/${project}/members/${confirmation.member.id}`,
-                    { method: "DELETE" },
-                  ),
-                )
-          }
+          onConfirm={async () => {
+            if (confirmation.kind === "delete") return deleteProject();
+            await api(
+              `/projects/${project}/members/${confirmation.member.id}`,
+              { method: "DELETE" },
+            );
+            // The dialog closes on success; the page reports a failed reload.
+            void run(reload);
+          }}
         >
           <p>
             {t(

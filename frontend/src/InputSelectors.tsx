@@ -22,7 +22,6 @@ export default function InputSelectors({
   const t = useT();
   return (
     <>
-      {" "}
       {!!inputs.length && (
         <>
           <h4>{t("inputs")}</h4>

@@ -1,7 +1,15 @@
 import { applyParameterChange } from "./inspectorParameters";
 import ParameterField from "./ParameterField";
 import { typeArgument } from "./parameterType";
-import type { FlowNode, Json, Snapshot } from "./types";
+import type { RefObject } from "react";
+import type {
+  Column,
+  Diagnostic,
+  FlowNode,
+  Json,
+  Parameter,
+  Snapshot,
+} from "./types";
 import { BoundVariable, VariablePicker } from "./VariableBinding";
 import {
   bindTo,
@@ -39,7 +47,7 @@ export default function InspectorParameters({
   inputColumns,
   schemas,
 }: {
-  parameters: import("./types").Parameter[];
+  parameters: Parameter[];
   typesInPreview: boolean;
   draft: FlowNode;
   bindable: boolean;
@@ -47,23 +55,18 @@ export default function InspectorParameters({
   readOnly: boolean;
   setParameter: (name: string, value: Json | undefined) => void;
   persist: () => Promise<boolean>;
-  declared: import("react").RefObject<Record<string, Declaration>>;
+  declared: RefObject<Record<string, Declaration>>;
   rejection: () => unknown;
   worktree: string;
   environment: string;
-  nodeProblems: import("./types").Diagnostic[];
+  nodeProblems: Diagnostic[];
   update: (change: (current: FlowNode) => FlowNode) => void;
   fileSource: boolean;
   listedConnection: string | undefined;
   listedSchema: string | undefined;
   listedTable: string | undefined;
   blur: () => void;
-  connections: {
-    id: string;
-    name: string;
-    family: import("./types").ConnectorFamily | null;
-    capabilities: ("read" | "write")[];
-  }[];
+  connections: Snapshot["connections"];
   locations: Set<string | undefined>;
   valueOf: (name?: string) => string;
   csvSource: boolean;
@@ -73,8 +76,8 @@ export default function InspectorParameters({
   }) =>
     | { complete: boolean; pending: boolean; error: string; names: string[] }
     | undefined;
-  inputColumns: { [k: string]: import("./types").Column[] };
-  schemas: { [k: string]: string[] };
+  inputColumns: Record<string, Column[]>;
+  schemas: Record<string, string[]>;
 }) {
   return (
     <>

@@ -12,6 +12,8 @@ import {
   setNodeCode,
 } from "./nodeCode";
 import type { Bundle, FlowNode, Json, ParsedTemplate } from "./types";
+
+/** A Filter node's code when the project has no `filter` template to copy. */
 const FILTER_SQL =
   "-- @label Filter\n-- @input source\n-- @param condition: expression(source)\n-- @output result\nSELECT * FROM {{ source }} WHERE {{ condition }};\n";
 

@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { PipelineNode } from "./CanvasNode";
 import { nodeStates, nodeStatus, primaryOutputCount } from "./canvasResults";
-import { CanvasProps } from "./canvasTypes";
+import type { CanvasProps } from "./canvasTypes";
 import { warningCount } from "./ExecutionMessages";
 import { nodeInterface } from "./graph";
 import { nodeLabel, templateLabel, useT } from "./i18n";
@@ -34,7 +34,11 @@ export function useCanvasNodes(props: CanvasProps) {
         );
         const { kind, inputs, outputs } = signature;
         const states = nodeStates(props.statuses, props.prefix + node.id);
-        const status = nodeStatus(props.statuses, props.prefix + node.id);
+        const status = nodeStatus(
+          props.statuses,
+          props.prefix + node.id,
+          states,
+        );
         return {
           id: node.id,
           type: "pipeline" as const,

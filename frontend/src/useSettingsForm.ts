@@ -98,7 +98,6 @@ export function useSettingsForm<T>(
   return {
     config,
     discard,
-    replace: setDraft,
     update: (change: (current: T) => T) => {
       if (config !== null) setDraft(change(config));
       setSaved(false);

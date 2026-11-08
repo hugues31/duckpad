@@ -34,10 +34,9 @@ export default function UsersPage({
   const [tokenUser, setTokenUser] = useState<User | null>(null);
   const [query, setQuery] = useState("");
   const [modal, setModal] = useState<Dialog | null>(null);
-  const { pending, error: actionError, setError, run } = useAsyncAction();
-  const error = actionError || loadError;
-  // The dialog reports its own errors, next to the form that caused them.
-  const busy = pending;
+  const { pending: busy, error: actionError, run } = useAsyncAction();
+  // A later successful reload replaces a failed first load.
+  const error = actionError || (data ? "" : loadError);
   async function reload() {
     setUsers(await readUsers());
     await refresh();
@@ -72,8 +71,8 @@ export default function UsersPage({
             "PATCH",
           ),
         ));
-    setError("");
-    await reload();
+    // The dialog reports the change's errors; the page reports the reload's.
+    void run(reload);
   }
   const visible = users.filter((u) =>
     u.username.toLowerCase().includes(query.toLowerCase()),

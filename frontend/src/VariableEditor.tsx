@@ -30,7 +30,7 @@ import {
 export type Declarations = Record<string, Declaration>;
 
 /** A declaration being edited, with the name it is or will be saved under. */
-export type Draft = Declaration & { name: string };
+type Draft = Declaration & { name: string };
 
 const NEW_VARIABLE: Draft = {
   name: "",

@@ -63,7 +63,13 @@ export function SamplePopover({
   const insert = useAsyncAction();
   const [copied, setCopied] = useState(false);
   const filter = draft.filter || "";
-  const matches = useFilterMatchCount(worktree, environment, target, filter);
+  const matches = useFilterMatchCount(
+    worktree,
+    environment,
+    target,
+    filter,
+    sample.filter,
+  );
   const order = draft.order || [];
   const setOrder = (next: [string, SortDirection][]) =>
     setDraft({ ...draft, order: next });

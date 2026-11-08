@@ -1,7 +1,8 @@
 import { Plus, Trash2 } from "lucide-react";
+import { useState } from "react";
 import { api, send } from "./api";
 import { useT } from "./i18n";
-import { Confirmation, Settings } from "./projectSettingsTypes";
+import type { Confirmation, Settings } from "./projectSettingsTypes";
 import RoleSelect, { PROJECT_ROLES } from "./RoleSelect";
 import Select from "./Select";
 
@@ -9,8 +10,6 @@ export default function ProjectParticipants({
   admin,
   act,
   project,
-  selectedUser,
-  setSelectedUser,
   available,
   pending,
   settings,
@@ -19,22 +18,13 @@ export default function ProjectParticipants({
   admin: boolean;
   act: (action: () => Promise<unknown>) => Promise<boolean>;
   project: string;
-  selectedUser: string;
-  setSelectedUser: import("react").Dispatch<
-    import("react").SetStateAction<string>
-  >;
-  available: {
-    id: string;
-    username: string;
-    auth_method?: "oidc" | "service";
-  }[];
+  available: Settings["users"];
   pending: boolean;
   settings: Settings | null;
-  setConfirmation: import("react").Dispatch<
-    import("react").SetStateAction<Confirmation | null>
-  >;
+  setConfirmation: (confirmation: Confirmation) => void;
 }) {
   const t = useT();
+  const [selectedUser, setSelectedUser] = useState("");
   return (
     <>
       <div className="role-guide">

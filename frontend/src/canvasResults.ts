@@ -24,14 +24,15 @@ export function nodeStates(statuses: Statuses, id: string) {
   const nested = Object.entries(statuses.nodes || {})
     .filter(([key]) => key.startsWith(id + "::"))
     .map(([, v]) => v);
-  const states = result ? [result, ...nested] : nested;
-
-  return states;
+  return result ? [result, ...nested] : nested;
 }
 
-/** Status precedence shared by canvas nodes and component summaries. */
-export function nodeStatus(statuses: Statuses, id: string) {
-  const states = nodeStates(statuses, id);
+/** A node's status, from its active run and retained states, including nested nodes. */
+export function nodeStatus(
+  statuses: Statuses,
+  id: string,
+  states = nodeStates(statuses, id),
+) {
   const active = Object.entries(statuses.active?.nodes || {})
     .filter(([key]) => key === id || key.startsWith(id + "::"))
     .map(([, v]) => v.status as string);

@@ -24,7 +24,7 @@ import {
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router";
 import { api, send, withQuery } from "./api";
-import { CalculationCard, CardNode } from "./CalculationCard";
+import { CalculationCard, type CardNode } from "./CalculationCard";
 import { CalculationDetails } from "./CalculationDetails";
 import { formatValue } from "./graph";
 import { useT } from "./i18n";
@@ -39,6 +39,7 @@ import {
   type Query,
 } from "./lineageGraph";
 import { trapFocus } from "./modals";
+import { worktreeUrl } from "./navigation";
 import type { PartitionPage } from "./partitions";
 import { isFinal, usePolling } from "./usePolling";
 import { useOptionalWorktree } from "./worktree";
@@ -154,7 +155,7 @@ function LineageDialog({
             currentWorktree.selectPartition(entry);
             onClose();
             navigate(
-              `/worktrees/${worktree}/flow?${new URLSearchParams({ environment, node: value.node })}`,
+              worktreeUrl(worktree, "flow", environment, { node: value.node }),
             );
             await currentWorktree.run(value.node, {
               partitions: value.partitions,

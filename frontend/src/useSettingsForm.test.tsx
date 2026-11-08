@@ -15,7 +15,7 @@ it("compares unordered grants and discards dependent state", () => {
       discard,
     }),
   );
-  act(() => result.current.replace(["b", "a"]));
+  act(() => result.current.update(() => ["b", "a"]));
   expect(result.current.dirty).toBe(false);
   act(() => result.current.update((items) => [...items, "c"]));
   expect(result.current.dirty).toBe(true);

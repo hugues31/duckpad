@@ -6,20 +6,17 @@ import {
   SlidersHorizontal,
   X,
 } from "lucide-react";
+import { useState } from "react";
 import { useT } from "./i18n";
 import type { FailingRows, ResultsTarget, SaveProject } from "./results";
 import { SamplePopover } from "./SamplePopover";
 import { ALL_ROWS, deleteView, type Sample, type View } from "./samples";
-import type { FlowNode } from "./types";
+import type { Column, FlowNode } from "./types";
 import { ViewsBar } from "./ViewsBar";
 
 export default function ResultsToolbar({
   failing,
-  setOffset,
-  onFailing,
-  editing,
-  setEditing,
-  sampleLabel,
+  onClearFailing,
   worktree,
   environment,
   target,
@@ -28,43 +25,42 @@ export default function ResultsToolbar({
   canEdit,
   inspected,
   change,
-  setDialog,
+  onDialog,
   onAddFilter,
-  order,
   views,
   view,
   onSave,
   search,
-  setSearch,
+  onSearch,
   pending,
 }: {
   failing: FailingRows | null;
-  setOffset: import("react").Dispatch<import("react").SetStateAction<number>>;
-  onFailing: (failing: FailingRows | null) => void;
-  editing: boolean;
-  setEditing: import("react").Dispatch<import("react").SetStateAction<boolean>>;
-  sampleLabel: any;
+  onClearFailing: () => void;
   worktree: string;
   environment: string;
   target: ResultsTarget;
-  columns: import("./types").Column[];
+  columns: Column[];
   sample: Sample;
   canEdit: boolean;
   inspected: { node: FlowNode; parent?: string; fullNode: string };
   change: (next: Sample, name?: string) => void;
-  setDialog: import("react").Dispatch<
-    import("react").SetStateAction<"test" | "view" | null>
-  >;
+  onDialog: (dialog: "test" | "view") => void;
   onAddFilter: (condition: string) => Promise<unknown>;
-  order: [string, import("./samples").SortDirection][];
   views: View[];
   view: string | undefined;
   onSave: SaveProject;
   search: string;
-  setSearch: import("react").Dispatch<import("react").SetStateAction<string>>;
+  onSearch: (search: string) => void;
   pending: boolean;
 }) {
   const t = useT();
+  const [editing, setEditing] = useState(false);
+  const order = sample.order || [];
+  const sampleLabel = sample.rows
+    ? t(
+        sample.method === "random" ? "sampleRandomRows" : "sampleFirstRows",
+      ).replace("{count}", sample.rows.toLocaleString())
+    : t("sampleAllRows");
   return (
     <div className="results-toolbar">
       {failing ? (
@@ -75,10 +71,7 @@ export default function ResultsToolbar({
             className="icon"
             title={t("clear")}
             aria-label={t("clear")}
-            onClick={() => {
-              setOffset(0);
-              onFailing(null);
-            }}
+            onClick={onClearFailing}
           >
             <X size={11} />
           </button>
@@ -116,12 +109,12 @@ export default function ResultsToolbar({
                 onSaveView={(next) => {
                   change(next);
                   setEditing(false);
-                  setDialog("view");
+                  onDialog("view");
                 }}
                 onCreateTest={(next) => {
                   change(next);
                   setEditing(false);
-                  setDialog("test");
+                  onDialog("test");
                 }}
                 onAddFilter={async (condition) => {
                   await onAddFilter(condition);
@@ -171,7 +164,7 @@ export default function ResultsToolbar({
             onSelect={(item) =>
               change(item, item === ALL_ROWS ? undefined : (item as View).name)
             }
-            onSave={() => setDialog("view")}
+            onSave={() => onDialog("view")}
             onDelete={(name) =>
               onSave((bundle) =>
                 deleteView(bundle, `${target.node}:${target.port}`, name),
@@ -187,13 +180,13 @@ export default function ResultsToolbar({
           placeholder={t("searchAllColumns")}
           value={search}
           disabled={!!failing}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={(e) => onSearch(e.target.value)}
         />
         {search && (
           <button
             className="icon"
             title={t("clear")}
-            onClick={() => setSearch("")}
+            onClick={() => onSearch("")}
           >
             <X size={12} />
           </button>

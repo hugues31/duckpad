@@ -64,7 +64,6 @@ export default function AssistantChat() {
   const [undoing, setUndoing] = useState(false);
   // An "Ask the assistant" request arrived during a response; told until idle.
   const [waiting, setWaiting] = useState(false);
-  // The turn that streams again after a run approval.
   const [seenAnswers, setSeenAnswers] = useState(0);
   const launcherPosition = useLauncherPosition();
   const [debug, setDebug] = useState<

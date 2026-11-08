@@ -203,3 +203,4 @@ export const PipelineNode = memo(function PipelineNode({
     </div>
   );
 });
+PipelineNode.displayName = "PipelineNode";

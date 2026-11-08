@@ -1,14 +1,30 @@
 import type { ActionItem } from "./ActionMenu";
-import Inspector from "./Inspector";
-import NodeCodePanel, { type CodeReveal } from "./NodeCodePanel";
-import { connectInput, graphAt, type PathPart } from "./graph";
+import type { PreviewState, SampleSize } from "./draftPreview";
+import {
+  connectInput,
+  graphAt,
+  type NodeInterface,
+  type PathPart,
+} from "./graph";
 import { nodeLabel, useT } from "./i18n";
-import type { Cell } from "./lineageGraph";
+import Inspector from "./Inspector";
+import type { ModalState } from "./ModalHost";
+import NodeCodePanel, { type CodeReveal } from "./NodeCodePanel";
 import { nodeEntity } from "./nodeCode";
+import type { PartitionLaunchOptions } from "./partitions";
 import type { ResultsTab } from "./results";
-import type { Bundle, FlowNode, Graph, Snapshot } from "./types";
-import { FlowLocation } from "./useFlowView";
+import type {
+  Bundle,
+  ComponentDefinition,
+  FlowNode,
+  Graph,
+  ParsedTemplate,
+  Snapshot,
+  Statuses,
+} from "./types";
+import type { FlowView } from "./useFlowView";
 import { declarations } from "./variables";
+import type { PanelVisibility } from "./WorkspacePanels";
 
 export default function FlowInspector({
   panels,
@@ -48,73 +64,41 @@ export default function FlowInspector({
   openModal,
   showResults,
 }: {
-  panels: {
-    open: Record<"palette" | "inspector" | "preview", boolean>;
-    set: (
-      change: Partial<Record<"palette" | "inspector" | "preview", boolean>>,
-    ) => void;
-  };
+  panels: PanelVisibility;
   busy: boolean;
   node: FlowNode | undefined;
-  definition:
-    | import("./types").ParsedTemplate
-    | import("./types").ComponentDefinition
-    | undefined;
+  definition: ParsedTemplate | ComponentDefinition | undefined;
   codeShown: boolean;
   inspected: string;
   snapshot: Snapshot;
   parent: string | undefined;
   fullNode: string;
-  signature: import("./graph").NodeInterface | undefined;
+  signature: NodeInterface | undefined;
   environment: string;
   canEdit: boolean;
-  statuses: import("./types").Statuses;
-  preview: import("./draftPreview").PreviewState | null;
+  statuses: Statuses;
+  preview: PreviewState | null;
   codeReveal: CodeReveal | null;
-  sample: 100 | 1000 | 10000 | null;
-  setSample: import("react").Dispatch<
-    import("react").SetStateAction<100 | 1000 | 10000 | null>
-  >;
-  requestPreview: (
-    code?: string,
-    rows?: import("./draftPreview").SampleSize,
-  ) => Promise<void>;
+  sample: SampleSize;
+  setSample: (size: SampleSize) => void;
+  requestPreview: (code?: string, rows?: SampleSize) => Promise<void>;
   updateDraft: (code: string | null) => void;
-  view: {
-    change: (update: Partial<FlowLocation>) => void;
-    worktree: string;
-    environment: string;
-    path: PathPart[];
-    selected: string | null;
-    revealed: string;
-    cell: Cell | null;
-    code: boolean;
-  };
-  setCodeReveal: import("react").Dispatch<
-    import("react").SetStateAction<CodeReveal | null>
-  >;
+  view: FlowView;
+  setCodeReveal: (reveal: CodeReveal | null) => void;
   graph: Graph;
-  local: Record<string, import("./types").ParsedTemplate>;
-  connections: {
-    id: string;
-    name: string;
-    family: import("./types").ConnectorFamily | null;
-    capabilities: ("read" | "write")[];
-  }[];
+  local: Record<string, ParsedTemplate>;
+  connections: Snapshot["connections"];
   fromInspector: <T>(key: string, saving: Promise<T>) => Promise<T>;
   save: (base: Snapshot, change: (bundle: Bundle) => void) => Promise<Snapshot>;
   path: PathPart[];
   safe: (action: () => Promise<unknown>) => void;
   updateGraph: (change: (graph: Graph) => void) => Promise<void>;
   removeNodes: (ids: string[], edges?: string[]) => Promise<void>;
-  run: (
-    node?: string,
-    options?: import("./partitions").PartitionLaunchOptions,
-  ) => Promise<void>;
+  run: (node?: string, options?: PartitionLaunchOptions) => Promise<void>;
   openComponent: (id: string) => void;
   editCode: (line?: number, target?: string) => void;
   actionsFor: (target: FlowNode) => ActionItem[];
-  openModal: (modal: import("./ModalHost").ModalState) => void;
+  openModal: (modal: ModalState) => void;
   showResults: (tab: ResultsTab) => void;
 }) {
   const t = useT();

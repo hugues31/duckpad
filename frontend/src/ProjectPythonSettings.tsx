@@ -7,13 +7,13 @@ export default function ProjectPythonSettings({
   instanceAdmin,
   python,
   pending,
-  act,
+  onSave,
   project,
 }: {
   instanceAdmin: boolean;
   python: ReturnType<typeof useSettingsForm<Settings["python"]>>;
   pending: boolean;
-  act: (action: () => Promise<unknown>) => Promise<boolean>;
+  onSave: () => void;
   project: string;
 }) {
   const t = useT();
@@ -74,7 +74,7 @@ export default function ProjectPythonSettings({
               <button
                 className="button primary"
                 disabled={pending || !python.dirty}
-                onClick={() => act(python.persist)}
+                onClick={onSave}
               >
                 {t("save")}
               </button>
