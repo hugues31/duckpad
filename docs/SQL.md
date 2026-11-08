@@ -10,12 +10,8 @@ node's own code and a shared SQL template. Start with the
 Click or drag **SQL** from the palette list onto the canvas, then use
 **Edit code**. The code opens beside the canvas, in place of the inspector, and
 saves as you type; select another node to edit its code, or close the editor to
-return to the inspector. This changes only that node. Normal palette nodes also
-receive their own copy of the SQL, without the palette entry's `-- @description`.
-To share code, use **Convert to template** in the node's actions, or Alt+click a
-template in the palette (**Add linked**); editing a shared template affects all of
-its linked nodes in that branch. See
-[code ownership](AUTHORING.md#editing-node-code).
+return to the inspector. This changes only that node. To share code between
+nodes, follow [code ownership and linked templates](AUTHORING.md#editing-node-code).
 
 **Input columns**, above the code, list the name and type of each input's
 columns: from the upstream node's last result or, when it has none but the branch
@@ -39,11 +35,6 @@ ancestors**, which runs only the upstream nodes, then previews again. It says
 when an input result is stale. Previews need edit access, wait for an active run
 of the branch to finish, compute SQL nodes only, not Python or partitioned ones,
 and stop after 30 seconds.
-
-To create a reusable definition directly, click the **SQL** button at the bottom
-of the palette. It is created at once, without adding a node to the canvas;
-edit its SQL and `@label`, and the palette entry follows. Use **Import** beside
-it to copy a template or component from another project.
 
 The inspector's **SQL** tab compiles the current configuration without running
 it. After a run, **Results → Log → Executed SQL** shows what actually ran.
@@ -151,7 +142,7 @@ explicit `COPY ... TO` or `INSERT` statement and have no `@output`. Their
 connections need the `write` capability; other nodes' connections need `read`.
 With project files, the relative destination resolves inside the branch and
 environment's export directory. Run the node and open **Log →
-Download exported data** to retrieve its CSV. See [project exports](AUTHORING.md)
+Download exported data** to retrieve its CSV. See [export downloads](RESULTS.md#download-exported-data)
 for download lifetime, XLSX and destination limits.
 
 An export can also declare tests and messages. They run **before the external

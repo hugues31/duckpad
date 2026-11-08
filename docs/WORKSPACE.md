@@ -109,4 +109,12 @@ Duckpad supports English, French and Portuguese, with light and dark themes.
 Preferences do not change project files. Available actions depend on your
 [instance and project roles](INSTALLATION.md#accounts-and-project-access).
 
+The initial language follows your browser's supported languages and the theme
+follows your system. A manual choice is saved in this browser and takes priority
+on later visits.
+
+![Language and theme choices in personal preferences](images/preferences.png)
+
 For your first working pipeline, follow [Duckpad in 15 minutes](QUICKSTART.md).
+Then [use your own data](YOUR_DATA.md), or consult
+[troubleshooting](TROUBLESHOOTING.md) when an action or result is unexpected.
