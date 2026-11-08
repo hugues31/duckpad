@@ -1,6 +1,7 @@
 import { PartitionRunMenu } from "./PartitionRunMenu";
 import { PartitionSelector } from "./PartitionControls";
 import ProjectTabs from "./ProjectTabs";
+import RunProgress from "./RunProgress";
 import {
   AlertCircle,
   ArrowRight,
@@ -10,11 +11,54 @@ import {
   Play,
   Square,
 } from "lucide-react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { useT } from "./i18n";
 import { useShell } from "./shell";
 import type { Diagnostic, Run, Snapshot } from "./types";
 import { sameInput, useLoadedWorktree } from "./worktree";
 import { useAsyncAction } from "./useAsyncAction";
+
+/** Room kept for the save label before the run controls move under the tabs. */
+const SAVE_LABEL_RESERVE = 48;
+
+/**
+ * Stack the run controls under the tabs only when one row cannot hold both.
+ * The save label shrinks instead and is left out of the decision, so autosave
+ * state changes never move the canvas.
+ */
+function useStackedToolbar() {
+  const toolbar = useRef<HTMLDivElement>(null);
+  const [stacked, setStacked] = useState(false);
+  useLayoutEffect(() => {
+    const bar = toolbar.current!;
+    const tabs = bar.querySelector(".main-tabs")!;
+    const links = [...tabs.children];
+    const controls = bar.querySelector(":scope > .row")!;
+    const label = bar.querySelector(".save-status-label")!;
+    const width = (element: Element) => element.getBoundingClientRect().width;
+    const measure = () => {
+      const style = getComputedStyle(bar);
+      const needed =
+        parseFloat(style.paddingLeft) +
+        parseFloat(style.paddingRight) +
+        links.reduce((total, link) => total + width(link), 0) +
+        (links.length - 1) *
+          (parseFloat(getComputedStyle(tabs).columnGap) || 0) +
+        (parseFloat(style.columnGap) || 0) +
+        width(controls) -
+        width(label) +
+        SAVE_LABEL_RESERVE;
+      setStacked(needed > bar.clientWidth + 0.5);
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    // Links keep their natural width, unlike the tab bar once it is stacked.
+    for (const element of [bar, controls, label, ...links])
+      observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+  return { toolbar, stacked };
+}
 
 /** Tabs, save state and run controls of the open working branch. */
 export function FlowToolbar() {
@@ -35,8 +79,9 @@ export function FlowToolbar() {
   } = useLoadedWorktree();
   const dirty = drafts.dirty();
   const saveState = t(saving ? "saving" : dirty ? "unsavedChanges" : "saved");
+  const { toolbar, stacked } = useStackedToolbar();
   return (
-    <div className="flow-toolbar">
+    <div ref={toolbar} className="flow-toolbar" data-stacked={stacked}>
       <ProjectTabs
         project={snapshot.worktree.project}
         worktree={id}
@@ -72,21 +117,6 @@ export function FlowToolbar() {
             <GitMerge size={14} />
             {t("merge")}
           </button>
-        )}
-        {active?.partitions && (
-          <span role="status">
-            {active.partitions.completed}/{active.partitions.selected}{" "}
-            {t("partitions")} · {active.partitions.failed} {t("failed")}
-            {!!active.partitions.active_keys?.length &&
-              ` · ${t("running")}: ${active.partitions.active_keys.map((key) => String(key.value)).join(", ")}`}
-          </span>
-        )}
-        {active?.phase && (
-          <span role="status" className="muted small">
-            {active.phase === "values"
-              ? t("calculatingValues")
-              : t("runningConsumers")}
-          </span>
         )}
         {active ? (
           <button
@@ -138,8 +168,6 @@ export function WorkspaceNotices({
 }) {
   const t = useT();
   const diagnostics = visibleDiagnostics(snapshot, runDiagnostics);
-  const nodes = Object.values(active?.nodes || {});
-  const completed = nodes.filter((n) => n.status === "success").length;
   return (
     <>
       {(snapshot.worktree.read_only ||
@@ -193,23 +221,7 @@ export function WorkspaceNotices({
           </button>
         </div>
       )}
-      {active && (
-        <div className="run-progress">
-          <Loader2 className="spin" size={13} />
-          <span>
-            {t(active.status)} · {active.environment}
-            {/* A preparing run lists its nodes once dependencies and the worker are ready. */}
-            {!!nodes.length && ` · ${completed}/${nodes.length} ${t("nodes")}`}
-          </span>
-          <div className="progress-track">
-            <div
-              style={{
-                width: `${(100 * completed) / Math.max(1, nodes.length)}%`,
-              }}
-            />
-          </div>
-        </div>
-      )}
+      {active && <RunProgress run={active} />}
     </>
   );
 }

@@ -5,6 +5,7 @@ import { api, errorDetail, send, withQuery } from "../api";
 import ComparisonView from "../ComparisonView";
 import type { Branch, Comparison, GitTag } from "../gitTypes";
 import { RunDetails } from "../HistoryPanel";
+import RunProgress from "../RunProgress";
 import { useT } from "../i18n";
 import { ConfirmModal, Modal } from "../modals";
 import { worktreeUrl } from "../navigation";
@@ -351,6 +352,7 @@ function JobDetails({
             ))}
         </div>
       </div>
+      {busy && job.last_run && <RunProgress run={job.last_run} />}
       {action.error && (
         <p className="notice error" role="alert">
           {action.error}

@@ -38,30 +38,78 @@
 }
 .run-progress {
   position: relative;
-  z-index: 35;
+  z-index: 29;
   display: flex;
   align-items: center;
   gap: 10px;
-  min-height: 36px;
+  height: 36px;
+  min-width: 0;
   margin-top: 0;
-  padding: 7px 20px;
+  padding: 4px 20px 10px;
   border-radius: 0;
   background: var(--accent-soft);
   color: var(--accent);
-  font-size: 10px;
+  font-size: 11px;
   flex-shrink: 0;
 }
-.progress-track {
-  width: 100px;
-  height: 3px;
-  background: var(--accent-soft);
-  border-radius: 2px;
+.run-progress > svg,
+.run-progress-count {
+  flex-shrink: 0;
+}
+.run-progress-details {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.run-progress-count {
   margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.progress-track {
+  position: absolute;
+  inset: auto 20px 4px;
+  height: 4px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  border-radius: 4px;
 }
 .progress-track > div {
-  height: 3px;
-  background: var(--accent);
-  transition: width 0.3s;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(
+    100deg,
+    var(--accent) 20%,
+    color-mix(in srgb, var(--accent) 55%, var(--surface)) 50%,
+    var(--accent) 80%
+  );
+  background-size: 200% 100%;
+  animation: run-progress-shimmer 2.4s linear infinite;
+  transition: width 0.3s ease;
+}
+.progress-track[data-indeterminate="true"] > div {
+  width: 30%;
+  animation: run-progress-indeterminate 2s ease-in-out infinite alternate;
+}
+.run-progress[data-paused="true"] :is(svg, .progress-track > div) {
+  animation-play-state: paused;
+}
+@keyframes run-progress-shimmer {
+  to {
+    background-position: -200% 0;
+  }
+}
+@keyframes run-progress-indeterminate {
+  to {
+    transform: translateX(233%);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .run-progress :is(svg, .progress-track > div) {
+    animation: none;
+    transition: none;
+  }
 }
 .full-panel {
   --full-panel-padding: 37px;

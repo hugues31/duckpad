@@ -75,6 +75,10 @@
 .jobs-page .administration-table code {
   margin-left: 8px;
 }
+.job-details > .run-progress {
+  margin-bottom: 12px;
+  border-radius: 6px;
+}
 .job-details > details {
   margin-top: 24px;
 }
