@@ -26,7 +26,7 @@ KEYED = {
 
 @pytest.fixture(params=[False, True], ids=["embedded", "isolated"])
 def instance(tmp_path, request):
-    services = Services.open(tmp_path / "instance", enforce_access=request.param)
+    services = Services.open(tmp_path / "instance", enforce_access=request.param, isolated=request.param)
     try:
         yield services
     finally:
@@ -166,7 +166,7 @@ def isolated(tmp_path, request, monkeypatch):
     if request.param == "remote":
         # A remote database, such as PostgreSQL, locks no file: the new worker starts first.
         monkeypatch.setattr(contexts, "database_files", lambda definition, values: {})
-    services = Services.open(tmp_path / "instance", enforce_access=True)
+    services = Services.open(tmp_path / "instance", enforce_access=True, isolated=True)
     try:
         yield services
     finally:
@@ -232,7 +232,7 @@ def test_results_that_cannot_be_saved_stay_in_the_old_worker(isolated, tmp_path,
 def test_a_writable_database_file_moves_to_the_new_worker(tmp_path, monkeypatch):
     monkeypatch.setitem(KEYED, "init_sql", "ATTACH {{ database }} AS {{ alias }};")
     monkeypatch.setitem(KEYED, "capabilities", ["read", "write"])
-    services = Services.open(tmp_path / "instance", enforce_access=True)
+    services = Services.open(tmp_path / "instance", enforce_access=True, isolated=True)
     try:
         worktree, connection = keyed_project(services, tmp_path)
         before = results(services, worktree)

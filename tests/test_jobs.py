@@ -287,9 +287,9 @@ def test_one_run_per_job_without_queuing_and_independent_jobs(instance, monkeypa
     release = threading.Event()
     original = services.engine.runs._execute
 
-    def held(execution):
+    def held(*args):
         assert release.wait(10)
-        original(execution)
+        original(*args)
 
     monkeypatch.setattr(services.engine.runs, "_execute", held)
     try:

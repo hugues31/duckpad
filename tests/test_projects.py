@@ -404,7 +404,7 @@ def test_execution_history_survives_restart_but_datasets_do_not(services, tmp_pa
     store, projects, catalog, engine = services
     worktree = projects.create("History", example_bundle(tmp_path / "input.csv"))["id"]
     completed = wait_run(store, engine.launch(worktree, "dev"))
-    restart = Engine(store, projects, catalog)
+    restart = Engine(store, projects, catalog, isolated=False, enforce_access=False)
     try:
         assert store.get("run", completed["id"])["nodes"]["total"]["statements"]
         with pytest.raises(Problem, match="No materialized result"):

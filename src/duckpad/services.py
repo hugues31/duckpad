@@ -22,7 +22,7 @@ class Services:
     lineage: Lineage
 
     @classmethod
-    def open(cls, home: Path, *, enforce_access: bool = False, trusted_local: bool = False) -> Services:
+    def open(cls, home: Path, *, isolated: bool = True, enforce_access: bool = True) -> Services:
         store = Store(home)
         projects, catalog = Projects(store), Catalog(store)
         # A release can mark a built-in connector parameter secret.
@@ -32,8 +32,9 @@ class Services:
             store,
             projects,
             catalog,
-            access=Access(store) if enforce_access else None,
-            trusted_local=trusted_local,
+            access=Access(store),
+            isolated=isolated,
+            enforce_access=enforce_access,
         )
         # Definition and connection edits mark dependent results stale.
         projects.on_change = engine.invalidate

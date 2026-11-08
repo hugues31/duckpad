@@ -25,13 +25,13 @@ def test_serial_execution_preserves_duplicates_and_manifest_order(services, monk
     project["templates"]["transform"] = "-- @label Scaled amounts\n" + project["templates"]["transform"]
     worktree = projects.create("Partition equivalence", project)["id"]
     calls = Counter()
-    compute = engine.runs._compute
+    compute = engine.runs.nodes.compute
 
     def counted(execution, key, tables):
         calls[key] += 1
         return compute(execution, key, tables)
 
-    monkeypatch.setattr(engine.runs, "_compute", counted)
+    monkeypatch.setattr(engine.runs.nodes, "compute", counted)
     launched = engine.launch(worktree, "dev")
     run = join_run(store, launched["id"])
     assert run["status"] == "success", run

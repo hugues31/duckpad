@@ -8,7 +8,8 @@ from pydantic_ai import RunContext
 
 from .. import variables
 from ..components import expand_for
-from ..execution.runs import UNFINISHED_RUN_STATUSES, launch_scope
+from ..execution.journal import UNFINISHED_RUN_STATUSES
+from ..execution.launches import launch_scope
 from ..graph import connection_references
 from ..python_policy import get_policy
 from ..util import Problem

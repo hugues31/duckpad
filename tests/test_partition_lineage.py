@@ -23,7 +23,7 @@ def test_origin_survives_eviction_and_duplicate_occurrences(services, monkeypatc
     def never(*args, **kwargs):
         raise AssertionError("Lineage must not execute sources")
 
-    monkeypatch.setattr(engine.runs, "_compute", never)
+    monkeypatch.setattr(engine.runs.nodes, "compute", never)
     for row in (0, 1):
         result = lineage.explain(worktree, "dev", preview["id"], row, "amount")
         assert result["origin"]["partition"]["key"]["value"] == "a", result
@@ -95,7 +95,7 @@ def test_partition_checks_read_retained_generations_only(services, monkeypatch):
     def never(*args, **kwargs):
         raise AssertionError("Inspecting checks must not execute sources")
 
-    monkeypatch.setattr(engine.runs, "_compute", never)
+    monkeypatch.setattr(engine.runs.nodes, "compute", never)
     result = engine.test_rows(worktree, "dev", "transform", "large", partition_context=selected)
     assert result["filtered_count"] == 1
     assert result["rows"][0]["values"] == [20, "two"]

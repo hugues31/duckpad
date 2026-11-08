@@ -227,3 +227,76 @@ def test_preparing_run_is_visible_and_cancellable_during_uv_lock(services, tmp_p
     assert not any(t.is_alive() for t in engine.runs.threads)
     # Stopping the run neither prepared nor broke the environment: no error is left in settings.
     assert python_environment.environment_status(store.home, tree["project"])["state"] == "unprepared"
+
+
+def test_retirement_holds_context_lock_while_lineage_adds_datasets(services, tmp_path, monkeypatch):
+    store, projects, _, engine = services
+    bundle = example_bundle(tmp_path / "rows.csv")
+    bundle["flow"]["nodes"].extend(
+        [
+            {"id": "other_source", "template": "source", "params": {"file": str(tmp_path / "rows.csv")}},
+            {"id": "other_total", "template": "total", "params": {}},
+        ]
+    )
+    bundle["flow"]["edges"].append(
+        {
+            "id": "other_edge",
+            "source": "other_source",
+            "sourceHandle": "result",
+            "target": "other_total",
+            "targetHandle": "source",
+        }
+    )
+    worktree = projects.create("Concurrent retirement", bundle)["id"]
+    assert wait_run(store, engine.launch(worktree, "dev"))["status"] == "success"
+    context = engine.context(worktree, "dev")
+    output = context.outputs["other_total"]["result"]
+    inspecting = threading.local()
+    entered, release = threading.Event(), threading.Event()
+    retire = engine.runs.nodes.publication.retire
+
+    class CheckedDatasets(dict):
+        def items(self):
+            # Retirement must take its whole dependency snapshot under the same lock
+            # used by TraceQuery when it adds intermediate lineage datasets.
+            if getattr(inspecting, "retiring", False):
+                assert context.lock._is_owned()
+                entered.set()
+            return super().items()
+
+        def values(self):
+            if getattr(inspecting, "retiring", False):
+                assert context.lock._is_owned()
+            return super().values()
+
+    context.datasets = CheckedDatasets(context.datasets)
+
+    def observed(*args):
+        inspecting.retiring = True
+        try:
+            return retire(*args)
+        finally:
+            inspecting.retiring = False
+            release.set()
+
+    monkeypatch.setattr(engine.runs.nodes.publication, "retire", observed)
+    # An unrelated branch's lineage is allowed to read while source outputs retire.
+    lineage = Lineage(engine)
+    tracing = threading.Event()
+    trace = TraceQuery.trace
+
+    def held_trace(self, *args, **kwargs):
+        tracing.set()
+        assert release.wait(10)
+        return trace(self, *args, **kwargs)
+
+    monkeypatch.setattr(TraceQuery, "trace", held_trace)
+    with ThreadPoolExecutor(max_workers=1) as readers:
+        request = readers.submit(lineage.explain, worktree, "dev", output.id, 0, "total")
+        assert tracing.wait(5)
+        run = engine.launch(worktree, "dev", "source")
+        assert wait_run(store, run)["status"] == "success"
+        assert entered.is_set() and release.is_set()
+        assert request.result(10)["complete"]
+    current = context.outputs["source"]["result"]
+    assert current.run == run["id"]

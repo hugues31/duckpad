@@ -291,7 +291,7 @@ class PartitionResults:
         return {**run, "nodes": {node: state}, "partition": entry}
 
     def authorize(self, worktree, node):
-        if self.engine.access:
+        if self.engine.enforce_access:
             snapshot = self.engine.projects.snapshot(worktree)
             nodes, edges, _ = expand(snapshot["bundle"], tolerant=True)
             references = [

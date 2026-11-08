@@ -19,9 +19,22 @@ SLOW = "-- @output result\nSELECT SUM(random()) AS value FROM range(10000000000)
 PROMPT = 10
 
 
+def test_service_defaults_keep_isolation_and_access_enabled(tmp_path):
+    instance = Services.open(tmp_path / "instance")
+    try:
+        assert instance.engine.isolated
+        assert instance.engine.enforce_access
+        assert instance.engine.access.store is instance.store
+        tree = instance.projects.create("Default isolation")
+        run = wait_run(instance.store, instance.engine.launch(tree["id"], "dev"))
+        assert run["status"] == "success"
+    finally:
+        instance.close()
+
+
 @pytest.fixture
 def isolated(tmp_path):
-    instance = Services.open(tmp_path / "instance", enforce_access=True)
+    instance = Services.open(tmp_path / "instance", enforce_access=True, isolated=True)
     yield instance
     instance.close()
 
@@ -301,12 +314,12 @@ def test_cancellation_keeps_newer_run_progress(services, monkeypatch):
         "commit": "commit",
         "nodes": {"first": {"status": "running"}, "second": {"status": "pending"}},
     }
-    engine.runs._persist(run, [])
+    engine.runs.journal.persist(run, [])
     progressed = copy.deepcopy(run)
     progressed["nodes"]["first"]["status"] = "success"
     progressed["nodes"]["second"]["status"] = "running"
     # The run thread writes its progress while the cancellation request updates the record.
-    writer = threading.Thread(target=engine.runs._persist, args=(progressed, []))
+    writer = threading.Thread(target=engine.runs.journal.persist, args=(progressed, []))
     original = store.put
 
     def put(kind, key, value):

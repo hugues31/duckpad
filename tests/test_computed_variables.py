@@ -305,13 +305,13 @@ def test_shared_data_ancestor_executes_once_and_consumer_failure_keeps_published
     ]
     worktree = projects.create("Shared ancestor", project)["id"]
     executed = []
-    original = engine.runs._run_node
+    original = engine.runs.nodes.run_node
 
     def record(execution, key):
         executed.append(key)
         original(execution, key)
 
-    monkeypatch.setattr(engine.runs, "_run_node", record)
+    monkeypatch.setattr(engine.runs.nodes, "run_node", record)
     run = wait_run(store, engine.launch(worktree, "dev"))
     assert run["status"] == "partial_failure", run
     assert executed == ["independent", "control", "consumer"]
@@ -425,14 +425,14 @@ def test_cancel_during_value_phase_does_not_publish_partial_values(services, mon
     store, projects, _, engine = services
     worktree = projects.create("Canceled values", bundle())["id"]
     entered, release = threading.Event(), threading.Event()
-    original = engine.runs._freeze_values
+    original = engine.runs.values.freeze
 
     def paused(execution):
         entered.set()
         assert release.wait(10)
         original(execution)
 
-    monkeypatch.setattr(engine.runs, "_freeze_values", paused)
+    monkeypatch.setattr(engine.runs.values, "freeze", paused)
     run = engine.launch(worktree, "dev")
     try:
         assert entered.wait(10)
@@ -450,14 +450,14 @@ def test_values_are_frozen_at_admission_despite_edits_during_the_run(services, m
     worktree = projects.create("Frozen values", bundle())["id"]
     first = wait_run(store, engine.launch(worktree, "dev"))
     entered, release = threading.Event(), threading.Event()
-    original = engine.runs._run_node
+    original = engine.runs.nodes.run_node
 
     def paused(execution, key):
         entered.set()
         assert release.wait(10)
         original(execution, key)
 
-    monkeypatch.setattr(engine.runs, "_run_node", paused)
+    monkeypatch.setattr(engine.runs.nodes, "run_node", paused)
     run = engine.launch(worktree, "dev", "consumer")
     try:
         assert entered.wait(10)

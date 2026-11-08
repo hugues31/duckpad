@@ -4,6 +4,18 @@ FastAPI serves the React application and authenticated API. SQL runs in isolated
 DuckDB workers by default. Git stores project definitions, SQLite stores instance
 metadata, and execution contexts retain result data.
 
+`Services.open()` and `Engine` default to isolated execution and connection
+authorization. Embedded callers explicitly select `isolated=False`; disabling
+connection grants is a separate `enforce_access=False` option. Every engine owns
+an `Access` service in either mode. `ContextPool` owns the connection configuration
+used by launches, previews and cursor setup.
+
+Within `execution/`, `runs.py` owns the run lifecycle. `launches.py` prepares its
+snapshot, `journal.py` persists progress and recovers interrupted runs, `nodes.py`
+and `python_nodes.py` execute code, `values.py` freezes computed variables, and
+`publication.py` replaces and retires results. Partition runs call those services
+through public methods.
+
 ## Modules
 
 Paths below are relative to `src/duckpad/`.

@@ -141,7 +141,7 @@ def test_preparation_parameters_reference_declared_inputs_and_validate_types():
 
 @pytest.fixture(params=[False, True], ids=["embedded", "isolated"])
 def preparation_services(tmp_path, request):
-    instance = Services.open(tmp_path / "instance", enforce_access=request.param)
+    instance = Services.open(tmp_path / "instance", enforce_access=request.param, isolated=request.param)
     (tmp_path / "data").mkdir()
     instance.catalog.save(
         "connection",

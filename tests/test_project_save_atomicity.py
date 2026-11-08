@@ -181,13 +181,13 @@ def test_failed_commit_restores_reconciled_documentation_and_owned_code(services
 
 def test_restart_removes_backups_left_by_an_interrupted_save(tmp_path):
     home = tmp_path / "instance"
-    services = Services.open(home)
+    services = Services.open(home, isolated=False, enforce_access=False)
     worktree = services.projects.create("Interrupted save")
     leftover = Path(worktree["path"]) / (SAVE_BACKUPS + "interrupted")
     (leftover / "nodes").mkdir(parents=True)
     (leftover / "nodes" / "source.sql").write_text("SELECT 1 AS value;\n")
     services.close()
-    services = Services.open(home)
+    services = Services.open(home, isolated=False, enforce_access=False)
     try:
         services.projects.start_watcher()
         assert not leftover.exists()

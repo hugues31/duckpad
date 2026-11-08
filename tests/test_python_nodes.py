@@ -125,6 +125,50 @@ def test_invalid_returns_publish_no_outputs(services):
     assert "python" not in engine.context(worktree["id"], "dev").outputs
 
 
+def test_rerun_removes_previous_parquet_download(services):
+    store, projects, _, engine = services
+    code = SPLIT.replace(
+        '        print("processing orders")',
+        '        orders.write_parquet(str(self.artifact("out.parquet")))',
+    )
+    worktree = flow(services, code)
+    artifacts = engine.exports.artifacts
+    first = wait_run(store, engine.launch(worktree["id"], "dev"), timeout=30)
+    assert first["status"] == "success", first
+    identity = first["nodes"]["python"]["artifact"]
+    previous = artifacts.path(store.get("artifact", identity))
+    assert previous.is_file()
+    second = wait_run(store, engine.launch(worktree["id"], "dev"), timeout=30)
+    assert second["status"] == "success", second
+    current = store.get("artifact", second["nodes"]["python"]["artifact"])
+    assert current["storage_kind"] == "download"
+    assert store.get("artifact", identity) is None and not previous.exists()
+    assert list(store.paths.artifacts.iterdir()) == [artifacts.path(current)]
+    assert not list(store.paths.partition_artifacts(worktree["id"], "dev").glob("artifact_*"))
+    with artifacts.open(current["id"], worktree["id"], "dev", "python", second["id"]) as (stream, _):
+        assert stream.read(4) == b"PAR1"
+    engine.reset_project(worktree["project"])
+    projects.delete(worktree["project"])
+    assert not artifacts.path(current).exists()
+
+
+def test_disabled_python_creates_no_workspace(services, monkeypatch):
+    store, _, _, engine = services
+    worktree = flow(services)
+    compute = engine.runs.nodes.python.compute
+
+    def disable(*args):
+        store.put("settings", "python:" + worktree["project"], {"enabled": False})
+        return compute(*args)
+
+    monkeypatch.setattr(engine.runs.nodes.python, "compute", disable)
+    run = wait_run(store, engine.launch(worktree["id"], "dev"), timeout=30)
+    assert run["nodes"]["python"]["status"] == "failed"
+    assert "Python execution is disabled" in run["nodes"]["python"]["error"]
+    temporary = store.paths.exports(worktree["id"], "dev") / ".temporary"
+    assert not list(temporary.glob("python_*"))
+
+
 def test_parameters_validate_before_top_level_code(services, tmp_path):
     store, projects, _, engine = services
     marker = tmp_path / "never"
@@ -340,7 +384,7 @@ def test_python_isolated_filesystem_and_environment(tmp_path, monkeypatch):
         config.write_text("")
     monkeypatch.setenv("XDG_CONFIG_HOME", str(configs[0].parent.parent))
     monkeypatch.setenv("XDG_CONFIG_DIRS", str(configs[1].parent.parent))
-    instance = Services.open(tmp_path / "instance", enforce_access=True)
+    instance = Services.open(tmp_path / "instance", enforce_access=True, isolated=True)
     try:
         services = instance.store, instance.projects, instance.catalog, instance.engine
         other = instance.projects.create("Other project")

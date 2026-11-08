@@ -6,7 +6,7 @@ import time
 
 import httpx2
 
-from duckpad.execution.runs import UNFINISHED_RUN_STATUSES
+from duckpad.execution.journal import UNFINISHED_RUN_STATUSES
 from duckpad.extensions import core_catalog
 from duckpad.lineage import Lineage
 

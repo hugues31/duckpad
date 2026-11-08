@@ -14,7 +14,7 @@ from duckpad.services import Services
 
 @pytest.fixture(params=[False, True], ids=["embedded", "isolated"])
 def instance(tmp_path, excel_cache, request):
-    services = Services.open(tmp_path / "instance", enforce_access=request.param)
+    services = Services.open(tmp_path / "instance", enforce_access=request.param, isolated=request.param)
     shutil.copytree(excel_cache, services.store.home / "extensions")
     yield services
     services.close()
@@ -121,7 +121,7 @@ def test_a_custom_storage_type_works_as_a_location(instance, tmp_path):
 
 
 def test_uri_roots_open_their_prefix_in_the_isolated_worker(tmp_path, monkeypatch):
-    instance = Services.open(tmp_path / "instance", enforce_access=True)
+    instance = Services.open(tmp_path / "instance", enforce_access=True, isolated=True)
     try:
         instance.catalog.save(
             "connector",

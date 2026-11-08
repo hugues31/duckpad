@@ -130,19 +130,34 @@ def execute_test(
         raise Problem("Execution canceled")
     assert row is not None
     observed = row[0]
-    level = statement["test_severity"] if observed else "info"
-    name = redact(statement["test_name"], secrets)
-    message = f"Test {name} failed: {observed} failing rows" if observed else f"Test {name} passed"
-    record_result(
-        run,
-        node,
-        {
-            "level": level,
-            "status": level if observed else "ok",
-            "message": message,
-            "origin": {"kind": "test", "name": name},
-            "output": statement.get("message_output"),
-            "observed": observed,
-        },
+    result = check_result(
+        statement["test_name"],
+        observed,
+        statement["test_severity"],
+        secrets,
+        output=statement.get("message_output"),
     )
-    return message if level == "error" else None
+    record_result(run, node, result)
+    return str(result["message"]) if result["level"] == "error" else None
+
+
+def check_result(
+    name: str,
+    observed: int,
+    severity: str,
+    secrets: list[str],
+    *,
+    output: str | None = None,
+    block: str | None = None,
+) -> Record:
+    """The same test evidence for SQL and Python checks."""
+    name = redact(name, secrets)
+    level = severity if observed else "info"
+    return {
+        "level": level,
+        "status": level if observed else "ok",
+        "message": f"Test {name} failed: {observed} failing rows" if observed else f"Test {name} passed",
+        "origin": {"kind": "test", "name": name, **({"block": block} if block else {})},
+        "output": output,
+        "observed": observed,
+    }

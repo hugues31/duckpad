@@ -231,7 +231,7 @@ def test_column_statistics_are_computed_once_per_result(services, project, tmp_p
 
 @pytest.mark.parametrize("isolated", [False, True], ids=["embedded", "isolated"])
 def test_statistics_check_unique_values_exactly_and_skip_unbounded_histograms(tmp_path, isolated):
-    instance = Services.open(tmp_path / "instance", enforce_access=isolated)
+    instance = Services.open(tmp_path / "instance", enforce_access=isolated, isolated=isolated)
     try:
         # SUMMARIZE estimates 106 distinct values for these 107 identifiers.
         code = (

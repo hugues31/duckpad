@@ -460,7 +460,7 @@ def test_cleanup_keeps_a_locked_worktree(project):
 
 def test_cleanup_survives_a_failed_branch_deletion_and_a_restart(tmp_path, monkeypatch):
     home = tmp_path / "instance"
-    services = Services.open(home)
+    services = Services.open(home, isolated=False, enforce_access=False)
     projects = services.projects
     main = projects.create("Revenue", bundle())
     feature, head = integrated_feature(projects, main)
@@ -493,7 +493,7 @@ def test_cleanup_survives_a_failed_branch_deletion_and_a_restart(tmp_path, monke
 
 def test_restart_finishes_interrupted_cleanups_and_ignores_lost_directories(tmp_path, monkeypatch, caplog):
     home = tmp_path / "instance"
-    services = Services.open(home)
+    services = Services.open(home, isolated=False, enforce_access=False)
     projects = services.projects
     main = projects.create("Revenue", bundle())
     feature, head = integrated_feature(projects, main)

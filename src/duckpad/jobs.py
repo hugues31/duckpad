@@ -11,7 +11,7 @@ from sqlalchemy.exc import IntegrityError
 from .bundle import files_to_bundle
 from .components import expand_for
 from .execution.launch import confirm_environment
-from .execution.runs import launch_scope
+from .execution.launches import launch_scope
 from .git.command import check_branch_name
 from .git.workspace import require_valid
 from .node_names import node_names

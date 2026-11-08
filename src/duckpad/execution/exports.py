@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import threading
-from collections.abc import Iterable
-from contextlib import AbstractContextManager, suppress
+import weakref
+from collections.abc import Callable, Generator, Iterable
+from contextlib import AbstractContextManager, contextmanager
 from pathlib import Path
 from typing import BinaryIO
 
-from ..access import Access
 from ..artifacts import Artifacts
 from ..catalog import Catalog
 from ..components import expand_for
@@ -18,6 +18,7 @@ from ..store import Store
 from ..templates import URI
 from ..types import Connections, Record, RunToken
 from ..util import Problem, digest
+from .connections import ConnectionConfig
 from .fingerprints import Fingerprints
 
 
@@ -27,24 +28,47 @@ class Exports:
         store: Store,
         projects: Projects,
         catalog: Catalog,
-        access: Access | None,
+        connections: ConnectionConfig,
         fingerprints: Fingerprints,
         lock: threading.RLock,
         active: dict[str, RunToken],
     ) -> None:
-        self.store, self.projects, self.catalog, self.access = store, projects, catalog, access
+        self.store, self.projects, self.catalog, self.connections = store, projects, catalog, connections
         self.fingerprints = fingerprints
         # The engine lock and the active runs it guards.
         self.lock, self.active = lock, active
         # Serializes file writes and their capture across worktrees sharing a destination.
-        self.write_lock = threading.Lock()
+        self.destinations: weakref.WeakValueDictionary[str, threading.Lock] = weakref.WeakValueDictionary()
+        self.destination_lock = threading.Lock()
         self.artifacts = Artifacts(store)
+
+    @contextmanager
+    def writing(
+        self, export_file: Record | None, canceled: Callable[[], bool]
+    ) -> Generator[None, None, None]:
+        """Serialize local destinations while allowing unrelated writes and cancellation."""
+        path = export_file.get("path") if export_file else None
+        lock = None
+        if path and not URI.match(str(path)):
+            destination = str(Path(path).resolve())
+            with self.destination_lock:
+                lock = self.destinations.setdefault(destination, threading.Lock())
+            while not lock.acquire(timeout=0.05):
+                if canceled():
+                    raise Problem("Execution canceled")
+        try:
+            if canceled():
+                raise Problem("Execution canceled")
+            yield
+        finally:
+            if lock is not None:
+                lock.release()
 
     def capture(self, export_file: Record, run: Record, node: str, captured: Connections) -> str | None:
         """Copy a completed file export for download; None when the copy is unavailable."""
         roots = [self.store.paths.exports(run["worktree"], run["environment"])]
-        if self.access:
-            _, writable = self.access.local_roots(run["project"], captured)
+        if self.connections.enforce_access:
+            _, writable = self.connections.access.local_roots(run["project"], captured)
             roots.extend(writable)
         else:
             roots.extend(
@@ -61,8 +85,8 @@ class Exports:
     def record(self, run: Record) -> list[str]:
         """Make a run's export nodes the current results of their environment.
 
-        Runs inside the caller's store transaction, deleting the records of the download
-        copies it replaces; pass the returned identities to discard() once committed.
+        Runs inside the caller's store transaction; pass replaced artifact identities to
+        discard() once committed, while their storage metadata is still available.
         """
         replaced: list[str] = []
         for key, state in run["nodes"].items():
@@ -83,16 +107,12 @@ class Exports:
                     "run_status": run["status"],
                 },
             )
-        for artifact in replaced:
-            self.store.delete("artifact", artifact)
         return replaced
 
     def discard(self, artifacts: Iterable[str]) -> None:
         """Remove the files of replaced download copies."""
         for identity in artifacts:
-            # Windows keeps a file that a download is still reading.
-            with suppress(OSError):
-                (self.store.paths.artifacts / identity).unlink(missing_ok=True)
+            self.artifacts.remove(identity)
 
     def mark_stale(self, worktree: str, environment: str, nodes: Iterable[str]) -> None:
         """Mark export results stale, keeping their download copies."""
@@ -137,14 +157,14 @@ class Exports:
                 return {**public, "status": "running"}
             if result["status"] != "success":
                 return {**public, "status": "stale" if result["status"] == "stale" else "failed"}
-            if self.access:
+            if self.connections.enforce_access:
                 references = [
                     ref
                     for key in reachable({node}, edges, upstream=True)
                     for ref in connection_references(nodes[key])
                 ]
                 try:
-                    self.access.connections(snapshot["worktree"]["project"], references)
+                    self.connections.access.connections(snapshot["worktree"]["project"], references)
                 except Problem:
                     return {**public, "status": "stale"}
             current = self.fingerprints.current(worktree, environment)

@@ -261,7 +261,7 @@ def test_key_variables(tmp_path, monkeypatch):
 
 
 def test_a_parameter_made_secret_is_sealed_at_once(tmp_path):
-    services = Services.open(tmp_path)
+    services = Services.open(tmp_path, isolated=False, enforce_access=False)
     try:
         public = {
             **CONNECTOR,

@@ -101,7 +101,7 @@ def table_bundle(connection="warehouse"):
 
 @pytest.fixture(params=[False, True], ids=["embedded", "isolated"])
 def database_services(tmp_path, request):
-    instance = Services.open(tmp_path / "instance", enforce_access=request.param)
+    instance = Services.open(tmp_path / "instance", enforce_access=request.param, isolated=request.param)
     try:
         yield instance.store, instance.projects, instance.catalog, instance.engine
     finally:
@@ -153,7 +153,7 @@ def test_an_administrator_declared_database_works_through_load_table_and_export_
 
 @pytest.fixture
 def isolated(tmp_path):
-    instance = Services.open(tmp_path / "instance", enforce_access=True)
+    instance = Services.open(tmp_path / "instance", enforce_access=True, isolated=True)
     try:
         yield instance
     finally:
@@ -417,7 +417,7 @@ def test_embedded_runs_load_connector_extensions_in_a_child_first(services, tmp_
 
 
 def test_isolated_sessions_install_connector_extensions_in_a_child_first(tmp_path, monkeypatch):
-    instance = Services.open(tmp_path / "instance", enforce_access=True)
+    instance = Services.open(tmp_path / "instance", enforce_access=True, isolated=True)
     try:
         instance.catalog.save(
             "connector", {**NATIVE, "extensions": [{"name": "crashing_isolated_extension"}]}

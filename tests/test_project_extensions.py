@@ -37,7 +37,7 @@ def save(instance, identity, requirements):
 @pytest.mark.parametrize("isolated", [False, True])
 def test_contexts_reopen_only_when_enabled_requirements_change(tmp_path, isolated):
     home = tmp_path / "instance"
-    instance = Services.open(home, enforce_access=isolated)
+    instance = Services.open(home, enforce_access=isolated, isolated=isolated)
     requirements = {"json": {"source": "core", "enabled": True}}
     try:
         worktree = instance.projects.create("Extensions", bundle(requirements))
@@ -67,7 +67,7 @@ def test_contexts_reopen_only_when_enabled_requirements_change(tmp_path, isolate
         assert instance.engine.context(unrelated["id"], "dev") is other
         save(instance, identity, requirements)
         instance.close()
-        instance = Services.open(home, enforce_access=isolated)
+        instance = Services.open(home, enforce_access=isolated, isolated=isolated)
         run = wait_run(instance.store, instance.engine.launch(identity, "prod", entry_point="scheduler"))
         assert run["status"] == "success", run
         assert run["extensions"] == requirements
@@ -80,7 +80,7 @@ def test_contexts_reopen_only_when_enabled_requirements_change(tmp_path, isolate
 
 @pytest.mark.parametrize("isolated", [False, True])
 def test_missing_requirement_blocks_execution_without_installing(tmp_path, isolated):
-    instance = Services.open(tmp_path / "instance", enforce_access=isolated)
+    instance = Services.open(tmp_path / "instance", enforce_access=isolated, isolated=isolated)
     try:
         worktree = instance.projects.create(
             "Missing", bundle({"missing_capability": {"source": "community", "enabled": True}})
@@ -99,7 +99,7 @@ def test_missing_requirement_blocks_execution_without_installing(tmp_path, isola
 @pytest.mark.parametrize("isolated", [False, True])
 def test_a_format_without_its_extension_names_the_extension_to_enable(tmp_path, isolated):
     # Avro is a core extension that no supported DuckDB build links statically.
-    instance = Services.open(tmp_path / "instance", enforce_access=isolated)
+    instance = Services.open(tmp_path / "instance", enforce_access=isolated, isolated=isolated)
     try:
         definitions = bundle()
         definitions["templates"].update(
@@ -183,7 +183,7 @@ def test_requirements_roundtrip_merge_and_invalid_files_remain_reviewable():
 
 @pytest.mark.parametrize("isolated", [False, True])
 def test_editing_requirements_does_not_close_an_active_run_database(tmp_path, isolated):
-    instance = Services.open(tmp_path / "instance", enforce_access=isolated)
+    instance = Services.open(tmp_path / "instance", enforce_access=isolated, isolated=isolated)
     try:
         definitions = bundle({"json": {"source": "core", "enabled": True}})
         definitions["templates"]["source"] = (

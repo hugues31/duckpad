@@ -15,7 +15,6 @@ from typing import Any
 
 import duckdb
 
-from .. import connection_probe, variables
 from ..catalog import Catalog, redact
 from ..components import expand_for
 from ..datasets import Context, Dataset
@@ -24,12 +23,12 @@ from ..node_code import code_path, find_node
 from ..projects import Projects
 from ..sql_errors import SqlSourceError
 from ..store import Store
-from ..templates import compile_template
 from ..types import Connections, Record, RunToken, SQLCursor
 from ..util import Problem, clean, qi, uid
 from .contexts import ContextPool, interrupt
-from .runs import failure_message
+from .nodes import failure_message
 from .samples import reading
+from .statements import compile_node, statement_kind
 
 # Rows read from each input; None reads every row.
 SAMPLE_SIZES = (100, 1_000, 10_000)
@@ -79,13 +78,10 @@ class DraftPreviews:
         pool: ContextPool,
         lock: threading.RLock,
         active: dict[str, RunToken],
-        *,
-        isolated: bool,
     ) -> None:
         self.store, self.projects, self.catalog, self.pool = store, projects, catalog, pool
         # The engine lock and the active runs it guards.
         self.lock, self.active = lock, active
-        self.isolated = isolated
         self.requests: dict[tuple[str, ...], Request] = {}
         self.requests_lock = threading.Lock()
 
@@ -307,31 +303,10 @@ class DraftPreviews:
         An attached database is used as it is: setting it up again would detach it from the
         run that may be reading it. Without `setup`, a connection that is not attached fails.
         """
-        references = connection_references(node)
-        if not references:
-            return {}
-        if self.isolated:
-            missing = [r for r in references if r not in context.connections]
-            if missing:
-                # The worker attaches connections when it starts: check why this one is missing.
-                self.pool.capture(worktree, missing, environment)
-                raise Problem("Run this node once to attach its connection, then preview it again", 409)
-            return {r: context.connections[r] for r in references}
-        captured, hidden = self.pool.capture(worktree, references, environment)
-        secrets.extend(hidden)
-        offline = self.store.get("settings", "offline_extensions", {})
-        for reference, connection in captured.items():
-            if connection_probe.attached(cursor, connection["alias"]):
-                continue
-            if not setup:
-                raise Problem("Run this node once to attach its connection, then preview it again", 409)
-            try:
-                connection_probe.check_extensions(self.pool.probe_config(), connection, offline, secrets)
-                self.catalog.prepare(cursor, {reference: connection})
-            except (Problem, duckdb.Error) as error:
-                raise Problem(
-                    f"Cannot set up connection {connection['name']}: {redact(str(error), secrets)}", 422
-                ) from None
+        captured = self.pool.connections.for_context(
+            context, connection_references(node), secrets, require_attached=True
+        )
+        self.pool.connections.prepare(cursor, captured, secrets, reuse=True, setup=setup)
         return captured
 
     def _statements(
@@ -349,16 +324,13 @@ class DraftPreviews:
         """Compile a node against temporary relations; return its statements and source locations."""
         captured = self._connections(cursor, context, worktree, environment, node, secrets, setup)
         project = self.projects.get(worktree)["project"]
-        statements = compile_template(
-            node["parsed"],
-            node.get("params", {}),
+        statements = compile_node(
+            node,
             relations,
             {port: uid("data_") for port in node["parsed"]["outputs"]},
             captured,
             self.store.paths.project_files(project, worktree, environment),
-            input_schemas=columns,
-            variables=variables.expression_values(node),
-            bound=node.get("variables"),
+            columns,
         )
         return statements, [statement.pop("source_location") for statement in statements]
 
@@ -410,12 +382,9 @@ class DraftPreviews:
         skipped = {"exports": 0, "tests": 0, "messages": 0}
         computed = []
         for statement, location in zip(statements, locations, strict=True):
-            if statement.get("test_name"):
-                skipped["tests"] += 1
-            elif statement.get("message_block"):
-                skipped["messages"] += 1
-            elif not statement["output"]:
-                skipped["exports"] += 1
+            kind = statement_kind(statement)
+            if kind != "output":
+                skipped[kind] += 1
             else:
                 computed.append((statement, location))
         outputs = []
@@ -508,11 +477,7 @@ class DraftPreviews:
                     cursor, context, worktree, environment, node, inputs, columns, secrets, setup=False
                 )
                 for statement in statements:
-                    if (
-                        not statement["output"]
-                        or statement.get("test_name")
-                        or statement.get("message_block")
-                    ):
+                    if statement_kind(statement) != "output":
                         continue
                     table = qi(statement["table"])
                     cursor.execute(

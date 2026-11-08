@@ -4,7 +4,6 @@ import copy
 import os
 import re
 import threading
-from contextlib import suppress
 from dataclasses import asdict
 
 from sqlalchemy.dialects.sqlite import insert
@@ -153,7 +152,7 @@ class PartitionStorage:
             )
         # A key keeps one export download copy, like an ordinary export node.
         if replaced and replaced != state.get("artifact"):
-            self.remove(replaced, self.store.paths.artifacts)
+            self.remove(replaced)
 
     def save(self, cursor, dataset, entry, mandatory, budget, retention_run=None):
         self.temporary.mkdir(parents=True, exist_ok=True)
@@ -188,7 +187,11 @@ class PartitionStorage:
             run = self.store.get("run", dataset.run)
             artifacts = Artifacts(self.store)
             identity = artifacts.capture(
-                {"path": str(temporary), "format": "parquet"}, run, dataset.node, [self.temporary]
+                {"path": str(temporary), "format": "parquet"},
+                run,
+                dataset.node,
+                [self.temporary],
+                storage_kind="partition",
             )
             record = self.store.get("artifact", identity)
             metadata = {
@@ -247,18 +250,15 @@ class PartitionStorage:
         except OSError:
             return False
 
-    def remove(self, identity, directory=None):
-        self.store.delete("artifact", identity)
-        # Windows keeps a file that a download is still reading.
-        with suppress(OSError):
-            ((directory or self.data) / identity).unlink(missing_ok=True)
+    def remove(self, identity):
+        Artifacts(self.store).remove(identity)
 
     def forget(self, session, row):
         """Delete a key's result and the export download copy it owns."""
         session.delete(row)
         download = row.state.get("success", {}).get("artifact")
         if download:
-            self.remove(download, self.store.paths.artifacts)
+            self.remove(download)
 
     def restore(self, cursor, metadata):
         if not self.available(metadata):

@@ -454,7 +454,7 @@ def test_https_never_retries_with_server_authentication(team, monkeypatch, tmp_p
 
 def test_key_copies_left_by_a_crash_are_removed_at_startup_and_before_network(tmp_path, monkeypatch):
     home = tmp_path / "instance"
-    services = Services.open(home)
+    services = Services.open(home, isolated=False, enforce_access=False)
     folder = services.projects.remotes.temporary
     services.close()
     stale, recent = folder / "tmpstale", folder / "tmprecent"
@@ -463,7 +463,7 @@ def test_key_copies_left_by_a_crash_are_removed_at_startup_and_before_network(tm
         (directory / "identity").write_text("private")
     old = time.time() - 3600
     os.utime(stale, (old, old))
-    services = Services.open(home)
+    services = Services.open(home, isolated=False, enforce_access=False)
     try:
         assert not stale.exists() and recent.exists()
         os.utime(recent, (old, old))

@@ -54,10 +54,10 @@ def hold_execution(app, monkeypatch):
     entered, release = threading.Event(), threading.Event()
     execute = app.state.services.engine.runs._execute
 
-    def paused(execution):
+    def paused(*args):
         entered.set()
         assert release.wait(10), "Test did not release execution"
-        execute(execution)
+        execute(*args)
 
     monkeypatch.setattr(app.state.services.engine.runs, "_execute", paused)
     return entered, release

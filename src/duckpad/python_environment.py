@@ -674,5 +674,4 @@ def prepare_environment(files, home, project, *, allow_builds=False, progress=No
         "interpreter": str(interpreter),
         "site_packages": str(site),
         "worker": str(directory / "sdk/duckpad/worker_bootstrap.py"),
-        "fingerprint": signature,
     }

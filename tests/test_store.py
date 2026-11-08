@@ -54,7 +54,7 @@ def test_initial_migration_matches_models_and_survives_restart(store):
     with store.engine.connect() as connection:
         assert (
             connection.exec_driver_sql("SELECT version_num FROM alembic_version").scalar_one()
-            == "0001_baseline"
+            == "0002_artifact_storage"
         )
         assert "records" not in inspect(connection).get_table_names()
         assert len(SQLModel.metadata.tables) == 29
