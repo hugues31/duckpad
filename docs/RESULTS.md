@@ -25,6 +25,28 @@ While you edit a node's code, **Preview** adds a **Preview** tab with the output
 computed from samples of its inputs. Nothing in it is saved or published; see
 [previews](SQL.md#preview-while-you-edit).
 
+## Result lifetime
+
+Results belong to the branch and environment selected in the top bar. Switching
+either can show different results or none at all; it never starts a run.
+
+| State | What it means | What to do |
+| --- | --- | --- |
+| No result | This context has not run, or its in-memory data was cleared, for example by a backend restart | Run the node with its ancestors, or choose **Run all** |
+| Valid | The retained data matches the saved processing configuration | Inspect, sample and explain cells |
+| Stale | The retained data is from an earlier configuration or attempt | Inspect the old rows if useful; rerun before using them as current results or exploring lineage |
+| Failed or canceled run | Nodes that finished before the failure published their results; the failed, blocked and canceled nodes did not | Inspect Log; their previous outputs can remain visible as stale |
+
+SQL, parameter and upstream processing changes can invalidate results. Editing
+layout or documentation does not. Saving never launches a run, and changing an
+external source file does not refresh an existing result: run again to read it.
+Data samples also leave the underlying pipeline result unchanged.
+
+History keeps execution records, SQL and outcomes after a restart; it is not a
+stored copy of every historical result table. Use an export when you need a
+result file to keep or share. Job results follow the same context lifetime;
+see [Jobs](JOBS.md#results-and-history).
+
 ## Data and samples
 
 The **Data** tab pages through the retained result, 100 rows at a time. Select a
@@ -74,23 +96,7 @@ Views never change results, so saving one makes nothing stale. Deleting a node
 deletes its views in the same save. Readers and operators use views and their own
 samples but cannot save views.
 
-```json
-{
-  "validated:orders": [
-    {
-      "name": "Partner orders above 300",
-      "rows": 100,
-      "method": "first",
-      "filter": "channel = 'Partner' AND amount > 300",
-      "order": [["amount", "desc"]]
-    }
-  ]
-}
-```
-
-Views are keyed by `node:port`, like dataset documentation. A view has a `name`,
-unique for its output, and optionally `rows` (1 to 10,000), `method` (`first` or
-`random`), `seed`, `filter` and `order` (`[column, "asc" | "desc"]` pairs).
+For external editing, see the [saved view file format](AUTHORING.md#saved-views).
 
 ## Columns and statistics
 
@@ -140,7 +146,28 @@ filter shows all entries, messages, warnings or errors. **Executed SQL** shows
 the statements, bound values and variables of that run, with secrets masked.
 **Open the run in History** opens its full record.
 
+## Download exported data
+
+Use an **Export CSV** or **Export XLSX** node to write the full input table,
+including the format options configured on that node. After a successful run,
+select the export and choose **Log → Download exported data**. For a first
+export, follow [Use your own data](YOUR_DATA.md#3-export-and-download).
+
+Downloads apply to a single `COPY ... TO` statement using a `destination`
+parameter and a local CSV/XLSX target. They use a saved copy of the exported
+bytes, remain private to project members and survive a backend restart. Changed
+inputs/settings, upstream reruns, a failed export or a missing download copy
+require another successful export. A new export replaces the previous download.
+Database and remote-storage destinations do not offer browser downloads.
+
+**Code → Download project ZIP** shares the pipeline definitions, excluding data
+and Git history. It does not download the displayed table. See
+[project files and imports](AUTHORING.md#edit-and-share-project-files).
+
 ## API
+
+This section is a reference for integrations with the results interface. For
+supported Job automation, start with [CLI and automation](AUTOMATION.md).
 
 These internal UI routes require an explicit `environment` query parameter.
 

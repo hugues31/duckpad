@@ -102,15 +102,32 @@ its element history in the [Git workspace](GIT.md).
 ## Node results
 
 Use the [results guide](RESULTS.md) for data, samples, column statistics, tests
-and logs. After a successful CSV or XLSX export, **Log → Download exported data**
-retrieves the entire exported file, including its format options.
+and logs, including [export downloads](RESULTS.md#download-exported-data).
 
-Downloads apply to a single `COPY ... TO` statement using a `destination`
-parameter and a local CSV/XLSX target. They use a saved copy of the exported
-bytes, remain private to project members and survive a backend restart. Changed
-inputs/settings, upstream reruns, a failed export or a missing download copy
-require another successful export. A new export replaces the previous download.
-Oracle and remote-storage destinations do not offer downloads.
+## Saved views
+
+The results panel saves shared samples in `views.json`. External editors can
+use the same format:
+
+```json
+{
+  "validated:orders": [
+    {
+      "name": "Partner orders above 300",
+      "rows": 100,
+      "method": "first",
+      "filter": "channel = 'Partner' AND amount > 300",
+      "order": [["amount", "desc"]]
+    }
+  ]
+}
+```
+
+Views are keyed by `node:port`, like dataset documentation. A view has a `name`,
+unique for its output, and optionally `rows` (1 to 10,000), `method` (`first` or
+`random`), `seed`, `filter` and `order` (`[column, "asc" | "desc"]` pairs).
+
+See [results and samples](RESULTS.md#data-and-samples) to create one in the UI.
 
 ## Related guides
 

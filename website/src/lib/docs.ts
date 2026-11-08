@@ -3,10 +3,21 @@ export const sections = [
     label: "Start here",
     pages: [
       {
+        slug: "installation",
+        title: "Installation & accounts",
+        description: "Set up an instance, invite your team and manage access.",
+      },
+      {
         slug: "quickstart",
         title: "Duckpad in 15 minutes",
         description:
           "Build two SQL nodes from scratch, check their data and explain a result.",
+      },
+      {
+        slug: "your_data",
+        title: "Use your own data",
+        description:
+          "Upload a file, check its columns and download a CSV export.",
       },
       {
         slug: "example",
@@ -21,6 +32,12 @@ export const sections = [
           "Navigate the canvas, search projects and choose your preferences.",
       },
       {
+        slug: "troubleshooting",
+        title: "Troubleshooting",
+        description:
+          "Find help with sign-in, sources, saves, runs and results.",
+      },
+      {
         slug: "comparison",
         title: "Dataiku & Alteryx vocabulary",
         description:
@@ -32,10 +49,10 @@ export const sections = [
     label: "Build a pipeline",
     pages: [
       {
-        slug: "authoring",
-        title: "Projects & node code",
+        slug: "connectors",
+        title: "Connections",
         description:
-          "Manage project files, imports and the code each node owns or shares.",
+          "Read and export project files, server folders, S3 and Oracle data.",
       },
       {
         slug: "sql",
@@ -141,17 +158,6 @@ export const sections = [
     label: "Configure an instance",
     pages: [
       {
-        slug: "installation",
-        title: "Installation & accounts",
-        description: "Set up an instance, invite your team and manage access.",
-      },
-      {
-        slug: "connectors",
-        title: "Connections",
-        description:
-          "Read and export project files, server folders, S3 and Oracle data.",
-      },
-      {
         slug: "environments",
         title: "Environments",
         description:
@@ -171,8 +177,14 @@ export const sections = [
     ],
   },
   {
-    label: "Under the hood",
+    label: "Reference and development",
     pages: [
+      {
+        slug: "authoring",
+        title: "Project files & code ownership",
+        description:
+          "Manage project files, imports and the code each node owns or shares.",
+      },
       {
         slug: "offline_extensions_admin",
         title: "Extension import details",

@@ -32,7 +32,8 @@ source.
 
 ## Try it
 
-With Python 3.11+ and Git installed:
+On a supported host with Python 3.11+ and Git installed (see
+[platform requirements](docs/INSTALLATION.md#start)):
 
 ```sh
 pip install duckpad
@@ -47,21 +48,23 @@ Prefer a ready-made project? Choose **New project → Start from an example**,
 enter a name, then **Create → Run all** to explore Northstar.
 See [installation](docs/INSTALLATION.md) for platform requirements and setup options.
 
-## Go further
+## Find the right guide
 
-| Build | Understand | Share and run |
-| --- | --- | --- |
-| [SQL syntax](docs/SQL.md) | [Results and samples](docs/RESULTS.md) | [Version control](docs/GIT.md) |
-| [Data preparation](docs/DATA_PREPARATION.md) | [Data tests](docs/TESTS.md) | [Jobs](docs/JOBS.md) |
-| [Reusable components](docs/COMPONENTS.md) | [Messages and logs](docs/MESSAGES.md) | [CLI and automation](docs/AUTOMATION.md) |
-| [Variables](docs/VARIABLES.md) | [Lineage](docs/LINEAGE.md) | [Connections](docs/CONNECTORS.md) |
-| [Project files](docs/AUTHORING.md) | [AI assistant](docs/ASSISTANT.md) | [Environments](docs/ENVIRONMENTS.md) |
+| I want to… | Guide |
+| --- | --- |
+| Install Duckpad or join a team instance | [Installation and accounts](docs/INSTALLATION.md) |
+| Learn the basics with a small example | [Duckpad in 15 minutes](docs/QUICKSTART.md) |
+| Upload my data and download a result | [Use your own data](docs/YOUR_DATA.md) |
+| Navigate, save and run a pipeline | [Workspace](docs/WORKSPACE.md) |
+| Write SQL or prepare data with forms | [SQL syntax](docs/SQL.md) · [Data preparation](docs/DATA_PREPARATION.md) |
+| Check or explain a result | [Results](docs/RESULTS.md) · [Data tests](docs/TESTS.md) · [Lineage](docs/LINEAGE.md) |
+| Review changes and automate a version | [Git](docs/GIT.md) · [Jobs](docs/JOBS.md) · [CLI and automation](docs/AUTOMATION.md) |
+| Fix a startup, source or execution problem | [Troubleshooting](docs/TROUBLESHOOTING.md) |
 
-[Installation & accounts](docs/INSTALLATION.md) · [Single sign-on](docs/SSO.md) ·
-[Python nodes](docs/PYTHON.md) ·
-[Offline extensions](docs/OFFLINE_EXTENSIONS.md) · [Project documentation](docs/DOCUMENTATION.md) ·
-[Dataiku & Alteryx vocabulary](docs/COMPARISON.md) ·
-[Architecture](docs/ARCHITECTURE.md) · [Validation](docs/VALIDATION.md) ·
-[Releases](docs/RELEASING.md) · [Security](SECURITY.md)
+The [documentation index](https://hugues31.github.io/duckpad/docs/) also covers
+connections, variables, components, Python, the assistant and instance administration.
+Reference material includes [project files](docs/AUTHORING.md),
+[architecture](docs/ARCHITECTURE.md), [validation](docs/VALIDATION.md),
+[releases](docs/RELEASING.md) and [security](SECURITY.md).
 
 Want to contribute? Start with [CONTRIBUTING.md](CONTRIBUTING.md).
