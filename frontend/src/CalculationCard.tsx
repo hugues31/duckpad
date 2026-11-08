@@ -35,7 +35,7 @@ type CardData = {
 
 export type CardNode = Node<CardData, "lineage">;
 
-export const operationKeys = {
+const operationKeys = {
   sum: "lineageSum",
   avg: "lineageAverage",
   min: "lineageMinimum",
