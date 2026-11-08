@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 from helpers import example_bundle, files_connection, wait_run, wait_until
 
+from duckpad import projects as project_module
 from duckpad.auth import Auth
 from duckpad.bundle import bundle_to_files, files_to_bundle
 from duckpad.components import expand, group, import_definition
@@ -57,20 +58,45 @@ def test_rejected_save_writes_and_commits_nothing(services, tmp_path):
     assert projects.store.conflicts(worktree["id"]) == []
 
 
-def test_external_batch_commits_final_invalid_content_once(services, tmp_path):
+class Clock:
+    """Monotonic time of the projects module only, advanced by the test."""
+
+    def __init__(self):
+        self.now = 1000.0
+
+    def monotonic(self):
+        return self.now
+
+    def __getattr__(self, name):
+        return getattr(time, name)
+
+
+def test_external_batch_commits_final_invalid_content_once(services, tmp_path, monkeypatch):
     _, projects, _, _ = services
     worktree = projects.create("Batch", example_bundle(tmp_path / "input.csv"))
     original = commit_count(projects, worktree)
+    clock = Clock()
+    monkeypatch.setattr(project_module, "time", clock)
     projects.start_watcher()
+    # The test runs the watcher's passes itself, so its clock alone decides what is quiet.
+    projects.stop()
+
+    def observe(seconds):
+        clock.now += seconds
+        with projects.locked(worktree["id"]):
+            projects._observe(worktree)
+
     path = Path(worktree["path"])
     (path / "flow.json").write_text("{")
-    time.sleep(0.3)
+    observe(0)
     (path / "README.md").write_text("External save")
-    time.sleep(0.3)
+    observe(QUIET_PERIOD * 0.6)
+    observe(QUIET_PERIOD * 0.6)
     # Both writes fall within one quiet period, so they form a single save unit.
     assert commit_count(projects, worktree) == original
-    wait_until(lambda: commit_count(projects, worktree) == original + 1, message="Batch was not committed")
-    time.sleep(QUIET_PERIOD)
+    observe(QUIET_PERIOD * 0.5)
+    assert commit_count(projects, worktree) == original + 1
+    observe(QUIET_PERIOD)
     assert commit_count(projects, worktree) == original + 1
     snapshot = projects.snapshot(worktree["id"])
     assert snapshot["bundle"] is None
