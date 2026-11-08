@@ -1,18 +1,3 @@
-import { useWorkspace } from "./shell";
-import SourcePreview from "./SourcePreview";
-import { isFileReader, sourceFileName } from "./SourceFileField";
-import { ActionMenuButton, type ActionItem } from "./ActionMenu";
-import { PartitionInspector } from "./PartitionControls";
-import { useOptionalWorktree, usePartitionQuery } from "./worktree";
-import Select from "./Select";
-import {
-  nodeCode,
-  nodeEntity,
-  nodeSourcePath,
-  templateUsage,
-} from "./nodeCode";
-import { lazy, Suspense, useRef, useState } from "react";
-import { Link as RouterLink } from "react-router";
 import {
   ArrowRight,
   BookOpen,
@@ -26,32 +11,47 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { api, retainedConflict, withQuery } from "./api";
+import { lazy, Suspense, useRef, useState } from "react";
+import { Link as RouterLink } from "react-router";
+import { ActionMenuButton, type ActionItem } from "./ActionMenu";
+import { retainedConflict, withQuery } from "./api";
 import { containsPython, nodeInterface, type NodeInterface } from "./graph";
 import { nodeLabel, templateLabel, useT } from "./i18n";
 import { projectSettingsUrl } from "./navigation";
+import {
+  nodeCode,
+  nodeEntity,
+  nodeSourcePath,
+  templateUsage,
+} from "./nodeCode";
 import NodeDocumentation from "./NodeDocumentation";
 import NodeInfo from "./NodeInfo";
 import { numberBoundsError } from "./numberBounds";
 import ParameterField from "./ParameterField";
+import { baseType, typeArgument } from "./parameterType";
+import { PartitionInspector } from "./PartitionControls";
 import QueryBuilder from "./QueryBuilder";
-import type { ResultsTab } from "./ResultsPanel";
+import type { ResultsTab } from "./results";
 import ResultSummary from "./ResultSummary";
-import { useIdleSave, useRevisionDraft } from "./useRevisionDraft";
+import Select from "./Select";
+import { useShell, useWorkspace } from "./shell";
+import { isFileReader, sourceFileName } from "./SourceFileField";
+import SourcePreview from "./SourcePreview";
 import type {
-  Column,
   DatabaseObjects,
   Documentation,
   FlowEdge,
   FlowNode,
   Json,
-  PreviewPage,
-  Snapshot,
   ParsedTemplate,
+  Snapshot,
   Statement,
   Statuses,
 } from "./types";
-import { useApiResource, useResource } from "./useApiResource";
+import { useApiResource } from "./useApiResource";
+import { useAutosavedDraft } from "./useAutosavedDraft";
+import { useInputColumns } from "./useInputColumns";
+import { useSaveShortcut } from "./useSaveShortcut";
 import { BoundVariable, VariablePicker } from "./VariableBinding";
 import { StatementVariables } from "./VariableFields";
 import {
@@ -61,6 +61,7 @@ import {
   variableTypeFor,
   type Declaration,
 } from "./variables";
+import { useOptionalWorktree, usePartitionQuery } from "./worktree";
 
 const CodeEditor = lazy(() => import("./Editor"));
 
@@ -132,6 +133,8 @@ export default function Inspector({
 }) {
   const t = useT();
   const workspace = useWorkspace();
+  const { notify } = useShell();
+  const panel = useRef<HTMLElement>(null);
   const starting = useOptionalWorktree()?.starting;
   const partition = usePartitionQuery(fullNode);
   const [tab, setTab] = useState<(typeof TABS)[number][0]>("parameters");
@@ -143,9 +146,10 @@ export default function Inspector({
     dirty,
     update,
     persist: saveDraft,
-    rejected,
+    saveNow: persist,
+    error: saveError,
     rejection,
-  } = useRevisionDraft(
+  } = useAutosavedDraft(
     node,
     snapshot,
     async (value: FlowNode, base: Snapshot) => {
@@ -173,50 +177,19 @@ export default function Inspector({
       for (const name of Object.keys(variables)) delete declared.current[name];
       return saved;
     },
-    { autosave: !readOnly },
+    {
+      readOnly,
+      onOrphanedError: (error) => notify((error as Error).message, true),
+    },
   );
-  const [saveError, setError] = useState("");
+  useSaveShortcut(persist, panel);
   const worktree = snapshot.worktree.id;
-  const prefix = fullNode.includes("::")
-    ? fullNode.slice(0, fullNode.lastIndexOf("::") + 2)
-    : "";
-  const inputEdges = graphEdges.filter((e) => e.target === node.id);
-  // Column suggestions come from the materialized inputs; refresh them when results change.
-  const inputColumns =
-    useResource(
-      `${worktree}:${fullNode}`,
-      async (signal) =>
-        Object.fromEntries(
-          await Promise.all(
-            inputEdges.map(async (edge) => {
-              try {
-                const result = await api<PreviewPage>(
-                  withQuery(
-                    `/worktrees/${worktree}/preview/${encodeURIComponent(prefix + edge.source)}`,
-                    {
-                      environment,
-                      port: edge.sourceHandle,
-                      limit: 1,
-                      ...partition,
-                    },
-                  ),
-                  { signal },
-                );
-                return [edge.targetHandle, result.columns] as const;
-              } catch {
-                return [edge.targetHandle, [] as Column[]] as const;
-              }
-            }),
-          ),
-        ),
-      {
-        refresh: JSON.stringify([
-          environment,
-          inputEdges.map((e) => [e.source, e.sourceHandle, e.targetHandle]),
-          statuses.nodes,
-        ]),
-      },
-    ).data || {};
+  const inputColumns = useInputColumns(
+    snapshot,
+    fullNode,
+    environment,
+    statuses,
+  ).columns;
   // Python has no compiled SQL, so neither has a component containing it.
   const python =
     node.language === "python" ||
@@ -242,18 +215,6 @@ export default function Inspector({
       columns.map((column) => column.name),
     ]),
   );
-  const persist = async () => {
-    if (readOnly) return;
-    setError("");
-    try {
-      await saveDraft();
-    } catch (e) {
-      setError((e as Error).message);
-    }
-  };
-  useIdleSave(draft, dirty && !readOnly, () => {
-    if (!rejected()) void persist();
-  });
   // A conflict retains this draft until it is resolved: blurring the field, for
   // instance to open that conflict, must not retain another one.
   const blur = () => {
@@ -280,7 +241,7 @@ export default function Inspector({
     return typeof value === "string" ? value : "";
   };
   const argumentOf = (name?: string) =>
-    parameters.find((p) => p.name === name)?.type.match(/\((\w+)\)/)?.[1];
+    typeArgument(parameters.find((p) => p.name === name)?.type || "");
   const listedSchema = parameters.find((p) =>
     p.type.startsWith("schema_name("),
   )?.name;
@@ -297,7 +258,7 @@ export default function Inspector({
   );
   const objectNames = (parameter: { name: string; type: string }) => {
     if (!listedConnection) return undefined;
-    const base = parameter.type.split("(")[0];
+    const base = baseType(parameter.type);
     const argument = argumentOf(parameter.name);
     // The listing's progress and error show once, under the first schema field.
     const status = {
@@ -321,8 +282,8 @@ export default function Inspector({
   // Connection parameters naming where file and destination parameters live.
   const locations = new Set(
     parameters
-      .filter((p) => /^(file|destination)\(/.test(p.type))
-      .map((p) => p.type.match(/\((\w+)\)/)?.[1]),
+      .filter((p) => ["file", "destination"].includes(baseType(p.type)))
+      .map((p) => typeArgument(p.type)),
   );
   const nodeProblems = snapshot.diagnostics.filter(
     (item) => item.file === "flow.json" && item.node === node.id,
@@ -388,7 +349,7 @@ export default function Inspector({
       : null;
   const statements: Statement[] = compilation.data || [];
   return (
-    <aside className="inspector">
+    <aside className="inspector" ref={panel}>
       <div className="inspector-title">
         <span>{nodeLabel(node, signature, t)}</span>
         <ActionMenuButton
@@ -605,7 +566,7 @@ export default function Inspector({
                 const reference = variableReference(value);
                 const variableType = bindable ? variableTypeFor(type) : null;
                 // Column parameters name the input port they choose from.
-                const port = parameter.type.match(/\((\w+)\)/)?.[1];
+                const port = typeArgument(parameter.type);
                 return (
                   <ParameterField
                     key={parameter.name}

@@ -55,22 +55,41 @@ export const graphAt = (bundle: Bundle, path: PathPart[]): Graph =>
 export const pathPrefix = (path: PathPart[]) =>
   path.map((part) => part.instance + "::").join("");
 
+/** Resolve an expanded node ID to its authored graph and breadcrumb. */
+export function resolveNodePath(bundle: Bundle, target: string) {
+  const ids = target.split("::");
+  const path: PathPart[] = [];
+  let graph: Graph = bundle.flow;
+  for (const instance of ids.slice(0, -1)) {
+    const parent = graph.nodes.find((node) => node.id === instance);
+    const definition = parent?.component && bundle.components[parent.component];
+    if (!parent?.component || !definition) return null;
+    path.push({
+      instance,
+      definition: parent.component,
+      label: parent.label || definition.name || instance,
+    });
+    graph = definition;
+  }
+  const id = ids.at(-1)!;
+  const node = graph.nodes.find((node) => node.id === id);
+  return node
+    ? { node, id, graph, path, parent: path.at(-1)?.definition }
+    : null;
+}
+
 /**
  * The expanded node and port that materialize an output. A component instance
  * stores no rows: its exposed output is the output of a node inside it, found
  * through nested instances as the engine expands them.
  */
 export function outputSource(bundle: Bundle, node: string, port: string) {
-  const ids = node.split("::");
-  let graph: Graph = bundle.flow;
-  for (const id of ids.slice(0, -1)) {
-    const parent = graph.nodes.find((n) => n.id === id);
-    const definition = parent?.component && bundle.components[parent.component];
-    if (!definition) return { node, port };
-    graph = definition;
-  }
-  const current = graph.nodes.find((n) => n.id === ids[ids.length - 1]);
-  return exposedSource(bundle.components, current, node, port);
+  return exposedSource(
+    bundle.components,
+    resolveNodePath(bundle, node)?.node,
+    node,
+    port,
+  );
 }
 
 /** Follow a component instance's exposed port to the node inside it that

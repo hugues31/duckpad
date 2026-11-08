@@ -1,5 +1,5 @@
 import { identifier, nodeChoices } from "./graph";
-import { nodeCode, nodeCodePath, nodeGraph } from "./nodeCode";
+import { nodeCode, nodeGraph, setNodeCode } from "./nodeCode";
 import type { Bundle, FlowEdge, FlowNode } from "./types";
 
 /** How far a paste shifts its nodes while they would cover existing ones. */
@@ -98,8 +98,7 @@ export function pasteNodes(
       delete copy.template;
     }
     if (!copy.template && !copy.component)
-      (bundle.node_sql ||= {})[nodeCodePath(copy.id, parent, copy.language)] =
-        copied.code[node.id] ?? "";
+      setNodeCode(bundle, copy, copied.code[node.id] ?? "", parent);
     graph.nodes.push(copy);
   }
   for (const edge of copied.edges) {

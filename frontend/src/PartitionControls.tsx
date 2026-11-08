@@ -92,12 +92,10 @@ export function PartitionSelector() {
 export function PartitionStrip({
   node,
   port = "result",
-  run,
   onSelect,
 }: {
   node?: string;
   port?: string;
-  run?: string;
   onSelect?: () => void;
 }) {
   const t = useT();
@@ -116,7 +114,6 @@ export function PartitionStrip({
           search,
           status: status || undefined,
           cursor,
-          run,
         })
       : null;
   const loaded = useApiResource<PartitionPage>(endpoint, {

@@ -7,8 +7,6 @@ import { DRAG_TYPE, nodeChoices, type NodeKind } from "./graph";
 import { isBuiltinTemplate, templateLabel, useT } from "./i18n";
 import type { Snapshot } from "./types";
 
-export type { NodeKind } from "./graph";
-
 const CATEGORIES = [
   "sources",
   "transforms",

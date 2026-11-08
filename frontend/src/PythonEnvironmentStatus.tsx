@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from "react";
 import { CircleAlert, CircleCheck, Loader2, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { useT } from "./i18n";
-import { seconds } from "./ResultsPanel";
+import { seconds } from "./results";
 import { useApiResource } from "./useApiResource";
 
 const states = {

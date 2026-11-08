@@ -34,7 +34,7 @@ const TYPES = [
   "TIME",
 ];
 
-export function SampleTable({ data }: { data: SourceSample }) {
+function SampleTable({ data }: { data: SourceSample }) {
   const t = useT();
   return (
     <div

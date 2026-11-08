@@ -1,33 +1,27 @@
-import { useRunHistory } from "./useRunHistory";
-import { PartitionHistory } from "./PartitionHistory";
-import { partitionMessage } from "./partitions";
-import { Link, useSearchParams } from "react-router";
-import { worktreeUrl } from "./navigation";
-import AskAssistant from "./AskAssistant";
+import { AlertCircle, ArrowRight, Check, Clock, GitBranch } from "lucide-react";
 import { useState } from "react";
-import {
-  AlertCircle,
-  ArrowRight,
-  Check,
-  Clock,
-  GitBranch,
-  GitCommitHorizontal,
-} from "lucide-react";
-import { api, withQuery } from "./api";
-import { useT } from "./i18n";
-import { Modal } from "./modals";
-import type { GitTag, HistoryPage } from "./gitTypes";
-import type { Run } from "./types";
-import { useApiResource } from "./useApiResource";
-import { useAsyncAction } from "./useAsyncAction";
-import NewTagModal from "./NewTagModal";
-import TagBadges from "./TagBadges";
-import { displayNodeName } from "./nodeNames";
-import { VariableValues } from "./VariableFields";
+import { Link, useSearchParams } from "react-router";
+import { withQuery } from "./api";
+import AskAssistant from "./AskAssistant";
+import CommitRow from "./CommitRow";
 import ExecutionMessages, {
   WarningBadge,
   warningCount,
 } from "./ExecutionMessages";
+import type { GitTag } from "./gitTypes";
+import { useT } from "./i18n";
+import { Modal } from "./modals";
+import { worktreeUrl } from "./navigation";
+import NewTagModal from "./NewTagModal";
+import { displayNodeName } from "./nodeNames";
+import { PartitionHistory } from "./PartitionHistory";
+import { partitionMessage } from "./partitions";
+import TagBadges from "./TagBadges";
+import type { Run } from "./types";
+import { useApiResource } from "./useApiResource";
+import { useGitHistory } from "./useGitHistory";
+import { useRunHistory } from "./useRunHistory";
+import { VariableValues } from "./VariableFields";
 
 /** The node parameters using each variable of a run, as "Node · parameter". */
 function boundParameters(run: Run) {
@@ -63,13 +57,10 @@ export default function HistoryPanel({
   const [selected, setSelected] = useState<Run | null>(null);
   const [tagCommit, setTagCommit] = useState<string | null>(null);
   const tags = useApiResource<GitTag[]>(`/worktrees/${worktree}/git/tags`);
-  const more = useAsyncAction();
   const runHistory = useRunHistory(
     withQuery("/runs", { worktree, include_jobs: true }),
   );
-  const gitHistory = useApiResource<HistoryPage>(
-    withQuery(`/worktrees/${worktree}/git/history`, { limit: 100 }),
-  );
+  const gitHistory = useGitHistory(`/worktrees/${worktree}/git/history`);
   const runs = runHistory.data || [];
   // The results panel links to the run behind a result with `?run=`.
   const [params] = useSearchParams();
@@ -85,8 +76,7 @@ export default function HistoryPanel({
   }
   const commits = gitHistory.data?.items || [];
   // A `?run=` link to a run that no longer exists opens nothing, as before.
-  const error =
-    runHistory.error || gitHistory.error || tags.error || more.error;
+  const error = runHistory.error || gitHistory.error || tags.error;
   const tagNames = (commit: string) =>
     (tags.data || [])
       .filter((tag) => tag.commit === commit)
@@ -186,19 +176,11 @@ export default function HistoryPanel({
       ) : (
         <>
           {commits.map((commit) => (
-            <div className="history-row" key={commit.commit}>
-              <GitCommitHorizontal size={21} />
-              <span className="grow">
-                <strong>{commit.message}</strong>
-                <TagBadges names={tagNames(commit.commit)} />
-                <small>
-                  {commit.author}
-                  {commit.assistant
-                    ? ` ${t("assistantAttribution")}`
-                    : ""} · {new Date(commit.date).toLocaleString()} ·{" "}
-                  {commit.commit.slice(0, 8)}
-                </small>
-              </span>
+            <CommitRow
+              key={commit.commit}
+              commit={commit}
+              tags={tagNames(commit.commit)}
+            >
               {!readOnly && (
                 <button
                   className="button secondary small"
@@ -221,31 +203,15 @@ export default function HistoryPanel({
               >
                 <GitBranch size={17} />
               </button>
-            </div>
+            </CommitRow>
           ))}
           {gitHistory.data?.next != null && (
             <button
               className="button secondary"
-              disabled={more.pending}
-              onClick={() =>
-                void more.run(async () => {
-                  const from = gitHistory.data!;
-                  const page = await api<HistoryPage>(
-                    withQuery(`/worktrees/${worktree}/git/history`, {
-                      ref: from.head,
-                      offset: from.next!,
-                      limit: 100,
-                    }),
-                  );
-                  gitHistory.setData((current) =>
-                    current === from
-                      ? { ...page, items: [...from.items, ...page.items] }
-                      : current,
-                  );
-                })
-              }
+              disabled={gitHistory.loadingMore}
+              onClick={() => void gitHistory.loadMore()}
             >
-              {t(more.pending ? "loading" : "loadMore")}
+              {t(gitHistory.loadingMore ? "loading" : "loadMore")}
             </button>
           )}
         </>

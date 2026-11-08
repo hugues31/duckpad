@@ -1,4 +1,4 @@
-import type { ActionItem } from "../ActionMenu";
+import { Loader2 } from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -10,23 +10,25 @@ import {
   type CSSProperties,
 } from "react";
 import { useLocation, useOutletContext } from "react-router";
-import { Loader2 } from "lucide-react";
-import Canvas, { type CanvasHandle, type FocusRequest } from "../Canvas";
-import { findNodePosition } from "../graphLayout";
-import CanvasHeader from "../CanvasHeader";
+import type { ActionItem } from "../ActionMenu";
 import BranchResultsNotice from "../BranchResultsNotice";
+import Canvas, { type CanvasHandle, type FocusRequest } from "../Canvas";
+import CanvasHeader from "../CanvasHeader";
 import { noticeCount } from "../FlowToolbar";
-import {
-  connectInput,
-  graphAt,
-  identifier,
-  nodeInterface,
-  pathPrefix,
-  type NodeConnection,
-  type PathPart,
-} from "../graph";
 import Inspector from "../Inspector";
+import LineagePanel from "../LineagePanel";
 import NodeCodePanel, { type CodeReveal } from "../NodeCodePanel";
+import NodePalette from "../NodePalette";
+import type { NodeKind } from "../graph";
+import ResultsPanel from "../ResultsPanel";
+import { isFileReader, isSourceFile } from "../SourceFileField";
+import { previewFile } from "../SourcePreview";
+import {
+  isWideLayout,
+  PanelResizeHandles,
+  usePanelSizes,
+} from "../WorkspacePanels";
+import { api, errorDetail, send, uploadSourceFile } from "../api";
 import {
   DEFAULT_SAMPLE,
   type DraftPreview,
@@ -35,31 +37,39 @@ import {
   type SampleSize,
 } from "../draftPreview";
 import {
+  connectInput,
+  graphAt,
+  identifier,
+  nodeInterface,
+  pathPrefix,
+  resolveNodePath,
+  type NodeConnection,
+  type PathPart,
+} from "../graph";
+import { findNodePosition } from "../graphLayout";
+import { countLabel, isBuiltinTemplate, nodeLabel, useT } from "../i18n";
+import type { Cell } from "../lineageGraph";
+import {
   copiedNodes,
   copyNodes,
   pastableNodes,
   pasteNodes,
   type CopiedNodes,
 } from "../nodeClipboard";
-import { blockingDialogShown, typingTarget } from "../searchShortcuts";
 import {
   detachNode,
   freshNodeCode,
   localDefinitions,
   nodeCode,
   nodeCodePath,
-  nodeLocation,
   nodeEntity,
   nodeGraph,
+  nodeLocation,
+  setNodeCode,
   templateUsage,
 } from "../nodeCode";
-import LineagePanel from "../LineagePanel";
-import type { Cell } from "../lineageGraph";
-import NodePalette, { type NodeKind } from "../NodePalette";
-import ResultsPanel, { type ResultsTab } from "../ResultsPanel";
-import { api, errorDetail, send, uploadSourceFile } from "../api";
-import { previewFile } from "../SourcePreview";
-import { isFileReader, isSourceFile } from "../SourceFileField";
+import type { ResultsTab } from "../results";
+import { blockingDialogShown, typingTarget } from "../searchShortcuts";
 import { useShell, useWorkspace } from "../shell";
 import type {
   Bundle,
@@ -69,12 +79,6 @@ import type {
   Snapshot,
   SqlDiagnostic,
 } from "../types";
-import { countLabel, isBuiltinTemplate, nodeLabel, useT } from "../i18n";
-import {
-  isWideLayout,
-  PanelResizeHandles,
-  usePanelSizes,
-} from "../WorkspacePanels";
 import { declarations } from "../variables";
 import { useLoadedWorktree } from "../worktree";
 import { InvalidProject } from "./PageStates";
@@ -124,26 +128,6 @@ export function useFlowView(worktree: string, environment: string) {
   };
 }
 type FlowView = ReturnType<typeof useFlowView>;
-
-/** Find the node named by a search result, inside the components it lies in. */
-function locate(bundle: Bundle, target: string) {
-  const ids = target.split("::");
-  const path: PathPart[] = [];
-  let graph: Graph = bundle.flow;
-  for (const instance of ids.slice(0, -1)) {
-    const parent = graph.nodes.find((n) => n.id === instance);
-    const definition = parent?.component && bundle.components[parent.component];
-    if (!parent?.component || !definition) return null;
-    path.push({
-      instance,
-      definition: parent.component,
-      label: parent.label || definition.name || instance,
-    });
-    graph = definition;
-  }
-  const id = ids[ids.length - 1];
-  return graph.nodes.some((node) => node.id === id) ? { path, id } : null;
-}
 
 export default function FlowPage() {
   const t = useT();
@@ -298,7 +282,7 @@ export default function FlowPage() {
     if (!target && !location.state?.searchResult) return;
     // A navigation, not a user event on this page, names the node to select.
     // eslint-disable-next-line react-hooks/set-state-in-effect -- once per location key
-    reveal(target ? locate(bundle, target) : { path: [], id: null });
+    reveal(target ? resolveNodePath(bundle, target) : { path: [], id: null });
   }, [bundle, view.revealed, location.key, location.search, location.state]);
 
   /** Compute the selected node's code, or its draft, on samples of its inputs. */
@@ -486,8 +470,7 @@ export default function FlowPage() {
               y: position.y + Math.floor(index / 3) * 160,
             },
           };
-          (value.node_sql ||= {})[nodeCodePath(created.id, parent)] =
-            upload.code;
+          setNodeCode(value, created, upload.code, parent);
           if (upload.template === "load_xlsx") {
             const extensions =
               typeof value.extensions === "object" && value.extensions
@@ -648,7 +631,7 @@ export default function FlowPage() {
         freshNodeCode(value, created, parent);
       } else {
         created.preset = "filter";
-        (value.node_sql ||= {})[nodeCodePath(created.id, parent)] = FILTER_SQL;
+        setNodeCode(value, created, FILTER_SQL, parent);
       }
       g.nodes.push(created);
       connectInput(g, {
@@ -765,9 +748,7 @@ export default function FlowPage() {
               const sql = nodeCode(value, target, parent);
               duplicate.origin = target.template || target.origin;
               delete duplicate.template;
-              (value.node_sql ||= {})[
-                nodeCodePath(duplicate.id, parent, duplicate.language)
-              ] = sql;
+              setNodeCode(value, duplicate, sql, parent);
             }
             nodeGraph(value, parent).nodes.push(duplicate);
             return duplicate.id;
@@ -1059,20 +1040,17 @@ export default function FlowPage() {
             connections={connections}
             statuses={statuses}
             onSave={(updated, base, variables) =>
-              fromInspector(
-                inspected,
-                save(base, (value) => {
-                  const target = graphAt(value, path);
-                  target.nodes = target.nodes.map((n) =>
-                    n.id === updated.id ? updated : n,
-                  );
-                  if (!Object.keys(variables).length) return;
-                  // A malformed file is never overwritten with new declarations.
-                  const current = declarations(value);
-                  if (!current) throw new Error(t("invalidVariablesFile"));
-                  value.variables = { ...current, ...variables };
-                }),
-              )
+              save(base, (value) => {
+                const target = graphAt(value, path);
+                target.nodes = target.nodes.map((n) =>
+                  n.id === updated.id ? updated : n,
+                );
+                if (!Object.keys(variables).length) return;
+                // A malformed file is never overwritten with new declarations.
+                const current = declarations(value);
+                if (!current) throw new Error(t("invalidVariablesFile"));
+                value.variables = { ...current, ...variables };
+              })
             }
             onSaveDocumentation={(change, base) =>
               fromInspector(

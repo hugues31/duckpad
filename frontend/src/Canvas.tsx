@@ -62,7 +62,7 @@ import ConnectionPalette from "./ConnectionPalette";
 import { WarningBadge, warningCount } from "./ExecutionMessages";
 import { findNodePosition, layoutNodes } from "./graphLayout";
 import { SearchField } from "./Search";
-import type { NodeKind } from "./NodePalette";
+import type { NodeKind } from "./graph";
 import type {
   ComponentDefinition,
   ComponentPort,

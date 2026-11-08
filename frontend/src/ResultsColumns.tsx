@@ -1,5 +1,3 @@
-import { usePartitionQuery } from "./worktree";
-import { useRef, useState } from "react";
 import {
   BarChart3,
   CircleCheck,
@@ -7,9 +5,10 @@ import {
   Loader2,
   Pencil,
 } from "lucide-react";
+import { useRef, useState } from "react";
 import { api, withQuery } from "./api";
 import { useT } from "./i18n";
-import { clock, seconds, type ResultsTarget } from "./ResultsPanel";
+import { clock, seconds, type ResultsTarget } from "./results";
 import type {
   ColumnStatistics,
   Dataset,
@@ -19,6 +18,7 @@ import type {
 } from "./types";
 import { useApiResource } from "./useApiResource";
 import { useAsyncAction } from "./useAsyncAction";
+import { usePartitionQuery } from "./worktree";
 
 /**
  * The columns of a dataset with their type and description, shown at once, and

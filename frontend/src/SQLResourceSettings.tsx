@@ -1,9 +1,8 @@
-import { useSettingsForm } from "./useSettingsForm";
-import { useState } from "react";
 import { api, send } from "./api";
 import { useT } from "./i18n";
+import SettingsCard from "./SettingsCard";
 import { useApiResource } from "./useApiResource";
-import { useAsyncAction } from "./useAsyncAction";
+import { useSettingsForm } from "./useSettingsForm";
 
 type Resources = { threads: number | null; memory_limit: string | null };
 type Configuration = Resources & {
@@ -13,52 +12,39 @@ type Configuration = Resources & {
 export default function SQLResourceSettings() {
   const t = useT();
   const settings = useApiResource<Configuration>("/sql-resources");
-  const [draft, setConfig] = useState<Configuration | null>(null);
-  const config = draft ?? settings.data;
-  const [saved, setSaved] = useState(false);
-  const { pending, run, ...save } = useAsyncAction();
-  const error = save.error || settings.error;
-  function change(values: Partial<Resources>) {
-    setConfig(config && { ...config, ...values });
-    setSaved(false);
-  }
+  const {
+    config,
+    change,
+    pending,
+    saved,
+    submit,
+    error: saveError,
+  } = useSettingsForm(settings.data, async (config) => {
+    settings.setData(
+      await api<Configuration>(
+        "/sql-resources",
+        send(
+          { threads: config.threads, memory_limit: config.memory_limit },
+          "PUT",
+        ),
+      ),
+    );
+  });
+  const error = saveError || settings.error;
   const automatic = (value: string | number) =>
     t("automaticValue").replace("{value}", String(value));
-  const persist = useSettingsForm({
-    dirty: !!draft && JSON.stringify(draft) !== JSON.stringify(settings.data),
-    discard: () => {
-      setConfig(null);
-    },
-    save: async () => {
-      if (!config) return;
-      const { threads, memory_limit } = config;
-      settings.setData(
-        await api<Configuration>(
-          "/sql-resources",
-          send({ threads, memory_limit }, "PUT"),
-        ),
-      );
-      setConfig(null);
-      setSaved(true);
-    },
-  });
   return (
-    <section className="settings-card" aria-label={t("sqlResources")}>
-      <h2>{t("sqlResources")}</h2>
-      <p className="muted">{t("sqlResourcesDescription")}</p>
-      {error && (
-        <div className="notice error" role="alert">
-          {error}
-        </div>
-      )}
-      {!config ? (
-        <p>{t("loading")}</p>
-      ) : (
+    <SettingsCard
+      title={t("sqlResources")}
+      description={t("sqlResourcesDescription")}
+      error={error}
+      loading={!config}
+    >
+      {config && (
         <form
           onSubmit={(event) => {
             event.preventDefault();
-            setSaved(false);
-            void run(persist);
+            void submit();
           }}
         >
           <fieldset disabled={pending} className="sql-resource-fields">
@@ -119,6 +105,6 @@ export default function SQLResourceSettings() {
           {saved && <p role="status">{t("sqlResourcesSaved")}</p>}
         </form>
       )}
-    </section>
+    </SettingsCard>
   );
 }

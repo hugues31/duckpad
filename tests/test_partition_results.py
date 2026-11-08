@@ -62,6 +62,15 @@ def test_explicit_contexts_paging_and_retained_reads(services, monkeypatch):
     assert [r["values"] for r in rows["rows"]] == [[10, "one"], [10, "one"]]
     assert rows["partition_context"] == selected
     assert rows["executed_sql"]
+    missing, lookup = engine.input_columns(worktree, "dev", "transform", partition_context=selected)["inputs"]
+    assert missing["columns"] is None
+    assert lookup["columns"] == [{"name": "rate", "type": "INTEGER"}]
+    retained = {**selected, "partition_id": second["entries"][0]["partition_id"]}
+    columns, _ = engine.input_columns(worktree, "dev", "transform", partition_context=retained)["inputs"]
+    assert columns["origin"] == "result"
+    assert (
+        columns["columns"] == engine.preview(worktree, "dev", "source", partition_context=retained)["columns"]
+    )
     with pytest.raises(Problem, match="explicit partition manifest"):
         engine.preview(worktree, "dev", "transform")
     with pytest.raises(Problem, match="Select one"):

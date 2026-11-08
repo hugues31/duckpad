@@ -1,8 +1,3 @@
-import { withQuery } from "./api";
-import { PartitionStrip } from "./PartitionControls";
-import { partitionMessage, type PartitionPage } from "./partitions";
-import { useOptionalWorktree, usePartitionQuery } from "./worktree";
-import { useState } from "react";
 import {
   Clock,
   Columns3,
@@ -15,69 +10,47 @@ import {
   Table2,
   X,
 } from "lucide-react";
+import { useState } from "react";
+import { withQuery } from "./api";
+import type { PreviewState } from "./draftPreview";
+import DraftPreviewView from "./DraftPreviewView";
+import ExecutionError from "./ExecutionError";
 import { WarningBadge, warningCount } from "./ExecutionMessages";
 import { nodeInterface, outputSource, type NodeInterface } from "./graph";
 import { nodeLabel, useT } from "./i18n";
-import { localDefinitions, nodeCode, nodeLocation } from "./nodeCode";
 import type { Cell } from "./lineageGraph";
-import DraftPreviewView from "./DraftPreviewView";
-import type { PreviewState } from "./draftPreview";
-import ExecutionError from "./ExecutionError";
+import { localDefinitions, nodeCode, nodeLocation } from "./nodeCode";
 import { displayNodeName } from "./nodeNames";
+import { PartitionStrip } from "./PartitionControls";
+import { partitionMessage, type PartitionPage } from "./partitions";
 import ResultsColumns from "./ResultsColumns";
 import ResultsData, { type FailingRows } from "./ResultsData";
 import ResultsLog from "./ResultsLog";
 import ResultsTests, { declaredTests } from "./ResultsTests";
-import Select from "./Select";
 import { loadSample, sampleFits, sampleKey, storeSample } from "./samples";
+import Select from "./Select";
 import type {
   Documentation,
   FlowEdge,
   FlowNode,
+  PreviewPage,
   Run,
   Snapshot,
   Statuses,
-  PreviewPage,
 } from "./types";
 import { useApiResource } from "./useApiResource";
+import { useOptionalWorktree, usePartitionQuery } from "./worktree";
 
-export const RESULT_TABS = ["data", "columns", "tests", "log"] as const;
-/** A tab of the panel; "preview" shows while the node has a preview. */
-export type ResultsTab = (typeof RESULT_TABS)[number] | "preview";
-export const TAB_LABELS = {
-  preview: "results_preview",
-  data: "results_data",
-  columns: "results_columns",
-  tests: "results_tests",
-  log: "results_log",
-} as const;
-
-/** A dataset the panel can show: an output of the node, or one of its inputs. */
-export interface ResultsTarget {
-  /** The expanded ID of the node holding the dataset. */
-  node: string;
-  port: string;
-  /** For an input of the inspected node, the input port it is connected to. */
-  input?: string;
-}
-
-/** Whether an edit to the project files comes from the results panel. */
-export type SaveProject = (
-  change: (bundle: NonNullable<Snapshot["bundle"]>) => void,
-) => Promise<unknown>;
-
-/** The time of an ISO date, as the panel shows run times. */
-export const clock = (value: string) => new Date(value).toLocaleTimeString();
-export const seconds = (value: number) =>
-  value < 10 ? `${value.toFixed(1)} s` : `${Math.round(value)} s`;
-
-/** Whether the active run is computing a node, or a node inside a component instance. */
-export const computing = (statuses: Statuses, fullNode: string) =>
-  Object.entries(statuses.active?.nodes || {}).some(
-    ([id, state]) =>
-      (id === fullNode || id.startsWith(fullNode + "::")) &&
-      ["pending", "running"].includes(state.status),
-  );
+import {
+  RESULT_TABS,
+  TAB_LABELS,
+  clock,
+  computing,
+  seconds,
+  type ResultsTab,
+  type ResultsTarget,
+  type SaveProject,
+} from "./results";
 
 /**
  * What a node produced in the environment selected in the top bar: its rows,

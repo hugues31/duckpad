@@ -1,9 +1,5 @@
-import { usePartitionQuery } from "./worktree";
-import { useEffect, useState } from "react";
 import {
   Bookmark,
-  ChevronLeft,
-  ChevronRight,
   Copy,
   Database,
   Filter,
@@ -11,19 +7,31 @@ import {
   Loader2,
   Play,
   Plus,
+  Rows3,
   Search,
   Shuffle,
   SlidersHorizontal,
-  Rows3,
   X,
 } from "lucide-react";
+import { useEffect, useState } from "react";
 import { api, ApiError, withQuery } from "./api";
+import DataGrid from "./DataGrid";
 import { formatValue } from "./graph";
 import { useT } from "./i18n";
 import type { Cell } from "./lineageGraph";
 import { Modal } from "./modals";
-import { partitionMessage } from "./partitions";
 import {
+  detachNode,
+  nodeCode,
+  setNodeCode,
+  nodeGraph,
+  templateUsage,
+} from "./nodeCode";
+import Pager from "./Pager";
+import { partitionMessage } from "./partitions";
+import type { ResultsTarget, SaveProject } from "./results";
+import {
+  ALL_ROWS,
   appendBlock,
   MAX_SAMPLE_ROWS,
   normalizedSample,
@@ -39,16 +47,7 @@ import {
   type Sample,
   type SortDirection,
   type View,
-  ALL_ROWS,
 } from "./samples";
-import {
-  detachNode,
-  nodeCode,
-  nodeCodePath,
-  nodeGraph,
-  templateUsage,
-} from "./nodeCode";
-import type { ResultsTarget, SaveProject } from "./ResultsPanel";
 import Select from "./Select";
 import type {
   Dataset,
@@ -61,6 +60,7 @@ import type {
 import { useResource } from "./useApiResource";
 import { useAsyncAction } from "./useAsyncAction";
 import { useStaleVariables } from "./VariableFields";
+import { usePartitionQuery } from "./worktree";
 
 const PAGE_SIZE = 100;
 
@@ -394,77 +394,51 @@ export default function ResultsData({
       {!!staleVariables.length && (
         <div className="stale-reason">{staleVariables.join(" ")}</div>
       )}
-      <div className="data-scroll">
-        <table className="data-table">
-          <thead>
-            <tr>
-              <th className="row-number">#</th>
-              {columns.map((column) => {
-                const sorted = order.find(
-                  ([name]) => name === column.name,
-                )?.[1];
-                return (
-                  <th key={column.name} data-column={column.name}>
-                    <button
-                      disabled={!!failing}
-                      onClick={() => sortBy(column.name)}
-                    >
-                      <span>
-                        {column.name}
-                        {sorted ? (sorted === "desc" ? " ↓" : " ↑") : ""}
-                      </span>
-                      <small>{column.type}</small>
-                    </button>
-                  </th>
-                );
-              })}
-            </tr>
-          </thead>
-          <tbody>
-            {(page || rows)?.rows.map((row, index) => (
-              <tr key={row.id}>
-                <td className="row-number">{offset + index + 1}</td>
-                {row.values.map((value, i) => (
-                  <td key={i}>
-                    {page ? (
-                      <button
-                        className={`cell ${value === null ? "null" : ""}`}
-                        disabled={page.status !== "valid" || active}
-                        title={
-                          page.status === "valid"
-                            ? t("explain")
-                            : t("staleHint")
-                        }
-                        aria-label={`${t("explain")}: ${columns[i].name}, ${t("rows")} ${row.id + 1}, ${formatValue(value)}`}
-                        onClick={() =>
-                          onExplain({
-                            dataset: page.id,
-                            row: row.id,
-                            column: columns[i].name,
-                            partition_context: page.partition_context,
-                          })
-                        }
-                      >
-                        {formatValue(value)}
-                      </button>
-                    ) : (
-                      <span
-                        className={`cell-text ${value === null ? "null" : ""}`}
-                      >
-                        {formatValue(value)}
-                      </span>
-                    )}
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {/* While loading, data is the previous page, such as one past a shrunk result. */}
+      <DataGrid
+        columns={columns}
+        rows={(page || rows)?.rows || []}
+        offset={offset}
+        header={(column) => {
+          const sorted = order.find(([name]) => name === column.name)?.[1];
+          return (
+            <button disabled={!!failing} onClick={() => sortBy(column.name)}>
+              <span>
+                {column.name}
+                {sorted ? (sorted === "desc" ? " ↓" : " ↑") : ""}
+              </span>
+              <small>{column.type}</small>
+            </button>
+          );
+        }}
+        cell={(value, column, row) =>
+          page ? (
+            <button
+              className={`cell ${value === null ? "null" : ""}`}
+              disabled={page.status !== "valid" || active}
+              title={page.status === "valid" ? t("explain") : t("staleHint")}
+              aria-label={`${t("explain")}: ${column.name}, ${t("rows")} ${row.id + 1}, ${formatValue(value)}`}
+              onClick={() =>
+                onExplain({
+                  dataset: page.id,
+                  row: row.id,
+                  column: column.name,
+                  partition_context: page.partition_context,
+                })
+              }
+            >
+              {formatValue(value)}
+            </button>
+          ) : (
+            <span className={`cell-text ${value === null ? "null" : ""}`}>
+              {formatValue(value)}
+            </span>
+          )
+        }
+      >
         {data && !data.rows.length && !pending && (
           <p className="empty-small">{t("noMatches")}</p>
         )}
-      </div>
+      </DataGrid>
       <div className="preview-footer">
         <span title={page?.created}>
           {failing
@@ -480,32 +454,12 @@ export default function ResultsData({
                 ? t("staleHint")
                 : t("snapshotHint")}
         </span>
-        <div className="row">
-          <span>
-            {total
-              ? `${offset + 1}–${Math.min(offset + PAGE_SIZE, total)}`
-              : "0"}{" "}
-            / {total.toLocaleString()}
-          </span>
-          <button
-            className="icon"
-            disabled={!offset}
-            title={t("previous")}
-            aria-label={t("previous")}
-            onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}
-          >
-            <ChevronLeft size={15} />
-          </button>
-          <button
-            className="icon"
-            disabled={offset + PAGE_SIZE >= total}
-            title={t("next")}
-            aria-label={t("next")}
-            onClick={() => setOffset(offset + PAGE_SIZE)}
-          >
-            <ChevronRight size={15} />
-          </button>
-        </div>
+        <Pager
+          offset={offset}
+          total={total}
+          pageSize={PAGE_SIZE}
+          onOffset={setOffset}
+        />
       </div>
       {dialog === "view" && (
         <SaveViewModal
@@ -1033,14 +987,12 @@ function CreateTestModal({
                 throw new Error(t("pythonTestHint"));
               if (current.template && detach)
                 detachNode(bundle, current, parent);
-              if (current.template)
-                bundle.templates[current.template] = appendBlock(
-                  bundle.templates[current.template],
-                  block,
-                );
-              else
-                (bundle.node_sql ||= {})[nodeCodePath(current.id, parent)] =
-                  appendBlock(nodeCode(bundle, current, parent), block);
+              setNodeCode(
+                bundle,
+                current,
+                appendBlock(nodeCode(bundle, current, parent), block),
+                parent,
+              );
             }),
           );
           if (done) onClose();

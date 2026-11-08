@@ -20,6 +20,7 @@ from ..components import expand_for
 from ..datasets import Context, Dataset
 from ..graph import connection_references, reachable
 from ..node_code import code_path, find_node
+from ..partition_results import PartitionResults
 from ..projects import Projects
 from ..sql_errors import SqlSourceError
 from ..store import Store
@@ -84,6 +85,7 @@ class DraftPreviews:
         self.lock, self.active = lock, active
         self.requests: dict[tuple[str, ...], Request] = {}
         self.requests_lock = threading.Lock()
+        self.partitions: PartitionResults | None = None
 
     def preview(
         self,
@@ -171,11 +173,13 @@ class DraftPreviews:
             "duration": time.monotonic() - started,
         }
 
-    def input_columns(self, worktree: str, environment: str, full_node: str) -> Record:
+    def input_columns(
+        self, worktree: str, environment: str, full_node: str, partition_context: Record | None = None
+    ) -> Record:
         """The columns of each input of a node: from its retained result, or described from the
         code of upstream nodes when they have no result yet."""
         self.catalog.environment(environment)
-        located = self._locate(worktree, environment, full_node)
+        located = self._locate(worktree, environment, full_node, component_inputs=True)
         context = self.pool.find(worktree, environment)
         edges = {e["targetHandle"]: e for e in located.edges if e["target"] == full_node}
         entries: dict[str, Record] = {}
@@ -185,7 +189,20 @@ class DraftPreviews:
             if edge is None:
                 entries[port] = {"input": port, "columns": None, "origin": None, "reason": "not_connected"}
                 continue
-            dataset = self._retained(context, edge["source"], edge["sourceHandle"])
+            if partition_context and self.partitions:
+                try:
+                    loaded = self.partitions.load(
+                        worktree, environment, edge["source"], edge["sourceHandle"], partition_context
+                    )
+                    dataset = (
+                        loaded[1] if loaded else self._retained(context, edge["source"], edge["sourceHandle"])
+                    )
+                except Problem as error:
+                    if not str(error).startswith("partition_not_retained:"):
+                        raise
+                    dataset = None
+            else:
+                dataset = self._retained(context, edge["source"], edge["sourceHandle"])
             entry = {"input": port, "node": edge["source"], "port": edge["sourceHandle"]}
             if dataset is not None:
                 entries[port] = {
@@ -222,7 +239,15 @@ class DraftPreviews:
                 {"code": "run_active", "run": token["id"]},
             )
 
-    def _locate(self, worktree: str, environment: str, full_node: str, code: str | None = None) -> Located:
+    def _locate(
+        self,
+        worktree: str,
+        environment: str,
+        full_node: str,
+        code: str | None = None,
+        *,
+        component_inputs: bool = False,
+    ) -> Located:
         snapshot = self.projects.snapshot(worktree)
         bundle = snapshot["bundle"]
         if bundle is None:
@@ -232,6 +257,17 @@ class DraftPreviews:
         nodes, edges, boundaries = expand_for(
             bundle, environment, computed=self.pool.computed(worktree, environment, bundle)
         )
+        if full_node in boundaries and component_inputs:
+            # Expansion connects directly to leaf inputs. Expose those same sources under
+            # the component's public port names without changing the expanded graph.
+            inputs = boundaries[full_node]["inputs"]
+            incoming = {(edge["target"], edge["targetHandle"]): edge for edge in edges}
+            aliases = [
+                {**incoming[tuple(target)], "target": full_node, "targetHandle": port}
+                for port, target in inputs.items()
+                if tuple(target) in incoming
+            ]
+            return Located({"id": full_node, "parsed": {"inputs": list(inputs)}}, [*edges, *aliases], nodes)
         if full_node in boundaries:
             raise Problem("A component instance has no code; open the component to preview its nodes", 422)
         node = nodes.get(full_node)

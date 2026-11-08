@@ -295,3 +295,62 @@ def test_preview_over_http(tmp_path):
         assert response.json()["outputs"][0]["count"] == 100
         columns = client.get(f"{path}/input-columns/report", params={"environment": "dev"})
         assert columns.json()["inputs"][0]["origin"] == "result"
+
+
+def test_input_columns_follow_nested_component_boundaries_and_instance_wiring(services, tmp_path):
+    store, projects, _, engine = services
+    value = bundle(tmp_path / "component.csv")
+    value["components"] = {
+        "inner": {
+            "nodes": [{"id": "leaf", "params": {}}],
+            "edges": [],
+            "inputs": {"orders": {"node": "leaf", "port": "source"}},
+            "outputs": {"result": {"node": "leaf", "port": "result"}},
+            "parameters": {},
+        },
+        "outer": {
+            "nodes": [{"id": "nested", "component": "inner", "params": {}}],
+            "edges": [],
+            "inputs": {"data": {"node": "nested", "port": "orders"}},
+            "outputs": {"result": {"node": "nested", "port": "result"}},
+            "parameters": {},
+        },
+    }
+    value["node_sql"]["components/inner/leaf.sql"] = CODE
+    value["flow"]["nodes"].extend(
+        [
+            {"id": "connected", "component": "outer", "params": {}},
+            {"id": "unconnected", "component": "outer", "params": {}},
+        ]
+    )
+    value["flow"]["edges"].append(
+        {
+            "id": "into-component",
+            "source": "source",
+            "sourceHandle": "result",
+            "target": "connected",
+            "targetHandle": "data",
+        }
+    )
+    worktree = projects.create("Component inputs", value)["id"]
+    # A source that has never run can still describe its columns for all three levels.
+    for target, port in [
+        ("connected", "data"),
+        ("connected::nested", "orders"),
+        ("connected::nested::leaf", "source"),
+    ]:
+        [entry] = engine.input_columns(worktree, "dev", target)["inputs"]
+        assert entry["input"] == port
+        assert entry["node"] == "source"
+        assert entry["origin"] == "description"
+        assert [column["name"] for column in entry["columns"]] == ["id", "country", "amount"]
+    assert engine.statuses(worktree, "dev")["nodes"] == {}
+    [missing] = engine.input_columns(worktree, "dev", "unconnected")["inputs"]
+    assert missing["reason"] == "not_connected"
+    assert missing["columns"] is None
+    run = join_run(store, engine.launch(worktree, "dev", "source")["id"])
+    assert run["status"] == "success"
+    [entry] = engine.input_columns(worktree, "dev", "connected")["inputs"]
+    assert entry["origin"] == "result"
+    with pytest.raises(Problem, match="component instance has no code"):
+        engine.drafts.preview(worktree, "dev", "connected")

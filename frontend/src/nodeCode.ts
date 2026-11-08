@@ -1,10 +1,5 @@
-import type {
-  Bundle,
-  FlowNode,
-  ParsedTemplate,
-  Snapshot,
-  Graph,
-} from "./types";
+import { resolveNodePath } from "./graph";
+import type { Bundle, FlowNode, ParsedTemplate, Snapshot } from "./types";
 
 export const nodeCodePath = (id: string, parent?: string, language = "sql") => {
   const extension = language === "python" ? "py" : "sql";
@@ -29,18 +24,24 @@ export const nodeCode = (bundle: Bundle, node: FlowNode, parent?: string) =>
     ? bundle.templates[node.template]
     : bundle.node_sql?.[nodeCodePath(node.id, parent, node.language)] || "";
 
+/** Write the code owned by a node or its shared template. */
+export function setNodeCode(
+  bundle: Bundle,
+  node: FlowNode,
+  code: string,
+  parent?: string,
+) {
+  if (node.component) throw new Error("A component instance has no code");
+  if (node.template) bundle.templates[node.template] = code;
+  else
+    (bundle.node_sql ||= {})[nodeCodePath(node.id, parent, node.language)] =
+      code;
+}
+
 /** Locate the authored definition of a node inside component instances. */
 export function nodeLocation(bundle: Bundle, fullNode: string) {
-  const ids = fullNode.split("::");
-  let graph: Graph = bundle.flow;
-  let parent: string | undefined;
-  for (const id of ids.slice(0, -1)) {
-    parent = graph.nodes.find((node) => node.id === id)?.component;
-    if (!parent || !bundle.components[parent]) return null;
-    graph = bundle.components[parent];
-  }
-  const node = graph.nodes.find((item) => item.id === ids.at(-1));
-  return node ? { node, parent } : null;
+  const location = resolveNodePath(bundle, fullNode);
+  return location ? { node: location.node, parent: location.parent } : null;
 }
 
 /** Parsed local definitions of the opened graph, keyed by stable node ID. */
@@ -68,7 +69,7 @@ export function detachNode(bundle: Bundle, node: FlowNode, parent?: string) {
   node.preset ||= node.template || node.origin;
   if (node.template) node.origin = node.template;
   delete node.template;
-  (bundle.node_sql ||= {})[nodeCodePath(node.id, parent, node.language)] = code;
+  setNodeCode(bundle, node, code, parent);
 }
 
 /**
