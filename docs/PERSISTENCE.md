@@ -183,3 +183,27 @@ Tests compare the initial schema to SQLModel metadata and exercise rollback,
 constraints, cascades, thread isolation, rejection of unsupported databases,
 initialization failure recovery and a failed batch rebuild with child rows.
 Migration scripts and their template ship inside the wheel and sdist.
+
+## Execution history retention
+
+After a run finishes, Duckpad retains the newest 1,000 completed runs per working
+branch and environment. Active runs and evidence still referenced by live results,
+exports, partition results or retained manifests are exempt, so the retained total
+can exceed 1,000. Deleting an expired run also deletes its partition attempts and
+unreferenced manifests through the database's ownership constraints. Retention
+runs outside the engine's admission lock.
+
+A partition manifest is reused when its ordered typed keys, attributes, source,
+schema and partition definition are unchanged. Its IDs and original provenance
+remain immutable; each new run stores separate attempts against those IDs.
+Changed values or ordering create a new manifest.
+
+The internal `/api/runs` and `/api/jobs/{slug}/runs` lists return summaries without
+captured project definitions, connection settings or node logs. They default to
+50 records and accept `limit` from 1 to 100. When another page exists,
+`X-Next-Cursor` contains the opaque value to pass as `cursor` on the next request,
+with the same filters. Ordering uses start time and run ID, so equal timestamps
+and concurrent new runs do not duplicate records. `/api/runs/{id}` retains the
+complete record. The History and Jobs pages load older records explicitly and
+fetch details when a run is opened. The public automation API keeps its existing
+response contract.

@@ -32,6 +32,7 @@ class PartitionRun:
         self.active = set()
         self.stopped = False
         self.schemas = {}
+        self.variants = {}
         self.attempt_states = {}
         self.persisted = {}
         self.saved = {}
@@ -83,7 +84,7 @@ class PartitionRun:
                 "count": len(self.entries),
                 "created": now(),
             }
-            self.storage.publish_manifest(self.manifest, self.entries)
+            self.manifest, self.entries = self.storage.publish_manifest(self.manifest, self.entries)
         else:
             self.manifest = self.storage.manifest(signature=signature)
             if self.manifest is None:
@@ -100,6 +101,7 @@ class PartitionRun:
             execution.captured,
             execution.values,
             manifest=self.entries,
+            variants=self.variants,
         )
         for key in execution.order:
             self.root["nodes"][key]["fingerprint"] = execution.fingerprints.get(key)
@@ -152,9 +154,7 @@ class PartitionRun:
         if not any(execution.nodes[k]["parsed"]["writes_external"] for k in self.partitioned):
             return
         for entry in self.entries:
-            nodes, _, _ = expand_for(
-                execution.bundle, execution.context.environment, computed=execution.values, partition=entry
-            )
+            nodes = self.variant(entry)
             for key in self.partitioned:
                 node = nodes[key]
                 if not node["parsed"]["writes_external"] or node.get("error"):
@@ -391,11 +391,18 @@ class PartitionRun:
             ],
         )
 
+    def variant(self, entry):
+        identity = partitions.identity(entry["key"])
+        if identity not in self.variants:
+            execution = self.execution
+            self.variants[identity] = expand_for(
+                execution.bundle, execution.context.environment, computed=execution.values, partition=entry
+            )[0]
+        return self.variants[identity]
+
     def for_entry(self, entry, unit):
         execution = self.execution
-        nodes, _, _ = expand_for(
-            execution.bundle, execution.context.environment, computed=execution.values, partition=entry
-        )
+        nodes = self.variant(entry)
         fingerprints = self.key_fingerprints.get(partitions.identity(entry["key"]))
         if fingerprints is None:  # Schema binding for an empty manifest.
             fingerprints = self.runner.fingerprints.of(

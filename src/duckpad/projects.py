@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import io
 import logging
 import shutil
@@ -13,7 +14,7 @@ from collections import OrderedDict
 from collections.abc import Callable, Collection, Generator, Iterable, Mapping
 from contextlib import contextmanager, suppress
 from pathlib import Path
-from typing import Literal, Unpack, cast, overload
+from typing import Literal, TypeVar, Unpack, cast, overload
 
 from . import python_environment, views
 from .artifacts import Artifacts
@@ -65,6 +66,9 @@ def conflict_view(conflict: Record) -> Record:
     }
 
 
+CachedValue = TypeVar("CachedValue")
+
+
 class Projects:
     def __init__(self, store: Store) -> None:
         self.store = store
@@ -77,6 +81,8 @@ class Projects:
         self.pending: dict[str, float] = {}
         self.commit_files: OrderedDict[tuple[str, str], Files] = OrderedDict()
         self.revisions: OrderedDict[tuple[str, str], Files] = OrderedDict()
+        self.snapshot_definitions: OrderedDict[tuple[str, str], Record] = OrderedDict()
+        self.views: OrderedDict[tuple[str, str], Record] = OrderedDict()
         self.on_change: Callable[[str], None] = lambda worktree: None
         self.thread: threading.Thread | None = None
         self.versioning = GitWorkspace(self)
@@ -207,6 +213,10 @@ class Projects:
         return worktree
 
     def delete(self, project_id: str) -> None:
+        self.delete_files(project_id, *self.delete_records(project_id))
+
+    def delete_records(self, project_id: str) -> tuple[list[Record], list[Record]]:
+        """Detach metadata while the caller prevents new runs for the project."""
         with self.repository(project_id):
             with self.store.transaction():
                 worktrees = self.store.worktrees(project_id)
@@ -218,8 +228,11 @@ class Projects:
                     "settings", history_cache_key(self.store.paths.project(project_id) / ".git")
                 )
                 self.store.delete("project", project_id)
-            self.discard(worktrees, artifacts)
-            shutil.rmtree(self.store.paths.resources(project_id), ignore_errors=True)
+            return worktrees, artifacts
+
+    def delete_files(self, project_id: str, worktrees: list[Record], artifacts: list[Record]) -> None:
+        self.discard(worktrees, artifacts)
+        shutil.rmtree(self.store.paths.resources(project_id), ignore_errors=True)
 
     def open_worktree(self, worktree: Record, branch: str, start: str | None = None) -> Record:
         """Check out a branch, created at start when given, in a new recorded worktree.
@@ -439,8 +452,11 @@ class Projects:
         return self.git(path, "rev-parse", "HEAD")
 
     def cached(
-        self, cache: OrderedDict[tuple[str, str], Files], key: tuple[str, str], value: Files | None = None
-    ) -> Files | None:
+        self,
+        cache: OrderedDict[tuple[str, str], CachedValue],
+        key: tuple[str, str],
+        value: CachedValue | None = None,
+    ) -> CachedValue | None:
         """Read a bounded cache entry, or store one, evicting the least recently used."""
         with self.cache_lock:
             if value is None:
@@ -488,15 +504,18 @@ class Projects:
                 files = self.read_files(worktree)
         revision = digest(files)
         self.cached(self.revisions, (worktree_id, revision), dict(files))
-        bundle, errors = diagnose(files)
+        key = (worktree_id, revision)
+        definitions = self.cached(self.snapshot_definitions, key)
+        if definitions is None:
+            bundle, errors = diagnose(files)
+            definitions = {"bundle": bundle, "node_names": node_names(bundle), "diagnostics": errors}
+            self.cached(self.snapshot_definitions, key, definitions)
         return {
             "worktree": worktree,
             "revision": revision,
             "commit": commit,
-            "bundle": bundle,
-            "node_names": node_names(bundle),
+            **copy.deepcopy(definitions),
             "files": files,
-            "diagnostics": errors,
             "conflicts": [conflict_view(c) for c in self.store.conflicts(worktree_id)],
         }
 
@@ -897,7 +916,7 @@ class Projects:
         for project in self.store.all("project"):
             if visible is not None and project["id"] not in visible:
                 continue
-            snapshot = self.snapshot(project["main"])
+            snapshot = self.snapshot(project["main"], committed=True)
             bundle = snapshot["bundle"]
             if not bundle:
                 continue

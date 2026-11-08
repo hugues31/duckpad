@@ -1,5 +1,7 @@
 """The editor's project snapshot with permissions and computed presentation data."""
 
+import copy
+
 from . import variables
 from .node_code import code_path
 from .python_nodes import retained_contract
@@ -16,19 +18,45 @@ def project_view(services: Services, user: Record, worktree: str) -> Record:
     project = result["worktree"]["project"]
     result["role"] = access.role(user, project)
     result["python_enabled"] = get_policy(store, project)["enabled"]
-    granted_connections = access.record(project)["connections"]
     result["connections"] = []
-    for c in store.all("connection"):
-        if c["id"] in granted_connections:
-            definition = catalog.connector(c["connector"]) or {}
-            result["connections"].append(
-                {
-                    "id": c["id"],
-                    "name": c["name"],
-                    "family": definition.get("family"),
-                    "capabilities": definition.get("capabilities", []),
-                }
-            )
+    for c in store.connection_summaries(project):
+        definition = catalog.connector(c["connector"]) or {}
+        result["connections"].append(
+            {
+                "id": c["id"],
+                "name": c["name"],
+                "family": definition.get("family"),
+                "capabilities": definition.get("capabilities", []),
+            }
+        )
+    key = (worktree, result["revision"])
+    derived = projects.cached(projects.views, key)
+    if derived is None:
+        derived = definitions(result)
+        projects.cached(projects.views, key, derived)
+    result.update(copy.deepcopy(derived))
+    result["variables"] = (
+        variables.summary(
+            result["bundle"],
+            catalog.environment_names(),
+            {
+                environment: engine.pool.computed(worktree, environment, result["bundle"])
+                for environment in catalog.environment_names()
+            },
+        )
+        if result["bundle"]
+        else None
+    )
+    result["partitions"] = {
+        environment: engine.partitions.describe(worktree, environment, bundle=result["bundle"])
+        for environment in catalog.environment_names()
+    }
+    return result
+
+
+def definitions(result: Record) -> Record:
+    """File-derived editor metadata; callers retain independent mutable copies."""
+    result = copy.deepcopy(result)
     result["parsed_templates"] = parse_templates((result["bundle"] or {}).get("templates", {}))
     result["parsed_nodes"] = parse_templates((result["bundle"] or {}).get("node_sql", {}))
 
@@ -60,20 +88,4 @@ def project_view(services: Services, user: Record, worktree: str) -> Record:
                         same.update(located)
                     else:
                         result["diagnostics"].append({"file": file, "message": message, **located})
-    result["variables"] = (
-        variables.summary(
-            result["bundle"],
-            catalog.environment_names(),
-            {
-                environment: engine.pool.computed(worktree, environment, result["bundle"])
-                for environment in catalog.environment_names()
-            },
-        )
-        if result["bundle"]
-        else None
-    )
-    result["partitions"] = {
-        environment: engine.partitions.describe(worktree, environment)
-        for environment in catalog.environment_names()
-    }
-    return result
+    return {key: result[key] for key in ("parsed_templates", "parsed_nodes", "diagnostics")}

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import threading
 import time
 from contextlib import suppress
@@ -200,6 +201,15 @@ class Runner:
                 finally:
                     self.active.pop(context.worktree, None)
                     self.journal.partitions.pop(run["id"], None)
+
+            # Disk-backed retention runs after releasing the engine-wide admission lock.
+            try:
+                with context.lock:
+                    protected = {dataset.run for dataset in context.datasets.values()}
+                keep = self.store.get("settings", "run_retention", {}).get("per_environment", 1000)
+                self.store.prune_runs(context.worktree, context.environment, keep=keep, protected=protected)
+            except Exception:
+                logging.getLogger(__name__).exception("Cannot expire old execution history")
 
     def close(self) -> None:
         """Cancel active runs and wait for their workers."""

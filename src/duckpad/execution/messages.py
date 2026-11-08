@@ -53,6 +53,7 @@ def record_result(run: Record, node: str, result: Record) -> None:
         summary["omitted"] += 1
         summary["counts"][result["level"]] += 1
         summary["message"] = f"… and {summary['omitted']} more"
+        return
     if result["origin"]["kind"] == "test" and result["level"] == "info":
         return
     logger.log(
@@ -87,29 +88,30 @@ def execute_messages(
     level_index, message_index = columns.index("level"), columns.index("message")
     cursor.execute(statement["sql"], statement["bindings"])
     failure = None
-    while (row := cursor.fetchone()) is not None:
-        if canceled():
-            raise Problem("Execution canceled")
-        level, message = row[level_index], row[message_index]
-        if not isinstance(level, str) or level not in LEVELS:
-            raise Problem(
-                f"@message block {block}: unknown level {redact(str(level), secrets)!r}; expected info, warning or error"
+    while rows := cursor.fetchmany(1000):
+        for row in rows:
+            if canceled():
+                raise Problem("Execution canceled")
+            level, message = row[level_index], row[message_index]
+            if not isinstance(level, str) or level not in LEVELS:
+                raise Problem(
+                    f"@message block {block}: unknown level {redact(str(level), secrets)!r}; expected info, warning or error"
+                )
+            if not isinstance(message, str):
+                raise Problem(f"@message block {block}: message must be non-null text")
+            message = redact(message, secrets)
+            record_result(
+                run,
+                node,
+                {
+                    "level": level,
+                    "message": message,
+                    "origin": {"kind": "message", "block": block},
+                    "output": statement.get("message_output"),
+                },
             )
-        if not isinstance(message, str):
-            raise Problem(f"@message block {block}: message must be non-null text")
-        message = redact(message, secrets)
-        record_result(
-            run,
-            node,
-            {
-                "level": level,
-                "message": message,
-                "origin": {"kind": "message", "block": block},
-                "output": statement.get("message_output"),
-            },
-        )
-        if level == "error" and failure is None:
-            failure = message
+            if level == "error" and failure is None:
+                failure = message
     return failure
 
 
