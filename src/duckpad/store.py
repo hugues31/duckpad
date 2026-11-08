@@ -6,6 +6,7 @@ Secrets are sealed on write and opened on read (see `sealing`).
 """
 
 import copy
+import math
 import threading
 from contextlib import contextmanager
 from pathlib import Path
@@ -504,6 +505,34 @@ class Store:
                 statement = statement.limit(limit)
             rows = session.exec(statement)
             return [self._record("run", row, session) for row in rows]
+
+    def node_duration_estimates(self, worktree, environment):
+        """Latest successful node timings from a bounded, environment-local history.
+
+        Partition summaries are not timings of single executions. Read only the
+        snapshots: estimates do not need decrypted connection settings.
+        """
+        estimates = {}
+        with self.session() as session:
+            statement = (
+                select(m.Run.snapshot)
+                .where(m.Run.worktree == worktree, m.Run.environment == environment)
+                .order_by(m.Run.started.desc(), m.Run.id.desc())
+                .limit(20)
+            )
+            for snapshot in session.exec(statement):
+                for key, state in snapshot.get("nodes", {}).items():
+                    duration = state.get("duration")
+                    if (
+                        key not in estimates
+                        and state.get("status") == "success"
+                        and not state.get("partitioned")
+                        and isinstance(duration, (int, float))
+                        and math.isfinite(duration)
+                        and duration > 0
+                    ):
+                        estimates[key] = duration
+        return estimates
 
     def test_history(self, worktree, environment, node, limit=10):
         """Recent executions of this node's tests, including failures without published outputs."""
