@@ -71,12 +71,21 @@ test("a Job shows live progress in its details until it finishes", async ({
   active = {
     ...active,
     status: "running",
-    nodes: { first: { status: "success" }, second: { status: "running" } },
+    nodes: {
+      first: { status: "success", duration: 120 },
+      second: { status: "running", started: new Date().toISOString() },
+    },
   };
   await expect(bar).toHaveAttribute("aria-valuenow", "50");
   await expect(details.locator(".run-progress")).toContainText(
     `1/2 ${en.nodes}`,
   );
+  await expect(details.locator(".run-progress-remaining")).toContainText(
+    "left",
+  );
+  await expect(details.locator(".run-progress-remaining")).toBeInViewport({
+    ratio: 1,
+  });
   active = { ...active, status: "success" };
   await expect(bar).toHaveCount(0);
   await expect(
@@ -175,15 +184,30 @@ for (const [language, labels] of [
     await expect(bar).toBeVisible();
     await expect(bar).not.toHaveAttribute("aria-valuenow");
     await expect(strip).toContainText(labels.preparing);
+    await expect(strip).toContainText(labels.estimatingRemaining);
     await expect(strip.locator(".run-progress-count")).toHaveCount(0);
 
     active = {
       ...active,
       status: "running",
-      nodes: { first: { status: "success" }, second: { status: "running" } },
+      nodes: {
+        first: { status: "success", duration: 10 },
+        second: {
+          status: "running",
+          started: new Date().toISOString(),
+          estimated_duration: 7200,
+        },
+      },
     };
     await expect(bar).toHaveAttribute("aria-valuenow", "50");
     await expect(strip).toContainText(`1/2 ${labels.nodes}`);
+    const remaining = strip.locator(".run-progress-remaining");
+    await expect(remaining).toContainText("2 h");
+    await expect(remaining).toBeInViewport({ ratio: 1 });
+    await expect(bar).toHaveAttribute(
+      "aria-valuetext",
+      new RegExp(labels.estimatedRemaining.split("{duration}")[0]),
+    );
     expect((await bar.boundingBox())!.width).toBeGreaterThan(1100);
     await expect(bar.locator("div")).toHaveCSS(
       "animation-name",
@@ -193,6 +217,7 @@ for (const [language, labels] of [
     active = {
       ...active,
       partitions: {
+        started: new Date(Date.now() - 60000).toISOString(),
         phase: "consumers",
         selected: 10,
         total: 50,
@@ -202,6 +227,8 @@ for (const [language, labels] of [
       },
     };
     await expect(strip).toContainText(`3/10 ${labels.partitions}`);
+    await expect(remaining).toContainText("min");
+    await expect(remaining).toBeInViewport({ ratio: 1 });
     await expect(bar).toHaveAttribute("aria-valuenow", "50");
     await expect(bar).toHaveAttribute(
       "aria-valuetext",
@@ -240,6 +267,7 @@ for (const [language, labels] of [
     await expect(strip.locator("svg")).toHaveCSS("animation-name", "none");
     await page.emulateMedia({ reducedMotion: "no-preference" });
     active = { ...active, status: "canceling" };
+    await expect(remaining).toHaveCount(0);
     await expect(
       page.getByRole("button", { name: labels.canceling, exact: true }),
     ).toBeDisabled();

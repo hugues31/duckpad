@@ -59,8 +59,6 @@ class PartitionRun:
             "not_started": 0,
             "execution": self.policy,
         }
-        for key in self.partitioned:
-            self.root["nodes"][key]["partitioned"] = True
 
     def resolve(self):
         execution, source = self.execution, self.plan["source"]
@@ -222,6 +220,7 @@ class PartitionRun:
                 execution, [k for k in execution.order if k not in execution.value_phase]
             )
             return
+        self.root["partitions"]["started"] = now()
         # Inputs used only by empty zones need schema binding, never data evaluation.
         terminals = set(execution.order) - {e["source"] for e in execution.edges}
         ordinary = reachable(
