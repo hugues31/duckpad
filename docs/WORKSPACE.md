@@ -80,6 +80,11 @@ indeterminate bar until the total is known. The animation respects reduced-motio
 preferences and pauses while stopping. When the project tabs and run controls
 do not fit on one row, the controls move to a second row instead of hiding tabs.
 The same progress strip appears in a running Job's details on the **Jobs** page.
+It also shows an approximate time remaining, using previous successful node
+durations in the same worktree and environment. Without that history, completed
+nodes provide a simple average; partitioned runs use their observed key throughput.
+The estimate updates during execution and shows **Estimating…** until enough timing
+data is available or when work outlasts its estimate. It disappears on cancellation.
 
 Results belong to a branch and environment. A change can mark previous results
 **Stale**, and a failed run retains the previous successful data. Successful canvas

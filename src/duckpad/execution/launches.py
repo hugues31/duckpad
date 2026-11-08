@@ -349,6 +349,12 @@ class LaunchPlanner:
         execution.run = self.snapshot_run(
             execution, snapshot, admission, scope, target, entry_point, ancestors
         )
+        estimates = self.store.node_duration_estimates(worktree, environment)
+        for key, state in execution.run["nodes"].items():
+            if nodes[key].get("partitioned"):
+                state["partitioned"] = True
+            elif key in estimates:
+                state["estimated_duration"] = estimates[key]
         return execution
 
     @staticmethod
