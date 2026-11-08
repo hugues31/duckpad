@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { api, withQuery } from "./api";
 import CommitRow from "./CommitRow";
 import ComparisonView from "./ComparisonView";
@@ -6,7 +6,7 @@ import { TabStatus } from "./gitTabs";
 import type { Branch, Comparison, GitTag } from "./gitTypes";
 import { useT } from "./i18n";
 import Select from "./Select";
-import { useApiResource } from "./useApiResource";
+import { useApiResource, useResource } from "./useApiResource";
 import { useGitHistory } from "./useGitHistory";
 
 /**
@@ -66,20 +66,6 @@ export default function GitCompareTab({
 }) {
   const t = useT();
   const tags = useApiResource<GitTag[]>(`${base}/tags`, { refresh: version });
-  // The previous report stays in place while another comparison loads.
-  const [report, setReport] = useState<Comparison | null>(null);
-  const [attempt, setAttempt] = useState(0);
-  const comparison = useMemo(
-    () => ({ base, storageKey, selection, attempt }),
-    [base, storageKey, selection, attempt],
-  );
-  // Each comparison is settled by its own answer.
-  const [settled, setSettled] = useState<{
-    comparison: typeof comparison;
-    error: string;
-  } | null>(null);
-  const comparing = ready && settled?.comparison !== comparison;
-  const error = settled?.comparison === comparison ? settled.error : "";
   const resolved = useRef<Resolved>(null);
   const [entity, setEntity] = useState(initialEntity);
   const gitHistory = useGitHistory(`${base}/history`, {
@@ -89,40 +75,32 @@ export default function GitCompareTab({
     limit: 50,
   });
   const history = gitHistory.data;
-  useEffect(() => {
-    if (!ready) return;
-    const controller = new AbortController();
-    const { base, storageKey, selection } = comparison;
-    const frozen = frozenFor(resolved.current, selection);
-    const timer = window.setTimeout(() => {
-      void api<Comparison>(
+  const comparison = useResource<Comparison>(
+    `${base}:${storageKey}`,
+    async (signal) => {
+      const frozen = frozenFor(resolved.current, selection);
+      const result = await api<Comparison>(
         withQuery(`${base}/compare`, {
           a: frozen?.a || selection.a,
           b: frozen?.b || selection.b,
         }),
-        { signal: controller.signal },
-      )
-        .then((result) => {
-          if (controller.signal.aborted) return;
-          resolved.current = { selection, a: result.a.ref, b: result.b.ref };
-          setReport(result);
-          setSettled({ comparison, error: "" });
-          // Resolved revisions go stale and frozen ones expire: only names are kept.
-          sessionStorage.setItem(
-            selectionKey(storageKey),
-            JSON.stringify({ a: selection.a, b: selection.b }),
-          );
-        })
-        .catch((e) => {
-          if (!controller.signal.aborted)
-            setSettled({ comparison, error: e.message });
-        });
-    }, 300);
-    return () => {
-      clearTimeout(timer);
-      controller.abort();
-    };
-  }, [comparison, ready]);
+        { signal },
+      );
+      if (!signal.aborted) {
+        resolved.current = { selection, a: result.a.ref, b: result.b.ref };
+        // Frozen revisions expire: keep only the names for the next opening.
+        sessionStorage.setItem(
+          selectionKey(storageKey),
+          JSON.stringify({ a: selection.a, b: selection.b }),
+        );
+      }
+      return result;
+    },
+    { refresh: selection, enabled: ready, delay: 300, keepDataOnError: true },
+  );
+  const report = comparison.data;
+  const comparing = comparison.pending;
+  const error = comparing ? "" : comparison.error;
 
   const items = history?.items || [];
   const currentCommit = items.find((v) => v.commit === selection.b);
@@ -285,10 +263,7 @@ export default function GitCompareTab({
         )}
       </details>
       {error ? (
-        <TabStatus
-          error={error}
-          onRetry={() => setAttempt((value) => value + 1)}
-        />
+        <TabStatus error={error} onRetry={comparison.reload} />
       ) : comparing || !ready ? (
         <p role="status">{t("comparing")}</p>
       ) : (

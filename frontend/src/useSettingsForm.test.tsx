@@ -6,6 +6,25 @@ import { useSettingsForm } from "./useSettingsForm";
 
 afterEach(cleanup);
 
+it("compares unordered grants and discards dependent state", () => {
+  const discard = vi.fn();
+  const { result } = renderHook(() =>
+    useSettingsForm(["a", "b"], async () => {}, {
+      equal: (a, b) =>
+        a.length === b.length && a.every((item) => b.includes(item)),
+      discard,
+    }),
+  );
+  act(() => result.current.replace(["b", "a"]));
+  expect(result.current.dirty).toBe(false);
+  act(() => result.current.update((items) => [...items, "c"]));
+  expect(result.current.dirty).toBe(true);
+  act(() => result.current.discard());
+  expect(result.current.config).toEqual(["a", "b"]);
+  expect(result.current.dirty).toBe(false);
+  expect(discard).toHaveBeenCalledOnce();
+});
+
 it("protects navigation, preserves edits through rejection, and unregisters on discard", async () => {
   const registry = renderHook(() => useDraftRegistry());
   const save = vi.fn().mockRejectedValue(new Error("Unavailable"));

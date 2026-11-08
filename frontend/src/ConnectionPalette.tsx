@@ -1,3 +1,4 @@
+import { Search, X } from "lucide-react";
 import {
   useEffect,
   useId,
@@ -7,8 +8,7 @@ import {
   useState,
 } from "react";
 import { createPortal } from "react-dom";
-import { Search, X } from "lucide-react";
-import { NodeIcon } from "./Canvas";
+import { NodeIcon } from "./CanvasNode";
 import { nodeChoices, type NodeKind } from "./graph";
 import { templateLabel, useT } from "./i18n";
 import type { ComponentDefinition, ParsedTemplate } from "./types";

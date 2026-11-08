@@ -12,6 +12,12 @@ import { useAsyncAction } from "./useAsyncAction";
 
 const CodeEditor = lazy(() => import("./Editor"));
 
+type FormState = Pick<
+  ReturnType<typeof useAsyncAction>,
+  "pending" | "error" | "setError"
+>;
+type FormContent = React.ReactNode | ((state: FormState) => React.ReactNode);
+
 export function ConfirmModal({
   title,
   children,
@@ -51,10 +57,12 @@ export function ModalForm({
   cancelAutoFocus = false,
   disabled = false,
   wide = false,
+  className,
+  actions,
 }: {
   title: string;
-  children: React.ReactNode;
-  onSubmit: () => Promise<unknown>;
+  children: FormContent;
+  onSubmit: (form: HTMLFormElement) => Promise<unknown>;
   onClose: () => void;
   submitLabel: string;
   pendingLabel?: "saving" | "loading";
@@ -62,9 +70,12 @@ export function ModalForm({
   cancelAutoFocus?: boolean;
   disabled?: boolean;
   wide?: boolean;
+  className?: string;
+  actions?: FormContent;
 }) {
   const t = useT();
-  const { pending, error, run } = useAsyncAction();
+  const { pending, error, setError, run } = useAsyncAction();
+  const state = { pending, error, setError };
   const submitting = useRef(false);
   const close = () => {
     if (!submitting.current) onClose();
@@ -72,19 +83,28 @@ export function ModalForm({
   return (
     <Modal title={title} onClose={close} wide={wide}>
       <form
+        className={className}
         onSubmit={async (event) => {
           event.preventDefault();
           if (disabled || submitting.current) return;
+          const form = event.currentTarget;
           submitting.current = true;
           try {
-            if (await run(onSubmit)) onClose();
+            let submitted = false;
+            if (
+              (await run(async () => {
+                submitted = (await onSubmit(form)) !== false;
+              })) &&
+              submitted
+            )
+              onClose();
           } finally {
             submitting.current = false;
           }
         }}
       >
         <div className="modal-content">
-          {children}
+          {typeof children === "function" ? children(state) : children}
           {error && (
             <div className="notice error" role="alert">
               {error}
@@ -92,6 +112,7 @@ export function ModalForm({
           )}
         </div>
         <footer>
+          {typeof actions === "function" ? actions(state) : actions}
           <button
             type="button"
             autoFocus={cancelAutoFocus}

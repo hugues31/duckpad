@@ -1,8 +1,9 @@
 import { CircleAlert, CircleCheck, Loader2, X } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useT } from "./i18n";
 import { seconds } from "./results";
 import { useApiResource } from "./useApiResource";
+import { useFollowScroll } from "./useFollowScroll";
 
 const states = {
   unprepared: "pythonEnvironmentUnprepared",
@@ -41,10 +42,6 @@ interface PreparationStatus {
   log_truncated?: boolean;
 }
 
-const toEnd = (element: HTMLElement | null) => {
-  if (element) element.scrollTop = element.scrollHeight;
-};
-
 /** The latest preparation, polled every second while it runs or while `active`. */
 function usePreparation(project: string, active = false) {
   const [busy, setBusy] = useState(false);
@@ -72,11 +69,10 @@ function PreparationDetails({
   onToggle?: (open: boolean) => void;
 }) {
   const t = useT();
-  const log = useRef<HTMLPreElement>(null);
-  const follow = useRef(true);
-  useEffect(() => {
-    if (follow.current) toEnd(log.current);
-  }, [status.log]);
+  const { log, followLog, restore } = useFollowScroll<HTMLPreElement>(
+    open ?? true,
+    40,
+  );
   return (
     <>
       {preparing && <progress aria-label={t("pythonEnvironmentProgress")} />}
@@ -85,7 +81,7 @@ function PreparationDetails({
         <details
           open={open}
           onToggle={(event) => {
-            if (follow.current) toEnd(log.current);
+            restore();
             onToggle?.(event.currentTarget.open);
           }}
         >
@@ -97,15 +93,7 @@ function PreparationDetails({
             ref={log}
             role="log"
             aria-label={t("pythonEnvironmentLogs")}
-            onScroll={() => {
-              const element = log.current;
-              if (element)
-                follow.current =
-                  element.scrollHeight -
-                    element.scrollTop -
-                    element.clientHeight <
-                  40;
-            }}
+            onScroll={followLog}
           >
             {status.log || t("pythonEnvironmentLogWaiting")}
           </pre>

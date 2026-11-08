@@ -1,12 +1,13 @@
-import { useEffect, useState } from "react";
-import APITokenSettings from "./APITokenSettings";
 import { Plus, Users } from "lucide-react";
+import { useState } from "react";
 import { api, send } from "./api";
+import APITokenSettings from "./APITokenSettings";
 import { useT } from "./i18n";
-import { Modal } from "./modals";
+import { Modal, ModalForm } from "./modals";
 import RoleSelect from "./RoleSelect";
 import Select from "./Select";
 import type { User } from "./types";
+import { useApiResource } from "./useApiResource";
 import { useAsyncAction } from "./useAsyncAction";
 
 const readUsers = () => api<User[]>("/users");
@@ -24,17 +25,19 @@ export default function UsersPage({
   refresh: () => Promise<unknown>;
 }) {
   const t = useT();
-  const [users, setUsers] = useState<User[]>([]);
+  const {
+    data,
+    setData: setUsers,
+    error: loadError,
+  } = useApiResource<User[]>("/users");
+  const users = data || [];
   const [tokenUser, setTokenUser] = useState<User | null>(null);
   const [query, setQuery] = useState("");
   const [modal, setModal] = useState<Dialog | null>(null);
-  const { pending, error, setError, run } = useAsyncAction();
+  const { pending, error: actionError, setError, run } = useAsyncAction();
+  const error = actionError || loadError;
   // The dialog reports its own errors, next to the form that caused them.
-  const dialog = useAsyncAction();
-  const busy = pending || dialog.pending;
-  useEffect(() => {
-    readUsers().then(setUsers, (e) => setError(e.message));
-  }, [setError]);
+  const busy = pending;
   async function reload() {
     setUsers(await readUsers());
     await refresh();
@@ -45,37 +48,32 @@ export default function UsersPage({
       await reload();
     });
   function open(value: Dialog) {
-    dialog.setError("");
     setModal(value);
   }
   async function submit(modal: Dialog, data: FormData) {
-    const saved = await dialog.run(() =>
-      modal.kind === "create" || modal.kind === "createService"
-        ? api(
-            "/users",
-            send({
-              username: data.get("username"),
-              password:
-                modal.kind === "createService" ? null : data.get("password"),
-              role:
-                modal.kind === "createService" ? "member" : data.get("role"),
-              service: modal.kind === "createService",
-              description: data.get("description") || "",
-            }),
-          )
-        : api(
-            `/users/${modal.user.id}`,
-            send(
-              modal.kind === "deactivate"
-                ? { active: false }
-                : { password: data.get("password") },
-              "PATCH",
-            ),
+    await (modal.kind === "create" || modal.kind === "createService"
+      ? api(
+          "/users",
+          send({
+            username: data.get("username"),
+            password:
+              modal.kind === "createService" ? null : data.get("password"),
+            role: modal.kind === "createService" ? "member" : data.get("role"),
+            service: modal.kind === "createService",
+            description: data.get("description") || "",
+          }),
+        )
+      : api(
+          `/users/${modal.user.id}`,
+          send(
+            modal.kind === "deactivate"
+              ? { active: false }
+              : { password: data.get("password") },
+            "PATCH",
           ),
-    );
-    if (!saved) return;
-    setModal(null);
-    await run(reload);
+        ));
+    setError("");
+    await reload();
   }
   const visible = users.filter((u) =>
     u.username.toLowerCase().includes(query.toLowerCase()),
@@ -217,7 +215,7 @@ export default function UsersPage({
         </Modal>
       )}
       {modal && (
-        <Modal
+        <ModalForm
           title={t(
             modal.kind === "createService"
               ? "addServiceAccount"
@@ -228,93 +226,69 @@ export default function UsersPage({
                   : "deactivate",
           )}
           onClose={() => setModal(null)}
+          submitLabel={t(
+            modal.kind === "create" || modal.kind === "createService"
+              ? "create"
+              : modal.kind === "deactivate"
+                ? "deactivate"
+                : "save",
+          )}
+          onSubmit={(form) => submit(modal, new FormData(form))}
         >
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              void submit(modal, new FormData(e.currentTarget));
-            }}
-          >
-            <div className="modal-content">
-              {(modal.kind === "create" || modal.kind === "createService") && (
-                <>
-                  <label className="field">
-                    <span>{t("username")}</span>
-                    <input
-                      name="username"
-                      required
-                      maxLength={64}
-                      pattern="[a-zA-Z0-9][a-zA-Z0-9_.-]*"
-                      autoComplete="off"
-                    />
-                  </label>
-                  {modal.kind === "createService" ? (
-                    <label className="field">
-                      <span>{t("serviceDescription")}</span>
-                      <textarea name="description" maxLength={1000} />
-                    </label>
-                  ) : (
-                    <label className="field">
-                      <span>{t("instanceRole")}</span>
-                      <Select
-                        aria-label={t("instanceRole")}
-                        name="role"
-                        defaultValue="member"
-                      >
-                        <option value="member">{t("role_member")}</option>
-                        <option value="admin">{t("role_admin")}</option>
-                      </Select>
-                    </label>
-                  )}
-                </>
-              )}
-              {modal.kind === "deactivate" ? (
-                <p>
-                  {t("deactivateHint")} <strong>{modal.user.username}</strong>
-                </p>
-              ) : modal.kind === "createService" ? (
-                <p>{t("serviceAccountHint")}</p>
+          {(modal.kind === "create" || modal.kind === "createService") && (
+            <>
+              <label className="field">
+                <span>{t("username")}</span>
+                <input
+                  name="username"
+                  required
+                  maxLength={64}
+                  pattern="[a-zA-Z0-9][a-zA-Z0-9_.-]*"
+                  autoComplete="off"
+                />
+              </label>
+              {modal.kind === "createService" ? (
+                <label className="field">
+                  <span>{t("serviceDescription")}</span>
+                  <textarea name="description" maxLength={1000} />
+                </label>
               ) : (
                 <label className="field">
-                  <span>{t("newPassword")}</span>
-                  <input
-                    aria-label={t("newPassword")}
-                    name="password"
-                    type="password"
-                    required
-                    minLength={12}
-                    maxLength={1024}
-                    autoComplete="new-password"
-                  />
-                  <small>{t("passwordHint")}</small>
+                  <span>{t("instanceRole")}</span>
+                  <Select
+                    aria-label={t("instanceRole")}
+                    name="role"
+                    defaultValue="member"
+                  >
+                    <option value="member">{t("role_member")}</option>
+                    <option value="admin">{t("role_admin")}</option>
+                  </Select>
                 </label>
               )}
-              {dialog.error && (
-                <p className="notice error" role="alert">
-                  {dialog.error}
-                </p>
-              )}
-            </div>
-            <footer>
-              <button
-                type="button"
-                className="button secondary"
-                onClick={() => setModal(null)}
-              >
-                {t("cancel")}
-              </button>
-              <button className="button primary" disabled={busy}>
-                {t(
-                  modal.kind === "create" || modal.kind === "createService"
-                    ? "create"
-                    : modal.kind === "deactivate"
-                      ? "deactivate"
-                      : "save",
-                )}
-              </button>
-            </footer>
-          </form>
-        </Modal>
+            </>
+          )}
+          {modal.kind === "deactivate" ? (
+            <p>
+              {t("deactivateHint")} <strong>{modal.user.username}</strong>
+            </p>
+          ) : modal.kind === "createService" ? (
+            <p>{t("serviceAccountHint")}</p>
+          ) : (
+            <label className="field">
+              <span>{t("newPassword")}</span>
+              <input
+                aria-label={t("newPassword")}
+                name="password"
+                type="password"
+                required
+                minLength={12}
+                maxLength={1024}
+                autoComplete="new-password"
+              />
+              <small>{t("passwordHint")}</small>
+            </label>
+          )}
+        </ModalForm>
       )}
     </section>
   );

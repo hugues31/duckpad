@@ -19,7 +19,7 @@ let clipboard: CopiedNodes | null = null;
 export const copiedNodes = () => clipboard;
 
 /** Copy nodes of a graph, with the edges that connect them to each other. */
-export function copyNodes(
+export function nodeCopies(
   bundle: Bundle,
   parent: string | undefined,
   ids: string[],
@@ -27,7 +27,7 @@ export function copyNodes(
   const graph = nodeGraph(bundle, parent);
   const nodes = graph.nodes.filter((node) => ids.includes(node.id));
   if (!nodes.length) return null;
-  clipboard = structuredClone({
+  return structuredClone({
     nodes,
     edges: graph.edges.filter(
       (edge) =>
@@ -40,6 +40,16 @@ export function copyNodes(
         .map((node) => [node.id, nodeCode(bundle, node, parent)]),
     ),
   });
+}
+
+export function copyNodes(
+  bundle: Bundle,
+  parent: string | undefined,
+  ids: string[],
+) {
+  const copied = nodeCopies(bundle, parent, ids);
+  if (!copied) return null;
+  clipboard = copied;
   return clipboard;
 }
 
@@ -70,6 +80,7 @@ export function pasteNodes(
   parent: string | undefined,
   copied: CopiedNodes,
   opened: string[],
+  { detach = false }: { detach?: boolean } = {},
 ): string[] {
   const graph = nodeGraph(bundle, parent);
   const nodes = pastableNodes(bundle, copied, opened);
@@ -92,9 +103,13 @@ export function pasteNodes(
       id: ids.get(node.id)!,
       position: { x: node.position.x + shift, y: node.position.y + shift },
     };
-    if (copy.template && bundle.templates[copy.template] === undefined) {
+    if (
+      copy.template &&
+      (detach || bundle.templates[copy.template] === undefined)
+    ) {
       // Another branch or project lacks the template: the copy owns its code.
       copy.preset ||= copy.template;
+      if (detach) copy.origin ||= copy.template;
       delete copy.template;
     }
     if (!copy.template && !copy.component)

@@ -7,9 +7,45 @@ import {
   screen,
 } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
-import { FormModal, ConfirmModal } from "./modals";
+import { ConfirmModal, FormModal, ModalForm } from "./modals";
 
 afterEach(cleanup);
+
+it("provides form controls and footer actions without closing on local validation", async () => {
+  const close = vi.fn();
+  const submit = vi.fn(async (form: HTMLFormElement) => {
+    expect(new FormData(form).get("name")).toBe("Warehouse");
+    return false;
+  });
+  render(
+    <ModalForm
+      title="Connection"
+      submitLabel="Save"
+      onSubmit={submit}
+      onClose={close}
+      actions={({ setError }) => (
+        <button type="button" onClick={() => setError("Test failed")}>
+          Test
+        </button>
+      )}
+    >
+      {({ pending }) => (
+        <input name="name" defaultValue="Warehouse" disabled={pending} />
+      )}
+    </ModalForm>,
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Test" }));
+  expect(screen.getByRole("alert").textContent).toBe("Test failed");
+  expect(submit).not.toHaveBeenCalled();
+  await act(async () =>
+    fireEvent.submit(
+      screen.getByRole("button", { name: "Save" }).closest("form")!,
+    ),
+  );
+  expect(submit).toHaveBeenCalledOnce();
+  expect(close).not.toHaveBeenCalled();
+  expect(screen.queryByRole("alert")).toBeNull();
+});
 
 it("serializes submissions, preserves failed input, and closes after a successful retry", async () => {
   let fail!: (error: Error) => void;

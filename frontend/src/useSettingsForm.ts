@@ -49,26 +49,35 @@ export function useSettingsGuard({
   return persist;
 }
 
-/** State and navigation protection shared by explicitly saved instance settings. */
+/** State and navigation protection for explicit settings saves. The save callback
+ * must publish the persisted value before resolving so clearing the draft shows it. */
 export function useSettingsForm<T>(
   value: T | null,
   save: (value: T) => Promise<void>,
-  options: { dirty?: boolean; discard?: () => void } = {},
+  options: {
+    dirty?: boolean;
+    discard?: () => void;
+    equal?: (a: T, b: T) => boolean;
+  } = {},
 ) {
   const [draft, setDraft] = useState<T | null>(null);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
   const config = draft ?? value;
+  const equal =
+    options.equal ?? ((a: T, b: T) => JSON.stringify(a) === JSON.stringify(b));
   const dirty =
-    (!!draft && JSON.stringify(draft) !== JSON.stringify(value)) ||
+    (draft !== null && (value === null || !equal(draft, value))) ||
     !!options.dirty;
+  const discard = () => {
+    setDraft(null);
+    setSaved(false);
+    options.discard?.();
+  };
   const persist = useSettingsGuard({
     dirty,
-    discard: () => {
-      setDraft(null);
-      options.discard?.();
-    },
+    discard,
     save: async () => {
       if (config === null) return;
       setPending(true);
@@ -88,6 +97,13 @@ export function useSettingsForm<T>(
   });
   return {
     config,
+    discard,
+    replace: setDraft,
+    update: (change: (current: T) => T) => {
+      if (config !== null) setDraft(change(config));
+      setSaved(false);
+    },
+    persist,
     dirty,
     pending,
     error,

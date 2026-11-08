@@ -37,3 +37,8 @@ export const computing = (statuses: Statuses, fullNode: string) =>
       (id === fullNode || id.startsWith(fullNode + "::")) &&
       ["pending", "running"].includes(state.status),
   );
+
+export interface FailingRows {
+  test: string;
+  count?: number;
+}

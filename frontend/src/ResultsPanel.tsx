@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { withQuery } from "./api";
+import { DatasetPicker } from "./DatasetPicker";
 import type { PreviewState } from "./draftPreview";
 import DraftPreviewView from "./DraftPreviewView";
 import ExecutionError from "./ExecutionError";
@@ -23,12 +24,12 @@ import { localDefinitions, nodeCode, nodeLocation } from "./nodeCode";
 import { displayNodeName } from "./nodeNames";
 import { PartitionStrip } from "./PartitionControls";
 import { partitionMessage, type PartitionPage } from "./partitions";
+import type { FailingRows } from "./results";
 import ResultsColumns from "./ResultsColumns";
-import ResultsData, { type FailingRows } from "./ResultsData";
+import ResultsData from "./ResultsData";
 import ResultsLog from "./ResultsLog";
 import ResultsTests, { declaredTests } from "./ResultsTests";
 import { loadSample, sampleFits, sampleKey, storeSample } from "./samples";
-import Select from "./Select";
 import type {
   Documentation,
   FlowEdge,
@@ -533,67 +534,5 @@ export default function ResultsPanel({
         />
       )}
     </section>
-  );
-}
-
-function DatasetPicker({
-  target,
-  ports,
-  inputs,
-  fullNode,
-  onSelect,
-}: {
-  target: ResultsTarget;
-  ports: { port: string; count?: number }[];
-  inputs: {
-    node: string;
-    port: string;
-    input: string;
-    label: string;
-    count?: number;
-  }[];
-  fullNode: string;
-  onSelect: (target: ResultsTarget) => void;
-}) {
-  const t = useT();
-  const count = (value?: number) =>
-    value === undefined
-      ? ""
-      : ` · ${value.toLocaleString()} ${t(value === 1 ? "row" : "rows")}`;
-  return (
-    <Select
-      className="dataset-select"
-      aria-label={t("output")}
-      title={inputs.length ? t("inputsToCompareHint") : undefined}
-      value={target.input ? `input:${target.input}` : target.port}
-      onChange={(event) => {
-        const value = event.target.value;
-        const input = inputs.find((item) => `input:${item.input}` === value);
-        onSelect(
-          input
-            ? { node: input.node, port: input.port, input: input.input }
-            : { node: fullNode, port: value },
-        );
-      }}
-    >
-      <optgroup label={t("nodeOutputs")}>
-        {ports.map((item) => (
-          <option key={item.port} value={item.port}>
-            {item.port}
-            {count(item.count)}
-          </option>
-        ))}
-      </optgroup>
-      {inputs.length > 0 && (
-        <optgroup label={t("inputsToCompare")}>
-          {inputs.map((item) => (
-            <option key={item.input} value={`input:${item.input}`}>
-              {item.input} ← {item.label} · {item.port}
-              {count(item.count)}
-            </option>
-          ))}
-        </optgroup>
-      )}
-    </Select>
   );
 }

@@ -1,4 +1,6 @@
-import type { Json } from "./types";
+import type { Translate } from "./i18n";
+import { detachNode, nodeCode, nodeGraph, setNodeCode } from "./nodeCode";
+import type { Bundle, Json } from "./types";
 
 /** Samples show at most this many rows, like a preview page. */
 export const MAX_SAMPLE_ROWS = 10_000;
@@ -251,4 +253,50 @@ export function outputViews(
 /** A view as views.json stores it. */
 export function storedView(name: string, sample: Sample): Json {
   return { name, ...normalizedSample(sample) } as unknown as Json;
+}
+
+/** Save or replace one named view without changing the other outputs. */
+export function saveView(
+  bundle: Bundle,
+  key: string,
+  name: string,
+  sample: Sample,
+  t: Translate,
+) {
+  if (typeof bundle.views === "string") throw new Error(t("invalidViewsFile"));
+  const all = (bundle.views ||= {}) as Record<string, Json>;
+  all[key] = [
+    ...outputViews(all, key).filter((view) => view.name !== name),
+    storedView(name, sample),
+  ] as unknown as Json;
+}
+export function deleteView(bundle: Bundle, key: string, name: string) {
+  if (!bundle.views || typeof bundle.views === "string") return;
+  const all = bundle.views;
+  const remaining = outputViews(all, key).filter((view) => view.name !== name);
+  if (remaining.length) all[key] = remaining as unknown as Json;
+  else delete all[key];
+  if (!Object.keys(all).length) bundle.views = null;
+}
+/** Append a data test to owned or shared code, optionally detaching the node first. */
+export function appendTest(
+  bundle: Bundle,
+  id: string,
+  parent: string | undefined,
+  block: string,
+  detach: boolean,
+  t: Translate,
+) {
+  const current = nodeGraph(bundle, parent).nodes.find(
+    (node) => node.id === id,
+  );
+  if (!current) throw new Error(t("nodeRemoved"));
+  if (current.language === "python") throw new Error(t("pythonTestHint"));
+  if (current.template && detach) detachNode(bundle, current, parent);
+  setNodeCode(
+    bundle,
+    current,
+    appendBlock(nodeCode(bundle, current, parent), block),
+    parent,
+  );
 }
