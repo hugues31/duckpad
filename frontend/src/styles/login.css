@@ -4,7 +4,10 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  /* Scroll from the top when the recovery steps make the card taller than the window. */
+  justify-content: safe center;
+  overflow-y: auto;
+  padding: 24px 0;
   background: var(--bg);
 }
 .login-preferences {
@@ -61,4 +64,32 @@
 .login-page .button,
 .login-page input {
   border-radius: 12px;
+}
+.login-card .login-help {
+  margin-top: 10px;
+  font-size: 12px;
+  line-height: 1.7;
+}
+.login-help summary {
+  width: fit-content;
+  color: var(--accent);
+  cursor: pointer;
+}
+.login-help summary:hover {
+  text-decoration: underline;
+}
+.login-help p {
+  margin: 10px 0 0;
+}
+.login-help pre {
+  margin: 8px 0 0;
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-alt);
+  overflow-x: auto;
+  user-select: all;
+}
+.login-card .login-switch {
+  margin-top: 16px;
 }
