@@ -63,8 +63,10 @@ export default function ExportDownload({
 }) {
   const t = useT();
   const partition = usePartitionQuery(node);
-  // Idle polls are slow: a run starting or ending reloads the status at once.
-  const activeRun = useOptionalWorktree()?.statuses.active?.id;
+  // Idle polls are slow: a run starting or ending, or a saved edit that can make
+  // the export stale, reloads the status at once.
+  const opened = useOptionalWorktree();
+  const refresh = `${opened?.statuses.active?.id ?? ""}:${opened?.snapshot?.revision ?? ""}`;
   const endpoint = `/worktrees/${encodeURIComponent(worktree)}/exports/${encodeURIComponent(node)}`;
   const {
     data: result,
@@ -74,7 +76,7 @@ export default function ExportDownload({
     withQuery(endpoint, { environment, ...partition }),
     {
       interval: 1500,
-      refresh: activeRun,
+      refresh,
       nextInterval: (value) =>
         value.status === "unsupported"
           ? false

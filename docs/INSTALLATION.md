@@ -6,39 +6,65 @@ Python, Git or Duckpad on your own computer to use that server.
 
 | I want to… | Read next |
 | --- | --- |
-| Run Duckpad myself | [Start and platform requirements](#start) |
+| Run Duckpad myself | [Start](#start) and [platform requirements](#platform-requirements) |
 | Upgrade or keep a backup | [Upgrades and backups](#upgrades-and-backups) |
 | Add people or understand a missing action | [Accounts and project access](#accounts-and-project-access) |
 | Host a shared instance | [Reverse proxy](#reverse-proxy), [secrets](#secrets-and-the-master-key) and [SQL resources](#sql-resources) |
 | Change language or theme | [Workspace preferences](WORKSPACE.md#preferences-and-access) |
+| Get back in after losing a password | [Reset a lost password](#reset-a-lost-password) |
 | Fix a startup or sign-in error | [Troubleshooting](TROUBLESHOOTING.md#start-and-sign-in) |
 
 ## Start
 
-Requires **Python 3.11+ and Git** on `PATH`. The default isolated SQL mode also requires **Linux with Landlock ABI 2 or later** (Linux 5.19+ with Landlock enabled); unsupported hosts refuse execution rather than automatically running without isolation. For a trusted Windows workstation, explicitly select [trusted local mode](#trusted-local-mode). Release wheels include the frontend, Monaco and its workers; Node.js is not needed to run the installed application.
+You need **Python 3.11 or later** and **Git**. If you are not on Linux, read the
+[platform requirements](#platform-requirements) first.
 
-Create and activate a virtual environment before installing if your Python is
-managed by the operating system. On Linux:
+1. Open a terminal. Create and activate a virtual environment, so that Duckpad
+   stays separate from the Python packages of your operating system. On Linux
+   and macOS:
 
-```sh
-python3 -m venv .venv
-source .venv/bin/activate
-```
+   ```sh
+   python3 -m venv .venv
+   source .venv/bin/activate
+   ```
 
-In Windows PowerShell, use `python -m venv .venv` followed by
-`.venv\Scripts\Activate.ps1`. Then install and start Duckpad:
+   In Windows PowerShell, run `python -m venv .venv`, then `.venv\Scripts\Activate.ps1`.
 
-```sh
-pip install duckpad
-duckpad start
-```
+2. Install and start Duckpad:
+
+   ```sh
+   pip install duckpad
+   duckpad start
+   ```
+
+3. Your browser opens Duckpad. On the first launch, choose the password of the
+   administrator account, `admin`. You are signed in, and this is the password
+   you will use from now on.
+
+   ![The first-launch page asks for the admin password twice, then signs in](images/first-launch-setup.png)
+
+Keep the terminal open while you use Duckpad, and press **Ctrl+C**
+there to stop it. Next time, activate the same virtual environment from the same
+folder and run `duckpad start` again.
+
+If no browser opens, for example over SSH, open the setup link printed in the
+terminal. You can also sign in as `admin` with the generated password printed
+below it. The link works once and stops working when Duckpad restarts; the
+generated password stays valid until you choose your own. Lost your password?
+[Reset it from the terminal](#reset-a-lost-password).
+
+### Platform requirements
+
+Python and Git must be on `PATH`. The default isolated SQL mode also requires **Linux with Landlock ABI 2 or later** (Linux 5.19+ with Landlock enabled); unsupported hosts refuse execution rather than automatically running without isolation. For a trusted macOS or Windows workstation, explicitly select [trusted local mode](#trusted-local-mode). Release wheels include the frontend, Monaco and its workers; Node.js is not needed to run the installed application.
 
 The distribution is available on [PyPI](https://pypi.org/project/duckpad/).
 Version tags also create a GitHub release with downloadable wheels. To install
 a downloaded wheel, use `pip install <wheel-file>`. See the
 [release guide](../docs/RELEASING.md) for publishing instructions.
 
-Open the localhost address printed in the terminal. Sign in as `admin` using the password printed **once** on the first launch. The same password remains valid after a restart. The default instance directory is `$XDG_DATA_HOME/duckpad`, or `~/.local/share/duckpad`. Authentication, connection settings and execution history are kept there, outside project repositories.
+### Instance directory and options
+
+The default instance directory is `$XDG_DATA_HOME/duckpad`, or `~/.local/share/duckpad`. Authentication, connection settings and execution history are kept there, outside project repositories.
 
 ```sh
 duckpad start --home /path/to/my-instance --port 8765 --no-browser
@@ -49,6 +75,37 @@ Only one backend may own an instance directory at a time. Use separate `--home` 
 For air-gapped deployments, [download extensions on any connected computer and
 import them into Duckpad](OFFLINE_EXTENSIONS.md) before running connectors that
 need them.
+
+### Reset a lost password
+
+An instance administrator resets other people's passwords in **Instance settings →
+Users and permissions**. If you lost the administrator password, run this command
+on the computer or container where Duckpad runs. It works while Duckpad is running:
+
+```sh
+duckpad reset-password
+```
+
+It prints a new generated password for `admin` and signs out that account's
+sessions. Sign in with it, then choose your own in **User settings → Change
+password**. To reset another local account, name it, and pass the `--home` used
+with `duckpad start` if you chose one:
+
+```sh
+duckpad reset-password analyst --home /path/to/my-instance
+```
+
+In a container built from the repository's `Dockerfile`, run
+`docker exec -it <container> duckpad reset-password --home /data/duckpad`.
+Single sign-on and service accounts have no Duckpad password, and a deactivated
+account must be reactivated first. The command needs access to the instance
+directory, which already holds the instance's secrets: run it as the
+operating-system user that runs Duckpad, with the same `DUCKPAD_MASTER_KEY_FILE`
+or `DUCKPAD_MASTER_KEY` if you [provide the master key](#secrets-and-the-master-key).
+
+After a failed attempt, the sign-in page shows these steps too:
+
+![After a failed sign-in, the sign-in page explains how to reset a forgotten password](images/sign-in-recovery.png)
 
 ## Upgrades and backups
 
@@ -235,16 +292,16 @@ volumes:
 
 ## Trusted local mode
 
-For your own trusted projects on a single-user Windows workstation, run:
+For your own trusted projects on a single-user macOS or Windows workstation, run:
 
 ```sh
 duckpad start --trusted-local
 ```
 
-This mode uses DuckDB directly in the application process, without Landlock or
-the Linux SQL worker. It supports the normal pipeline, preview, lineage and
-export workflow. The terminal prints a notice at startup. The option applies
-only to that launch; include it again after restarting.
+SQL and Python still run in a separate worker process, as in the default mode,
+but without Landlock filesystem isolation. It supports the normal pipeline,
+preview, lineage and export workflow. The terminal prints a notice at startup.
+The option applies only to that launch; include it again after restarting.
 
 Authentication, API project permissions and connection grants still apply, but
 SQL and extensions run with your operating-system permissions. There is no OS
@@ -258,9 +315,9 @@ missing sandbox never enables trusted mode automatically.
 
 ## SQL resources
 
-Each branch and environment that runs SQL gets its own DuckDB session: an isolated
-worker process by default, or a database inside the application process in trusted
-local mode. By default, DuckDB sizes every session from the server: one thread per
+Each branch and environment that runs SQL gets its own DuckDB session in a worker
+process, isolated by default and without filesystem isolation in trusted local
+mode. By default, DuckDB sizes every session from the server: one thread per
 available CPU core, and a memory limit of 80% of the server's memory, both within
 Linux cgroup limits when they apply. Intermediate results that exceed the memory limit
 spill to temporary files on disk.

@@ -11,7 +11,10 @@ def restrict_files(read_paths, write_paths):
     # Linux generic syscall numbers on the supported x86-64 and arm64 targets.
     # Fail closed elsewhere. ABI 2 adds cross-directory rename/link protection.
     if sys.platform != "linux" or platform.machine() not in ("x86_64", "aarch64"):
-        raise RuntimeError("Shared SQL execution requires Linux with Landlock ABI 2 or later")
+        raise RuntimeError(
+            "Shared SQL execution requires Linux with Landlock ABI 2 or later; "
+            "on a trusted single-user workstation, start with --trusted-local"
+        )
     libc = ctypes.CDLL(None, use_errno=True)
     abi = libc.syscall(444, 0, 0, 1)
     if abi < 2:

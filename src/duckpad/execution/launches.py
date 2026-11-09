@@ -200,7 +200,11 @@ class LaunchPlanner:
             raise Problem(missing_inputs[0]["message"], 422, missing_inputs)
         python = any(nodes[key].get("language") == "python" for key in scope)
         if python and not get_policy(self.store, snapshot["worktree"]["project"]).get("enabled"):
-            raise Problem("Python execution is disabled; ask an instance administrator to enable it", 403)
+            raise Problem(
+                "Python execution is disabled; ask an instance administrator to enable it",
+                403,
+                {"code": "python_disabled"},
+            )
         return Admission(bundle, nodes, edges, boundaries, plan, selection, policy, scope, python)
 
     @staticmethod

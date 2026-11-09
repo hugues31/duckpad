@@ -423,6 +423,15 @@ export function WorktreeProvider({
             worktreeUrl(id, "flow", environment, { node: missing[0].node! }),
           );
         }
+        if (
+          error instanceof ApiError &&
+          errorDetail(error).code === "python_disabled"
+        )
+          throw new ApiError(
+            t("pythonExecutionDisabled"),
+            error.status,
+            error.detail,
+          );
         throw error;
       } finally {
         launching.current = false;

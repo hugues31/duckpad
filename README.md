@@ -33,16 +33,17 @@ source.
 ## Try it
 
 On a supported host with Python 3.11+ and Git installed (see
-[platform requirements](docs/INSTALLATION.md#start)):
+[platform requirements](docs/INSTALLATION.md#platform-requirements)):
 
 ```sh
 pip install duckpad
 duckpad start
 ```
 
-Open the printed local address and sign in with the initial admin
-password from the terminal. Follow **[Duckpad in 15 minutes](docs/QUICKSTART.md)**
-to build your first pipeline from scratch, write SQL and explain a result.
+Your browser opens Duckpad: choose the administrator password, and you are in.
+Follow **[Duckpad in 15 minutes](docs/QUICKSTART.md)** to build your first
+pipeline from scratch, write SQL and explain a result. Lost the password later?
+Run `duckpad reset-password`.
 
 Prefer a ready-made project? Choose **New project → Start from an example**,
 enter a name, then **Create → Run all** to explore Northstar.

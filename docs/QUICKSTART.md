@@ -19,14 +19,15 @@ duckpad start
 ```
 
 The default execution mode needs Linux with Landlock ABI 2+ (Linux 5.19+ with
-Landlock enabled). On your own trusted Windows workstation, use
+Landlock enabled). On your own trusted macOS or Windows workstation, use
 `duckpad start --trusted-local`; this mode runs with your user permissions and
 must stay private to your computer. See [installation](INSTALLATION.md) for
 platform requirements, virtual environments and instance options.
 
-Open the local address printed in the terminal, normally `http://127.0.0.1:8765`.
-Sign in as **admin** with the password printed once on first launch. Save that
-password privately; it remains valid after a restart.
+Your browser opens Duckpad, normally at `http://127.0.0.1:8765`. On the first
+launch, choose the password of the **admin** account; you are signed in and use
+that password from now on. If no browser opens, open the setup link printed in
+the terminal. Lost it later? [Reset it](INSTALLATION.md#reset-a-lost-password).
 
 ## 2. Create an empty project · 1 minute
 

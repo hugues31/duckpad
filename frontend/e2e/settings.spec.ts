@@ -378,7 +378,7 @@ test("project administrators manage their project and password without instance 
     ).toBeVisible();
     await expect(
       member.getByRole("button", { name: "Save connections", exact: true }),
-    ).toBeDisabled();
+    ).toHaveCount(0);
     await expect(
       member.getByRole("link", { name: "Instance settings", exact: true }),
     ).toHaveCount(0);

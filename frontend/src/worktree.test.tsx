@@ -5,11 +5,17 @@ import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { WorktreeProvider, useWorktree, type Worktree } from "./worktree";
 import type { Snapshot } from "./types";
+import { ApiError } from "./api";
+import { I18n, type Language } from "./i18n";
+import en from "./locales/en.json";
+import fr from "./locales/fr.json";
+import pt from "./locales/pt.json";
 
 const mocks = vi.hoisted(() => ({
   persist: vi.fn(),
   discardRejected: vi.fn(),
   refresh: vi.fn(),
+  notify: vi.fn(),
   snapshot: {
     worktree: { id: "branch" },
     role: "editor",
@@ -23,6 +29,7 @@ vi.mock("./shell", () => ({
     drafts: { persist: mocks.persist, discardRejected: mocks.discardRejected },
     environment: "dev",
     closeModal: vi.fn(),
+    notify: mocks.notify,
   }),
 }));
 vi.mock("./useWorktreeSnapshot", () => ({
@@ -41,13 +48,15 @@ function Probe() {
   });
   return null;
 }
-function mount() {
+function mount(language: Language = "en") {
   render(
-    <MemoryRouter>
-      <WorktreeProvider worktree="branch">
-        <Probe />
-      </WorktreeProvider>
-    </MemoryRouter>,
+    <I18n.Provider value={{ language, setLanguage: () => {} }}>
+      <MemoryRouter>
+        <WorktreeProvider worktree="branch">
+          <Probe />
+        </WorktreeProvider>
+      </MemoryRouter>
+    </I18n.Provider>,
   );
 }
 const json = (value: unknown) => new Response(JSON.stringify(value));
@@ -61,8 +70,67 @@ function deferred() {
 beforeEach(() => {
   mocks.persist.mockReset().mockResolvedValue(undefined);
   mocks.refresh.mockReset().mockResolvedValue(undefined);
+  mocks.notify.mockReset();
 });
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
+
+it.each([
+  ["en", en],
+  ["fr", fr],
+  ["pt", pt],
+] as const)(
+  "explains Python refusals for direct and confirmed runs in %s",
+  async (language, labels) => {
+    const detail = { code: "python_disabled" };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({
+              error:
+                "Python execution is disabled; ask an instance administrator to enable it",
+              detail,
+            }),
+            {
+              status: 403,
+              headers: { "content-type": "application/json" },
+            },
+          ),
+      ),
+    );
+    mount(language);
+    await act(async () => {
+      await worktree.run();
+    });
+    expect(mocks.notify).toHaveBeenCalledWith(
+      labels.pythonExecutionDisabled,
+      true,
+    );
+    await act(async () => {
+      await expect(worktree.runConfirmed("dev")).rejects.toMatchObject({
+        message: labels.pythonExecutionDisabled,
+        status: 403,
+        detail,
+      });
+    });
+    expect(worktree.starting).toBe(false);
+  },
+);
+
+it("preserves unrelated API errors when launching a run", async () => {
+  const error = new ApiError("Resolve the project conflict", 409, {
+    id: "conflict",
+  });
+  mocks.persist.mockRejectedValue(error);
+  mount();
+  await act(async () => {
+    await expect(worktree.runConfirmed("dev")).rejects.toBe(error);
+  });
+});
 
 it("waits for drafts, reads the current grouping revision, tracks flush and undoes the command", async () => {
   const drafts = deferred();

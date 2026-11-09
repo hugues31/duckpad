@@ -13,6 +13,11 @@ from .util import Problem, uid
 SESSION_LIFETIME = 7 * 24 * 3600
 LOGIN_ATTEMPTS = 12
 LOGIN_WINDOW = 60
+SETUP_LINK_INVALID = (
+    "This setup link no longer works: it was already used, the admin password was changed, or "
+    "Duckpad restarted. Sign in instead. If you lost your password, run duckpad reset-password "
+    "on the computer where Duckpad runs."
+)
 
 
 def session_key(token):
@@ -20,12 +25,44 @@ def session_key(token):
     return hashlib.sha256((token or "").encode()).hexdigest()
 
 
+def reset_password(store, username):
+    """Give a local account a new generated password, from the server's command line.
+
+    This is the way back in for an administrator who lost every password. The new hash
+    signs out the account's sessions, including those of a server that is running.
+    """
+    password = secrets.token_urlsafe(18)
+    credentials = Auth.credentials(password)
+    with store.transaction():
+        user = store.find_user(username)
+        if not user:
+            raise Problem(f"No account is named {username}")
+        if user.get("service"):
+            raise Problem(f"{user['username']} is a service account; it signs in with API tokens only")
+        if user.get("oidc"):
+            raise Problem(f"{user['username']} signs in with single sign-on; change its password there")
+        if not user["active"]:
+            raise Problem(
+                f"{user['username']} is deactivated. Reset an active administrator's password, "
+                "then reactivate it in Instance settings → Users and permissions"
+            )
+        store.put("user", user["id"], {**user, **credentials})
+    return user["username"], password
+
+
 class Auth:
     def __init__(self, store):
         self.store = store
         self.initial_password = None
+        # The first launch also prints a link that lets its reader choose the administrator's
+        # password instead. The token lives in memory only, so a restart revokes it.
+        self.setup_token = None
+        self._initial_hash = None
         if not store.all("user"):
             self.initial_password = secrets.token_urlsafe(18)
+            self.setup_token = secrets.token_urlsafe(32)
+            credentials = self.credentials(self.initial_password)
+            self._initial_hash = credentials["hash"]
             store.put(
                 "user",
                 "admin",
@@ -34,7 +71,7 @@ class Auth:
                     "username": "admin",
                     "role": "admin",
                     "active": True,
-                    **self.credentials(self.initial_password),
+                    **credentials,
                 },
             )
         self.attempts = {}
@@ -84,7 +121,8 @@ class Auth:
             self.store.put("user", user["id"], user)
         return self.public(user)
 
-    def login(self, username, password, peer="local"):
+    def attempt(self, peer):
+        """Record a sign-in attempt; at most LOGIN_ATTEMPTS per peer and minute are allowed."""
         # Peers are client addresses; behind a reverse proxy, Uvicorn only reports them
         # when FORWARDED_ALLOW_IPS trusts that proxy (see docs/INSTALLATION.md).
         now = time.time()
@@ -99,6 +137,14 @@ class Auth:
                 raise Problem("Too many login attempts. Try again in a minute.", 429)
             attempt = time.time()
             recent.append(attempt)
+        return attempt
+
+    def forget_attempt(self, peer, attempt):
+        """Successful attempts do not count against the limit."""
+        self.attempts[peer] = [t for t in self.attempts.get(peer, []) if t != attempt]
+
+    def login(self, username, password, peer="local"):
+        attempt = self.attempt(peer)
         user = self.store.find_user(username)
         valid = self.password_matches(user, password)
         if not user or user.get("oidc") or user.get("service") or not user["active"] or not valid:
@@ -107,8 +153,36 @@ class Auth:
             current = self.store.get("user", user["id"])
             if not current["active"] or current["hash"] != user["hash"]:
                 raise Problem("Invalid username or password", 401)
-            self.attempts[peer] = [t for t in self.attempts.get(peer, []) if t != attempt]
+            self.forget_attempt(peer, attempt)
             return self.start_session(user, credential=user["hash"])
+
+    def finish_setup(self, token, password, peer="local"):
+        """Let the first launch's setup link choose the administrator's password, then sign in.
+
+        The link works once, and only while the administrator still has the generated
+        initial password: changing that password by any means also revokes it.
+        """
+        attempt = self.attempt(peer)
+        # Check the token before deriving the new hash, then again once another request
+        # can no longer use it.
+        self._check_setup_token(token)
+        credentials = self.credentials(password)
+        with self.store.transaction():
+            self._check_setup_token(token)
+            user = self.store.get("user", "admin")
+            if not user or not user["active"] or user.get("hash") != self._initial_hash:
+                self.setup_token = None
+                raise Problem(SETUP_LINK_INVALID, 403)
+            user = {**user, **credentials}
+            self.store.put("user", "admin", user)
+            self.setup_token = None
+            self.forget_attempt(peer, attempt)
+            return self.start_session(user, credential=user["hash"])
+
+    def _check_setup_token(self, token):
+        expected = self.setup_token
+        if not expected or not hmac.compare_digest(token.encode(), expected.encode()):
+            raise Problem(SETUP_LINK_INVALID, 403)
 
     def password_matches(self, user, password):
         """Check a local password; accounts without passwords run the same derivation."""

@@ -11,6 +11,17 @@ from pathlib import Path
 from . import client
 
 LOOPBACK_HOSTS = ("127.0.0.1", "::1", "localhost")
+WILDCARD_HOSTS = ("0.0.0.0", "::", "")
+
+
+def default_home():
+    return Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share")) / "duckpad"
+
+
+def browser_url(host, port):
+    """The address to open on the server's own computer, even when it listens on every interface."""
+    host = "127.0.0.1" if host in WILDCARD_HOSTS else host
+    return f"http://[{host}]:{port}" if ":" in host else f"http://{host}:{port}"
 
 
 def main():
@@ -20,11 +31,7 @@ def main():
     parser = argparse.ArgumentParser(prog="duckpad", description="Local SQL pipelines with cell lineage")
     commands = parser.add_subparsers(dest="command", required=True)
     start = commands.add_parser("start", help="Start the local workspace")
-    start.add_argument(
-        "--home",
-        type=Path,
-        default=Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share")) / "duckpad",
-    )
+    start.add_argument("--home", type=Path, default=default_home())
     start.add_argument("--host", default="127.0.0.1")
     start.add_argument("--port", type=int, default=8765)
     start.add_argument("--no-browser", action="store_true")
@@ -43,8 +50,58 @@ def main():
     commands.add_parser(
         "run", help="Launch a Job, wait for its outcome and exit with its code", add_help=False
     )
+    reset = commands.add_parser(
+        "reset-password",
+        help="Give a local account a new password, for example a lost admin password",
+        description="Print a new generated password for a local account and sign out its sessions. "
+        "It works while Duckpad is running.",
+    )
+    reset.add_argument("username", nargs="?", default="admin", help="Account to reset (default: admin)")
+    reset.add_argument(
+        "--home", type=Path, default=default_home(), help="Instance directory used by duckpad start"
+    )
     args = parser.parse_args()
-    start_server(parser, args)
+    if args.command == "reset-password":
+        reset_password(reset, args)
+    else:
+        start_server(parser, args)
+
+
+def reset_command(home):
+    """The reset command for this instance, with --home only when it is not the default."""
+    if home == default_home():
+        return "duckpad reset-password"
+    # Double quotes keep a path with spaces in one argument in POSIX shells, PowerShell and cmd.
+    quoted = f'"{home}"' if any(c.isspace() for c in str(home)) else home
+    return f"duckpad reset-password --home {quoted}"
+
+
+def reset_password(parser, args):
+    from .auth import reset_password as reset
+    from .store import Store
+    from .util import Problem
+
+    # Never create an instance here: a mistyped --home would only print a useless password.
+    if not (args.home / "instance.sqlite").is_file():
+        parser.error(
+            f"No Duckpad instance in {args.home}. Pass the --home directory used with duckpad start."
+        )
+    try:
+        store = Store(args.home)
+    except Problem as error:
+        parser.error(str(error))
+    try:
+        username, password = reset(store, args.username)
+    except Problem as error:
+        parser.error(str(error))
+    finally:
+        store.close()
+    print(
+        f"New password for {username}:\n\n    {password}\n\n"
+        "Sign in with it, then choose your own in User settings → Change password. "
+        f"Every session of {username} is now signed out.",
+        flush=True,
+    )
 
 
 def start_server(parser, args):
@@ -72,7 +129,8 @@ def start_server(parser, args):
             app = create_app(args.home, trusted_local=args.trusted_local)
         except Problem as error:
             parser.error(str(error))
-        print(f"Duckpad · http://{args.host}:{args.port}", flush=True)
+        address = browser_url(args.host, args.port)
+        print(f"Duckpad · {address}", flush=True)
         if args.trusted_local:
             print(
                 "Trusted local mode: SQL runs without OS isolation, with your operating-system permissions. "
@@ -92,13 +150,21 @@ def start_server(parser, args):
                 "DUCKPAD_MASTER_KEY_FILE, for example as a Docker or Kubernetes secret.",
                 flush=True,
             )
+        target = address
         if app.state.auth.initial_password:
+            # A fragment never reaches the server or its access log; the page removes it.
+            target = f"{address}/#setup={app.state.auth.setup_token}"
+            opening = "" if args.no_browser else " (it opens by itself)"
             print(
-                f"Initial administrator login: admin\nPassword: {app.state.auth.initial_password}\nSave this password. It will not be displayed again.",
+                f"\nFirst launch: choose the administrator's password in your browser{opening}:"
+                f"\n\n    {target}\n\n"
+                "You can also sign in right away:\n"
+                f"Username: admin\nPassword: {app.state.auth.initial_password}\n\n"
+                f"This password is shown only once. If you lose it, run: {reset_command(args.home)}\n",
                 flush=True,
             )
         if not args.no_browser:
-            timer = threading.Timer(1.0, lambda: webbrowser.open(f"http://{args.host}:{args.port}"))
+            timer = threading.Timer(1.0, lambda: webbrowser.open(target))
             timer.daemon = True
             timer.start()
         uvicorn.run(
