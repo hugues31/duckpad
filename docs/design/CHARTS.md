@@ -1,8 +1,8 @@
 # Charts on node outputs (design proposal)
 
-**Status: proposed on 9 November 2026 for review in issue #221, not implemented
-yet.** This record settles the file format, validation, rendering and Git
-behavior of a first, read-only charting step.
+**Status: accepted on 9 November 2026 in issue #221 (see [Decisions](#decisions)),
+not implemented yet.** This record settles the file format, validation,
+rendering and Git behavior of a first, read-only charting step.
 
 ## Summary
 
@@ -26,7 +26,7 @@ channels.
 
 ## Decisions
 
-Proposed:
+Accepted:
 
 1. Charts are presentation on a node output, shown in a results-panel tab. A
    canvas chart node is not added.
