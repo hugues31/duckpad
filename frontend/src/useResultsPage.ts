@@ -7,6 +7,17 @@ import { useResource } from "./useApiResource";
 import { useStaleVariables } from "./VariableFields";
 import { usePartitionQuery } from "./worktree";
 export const PAGE_SIZE = 100;
+
+/** A preview page, or null while the output has no result: the Run hint says what to do. */
+export async function fetchPreview(path: string, signal: AbortSignal) {
+  try {
+    return await api<PreviewPage>(path, { signal });
+  } catch (e) {
+    if (e instanceof ApiError && e.status === 404) return null;
+    throw e;
+  }
+}
+
 export function useResultsPage(
   snapshot: Snapshot,
   environment: string,
@@ -49,14 +60,8 @@ export function useResultsPage(
   // The current page stays visible while another page, sample or search loads.
   const { data, error, pending } = useResource<PreviewPage | TestRows | null>(
     `${worktree}:${target.node}:${target.port}:${JSON.stringify(partition)}`,
-    async (signal) => {
-      try {
-        return await api<PreviewPage | TestRows>(path, { signal });
-      } catch (e) {
-        if (e instanceof ApiError && e.status === 404 && !failing) return null;
-        throw e;
-      }
-    },
+    (signal) =>
+      failing ? api<TestRows>(path, { signal }) : fetchPreview(path, signal),
     { refresh: `${path}:${dataset?.id}:${dataset?.status}` },
   );
   const page = data && "status" in data ? data : null;

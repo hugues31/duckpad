@@ -1,4 +1,5 @@
 import {
+  ChartColumn,
   Clock,
   Columns3,
   Eye,
@@ -25,6 +26,7 @@ import { displayNodeName } from "./nodeNames";
 import { PartitionStrip } from "./PartitionControls";
 import { partitionMessage, type PartitionPage } from "./partitions";
 import type { FailingRows } from "./results";
+import ResultsChart from "./ResultsChart";
 import ResultsColumns from "./ResultsColumns";
 import ResultsData from "./ResultsData";
 import ResultsLog from "./ResultsLog";
@@ -47,9 +49,11 @@ import {
   TAB_LABELS,
   clock,
   computing,
+  outputKey,
   seconds,
   type ResultsTab,
   type ResultsTarget,
+  type RunState,
   type SaveProject,
 } from "./results";
 
@@ -275,6 +279,37 @@ export default function ResultsPanel({
     )
       setShownSample({ environment, ...loadSample(storage(next)) });
   };
+  // The node's last run error, above the rows or the chart.
+  const failureCard = failure && (
+    <ExecutionError
+      failure={failure}
+      node={producer}
+      environment={environment}
+      currentSource={
+        snapshot.bundle && sourceLocation
+          ? nodeCode(
+              snapshot.bundle,
+              sourceLocation.node,
+              sourceLocation.parent,
+            )
+          : ""
+      }
+      onEditCode={(line) => onEditCode(line, producer)}
+      onLog={() => onTab("log")}
+    />
+  );
+  // How the Data and Chart tabs run the node and explain a missing result.
+  const runState: RunState = {
+    canEdit: !readOnly,
+    active: !!statuses.active,
+    starting: worktree?.starting,
+    onRun: runResult,
+    runLabel,
+    reason: target.input ? undefined : blocked,
+    failureShown: !!failure,
+  };
+  // The tabs of the shown dataset start over on another output, environment or partition.
+  const datasetKey = `${outputKey(target)}:${environment}:${JSON.stringify(partition)}`;
   return (
     <section
       className="preview-panel results-panel"
@@ -386,6 +421,7 @@ export default function ResultsPanel({
           const Icon = {
             preview: Eye,
             data: Table2,
+            chart: ChartColumn,
             columns: Columns3,
             tests: ShieldCheck,
             log: ScrollText,
@@ -420,34 +456,15 @@ export default function ResultsPanel({
         />
       ) : shown === "data" ? (
         <>
-          {failure && (
-            <ExecutionError
-              failure={failure}
-              node={producer}
-              environment={environment}
-              currentSource={
-                snapshot.bundle && sourceLocation
-                  ? nodeCode(
-                      snapshot.bundle,
-                      sourceLocation.node,
-                      sourceLocation.parent,
-                    )
-                  : ""
-              }
-              onEditCode={(line) => onEditCode(line, producer)}
-              onLog={() => onTab("log")}
-            />
-          )}
+          {failureCard}
           {(!failure || dataset) && (
             <ResultsData
-              key={`${target.node}:${target.port}:${environment}:${JSON.stringify(partition)}`}
+              key={datasetKey}
               snapshot={snapshot}
               environment={environment}
               target={target}
               dataset={dataset}
-              canEdit={!readOnly}
-              active={!!statuses.active}
-              starting={worktree?.starting}
+              run={runState}
               sample={shownSample.sample}
               view={shownSample.view}
               failing={failing}
@@ -457,10 +474,6 @@ export default function ResultsPanel({
                 storeSample(storage(target), sample, view);
               }}
               onFailing={setFailing}
-              onRun={runResult}
-              runLabel={runLabel}
-              reason={target.input ? undefined : blocked}
-              failureShown={!!failure}
               onExplain={onExplain}
               onSave={onSave}
               onAddFilter={(condition) => onAddFilter(target.port, condition)}
@@ -469,9 +482,25 @@ export default function ResultsPanel({
             />
           )}
         </>
+      ) : shown === "chart" ? (
+        <>
+          {failureCard}
+          {(!failure || dataset) && (
+            <ResultsChart
+              key={datasetKey}
+              snapshot={snapshot}
+              environment={environment}
+              target={target}
+              stored={stored(target)}
+              dataset={dataset}
+              run={runState}
+              onSave={onSave}
+            />
+          )}
+        </>
       ) : shown === "columns" ? (
         <ResultsColumns
-          key={`${target.node}:${target.port}:${environment}:${JSON.stringify(partition)}`}
+          key={datasetKey}
           snapshot={snapshot}
           environment={environment}
           target={target}

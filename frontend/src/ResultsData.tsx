@@ -1,12 +1,19 @@
-import { Database, Loader2, Play } from "lucide-react";
+import { Database } from "lucide-react";
 import { useState } from "react";
 import DataGrid from "./DataGrid";
 import { formatValue } from "./graph";
 import { useT } from "./i18n";
 import type { Cell } from "./lineageGraph";
+import NoResult from "./NoResult";
 import Pager from "./Pager";
 import { partitionMessage } from "./partitions";
-import type { FailingRows, ResultsTarget, SaveProject } from "./results";
+import {
+  outputKey,
+  type FailingRows,
+  type ResultsTarget,
+  type RunState,
+  type SaveProject,
+} from "./results";
 import ResultsToolbar from "./ResultsToolbar";
 import { CreateTestModal, SaveViewModal } from "./SampleModals";
 import {
@@ -29,9 +36,7 @@ export default function ResultsData({
   environment,
   target,
   dataset,
-  canEdit,
-  active,
-  starting = false,
+  run,
   sample,
   view,
   failing,
@@ -39,10 +44,6 @@ export default function ResultsData({
   inspected,
   onSample,
   onFailing,
-  onRun,
-  runLabel,
-  reason,
-  failureShown = false,
   onExplain,
   onSave,
   onAddFilter,
@@ -52,9 +53,7 @@ export default function ResultsData({
   environment: string;
   target: ResultsTarget;
   dataset?: Dataset;
-  canEdit: boolean;
-  active: boolean;
-  starting?: boolean;
+  run: RunState;
   sample: Sample;
   view?: string;
   failing: FailingRows | null;
@@ -62,12 +61,6 @@ export default function ResultsData({
   inspected: { node: FlowNode; parent?: string; fullNode: string };
   onSample: (sample: Sample, view?: string) => void;
   onFailing: (failing: FailingRows | null) => void;
-  onRun: () => void;
-  runLabel?: string;
-  /** Why the node has no result, such as the inputs a blocked collector waits for. */
-  reason?: string;
-  /** The panel already shows the node's last run error above these rows. */
-  failureShown?: boolean;
   onExplain: (cell: Cell) => void;
   onSave: SaveProject;
   onAddFilter: (condition: string) => Promise<unknown>;
@@ -100,10 +93,7 @@ export default function ResultsData({
     sample,
   );
   const [dialog, setDialog] = useState<"view" | "test" | null>(null);
-  const views = outputViews(
-    snapshot.bundle?.views,
-    `${target.node}:${target.port}`,
-  );
+  const views = outputViews(snapshot.bundle?.views, outputKey(target));
   const order = sample.order || [];
   const sortBy = (column: string) => {
     const current =
@@ -119,35 +109,15 @@ export default function ResultsData({
   };
   const errorText = (message: string) =>
     partitionMessage(t, message, partition.partition_mode === "all");
-  if (!dataset && !page && !failing) {
-    const message = error || reason || "";
-    const explained = errorText(message);
+  if (!dataset && !page && !failing)
     return (
-      <div className="preview-empty">
-        <Database size={25} aria-hidden="true" />
-        <div>
-          <strong>{explained || t("noResult")}</strong>
-          {/* A translated partition message already says what to run. */}
-          {(!canEdit || explained === message) && (
-            <p>{t(canEdit ? "noResultHint" : "readerNoResult")}</p>
-          )}
-        </div>
-        <button
-          className="button secondary small"
-          disabled={!canEdit || active || starting}
-          aria-busy={starting}
-          onClick={onRun}
-        >
-          {starting ? (
-            <Loader2 size={13} className="spin" />
-          ) : (
-            <Play size={13} />
-          )}
-          {runLabel || t("runNode")}
-        </button>
-      </div>
+      <NoResult
+        icon={Database}
+        error={error}
+        all={partition.partition_mode === "all"}
+        run={run}
+      />
     );
-  }
   return (
     <div className="results-data">
       <ResultsToolbar
@@ -161,7 +131,7 @@ export default function ResultsData({
         target={target}
         columns={columns}
         sample={sample}
-        canEdit={canEdit}
+        canEdit={run.canEdit}
         inspected={inspected}
         change={change}
         onDialog={setDialog}
@@ -173,7 +143,7 @@ export default function ResultsData({
         onSearch={setSearch}
         pending={pending}
       />
-      {(error || (!failureShown && page?.error)) && (
+      {(error || (!run.failureShown && page?.error)) && (
         <div className="inline-error" role="alert">
           {errorText(error || page?.error || "")}
           {error && !failing && !sameSample(sample, ALL_ROWS) && (
@@ -206,7 +176,7 @@ export default function ResultsData({
           page ? (
             <button
               className={`cell ${value === null ? "null" : ""}`}
-              disabled={page.status !== "valid" || active}
+              disabled={page.status !== "valid" || run.active}
               title={page.status === "valid" ? t("explain") : t("staleHint")}
               aria-label={`${t("explain")}: ${column.name}, ${t("rows")} ${row.id + 1}, ${formatValue(value)}`}
               onClick={() =>
@@ -260,13 +230,7 @@ export default function ResultsData({
           onClose={() => setDialog(null)}
           onSave={async (name) => {
             await onSave((bundle) =>
-              saveView(
-                bundle,
-                `${target.node}:${target.port}`,
-                name,
-                sample,
-                t,
-              ),
+              saveView(bundle, outputKey(target), name, sample, t),
             );
             onSample(sample, name);
           }}

@@ -66,6 +66,13 @@ export function worktreeUrl(
   return `/worktrees/${encodeURIComponent(id)}/${tab}${query ? `?${query}` : ""}`;
 }
 
+/** The query parameter of a Code tab URL naming the project file to open. */
+export const CODE_FILE_PARAM = "file";
+
+/** The Code tab of a working branch, opened on one project file. */
+export const codeFileUrl = (id: string, file: string, environment?: string) =>
+  worktreeUrl(id, "code", environment, { [CODE_FILE_PARAM]: file });
+
 export const projectSettingsUrl = (project: string, section?: string) =>
   `/projects/${encodeURIComponent(project)}/settings${section ? `/${section}` : ""}`;
 

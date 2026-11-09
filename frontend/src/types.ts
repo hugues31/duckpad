@@ -108,6 +108,8 @@ export interface Bundle {
   extensions?: Record<string, ProjectExtension> | string | null;
   /** Shared result views of views.json by `node:port`, its raw text when malformed. */
   views?: Record<string, Json> | string | null;
+  /** Charts of charts.json by `node:port`, its raw text when malformed. */
+  charts?: Record<string, Json> | string | null;
 }
 /** A root flow node parameter bound to a project variable. */
 export interface VariableUsage {

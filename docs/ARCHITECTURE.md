@@ -29,7 +29,7 @@ Paths below are relative to `src/duckpad/`.
 | `models.py`, `store.py`, `migrations/`, `paths.py` | Instance schema, transactions and directory layout |
 | `catalog.py`, `sealing.py`, `secret_references.py` | Connections, environments, secret encryption and server references |
 | `projects.py`, `bundle.py`, `archive.py`, `merge.py` | Project files, snapshots, save conflicts, ZIPs and semantic merges |
-| `project_files.py`, `json_document.py`, `project_schema.py`, `validation.py`, `processing.py` | File registry, lossless JSON, document schemas, ordered semantic validation and node processing inputs |
+| `project_files.py`, `json_document.py`, `named_documents.py`, `project_schema.py`, `validation.py`, `processing.py` | File registry, lossless JSON, per-output named documents, document schemas, ordered semantic validation and node processing inputs |
 | `git/` | Git commands, worktrees, remote synchronization and account credentials |
 | `templates.py`, `builtin_templates.py`, `components.py`, `graph.py` | SQL compilation, node contracts and graph expansion |
 | `variables.py`, `partitions.py`, `partition_runs.py`, `partition_storage.py` | Value resolution, partition planning, attempts and retained artifacts |

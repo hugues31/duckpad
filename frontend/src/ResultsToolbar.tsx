@@ -8,7 +8,12 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { useT } from "./i18n";
-import type { FailingRows, ResultsTarget, SaveProject } from "./results";
+import {
+  outputKey,
+  type FailingRows,
+  type ResultsTarget,
+  type SaveProject,
+} from "./results";
 import { SamplePopover } from "./SamplePopover";
 import { ALL_ROWS, deleteView, type Sample, type View } from "./samples";
 import type { Column, FlowNode } from "./types";
@@ -166,9 +171,7 @@ export default function ResultsToolbar({
             }
             onSave={() => onDialog("view")}
             onDelete={(name) =>
-              onSave((bundle) =>
-                deleteView(bundle, `${target.node}:${target.port}`, name),
-              )
+              onSave((bundle) => deleteView(bundle, outputKey(target), name))
             }
           />
         </>

@@ -111,6 +111,30 @@ describe("conflict content", () => {
     ).not.toHaveProperty("limit");
   });
 
+  it("resolves a conflicting chart as a whole entry located by name", () => {
+    const bars = { name: "Bars", spec: { mark: "bar" } };
+    const lines = { name: "Lines", spec: { mark: "line" } };
+    const path = "charts.json/report::rank:result/Bars";
+    const review = conflict(
+      [field(path, { ...bars, spec: { mark: "area" } })],
+      {
+        "charts.json": JSON.stringify({
+          "report::rank:result": [bars, lines],
+        }),
+      },
+    );
+    const drafts = conflictDrafts(review);
+    drafts[path].text = JSON.stringify({ ...bars, spec: { mark: "point" } });
+    expect(JSON.parse(combinedFiles(review, drafts)["charts.json"])).toEqual({
+      "report::rank:result": [{ ...bars, spec: { mark: "point" } }, lines],
+    });
+    // Choosing the side that deleted the chart removes only that chart.
+    drafts[path].present = false;
+    expect(JSON.parse(combinedFiles(review, drafts)["charts.json"])).toEqual({
+      "report::rank:result": [lines],
+    });
+  });
+
   it("names nodes, component nodes and variables with raw paths only as fallback", () => {
     const files = {
       "flow.json": '{"nodes":[{"id":"report","label":"Revenue report"}]}',
