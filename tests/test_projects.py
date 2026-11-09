@@ -77,10 +77,8 @@ def test_external_batch_commits_final_invalid_content_once(services, tmp_path, m
     original = commit_count(projects, worktree)
     clock = Clock()
     monkeypatch.setattr(project_module, "time", clock)
-    projects.start_watcher()
-    # The test runs the watcher's passes itself, so its clock alone decides what is quiet.
-    projects.stop()
 
+    # The test runs the watcher's passes itself, so its clock alone decides what is quiet.
     def observe(seconds):
         clock.now += seconds
         with projects.locked(worktree["id"]):
