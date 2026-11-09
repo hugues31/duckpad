@@ -1,6 +1,5 @@
 """Read and serialize the project file registry without changing authored text."""
 
-import json
 import re
 import sys
 from contextlib import suppress
@@ -8,6 +7,7 @@ from contextlib import suppress
 import duckdb
 
 from . import project_files
+from .json_read import loads
 from .node_names import Name, node_names
 from .project_schema import require_structure
 from .python_environment import manifest_settings
@@ -27,11 +27,7 @@ def files_to_bundle(files, *, check_structure=True):
             continue
         try:
             value = (
-                spec.document.read(text)
-                if spec.document
-                else json.loads(text)
-                if spec.merge == "json"
-                else text
+                spec.document.read(text) if spec.document else loads(text) if spec.merge == "json" else text
             )
         except ValueError as error:
             errors.append({"file": name, "message": f"Invalid JSON: {error}"})

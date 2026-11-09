@@ -1,8 +1,8 @@
 """Server-side Python parameter validation using the common parameter descriptors."""
 
-import json
 import math
 
+from .json_read import loads
 from .templates import check_scalar, connection_for, render_parameter
 from .util import Problem, dumps
 from .value_types import base_type, type_argument
@@ -50,7 +50,7 @@ def remember_contracts(files):
         if name != "flow.json" and not (name.startswith("components/") and name.endswith(".json")):
             continue
         try:
-            graph = json.loads(source)
+            graph = loads(source)
             parent = name.removeprefix("components/").removesuffix(".json") if name != "flow.json" else None
             for node in graph.get("nodes", []):
                 if node.get("language") != "python":
@@ -67,7 +67,7 @@ def remember_contracts(files):
                     continue
                 if not port_error(node, contract, graph.get("edges", [])):
                     node["python_contract"] = contract
-            if json.loads(source) != graph:
+            if loads(source) != graph:
                 result[name] = dumps(graph)
         except (ValueError, TypeError, KeyError):
             continue

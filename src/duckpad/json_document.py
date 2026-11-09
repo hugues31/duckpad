@@ -1,8 +1,8 @@
 """Lossless JSON documents and one error convention for project declarations."""
 
-import json
 from dataclasses import dataclass
 
+from .json_read import loads
 from .util import Problem, dumps
 
 
@@ -15,7 +15,7 @@ class Document:
         if text is None:
             return None
         try:
-            value = json.loads(text)
+            value = loads(text)
         except ValueError:
             return text
         # Keep malformed documents editable, including JSON strings with their quotes.
@@ -29,7 +29,7 @@ class Document:
             return {}
         if isinstance(value, str):
             try:
-                json.loads(value)
+                loads(value)
             except ValueError as error:
                 raise Problem(f"{self.file} is not valid JSON: {error}", 422) from error
         if not isinstance(value, dict):

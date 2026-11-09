@@ -1,8 +1,7 @@
 """Three-way merge of declarative project files with field-level conflicts."""
 
-import json
-
 from . import named_documents, project_files, variables
+from .json_read import loads
 from .util import Problem, dumps
 
 MISSING = object()
@@ -144,11 +143,11 @@ def merge_files(base, current, proposal, choices=None, evidence=None, resolution
                 and spec.merge in ("json", "declarations", "named")
                 and all(v is not MISSING for v in values)
             ):
-                parsed = [json.loads(v) for v in values]
+                parsed = [loads(v) for v in values]
                 resolved = MISSING
                 if isinstance(resolution, str):
                     try:
-                        resolved = json.loads(resolution)
+                        resolved = loads(resolution)
                     except (ValueError, TypeError) as error:
                         raise Problem(f"Combined contents for {name} must be valid JSON", 422) from error
                 named = [named_documents.by_name(v) for v in parsed] if spec.merge == "named" else [None]
