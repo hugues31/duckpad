@@ -981,6 +981,7 @@
   "assistantWriteDocs": "Writes documentation",
   "assistantEditVariable": "Edits a variable",
   "assistantGroupNodes": "Groups nodes",
+  "assistantEditChart": "Edited chart",
   "assistantUndo": "Undo",
   "assistantUndoTurn": "Undo these {count} changes",
   "assistantUndone": "Undone",

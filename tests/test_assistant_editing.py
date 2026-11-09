@@ -23,6 +23,7 @@ from duckpad.git.command import GitTimeout
 from duckpad.util import Problem
 
 SQL = "-- @output result\nSELECT 1 AS value;\n"
+BAR = {"mark": "bar", "encoding": {"x": {"field": "value", "type": "quantitative"}}}
 
 
 def seed(app, client):
@@ -131,6 +132,10 @@ def change(app, worktree, callback):
         variable(operation="delete", name="region"),
         variable(operation="update", name="region", remove_fields=["default"]),
         ("group_nodes", {"nodes": ["first", "second"], "name": "Together"}),
+        (
+            "edit_chart",
+            {"operation": "create", "node": "first", "output": "result", "name": "Values", "spec": BAR},
+        ),
     ],
 )
 def test_each_write_is_one_attributed_commit_and_can_be_undone(instance, name, args):
@@ -560,6 +565,96 @@ def test_every_provider_receives_the_four_variable_operations(instance, kind):
         "rename": ({"operation", "name", "new_name"}, False),
         "delete": ({"operation", "name"}, False),
     }
+
+
+def add_component_instance(app, worktree):
+    """A Summary instance of a Report component, whose ranked output is its inner rank node's result."""
+
+    def callback(bundle):
+        bundle["components"]["report"] = {
+            "name": "Report",
+            "nodes": [{"id": "rank", "params": {}}],
+            "edges": [],
+            "outputs": {"ranked": {"node": "rank", "port": "result"}},
+        }
+        bundle["node_sql"]["components/report/rank.sql"] = SQL
+        bundle["flow"]["nodes"].append({"id": "summary", "component": "report", "params": {}})
+
+    change(app, worktree, callback)
+
+
+def test_charts_are_created_under_the_stored_output_key_and_committed_one_by_one(instance):
+    app, client = instance
+    worktree, context = seed(app, client)
+    add_component_instance(app, worktree)
+    line = {"mark": "line", "encoding": {"y": {"field": "value", "type": "quantitative"}}}
+    calls = [
+        (
+            "edit_chart",
+            {"operation": "create", "node": "first", "output": "result", "name": "Values", "spec": BAR},
+        ),
+        (
+            "edit_chart",
+            {"operation": "create", "node": "summary", "output": "ranked", "name": "Trend", "spec": line},
+        ),
+    ]
+    identity, result = write_turn(app, client, context, calls)
+    assert [t["status"] for t in result["tools"]] == ["complete", "complete"], result
+    projects = app.state.services.projects
+    assert projects.snapshot(worktree["id"])["bundle"]["charts"] == {
+        "first:result": [{"name": "Values", "spec": BAR}],
+        "summary::rank:result": [{"name": "Trend", "spec": line}],
+    }
+    undo(client, identity, result, context, result["tools"][1]["id"])
+    assert projects.snapshot(worktree["id"])["bundle"]["charts"] == {
+        "first:result": [{"name": "Values", "spec": BAR}],
+    }
+
+
+@pytest.mark.parametrize(
+    ("args", "message"),
+    [
+        ({"node": "missing", "output": "result", "name": "New", "spec": BAR}, "Node not found"),
+        ({"node": "first", "output": "missing", "name": "New", "spec": BAR}, "Output port not found"),
+        ({"node": "summary", "output": "result", "name": "New", "spec": BAR}, "Output port not found"),
+        ({"node": "first", "output": "result", "name": "Values", "spec": BAR}, "already exists"),
+        ({"node": "first", "output": "result", "name": "New"}, "Provide a chart spec"),
+        (
+            {
+                "node": "first",
+                "output": "result",
+                "name": "New",
+                "spec": {"mark": "bar", "encoding": {"x": {"field": "value", "aggregate": "sum"}}},
+            },
+            "charts.json: chart New of first:result: encoding.x.aggregate is not allowed",
+        ),
+    ],
+)
+def test_invalid_chart_creations_preserve_saved_files(instance, args, message):
+    app, client = instance
+    worktree, context = seed(app, client)
+    add_component_instance(app, worktree)
+    change(app, worktree, lambda b: b.update(charts={"first:result": [{"name": "Values", "spec": BAR}]}))
+    before = app.state.services.projects.snapshot(worktree["id"])
+    _, result = write_turn(app, client, context, [("edit_chart", {"operation": "create", **args})])
+    assert result["tools"][0]["status"] == "error", result
+    assert message in result["tools"][0]["summary"]
+    assert app.state.services.projects.snapshot(worktree["id"])["files"] == before["files"]
+
+
+def test_editors_are_told_charts_are_vega_lite_even_without_data_reading(instance):
+    app, client = instance
+    _, context = seed(app, client)
+    configure(client, allow_data=False)
+    app.state.assistant.configuration.model_override = TestModel(call_tools=[], custom_output_text="Ready")
+    turn(client, conversation(client, context), context)
+    available = app.state.assistant.configuration.model_override.last_model_request_parameters.function_tools
+    tool = next(t for t in available if t.name == "edit_chart")
+    schema = tool.parameters_json_schema["properties"]
+    assert schema["operation"]["enum"] == ["create", "update", "rename", "delete"]
+    assert schema["spec"]["description"] == "Vega-Lite 6 spec within Duckpad's chart allowlist"
+    for promise in ("Vega-Lite 6", '"data": {"name": "data"}', "5,000 rows", "charts.json", "read_guide"):
+        assert promise in (tool.description or "")
 
 
 def test_reader_has_no_write_tools_and_forced_write_or_undo_is_denied(instance):

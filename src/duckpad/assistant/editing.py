@@ -260,4 +260,59 @@ def group_nodes(ctx: RunContext[Dependencies], nodes: list[str], name: str, comp
     return save(ctx, snapshot, bundle, selected=selected)
 
 
-WRITE_TOOLS = [edit_flow, write_sql, write_documentation, edit_variable, group_nodes]
+def output_key(bundle, node, output):
+    """The key storing an output's rows: `node:port`, or `instance::node:port` behind an instance port."""
+    find_node(bundle, node)
+    nodes, _, boundaries = expand(bundle, tolerant=True)
+    ports = boundaries[node]["outputs"] if node in boundaries else None
+    if ports is None:
+        ports = {port: (node, port) for port in nodes.get(node, {}).get("parsed", {}).get("outputs", [])}
+    if output not in ports:
+        raise Problem("Output port not found", 404)
+    producer, port = ports[output]
+    return f"{producer}:{port}"
+
+
+def edit_chart(
+    ctx: RunContext[Dependencies],
+    operation: Literal["create", "update", "rename", "delete"],
+    node: str,
+    output: str,
+    name: str,
+    spec: Annotated[
+        dict[str, JsonValue] | None, Field(description="Vega-Lite 6 spec within Duckpad's chart allowlist")
+    ] = None,
+    new_name: str = "",
+) -> dict:
+    """Create, update, rename or delete a named chart of a node output, with a commit and Undo for each change.
+
+    A chart is a Vega-Lite 6 spec drawn from the rows of one output, shown in its Chart tab. Duckpad
+    supplies the rows as "data": {"name": "data"} and accepts a subset of Vega-Lite: the top-level
+    fields $schema, data, mark, encoding, layer, title, description, width and height, with no
+    transforms, aggregates or expressions. Charts draw at most 5,000 rows: aggregate, bin and filter
+    in the node's SQL first. Before writing a spec, read the charts guide (read_guide), the current
+    charts.json (read_file) and the output schema (read_schemas). node is the expanded node or component-instance ID shown on the
+    canvas, output its output port name. Create and update take spec; update replaces the whole spec,
+    never merges it. Rename uses only new_name, on the same output; delete uses only name.
+    """
+    snapshot = editable(ctx)
+    bundle = snapshot["bundle"]
+    key = output_key(bundle, node, output)
+    charts = bundle.get("charts") or {}
+    if not isinstance(charts, dict) or not isinstance(charts.get(key, []), list):
+        raise Problem("Correct charts.json before editing charts", 422)
+    entries = charts.setdefault(key, [])
+    existing = next((c for c in entries if isinstance(c, dict) and c.get("name") == name), None)
+    if operation != "create":
+        raise Problem(f"Chart {operation} is not supported yet", 422)
+    if existing is not None:
+        raise Problem("A chart with this name already exists on this output", 409)
+    if spec is None:
+        raise Problem("Provide a chart spec", 422)
+    entries.append({"name": name, "spec": spec})
+    bundle["charts"] = charts
+    # The save validates every chart: chart rules live in duckpad.charts only.
+    return save(ctx, snapshot, bundle)
+
+
+WRITE_TOOLS = [edit_flow, write_sql, write_documentation, edit_variable, group_nodes, edit_chart]

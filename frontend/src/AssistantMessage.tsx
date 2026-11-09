@@ -36,6 +36,7 @@ const toolLabels: Record<string, TranslationKey> = {
   write_documentation: "assistantWriteDocs",
   edit_variable: "assistantEditVariable",
   group_nodes: "assistantGroupNodes",
+  edit_chart: "assistantEditChart",
   launch_run: "assistantLaunchRun",
   cancel_run: "assistantCancelRun",
   wait_for_run: "assistantWaitRun",

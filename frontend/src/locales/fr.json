@@ -981,6 +981,7 @@
   "assistantWriteDocs": "Rédige la documentation",
   "assistantEditVariable": "Modifie une variable",
   "assistantGroupNodes": "Regroupe les nœuds",
+  "assistantEditChart": "Graphique modifié",
   "assistantUndo": "Annuler",
   "assistantUndoTurn": "Annuler ces {count} modifications",
   "assistantUndone": "Annulée",
