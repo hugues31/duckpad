@@ -1,5 +1,6 @@
 import {
   applyNodeChanges,
+  ConnectionLineType,
   ControlButton,
   Controls,
   MarkerType,
@@ -9,8 +10,10 @@ import {
   ReactFlowProvider,
   useNodesInitialized,
   useReactFlow,
+  useStore,
   type Connection,
   type NodeChange,
+  type ReactFlowState,
 } from "@xyflow/react";
 import { Maximize, Sparkles, Workflow } from "lucide-react";
 import {
@@ -22,6 +25,8 @@ import {
   useState,
 } from "react";
 import { ActionMenu } from "./ActionMenu";
+import { PipelineEdge } from "./CanvasEdge";
+import { edgeEndpoints, orthogonalLanes, sameLanes } from "./canvasEdges";
 import { PipelineNode } from "./CanvasNode";
 import { showMinimap } from "./canvasResults";
 import type { CanvasProps, FocusRequest } from "./canvasTypes";
@@ -35,6 +40,8 @@ import { useCanvasFrame } from "./useCanvasFrame";
 import { useCanvasNodes } from "./useCanvasNodes";
 import { useDoubleClickGuard } from "./useDoubleClickGuard";
 const nodeTypes = { pipeline: PipelineNode };
+const edgeTypes = { pipeline: PipelineEdge };
+const NO_LANES = new Map<string, number>();
 function CanvasInner({ ref, ...props }: CanvasProps) {
   const t = useT();
   const [context, setContext] = useState<{
@@ -42,7 +49,7 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
     position: { x: number; y: number };
     trigger: HTMLElement;
   } | null>(null);
-  const { getNodes, screenToFlowPosition } = useReactFlow();
+  const { getNodes, getInternalNode, screenToFlowPosition } = useReactFlow();
   const initialized = useNodesInitialized();
   const safeArea = useRef<HTMLDivElement>(null);
   const viewportTouched = useRef(false);
@@ -170,18 +177,40 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
     [onSelection],
   );
   const running = !!props.statuses.active;
+  const edgeStyle = props.edgeStyle ?? "curved";
+  // Right-angled links get separate vertical lanes from the measured socket positions.
+  const lanes = useStore(
+    useCallback(
+      (state: ReactFlowState) =>
+        edgeStyle === "orthogonal"
+          ? orthogonalLanes(edgeEndpoints(state.nodeLookup, props.edges))
+          : NO_LANES,
+      [edgeStyle, props.edges],
+    ),
+    sameLanes,
+  );
+  const [hovered, setHovered] = useState<string | null>(null);
   const edges = useMemo(
     () =>
-      props.edges.map((e) => {
+      props.edges.map((e): PipelineEdge => {
         const connected = nodes.some(
           (n) => n.selected && (n.id === e.source || n.id === e.target),
         );
-        const highlighted = connected || running;
+        const pointed = hovered === e.source || hovered === e.target;
+        const highlighted = connected || pointed || running;
         return {
           ...e,
-          type: "smoothstep",
-          animated: highlighted,
-          className: connected ? "node-connected" : undefined,
+          type: "pipeline",
+          data: { style: edgeStyle, lane: lanes.get(e.id) },
+          animated: connected || running,
+          className:
+            [
+              connected && "node-connected",
+              pointed && "node-hovered",
+              highlighted && "highlighted",
+            ]
+              .filter(Boolean)
+              .join(" ") || undefined,
           markerEnd: highlighted
             ? {
                 type: MarkerType.ArrowClosed,
@@ -190,13 +219,9 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
                 height: 14,
               }
             : undefined,
-          style: {
-            stroke: highlighted ? "var(--accent)" : "var(--edge)",
-            strokeWidth: highlighted ? 2.3 : 1.8,
-          },
         };
       }),
-    [props.edges, nodes, running],
+    [props.edges, nodes, running, hovered, edgeStyle, lanes],
   );
   const changes = (changes: NodeChange<PipelineNode>[]) =>
     setNodes((current) => applyNodeChanges(changes, current));
@@ -229,7 +254,12 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
   };
   const arrangeGraph = () => {
     if (props.readOnly || !initialized || !nodes.length) return;
-    const arranged = layoutNodes(getNodes(), props.edges);
+    const arranged = layoutNodes(getNodes(), props.edges, (id, port, type) => {
+      const handle = getInternalNode(id)?.internals.handleBounds?.[type]?.find(
+        (bounds) => bounds.id === port,
+      );
+      return handle && handle.y + handle.height / 2;
+    });
     const positions = new Map(arranged.map((node) => [node.id, node.position]));
     void persistPositions(
       props.nodes.map((node) => ({
@@ -279,7 +309,15 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
         nodes={nodes}
         edges={edges}
         nodeTypes={nodeTypes}
+        edgeTypes={edgeTypes}
+        connectionLineType={
+          edgeStyle === "orthogonal"
+            ? ConnectionLineType.SmoothStep
+            : ConnectionLineType.Bezier
+        }
         onNodesChange={changes}
+        onNodeMouseEnter={(_, node) => setHovered(node.id)}
+        onNodeMouseLeave={() => setHovered(null)}
         onMoveStart={(event) => {
           if (event) {
             viewportTouched.current = true;

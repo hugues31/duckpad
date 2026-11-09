@@ -682,6 +682,11 @@ fieldset.palette-bottom {
   color: var(--muted);
   pointer-events: none;
   opacity: 1;
+  /* Links drawn under a label stay out of its letters. */
+  text-shadow:
+    0 0 2px var(--bg),
+    0 0 2px var(--bg),
+    0 0 3px var(--bg);
 }
 .handle-label.in {
   right: 17px;
@@ -689,10 +694,24 @@ fieldset.palette-bottom {
 .handle-label.out {
   left: 17px;
 }
+/* Connected sockets are filled, free ones stay hollow. */
+.pipeline-node .react-flow__handle.is-connected {
+  background: var(--accent);
+}
 .pipeline-node .react-flow__handle:hover {
   background: var(--accent);
   border-color: var(--accent);
   box-shadow: 0 0 0 4px var(--accent-soft);
+}
+.react-flow__edge-pipeline .react-flow__edge-path {
+  stroke: var(--edge);
+  stroke-width: 1.8;
+}
+/* Links of the selected or pointed node, and the pointed link, stand out. */
+.react-flow__edge-pipeline.highlighted .react-flow__edge-path,
+.react-flow__edge-pipeline:hover .react-flow__edge-path {
+  stroke: var(--accent);
+  stroke-width: 2.3;
 }
 .react-flow__edge.animated .react-flow__edge-path {
   stroke-dasharray: 6 6;

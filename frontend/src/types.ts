@@ -11,6 +11,8 @@ import type { MergeConflict } from "./gitTypes";
 export type Json =
   string | number | boolean | null | Json[] | { [key: string]: Json };
 export type Theme = "light" | "dark";
+/** Curved links, or links with right angles. */
+export type EdgeStyle = "curved" | "orthogonal";
 export interface FlowNode {
   language?: "sql" | "python";
   partitions?: "all";

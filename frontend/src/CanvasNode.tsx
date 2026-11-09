@@ -64,6 +64,8 @@ type PipelineData = {
   inputs: string[];
   missingInputs: string[];
   outputs: string[];
+  /** Outputs that feed another node or the outputs of the opened component. */
+  connectedOutputs: string[];
   /** The run or result state shown on the node, if any. */
   status:
     | ""
@@ -92,6 +94,7 @@ export const PipelineNode = memo(function PipelineNode({
   const partition = data.partition;
   const updateNodeInternals = useUpdateNodeInternals();
   const portLayout = JSON.stringify([data.kind, data.inputs, data.outputs]);
+  const usedOutputs = new Set(data.connectedOutputs);
   useEffect(() => {
     // SQL edits can rename or move handles without resizing the node.
     updateNodeInternals(id);
@@ -171,8 +174,9 @@ export const PipelineNode = memo(function PipelineNode({
             top: portPosition(i, data.inputs.length).top,
             left: portPosition(i, data.inputs.length).inset,
           }}
+          // A connected socket is filled; an input still waiting for a source is orange.
           className={
-            data.missingInputs.includes(port) ? "missing-input" : undefined
+            data.missingInputs.includes(port) ? "missing-input" : "is-connected"
           }
           title={
             data.missingInputs.includes(port)
@@ -194,6 +198,7 @@ export const PipelineNode = memo(function PipelineNode({
             top: portPosition(i, data.outputs.length).top,
             right: portPosition(i, data.outputs.length).inset,
           }}
+          className={usedOutputs.has(port) ? "is-connected" : undefined}
           title={port}
           aria-label={`${t("output")}: ${port}`}
         >
