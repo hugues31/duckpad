@@ -108,17 +108,21 @@ Its run ID appears immediately in status and history, and **Stop** also works du
 `uv lock` or environment installation. Cancellation stops the dependency command;
 shutdown cancels preparation before closing execution contexts. Setup failures are
 recorded on the run, while invalid launch options are still refused immediately.
+Run details retain the resolution and installation stages, elapsed time, errors
+and bounded logs, including canceled preparations. Stopping installation removes
+the incomplete environment so the next run can safely retry.
 
 While dependencies are resolved on save or the environment is built for a run,
 the workspace shows a notice with the current preparation stage, an indeterminate
 progress bar, elapsed time and expandable live uv output. No download percentage is
 estimated. A success closes the notice after a few seconds unless its log is open; a
 failure stays until closed. Cached environments are reused without reinstalling
-dependencies or showing the notice. The project’s Python settings retain the latest
-preparation, its error and up to 16,000 characters of log output, with credentials
-and local runtime paths masked. A preparation interrupted by a server stop is
-reported as failed. Environments unused for seven days are removed during
-later preparations; active workers hold a lease that prevents removal.
+dependencies or showing the notice. Each branch and Job keeps its own latest
+preparation: the project’s Python settings show the selected branch’s, with its error
+and up to 16,000 characters of log output, credentials and local runtime paths
+masked. A preparation interrupted by a server stop is reported as failed.
+Environments unused for seven days are removed during later preparations; active
+workers hold a lease that prevents removal.
 
 ### Use an on-premises Artifactory index
 

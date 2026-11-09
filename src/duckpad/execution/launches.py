@@ -222,10 +222,19 @@ class LaunchPlanner:
         ancestors: bool,
     ) -> Execution | None:
         from ..python_environment import preparation_cancellation
+        from ..python_progress import observe_preparation
+
+        def progress(status: Record) -> None:
+            stages = run.setdefault("preparation", [])
+            if stages and stages[-1]["operation"] == status["operation"]:
+                stages[-1] = status
+            else:
+                stages.append(status)
+            self.journal.persist(run, [])
 
         started = time.monotonic()
         try:
-            with preparation_cancellation(token["cancel"]):
+            with preparation_cancellation(token["cancel"]), observe_preparation(progress):
                 self.check_canceled(token)
                 execution = self.prepare(
                     token,
@@ -238,7 +247,7 @@ class LaunchPlanner:
                     ancestors,
                 )
                 self.check_canceled(token)
-            for key in ("started", "requester", "trigger", "job", "tag", "external_trigger"):
+            for key in ("started", "requester", "trigger", "job", "tag", "external_trigger", "preparation"):
                 if key in run:
                     execution.run[key] = run[key]
             self.journal.persist(execution.run, execution.secrets)
@@ -544,7 +553,7 @@ class LaunchPlanner:
             files,
             self.store.home,
             read_only=bool(snapshot["worktree"].get("read_only")),
-            project=snapshot["worktree"]["project"],
+            worktree=worktree,
             allow_builds=settings.get("allow_builds", False),
         )
         self.check_canceled(token)

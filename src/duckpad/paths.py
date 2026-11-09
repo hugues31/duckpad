@@ -51,6 +51,15 @@ class InstancePaths:
         """
         return {"file": self.resources(project), "destination": self.exports(worktree, environment)}
 
+    def python_status(self, worktree: str) -> Path:
+        """The latest Python environment preparation of a branch or Job worktree."""
+        return self.home / "python" / "status" / worktree
+
     def worktree_directories(self) -> list[Path]:
         """Every directory with one child per recorded worktree, named after it."""
-        return [self.home / "worktrees", self.home / "exports", self.artifacts / "partitions"]
+        return [
+            self.home / "worktrees",
+            self.home / "exports",
+            self.artifacts / "partitions",
+            self.home / "python" / "status",
+        ]

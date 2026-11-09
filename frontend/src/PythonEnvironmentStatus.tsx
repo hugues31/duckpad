@@ -2,6 +2,7 @@ import { CircleAlert, CircleCheck, Loader2, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useT } from "./i18n";
 import { seconds } from "./results";
+import type { PreparationStatus, Run } from "./types";
 import { useApiResource } from "./useApiResource";
 import { useFollowScroll } from "./useFollowScroll";
 
@@ -12,9 +13,10 @@ const states = {
   installing: "pythonEnvironmentInstalling",
   ready: "pythonEnvironmentReady",
   error: "pythonEnvironmentError",
+  canceled: "canceled",
 } as const;
 
-const stages = {
+export const preparationStages = {
   waiting: "pythonEnvironmentWaiting",
   runtime: "pythonEnvironmentRuntime",
   resolving: "pythonEnvironmentResolving",
@@ -30,23 +32,11 @@ const outcomes = {
   error: "pythonEnvironmentError",
 } as const;
 
-interface PreparationStatus {
-  state: keyof typeof states;
-  stage?: keyof typeof stages;
-  operation?: string;
-  elapsed_seconds?: number;
-  python: string;
-  duckdb: string;
-  error?: string | null;
-  log?: string;
-  log_truncated?: boolean;
-}
-
 /** The latest preparation, polled every second while it runs or while `active`. */
-function usePreparation(project: string, active = false) {
+function usePreparation(project: string, worktree?: string, active = false) {
   const [busy, setBusy] = useState(false);
   const resource = useApiResource<PreparationStatus>(
-    `/projects/${project}/python/environment`,
+    `/projects/${project}/python/environment${worktree ? `?worktree=${encodeURIComponent(worktree)}` : ""}`,
     { interval: busy || active ? 1000 : 5000, refresh: Number(active) },
   );
   const preparing =
@@ -56,63 +46,84 @@ function usePreparation(project: string, active = false) {
   return { ...resource, preparing };
 }
 
-/** Progress, error and live installer output, following the end of the log. */
+/**
+ * Progress, error and live installer output, following the end of the log.
+ * The log has its own toggle unless it already sits in a collapsed run step.
+ */
 function PreparationDetails({
   status,
   preparing,
   open,
   onToggle,
+  collapsible = true,
 }: {
   status: PreparationStatus;
   preparing: boolean;
   open?: boolean;
   onToggle?: (open: boolean) => void;
+  collapsible?: boolean;
 }) {
   const t = useT();
   const { log, followLog, restore } = useFollowScroll<HTMLPreElement>(
     open ?? true,
     40,
   );
+  const output = (
+    <>
+      {status.log_truncated && (
+        <p className="muted">{t("pythonEnvironmentLogTail")}</p>
+      )}
+      <pre
+        ref={log}
+        role="log"
+        aria-label={t("pythonEnvironmentLogs")}
+        onScroll={followLog}
+      >
+        {status.log || t("pythonEnvironmentLogWaiting")}
+      </pre>
+    </>
+  );
   return (
     <>
       {preparing && <progress aria-label={t("pythonEnvironmentProgress")} />}
       {status.error && <pre className="notice error">{status.error}</pre>}
-      {(preparing || status.log) && (
-        <details
-          open={open}
-          onToggle={(event) => {
-            restore();
-            onToggle?.(event.currentTarget.open);
-          }}
-        >
-          <summary>{t("pythonEnvironmentLogs")}</summary>
-          {status.log_truncated && (
-            <p className="muted">{t("pythonEnvironmentLogTail")}</p>
-          )}
-          <pre
-            ref={log}
-            role="log"
-            aria-label={t("pythonEnvironmentLogs")}
-            onScroll={followLog}
+      {(preparing || status.log) &&
+        (collapsible ? (
+          <details
+            open={open}
+            onToggle={(event) => {
+              restore();
+              onToggle?.(event.currentTarget.open);
+            }}
           >
-            {status.log || t("pythonEnvironmentLogWaiting")}
-          </pre>
-        </details>
-      )}
+            <summary>{t("pythonEnvironmentLogs")}</summary>
+            {output}
+          </details>
+        ) : (
+          output
+        ))}
     </>
   );
 }
 
-/** The project's latest preparation, with its log, in Python settings. */
+/** The selected branch's latest preparation, with its log, in Python settings. */
 export default function PythonEnvironmentStatus({
   project,
+  worktree,
+  branch,
 }: {
   project: string;
+  worktree?: string;
+  branch?: string;
 }) {
   const t = useT();
-  const { data: status, error, preparing } = usePreparation(project);
+  const { data: status, error, preparing } = usePreparation(project, worktree);
   const label = status
-    ? t(preparing && status.stage ? stages[status.stage] : states[status.state])
+    ? t(
+        preparing && status.stage
+          ? preparationStages[status.stage]
+          : states[status.state],
+      )
     : t("loading");
   return (
     <section
@@ -120,7 +131,11 @@ export default function PythonEnvironmentStatus({
       aria-label={t("pythonEnvironments")}
     >
       <h2>{t("pythonEnvironments")}</h2>
-      <p className="muted">{t("pythonEnvironmentHint")}</p>
+      {branch && (
+        <p className="muted">
+          {t("pythonEnvironmentHint").replace("{branch}", branch)}
+        </p>
+      )}
       {error ? (
         <pre className="notice error">{error}</pre>
       ) : (
@@ -154,13 +169,15 @@ export default function PythonEnvironmentStatus({
  */
 export function PythonPreparationNotice({
   project,
+  worktree,
   active,
 }: {
   project: string;
+  worktree: string;
   active: boolean;
 }) {
   const t = useT();
-  const { data: status, preparing } = usePreparation(project, active);
+  const { data: status, preparing } = usePreparation(project, worktree, active);
   const [hidden, setHidden] = useState<string>();
   const [loaded, setLoaded] = useState(false);
   const [reading, setReading] = useState(false);
@@ -184,7 +201,7 @@ export function PythonPreparationNotice({
   const failed = status.state === "error";
   const label =
     preparing && status.stage
-      ? stages[status.stage]
+      ? preparationStages[status.stage]
       : outcomes[status.state as keyof typeof outcomes] || states[status.state];
   return (
     <section
@@ -224,5 +241,64 @@ export function PythonPreparationNotice({
         onToggle={setReading}
       />
     </section>
+  );
+}
+
+/** Outcomes of settled operations, in run status terms. */
+const badges = {
+  locked: "success",
+  ready: "success",
+  error: "failed",
+  canceled: "canceled",
+} as const;
+
+/** The run's resolver and installer operations, as a step beside its nodes. */
+export function RunPreparation({ run }: { run: Run }) {
+  const t = useT();
+  const operations = run.preparation;
+  if (!operations?.length) return null;
+  const active = ["preparing", "canceling"].includes(run.status);
+  const last = operations[operations.length - 1].state;
+  // While the run prepares, and after an interrupted operation, the run's status speaks for it.
+  const badge =
+    !active && last in badges
+      ? badges[last as keyof typeof badges]
+      : run.status;
+  const elapsed = operations.reduce(
+    (total, status) => total + (status.elapsed_seconds || 0),
+    0,
+  );
+  return (
+    <details className="run-step python-preparation">
+      <summary>
+        <span className={`badge ${badge}`}>{t(badge)}</span>
+        <strong>{t("pythonEnvironment")}</strong>
+        {!active && <span className="muted">{seconds(elapsed)}</span>}
+      </summary>
+      {operations.map((status, index) => {
+        const preparing =
+          active && ["resolving", "installing"].includes(status.state);
+        return (
+          <div key={status.operation || index}>
+            <p role="status">
+              {t(
+                preparing && status.stage
+                  ? preparationStages[status.stage]
+                  : states[status.state],
+              )}
+              {!preparing &&
+                operations.length > 1 &&
+                status.elapsed_seconds !== undefined &&
+                ` · ${seconds(status.elapsed_seconds)}`}
+            </p>
+            <PreparationDetails
+              status={status}
+              preparing={preparing}
+              collapsible={false}
+            />
+          </div>
+        );
+      })}
+    </details>
   );
 }

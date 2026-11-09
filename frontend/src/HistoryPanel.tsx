@@ -1,5 +1,5 @@
 import { AlertCircle, ArrowRight, Check, Clock, GitBranch } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import { withQuery } from "./api";
 import AskAssistant from "./AskAssistant";
@@ -16,6 +16,7 @@ import NewTagModal from "./NewTagModal";
 import { displayNodeName } from "./nodeNames";
 import { PartitionHistory } from "./PartitionHistory";
 import { partitionMessage } from "./partitions";
+import { RunPreparation } from "./PythonEnvironmentStatus";
 import TagBadges from "./TagBadges";
 import type { Run } from "./types";
 import { useApiResource } from "./useApiResource";
@@ -250,7 +251,11 @@ export default function HistoryPanel({
             {selected.entry_point === "assistant" && (
               <p className="muted">{t("assistantRunEntryPoint")}</p>
             )}
-            <RunDetails run={selected} onClose={() => setSelected(null)} />
+            <RunDetails
+              run={selected}
+              onUpdate={setSelected}
+              onClose={() => setSelected(null)}
+            />
           </div>
         </Modal>
       )}
@@ -269,20 +274,36 @@ export default function HistoryPanel({
 /** The captured requester, configuration and node logs of a run. */
 export function RunDetails(props: {
   run: Run;
+  onUpdate?: (run: Run) => void;
   onClose: () => void;
   onPartitionRetry?: () => void;
 }) {
   const t = useT();
   const detail = useApiResource<Run>(
-    props.run.nodes ? null : `/runs/${props.run.id}`,
+    !props.run.nodes ||
+      ["preparing", "running", "canceling"].includes(props.run.status)
+      ? `/runs/${props.run.id}`
+      : null,
+    {
+      interval: 1000,
+      nextInterval: (run) =>
+        ["preparing", "running", "canceling"].includes(run.status)
+          ? 1000
+          : false,
+    },
   );
+  const { onUpdate } = props;
+  const updated = detail.data;
+  useEffect(() => {
+    if (updated) onUpdate?.(updated);
+  }, [updated, onUpdate]);
   if (detail.error)
     return (
       <p className="notice error" role="alert">
         {detail.error}
       </p>
     );
-  const run = props.run.nodes ? props.run : detail.data;
+  const run = detail.data || (props.run.nodes ? props.run : null);
   return run ? (
     <RunDetailsContent {...props} run={run} />
   ) : (
@@ -367,6 +388,7 @@ function RunDetailsContent({
           )}
         </pre>
       </details>
+      <RunPreparation run={run} />
       {Object.entries(run.nodes).map(([key, state]) => (
         <details className="run-step" key={key}>
           <summary>

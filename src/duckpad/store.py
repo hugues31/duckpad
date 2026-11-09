@@ -523,6 +523,7 @@ class Store:
                 "extensions",
                 "nodes",
                 "variables",
+                "preparation",
             )
             columns = [col(getattr(m.Run, name)) for name in m.Run.model_fields if name != "snapshot"]
             statement = (

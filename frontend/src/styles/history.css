@@ -61,6 +61,14 @@
 .run-step .expression {
   max-height: 450px;
 }
+.run-step.python-preparation > div {
+  display: grid;
+  gap: 6px;
+  margin-top: 10px;
+}
+.run-step.python-preparation > div p {
+  margin: 0;
+}
 
 /* Jobs share the execution log and settings card surfaces. */
 .job-scope .search-dropdown [role="listbox"] {

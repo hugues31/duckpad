@@ -1,6 +1,7 @@
 import { Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useT } from "./i18n";
+import { preparationStages } from "./PythonEnvironmentStatus";
 import { remainingDuration, remainingSeconds } from "./runEstimate";
 import type { Run } from "./types";
 
@@ -44,9 +45,14 @@ export default function RunProgress({ run }: { run: Run }) {
     .filter(Boolean)
     .join(" · ");
   const phase = run.phase || partitions?.phase;
+  const preparation =
+    run.status === "preparing" ? run.preparation?.at(-1) : undefined;
   const details = [
     t(run.status),
     run.environment,
+    preparation?.stage
+      ? `${t("pythonEnvironment")} · ${t(preparationStages[preparation.stage])}`
+      : "",
     phase === "values"
       ? t("calculatingValues")
       : phase === "consumers"

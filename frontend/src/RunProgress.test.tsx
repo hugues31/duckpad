@@ -2,6 +2,7 @@
 import { act, cleanup, render, screen } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import RunProgress from "./RunProgress";
+import { RunPreparation } from "./PythonEnvironmentStatus";
 import type { Run } from "./types";
 
 afterEach(() => {
@@ -58,4 +59,49 @@ it("shows an honest placeholder during preparation and the first untimed node", 
     />,
   );
   expect(screen.getByText("Estimating…")).toBeTruthy();
+});
+
+it("shows the environment stage and retains its log after cancellation", () => {
+  const run = {
+    id: "run",
+    status: "preparing",
+    environment: "dev",
+    nodes: {},
+    preparation: [
+      {
+        operation: "install",
+        state: "installing",
+        stage: "installing",
+        log: "Downloading package",
+      },
+    ],
+  } as Run;
+  const { rerender } = render(
+    <>
+      <RunProgress run={run} />
+      <RunPreparation run={run} />
+    </>,
+  );
+  expect(
+    screen
+      .getByRole("progressbar", { name: "Run progress" })
+      .getAttribute("aria-valuetext"),
+  ).toContain("Installing the locked environment");
+  expect(screen.getByRole("log", { hidden: true }).textContent).toBe(
+    "Downloading package",
+  );
+  rerender(
+    <RunPreparation
+      run={{
+        ...run,
+        status: "canceled",
+        preparation: [{ ...run.preparation![0], state: "canceled" }],
+      }}
+    />,
+  );
+  expect(screen.getByRole("status").textContent).toContain("Canceled");
+  expect(screen.getByRole("log", { hidden: true }).textContent).toBe(
+    "Downloading package",
+  );
+  expect(screen.queryByRole("progressbar")).toBeNull();
 });
