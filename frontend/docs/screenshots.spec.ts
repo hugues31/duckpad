@@ -987,6 +987,42 @@ test("capture project extension activation and missing imports", async ({
   );
 });
 
+test("capture the first-launch setup page and password recovery help", async ({
+  browser,
+  baseURL,
+}) => {
+  const context = await browser.newContext({
+    baseURL,
+    viewport: { width: 1100, height: 1000 },
+    locale: "en-US",
+    colorScheme: "light",
+    reducedMotion: "reduce",
+  });
+  try {
+    const page = await context.newPage();
+    // The form renders from any token; only saving checks it.
+    await page.goto("/#setup=documentation-capture");
+    await expect(
+      page.getByRole("heading", { name: "Choose your password", exact: true }),
+    ).toBeVisible();
+    await capture(page, "first-launch-setup", page.locator(".login-card"));
+    await page
+      .getByRole("button", {
+        name: "Sign in with the generated password instead",
+        exact: true,
+      })
+      .click();
+    await page
+      .getByLabel("Password", { exact: true })
+      .fill("not-the-admin-password");
+    await page.getByRole("button", { name: "Sign in", exact: true }).click();
+    await expect(page.locator(".login-help")).toHaveAttribute("open");
+    await capture(page, "sign-in-recovery", page.locator(".login-card"));
+  } finally {
+    await context.close();
+  }
+});
+
 test("capture SSO configuration and the enabled sign-in choice", async ({
   page,
   browser,

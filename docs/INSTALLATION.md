@@ -40,6 +40,8 @@ You need **Python 3.11 or later** and **Git**. If you are not on Linux, read the
    administrator account, `admin`. You are signed in, and this is the password
    you will use from now on.
 
+   ![The first-launch page asks for the admin password twice, then signs in](images/first-launch-setup.png)
+
 Keep the terminal open while you use Duckpad, and press **Ctrl+C**
 there to stop it. Next time, activate the same virtual environment from the same
 folder and run `duckpad start` again.
@@ -97,6 +99,10 @@ In a container built from the repository's `Dockerfile`, run
 Single sign-on and service accounts have no Duckpad password, and a deactivated
 account must be reactivated first. The command needs access to the instance
 directory, which already holds the instance's secrets.
+
+After a failed attempt, the sign-in page shows these steps too:
+
+![After a failed sign-in, the sign-in page explains how to reset a forgotten password](images/sign-in-recovery.png)
 
 ## Upgrades and backups
 
