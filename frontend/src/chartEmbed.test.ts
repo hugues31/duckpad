@@ -1,5 +1,7 @@
 // @vitest-environment happy-dom
-import type { Item, TooltipHandler } from "vega";
+import { parse, View, type Item, type TooltipHandler } from "vega";
+import { compile, type TopLevelSpec } from "vega-lite";
+import { unknownFields } from "./charts";
 import { expressionInterpreter } from "vega-interpreter";
 import { expect, it } from "vitest";
 import {
@@ -10,7 +12,7 @@ import {
   renderChart,
   themeConfig,
 } from "./chartEmbed";
-import { chartRows } from "./chartValues";
+import { chartRows, ROW_ID } from "./chartValues";
 
 const BARS = {
   mark: "bar",
@@ -117,7 +119,10 @@ it("supplies the rows as the spec's data and drops embed options from the spec",
     },
     rows,
   );
-  expect(spec.data).toEqual({ name: "data", values: rows });
+  expect(spec.data).toEqual({
+    name: "data",
+    values: [{ column_0: "North", column_1: 3, [ROW_ID]: 0 }],
+  });
   expect(spec).not.toHaveProperty("usermeta");
 });
 
@@ -164,4 +169,105 @@ it("derives the chart theme from the interface's CSS variables", () => {
   expect(
     embedOptions(expressionInterpreter, { language: "en", config }).config,
   ).toBe(config);
+});
+
+// Compile and run the generated expressions with the same interpreter used in the browser.
+it.each([
+  "a.b",
+  "x[0]",
+  "x]",
+  "a\\b",
+  'a"b',
+  "a'b",
+  String.raw`x\" + datum.other + "`,
+  String.raw`x\\.y[0]`,
+  'x\\[0]." + datum.other + "',
+])(
+  "draws the literal column %s with unescaped axis, legend and tooltip titles",
+  async (field) => {
+    const spec = {
+      width: 300,
+      mark: { type: "point", tooltip: true },
+      encoding: {
+        x: { field, type: "quantitative" },
+        color: { field, type: "nominal" },
+        tooltip: [{ field, type: "quantitative" }],
+      },
+    };
+    expect(unknownFields(spec, [{ name: field, type: "INTEGER" }])).toEqual([]);
+    const source = JSON.stringify(spec);
+    const drawn = chartSpec(spec, [{ [field]: 7, [ROW_ID]: 0 }]);
+    const compiled = compile(drawn as unknown as TopLevelSpec).spec;
+    const runtime = parse(
+      compiled,
+      { legend: { titleLimit: 1000 } },
+      { ast: true },
+    );
+    const view = new View(runtime, {
+      renderer: "none",
+      expr: expressionInterpreter,
+    });
+    try {
+      await view.runAsync();
+      const svg = await view.toSVG();
+      expect(svg).toContain('role="graphics-symbol"');
+      const element = document.createElement("div");
+      element.innerHTML = svg;
+      expect(element.querySelector(".role-axis-title")?.textContent).toBe(
+        field,
+      );
+      expect(element.querySelector(".role-legend-title")?.textContent).toBe(
+        field,
+      );
+      const mark = element.querySelector(".mark-symbol.role-mark path");
+      expect(mark?.getAttribute("aria-label")).toContain(`${field}: 7`);
+      // Tooltips are generated expressions too, with the original column name as key.
+      const marks = (
+        view.scenegraph() as unknown as {
+          root: {
+            items: {
+              items: {
+                marktype: string;
+                role: string;
+                items: { tooltip: unknown }[];
+              }[];
+            }[];
+          };
+        }
+      ).root.items[0].items;
+      const symbols = marks.find(
+        (item) => item.marktype === "symbol" && item.role === "mark",
+      );
+      expect(symbols?.items[0].tooltip).toEqual({ [field]: "7" });
+    } finally {
+      view.finalize();
+    }
+    expect(JSON.stringify(spec)).toBe(source);
+  },
+);
+
+it("maps layer fields and tooltip lists while preserving explicit titles and values", () => {
+  const spec = {
+    layer: [
+      {
+        mark: "text",
+        encoding: {
+          text: { field: "x[0]", title: null },
+          tooltip: [{ field: "a.b", title: "Custom" }],
+          color: { value: "red" },
+        },
+      },
+    ],
+  };
+  expect(chartSpec(spec, [])).toMatchObject({
+    layer: [
+      {
+        encoding: {
+          text: { field: "column_0", title: "x[0]" },
+          tooltip: [{ field: "column_1", title: "Custom" }],
+          color: { value: "red" },
+        },
+      },
+    ],
+  });
 });
