@@ -442,11 +442,15 @@ def command(arguments, directory, *, allow_builds=False, progress=None):
                 )
 
 
-def lock_files(files, home, *, read_only=False, allow_builds=False, project=None):
-    progress = Preparation(home, project, "resolving", start=False)
+def lock_files(files, home, *, read_only=False, allow_builds=False, project=None, worktree=None):
+    progress = Preparation(home, project, "resolving", worktree=worktree, start=False)
     try:
         locked = cached_lock(files, home, read_only=read_only, allow_builds=allow_builds, progress=progress)
-        if not progress.active and project and environment_status(home, project)["state"] == "error":
+        if (
+            not progress.active
+            and project
+            and environment_status(home, project, worktree)["state"] == "error"
+        ):
             progress.step("cached")
         progress.finish("locked")
         return locked
@@ -526,15 +530,15 @@ def resolve_lock(files, home, *, read_only=False, allow_builds=False, progress=N
         return locked
 
 
-def prepare(files, home, project, *, allow_builds=False):
-    progress = Preparation(home, project, "installing", start=False)
+def prepare(files, home, project, *, allow_builds=False, worktree=None):
+    progress = Preparation(home, project, "installing", worktree=worktree, start=False)
     try:
         result = prepare_environment(files, home, project, allow_builds=allow_builds, progress=progress)
         # A cached environment starts no preparation; it only replaces a settled state other than ready.
         if (
             not progress.active
             and project
-            and environment_status(home, project)["state"] in ("unprepared", "locked", "error")
+            and environment_status(home, project, worktree)["state"] in ("unprepared", "locked", "error")
         ):
             progress.step("cached")
         progress.finish("ready")
@@ -652,6 +656,7 @@ def prepare_environment(files, home, project, *, allow_builds=False, progress=No
                     )
                 )
                 shutil.copytree(package, site / "duckpad")
+                check_canceled()
                 atomic_write(directory / "ready.json", json.dumps({"signature": signature}))
             except BaseException:
                 shutil.rmtree(directory, ignore_errors=True)

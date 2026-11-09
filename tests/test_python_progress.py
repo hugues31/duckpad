@@ -4,7 +4,7 @@ import sys
 from concurrent.futures import ThreadPoolExecutor
 
 import pytest
-from helpers import wait_until
+from helpers import wait_run, wait_until
 from test_python_nodes import flow
 
 from duckpad import python_environment as environment
@@ -124,30 +124,32 @@ def test_real_preparation_and_cache_reuse_replace_previous_errors(services, monk
     tree = flow(services)
     project = tree["project"]
     files = projects.snapshot(tree["id"])["files"]
-    status = environment_status(store.home, project)
+    status = environment_status(store.home, project, tree["id"])
     assert status["state"] == "locked" and "Resolved" in status["log"]
-    first = environment.prepare(files, store.home, project)
-    status = environment_status(store.home, project)
+    first = environment.prepare(files, store.home, project, worktree=tree["id"])
+    status = environment_status(store.home, project, tree["id"])
     assert status["state"] == "ready" and "Installed" in status["log"]
     # Starting another worker on a ready environment is not a new preparation.
-    assert environment.prepare(files, store.home, project) == first
-    assert environment_status(store.home, project) == status
-    environment.lock_files(files, store.home, project=project)
+    assert environment.prepare(files, store.home, project, worktree=tree["id"]) == first
+    assert environment_status(store.home, project, tree["id"]) == status
+    environment.lock_files(files, store.home, project=project, worktree=tree["id"])
     # A run reusing its existing worker does not prepare again after this cache hit.
-    assert environment_status(store.home, project) == status
+    assert environment_status(store.home, project, tree["id"]) == status
 
     def forbidden(*args, **kwargs):
         pytest.fail("Cached environments must not run uv")
 
     monkeypatch.setattr(environment, "command", forbidden)
     with pytest.raises(Problem):
-        environment.lock_files({"pyproject.toml": "invalid"}, store.home, project=project)
-    assert environment_status(store.home, project)["state"] == "error"
-    assert environment.lock_files(files, store.home, project=project) == files["uv.lock"]
-    status = environment_status(store.home, project)
+        environment.lock_files(
+            {"pyproject.toml": "invalid"}, store.home, project=project, worktree=tree["id"]
+        )
+    assert environment_status(store.home, project, tree["id"])["state"] == "error"
+    assert environment.lock_files(files, store.home, project=project, worktree=tree["id"]) == files["uv.lock"]
+    status = environment_status(store.home, project, tree["id"])
     assert status["state"] == "locked" and status["error"] is None
-    assert environment.prepare(files, store.home, project) == first
-    status = environment_status(store.home, project)
+    assert environment.prepare(files, store.home, project, worktree=tree["id"]) == first
+    status = environment_status(store.home, project, tree["id"])
     assert status["state"] == "ready" and status["stage"] == "cached"
     assert not status["log"]
 
@@ -159,3 +161,73 @@ def test_canceled_preparation_restores_the_status_it_replaced(tmp_path):
     assert environment_status(tmp_path, "project")["state"] == "resolving"
     stopped.cancel()
     assert environment_status(tmp_path, "project")["state"] == "ready"
+
+
+def test_preparation_states_are_independent_for_branches_and_jobs(services):
+    store, projects, _, _ = services
+    main = flow(services)
+    branch = projects.branch(main["id"], "different-dependencies")
+    job = projects.job_worktree(main["project"], projects.snapshot(main["id"])["commit"])
+    # Project-wide state from an older version cannot identify which branch prepared it.
+    Preparation(store.home, main["project"], "installing").finish("error", "Legacy failure")
+    for tree in (branch, job):
+        assert environment_status(store.home, main["project"], tree["id"])["state"] == "unprepared"
+    environment.prepare(
+        projects.snapshot(main["id"])["files"], store.home, main["project"], worktree=main["id"]
+    )
+    snapshot = projects.snapshot(branch["id"])
+    with pytest.raises(Problem):
+        projects.write(branch["id"], snapshot["revision"], {**snapshot["files"], "pyproject.toml": "invalid"})
+    assert environment_status(store.home, main["project"], branch["id"])["state"] == "error"
+    assert environment_status(store.home, main["project"], main["id"])["state"] == "ready"
+    progress = Preparation(store.home, main["project"], "installing", worktree=job["id"])
+    progress.output("Job installation")
+    assert environment_status(store.home, main["project"], job["id"])["log"] == "Job installation"
+    progress.cancel()
+    assert environment_status(store.home, main["project"], job["id"])["state"] == "unprepared"
+    assert environment_status(store.home, main["project"], branch["id"])["state"] == "error"
+
+
+@pytest.mark.parametrize("fail", [False, True])
+def test_run_retains_its_preparation_after_another_operation(services, monkeypatch, fail):
+    store, _, _, engine = services
+    tree = flow(services)
+    if fail:
+
+        def unavailable(files, home, project, *, progress, **kwargs):
+            progress.step("installing")
+            progress.output("Package unavailable at https://user:secret@example.invalid/simple")
+            raise Problem("Package unavailable", 422)
+
+        monkeypatch.setattr(environment, "prepare_environment", unavailable)
+    run = wait_run(store, engine.launch(tree["id"], "dev"))
+    assert run["status"] == ("failed" if fail else "success")
+    preparation = run["preparation"][-1]
+    assert preparation["state"] == ("error" if fail else "ready")
+    assert ("Package unavailable" if fail else "Installed") in preparation["log"]
+    assert "secret" not in preparation["log"]
+    Preparation(store.home, tree["project"], "resolving", worktree=tree["id"]).finish("locked")
+    assert store.get("run", run["id"])["preparation"] == run["preparation"]
+
+
+def test_status_api_selects_the_worktree_and_checks_its_project(tmp_path):
+    from fastapi.testclient import TestClient
+
+    from duckpad.app import create_app
+
+    app = create_app(tmp_path / "api")
+    with TestClient(app) as client:
+        assert client.post("/api/login", json={"password": app.state.auth.initial_password}).is_success
+        main = client.post("/api/projects", json={"name": "Branches"}).json()
+        other = client.post("/api/projects", json={"name": "Other"}).json()
+        branch = app.state.services.projects.branch(main["id"], "experiment")
+        home = app.state.services.store.home
+        Preparation(home, main["project"], "installing", worktree=main["id"]).finish("ready")
+        Preparation(home, main["project"], "resolving", worktree=branch["id"]).finish(
+            "error", "Branch failure"
+        )
+        url = f"/api/projects/{main['project']}/python/environment"
+        assert client.get(url).json()["state"] == "ready"
+        assert client.get(url, params={"worktree": branch["id"]}).json()["error"] == "Branch failure"
+        assert client.get(url, params={"worktree": other["id"]}).status_code == 404
+        assert client.get(url, params={"worktree": "missing"}).status_code == 404

@@ -1,4 +1,4 @@
-"""Latest project preparation, readable while uv is still running."""
+"""Worktree preparation and run diagnostics, readable while uv is still running."""
 
 import json
 import os
@@ -6,6 +6,8 @@ import re
 import sys
 import time
 import uuid
+from contextlib import contextmanager
+from contextvars import ContextVar
 from pathlib import Path
 
 import duckdb
@@ -18,6 +20,21 @@ from .util import atomic_write
 LOG_LIMIT = 16000
 # A single server owns a home (instance.lock): an unfinished preparation from another process was interrupted.
 PROCESS = uuid.uuid4().hex
+OBSERVER = ContextVar("preparation_observer", default=None)
+
+
+@contextmanager
+def observe_preparation(callback):
+    token = OBSERVER.set(callback)
+    try:
+        yield
+    finally:
+        OBSERVER.reset(token)
+
+
+def status_path(home, project, worktree=None):
+    root = Path(home) / "python" / "status"
+    return root / project / (worktree + ".json") if worktree else root / (project + ".json")
 
 
 def clean_output(text, *paths):
@@ -35,9 +52,13 @@ def clean_output(text, *paths):
     return redact_log(text)
 
 
-def environment_status(home, project):
-    path = Path(home) / "python" / "status" / (project + ".json")
-    status: Record = json.loads(path.read_text()) if path.exists() else {"state": "unprepared"}
+def environment_status(home, project, worktree=None):
+    path = status_path(home, project, worktree)
+    try:
+        status: Record = json.loads(path.read_text())
+    except FileNotFoundError:
+        # Cancellation can remove the first preparation while the UI is polling it.
+        status = {"state": "unprepared"}
     if status["state"] in ("resolving", "installing") and status.get("process") != PROCESS:
         status.update(
             state="error",
@@ -52,9 +73,9 @@ def environment_status(home, project):
 
 
 class Preparation:
-    def __init__(self, home, project, state, *, start=True):
+    def __init__(self, home, project, state, *, worktree=None, start=True):
         self.home = home
-        self.path = Path(home) / "python" / "status" / (project + ".json") if project else None
+        self.path = status_path(home, project, worktree) if project else None
         self.status = {
             "operation": uuid.uuid4().hex,
             "process": PROCESS,
@@ -78,6 +99,7 @@ class Preparation:
             self.save(initial=True)
 
     def save(self, *, initial=False):
+        self.publish()
         if self.path is None:
             return
         self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -91,6 +113,17 @@ class Preparation:
                     return
             atomic_write(self.path, json.dumps(self.status))
 
+    def publish(self):
+        if observer := OBSERVER.get():
+            observer(
+                {
+                    **self.status,
+                    "elapsed_seconds": round(
+                        max(0, (self.status["finished_at"] or time.time()) - self.status["started_at"]), 1
+                    ),
+                }
+            )
+
     def step(self, stage):
         self.start()
         self.status["stage"] = stage
@@ -103,7 +136,11 @@ class Preparation:
 
     def cancel(self):
         """Restore the replaced status: stopping a run neither prepared nor broke the environment."""
-        if not self.active or self.path is None:
+        if not self.active:
+            return
+        self.status.update(state="canceled", finished_at=time.time())
+        self.publish()
+        if self.path is None:
             return
         with FileLock(str(self.path.with_suffix(".lock"))):
             if (

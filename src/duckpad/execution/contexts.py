@@ -414,7 +414,13 @@ class ContextPool:
         if policy.get("enabled") and python:
             from ..python_environment import prepare
 
-            runtime = prepare(files, self.store.home, project, allow_builds=policy.get("allow_builds", False))
+            runtime = prepare(
+                files,
+                self.store.home,
+                project,
+                worktree=worktree,
+                allow_builds=policy.get("allow_builds", False),
+            )
         directory = self.store.paths.exports(worktree, environment)
         directory.mkdir(parents=True, exist_ok=True)
         temporary = directory / ".temporary"

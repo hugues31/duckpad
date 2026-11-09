@@ -723,6 +723,7 @@ class Projects:
                 self.store.home,
                 allow_builds=policy.get("allow_builds", False),
                 project=record["project"],
+                worktree=record["id"],
             ),
         }
 

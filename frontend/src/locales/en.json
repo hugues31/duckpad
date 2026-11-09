@@ -1336,7 +1336,7 @@
   "pythonParentCell": "Trace {column}, row {row}",
   "pythonCapturedParents": "Parent results captured for this execution",
   "pythonEnvironments": "Python environments",
-  "pythonEnvironmentHint": "Latest environment preparation for this project. Each dependency set has its own immutable environment.",
+  "pythonEnvironmentHint": "Latest environment preparation for the selected branch. Each dependency set has its own immutable environment.",
   "pythonEnvironmentUnprepared": "Not prepared yet",
   "pythonEnvironmentResolving": "Resolving dependencies and updating uv.lock…",
   "pythonEnvironmentLocked": "Dependencies locked; installation starts when Python runs",

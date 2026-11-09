@@ -1336,7 +1336,7 @@
   "pythonParentCell": "Suivre {column}, ligne {row}",
   "pythonCapturedParents": "Résultats parents capturés pour cette exécution",
   "pythonEnvironments": "Environnements Python",
-  "pythonEnvironmentHint": "Dernière préparation d’environnement pour ce projet. Chaque ensemble de dépendances dispose de son propre environnement immuable.",
+  "pythonEnvironmentHint": "Dernière préparation d’environnement pour la branche sélectionnée. Chaque ensemble de dépendances dispose de son propre environnement immuable.",
   "pythonEnvironmentUnprepared": "Pas encore préparé",
   "pythonEnvironmentResolving": "Résolution des dépendances et mise à jour de uv.lock…",
   "pythonEnvironmentLocked": "Dépendances verrouillées ; l’installation démarrera à l’exécution de Python",

@@ -177,7 +177,8 @@ def test_unrelated_lineage_in_same_context_is_not_canceled(services, tmp_path, m
 
 
 @pytest.mark.parametrize("close", [False, True])
-def test_preparing_run_is_visible_and_cancellable_during_uv_lock(services, tmp_path, monkeypatch, close):
+@pytest.mark.parametrize("command", ["lock", "sync"])
+def test_preparing_run_is_visible_and_cancellable_during_uv(services, tmp_path, monkeypatch, close, command):
     import os
     import sys
 
@@ -193,11 +194,16 @@ def test_preparing_run_is_visible_and_cancellable_during_uv_lock(services, tmp_p
     }
     projects.write(tree["id"], snapshot["revision"], bundle_to_files(bundle))
     store.put("settings", "python:" + tree["project"], {"enabled": True})
+    if command == "sync":
+        snapshot = projects.snapshot(tree["id"])
+        locked = python_environment.lock_files(snapshot["files"], store.home)
+        projects.write(tree["id"], snapshot["revision"], {**snapshot["files"], "uv.lock": locked})
     marker = tmp_path / "uv-started"
     uv = tmp_path / "uv"
     # The PID is published by renaming a complete file: the test reads the marker as soon as it exists.
     uv.write_text(
-        f"#!{sys.executable}\nimport os, sys, time\nfrom pathlib import Path\nassert sys.argv[1] == 'lock'\n"
+        f"#!{sys.executable}\nimport os, sys, time\nfrom pathlib import Path\nassert sys.argv[1] == {command!r}\n"
+        "print('Preparing packages', flush=True)\n"
         f"Path({str(marker) + '.tmp'!r}).write_text(str(os.getpid()))\n"
         f"os.replace({str(marker) + '.tmp'!r}, {str(marker)!r})\ntime.sleep(60)\n"
     )
@@ -212,6 +218,7 @@ def test_preparing_run_is_visible_and_cancellable_during_uv_lock(services, tmp_p
     wait_until(marker.exists, timeout=10)
     child = int(marker.read_text())
     assert store.get("run", run["id"])["status"] == "preparing"
+    wait_until(lambda: "Preparing packages" in store.get("run", run["id"])["preparation"][-1]["log"])
     assert engine.statuses(tree["id"], "dev")["active"]["id"] == run["id"]
     with pytest.raises(Problem) as busy:
         engine.launch(tree["id"], "dev")
@@ -222,14 +229,21 @@ def test_preparing_run_is_visible_and_cancellable_during_uv_lock(services, tmp_p
         assert not engine.pool.all()
     else:
         assert engine.cancel(run["id"])["status"] == "canceling"
-    assert wait_run(store, run, timeout=5)["status"] == "canceled"
+    finished = wait_run(store, run, timeout=5)
+    assert finished["status"] == "canceled"
+    assert finished["preparation"][-1]["state"] == "canceled"
+    assert "Preparing packages" in finished["preparation"][-1]["log"]
+    assert not [p for p in (store.home / "python").iterdir() if p.is_dir() and len(p.name) == 64]
     assert not engine.active
     with pytest.raises(ProcessLookupError):
         os.kill(child, 0)
     assert projects.snapshot(tree["id"])["commit"] == before
     assert not any(t.is_alive() for t in engine.runs.threads)
     # Stopping the run neither prepared nor broke the environment: no error is left in settings.
-    assert python_environment.environment_status(store.home, tree["project"])["state"] == "unprepared"
+    assert python_environment.environment_status(store.home, tree["project"], tree["id"])["state"] in (
+        "unprepared",
+        "locked",
+    )
 
 
 def test_retirement_holds_context_lock_while_lineage_adds_datasets(services, tmp_path, monkeypatch):

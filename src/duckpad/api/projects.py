@@ -105,8 +105,12 @@ def router(ctx: Context) -> APIRouter:
         response_model=None,
         dependencies=[Depends(project_role("reader"))],
     )
-    def python_environment_status(project: str) -> Record:
-        return environment_status(store.home, project)
+    def python_environment_status(project: str, worktree: str | None = None) -> Record:
+        worktree = worktree or store.get("project", project)["main"]
+        record = projects.get(worktree)
+        if record["project"] != project:
+            raise Problem("Worktree not found in this project", 404)
+        return environment_status(store.home, project, worktree)
 
     @api.put(
         "/api/projects/{project}/python",

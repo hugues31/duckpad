@@ -431,7 +431,26 @@ export interface NodeRun {
   /** Parameter -> the variables its expression references. */
   references?: Record<string, string[]>;
 }
+export interface PreparationStatus {
+  state:
+    | "unprepared"
+    | "resolving"
+    | "locked"
+    | "installing"
+    | "ready"
+    | "error"
+    | "canceled";
+  stage?: "waiting" | "runtime" | "resolving" | "installing" | "sdk" | "cached";
+  operation?: string;
+  elapsed_seconds?: number;
+  python?: string;
+  duckdb?: string;
+  error?: string | null;
+  log?: string;
+  log_truncated?: boolean;
+}
 export interface Run {
+  preparation?: PreparationStatus[];
   partitions?: {
     started?: string;
     manifest?: string;

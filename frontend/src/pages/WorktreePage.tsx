@@ -93,8 +93,9 @@ export default function WorktreePage() {
       <Outlet key={id} context={flowView} />
       {snapshot.python_enabled && (
         <PythonPreparationNotice
-          key={`python:${tree.project}`}
+          key={`python:${id}`}
           project={tree.project}
+          worktree={id}
           active={saving || starting || !!statuses.active}
         />
       )}

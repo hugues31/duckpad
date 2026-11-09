@@ -28,8 +28,9 @@ test("Python preparation is visible in the workspace and retained in settings", 
     log: "Old failure",
     error: "Old failure",
   };
-  await page.route(`**/projects/${tree.project}/python/environment`, (route) =>
-    route.fulfill({ json: status }),
+  await page.route(
+    `**/projects/${tree.project}/python/environment?worktree=${tree.id}`,
+    (route) => route.fulfill({ json: status }),
   );
   await page.goto(`/worktrees/${tree.id}/flow`);
   await expect(
@@ -109,6 +110,42 @@ test("Python preparation is visible in the workspace and retained in settings", 
   );
   await settings.getByText("Preparation log", { exact: true }).click();
   await expect(settings.getByRole("log")).toContainText(
+    "No matching distribution",
+  );
+
+  const branched = await page.request.post(
+    `/api/worktrees/${tree.id}/branches`,
+    {
+      data: { name: "other-dependencies" },
+    },
+  );
+  expect(branched.ok()).toBeTruthy();
+  const branch = await branched.json();
+  await page.route(
+    `**/projects/${tree.project}/python/environment?worktree=${branch.id}`,
+    (route) =>
+      route.fulfill({
+        json: {
+          ...status,
+          state: "ready",
+          error: null,
+          log: "Installed branch dependencies",
+        },
+      }),
+  );
+  await page.goto(
+    `/projects/${tree.project}/settings/python?worktree=${branch.id}`,
+  );
+  await expect(settings.getByRole("status")).toContainText("Environment ready");
+  await expect(settings.locator(".notice.error")).toHaveCount(0);
+  await settings.getByText("Preparation log", { exact: true }).click();
+  await expect(settings.getByRole("log")).toContainText(
+    "Installed branch dependencies",
+  );
+  await page.goto(
+    `/projects/${tree.project}/settings/python?worktree=${tree.id}`,
+  );
+  await expect(settings.locator(".notice.error")).toContainText(
     "No matching distribution",
   );
 });

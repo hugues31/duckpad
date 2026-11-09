@@ -2,6 +2,7 @@ import { useT } from "./i18n";
 import { Settings } from "./projectSettingsTypes";
 import PythonEnvironmentStatus from "./PythonEnvironmentStatus";
 import { useSettingsForm } from "./useSettingsForm";
+import { useOptionalWorktree } from "./worktree";
 
 export default function ProjectPythonSettings({
   instanceAdmin,
@@ -17,6 +18,7 @@ export default function ProjectPythonSettings({
   project: string;
 }) {
   const t = useT();
+  const worktree = useOptionalWorktree();
   return (
     <>
       <div className="settings-card">
@@ -85,7 +87,7 @@ export default function ProjectPythonSettings({
           </>
         )}
       </div>
-      <PythonEnvironmentStatus project={project} />
+      <PythonEnvironmentStatus project={project} worktree={worktree?.id} />
     </>
   );
 }

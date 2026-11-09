@@ -4,6 +4,7 @@ import { useT } from "./i18n";
 import { seconds } from "./results";
 import { useApiResource } from "./useApiResource";
 import { useFollowScroll } from "./useFollowScroll";
+import type { PreparationStatus, Run } from "./types";
 
 const states = {
   unprepared: "pythonEnvironmentUnprepared",
@@ -12,9 +13,10 @@ const states = {
   installing: "pythonEnvironmentInstalling",
   ready: "pythonEnvironmentReady",
   error: "pythonEnvironmentError",
+  canceled: "canceled",
 } as const;
 
-const stages = {
+export const preparationStages = {
   waiting: "pythonEnvironmentWaiting",
   runtime: "pythonEnvironmentRuntime",
   resolving: "pythonEnvironmentResolving",
@@ -30,23 +32,11 @@ const outcomes = {
   error: "pythonEnvironmentError",
 } as const;
 
-interface PreparationStatus {
-  state: keyof typeof states;
-  stage?: keyof typeof stages;
-  operation?: string;
-  elapsed_seconds?: number;
-  python: string;
-  duckdb: string;
-  error?: string | null;
-  log?: string;
-  log_truncated?: boolean;
-}
-
 /** The latest preparation, polled every second while it runs or while `active`. */
-function usePreparation(project: string, active = false) {
+function usePreparation(project: string, worktree?: string, active = false) {
   const [busy, setBusy] = useState(false);
   const resource = useApiResource<PreparationStatus>(
-    `/projects/${project}/python/environment`,
+    `/projects/${project}/python/environment${worktree ? `?worktree=${encodeURIComponent(worktree)}` : ""}`,
     { interval: busy || active ? 1000 : 5000, refresh: Number(active) },
   );
   const preparing =
@@ -103,16 +93,22 @@ function PreparationDetails({
   );
 }
 
-/** The project's latest preparation, with its log, in Python settings. */
+/** The selected branch's latest preparation, with its log, in Python settings. */
 export default function PythonEnvironmentStatus({
   project,
+  worktree,
 }: {
   project: string;
+  worktree?: string;
 }) {
   const t = useT();
-  const { data: status, error, preparing } = usePreparation(project);
+  const { data: status, error, preparing } = usePreparation(project, worktree);
   const label = status
-    ? t(preparing && status.stage ? stages[status.stage] : states[status.state])
+    ? t(
+        preparing && status.stage
+          ? preparationStages[status.stage]
+          : states[status.state],
+      )
     : t("loading");
   return (
     <section
@@ -154,13 +150,15 @@ export default function PythonEnvironmentStatus({
  */
 export function PythonPreparationNotice({
   project,
+  worktree,
   active,
 }: {
   project: string;
+  worktree: string;
   active: boolean;
 }) {
   const t = useT();
-  const { data: status, preparing } = usePreparation(project, active);
+  const { data: status, preparing } = usePreparation(project, worktree, active);
   const [hidden, setHidden] = useState<string>();
   const [loaded, setLoaded] = useState(false);
   const [reading, setReading] = useState(false);
@@ -184,7 +182,7 @@ export function PythonPreparationNotice({
   const failed = status.state === "error";
   const label =
     preparing && status.stage
-      ? stages[status.stage]
+      ? preparationStages[status.stage]
       : outcomes[status.state as keyof typeof outcomes] || states[status.state];
   return (
     <section
@@ -223,6 +221,36 @@ export function PythonPreparationNotice({
         open={reading}
         onToggle={setReading}
       />
+    </section>
+  );
+}
+
+/** Retain each resolver/installer operation with the run that requested it. */
+export function RunPreparation({ run }: { run: Run }) {
+  const t = useT();
+  if (!run.preparation?.length) return null;
+  const active = ["preparing", "canceling"].includes(run.status);
+  return (
+    <section className="python-preparation" aria-label={t("pythonEnvironment")}>
+      <h3>{t("pythonEnvironment")}</h3>
+      {run.preparation.map((status, index) => {
+        const preparing =
+          active && ["resolving", "installing"].includes(status.state);
+        return (
+          <div key={status.operation || index}>
+            <p role="status">
+              {t(
+                preparing && status.stage
+                  ? preparationStages[status.stage]
+                  : states[status.state],
+              )}
+              {status.elapsed_seconds !== undefined &&
+                ` · ${seconds(status.elapsed_seconds)}`}
+            </p>
+            <PreparationDetails status={status} preparing={preparing} />
+          </div>
+        );
+      })}
     </section>
   );
 }

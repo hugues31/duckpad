@@ -16,6 +16,7 @@ import NewTagModal from "./NewTagModal";
 import { displayNodeName } from "./nodeNames";
 import { PartitionHistory } from "./PartitionHistory";
 import { partitionMessage } from "./partitions";
+import { RunPreparation } from "./PythonEnvironmentStatus";
 import TagBadges from "./TagBadges";
 import type { Run } from "./types";
 import { useApiResource } from "./useApiResource";
@@ -274,7 +275,17 @@ export function RunDetails(props: {
 }) {
   const t = useT();
   const detail = useApiResource<Run>(
-    props.run.nodes ? null : `/runs/${props.run.id}`,
+    !props.run.nodes ||
+      ["preparing", "running", "canceling"].includes(props.run.status)
+      ? `/runs/${props.run.id}`
+      : null,
+    {
+      interval: 1000,
+      nextInterval: (run) =>
+        ["preparing", "running", "canceling"].includes(run.status)
+          ? 1000
+          : false,
+    },
   );
   if (detail.error)
     return (
@@ -282,7 +293,7 @@ export function RunDetails(props: {
         {detail.error}
       </p>
     );
-  const run = props.run.nodes ? props.run : detail.data;
+  const run = detail.data || (props.run.nodes ? props.run : null);
   return run ? (
     <RunDetailsContent {...props} run={run} />
   ) : (
@@ -320,6 +331,7 @@ function RunDetailsContent({
       {run.error && (
         <p className="notice error">{partitionMessage(t, run.error)}</p>
       )}
+      <RunPreparation run={run} />
       {run.requester && (
         <p>
           {t("runRequester")}: <strong>{run.requester.username}</strong>
