@@ -40,7 +40,10 @@ export interface Preferences {
   setEdgeStyle: (value: EdgeStyle) => void;
 }
 
-/** Language and theme follow the browser until the user picks one; choices are saved per browser. */
+/**
+ * Language and theme follow the browser until the user picks one, and links are
+ * curved by default; choices are saved per browser.
+ */
 export function usePreferences(): Preferences {
   const [language, setLanguageState] = useState<Language>(() => {
     const saved = localStorage.getItem(LANGUAGE_KEY);
