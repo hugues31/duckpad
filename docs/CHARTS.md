@@ -81,6 +81,7 @@ naming the chart, its output and the first construct refused, such as
 
 Values follow these rules:
 
+- A spec has a `mark` or a `layer`, and every layer has a `mark`.
 - `width` and `height` are a positive number or `"container"`. A `title` is a
   string or an object with `text` and `subtitle` strings.
 - `type` is `quantitative`, `temporal`, `ordinal` or `nominal`; `formatType` is
@@ -153,6 +154,8 @@ external editors, so the browser applies its own barriers on top of validation:
 - **No generated code.** Vega expressions run in `vega-interpreter` rather than
   being compiled to JavaScript, and the actions menu, which could open the spec
   in an online editor, is hidden.
+- **Text tooltips.** A tooltip shows its values as escaped text, never as HTML
+  or as an image a value points to.
 - **Pinned versions.** `vega` 6.4.0, `vega-lite` 6.5.0, `vega-embed` 7.3.0 and
   `vega-interpreter` 2.3.2 are upgraded only deliberately. Vega loads when the
   Chart tab first opens.

@@ -135,6 +135,9 @@ and legend properties) is a diagnostic, so `{"expr": …}` and other
 expression or signal references never reach the renderer. This is the central
 safety property of the allowlist.
 
+A spec has a `mark` or a `layer`, and every layer has a `mark`: Vega-Lite's
+error for a spec without one quotes the whole spec, rows included.
+
 Beyond the allowlist, a spec is at most 64 KiB serialized as compact UTF-8
 JSON. Each diagnostic names the chart, its output and the path of the first
 construct refused, such as `encoding.x.aggregate is not allowed`.
@@ -162,6 +165,9 @@ editors. Backend validation therefore cannot be the only barrier:
 - **Every embed** uses `ast: true` (vega-embed 7.3 then evaluates expressions
   with `vega-interpreter`, generating no code), a Vega loader that rejects
   every network and file request, and `actions: false`.
+- **Text tooltips:** vega-tooltip's default formatter writes HTML, escapes
+  only `&` and `<`, and turns an `image` entry into an `<img>` whose source
+  is a cell. Duckpad formats tooltips itself, as escaped text.
 - **Pinned versions:** `vega` 6.4.0, `vega-lite` 6.5.0, `vega-embed` 7.3.0
   and `vega-interpreter` 2.3.2, all BSD-3-Clause. Vega's expression language
   has had several XSS advisories, including in `vega-interpreter` before

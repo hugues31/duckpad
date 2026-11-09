@@ -193,6 +193,8 @@ REJECTED = {
         "layer[0].data is not allowed",
     ),
     "nested layer": ({"layer": [{"layer": []}]}, "layer[0].layer is not allowed"),
+    "no mark": ({"encoding": BARS["spec"]["encoding"]}, "a chart needs a mark or a layer"),
+    "layer without mark": ({"layer": [{"mark": "bar"}, {"encoding": {}}]}, "layer[1] needs a mark"),
     "layer list": ({"layer": {"mark": "bar"}}, "layer must be a list of objects"),
     "boxplot": ({"mark": "boxplot"}, "mark boxplot is not allowed"),
     "errorbar": ({"mark": {"type": "errorbar"}}, "mark errorbar is not allowed"),

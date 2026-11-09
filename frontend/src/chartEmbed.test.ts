@@ -1,9 +1,13 @@
+// @vitest-environment happy-dom
+import type { Item, TooltipHandler } from "vega";
 import { expressionInterpreter } from "vega-interpreter";
 import { expect, it } from "vitest";
 import {
   chartSpec,
   embedOptions,
+  formatTooltip,
   LOAD_REFUSED,
+  renderChart,
   themeConfig,
 } from "./chartEmbed";
 import { chartRows } from "./chartValues";
@@ -37,6 +41,59 @@ it("refuses every network and file request", async () => {
   ).rejects.toThrow();
   await expect(loader.http("https://example.com/", {})).rejects.toThrow();
   await expect(loader.file("/etc/passwd")).rejects.toThrow();
+});
+
+// A cell is untrusted text: vega-tooltip's default formatter would turn this
+// one, under an `image` key, into <img src="x:a" onerror="alert(1)">.
+const ATTACK = 'x:a" onerror="alert(1)';
+
+it("formats tooltips as escaped text, with no image", () => {
+  const html = formatTooltip({ image: ATTACK, title: "<b>", amount: 3 });
+  expect(html).not.toContain("<img");
+  expect(html).not.toContain("<b>");
+  expect(html).toContain("x:a&quot; onerror=&quot;alert(1)");
+  expect(formatTooltip([ATTACK, { a: "<" }])).toBe(
+    "[&quot;x:a\\&quot; onerror=\\&quot;alert(1)&quot;,{&quot;a&quot;:&quot;&lt;&quot;}]",
+  );
+  expect(formatTooltip("<svg onload=alert(1)>")).toBe(
+    "&lt;svg onload=alert(1)&gt;",
+  );
+});
+
+it("shows a hovered cell in the tooltip as text", async () => {
+  const element = document.createElement("div");
+  document.body.append(element);
+  const rows = chartRows(
+    [{ name: "image", type: "VARCHAR" }],
+    [{ id: 0, values: [ATTACK] }],
+  );
+  const result = await renderChart(
+    element,
+    {
+      mark: { type: "point", tooltip: true },
+      encoding: { x: { field: "image", type: "nominal" } },
+    },
+    rows,
+  );
+  // Vega's getter, which its typings omit, returns the handler embed installed.
+  const view = result.view as unknown as { tooltip(): TooltipHandler };
+  view.tooltip()(result.view, new MouseEvent("mousemove"), {} as Item, {
+    image: ATTACK,
+  });
+  const tooltip = document.getElementById("vg-tooltip-element");
+  expect(tooltip?.querySelector("img")).toBeNull();
+  expect(tooltip?.textContent).toContain(ATTACK);
+  result.finalize();
+  element.remove();
+});
+
+it("draws nothing once its signal is aborted", async () => {
+  const element = document.createElement("div");
+  const drawing = new AbortController();
+  const rendered = renderChart(element, BARS, [], undefined, drawing.signal);
+  drawing.abort();
+  await expect(rendered).rejects.toThrow();
+  expect(element.childNodes).toHaveLength(0);
 });
 
 it("fills the container width unless the spec sets one", () => {

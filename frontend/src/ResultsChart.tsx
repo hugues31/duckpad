@@ -152,16 +152,26 @@ function ChartView({
   const element = useRef<HTMLDivElement>(null);
   const [failure, setFailure] = useState<{ spec: string; message: string }>();
   useEffect(() => {
-    if (!rows || missing || !element.current) return;
-    let disposed = false;
+    const target = element.current;
+    if (!rows || missing || !target) return;
+    const drawing = new AbortController();
     let finalize = () => {};
-    renderChart(element.current, JSON.parse(spec), rows, appearance).then(
+    renderChart(
+      target,
+      JSON.parse(spec),
+      rows,
+      appearance,
+      drawing.signal,
+    ).then(
       (result) => {
-        if (disposed) result.finalize();
-        else finalize = () => result.finalize();
+        if (drawing.signal.aborted) result.finalize();
+        else {
+          finalize = () => result.finalize();
+          setFailure(undefined);
+        }
       },
       (error: unknown) => {
-        if (!disposed)
+        if (!drawing.signal.aborted)
           setFailure({
             spec,
             message: error instanceof Error ? error.message : String(error),
@@ -169,8 +179,10 @@ function ChartView({
       },
     );
     return () => {
-      disposed = true;
+      drawing.abort();
       finalize();
+      // Vega leaves its drawing: no error or other chart may show over it.
+      target.replaceChildren();
     };
   }, [rows, missing, spec, appearance]);
   const all = partition.partition_mode === "all";

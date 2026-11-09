@@ -68,11 +68,43 @@ const blockingLoader: Loader = {
   file: refuse,
 };
 
+const ESCAPES: Record<string, string> = {
+  "&": "&amp;",
+  "<": "&lt;",
+  ">": "&gt;",
+  '"': "&quot;",
+  "'": "&#39;",
+};
+const escapeHTML = (value: unknown) =>
+  String(value).replace(/[&<>"']/g, (character) => ESCAPES[character]);
+const tooltipText = (value: unknown) =>
+  escapeHTML(
+    value !== null && typeof value === "object" ? JSON.stringify(value) : value,
+  );
+
+/**
+ * Tooltip HTML made of escaped text only. vega-tooltip's default turns an
+ * `image` entry into an `<img>` whose source is a cell, escaped for `&` and
+ * `<` alone: the cell could close the attribute or load a remote image.
+ */
+export function formatTooltip(value: unknown) {
+  if (value === null || typeof value !== "object" || Array.isArray(value))
+    return tooltipText(value);
+  const rows = Object.entries(value)
+    .filter(([, item]) => item !== undefined)
+    .map(
+      ([key, item]) =>
+        `<tr><td class="key">${escapeHTML(key)}</td><td class="value">${tooltipText(item)}</td></tr>`,
+    );
+  return `<table>${rows.join("")}</table>`;
+}
+
 /**
  * Embed options that always parse the spec as Vega-Lite, never as Vega, and
  * never generate code or reach the network: expressions
- * run in `vega-interpreter` (`ast: true`), every load is refused and the
- * actions menu, which can open the spec in an online editor, is hidden.
+ * run in `vega-interpreter` (`ast: true`), every load is refused, tooltips
+ * are text and the actions menu, which can open the spec in an online
+ * editor, is hidden.
  */
 export function embedOptions(
   expr: NonNullable<EmbedOptions["expr"]>,
@@ -83,6 +115,7 @@ export function embedOptions(
     ast: true,
     expr,
     loader: blockingLoader,
+    tooltip: { formatTooltip },
     actions: false,
     renderer: "svg",
     config,
@@ -101,17 +134,22 @@ export function chartSpec(spec: ChartSpec, rows: ChartRow[]): ChartSpec {
   };
 }
 
-/** Draw a chart, loading Vega on first use so the main bundle stays small. */
+/**
+ * Draw a chart, loading Vega on first use so the main bundle stays small.
+ * An aborted signal stops it before it draws into the element.
+ */
 export async function renderChart(
   element: HTMLElement,
   spec: ChartSpec,
   rows: ChartRow[],
   appearance?: ChartAppearance,
+  signal?: AbortSignal,
 ): Promise<Result> {
   const [{ default: embed }, { expressionInterpreter }] = await Promise.all([
     import("vega-embed"),
     import("vega-interpreter"),
   ]);
+  signal?.throwIfAborted();
   return embed(
     element,
     chartSpec(spec, rows) as VisualizationSpec,

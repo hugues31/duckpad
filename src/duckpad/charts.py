@@ -256,6 +256,11 @@ def check_spec(spec):
         raise Invalid("layer must be a list of objects")
     for index, layer in enumerate(layers):
         check_spec_part(layer, f"layer[{index}]", LAYER)
+        if "mark" not in layer:
+            raise Invalid(f"layer[{index}] needs a mark")
+    # Vega-Lite would refuse it when drawing, quoting the whole spec with its rows.
+    if "mark" not in spec and "layer" not in spec:
+        raise Invalid("a chart needs a mark or a layer")
 
 
 def check_chart(key, chart):

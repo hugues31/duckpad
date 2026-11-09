@@ -257,12 +257,12 @@ test("readers and read-only branches see no Add a chart, and a reader cannot sav
   expect((await snapshotOf(page, worktree)).revision).toBe(before.revision);
 });
 
-test("Vega-Lite compile errors and unknown fields are shown in the tab", async ({
+test("a chart with an unknown field shows the error instead of the previous chart", async ({
   page,
 }) => {
   const worktree = await chartedProject(page, {
     "validated:orders": [
-      { name: "Without a mark", spec: { encoding } },
+      BARS,
       {
         name: "Misspelled field",
         spec: {
@@ -276,8 +276,7 @@ test("Vega-Lite compile errors and unknown fields are shown in the tab", async (
     ],
   });
   const panel = await chartTab(page, worktree, "validated");
-  await expect(panel.getByRole("alert")).toContainText("Invalid specification");
-  await expect(panel.locator(".chart-view svg")).toHaveCount(0);
+  await expect(panel.locator(".chart-view svg")).toHaveCount(1);
 
   await panel.getByRole("button", { name: "Misspelled field" }).click();
   await expect(panel.getByRole("alert")).toHaveText(
