@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { signIn, withoutExampleVariables } from "./helpers";
+import { editCode, signIn, withoutExampleVariables } from "./helpers";
 import type { Run, Snapshot } from "../src/types";
 
 async function prepare(page: Page, environment = "dev") {
@@ -243,20 +243,7 @@ test("Run persists unsaved Code edits before launching", async ({ page }) => {
   ).params.status = { $var: "order_status" };
   await page.getByRole("link", { name: "Code", exact: true }).click();
   await page.getByRole("treeitem", { name: "flow.json", exact: true }).click();
-  // The file's new editor stays hidden, so focusing it fails, and reports no
-  // changes until it is ready: wait until it shows the file.
-  await expect(page.locator(".code-workspace .monaco-editor")).toContainText(
-    '"edges"',
-  );
-  const editor = page.locator(".code-workspace .monaco-editor textarea");
-  await editor.focus();
-  await page.keyboard.press("ControlOrMeta+A");
-  await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
-  await page.evaluate(
-    (text) => navigator.clipboard.writeText(text),
-    JSON.stringify(flow, null, 2),
-  );
-  await page.keyboard.press("ControlOrMeta+V");
+  await editCode(page, JSON.stringify(flow, null, 2));
   await expect(page.locator(".flow-toolbar .save-status")).toHaveText(
     "Unsaved changes",
   );

@@ -34,6 +34,8 @@ async function createProject(page: Page) {
 }
 
 async function replaceEditor(page: Page, editor: Locator, text: string) {
+  // A newly mounted editor stays hidden, and ignores focus, until it is ready.
+  await expect(editor).toBeVisible();
   await editor.focus();
   await page.keyboard.press("ControlOrMeta+A");
   await page.keyboard.insertText(text);

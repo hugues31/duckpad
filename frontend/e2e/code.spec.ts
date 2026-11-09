@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { test, expect, type Page } from "@playwright/test";
 import fr from "../src/locales/fr.json" with { type: "json" };
-import { signIn } from "./helpers";
+import { editCode, signIn } from "./helpers";
 
 async function openCode(page: Page) {
   await signIn(page);
@@ -17,18 +17,6 @@ async function openCode(page: Page) {
       await page.request.get(`/api/worktrees/${worktree.id}`)
     ).json(),
   };
-}
-
-async function editCode(page: Page, text: string) {
-  // A newly selected file mounts a hidden editor, which ignores focus and
-  // reports no changes until it shows.
-  await expect(page.locator(".code-workspace .monaco-editor")).toBeVisible();
-  const editor = page.locator(".code-workspace .monaco-editor textarea");
-  await editor.focus();
-  await page.keyboard.press("ControlOrMeta+A");
-  await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
-  await page.evaluate((value) => navigator.clipboard.writeText(value), text);
-  await page.keyboard.press("ControlOrMeta+V");
 }
 
 test("Code has a keyboard file tree, preserves drafts across files and tabs, saves and downloads a ZIP", async ({

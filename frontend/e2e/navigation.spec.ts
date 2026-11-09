@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import fr from "../src/locales/fr.json" with { type: "json" };
-import { signIn, submitLogin, openUserSettings } from "./helpers";
+import { editCode, signIn, submitLogin, openUserSettings } from "./helpers";
 
 test("dedicated pages support direct sign-in, refresh, history, new tabs and translated labels", async ({
   page,
@@ -158,10 +158,7 @@ test("unsaved code and documentation guard links and browser history without los
     .getByRole("link", { name: `Open project: ${projectName}`, exact: true })
     .click();
   await page.getByRole("link", { name: "Code", exact: true }).click();
-  const editor = page.locator(".code-workspace .monaco-editor textarea");
-  await editor.focus();
-  await page.keyboard.press("ControlOrMeta+A");
-  await page.keyboard.insertText('{"unsaved":true}');
+  await editCode(page, '{"unsaved":true}');
   await page.getByRole("link", { name: "Flow", exact: true }).click();
   await page.goBack();
   await expect(page.locator(".code-workspace")).toContainText('"unsaved":true');
