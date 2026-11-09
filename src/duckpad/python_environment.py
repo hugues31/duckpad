@@ -442,15 +442,11 @@ def command(arguments, directory, *, allow_builds=False, progress=None):
                 )
 
 
-def lock_files(files, home, *, read_only=False, allow_builds=False, project=None, worktree=None):
-    progress = Preparation(home, project, "resolving", worktree=worktree, start=False)
+def lock_files(files, home, *, read_only=False, allow_builds=False, worktree=None):
+    progress = Preparation(home, worktree, "resolving", start=False)
     try:
         locked = cached_lock(files, home, read_only=read_only, allow_builds=allow_builds, progress=progress)
-        if (
-            not progress.active
-            and project
-            and environment_status(home, project, worktree)["state"] == "error"
-        ):
+        if not progress.active and worktree and environment_status(home, worktree)["state"] == "error":
             progress.step("cached")
         progress.finish("locked")
         return locked
@@ -531,14 +527,14 @@ def resolve_lock(files, home, *, read_only=False, allow_builds=False, progress=N
 
 
 def prepare(files, home, project, *, allow_builds=False, worktree=None):
-    progress = Preparation(home, project, "installing", worktree=worktree, start=False)
+    progress = Preparation(home, worktree, "installing", start=False)
     try:
         result = prepare_environment(files, home, project, allow_builds=allow_builds, progress=progress)
         # A cached environment starts no preparation; it only replaces a settled state other than ready.
         if (
             not progress.active
-            and project
-            and environment_status(home, project, worktree)["state"] in ("unprepared", "locked", "error")
+            and worktree
+            and environment_status(home, worktree)["state"] in ("unprepared", "locked", "error")
         ):
             progress.step("cached")
         progress.finish("ready")

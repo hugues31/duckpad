@@ -553,7 +553,6 @@ class LaunchPlanner:
             files,
             self.store.home,
             read_only=bool(snapshot["worktree"].get("read_only")),
-            project=snapshot["worktree"]["project"],
             worktree=worktree,
             allow_builds=settings.get("allow_builds", False),
         )

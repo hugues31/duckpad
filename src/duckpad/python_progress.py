@@ -14,6 +14,7 @@ import duckdb
 from filelock import FileLock
 
 from .monitoring import redact_log
+from .paths import InstancePaths
 from .types import Record
 from .util import atomic_write
 
@@ -32,9 +33,8 @@ def observe_preparation(callback):
         OBSERVER.reset(token)
 
 
-def status_path(home, project, worktree=None):
-    root = Path(home) / "python" / "status"
-    return root / project / (worktree + ".json") if worktree else root / (project + ".json")
+def status_path(home, worktree):
+    return InstancePaths(home).python_status(worktree) / "status.json"
 
 
 def clean_output(text, *paths):
@@ -52,8 +52,8 @@ def clean_output(text, *paths):
     return redact_log(text)
 
 
-def environment_status(home, project, worktree=None):
-    path = status_path(home, project, worktree)
+def environment_status(home, worktree):
+    path = status_path(home, worktree)
     try:
         status: Record = json.loads(path.read_text())
     except FileNotFoundError:
@@ -73,9 +73,9 @@ def environment_status(home, project, worktree=None):
 
 
 class Preparation:
-    def __init__(self, home, project, state, *, worktree=None, start=True):
+    def __init__(self, home, worktree, state, *, start=True):
         self.home = home
-        self.path = status_path(home, project, worktree) if project else None
+        self.path = status_path(home, worktree) if worktree else None
         self.status = {
             "operation": uuid.uuid4().hex,
             "process": PROCESS,
@@ -115,14 +115,11 @@ class Preparation:
 
     def publish(self):
         if observer := OBSERVER.get():
-            observer(
-                {
-                    **self.status,
-                    "elapsed_seconds": round(
-                        max(0, (self.status["finished_at"] or time.time()) - self.status["started_at"]), 1
-                    ),
-                }
+            status = {key: value for key, value in self.status.items() if key != "process"}
+            status["elapsed_seconds"] = round(
+                max(0, (status["finished_at"] or time.time()) - status["started_at"]), 1
             )
+            observer(status)
 
     def step(self, stage):
         self.start()

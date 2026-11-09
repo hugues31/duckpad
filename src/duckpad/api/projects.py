@@ -110,7 +110,7 @@ def router(ctx: Context) -> APIRouter:
         record = projects.get(worktree)
         if record["project"] != project:
             raise Problem("Worktree not found in this project", 404)
-        return environment_status(store.home, project, worktree)
+        return environment_status(store.home, worktree)
 
     @api.put(
         "/api/projects/{project}/python",

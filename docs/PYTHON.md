@@ -117,12 +117,12 @@ the workspace shows a notice with the current preparation stage, an indeterminat
 progress bar, elapsed time and expandable live uv output. No download percentage is
 estimated. A success closes the notice after a few seconds unless its log is open; a
 failure stays until closed. Cached environments are reused without reinstalling
-dependencies or showing the notice. The project’s Python settings retain the latest
-preparation for the selected branch, its error and up to 16,000 characters of log output, with credentials
-and local runtime paths masked. A preparation interrupted by a server stop is
-reported as failed. Branches and Job worktrees keep independent preparation states;
-an older project-wide status is not attributed to any branch. Environments unused for seven days are removed during
-later preparations; active workers hold a lease that prevents removal.
+dependencies or showing the notice. Each branch and Job keeps its own latest
+preparation: the project’s Python settings show the selected branch’s, with its error
+and up to 16,000 characters of log output, credentials and local runtime paths
+masked. A preparation interrupted by a server stop is reported as failed.
+Environments unused for seven days are removed during later preparations; active
+workers hold a lease that prevents removal.
 
 ### Use an on-premises Artifactory index
 

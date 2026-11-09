@@ -294,6 +294,7 @@ class Projects:
             self.pending.pop(worktree["id"], None)
             shutil.rmtree(worktree["path"], ignore_errors=True)
             shutil.rmtree(self.store.paths.exports(worktree["id"]), ignore_errors=True)
+            shutil.rmtree(self.store.paths.python_status(worktree["id"]), ignore_errors=True)
             partition_artifacts = self.store.paths.partition_artifacts(worktree["id"])
             shutil.rmtree(partition_artifacts, ignore_errors=True)
             with suppress(OSError):
@@ -722,7 +723,6 @@ class Projects:
                 proposal,
                 self.store.home,
                 allow_builds=policy.get("allow_builds", False),
-                project=record["project"],
                 worktree=record["id"],
             ),
         }
