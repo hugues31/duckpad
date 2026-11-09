@@ -275,11 +275,13 @@ def only_run_status(app):
 @pytest.mark.parametrize("signum", [signal.SIGTERM, signal.SIGINT])
 def test_signals_cancel_wait_for_the_stop_and_exit_3(server, monkeypatch, signum):
     app, url, tokens = server
-    _, release = test_automation.hold_execution(app, monkeypatch)
+    entered, release = test_automation.hold_execution(app, monkeypatch)
     try:
         process = start(url, "daily", token=tokens["operator"])
         assert process.stdout is not None
         assert " accepted: " in process.stdout.readline()
+        # Signal a held run: it stays canceling until released, unlike one stopped while preparing.
+        assert entered.wait(10), "The run did not start"
         process.send_signal(signum)
         wait_for(lambda: only_run_status(app) == "canceling", "Signal did not request cancellation")
         assert process.poll() is None, "The command must wait for the run to stop"

@@ -108,6 +108,21 @@ export async function replaceCode(page: Page, text: string) {
   });
 }
 
+/**
+ * Replace the text of the file open in the Code tab through the clipboard.
+ * A newly selected file mounts a hidden editor, which ignores focus and
+ * reports no changes until it shows.
+ */
+export async function editCode(page: Page, text: string) {
+  const editor = page.locator(".code-workspace .monaco-editor");
+  await expect(editor).toBeVisible();
+  await editor.locator("textarea").focus();
+  await page.keyboard.press("ControlOrMeta+A");
+  await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
+  await page.evaluate((value) => navigator.clipboard.writeText(value), text);
+  await page.keyboard.press("ControlOrMeta+V");
+}
+
 /** Close the code panel: the inspector takes its place again. */
 export async function closeCode(page: Page) {
   const panel = codePanel(page);

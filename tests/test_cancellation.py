@@ -195,8 +195,11 @@ def test_preparing_run_is_visible_and_cancellable_during_uv_lock(services, tmp_p
     store.put("settings", "python:" + tree["project"], {"enabled": True})
     marker = tmp_path / "uv-started"
     uv = tmp_path / "uv"
+    # The PID is published by renaming a complete file: the test reads the marker as soon as it exists.
     uv.write_text(
-        f"#!{sys.executable}\nimport os, sys, time\nfrom pathlib import Path\nassert sys.argv[1] == 'lock'\nPath({str(marker)!r}).write_text(str(os.getpid()))\ntime.sleep(60)\n"
+        f"#!{sys.executable}\nimport os, sys, time\nfrom pathlib import Path\nassert sys.argv[1] == 'lock'\n"
+        f"Path({str(marker) + '.tmp'!r}).write_text(str(os.getpid()))\n"
+        f"os.replace({str(marker) + '.tmp'!r}, {str(marker)!r})\ntime.sleep(60)\n"
     )
     uv.chmod(0o755)
     monkeypatch.setattr(python_environment, "uv_executable", lambda: str(uv))

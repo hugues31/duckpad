@@ -53,7 +53,11 @@ export async function jobsFlow(page: Page) {
   const first = await save(10);
   await page.goto(`/worktrees/${tree.id}/flow`);
   await page.getByRole("link", { name: "Jobs", exact: true }).click();
-  await page.getByRole("button", { name: "New Job", exact: true }).click();
+  // Once the empty list loads, its call to action repeats this button.
+  await page
+    .locator(".page-heading")
+    .getByRole("button", { name: "New Job", exact: true })
+    .click();
   let dialog = page.getByRole("dialog", { name: "New Job", exact: true });
   await dialog.getByLabel("Slug", { exact: true }).fill(slug);
   await dialog.getByLabel("Name", { exact: true }).fill("Daily production");
