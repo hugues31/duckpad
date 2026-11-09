@@ -1,8 +1,5 @@
 import { expect, it } from "vitest";
-import {
-  applyParameterChange,
-  sourcePreviewParams,
-} from "./inspectorParameters";
+import { applyParameterChange, sourcePreviewParams } from "./nodeParameters";
 import type { FlowNode } from "./types";
 import { bindTo } from "./variables";
 
