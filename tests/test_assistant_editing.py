@@ -134,13 +134,36 @@ def change(app, worktree, callback):
         ("group_nodes", {"nodes": ["first", "second"], "name": "Together"}),
         (
             "edit_chart",
-            {"operation": "create", "node": "first", "output": "result", "name": "Values", "spec": BAR},
+            {"operation": "create", "node": "first", "output": "result", "name": "Trend", "spec": BAR},
         ),
+        (
+            "edit_chart",
+            {
+                "operation": "update",
+                "node": "first",
+                "output": "result",
+                "name": "Values",
+                "spec": {"mark": "line", "encoding": {"y": {"field": "value", "type": "quantitative"}}},
+            },
+        ),
+        (
+            "edit_chart",
+            {
+                "operation": "rename",
+                "node": "first",
+                "output": "result",
+                "name": "Values",
+                "new_name": "Sums",
+            },
+        ),
+        ("edit_chart", {"operation": "delete", "node": "first", "output": "result", "name": "Values"}),
     ],
 )
 def test_each_write_is_one_attributed_commit_and_can_be_undone(instance, name, args):
     app, client = instance
     worktree, context = seed(app, client)
+    if name == "edit_chart":
+        change(app, worktree, lambda b: b.update(charts={"first:result": [{"name": "Values", "spec": BAR}]}))
     projects = app.state.services.projects
     before = projects.snapshot(worktree["id"])
     identity, result = write_turn(app, client, context, [(name, args)])
@@ -637,6 +660,61 @@ def test_invalid_chart_creations_preserve_saved_files(instance, args, message):
     change(app, worktree, lambda b: b.update(charts={"first:result": [{"name": "Values", "spec": BAR}]}))
     before = app.state.services.projects.snapshot(worktree["id"])
     _, result = write_turn(app, client, context, [("edit_chart", {"operation": "create", **args})])
+    assert result["tools"][0]["status"] == "error", result
+    assert message in result["tools"][0]["summary"]
+    assert app.state.services.projects.snapshot(worktree["id"])["files"] == before["files"]
+
+
+LINE = {"mark": "line", "encoding": {"y": {"field": "value", "type": "quantitative"}}}
+
+
+def test_chart_updates_replace_the_spec_renames_stay_on_the_output_and_last_deletes_drop_the_key(instance):
+    app, client = instance
+    worktree, context = seed(app, client)
+    charts = {"first:result": [{"name": "Values", "spec": BAR}, {"name": "Trend", "spec": BAR}]}
+    change(
+        app, worktree, lambda b: b.update(charts={**charts, "second:result": [{"name": "Only", "spec": BAR}]})
+    )
+    target = {"node": "first", "output": "result"}
+    calls = [
+        ("edit_chart", {"operation": "update", **target, "name": "Values", "spec": LINE}),
+        ("edit_chart", {"operation": "rename", **target, "name": "Values", "new_name": "Lines"}),
+        ("edit_chart", {"operation": "delete", **target, "name": "Trend"}),
+        ("edit_chart", {"operation": "delete", "node": "second", "output": "result", "name": "Only"}),
+    ]
+    _, result = write_turn(app, client, context, calls)
+    assert [t["status"] for t in result["tools"]] == ["complete"] * 4, result
+    assert app.state.services.projects.snapshot(worktree["id"])["bundle"]["charts"] == {
+        "first:result": [{"name": "Lines", "spec": LINE}],
+    }
+
+
+@pytest.mark.parametrize(
+    ("args", "message"),
+    [
+        ({"operation": "update", "name": "Missing", "spec": LINE}, "Chart not found"),
+        ({"operation": "update", "name": "Values"}, "Provide a chart spec"),
+        ({"operation": "rename", "name": "Missing", "new_name": "Lines"}, "Chart not found"),
+        ({"operation": "rename", "name": "Values", "new_name": "Trend"}, "already exists"),
+        ({"operation": "delete", "name": "Missing"}, "Chart not found"),
+        (
+            {"operation": "rename", "name": "Values", "new_name": "Lines", "spec": LINE},
+            "do not accept a spec",
+        ),
+        ({"operation": "delete", "name": "Values", "spec": LINE}, "do not accept a spec"),
+        ({"operation": "create", "name": "Lines", "spec": LINE, "new_name": "Other"}, "Only rename"),
+        ({"operation": "update", "name": "Values", "spec": LINE, "new_name": "Lines"}, "Only rename"),
+        ({"operation": "delete", "name": "Values", "new_name": "Lines"}, "Only rename"),
+    ],
+)
+def test_invalid_chart_changes_preserve_saved_files(instance, args, message):
+    app, client = instance
+    worktree, context = seed(app, client)
+    charts = {"first:result": [{"name": "Values", "spec": BAR}, {"name": "Trend", "spec": BAR}]}
+    change(app, worktree, lambda b: b.update(charts=charts))
+    before = app.state.services.projects.snapshot(worktree["id"])
+    target = {"node": "first", "output": "result"}
+    _, result = write_turn(app, client, context, [("edit_chart", {**target, **args})])
     assert result["tools"][0]["status"] == "error", result
     assert message in result["tools"][0]["summary"]
     assert app.state.services.projects.snapshot(worktree["id"])["files"] == before["files"]

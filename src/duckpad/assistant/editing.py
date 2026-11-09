@@ -327,19 +327,34 @@ def edit_chart(
     """
     snapshot = editable(ctx)
     bundle = snapshot["bundle"]
+    if operation in ("rename", "delete") and spec is not None:
+        raise Problem("Rename and delete do not accept a spec", 422)
+    if operation != "rename" and new_name:
+        raise Problem("Only rename accepts a new name", 422)
     key = output_key(bundle, node, output)
     charts = bundle.get("charts") or {}
     if not isinstance(charts, dict) or not isinstance(charts.get(key, []), list):
         raise Problem("Correct charts.json before editing charts", 422)
     entries = charts.setdefault(key, [])
     existing = next((c for c in entries if isinstance(c, dict) and c.get("name") == name), None)
-    if operation != "create":
-        raise Problem(f"Chart {operation} is not supported yet", 422)
-    if existing is not None:
-        raise Problem("A chart with this name already exists on this output", 409)
-    if spec is None:
+    if operation in ("create", "update") and spec is None:
         raise Problem("Provide a chart spec", 422)
-    entries.append({"name": name, "spec": spec})
+    if operation == "create":
+        if existing is not None:
+            raise Problem("A chart with this name already exists on this output", 409)
+        entries.append({"name": name, "spec": spec})
+    elif existing is None:
+        raise Problem("Chart not found", 404)
+    elif operation == "update":
+        existing["spec"] = spec
+    elif operation == "rename":
+        if any(isinstance(c, dict) and c.get("name") == new_name for c in entries):
+            raise Problem("A chart with this name already exists on this output", 409)
+        existing["name"] = new_name
+    else:
+        entries.remove(existing)
+        if not entries:
+            del charts[key]
     bundle["charts"] = charts
     # The save validates every chart: chart rules live in duckpad.charts only.
     result = save(ctx, snapshot, bundle)
