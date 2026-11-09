@@ -32,7 +32,6 @@ def router(ctx: Context) -> APIRouter:
     projects = ctx.services.projects
     engine = ctx.services.engine
     access = ctx.access
-    assistant = ctx.assistant
 
     @api.post(
         "/api/worktrees/{worktree}/uploads",
@@ -139,8 +138,8 @@ def router(ctx: Context) -> APIRouter:
         )
 
     @api.post("/api/conflicts/{conflict}/resolve", response_model=None, dependencies=[Depends(conflict_role)])
-    def resolve_conflict(conflict: str, data: schemas.Resolution, request: Request) -> Record:
-        return assistant.actions.resolve(request.state.user, conflict, data.choice, data.files)
+    def resolve_conflict(conflict: str, data: schemas.Resolution) -> Record:
+        return projects.resolve(conflict, data.choice, data.files)
 
     @api.post(
         "/api/worktrees/{worktree}/branches",

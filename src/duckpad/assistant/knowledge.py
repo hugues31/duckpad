@@ -1,5 +1,6 @@
 """Versioned product guidance, independent of user-authored project documentation."""
 
+import subprocess
 from importlib.resources import files
 from importlib.resources.abc import Traversable
 from pathlib import Path
@@ -13,10 +14,29 @@ from .tools import Dependencies
 def guide_files() -> dict[str, Traversable]:
     """Topic -> guide: every docs/*.md, bundled by the build hook, or read in place by editable installs."""
     packaged = files("duckpad.assistant").joinpath("guides")
-    root = packaged if packaged.is_dir() else Path(__file__).resolve().parents[3] / "docs"
-    if not root.is_dir():
+    if packaged.is_dir():
+        return {f.name.removesuffix(".md").lower(): f for f in packaged.iterdir() if f.name.endswith(".md")}
+    return checkout_guides(Path(__file__).resolve().parents[3])
+
+
+def checkout_guides(root: Path) -> dict[str, Traversable]:
+    """The guides of a source checkout, without the Git-ignored files the build hook leaves out of
+    wheels, such as an operator's private docs/MULTICA.md."""
+    docs = root / "docs"
+    if not docs.is_dir():
         return {}
-    return {f.name.removesuffix(".md").lower(): f for f in root.iterdir() if f.name.endswith(".md")}
+    guides = sorted(f for f in docs.iterdir() if f.name.endswith(".md"))
+    # --no-index applies the ignore rules to tracked files too, as the build hook does.
+    result = subprocess.run(
+        ["git", "-C", str(root), "check-ignore", "--no-index", "-z", "--stdin"],
+        input="\0".join(f"docs/{f.name}" for f in guides),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    # 1: nothing is ignored. Outside a Git checkout, no ignore rule applies either.
+    ignored = set(result.stdout.split("\0")) if result.returncode == 0 else set()
+    return {f.name.removesuffix(".md").lower(): f for f in guides if f"docs/{f.name}" not in ignored}
 
 
 # Only release-owned files are readable: never a path, nor the project's README.

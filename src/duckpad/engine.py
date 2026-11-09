@@ -4,7 +4,7 @@ keeps consistent when worktrees, projects, connections or extensions change."""
 from __future__ import annotations
 
 import threading
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 from contextlib import AbstractContextManager, contextmanager, nullcontext
 from typing import BinaryIO
 
@@ -89,6 +89,7 @@ class Engine:
         partition_selection: Record | None = None,
         partition_execution: Record | None = None,
         ancestors: bool = False,
+        guard: Callable[[], None] | None = None,
     ) -> Record:
         return self.runs.launch(
             worktree,
@@ -99,6 +100,7 @@ class Engine:
             partition_selection=partition_selection,
             partition_execution=partition_execution,
             ancestors=ancestors,
+            guard=guard,
         )
 
     def scope_variables(
