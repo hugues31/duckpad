@@ -273,6 +273,36 @@ def output_key(bundle, node, output):
     return f"{producer}:{port}"
 
 
+def unknown_fields(ctx, key, spec) -> dict:
+    """`unknown_fields`: the fields a chart encodes that the output's materialized columns lack.
+
+    Mirrors the Chart tab's check (top level and layers). Reads schema metadata only, from the
+    page's environment; nothing when the output was never run or its schema cannot be read.
+    """
+    try:
+        worktree, environment = ctx.deps.results()
+    except Problem:
+        return {}
+    context = ctx.deps.services.engine.pool.find(worktree, environment)
+    if not context:
+        return {}
+    node, _, port = key.rpartition(":")
+    with context.lock:
+        dataset = context.outputs.get(node, {}).get(port)
+        known = {column["name"] for column in dataset.columns} if dataset else None
+    if known is None:
+        return {}
+    # The save validated the spec: encodings map channels to definitions, or tooltip to a list.
+    fields = [
+        definition.get("field")
+        for part in [spec, *spec.get("layer", [])]
+        for channel in part.get("encoding", {}).values()
+        for definition in (channel if isinstance(channel, list) else [channel])
+    ]
+    unknown = list(dict.fromkeys(f for f in fields if f is not None and f not in known))
+    return {"unknown_fields": unknown} if unknown else {}
+
+
 def edit_chart(
     ctx: RunContext[Dependencies],
     operation: Literal["create", "update", "rename", "delete"],
@@ -312,7 +342,10 @@ def edit_chart(
     entries.append({"name": name, "spec": spec})
     bundle["charts"] = charts
     # The save validates every chart: chart rules live in duckpad.charts only.
-    return save(ctx, snapshot, bundle)
+    result = save(ctx, snapshot, bundle)
+    if operation in ("create", "update") and "error" not in result:
+        result |= unknown_fields(ctx, key, spec)
+    return result
 
 
 WRITE_TOOLS = [edit_flow, write_sql, write_documentation, edit_variable, group_nodes, edit_chart]

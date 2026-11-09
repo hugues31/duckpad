@@ -642,6 +642,35 @@ def test_invalid_chart_creations_preserve_saved_files(instance, args, message):
     assert app.state.services.projects.snapshot(worktree["id"])["files"] == before["files"]
 
 
+def test_saved_charts_report_fields_the_materialized_output_lacks(instance):
+    from helpers import join_run
+
+    app, client = instance
+    worktree, context = seed(app, client)
+    misspelled = {
+        "mark": "bar",
+        "encoding": {"x": {"field": "value"}, "y": {"field": "vaule"}},
+        "layer": [{"mark": "rule", "encoding": {"tooltip": [{"field": "value"}, {"field": "missing"}]}}],
+    }
+
+    def create(name, spec):
+        args = {"operation": "create", "node": "first", "output": "result", "name": name, "spec": spec}
+        _, result = write_turn(app, client, context, [("edit_chart", args)])
+        assert result["tools"][0]["status"] == "complete", result
+        return json.loads(result["tools"][0]["summary"])
+
+    assert "unknown_fields" not in create("Before the run", misspelled)
+    run = app.state.services.engine.launch(worktree["id"], "dev")
+    assert join_run(app.state.services.store, run["id"])["status"] == "success"
+    assert create("Misspelled", misspelled)["unknown_fields"] == ["vaule", "missing"]
+    assert "unknown_fields" not in create("Correct", BAR)
+    names = [
+        c["name"]
+        for c in app.state.services.projects.snapshot(worktree["id"])["bundle"]["charts"]["first:result"]
+    ]
+    assert names == ["Before the run", "Misspelled", "Correct"]
+
+
 def test_editors_are_told_charts_are_vega_lite_even_without_data_reading(instance):
     app, client = instance
     _, context = seed(app, client)
