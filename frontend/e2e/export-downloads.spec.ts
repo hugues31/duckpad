@@ -134,7 +134,10 @@ test("download a full CSV export and keep project ZIP separate", async ({
         .getByRole("textbox", { name: /delimiter/ })
         .fill(","),
     );
-    await expect(panel).toContainText("Inputs or settings have changed");
+    // Below the 10 s idle poll: the saved revision must reload the status at once.
+    await expect(panel).toContainText("Inputs or settings have changed", {
+      timeout: 5000,
+    });
     await expect(downloadButton).toBeDisabled();
 
     await expect(page.locator(".save-status")).toHaveText("All changes saved");
