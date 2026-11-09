@@ -281,7 +281,7 @@ test("capture the quickstart using the SQL printed in the guide", async ({
   await expect(results.locator("tbody tr")).toContainText("50.00");
 });
 
-test("capture the results panel: samples, columns, tests and log", async ({
+test("capture the results panel: samples, columns, tests, log and chart", async ({
   page,
 }) => {
   const worktree = await example(page);
@@ -351,6 +351,28 @@ test("capture the results panel: samples, columns, tests and log", async ({
   await panel.getByRole("tab", { name: /^Log/ }).click();
   await expect(panel.locator(".log-timeline")).toContainText("Published");
   await capture(page, "results-log", panel);
+  // The report output of Regional revenue has the Revenue by region chart,
+  // shown whole in a taller results panel.
+  await page.evaluate(() =>
+    localStorage.setItem(
+      "duckpad-panel-sizes",
+      JSON.stringify({
+        ...JSON.parse(localStorage.getItem("duckpad-panel-sizes") || "{}"),
+        preview: 520,
+      }),
+    ),
+  );
+  await page.reload();
+  await node(page, "Regional revenue").click();
+  await page.getByLabel("Output", { exact: true }).selectOption("report");
+  await panel.getByRole("tab", { name: "Chart", exact: true }).click();
+  await expect(panel.getByRole("figure")).toHaveAccessibleName(
+    "Revenue by region",
+  );
+  await expect(panel.locator(".chart-view svg .mark-symbol path")).toHaveCount(
+    4,
+  );
+  await capture(page, "results-chart", panel);
 });
 
 test("capture parameters, node documentation and nested components", async ({

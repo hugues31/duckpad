@@ -2,7 +2,7 @@
 
 import json
 
-from . import project_files, variables, views
+from . import named_documents, project_files, variables
 from .util import Problem, dumps
 
 MISSING = object()
@@ -43,6 +43,9 @@ def merge_values(base, current, proposed, path="", choices=None, evidence=None, 
     atomic_source |= (
         path.startswith("flow.json/partitions/") and path.count("/") == 3 and path.endswith("/values")
     )
+    # Whole entries of a named document, at `file/key/name`, are never merged field by field.
+    spec = project_files.matching(path.partition("/")[0]) if path.count("/") == 2 else None
+    atomic_source |= spec is not None and spec.merge == "named" and spec.whole_entries
     mode_change = (
         variable_path
         and path.count("/") == 1
@@ -128,7 +131,7 @@ def merge_files(base, current, proposal, choices=None, evidence=None, resolution
         )
         if (
             spec is not None
-            and spec.merge in ("declarations", "views")
+            and spec.merge in ("declarations", "named")
             and values[0] is MISSING
             and all(v is not MISSING for v in values[1:])
         ):
@@ -138,7 +141,7 @@ def merge_files(base, current, proposal, choices=None, evidence=None, resolution
         try:
             if (
                 spec is not None
-                and spec.merge in ("json", "declarations", "views")
+                and spec.merge in ("json", "declarations", "named")
                 and all(v is not MISSING for v in values)
             ):
                 parsed = [json.loads(v) for v in values]
@@ -148,11 +151,16 @@ def merge_files(base, current, proposal, choices=None, evidence=None, resolution
                         resolved = json.loads(resolution)
                     except (ValueError, TypeError) as error:
                         raise Problem(f"Combined contents for {name} must be valid JSON", 422) from error
-                named = [views.by_name(v) for v in parsed] if spec.merge == "views" else [None]
+                named = [named_documents.by_name(v) for v in parsed] if spec.merge == "named" else [None]
                 if all(v is not None for v in named):
-                    # Shared views merge view by view, keyed by their name.
-                    merged, errors = merge_values(*named, name, choices, evidence, views.by_name(resolved))
-                    merged = views.from_names(merged, [parsed[1], parsed[2], parsed[0]])
+                    # Branches that both add entries to an output the base lacks merge them by name.
+                    for key in (named[1].keys() & named[2].keys()) - named[0].keys():
+                        named[0][key] = {}
+                    # Named documents merge entry by entry, keyed by output and name.
+                    merged, errors = merge_values(
+                        *named, name, choices, evidence, named_documents.by_name(resolved)
+                    )
+                    merged = named_documents.from_names(merged, [parsed[1], parsed[2], parsed[0]])
                 else:
                     merged, errors = merge_values(*parsed, name, choices, evidence, resolved)
                 content = dumps(merged)

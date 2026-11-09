@@ -8,7 +8,7 @@ import {
 import { useRef, useState } from "react";
 import { api, withQuery } from "./api";
 import { useT } from "./i18n";
-import { clock, seconds, type ResultsTarget } from "./results";
+import { clock, outputKey, seconds, type ResultsTarget } from "./results";
 import type {
   ColumnStatistics,
   Dataset,
@@ -46,7 +46,7 @@ export default function ResultsColumns({
   const t = useT();
   const partition = usePartitionQuery(target.node, target.port);
   const worktree = snapshot.worktree.id;
-  const key = `${target.node}:${target.port}`;
+  const key = outputKey(target);
   const documentation = snapshot.bundle?.documentation;
   const descriptions = documentation?.columns?.[key] || {};
   const endpoint = withQuery(

@@ -28,6 +28,8 @@ A complete example of a documented, tested and reusable sales pipeline.
   or the shared **Orders to review** view.
 - Execution messages report the orders kept by Paid orders and the leading region
   of each report in the **Log**.
+- Select Regional revenue and open **Chart** to see revenue by region, declared
+  in `charts.json`.
 
 ## Variables
 
@@ -391,6 +393,36 @@ SELECT 'The report has no rows' AS problem FROM {{ source }} HAVING COUNT(*) = 0
                     "method": "first",
                     "filter": "amount > {{ var.review_threshold }}",
                     "order": [["amount", "desc"]],
+                }
+            ]
+        },
+        # Charts are keyed by the output that stores the rows: Rank regions inside Regional revenue.
+        "charts": {
+            "report::rank:result": [
+                {
+                    "name": "Revenue by region",
+                    # Points on an axis that does not start at 0: regional revenues differ by a few percent.
+                    "spec": {
+                        "$schema": "https://vega.github.io/schema/vega-lite/v6.json",
+                        "mark": {"type": "circle", "size": 200, "tooltip": True},
+                        "height": 200,
+                        "encoding": {
+                            "x": {
+                                "field": "revenue",
+                                "type": "quantitative",
+                                "title": "Revenue",
+                                "format": ",",
+                                "scale": {"zero": False},
+                            },
+                            "y": {"field": "region", "type": "nominal", "sort": "-x", "title": "Region"},
+                            "color": {
+                                "field": "region",
+                                "type": "nominal",
+                                "title": "Region",
+                                "legend": None,
+                            },
+                        },
+                    },
                 }
             ]
         },

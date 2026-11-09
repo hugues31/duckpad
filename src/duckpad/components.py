@@ -3,7 +3,7 @@
 import copy
 import tomllib
 
-from . import partitions, value_sources, variables, views
+from . import named_documents, partitions, project_files, value_sources, variables
 from .node_code import code_path, node_sql
 from .node_names import name_text, node_caption
 from .python_environment import requirement_name
@@ -211,14 +211,9 @@ def group(bundle, selection, label, exposed=None, parent=None):
                     definition.setdefault("documentation", {}).setdefault(section, {})[local] = copy.deepcopy(
                         value
                     )
-    # Shared views follow their nodes into the instance, or the next save would prune them.
-    saved = bundle.get("views")
-    if isinstance(saved, dict):
-        for prefix in prefixes:
-            for key in list(saved):
-                local = key[len(prefix) :] if key.startswith(prefix) else ""
-                if any(local.startswith(node + ":") for node in selected):
-                    saved[prefix + instance_id + "::" + local] = saved.pop(key)
+    # Named documents such as views follow their nodes into the instance, or the next save would prune them.
+    for spec in project_files.NAMED:
+        named_documents.regroup(bundle.get(spec.section), prefixes, instance_id, selected)
     outer = []
     outgoing_ports, incoming_ports = {}, {}
     for edge in graph["edges"]:
@@ -468,7 +463,7 @@ def component_paths(bundle):
 
 
 def reconcile_documentation(previous, current):
-    """Copy imported documentation and prune the documentation and views of deleted owning nodes."""
+    """Copy imported documentation and prune the documentation and named documents of deleted nodes."""
     documentation = current.setdefault("documentation", {})
     paths = component_paths(current)
     for identity, prefixes in paths.items():
@@ -489,7 +484,8 @@ def reconcile_documentation(previous, current):
     for before, after, prefixes in pairs:
         removed = {n["id"] for n in before.get("nodes", [])} - {n["id"] for n in after.get("nodes", [])}
         owners = [prefix + node for prefix in prefixes for node in removed]
-        views.prune(current.get("views"), owners)
+        for spec in project_files.NAMED:
+            named_documents.prune(current.get(spec.section), owners)
         for section in DOCUMENTATION_SECTIONS:
             values = documentation.get(section, {})
             for key in list(values):

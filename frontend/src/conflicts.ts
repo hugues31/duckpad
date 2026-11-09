@@ -4,6 +4,10 @@ import type { Conflict, Json } from "./types";
 import { displayNodeName, type NodeNames } from "./nodeNames";
 import { conflictLabel } from "./variables";
 import { templateCodePath } from "./nodeCode";
+import { CHARTS_FILE } from "./charts";
+
+/** Per-output files whose list entries are identified by `name` instead of `id`. */
+const NAMED_FILES = new Set(["views.json", CHARTS_FILE]);
 
 /** File name followed by the semantic JSON pointer used by the merge engine. */
 export function conflictPath(path: string) {
@@ -178,13 +182,11 @@ export function combinedFiles(
           ? JSON.parse(draft.text)
           : null;
     const root: Json = JSON.parse(files[file]);
+    const identity = NAMED_FILES.has(file) ? "name" : "id";
     let parent = root;
     for (const part of parts.slice(0, -1)) {
       const next = Array.isArray(parent)
-        ? parent.find(
-            (item) =>
-              object(item)[file === "views.json" ? "name" : "id"] === part,
-          )
+        ? parent.find((item) => object(item)[identity] === part)
         : object(parent)[part];
       if (!next || typeof next !== "object")
         throw new Error(`Cannot edit ${field.path}`);
@@ -192,9 +194,7 @@ export function combinedFiles(
     }
     const key = parts.at(-1)!;
     if (Array.isArray(parent)) {
-      const index = parent.findIndex(
-        (item) => object(item)[file === "views.json" ? "name" : "id"] === key,
-      );
+      const index = parent.findIndex((item) => object(item)[identity] === key);
       if (draft.present) {
         if (index < 0) parent.push(value);
         else parent[index] = value;

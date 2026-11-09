@@ -1,7 +1,8 @@
 # Charts on node outputs (design proposal)
 
-**Status: accepted on 9 November 2026 in issue #221 (see [Decisions](#decisions)),
-not implemented yet.** This record settles the file format, validation,
+**Status: accepted on 9 November 2026 in issue #221 (see [Decisions](#decisions))
+and implemented.** See [Charts](../CHARTS.md) for the current interface and file
+format. This record settles the file format, validation,
 rendering and Git behavior of a first, read-only charting step.
 
 ## Summary
@@ -52,7 +53,7 @@ exactly `name` (1 to 100 characters, unique per output) and `spec` (a
 Vega-Lite 6 spec of at most 64 KiB when serialized). Duckpad metadata lives
 beside the spec, never inside it: Vega-Lite has its own top-level `name`.
 
-The Northstar example would gain this chart on the ranked output of the
+The Northstar example has this chart on the ranked output of the
 Regional revenue instance:
 
 ```json
@@ -106,22 +107,41 @@ The allowlist, by level:
   `rect`, `rule`, `text`, `arc`. A mark is a type string or an object with
   `type` plus literal `color`, `opacity`, `filled`, `size`, `strokeWidth`,
   `interpolate`, `point`, `orient`, `tooltip`, `innerRadius`, `outerRadius`
-  or `cornerRadius`.
+  or `cornerRadius`. Composite and unknown marks are diagnostics.
 - **Channels:** `x`, `y`, `x2`, `y2`, `xOffset`, `yOffset`, `theta`,
   `radius`, `color`, `fill`, `stroke`, `opacity`, `size`, `shape`,
   `strokeDash`, `text`, `tooltip`, `detail`, `order`. `tooltip` may be a list
   of channel definitions.
 - **Channel definition:** `field` (string), `type` (`quantitative`,
-  `temporal`, `ordinal`, `nominal`), `title`, `format`, `formatType`
-  (`number`, `time` or `utc`), `value` (literal), `scale`, `axis`, `legend`,
-  `sort`, `stack`.
-  - `sort`: `"ascending"`, `"descending"`, `null`, a channel name with an
-    optional `-` prefix, a list of literals, or `{"encoding", "order"}`.
+  `temporal`, `ordinal`, `nominal`), `title` (string or `null`), `format`
+  (string without quotes or backslashes, which Vega-Lite writes into an
+  expression unescaped), `formatType` (`number` or `time`), `value` (literal),
+  `scale`, `axis`, `legend`, `sort`, `stack`.
+  - `sort`: `"ascending"`, `"descending"`, `null`, a channel name of this
+    list with an optional `-` prefix, a list of literals, or
+    `{"encoding", "order"}` with a channel name and `"ascending"`,
+    `"descending"` or `null`. An object with `field` or `op` is a diagnostic.
   - `stack`: `true`, `false`, `null`, `"zero"` or `"center"`.
   - `scale`: `type`, `domain`, `range`, `scheme`, `zero`, `nice`, `reverse`.
     `axis`: `title`, `format`, `formatType`, `labelAngle`, `grid`, `orient`,
     `tickCount`. `legend`: `title`, `format`, `formatType`, `orient`. Values
-    are literals; `domain` and `range` are lists of literals.
+    are literals; `domain` and `range` are lists of literals, and
+    `format` and `formatType` follow the channel rules. `axis` and `legend` may
+    also be `null`, which hides them.
+
+A **literal** is a JSON scalar: a string, a number, a boolean or `null`. Any
+object or list where the allowlist expects a literal (mark style properties,
+`value`, the items of `domain`, `range` and a `sort` list, and the scale, axis
+and legend properties) is a diagnostic, so `{"expr": …}` and other
+expression or signal references never reach the renderer. This is the central
+safety property of the allowlist.
+
+A spec has a `mark` or a `layer`, and every layer has a `mark`: Vega-Lite's
+error for a spec without one quotes the whole spec, rows included.
+
+Beyond the allowlist, a spec is at most 64 KiB serialized as compact UTF-8
+JSON. Each diagnostic names the chart, its output and the path of the first
+construct refused, such as `encoding.x.aggregate is not allowed`.
 
 What the allowlist leaves out, so reviewers can check it against Vega-Lite:
 transforms, `aggregate`, `bin`, `timeUnit`, `impute`, composite marks
@@ -146,6 +166,9 @@ editors. Backend validation therefore cannot be the only barrier:
 - **Every embed** uses `ast: true` (vega-embed 7.3 then evaluates expressions
   with `vega-interpreter`, generating no code), a Vega loader that rejects
   every network and file request, and `actions: false`.
+- **Text tooltips:** vega-tooltip's default formatter writes HTML, escapes
+  only `&` and `<`, and turns an `image` entry into an `<img>` whose source
+  is a cell. Duckpad formats tooltips itself, as escaped text.
 - **Pinned versions:** `vega` 6.4.0, `vega-lite` 6.5.0, `vega-embed` 7.3.0
   and `vega-interpreter` 2.3.2, all BSD-3-Clause. Vega's expression language
   has had several XSS advisories, including in `vega-interpreter` before
@@ -177,18 +200,19 @@ with a hint to aggregate upstream. A truncated or sampled line would look
 complete. Previews and samples allow up to 10,000 rows elsewhere; 5,000 is a
 rendering limit.
 
-Preview values are JSON-safe rather than chart-ready (`DECIMAL` and `HUGEINT`
-arrive as strings, non-finite floats as `"inf"` or `"nan"`). A browser helper
-converts each column by its type:
+Preview values are JSON-safe rather than chart-ready: only `DECIMAL` arrives
+as a string (`HUGEINT` is already a JSON number), non-finite floats arrive as
+`"inf"`, `"-inf"` or `"nan"`, and dates and timestamps as ISO text. A browser
+helper converts each column by its type:
 
 | Column type | Chart value |
 | --- | --- |
 | Integer, floating point, `DECIMAL`, `HUGEINT` | Number. Precision loss is accepted for charts; `"inf"` and `"nan"` become `null`. |
 | `DATE` | `Date` at local midnight of that day. |
-| `TIMESTAMP` | `Date` with the same local wall-clock time. |
+| `TIMESTAMP` (and its `_S`, `_MS`, `_NS` variants) | `Date` with the same local wall-clock time, to the millisecond. |
 | `TIMESTAMP WITH TIME ZONE` | `Date` at that instant, shown in the viewer's time zone. |
 | `BOOLEAN` | Boolean. |
-| Anything else (`TIME`, lists, structs, maps, blobs) | String. |
+| Anything else (`TIME`, lists, structs, maps, blobs) | String; lists and structs as their JSON text. |
 
 The `DATE` rule matters: Vega parses `"2024-01-01"` as UTC midnight and shows
 it in local time, a day early west of UTC. A `TIMESTAMP` string without a time
@@ -199,17 +223,32 @@ zone is already parsed as local time.
 - **Gate:** the tab is shown whenever the node has output ports, like the Data
   tab.
 - **Dataset:** like saved views, the tab follows the dataset shown in the
-  results panel, inputs included, and shows that dataset's charts.
+  results panel, inputs included, and shows that dataset's charts. A
+  component instance output resolves to the output that stores its rows
+  (`instance::node:port`), so the instance and its inner node show the same
+  charts.
 - **States** follow the Data tab: Stale badge, Run hint without a result,
   failed-run messages, partition selection.
 - **Several charts:** a selector by name, styled like the views bar.
-- **Empty state:** a short explanation. Editors also get **Add a chart**, which
-  saves a starter bar chart of the first two columns for this output (creating
-  `charts.json` when the project has none) and opens the file in the Code tab.
-  The Code tab only opens existing files, so this action is how a project gets
-  its first chart from the interface.
-- **Errors in the tab:** too many rows, Vega-Lite compile errors and unknown
-  fields.
+- **Empty state:** a short explanation. Users with the Editor role (and
+  administrators) also get **Add a chart**, which saves a starter bar chart of
+  the first two columns for this output (creating `charts.json` when the
+  project has none) and opens the file in the Code tab. The Code tab only
+  opens existing files, so this action is how a project gets its first chart
+  from the interface. Readers, Operators and read-only branches such as Job
+  results see the explanation only.
+- **Normal save:** **Add a chart** writes to the project from the results
+  panel through the normal project save, like saving a view: it creates one
+  commit, the server refuses it without the save permission, and on a stale
+  revision it reports the conflict and retains both versions for resolution.
+- **Errors in the tab:** too many rows, Vega-Lite compile errors and fields
+  that the result has no column for (Vega-Lite would draw them as empty marks
+  without an error).
+- **Appearance:** the theme config is rebuilt from the CSS variables when the
+  interface switches between light and dark, and the number and date formats
+  follow the interface language. Vega's locale is global, so English sets
+  en-US back explicitly. The `fr-FR` and `pt-BR` definitions come from
+  `d3-format` and `d3-time-format`, pinned at the versions Vega uses.
 - **Draft Preview tab:** no charts.
 
 ## Git, components and comparison
