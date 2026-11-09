@@ -3,6 +3,7 @@
 import asyncio
 import json
 from functools import partial
+from pathlib import Path
 
 import anyio
 import pytest
@@ -871,21 +872,24 @@ def test_tool_results_are_redacted_once_by_the_tool_wrapper(instance):
     assert guarded(read_file)(ctx, "README.md")["text"] == "Key: [redacted]"
 
 
+ROOT = Path(__file__).resolve().parents[1]
+TRANSLATED_ERRORS = ROOT / "frontend/src/assistantErrors.ts"
+
+
+@pytest.mark.skipif(not TRANSLATED_ERRORS.exists(), reason="Source archives ship no frontend sources")
 def test_translated_assistant_errors_match_backend_messages():
     """The interface translates these backend messages by their exact text: rewording one must
     update its translation too."""
     import ast
     import re
-    from pathlib import Path
 
-    root = Path(__file__).resolve().parents[1]
-    source = (root / "frontend/src/assistantErrors.ts").read_text()
+    source = TRANSLATED_ERRORS.read_text()
     table = source[source.index("const errors") : source.index("};")]
     messages = [json.loads(m) for m in re.findall(r'("(?:[^"\\]|\\.)*")\s*:', table)]
     assert len(messages) >= 20
     strings = {
         node.value
-        for path in (root / "src/duckpad").rglob("*.py")
+        for path in (ROOT / "src/duckpad").rglob("*.py")
         for node in ast.walk(ast.parse(path.read_text()))
         if isinstance(node, ast.Constant) and isinstance(node.value, str)
     }
