@@ -12,7 +12,8 @@ from test_assistant import instance as instance
 from test_assistant_editing import change, seed
 
 from duckpad.assistant.editing import edit_variable
-from duckpad.assistant.knowledge import GUIDES, guide_text, read_guide
+from duckpad.assistant.knowledge import GUIDES, checkout_guides, guide_text, read_guide
+from duckpad.assistant.service import guarded
 from duckpad.assistant.tools import read_variables
 from duckpad.util import Problem
 
@@ -127,9 +128,28 @@ def test_variable_inspection_redacts_secrets_and_never_reads_computed_values(ins
         ),
     )
     configure(client, allow_data=False)
-    result = read_variables(dependencies(app, client, context))
+    # Tool results reach the model through the wrapper, which redacts them.
+    result = guarded(read_variables)(dependencies(app, client, context))
     assert "private-test-key" not in json.dumps(result)
     assert "[redacted]" in json.dumps(result)
     computed = next(v for v in result["items"] if v["name"] == "computed")
     assert "value" not in computed["values"]["dev"]
     assert app.state.services.engine.pool.find(worktree["id"], "dev") is None
+
+
+def test_git_ignored_docs_are_not_guides(tmp_path):
+    import subprocess
+
+    def git(*args):
+        subprocess.run(["git", "-C", str(tmp_path), *args], check=True, capture_output=True)
+
+    git("init", "-q")
+    (tmp_path / "docs").mkdir()
+    for name in ("sql.md", "MULTICA.md", "notes.md"):
+        (tmp_path / "docs" / name).write_text("# Guide\n")
+    (tmp_path / ".gitignore").write_text("/docs/MULTICA.md\n/docs/notes.md\n")
+    # An operator's checkout may even track an ignored file, as the build hook ignores it anyway.
+    git("add", "-f", "docs/MULTICA.md")
+    assert sorted(checkout_guides(tmp_path)) == ["sql"]
+    (tmp_path / ".gitignore").unlink()
+    assert sorted(checkout_guides(tmp_path)) == ["multica", "notes", "sql"]

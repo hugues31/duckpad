@@ -5,7 +5,8 @@ from __future__ import annotations
 import logging
 import threading
 import time
-from contextlib import suppress
+from collections.abc import Callable
+from contextlib import nullcontext, suppress
 from contextvars import copy_context
 from typing import cast
 
@@ -68,7 +69,14 @@ class Runner:
         partition_selection: Record | None = None,
         partition_execution: Record | None = None,
         ancestors: bool = False,
+        guard: Callable[[], None] | None = None,
     ) -> Record:
+        """Admit a run and start it in a thread; its preparation happens there.
+
+        `guard` runs once the worktree is reserved, outside the engine lock, and can still refuse
+        the launch. From the reservation on, changes that reset execution state, such as Python
+        policy changes or connection deletions, are refused until the run ends.
+        """
         record = self.projects.get(worktree)
         if record.get("read_only") and job is None:
             raise Problem("Launch this worktree from its Job", 403)
@@ -89,32 +97,40 @@ class Runner:
             external_trigger,
             ancestors,
         )
-        # Reservation, visible record, and thread registration are atomic with cancellation/close.
-        with self.lock:
-            if self.closing:
-                raise Problem("The execution service is shutting down", 503)
-            self.planner.reserve(worktree, environment, token)
-
+        # Without a guard, the reservation, visible record and thread registration are atomic with
+        # cancellation and close. A guard runs between them, outside the lock.
+        with nullcontext() if guard else self.lock:
+            with self.lock:
+                if self.closing:
+                    raise Problem("The execution service is shutting down", 503)
+                self.planner.reserve(worktree, environment, token)
             try:
-                self.journal.persist(run, [], idempotency=idempotency)
-                thread = threading.Thread(
-                    target=copy_context().run,
-                    args=(
-                        self._execute,
-                        token,
-                        run,
-                        target,
-                        partition_selection,
-                        partition_execution,
-                        ancestors,
-                    ),
-                    name=token["id"],
-                    daemon=True,
-                )
-                self.threads = [t for t in self.threads if t.is_alive()] + [thread]
-                thread.start()
+                if guard:
+                    guard()
+                with self.lock:
+                    if self.closing:
+                        raise Problem("The execution service is shutting down", 503)
+                    self.journal.persist(run, [], idempotency=idempotency)
+                    thread = threading.Thread(
+                        target=copy_context().run,
+                        args=(
+                            self._execute,
+                            token,
+                            run,
+                            target,
+                            partition_selection,
+                            partition_execution,
+                            ancestors,
+                        ),
+                        name=token["id"],
+                        daemon=True,
+                    )
+                    self.threads = [t for t in self.threads if t.is_alive()] + [thread]
+                    thread.start()
             except Exception:
-                self.active.pop(worktree, None)
+                with self.lock:
+                    if self.active.get(worktree) is token:
+                        self.active.pop(worktree)
                 raise
         return cast(Record, self.store.get("run", token["id"]))
 
@@ -222,6 +238,8 @@ class Runner:
             self.closing = True
             tokens, threads = list(self.active.values()), list(self.threads)
         for token in tokens:
-            self.cancel(token["id"])
+            # A run still being admitted has no record yet; its launch refuses once closing.
+            with suppress(Problem):
+                self.cancel(token["id"])
         for thread in threads:
             thread.join()

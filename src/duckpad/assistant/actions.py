@@ -1,6 +1,6 @@
 """Durable chat action receipts and three-way inverses of their exact Git changes."""
 
-from contextlib import nullcontext
+from contextlib import contextmanager
 from difflib import unified_diff
 
 from pydantic import BaseModel, ConfigDict
@@ -63,6 +63,9 @@ class Actions:
 
     def apply(self, deps, identity, turn, tool_id, base, files, details):
         assistant = self.assistant
+        deps.check(write=True)
+        # `uv lock` can take long and use the network: resolve before taking any lock.
+        files = self.projects.lock_dependencies(deps.context["worktree"], files)
         with assistant.lock(identity), self.projects.locked(deps.context["worktree"]):
             user, _ = deps.check(write=True)
             assistant.owned(user, identity)
@@ -82,12 +85,14 @@ class Actions:
                         files,
                         validate=True,
                         assistant=identity,
+                        relock=False,
                     )
             except Problem as error:
                 self.retain_conflict(error, identity, turn, action, "write")
                 action.update(describe(before["files"], files))
                 card["action"] = deps.safe(action)
                 assistant.save_turn(identity, turn)
+                deps.failed.add(tool_id)
                 return {"error": str(error), "action": card["action"]}
             deps.editing_snapshot = result
             if result["commit"] == before["commit"]:
@@ -137,6 +142,8 @@ class Actions:
                                 action["before"],
                                 validate=True,
                                 assistant=identity,
+                                # An undo restores its earlier dependency files without `uv lock`.
+                                relock=False,
                             )
                     except Problem as error:
                         self.retain_conflict(error, identity, turn, action, "undo")
@@ -146,37 +153,39 @@ class Actions:
                     assistant.save_turn(identity, turn)
             return assistant.public(assistant.owned(user, identity))
 
-    def resolve(self, user, conflict_id, choice, files):
-        """The usual conflict UI also finalizes the associated action receipt."""
-        assistant = self.assistant
-        conflict = self.projects.conflict(conflict_id)
+    @contextmanager
+    def resolving(self, conflict, choice):
+        """Projects' resolution hook: a resolution finalizes the receipt of the assistant action
+        whose save retained the conflict."""
         link = conflict.get("assistant_action")
-        # Other conflicts take no conversation lock.
-        with assistant.lock(link["conversation"]) if link else nullcontext():
-            if link and link["conversation"] in assistant.active:
+        if not link:
+            yield lambda before, result: None
+            return
+        assistant = self.assistant
+        with assistant.lock(link["conversation"]):
+            if link["conversation"] in assistant.active:
                 raise Problem("Wait for the assistant response before resolving its conflict", 409)
-            assistant.services.engine.access.worktree(user, conflict["worktree"], "editor")
-            with self.projects.locked(conflict["worktree"]):
-                before = self.projects.flush(conflict["worktree"])
-                with commit_author(assistant.auth.commit_identity(user)):
-                    result = self.projects.resolve(conflict_id, choice, files)
-                record = self.store.get("assistant_conversation", link["conversation"]) if link else None
-                if record:
-                    turn = next(t for t in record["turns"] if t["id"] == link["turn"])
-                    action = next(t["action"] for t in turn["tools"] if t["id"] == link["action"])
-                    action.pop("conflict", None)
-                    if link["operation"] == "undo":
-                        action.update(status="applied" if choice == "current" else "undone")
-                        if choice != "current":
-                            action["undo_commit"] = result["commit"]
-                    elif choice == "current" or before["commit"] == result["commit"]:
-                        action["status"] = "discarded"
-                    else:
-                        action.update(
-                            status="applied",
-                            before=before["commit"],
-                            commit=result["commit"],
-                            **describe(before["files"], result["files"]),
-                        )
-                    assistant.save_turn(link["conversation"], turn)
-                return result
+            yield lambda before, result: self.resolved(link, choice, before, result)
+
+    def resolved(self, link, choice, before, result):
+        record = self.store.get("assistant_conversation", link["conversation"])
+        if not record:
+            return
+        turn = next(t for t in record["turns"] if t["id"] == link["turn"])
+        action = next(t["action"] for t in turn["tools"] if t["id"] == link["action"])
+        action.pop("conflict", None)
+        if link["operation"] == "undo":
+            action.update(status="applied" if choice == "current" else "undone")
+            if choice != "current":
+                action["undo_commit"] = result["commit"]
+        elif choice == "current" or before == result["commit"]:
+            action["status"] = "discarded"
+        else:
+            previous = self.projects.revision_files(result["worktree"]["path"], before)
+            action.update(
+                status="applied",
+                before=before,
+                commit=result["commit"],
+                **describe(previous, result["files"]),
+            )
+        self.assistant.save_turn(link["conversation"], turn)

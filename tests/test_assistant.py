@@ -3,6 +3,7 @@
 import asyncio
 import json
 from functools import partial
+from pathlib import Path
 
 import anyio
 import pytest
@@ -727,3 +728,169 @@ def test_unlisted_models_and_concurrent_turns_are_rejected(instance):
     request["model"] = "test"
     assert client.post(f"/api/assistant/conversations/{identity}/messages", json=request).status_code == 409
     app.state.assistant.active.clear()
+
+
+@pytest.mark.parametrize(
+    "breakage",
+    [
+        # A dangling edge: its target node is missing.
+        lambda files: files.update(
+            {
+                "flow.json": json.dumps(
+                    {
+                        "nodes": [{"id": "source", "params": {}}],
+                        "edges": [
+                            {
+                                "id": "dangling",
+                                "source": "source",
+                                "target": "missing",
+                                "sourceHandle": "result",
+                                "targetHandle": "input",
+                            }
+                        ],
+                    }
+                ),
+                "nodes/source.sql": "-- @output result\nSELECT 1 AS value;\n",
+            }
+        ),
+        # A node linked to a template that does not exist.
+        lambda files: files.update(
+            {"flow.json": json.dumps({"nodes": [{"id": "linked", "template": "missing"}], "edges": []})}
+        ),
+        # A directive error.
+        lambda files: files.update(
+            {
+                "flow.json": json.dumps({"nodes": [{"id": "source", "params": {}}], "edges": []}),
+                "nodes/source.sql": "-- @unknown directive\nSELECT 1 AS value;\n",
+            }
+        ),
+        # Files that form no bundle.
+        lambda files: files.update({"flow.json": "{"}),
+    ],
+    ids=["dangling-edge", "missing-template", "directive-error", "invalid-files"],
+)
+def test_follow_up_messages_are_accepted_on_a_broken_project(instance, breakage):
+    app, client = instance
+    configure(client)
+    worktree, context = project(client)
+    identity = conversation(client, context)
+    assert turn(client, identity, context)[-1]["turn"]["status"] == "complete"
+    projects = app.state.services.projects
+    snapshot = projects.snapshot(worktree["id"])
+    files = dict(snapshot["files"])
+    breakage(files)
+    projects.write(worktree["id"], snapshot["revision"], files)
+    assert projects.snapshot(worktree["id"])["diagnostics"]
+    assert turn(client, identity, context, "Why is my project broken?")[-1]["turn"]["status"] == "complete"
+
+
+def test_follow_up_messages_still_recheck_connection_grants(instance):
+    from helpers import files_connection
+
+    app, client = instance
+    configure(client)
+    worktree, context = project(client)
+    services = app.state.services
+    files_connection(services.catalog)
+    services.engine.access.grant_connections(worktree["project"], ["files"])
+    snapshot = services.projects.snapshot(worktree["id"])
+    files = dict(snapshot["files"])
+    # A node on a granted connection, beside a dangling edge that strict expansion refuses.
+    files["flow.json"] = json.dumps(
+        {
+            "nodes": [
+                {"id": "orders", "template": "load_csv", "params": {"connection": "files", "file": "a.csv"}}
+            ],
+            "edges": [
+                {
+                    "id": "dangling",
+                    "source": "orders",
+                    "target": "missing",
+                    "sourceHandle": "result",
+                    "targetHandle": "input",
+                }
+            ],
+        }
+    )
+    services.projects.write(worktree["id"], snapshot["revision"], files)
+    identity = conversation(client, context)
+    assert turn(client, identity, context)[-1]["turn"]["status"] == "complete"
+    services.engine.access.grant_connections(worktree["project"], [])
+    response = client.post(
+        f"/api/assistant/conversations/{identity}/messages",
+        json={"message": "continue", "provider": "primary", "model": "test", "context": context},
+    )
+    assert response.status_code == 403, response.text
+    assert "Connection is not authorized" in response.text
+
+
+def test_read_sql_reports_a_missing_intermediate_component(instance):
+    from duckpad.assistant.tools import read_sql
+
+    app, client = instance
+    configure(client)
+    worktree, context = project(client)
+    projects = app.state.services.projects
+    snapshot = projects.snapshot(worktree["id"])
+    files = dict(snapshot["files"])
+    files["flow.json"] = json.dumps(
+        {
+            "nodes": [
+                {"id": "container", "component": "removed", "params": {}},
+                {"id": "plain", "params": {}},
+                {"id": "inner", "params": {}},
+            ],
+            "edges": [],
+        }
+    )
+    files["nodes/plain.sql"] = files["nodes/inner.sql"] = "-- @output result\nSELECT 1 AS value;\n"
+    projects.write(worktree["id"], snapshot["revision"], files)
+    ctx = dependencies(app, client, context)
+    # The root node "inner" must never be read in place of a node inside the missing component.
+    with pytest.raises(Problem, match="Component not found"):
+        read_sql(ctx, node="container::inner")
+    with pytest.raises(Problem, match="Node is not a component"):
+        read_sql(ctx, node="plain::inner")
+    with pytest.raises(Problem, match="component instance"):
+        read_sql(ctx, node="container")
+    assert "SELECT 1" in read_sql(ctx, node="inner")["text"]
+
+
+def test_tool_results_are_redacted_once_by_the_tool_wrapper(instance):
+    from duckpad.assistant.service import guarded
+    from duckpad.assistant.tools import read_file
+
+    app, client = instance
+    configure(client)
+    worktree, context = project(client)
+    projects = app.state.services.projects
+    snapshot = projects.snapshot(worktree["id"])
+    projects.write(
+        worktree["id"], snapshot["revision"], {**snapshot["files"], "README.md": "Key: private-test-key"}
+    )
+    ctx = dependencies(app, client, context)
+    assert guarded(read_file)(ctx, "README.md")["text"] == "Key: [redacted]"
+
+
+ROOT = Path(__file__).resolve().parents[1]
+TRANSLATED_ERRORS = ROOT / "frontend/src/assistantErrors.ts"
+
+
+@pytest.mark.skipif(not TRANSLATED_ERRORS.exists(), reason="Source archives ship no frontend sources")
+def test_translated_assistant_errors_match_backend_messages():
+    """The interface translates these backend messages by their exact text: rewording one must
+    update its translation too."""
+    import ast
+    import re
+
+    source = TRANSLATED_ERRORS.read_text()
+    table = source[source.index("const errors") : source.index("};")]
+    messages = [json.loads(m) for m in re.findall(r'("(?:[^"\\]|\\.)*")\s*:', table)]
+    assert len(messages) >= 20
+    strings = {
+        node.value
+        for path in (ROOT / "src/duckpad").rglob("*.py")
+        for node in ast.walk(ast.parse(path.read_text()))
+        if isinstance(node, ast.Constant) and isinstance(node.value, str)
+    }
+    assert [m for m in messages if m not in strings] == []

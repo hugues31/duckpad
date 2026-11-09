@@ -1,4 +1,4 @@
-import { applyParameterChange } from "./inspectorParameters";
+import { applyParameterChange } from "./nodeParameters";
 import ParameterField from "./ParameterField";
 import { typeArgument } from "./parameterType";
 import type { RefObject } from "react";

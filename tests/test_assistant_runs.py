@@ -146,6 +146,8 @@ def test_protected_environment_and_changed_configuration(instance):
     result = final(decide(client, identity, requested))
     assert "configuration changed" in result["text"]
     assert client.get("/api/runs").json() == []
+    # The refused launch released the worktree's reservation.
+    assert not app.state.services.engine.active
 
 
 def test_python_run_approval_lists_code_and_rechecks_secret_policy(instance):
@@ -167,6 +169,8 @@ def test_python_run_approval_lists_code_and_rechecks_secret_policy(instance):
     result = final(decide(client, identity, requested))
     assert "configuration changed" in result["text"]
     assert client.get("/api/runs").json() == []
+    # The refused launch released the worktree's reservation.
+    assert not app.state.services.engine.active
 
 
 def test_approval_is_owned_and_permissions_are_rechecked(instance):
@@ -381,7 +385,7 @@ def test_failed_run_lookup_does_not_block_the_next_turn(instance):
         if any(isinstance(part, ToolReturnPart) for part in messages[-1].parts):
             yield "No run was found."
         else:
-            yield {0: DeltaToolCall(name="read_runs", json_args='{"run":"latest"}', tool_call_id="missing")}
+            yield {0: DeltaToolCall(name="inspect_run", json_args='{"run":"latest"}', tool_call_id="missing")}
 
     app.state.assistant.configuration.model_override = FunctionModel(stream_function=stream)
     identity = conversation(client, context)
@@ -389,3 +393,157 @@ def test_failed_run_lookup_does_not_block_the_next_turn(instance):
     assert first["tools"][0]["status"] == "error"
     assert first["status"] == "complete"
     assert turn(client, identity, context, "Then propose a new run")[-1]["turn"]["status"] == "complete"
+
+
+def selected_node_project(app, context):
+    projects = app.state.services.projects
+    snapshot = projects.snapshot(context["worktree"])
+    bundle = snapshot["bundle"]
+    bundle["flow"]["nodes"] = [{"id": "source", "params": {}}]
+    bundle["node_sql"] = {"nodes/source.sql": "-- @output result\nSELECT 1 AS value;\n"}
+    projects.write(context["worktree"], snapshot["revision"], bundle_to_files(bundle))
+    return {**context, "node": "source"}
+
+
+def test_pending_run_can_be_declined_after_its_selected_node_is_deleted(instance):
+    app, client = instance
+    configure(client)
+    _, context = project(client)
+    identity, requested = request_run(app, client, selected_node_project(app, context))
+    # For example, the assistant deleted the node it then proposed to run.
+    projects = app.state.services.projects
+    snapshot = projects.snapshot(context["worktree"])
+    snapshot["bundle"]["flow"]["nodes"] = []
+    snapshot["bundle"]["node_sql"] = {}
+    projects.write(context["worktree"], snapshot["revision"], bundle_to_files(snapshot["bundle"]))
+    result = final(decide(client, identity, requested, False))
+    assert result["status"] == "complete", result
+    assert "denied" in result["text"].lower()
+    assert client.get("/api/runs").json() == []
+    assert turn(client, identity, context)[-1]["turn"]["status"] == "awaiting_approval"
+
+
+def test_decline_closes_a_turn_that_can_no_longer_resume(instance):
+    app, client = instance
+    configure(client)
+    _, context = project(client)
+    identity, requested = request_run(app, client, context)
+    # An administrator removes the model of the pending turn.
+    provider = {"id": "primary", "kind": "deepseek", "api_key": "private-test-key", "models": ["other"]}
+    assert configure(client, providers=[provider], default_model="other").status_code == 200
+    assert decide(client, identity, requested).status_code == 400
+    result = final(decide(client, identity, requested, False))
+    assert result["status"] == "stopped"
+    assert result["tools"][0]["status"] == "denied"
+    assert result["tools"][0]["approval"]["decision"] is False
+    saved = client.get(f"/api/assistant/conversations/{identity}").json()["turns"]
+    assert saved[-1]["status"] == "stopped"
+    assert decide(client, identity, requested, False).status_code == 409
+    response = client.post(
+        f"/api/assistant/conversations/{identity}/messages",
+        json={"message": "Run the flow", "provider": "primary", "model": "other", "context": context},
+    )
+    assert response.status_code == 200, response.text
+    # The new prompt answers the declined call, which the model never received.
+    assert json.loads(response.text.splitlines()[-1])["turn"]["status"] == "complete"
+    assert client.get("/api/runs").json() == []
+
+
+@pytest.mark.parametrize("approved", [True, False])
+def test_renamed_title_survives_an_approval(instance, approved):
+    app, client = instance
+    configure(client)
+    _, context = project(client)
+    identity, requested = request_run(app, client, context)
+    path = f"/api/assistant/conversations/{identity}"
+    assert client.get(path).json()["title"] == "Run the flow"
+    assert client.patch(path, json={"title": "Chosen title"}).status_code == 200
+    assert final(decide(client, identity, requested, approved))["status"] == "complete"
+    assert client.get(path).json()["title"] == "Chosen title"
+
+
+def test_approved_launch_never_blocks_other_projects(instance, monkeypatch):
+    import asyncio
+    import threading
+    import time
+
+    from helpers import asgi_client
+
+    app, client = instance
+    configure(client)
+    other, _ = project(client)
+    _, context = project(client)
+    identity, requested = request_run(app, client, context)
+    planner = app.state.services.engine.runs.planner
+    check, entered, proceed = planner.check_launch, threading.Event(), threading.Event()
+    released = None
+
+    def slow(*args, **kwargs):
+        # The launch checks a definition, for example a large one, before admitting the run.
+        nonlocal released
+        entered.set()
+        proceed.wait(5)
+        released = time.monotonic()
+        return check(*args, **kwargs)
+
+    monkeypatch.setattr(planner, "check_launch", slow)
+
+    async def scenario():
+        headers = {"authorization": "Bearer " + client.cookies["duckpad_session"]}
+        async with asgi_client(app, headers=headers) as http:
+            approval = asyncio.create_task(
+                http.post(
+                    f"/api/assistant/conversations/{identity}/approvals",
+                    json={"turn": requested["id"], "tool": "run-call-0", "approved": True},
+                )
+            )
+            assert await asyncio.to_thread(entered.wait, 5)
+            try:
+                status = await http.get(f"/api/worktrees/{other['id']}/status", params={"environment": "dev"})
+                assert released is None, "The other project's status waited for the launch"
+            finally:
+                proceed.set()
+            return status, await approval
+
+    status, approval = asyncio.run(scenario())
+    assert status.status_code == 200, status.text
+    assert final(approval)["status"] == "complete"
+    assert len(client.get("/api/runs").json()) == 1
+
+
+def test_follow_up_after_an_inspected_run_expired(instance):
+    app, client = instance
+    configure(client)
+    _, context = project(client)
+    store = app.state.services.store
+    store.put(
+        "run",
+        "run_old",
+        {
+            "id": "run_old",
+            "project": context["project"],
+            "worktree": context["worktree"],
+            "branch": "main",
+            "environment": "dev",
+            "scope": "project",
+            "started": "2026-01-01",
+            "status": "success",
+            "commit": "before",
+            "nodes": {},
+            "connections": {},
+        },
+    )
+
+    async def stream(messages, info):
+        if any(isinstance(part, ToolReturnPart) for part in messages[-1].parts):
+            yield "Read."
+        else:
+            yield {0: DeltaToolCall(name="inspect_run", json_args='{"run":"run_old"}', tool_call_id="read")}
+
+    app.state.assistant.configuration.model_override = FunctionModel(stream_function=stream)
+    identity = conversation(client, context)
+    first = turn(client, identity, context)[-1]["turn"]
+    assert first["tools"][0]["status"] == "complete", first["tools"][0]["summary"]
+    # Retention removes old runs; the conversation that read one must stay usable.
+    store.delete("run", "run_old")
+    assert turn(client, identity, context, "And now?")[-1]["turn"]["status"] == "complete"

@@ -12,7 +12,7 @@ import threading
 import time
 from collections import OrderedDict
 from collections.abc import Callable, Collection, Generator, Iterable, Mapping
-from contextlib import contextmanager, suppress
+from contextlib import AbstractContextManager, contextmanager, suppress
 from pathlib import Path
 from typing import Literal, TypeVar, Unpack, cast, overload
 
@@ -69,6 +69,16 @@ def conflict_view(conflict: Record) -> Record:
 CachedValue = TypeVar("CachedValue")
 
 
+# Wraps a conflict resolution, outside the repository lock; the callable it yields receives,
+# under that lock, the commit before the resolution and the saved snapshot.
+ResolutionHook = Callable[[Record, str], AbstractContextManager[Callable[[str, Record], None]]]
+
+
+@contextmanager
+def unrecorded(conflict: Record, choice: str) -> Generator[Callable[[str, Record], None], None, None]:
+    yield lambda before, result: None
+
+
 class Projects:
     def __init__(self, store: Store) -> None:
         self.store = store
@@ -84,6 +94,8 @@ class Projects:
         self.snapshot_definitions: OrderedDict[tuple[str, str], Record] = OrderedDict()
         self.views: OrderedDict[tuple[str, str], Record] = OrderedDict()
         self.on_change: Callable[[str], None] = lambda worktree: None
+        # The assistant replaces it to update the receipt of an action whose save a conflict retained.
+        self.resolving: ResolutionHook = unrecorded
         self.thread: threading.Thread | None = None
         self.versioning = GitWorkspace(self)
         self.remotes = Remotes(self.versioning)
@@ -655,11 +667,13 @@ class Projects:
         *,
         validate: bool = False,
         assistant: str | None = None,
+        relock: bool = True,
     ) -> Record:
         """Save the three-way inverse of a change, keeping later independent edits.
 
         The change goes from `before` (by default the parent of a commit of the branch)
         to `commit`. Reverting the commit of a revert redoes the original change.
+        `relock=False` restores the dependency files of `before` as they were.
         """
         path = self.get(worktree_id)["path"]
         if before is None:
@@ -674,8 +688,18 @@ class Projects:
         # The base of the inverse save, even when the commit is older than the revision cache.
         self.cached(self.revisions, (worktree_id, revision), after)
         return self.write(
-            worktree_id, revision, self.revision_files(path, before), validate=validate, assistant=assistant
+            worktree_id,
+            revision,
+            self.revision_files(path, before),
+            validate=validate,
+            assistant=assistant,
+            relock=relock,
         )
+
+    def lock_dependencies(self, worktree_id: str, proposal: Files) -> Files:
+        """A proposal with its uv.lock resolved, for callers that save it while holding the
+        repository lock: resolve first, then save with `relock=False`."""
+        return self._locked_dependencies(self.get(worktree_id), dict(proposal))
 
     def _locked_dependencies(self, record: Record, proposal: Files) -> Files:
         """The proposal with a uv.lock resolved for its manifest; resolution runs before any lock."""
@@ -778,7 +802,7 @@ class Projects:
                         resolutions=files if choice == "combined" else None,
                     )[0],
                 )
-        with self.locked(stored["worktree"]):
+        with self.resolving(stored, choice) as record, self.locked(stored["worktree"]):
             # Read it again: another request may have resolved it while this one waited.
             conflict = self.conflict(conflict_id)
             snapshot = self.snapshot(conflict["worktree"])
@@ -822,6 +846,9 @@ class Projects:
             )
             self.store.delete("conflict", conflict_id)
             result["conflicts"] = [c for c in result["conflicts"] if c["id"] != conflict_id]
+            change, path = result["change"], result["worktree"]["path"]
+            # The parent of the change, after any external edit the save committed first.
+            record(self.git(path, "rev-parse", change + "^") if change else result["commit"], result)
             return result
 
     def flush(self, worktree_id: str) -> Record:

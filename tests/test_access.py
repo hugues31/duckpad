@@ -21,6 +21,7 @@ PUBLIC, SESSION, READER, OPERATOR, EDITOR, PROJECT_ADMIN, INSTANCE_ADMIN = range
 ROUTE_ACCESS = {
     PUBLIC: [
         "POST /api/login",
+        "POST /api/setup",
         "GET /api/oidc/provider",
         "GET /api/oidc/login",
         "GET /api/oidc/callback",

@@ -550,15 +550,26 @@ def test_forward_conflict_and_invalid_bundle_never_overwrite(instance):
     )
     action = result["tools"][0]["action"]
     assert action["status"] == "conflict" and not action["commit"]
-    assert (
-        client.post(f"/api/conflicts/{action['conflict']}/resolve", json={"choice": "proposal"}).status_code
-        == 200
-    )
+    assert result["tools"][0]["status"] == "error"
+    endpoint = f"/api/conflicts/{action['conflict']}/resolve"
+    from pydantic_ai import CancellationToken
+
+    app.state.assistant.active[identity] = CancellationToken()
+    response = client.post(endpoint, json={"choice": "proposal"})
+    assert response.status_code == 409 and "Wait for the assistant response" in response.text
+    app.state.assistant.active.clear()
+    # An edit made outside Duckpad meanwhile is committed on its own, before the resolution.
+    (Path(worktree["path"]) / "nodes/second.sql").write_text(SQL.replace("1", "6"))
+    # The first attempt refreshes the conflict with that edit.
+    assert client.post(endpoint, json={"choice": "proposal"}).status_code == 409
+    assert client.post(endpoint, json={"choice": "proposal"}).status_code == 200
     saved = client.get(f"/api/assistant/conversations/{identity}").json()["turns"][0]
     assert saved["tools"][0]["action"]["status"] == "applied"
+    assert [c["id"] for c in saved["tools"][0]["action"]["changes"]] == ["node/first"]
     undo(client, identity, saved, context)
     projects = app.state.services.projects
     assert projects.snapshot(worktree["id"])["files"]["nodes/first.sql"] == SQL.replace("1", "5")
+    assert projects.snapshot(worktree["id"])["files"]["nodes/second.sql"] == SQL.replace("1", "6")
     before = projects.snapshot(worktree["id"])["commit"]
     _, invalid = write_turn(
         app,
@@ -702,3 +713,33 @@ def test_multiple_calls_in_one_model_response_are_sequential_and_restart_undoabl
         updated = undo(resumed, identity, saved, context)
         assert all(t["action"]["status"] == "undone" for t in updated["tools"])
         assert restarted.state.services.projects.snapshot(worktree["id"])["files"]["nodes/first.sql"] == SQL
+
+
+def test_assistant_saves_resolve_dependencies_outside_the_repository_lock(instance, monkeypatch):
+    app, client = instance
+    _, context = seed(app, client)
+    projects = app.state.services.projects
+    resolve, held = projects._locked_dependencies, []
+
+    def probe(record, proposal):
+        # `uv lock` can run here for minutes: the project's other saves must not wait for it.
+        lock, acquired = projects.repository(record["project"]), []
+
+        def other_save():
+            acquired.append(lock.acquire(timeout=1))
+            if acquired[0]:
+                lock.release()
+
+        thread = threading.Thread(target=other_save)
+        thread.start()
+        thread.join()
+        held.append(not acquired[0])
+        return resolve(record, proposal)
+
+    monkeypatch.setattr(projects, "_locked_dependencies", probe)
+    identity, result = write_turn(
+        app, client, context, [("write_sql", {"node": "first", "sql": SQL.replace("1", "2")})]
+    )
+    assert result["tools"][0]["action"]["status"] == "applied"
+    assert undo(client, identity, result, context)["tools"][0]["action"]["status"] == "undone"
+    assert held and not any(held)
