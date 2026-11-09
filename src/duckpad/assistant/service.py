@@ -21,6 +21,7 @@ from pydantic_ai import (
 )
 from pydantic_ai.exceptions import RunCancelled, RunTimedOut
 from pydantic_ai.messages import (
+    ERROR_OUTCOMES,
     FunctionToolCallEvent,
     FunctionToolResultEvent,
     ModelMessagesTypeAdapter,
@@ -42,7 +43,7 @@ from .config import Configuration, provider_error
 from .editing import WRITE_TOOLS
 from .gateway import TURN_TIMEOUT
 from .knowledge import AUTHORING_INSTRUCTIONS, read_guide
-from .runs import DEBUG_TOOLS, RUN_TOOLS, read_run_sql, run_record
+from .runs import DEBUG_TOOLS, RUN_TOOLS, read_run_sql, recheck_run_reads
 from .tools import DATA_TOOLS, READ_TOOLS, Dependencies, PageContext, validate_context
 
 INSTRUCTIONS = """You are Duckpad's project assistant. Answer in the user's language.
@@ -80,6 +81,8 @@ When data tools are unavailable, do not invent values or ask the user to bypass 
 Page context contains only identifiers and names; read saved content through tools.
 """
 MAX_TURNS = 100
+# The title of a conversation until its first prompt names it, unless the user renames it first.
+UNTITLED = "New conversation"
 # Seconds between access rechecks while a response streams; tools recheck on every call.
 RECHECK_INTERVAL = 1.0
 
@@ -118,12 +121,14 @@ def guarded(function):
             ctx.deps.check()
             if error.status in (401, 403):
                 raise
+            ctx.deps.failed.add(ctx.tool_call_id)
             result = {"error": str(error)}
             if error.status == 422 and isinstance(error.detail, list):
                 result["diagnostics"] = error.detail[:20]
         ctx.deps.check()
         result = ctx.deps.safe(result)
         if len(json.dumps(result, ensure_ascii=False)) > 24000:
+            ctx.deps.failed.add(ctx.tool_call_id)
             return {
                 "error": "This result is too large. Request a smaller page or read a specific definition file."
             }
@@ -143,6 +148,7 @@ class Assistant:
         self.active = {}
         self.actions = Actions(self)
         self.approvals = Approvals(self)
+        services.projects.resolving = self.actions.resolving
 
     def lock(self, identity):
         """The lock serializing one conversation's responses, actions and record updates.
@@ -210,7 +216,7 @@ class Assistant:
             "project": context["project"],
             "worktree": context["worktree"],
             "branch": context["branch"],
-            "title": "New conversation",
+            "title": UNTITLED,
             "updated": now(),
             "allow_data": config["allow_data"],
             "messages": [],
@@ -222,7 +228,7 @@ class Assistant:
     def rename(self, user, identity, title):
         with self.lock(identity), self.store.transaction():
             record = self.owned(user, identity)
-            record["title"] = title.strip() or "New conversation"
+            record["title"] = title.strip() or UNTITLED
             self.store.put("assistant_conversation", identity, record)
         return self.public(record)
 
@@ -241,6 +247,12 @@ class Assistant:
         return {"ok": True}
 
     def prepare(self, user, token, identity, data, *, resume=None):
+        """Admit a prompt, or the resumption of an approved turn, and return its response stream.
+
+        A resumed turn keeps the page context validated with its prompt: only its project, worktree
+        and branch must still be the conversation's. A node, file or run deleted meanwhile must
+        never make its pending decision unanswerable.
+        """
         with self.lock(identity):
             record = self.owned(user, identity)
             last = record["turns"][-1] if resume is None and record["turns"] else {}
@@ -249,18 +261,10 @@ class Assistant:
             config = self.configuration.get()
             if not config["enabled"]:
                 raise Problem("The assistant is disabled", 403)
-            context = validate_context(self.services, user, data.context)
-            if any(record[k] != context[k] for k in ("project", "worktree", "branch")):
-                raise Problem("Open the conversation's original branch or start a new conversation", 409)
-            if record["allow_data"] and record["messages"] and not config["allow_data"]:
-                raise Problem(
-                    "Data reading is now disabled. Start a new conversation to keep previous values private.",
-                    409,
-                )
-            if (resume is None and len(record["turns"]) >= MAX_TURNS) or len(
-                json.dumps(record["messages"])
-            ) > 2_000_000:
-                raise Problem("This conversation is full. Start a new conversation.", 409)
+            context = (
+                validate_context(self.services, user, data.context) if resume is None else resume["context"]
+            )
+            self.admit(record, config, context, resume)
             provider = self.configuration.select(config, data.provider, data.model)
             deps = Dependencies(
                 self.services,
@@ -271,43 +275,51 @@ class Assistant:
                 context,
                 secrets=Configuration.credentials(config),
             )
+            # Also rechecks the worktree's project and branch, and the user's access to it.
             deps.check()
             if context["worktree"]:
                 deps.snapshot()
-            if record["messages"] and context["worktree"]:
-                # Recheck connection grants before old tool results go back to a provider.
-                deps.results()
-                for previous in record["turns"]:
-                    for tool in previous.get("tools", []):
-                        run_id = tool.get("args", {}).get("run")
-                        if (
-                            run_id
-                            and tool.get("status") == "complete"
-                            and tool["name"]
-                            in (
-                                "read_runs",
-                                "inspect_run",
-                                "read_run_sql",
-                                "compare_run",
-                                "wait_for_run",
-                            )
-                        ):
-                            run_record(deps, run_id)
+                if record["messages"]:
+                    # Recheck connection grants before old tool results go back to a provider.
+                    deps.recheck_connections()
+                    recheck_run_reads(deps, record["turns"])
             if identity in self.active:
                 raise Problem("A response is already in progress", 409)
             if last.get("status") == "resuming":
                 # The approved response lost its stream (restart or disconnect). Close it without
                 # replaying its decisions; the new prompt closes out its unanswered tool calls.
-                last["status"] = "stopped"
-                for card in last["tools"]:
-                    if card["status"] in ("running", "approved", "denied"):
-                        card["status"] = "stopped"
-                self.save_turn(identity, last)
+                self.close_turn(identity, last)
             cancellation = CancellationToken()
             self.active[identity] = cancellation
         return self.stream(
             identity, record, data, provider, config, deps, cancellation, resume=resume
         ), cancellation
+
+    @staticmethod
+    def admit(record, config, context, resume):
+        """Refuse a turn its conversation can no longer hold."""
+        if any(record[k] != context[k] for k in ("project", "worktree", "branch")):
+            raise Problem("Open the conversation's original branch or start a new conversation", 409)
+        if record["allow_data"] and record["messages"] and not config["allow_data"]:
+            raise Problem(
+                "Data reading is now disabled. Start a new conversation to keep previous values private.",
+                409,
+            )
+        if (resume is None and len(record["turns"]) >= MAX_TURNS) or len(
+            json.dumps(record["messages"])
+        ) > 2_000_000:
+            raise Problem("This conversation is full. Start a new conversation.", 409)
+
+    def close_turn(self, identity, turn):
+        """End a turn without a response, keeping its recorded decisions.
+
+        The provider never answers its pending calls: the next prompt closes them out.
+        """
+        turn["status"] = "stopped"
+        for card in turn["tools"]:
+            if card["status"] in ("running", "approved"):
+                card["status"] = "stopped"
+        self.save_turn(identity, turn)
 
     def release(self, identity, token):
         with self.lock(identity):
@@ -338,8 +350,10 @@ class Assistant:
                 current["turns"] = [turn if t["id"] == turn["id"] else t for t in current["turns"]]
                 current["updated"] = now()
                 current["allow_data"] = current["allow_data"] or config["allow_data"]
-                if len(current["turns"]) == 1:
-                    current["title"] = " ".join(turn["user"].split())[:80]
+                # The first prompt names the conversation, unless the user renamed it meanwhile,
+                # for example while a run awaited approval.
+                if len(current["turns"]) == 1 and current["title"] == UNTITLED:
+                    current["title"] = " ".join(turn["user"].split())[:80] or UNTITLED
                 if messages is not None:
                     current["messages"] = deps.safe(messages)
                 self.store.put("assistant_conversation", identity, current)
@@ -362,10 +376,8 @@ class Assistant:
                 "error": "",
             }
         )
-        messages = None
+        events = TurnEvents(self, deps, turn)
         stream = None
-        buffer = ""
-        text_parts = int(bool(turn["text"]))
         # `prepare` has just checked access.
         checked = time.monotonic()
         deps.writer = lambda tool_id, base, files, details: self.actions.apply(
@@ -385,18 +397,6 @@ class Assistant:
             if resume is not None
             else None
         )
-        hold = max(map(len, deps.secrets or ()), default=0)
-
-        def event(kind, **content):
-            return json.dumps(deps.safe({"type": kind, **content}), ensure_ascii=False) + "\n"
-
-        def text_delta(text, final=False):
-            nonlocal buffer
-            buffer = deps.safe(buffer + text)
-            end = len(buffer) if final else max(0, len(buffer) - hold)
-            chunk, buffer = buffer[:end], buffer[end:]
-            turn["text"] += chunk
-            return chunk
 
         async def recheck():
             """Recheck access at most once per interval, rather than for each streamed fragment."""
@@ -407,7 +407,7 @@ class Assistant:
 
         try:
             await blocking(self.save_turn, identity, turn)
-            yield event("start", conversation=identity)
+            yield events.event("start", conversation=identity)
             tools = await blocking(self.tools, config, deps)
             history = ModelMessagesTypeAdapter.validate_python(record["messages"])
             if resume is None:
@@ -440,56 +440,10 @@ class Assistant:
                 ) as stream:
                     async for item in stream:
                         await recheck()
-                        delta = ""
-                        if isinstance(item, PartStartEvent) and isinstance(item.part, TextPart):
-                            separator = "\n\n" if text_parts else ""
-                            text_parts += 1
-                            delta = separator + item.part.content
-                        elif isinstance(item, PartDeltaEvent) and isinstance(item.delta, TextPartDelta):
-                            delta = item.delta.content_delta
-                        elif isinstance(item, FunctionToolCallEvent):
-                            card = next((t for t in turn["tools"] if t["id"] == item.tool_call_id), None)
-                            card = (
-                                card
-                                if card is not None
-                                else {
-                                    "id": item.tool_call_id,
-                                    "name": item.part.tool_name,
-                                    "args": deps.safe(item.part.args_as_dict()),
-                                    "status": "running",
-                                    "summary": "",
-                                }
-                            )
-                            if card not in turn["tools"]:
-                                turn["tools"].append(card)
-                            yield event("tool", tool=card)
-                        elif isinstance(item, FunctionToolResultEvent):
-                            card = next((t for t in turn["tools"] if t["id"] == item.tool_call_id), None)
-                            if card:
-                                content = item.part.content
-                                card.update(
-                                    status="error"
-                                    if isinstance(content, dict) and "error" in content
-                                    else "complete",
-                                    summary=json.dumps(deps.safe(content), ensure_ascii=False, default=str)[
-                                        :2000
-                                    ],
-                                )
-                                yield event("tool", tool=card)
-                        elif isinstance(item, AgentRunResultEvent):
-                            messages = json.loads(item.result.all_messages_json())
-                            if isinstance(item.result.output, DeferredToolRequests):
-                                await blocking(self.approvals.capture, deps, turn, item.result.output)
-                                for card in turn["tools"]:
-                                    if card["id"] in turn["approvals"]:
-                                        yield event("tool", tool=card)
-                        if delta:
-                            chunk = text_delta(delta)
-                            if chunk:
-                                yield event("text", text=chunk)
-            chunk = text_delta("", final=True)
-            if chunk:
-                yield event("text", text=chunk)
+                        async for line in events.handle(item):
+                            yield line
+            if line := events.text("", final=True):
+                yield line
             if turn["status"] != "awaiting_approval":
                 turn["status"] = "complete"
         except RunTimedOut as error:
@@ -503,6 +457,7 @@ class Assistant:
             await blocking(self.configuration.log_failure, error, provider, data.model)
             turn.update(status="error", error=provider_error(error))
         finally:
+            messages = events.messages
             if stream is not None:
                 # A provider may fail before a run has bound its message state.
                 with suppress(Exception):
@@ -511,4 +466,73 @@ class Assistant:
                 if card["status"] == "running":
                     card["status"] = "stopped"
             await blocking(self.finish, identity, record["user"], turn, messages, config, deps)
-        yield event("done", turn=turn)
+        yield events.event("done", turn=turn)
+
+
+class TurnEvents:
+    """The NDJSON events of one streamed turn, and the turn record they update."""
+
+    def __init__(self, assistant, deps, turn):
+        self.assistant, self.deps, self.turn = assistant, deps, turn
+        # The run's final messages, once its result arrives.
+        self.messages = None
+        self.buffer = ""
+        self.text_parts = int(bool(turn["text"]))
+        # Text that could still begin a credential waits until it cannot, so redaction sees it whole.
+        self.hold = max(map(len, deps.secrets or ()), default=0)
+
+    def event(self, kind, **content):
+        return json.dumps(self.deps.safe({"type": kind, **content}), ensure_ascii=False) + "\n"
+
+    def text(self, delta, final=False):
+        """The text event of a fragment, without the held-back end, or None when nothing is due."""
+        self.buffer = self.deps.safe(self.buffer + delta)
+        end = len(self.buffer) if final else max(0, len(self.buffer) - self.hold)
+        chunk, self.buffer = self.buffer[:end], self.buffer[end:]
+        self.turn["text"] += chunk
+        return self.event("text", text=chunk) if chunk else None
+
+    def card(self, tool_call_id):
+        return next((t for t in self.turn["tools"] if t["id"] == tool_call_id), None)
+
+    async def handle(self, item):
+        """Record one agent stream item in the turn and yield its events."""
+        delta = ""
+        if isinstance(item, PartStartEvent) and isinstance(item.part, TextPart):
+            separator = "\n\n" if self.text_parts else ""
+            self.text_parts += 1
+            delta = separator + item.part.content
+        elif isinstance(item, PartDeltaEvent) and isinstance(item.delta, TextPartDelta):
+            delta = item.delta.content_delta
+        elif isinstance(item, FunctionToolCallEvent):
+            card = self.card(item.tool_call_id)
+            if card is None:
+                card = {
+                    "id": item.tool_call_id,
+                    "name": item.part.tool_name,
+                    "args": self.deps.safe(item.part.args_as_dict()),
+                    "status": "running",
+                    "summary": "",
+                }
+                self.turn["tools"].append(card)
+            yield self.event("tool", tool=card)
+        elif isinstance(item, FunctionToolResultEvent):
+            if card := self.card(item.tool_call_id):
+                # Rejected arguments come back as a retry; `guarded` reports other failures.
+                failed = item.part.outcome in ERROR_OUTCOMES or item.tool_call_id in self.deps.failed
+                card.update(
+                    status="error" if failed else "complete",
+                    summary=json.dumps(self.deps.safe(item.part.content), ensure_ascii=False, default=str)[
+                        :2000
+                    ],
+                )
+                yield self.event("tool", tool=card)
+        elif isinstance(item, AgentRunResultEvent):
+            self.messages = json.loads(item.result.all_messages_json())
+            if isinstance(item.result.output, DeferredToolRequests):
+                await blocking(self.assistant.approvals.capture, self.deps, self.turn, item.result.output)
+                for card in self.turn["tools"]:
+                    if card["id"] in self.turn["approvals"]:
+                        yield self.event("tool", tool=card)
+        if delta and (line := self.text(delta)):
+            yield line

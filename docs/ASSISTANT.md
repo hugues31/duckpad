@@ -184,11 +184,13 @@ external effects cannot be undone. Protected environments show their additional
 confirmation notice in the same card.
 
 Choose **Confirm and run** or **Decline run**. A refusal goes back to the model.
-Pending confirmations survive a page reload: maximize the assistant and reopen
-the conversation to answer. Each request can be answered only once. If the flow
-or connection configuration changes after the proposal, ask for a fresh run and
-review its new confirmation. Runs require the same project editing rights as
-running from the workspace; Readers cannot launch or cancel them.
+If the request can no longer resume, for example because an administrator removed
+its model, declining closes it without a response and the conversation continues
+with your next message. Pending confirmations survive a page reload: maximize the
+assistant and reopen the conversation to answer. Each request can be answered only
+once. If the flow or connection configuration changes after the proposal, ask for
+a fresh run and review its new confirmation. Runs require the same project editing
+rights as running from the workspace; Readers cannot launch or cancel them.
 
 The card follows execution status and offers **Cancel run** while it is active.
 **Stop** stops the assistant response, while **Cancel run** stops execution.
@@ -229,12 +231,15 @@ list hides the buttons. These settings are not stored in project Git files.
 ordered by recent activity. Select one to reopen its original branch and resume.
 Use the title
 field to rename it, **Delete conversation** to remove it, or **New conversation**
-to begin another. Escape closes the panel and returns focus to its launcher.
+to begin another. The first message names a conversation unless you renamed it
+first. Escape closes the panel and returns focus to its launcher.
 
 Conversations are private to their author, including against other instance
 administrators. Sending
 a message after navigating to another project or branch starts a new
-conversation. Losing project access prevents further project-reading turns.
+conversation. A conversation continues while the project files have errors, so
+you can ask for help fixing them. Losing project access prevents further
+project-reading turns.
 Deleting the author or the project removes its conversations from SQLite.
 
 ## Control what leaves the instance

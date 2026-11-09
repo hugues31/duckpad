@@ -1,5 +1,6 @@
 """Small read-only views over the same services and authorization as the HTTP API."""
 
+import dataclasses
 import json
 from collections.abc import Callable
 from copy import deepcopy
@@ -14,7 +15,7 @@ from ..auth import Auth
 from ..components import expand_for
 from ..execution.samples import Sample
 from ..graph import connection_references
-from ..node_code import code_path, template_path
+from ..node_code import code_path, find_node, template_path
 from ..search import node_entries
 from ..services import Services
 from ..util import Problem, clean
@@ -59,6 +60,9 @@ class Dependencies:
     launcher: Callable | None = None
     # Credentials of the settings revision; `check` fails once a newer revision is saved.
     secrets: list[str] | None = None
+    # Tool calls whose result reports a failure. A successful result can also hold an "error"
+    # field, such as the error of an inspected run.
+    failed: set[str] = dataclasses.field(default_factory=set)
 
     def __post_init__(self):
         if self.secrets is None:
@@ -118,14 +122,32 @@ class Dependencies:
         if not snapshot["bundle"]:
             raise Problem("Project files are invalid")
         nodes, _, _ = expand_for(snapshot["bundle"], environment, tolerant=False)
-        references = [ref for node in nodes.values() for ref in connection_references(node)]
-        # Also recheck old result reads after a grant has been revoked.
-        access = self.services.engine.access
-        access.connections(self.context["project"], references)
+        self.require_connections(nodes)
         return self.context["worktree"], environment
 
+    def recheck_connections(self):
+        """Recheck the grants of the connections the branch references, before earlier tool
+        results go back to a provider.
+
+        A broken project must not block the conversation that helps repair it: the expansion is
+        tolerant, and files that form no bundle reference no connection.
+        """
+        bundle = self.snapshot()["bundle"]
+        if bundle:
+            environment = self.context["environment"]
+            self.services.catalog.environment(environment)
+            self.require_connections(expand_for(bundle, environment, tolerant=True)[0])
+
+    def require_connections(self, nodes):
+        references = [ref for node in nodes.values() for ref in connection_references(node)]
+        # Also recheck old result reads after a grant has been revoked.
+        self.services.engine.access.connections(self.context["project"], references)
+
     def safe(self, value):
-        """Redact configured credentials even if user-authored content happens to repeat one."""
+        """Redact configured credentials even if user-authored content happens to repeat one.
+
+        Tool results need no call: `guarded` redacts each of them.
+        """
         text = json.dumps(clean(value), ensure_ascii=False)
         for key in self.secrets or ():
             if key:
@@ -213,7 +235,7 @@ def read_flow(
         ]
     else:
         items = [{"id": k} for k in bundle.get("templates", {})]
-    return ctx.deps.safe(page(items, offset, limit))
+    return page(items, offset, limit)
 
 
 def read_file(ctx: RunContext[Dependencies], path: str, offset: int = 0) -> dict:
@@ -227,32 +249,25 @@ def read_file(ctx: RunContext[Dependencies], path: str, offset: int = 0) -> dict
     text = files[path]
     offset = max(0, offset)
     end = offset + 12000
-    return ctx.deps.safe(
-        {"path": path, "text": text[offset:end], "next_offset": end if end < len(text) else None}
-    )
+    return {"path": path, "text": text[offset:end], "next_offset": end if end < len(text) else None}
 
 
 def read_sql(
     ctx: RunContext[Dependencies], node: str = "", template: str = "", compiled: bool = False, offset: int = 0
 ) -> dict:
     """Read saved SQL/Python code, or compiled SQL statements, without executing project code."""
-    snapshot = ctx.deps.snapshot()
-    bundle = snapshot["bundle"] or {}
     if compiled:
         worktree, environment = ctx.deps.results()
-        return ctx.deps.safe(page(ctx.deps.services.engine.compile(worktree, environment, node), offset, 5))
+        return page(ctx.deps.services.engine.compile(worktree, environment, node), offset, 5)
     if template:
         path = template_path(template)
     else:
-        parts = node.split("::")
-        graph, parent = bundle.get("flow", {}), None
-        for part in parts[:-1]:
-            container = next((n for n in graph.get("nodes", []) if n["id"] == part), {})
-            parent = container.get("component")
-            graph = bundle.get("components", {}).get(parent, {})
-        found = next((n for n in graph.get("nodes", []) if n["id"] == parts[-1]), None)
-        if found is None:
-            raise Problem("Node not found", 404)
+        bundle = ctx.deps.snapshot()["bundle"]
+        if bundle is None:
+            raise Problem("Project files are invalid. Read their definition files with read_file.", 422)
+        found, parent = find_node(bundle, node)
+        if found.get("component"):
+            raise Problem("This node is a component instance. Read the nodes of its component.", 422)
         path = (
             template_path(found["template"])
             if found.get("template")
@@ -289,7 +304,7 @@ def read_documentation(
         items = [
             {"id": k, "description": v} for k, v in bundle.get("documentation", {}).get(section, {}).items()
         ]
-    return ctx.deps.safe(page(items, offset, limit))
+    return page(items, offset, limit)
 
 
 def variable_usages(bundle):
@@ -323,7 +338,7 @@ def read_variables(
     if section == "usages":
         if not name:
             raise Problem("Choose a variable to inspect its usages", 422)
-        return ctx.deps.safe(page(variable_usages(bundle).get(name, []), offset, limit))
+        return page(variable_usages(bundle).get(name, []), offset, limit)
     summary = variables.summary(bundle, ctx.deps.services.catalog.environment_names())
     if name and name not in summary["declarations"]:
         raise Problem("Variable not found", 404)
@@ -338,7 +353,7 @@ def read_variables(
         for key, definition in summary["declarations"].items()
         if not name or key == name
     ]
-    return ctx.deps.safe({**page(items, offset, limit), "file_error": summary["file_error"]})
+    return {**page(items, offset, limit), "file_error": summary["file_error"]}
 
 
 def read_schemas(ctx: RunContext[Dependencies], node: str = "", offset: int = 0) -> dict:
@@ -349,64 +364,34 @@ def read_schemas(ctx: RunContext[Dependencies], node: str = "", offset: int = 0)
         return {"items": [], "next_offset": None}
     with context.lock:
         items = [data.public() for data in context.datasets.values() if not node or data.node == node]
-    return ctx.deps.safe(page(items, offset))
+    return page(items, offset)
 
 
-def read_runs(
-    ctx: RunContext[Dependencies], run: str = "", node: str = "", offset: int = 0, limit: int = 10
-) -> dict:
-    """Read run history, or node statuses in a run. Set both run and node to page its messages.
+def read_runs(ctx: RunContext[Dependencies], offset: int = 0, limit: int = 10) -> dict:
+    """Read a page of the branch's run history, newest first: IDs, status, scope and timing.
 
-    Error and message text are withheld when data reading is disabled. Offset pages runs,
-    nodes or messages respectively. This does not launch or cancel executions.
+    Use inspect_run for a run's node outcomes, errors and messages. This does not launch or
+    cancel executions.
     """
-    user, config = ctx.deps.check()
-    worktree, _ = ctx.deps.results()
-    store = ctx.deps.services.store
-    if run:
-        from .runs import run_record
-
-        record = run_record(ctx.deps, run)
-        if node:
-            result = record.get("nodes", {}).get(node)
-            if result is None:
-                raise Problem("Node execution not found", 404)
-            details = {"node": node, "status": result["status"], "has_error": bool(result.get("error"))}
-            if config["allow_data"]:
-                details.update(
-                    error=result.get("error"),
-                    **page(result.get("results", []), offset, min(limit, config["max_rows"])),
-                )
-            return ctx.deps.safe(details)
-        items = [
-            {
-                "node": key,
-                "status": value["status"],
-                "duration": value.get("duration"),
-                "has_error": bool(value.get("error")),
-                "message_count": len(value.get("results", [])),
-            }
-            for key, value in record.get("nodes", {}).items()
-        ]
-    else:
-        items = [
-            {
-                k: r.get(k)
-                for k in (
-                    "id",
-                    "environment",
-                    "scope",
-                    "entry_point",
-                    "status",
-                    "started",
-                    "finished",
-                    "duration",
-                    "commit",
-                )
-            }
-            for r in store.runs(user, worktree, summary=True)
-        ]
-    return ctx.deps.safe(page(items, offset, limit))
+    user, _ = ctx.deps.check()
+    items = [
+        {
+            k: r.get(k)
+            for k in (
+                "id",
+                "environment",
+                "scope",
+                "entry_point",
+                "status",
+                "started",
+                "finished",
+                "duration",
+                "commit",
+            )
+        }
+        for r in ctx.deps.services.store.runs(user, ctx.deps.context["worktree"], summary=True)
+    ]
+    return page(items, offset, limit)
 
 
 def search_project(ctx: RunContext[Dependencies], query: str, offset: int = 0, limit: int = 20) -> dict:
@@ -420,16 +405,14 @@ def search_project(ctx: RunContext[Dependencies], query: str, offset: int = 0, l
         for number, line in enumerate(text.splitlines(), 1)
         if query.casefold() in line.casefold()
     ]
-    return ctx.deps.safe(page(items, offset, limit))
+    return page(items, offset, limit)
 
 
 def read_history(ctx: RunContext[Dependencies], offset: int = 0, limit: int = 20) -> dict:
     """Read a page of Git commits on the current branch only."""
     ctx.deps.snapshot()
-    return ctx.deps.safe(
-        ctx.deps.services.projects.versioning.history(
-            ctx.deps.context["worktree"], "HEAD", max(0, offset), max(1, min(20, limit))
-        )
+    return ctx.deps.services.projects.versioning.history(
+        ctx.deps.context["worktree"], "HEAD", max(0, offset), max(1, min(20, limit))
     )
 
 
@@ -458,25 +441,13 @@ def preview_output(
         sample=Sample(filter=filter),
     )
     end = result["offset"] + len(result["rows"])
-    return ctx.deps.safe(
-        {
-            **{
-                k: result[k]
-                for k in (
-                    "id",
-                    "node",
-                    "port",
-                    "columns",
-                    "rows",
-                    "count",
-                    "filtered_count",
-                    "offset",
-                    "status",
-                )
-            },
-            "next_offset": end if end < result["filtered_count"] else None,
-        }
-    )
+    return {
+        **{
+            k: result[k]
+            for k in ("id", "node", "port", "columns", "rows", "count", "filtered_count", "offset", "status")
+        },
+        "next_offset": end if end < result["filtered_count"] else None,
+    }
 
 
 def explain_value(
@@ -529,7 +500,7 @@ def explain_value(
             result[field] = result[field][:remaining]
             remaining -= len(result[field])
     result["page_size"] = min(5, ctx.deps.configuration.get()["max_rows"])
-    return ctx.deps.safe(result)
+    return result
 
 
 READ_TOOLS = [

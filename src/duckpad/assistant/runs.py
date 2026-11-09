@@ -13,7 +13,7 @@ from ..execution.launches import launch_scope
 from ..graph import connection_references
 from ..python_policy import get_policy
 from ..util import Problem
-from .tools import Dependencies, page
+from .tools import Dependencies, page, read_runs
 
 
 def proposal(deps, environment="", node=""):
@@ -82,11 +82,41 @@ def launch_run(ctx: RunContext[Dependencies], environment: str = "", node: str =
 
 def run_record(deps, identity):
     deps.check()
+    record = branch_run(deps, identity)
+    if record is None:
+        raise Problem("Execution not found", 404)
+    require_run_connections(deps, record)
+    return record
+
+
+def branch_run(deps, identity):
+    """The record of a run of the conversation's branch, or None."""
     record = deps.services.store.get("run", identity)
     if not record or any(record[k] != deps.context[k] for k in ("worktree", "project", "branch")):
-        raise Problem("Execution not found", 404)
-    deps.services.engine.access.connections(deps.context["project"], list(record.get("connections", {})))
+        return None
     return record
+
+
+def require_run_connections(deps, record):
+    deps.services.engine.access.connections(deps.context["project"], list(record.get("connections", {})))
+
+
+def recheck_run_reads(deps, turns):
+    """Recheck the connection grants of the runs earlier tool calls read, once per run.
+
+    The caller has checked access. A run that retention has since removed is skipped: its
+    connections are unknown, and refusing it would block the conversation for good.
+    """
+    readers = {tool.__name__ for tool in RUN_READERS}
+    runs = {
+        tool.get("args", {}).get("run")
+        for turn in turns
+        for tool in turn.get("tools", [])
+        if tool["name"] in readers and tool.get("status") == "complete"
+    }
+    for identity in sorted(runs - {None, ""}):
+        if (record := branch_run(deps, identity)) is not None:
+            require_run_connections(deps, record)
 
 
 def run_summary(record):
@@ -198,3 +228,6 @@ def compare_run(ctx: RunContext[Dependencies], run: str, offset: int = 0, limit:
 
 RUN_TOOLS = [launch_run, cancel_run]
 DEBUG_TOOLS = [inspect_run, compare_run, wait_for_run]
+# Tools whose results hold a run's node outcomes, rechecked before they go back to a provider.
+# Saved conversations can also hold read_runs calls from before it only listed runs.
+RUN_READERS = [inspect_run, read_run_sql, compare_run, wait_for_run, read_runs]
