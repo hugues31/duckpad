@@ -6,6 +6,7 @@ import { type NodeNames } from "./nodeNames";
 import type {
   ComponentDefinition,
   ComponentPort,
+  EdgeStyle,
   FlowEdge,
   FlowNode,
   ParsedTemplate,
@@ -54,6 +55,10 @@ export interface CanvasProps {
   actionsFor: (id: string) => ActionItem[];
   /** Inputs of the opened component definition, connected from outside it. */
   exposedInputs?: Record<string, ComponentPort>;
+  /** Outputs of the opened component definition, used outside it. */
+  exposedOutputs?: Record<string, ComponentPort>;
+  /** How links are drawn; curved by default. */
+  edgeStyle?: EdgeStyle;
   onOpen: (id: string) => void;
   onSelection: (ids: string[]) => void;
   /** Show the results log of a node whose warning badge was clicked. */

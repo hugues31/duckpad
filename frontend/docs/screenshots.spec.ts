@@ -927,6 +927,9 @@ test("capture account roles, project access and personal preferences", async ({
   await openUserSettings(page);
   await expect(page.getByLabel("Language", { exact: true })).toHaveValue("en");
   await expect(page.getByLabel("Theme", { exact: true })).toHaveValue("light");
+  await expect(page.getByLabel("Node links", { exact: true })).toHaveValue(
+    "curved",
+  );
   await capture(
     page,
     "preferences",

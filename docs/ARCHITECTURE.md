@@ -76,9 +76,9 @@ bytes. See [results](RESULTS.md) and [partitions](PARTITIONS.md).
 | Instance | Instance settings | Accounts, SSO, assistant, Git hosts, environments, connections, extension imports and SQL resources; instance admins configure them |
 | Project | Project settings | Membership, connection grants and deletion; project admins manage membership, instance admins grant connections |
 | Project definition | Workspace tabs | Flow, SQL, documentation, variables, views and extension requirements; versioned with the branch |
-| User | Account menu → User settings | Password, API tokens, SSH key, language and theme |
+| User | Account menu → User settings | Password, API tokens, SSH key, language, theme and link style |
 
-Language and theme are browser-local, shared by accounts using that browser.
+Language, theme and link style are browser-local, shared by accounts using that browser.
 Project roles and permissions are listed in the
 [access matrix](INSTALLATION.md#accounts-and-project-access).
 
