@@ -1325,6 +1325,7 @@
   "myProposal": "Ma proposition",
   "generalSettings": "Général",
   "projectInstanceAdminHint": "Seul un administrateur d’instance peut modifier ces paramètres.",
+  "pythonExecutionDisabled": "L’exécution de Python est désactivée pour ce projet. Seul un administrateur d’instance peut l’activer dans Paramètres du projet > Python.",
   "pythonSecretsHint": "Activer Python donne au code accès aux secrets de toutes les connexions autorisées du projet. Activez-le uniquement pour du code de confiance.",
   "pythonBuildsHint": "Les dépendances utilisent des wheels par défaut. La compilation exécute le code d’installation des paquets sur le serveur.",
   "pythonResetHint": "Arrêtez les exécutions en cours du projet avant d’enregistrer. Enregistrer ces paramètres efface les résultats du projet en cache ; relancez le flow pour les recalculer.",

@@ -1,5 +1,6 @@
 import { AlertCircle, Code2 } from "lucide-react";
 import AskAssistant from "./AskAssistant";
+import { executionErrorMessage } from "./executionErrors";
 import { useT } from "./i18n";
 import type { NodeResult } from "./types";
 import { Link } from "react-router";
@@ -45,7 +46,7 @@ export default function ExecutionError({
         )}
       </div>
       <pre className="execution-error-message">
-        {diagnostic?.message || failure.error}
+        {executionErrorMessage(diagnostic?.message || failure.error || "", t)}
       </pre>
       {extension && worktree?.canEdit && worktree.snapshot && (
         <p>

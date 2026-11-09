@@ -4,6 +4,10 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { DEBUG_ASSISTANT_EVENT } from "./AskAssistant";
 import ExecutionError from "./ExecutionError";
 import type { NodeResult } from "./types";
+import { I18n } from "./i18n";
+import en from "./locales/en.json";
+import fr from "./locales/fr.json";
+import pt from "./locales/pt.json";
 
 const { settings } = vi.hoisted(() => ({ settings: { enabled: false } }));
 vi.mock("./shell", () => ({
@@ -27,6 +31,31 @@ const failure: NodeResult = {
     executed_sql: "DESCRIBE SELECT missing",
   },
 };
+
+it.each([
+  ["en", en],
+  ["fr", fr],
+  ["pt", pt],
+] as const)(
+  "explains a Python node's policy failure in %s",
+  (language, labels) => {
+    render(
+      <I18n.Provider value={{ language, setLanguage: () => {} }}>
+        <ExecutionError
+          failure={{ outputs: {}, error: "Python execution is disabled" }}
+          node="python"
+          environment="dev"
+          currentSource=""
+          onEditCode={() => {}}
+          onLog={() => {}}
+        />
+      </I18n.Provider>,
+    );
+    expect(screen.getByRole("alert").textContent).toContain(
+      labels.pythonExecutionDisabled,
+    );
+  },
+);
 
 it("opens the saved source line and the log, but does not point into changed code", () => {
   const onEditCode = vi.fn(),

@@ -17,6 +17,7 @@ import {
   withQuery,
 } from "./api";
 import { outputSource } from "./graph";
+import { executionErrorMessage } from "./executionErrors";
 import { useT } from "./i18n";
 import { worktreeUrl } from "./navigation";
 import type {
@@ -422,6 +423,11 @@ export function WorktreeProvider({
           void navigate(
             worktreeUrl(id, "flow", environment, { node: missing[0].node! }),
           );
+        }
+        if (error instanceof ApiError) {
+          const message = executionErrorMessage(error.message, t);
+          if (message !== error.message)
+            throw new ApiError(message, error.status, error.detail);
         }
         throw error;
       } finally {
