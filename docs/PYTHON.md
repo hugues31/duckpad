@@ -331,10 +331,10 @@ a partial or unknown outcome (see
 Python shares the existing SQL worker's filesystem policy. Isolated Linux mode
 allows authorized data roots, temporary files and read-only runtime libraries;
 project code cannot read the API metadata database or inherited API credentials.
-Trusted local mode, including Windows, uses the same worker protocol without
-Landlock and has the user's ordinary filesystem permissions. Process pipes work
-on both platforms; no Linux namespace or kernel upgrade is required beyond the
-existing isolated SQL requirements.
+Trusted local mode, including on macOS and Windows, uses the same worker
+protocol without Landlock and has the user's ordinary filesystem permissions.
+Process pipes work on every platform; no Linux namespace or kernel upgrade is
+required beyond the existing isolated SQL requirements.
 
 This is **not a hostile-code sandbox**. Network access and same-user process
 signals are deliberately unconfined. Administrators must trust project editors

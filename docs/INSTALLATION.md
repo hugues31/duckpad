@@ -20,7 +20,8 @@ You need **Python 3.11 or later** and **Git**. If you are not on Linux, read the
 [platform requirements](#platform-requirements) first.
 
 1. Open a terminal. Create and activate a virtual environment, so that Duckpad
-   stays separate from the Python packages of your operating system. On Linux:
+   stays separate from the Python packages of your operating system. On Linux
+   and macOS:
 
    ```sh
    python3 -m venv .venv
@@ -297,10 +298,10 @@ For your own trusted projects on a single-user macOS or Windows workstation, run
 duckpad start --trusted-local
 ```
 
-This mode uses DuckDB directly in the application process, without Landlock or
-the Linux SQL worker. It supports the normal pipeline, preview, lineage and
-export workflow. The terminal prints a notice at startup. The option applies
-only to that launch; include it again after restarting.
+SQL and Python still run in a separate worker process, as in the default mode,
+but without Landlock filesystem isolation. It supports the normal pipeline,
+preview, lineage and export workflow. The terminal prints a notice at startup.
+The option applies only to that launch; include it again after restarting.
 
 Authentication, API project permissions and connection grants still apply, but
 SQL and extensions run with your operating-system permissions. There is no OS
@@ -314,9 +315,9 @@ missing sandbox never enables trusted mode automatically.
 
 ## SQL resources
 
-Each branch and environment that runs SQL gets its own DuckDB session: an isolated
-worker process by default, or a database inside the application process in trusted
-local mode. By default, DuckDB sizes every session from the server: one thread per
+Each branch and environment that runs SQL gets its own DuckDB session in a worker
+process, isolated by default and without filesystem isolation in trusted local
+mode. By default, DuckDB sizes every session from the server: one thread per
 available CPU core, and a memory limit of 80% of the server's memory, both within
 Linux cgroup limits when they apply. Intermediate results that exceed the memory limit
 spill to temporary files on disk.
