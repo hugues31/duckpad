@@ -129,7 +129,9 @@ run".
 
 **Compute statistics** scans the whole retained result once, never the displayed
 sample: null percentage, approximate distinct values, range and distribution of
-numbers and dates, and top values of text. The tab never starts this computation
+numbers and dates, and top values of text. The range rounds numbers to two
+decimals, keeping two significant digits below 0.1 (such as 0.00012), and
+hovering it shows the exact bounds. The tab never starts this computation
 by itself, since it competes with runs for the CPU on large results. Statistics
 are kept for that result: reopening the tab, coming back to the node or another
 user shows them at once with the time they were computed, and the run that
