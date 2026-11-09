@@ -10,7 +10,7 @@ SQL** shows the statements and values used by that run.
 | Symptom | Next step |
 | --- | --- |
 | `duckpad` is not found after installation | Activate the Python environment where you installed it, then run `duckpad start` again. See [installation](INSTALLATION.md#start). |
-| Execution reports "Shared SQL execution requires … Landlock ABI 2 or later" | Check Linux and Landlock requirements in [installation](INSTALLATION.md#start). A trusted Windows workstation can explicitly use [trusted local mode](INSTALLATION.md#trusted-local-mode); shared instances need isolation. |
+| Execution reports "Shared SQL execution requires … Landlock ABI 2 or later" | Check Linux and Landlock requirements in [installation](INSTALLATION.md#start). A trusted macOS or Windows workstation can explicitly use [trusted local mode](INSTALLATION.md#trusted-local-mode); shared instances need isolation. |
 | The instance is already running | Use the existing server, or stop it before restarting. Independent instances need different `--home` directories and ports. |
 | I lost my password | Ask an instance administrator to reset it in **Instance settings → Users and permissions**. Single sign-on accounts change it with their identity provider. The initial password is printed only on the first launch; restarting does not reveal or replace it. |
 | Sign-in is temporarily blocked | Wait for the one-minute rate-limit window. If everyone behind a proxy is affected, ask the operator to check [forwarded client addresses](INSTALLATION.md#reverse-proxy). |

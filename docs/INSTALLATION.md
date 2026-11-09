@@ -15,7 +15,7 @@ Python, Git or Duckpad on your own computer to use that server.
 
 ## Start
 
-Requires **Python 3.11+ and Git** on `PATH`. The default isolated SQL mode also requires **Linux with Landlock ABI 2 or later** (Linux 5.19+ with Landlock enabled); unsupported hosts refuse execution rather than automatically running without isolation. For a trusted Windows workstation, explicitly select [trusted local mode](#trusted-local-mode). Release wheels include the frontend, Monaco and its workers; Node.js is not needed to run the installed application.
+Requires **Python 3.11+ and Git** on `PATH`. The default isolated SQL mode also requires **Linux with Landlock ABI 2 or later** (Linux 5.19+ with Landlock enabled); unsupported hosts refuse execution rather than automatically running without isolation. For a trusted macOS or Windows workstation, explicitly select [trusted local mode](#trusted-local-mode). Release wheels include the frontend, Monaco and its workers; Node.js is not needed to run the installed application.
 
 Create and activate a virtual environment before installing if your Python is
 managed by the operating system. On Linux:
@@ -235,7 +235,7 @@ volumes:
 
 ## Trusted local mode
 
-For your own trusted projects on a single-user Windows workstation, run:
+For your own trusted projects on a single-user macOS or Windows workstation, run:
 
 ```sh
 duckpad start --trusted-local

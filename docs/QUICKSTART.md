@@ -19,7 +19,7 @@ duckpad start
 ```
 
 The default execution mode needs Linux with Landlock ABI 2+ (Linux 5.19+ with
-Landlock enabled). On your own trusted Windows workstation, use
+Landlock enabled). On your own trusted macOS or Windows workstation, use
 `duckpad start --trusted-local`; this mode runs with your user permissions and
 must stay private to your computer. See [installation](INSTALLATION.md) for
 platform requirements, virtual environments and instance options.
