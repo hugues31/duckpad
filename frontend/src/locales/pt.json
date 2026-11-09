@@ -1349,7 +1349,7 @@
   "pythonParentCell": "Rastrear {column}, linha {row}",
   "pythonCapturedParents": "Resultados de origem capturados nesta execução",
   "pythonEnvironments": "Ambientes Python",
-  "pythonEnvironmentHint": "Última preparação de ambiente da branch selecionada. Cada conjunto de dependências tem seu próprio ambiente imutável.",
+  "pythonEnvironmentHint": "Última preparação de ambiente da branch {branch}. Cada conjunto de dependências tem seu próprio ambiente imutável.",
   "pythonEnvironmentUnprepared": "Ainda não preparado",
   "pythonEnvironmentResolving": "Resolvendo dependências e atualizando uv.lock…",
   "pythonEnvironmentLocked": "Dependências resolvidas no uv.lock; a instalação começa ao executar Python",

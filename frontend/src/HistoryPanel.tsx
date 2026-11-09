@@ -341,7 +341,6 @@ function RunDetailsContent({
       {run.error && (
         <p className="notice error">{partitionMessage(t, run.error)}</p>
       )}
-      <RunPreparation run={run} />
       {run.requester && (
         <p>
           {t("runRequester")}: <strong>{run.requester.username}</strong>
@@ -389,6 +388,7 @@ function RunDetailsContent({
           )}
         </pre>
       </details>
+      <RunPreparation run={run} />
       {Object.entries(run.nodes).map(([key, state]) => (
         <details className="run-step" key={key}>
           <summary>

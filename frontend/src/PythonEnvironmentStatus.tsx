@@ -2,9 +2,9 @@ import { CircleAlert, CircleCheck, Loader2, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useT } from "./i18n";
 import { seconds } from "./results";
+import type { PreparationStatus, Run } from "./types";
 import { useApiResource } from "./useApiResource";
 import { useFollowScroll } from "./useFollowScroll";
-import type { PreparationStatus, Run } from "./types";
 
 const states = {
   unprepared: "pythonEnvironmentUnprepared",
@@ -46,49 +46,62 @@ function usePreparation(project: string, worktree?: string, active = false) {
   return { ...resource, preparing };
 }
 
-/** Progress, error and live installer output, following the end of the log. */
+/**
+ * Progress, error and live installer output, following the end of the log.
+ * The log has its own toggle unless it already sits in a collapsed run step.
+ */
 function PreparationDetails({
   status,
   preparing,
   open,
   onToggle,
+  collapsible = true,
 }: {
   status: PreparationStatus;
   preparing: boolean;
   open?: boolean;
   onToggle?: (open: boolean) => void;
+  collapsible?: boolean;
 }) {
   const t = useT();
   const { log, followLog, restore } = useFollowScroll<HTMLPreElement>(
     open ?? true,
     40,
   );
+  const output = (
+    <>
+      {status.log_truncated && (
+        <p className="muted">{t("pythonEnvironmentLogTail")}</p>
+      )}
+      <pre
+        ref={log}
+        role="log"
+        aria-label={t("pythonEnvironmentLogs")}
+        onScroll={followLog}
+      >
+        {status.log || t("pythonEnvironmentLogWaiting")}
+      </pre>
+    </>
+  );
   return (
     <>
       {preparing && <progress aria-label={t("pythonEnvironmentProgress")} />}
       {status.error && <pre className="notice error">{status.error}</pre>}
-      {(preparing || status.log) && (
-        <details
-          open={open}
-          onToggle={(event) => {
-            restore();
-            onToggle?.(event.currentTarget.open);
-          }}
-        >
-          <summary>{t("pythonEnvironmentLogs")}</summary>
-          {status.log_truncated && (
-            <p className="muted">{t("pythonEnvironmentLogTail")}</p>
-          )}
-          <pre
-            ref={log}
-            role="log"
-            aria-label={t("pythonEnvironmentLogs")}
-            onScroll={followLog}
+      {(preparing || status.log) &&
+        (collapsible ? (
+          <details
+            open={open}
+            onToggle={(event) => {
+              restore();
+              onToggle?.(event.currentTarget.open);
+            }}
           >
-            {status.log || t("pythonEnvironmentLogWaiting")}
-          </pre>
-        </details>
-      )}
+            <summary>{t("pythonEnvironmentLogs")}</summary>
+            {output}
+          </details>
+        ) : (
+          output
+        ))}
     </>
   );
 }
@@ -97,9 +110,11 @@ function PreparationDetails({
 export default function PythonEnvironmentStatus({
   project,
   worktree,
+  branch,
 }: {
   project: string;
   worktree?: string;
+  branch?: string;
 }) {
   const t = useT();
   const { data: status, error, preparing } = usePreparation(project, worktree);
@@ -116,7 +131,11 @@ export default function PythonEnvironmentStatus({
       aria-label={t("pythonEnvironments")}
     >
       <h2>{t("pythonEnvironments")}</h2>
-      <p className="muted">{t("pythonEnvironmentHint")}</p>
+      {branch && (
+        <p className="muted">
+          {t("pythonEnvironmentHint").replace("{branch}", branch)}
+        </p>
+      )}
       {error ? (
         <pre className="notice error">{error}</pre>
       ) : (
@@ -225,15 +244,38 @@ export function PythonPreparationNotice({
   );
 }
 
-/** Retain each resolver/installer operation with the run that requested it. */
+/** Outcomes of settled operations, in run status terms. */
+const badges = {
+  locked: "success",
+  ready: "success",
+  error: "failed",
+  canceled: "canceled",
+} as const;
+
+/** The run's resolver and installer operations, as a step beside its nodes. */
 export function RunPreparation({ run }: { run: Run }) {
   const t = useT();
-  if (!run.preparation?.length) return null;
+  const operations = run.preparation;
+  if (!operations?.length) return null;
   const active = ["preparing", "canceling"].includes(run.status);
+  const last = operations[operations.length - 1].state;
+  // While the run prepares, and after an interrupted operation, the run's status speaks for it.
+  const badge =
+    !active && last in badges
+      ? badges[last as keyof typeof badges]
+      : run.status;
+  const elapsed = operations.reduce(
+    (total, status) => total + (status.elapsed_seconds || 0),
+    0,
+  );
   return (
-    <section className="python-preparation" aria-label={t("pythonEnvironment")}>
-      <h3>{t("pythonEnvironment")}</h3>
-      {run.preparation.map((status, index) => {
+    <details className="run-step python-preparation">
+      <summary>
+        <span className={`badge ${badge}`}>{t(badge)}</span>
+        <strong>{t("pythonEnvironment")}</strong>
+        {!active && <span className="muted">{seconds(elapsed)}</span>}
+      </summary>
+      {operations.map((status, index) => {
         const preparing =
           active && ["resolving", "installing"].includes(status.state);
         return (
@@ -244,13 +286,19 @@ export function RunPreparation({ run }: { run: Run }) {
                   ? preparationStages[status.stage]
                   : states[status.state],
               )}
-              {status.elapsed_seconds !== undefined &&
+              {!preparing &&
+                operations.length > 1 &&
+                status.elapsed_seconds !== undefined &&
                 ` · ${seconds(status.elapsed_seconds)}`}
             </p>
-            <PreparationDetails status={status} preparing={preparing} />
+            <PreparationDetails
+              status={status}
+              preparing={preparing}
+              collapsible={false}
+            />
           </div>
         );
       })}
-    </section>
+    </details>
   );
 }

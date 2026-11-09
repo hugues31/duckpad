@@ -87,7 +87,11 @@ export default function ProjectPythonSettings({
           </>
         )}
       </div>
-      <PythonEnvironmentStatus project={project} worktree={worktree?.id} />
+      <PythonEnvironmentStatus
+        project={project}
+        worktree={worktree?.id}
+        branch={worktree?.snapshot?.worktree.branch}
+      />
     </>
   );
 }

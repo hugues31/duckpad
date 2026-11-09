@@ -136,6 +136,7 @@ test("Python preparation is visible in the workspace and retained in settings", 
   await page.goto(
     `/projects/${tree.project}/settings/python?worktree=${branch.id}`,
   );
+  await expect(settings).toContainText("for branch other-dependencies.");
   await expect(settings.getByRole("status")).toContainText("Environment ready");
   await expect(settings.locator(".notice.error")).toHaveCount(0);
   await settings.getByText("Preparation log", { exact: true }).click();
@@ -145,6 +146,7 @@ test("Python preparation is visible in the workspace and retained in settings", 
   await page.goto(
     `/projects/${tree.project}/settings/python?worktree=${tree.id}`,
   );
+  await expect(settings).toContainText(`for branch ${tree.branch}.`);
   await expect(settings.locator(".notice.error")).toContainText(
     "No matching distribution",
   );
@@ -184,13 +186,11 @@ test("run details refresh preparation and the final status together", async ({
   );
   await page.goto(`/worktrees/${tree.id}/history?run=preparation-run`);
   const dialog = page.getByRole("dialog", { name: "View execution" });
-  await expect(dialog.locator(".badge.preparing")).toBeVisible();
-  const preparation = dialog.getByRole("region", {
-    name: "Python environment",
-    exact: true,
-  });
+  // The preparation is a run step beside the nodes, with the run's status while it lasts.
+  const preparation = dialog.locator(".run-step.python-preparation");
+  await expect(preparation.locator("summary .badge.preparing")).toBeVisible();
+  await preparation.getByText("Python environment", { exact: true }).click();
   await expect(preparation.getByRole("progressbar")).toBeVisible();
-  await preparation.getByText("Preparation log", { exact: true }).click();
   await expect(preparation.getByRole("log")).toContainText(
     "Downloading packages",
   );
@@ -201,7 +201,7 @@ test("run details refresh preparation and the final status together", async ({
       { ...run.preparation[0], state: "ready", log: "Installed packages" },
     ],
   };
-  await expect(dialog.locator(".badge.success")).toBeVisible();
+  await expect(dialog.locator(".badge.success")).toHaveCount(2);
   await expect(dialog.locator(".badge.preparing")).toHaveCount(0);
   await expect(preparation.getByRole("progressbar")).toHaveCount(0);
   await expect(preparation.getByRole("log")).toContainText(
