@@ -20,6 +20,8 @@ class FileType:
     merge: str = "text"
     pattern: str | None = None
     document: Document | None = None
+    # A `named` file merges entry by entry, either field by field or each entry as one unit.
+    whole_entries: bool = False
 
     def matches(self, path):
         return re.fullmatch(self.pattern, path) is not None if self.pattern else path == self.path
@@ -51,7 +53,7 @@ FILES = (
     FileType("uv.lock", "python_lock", "file", "generated"),
     FileType(VARIABLES.file, "variables", "variable", "declarations", document=VARIABLES),
     FileType(EXTENSIONS.file, "extensions", "file", "declarations", document=EXTENSIONS),
-    FileType(VIEWS.file, "views", "view", "views", document=VIEWS),
+    FileType(VIEWS.file, "views", "view", "named", document=VIEWS),
     FileType("templates/*", "templates", "template", pattern=r"templates/[A-Za-z0-9_-]+\.(?:sql|py)"),
     FileType("nodes/*", "node_sql", "node", pattern=r"nodes/[A-Za-z0-9_-]+\.(?:sql|py)"),
     FileType("components/*.json", "components", "graph", "json", r"components/[A-Za-z0-9_-]+\.json"),
@@ -63,6 +65,8 @@ FILES = (
     ),
 )
 ROOT_FILES = tuple(spec.path for spec in FILES if not spec.pattern)
+# Per-output named documents, such as views.json.
+NAMED = tuple(spec for spec in FILES if spec.merge == "named")
 
 
 def matching(path):
