@@ -12,7 +12,7 @@ from ..types import Record
 from ..util import Problem
 from .http import session_token
 
-PUBLIC_API_PATHS = {"/api/login", "/api/oidc/provider", "/api/oidc/login", CALLBACK_PATH}
+PUBLIC_API_PATHS = {"/api/login", "/api/setup", "/api/oidc/provider", "/api/oidc/login", CALLBACK_PATH}
 SAFE_METHODS = ("GET", "HEAD", "OPTIONS")
 WORKTREE_RESOURCE = re.compile(r"/api/worktrees/(?P<worktree>[^/]+)(?:/.*)?")
 

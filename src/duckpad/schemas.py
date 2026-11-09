@@ -26,6 +26,13 @@ class Login(BaseModel):
     password: str
 
 
+class Setup(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    token: str
+    password: str
+
+
 class NewUser(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
