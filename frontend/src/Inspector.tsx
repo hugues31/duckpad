@@ -18,7 +18,7 @@ import { nodeLabel, useT } from "./i18n";
 import InputSelectors from "./InputSelectors";
 import InspectorHeading from "./InspectorHeading";
 import InspectorParameters from "./InspectorParameters";
-import { sourcePreviewParams } from "./inspectorParameters";
+import { sourcePreviewParams } from "./nodeParameters";
 import { projectSettingsUrl } from "./navigation";
 import {
   nodeCode,
