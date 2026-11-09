@@ -92,6 +92,61 @@ def test_disabled_python_does_not_block_independent_sql(services):
     assert engine.preview(tree["id"], "dev", "source")["count"] == 5
 
 
+@pytest.mark.parametrize("existing_worker", [False, True])
+@pytest.mark.parametrize("save_at", ["context", "worker"])
+def test_python_worker_uses_run_snapshot_during_dependency_save(
+    services, monkeypatch, existing_worker, save_at
+):
+    store, projects, _, engine = services
+    tree = single(
+        services,
+        """import duckpad as dp
+import humanize
+
+class Version(dp.Node):
+    def run(self) -> dp.Relation:
+        return self.db.sql("SELECT '" + humanize.__version__ + "' AS version")
+""",
+    )
+    snapshot = projects.snapshot(tree["id"])
+    files = dict(snapshot["files"])
+    files["pyproject.toml"] = files["pyproject.toml"].replace(
+        '"pytz>=2024.1"', '"pytz>=2024.1", "humanize==4.13.0"'
+    )
+    snapshot = projects.write(tree["id"], snapshot["revision"], files)
+    if existing_worker:
+        warmup = wait_run(store, engine.launch(tree["id"], "dev"), timeout=40)
+        assert warmup["status"] == "success", warmup
+    captured = projects.write(
+        tree["id"],
+        snapshot["revision"],
+        {
+            **snapshot["files"],
+            "pyproject.toml": files["pyproject.toml"].replace("4.13.0", "4.12.3"),
+        },
+    )
+    owner, method = (engine.runs.planner, "open_context") if save_at == "context" else (engine.pool, "_open")
+    original = getattr(owner, method)
+    saved = []
+
+    def save_dependencies(*args, **kwargs):
+        if not saved:
+            saved.append(projects.write(tree["id"], captured["revision"], files))
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(owner, method, save_dependencies)
+    first = wait_run(store, engine.launch(tree["id"], "dev"), timeout=40)
+    assert first["status"] == "success", first
+    assert len(saved) == 1
+    assert first["commit"] == captured["commit"]
+    assert engine.preview(tree["id"], "dev", "python")["rows"][0]["values"] == ["4.12.3"]
+    second = wait_run(store, engine.launch(tree["id"], "dev"), timeout=40)
+    assert second["status"] == "success", second
+    assert second["commit"] == saved[0]["commit"]
+    assert engine.preview(tree["id"], "dev", "python")["rows"][0]["values"] == ["4.13.0"]
+    assert first["nodes"]["python"]["fingerprint"] != second["nodes"]["python"]["fingerprint"]
+
+
 def test_canceled_cursor_rejects_python_before_reading_its_payload(services):
     _, projects, _, engine = services
     tree = projects.create("Canceled Python")
