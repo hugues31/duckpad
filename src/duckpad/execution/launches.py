@@ -564,7 +564,8 @@ class LaunchPlanner:
                 {**files, "uv.lock": locked},
                 message="build(project): lock Python dependencies",
             )
-        bundle["python_lock"] = snapshot["files"].get("uv.lock")
+        # A dependency save merged meanwhile keeps its own lock: the run uses the one for its manifest.
+        bundle["python_lock"] = locked
         return snapshot
 
     def open_context(

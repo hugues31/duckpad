@@ -208,7 +208,6 @@ class ContextPool:
             requirements = existing.extensions
         resources = self.sql_resources() if opening else {}
         python_files = self._python_files(worktree, python_files, existing) if opening else None
-        python_signature = digest(python_files) if python_files is not None else ""
         while True:
             self.projects.get(worktree)
             if environment not in self.catalog.environment_names():
@@ -237,7 +236,6 @@ class ContextPool:
                         extensions=requirements or [],
                         resources=resources,
                         partition_artifacts=partition_artifacts,
-                        python_signature=python_signature,
                         python_files=python_files,
                     )
             if stopped:
@@ -256,7 +254,7 @@ class ContextPool:
             with self.lock:
                 if self.contexts.get(key) is context and context.db is None:
                     context.db, context.connections, context.secrets = database, connections, secrets
-                    context.python_signature, context.python_files = python_signature, python_files
+                    context.python_files = python_files
                     return context
             # Another request published its database first, or the context was discarded meanwhile.
             database.close()
@@ -328,9 +326,8 @@ class ContextPool:
         if previous is None or getattr(previous, "closed", False):
             return
         python_files = self._python_files(context.worktree, python_files, context)
-        python_signature = digest(python_files) if python_files is not None else ""
         connections, secrets = context.connections, context.secrets
-        changed = python_signature != context.python_signature
+        changed = python_files != context.python_files
         if self.isolated:
             project = self.projects.get(context.worktree)["project"]
             connections, secrets = self.connections.configured(project, context.environment)
@@ -377,7 +374,6 @@ class ContextPool:
             with context.lock:
                 cancel_lineage(context)
                 context.db, context.connections, context.secrets = candidate, connections, secrets
-                context.python_signature = python_signature
                 context.python_files = python_files
                 # Release the old worker's memory before the new one loads the results.
                 previous.close()

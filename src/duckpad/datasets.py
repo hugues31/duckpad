@@ -91,8 +91,7 @@ class Context:
     value_attempts: Record = field(default_factory=dict)
     partition_cache: dict[str, str] = field(default_factory=dict)
     partition_artifacts: bool = False
-    python_signature: str = ""
-    # Dependency snapshot used to start this worker, retained across SQL-only runs.
+    # The pyproject.toml and uv.lock this worker was prepared from; SQL-only runs keep them.
     python_files: Files | None = None
     lineage: dict[str, LineageRequest] = field(default_factory=dict)
     lock: threading.RLock = field(default_factory=threading.RLock)

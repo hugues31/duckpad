@@ -11,6 +11,7 @@ import pytest
 from helpers import wait_run
 from test_python_nodes import SPLIT, flow, single
 
+from duckpad import python_environment
 from duckpad.bundle import bundle_to_files
 from duckpad.components import group, import_definition
 from duckpad.python_environment import lock_files, runtime_tag, runtime_wheel
@@ -93,7 +94,7 @@ def test_disabled_python_does_not_block_independent_sql(services):
 
 
 @pytest.mark.parametrize("existing_worker", [False, True])
-@pytest.mark.parametrize("save_at", ["context", "worker"])
+@pytest.mark.parametrize("save_at", ["lock", "context"])
 def test_python_worker_uses_run_snapshot_during_dependency_save(
     services, monkeypatch, existing_worker, save_at
 ):
@@ -117,6 +118,7 @@ class Version(dp.Node):
     if existing_worker:
         warmup = wait_run(store, engine.launch(tree["id"], "dev"), timeout=40)
         assert warmup["status"] == "success", warmup
+    # A stale lock makes the run resolve and save one: a dependency save can land meanwhile.
     captured = projects.write(
         tree["id"],
         snapshot["revision"],
@@ -124,21 +126,27 @@ class Version(dp.Node):
             **snapshot["files"],
             "pyproject.toml": files["pyproject.toml"].replace("4.13.0", "4.12.3"),
         },
+        relock=save_at != "lock",
     )
-    owner, method = (engine.runs.planner, "open_context") if save_at == "context" else (engine.pool, "_open")
+    owner, method = (
+        (python_environment, "lock_files") if save_at == "lock" else (engine.runs.planner, "open_context")
+    )
     original = getattr(owner, method)
     saved = []
 
     def save_dependencies(*args, **kwargs):
         if not saved:
-            saved.append(projects.write(tree["id"], captured["revision"], files))
+            saved.append(None)  # The save resolves its own lock through the patched lock_files.
+            saved[0] = projects.write(tree["id"], captured["revision"], files)
         return original(*args, **kwargs)
 
     monkeypatch.setattr(owner, method, save_dependencies)
     first = wait_run(store, engine.launch(tree["id"], "dev"), timeout=40)
     assert first["status"] == "success", first
     assert len(saved) == 1
-    assert first["commit"] == captured["commit"]
+    if save_at == "context":
+        # In the lock window, the run's lock commit lands on top of the concurrent save.
+        assert first["commit"] == captured["commit"]
     assert engine.preview(tree["id"], "dev", "python")["rows"][0]["values"] == ["4.12.3"]
     second = wait_run(store, engine.launch(tree["id"], "dev"), timeout=40)
     assert second["status"] == "success", second
