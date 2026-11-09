@@ -1,4 +1,5 @@
 import type { Translate } from "./i18n";
+import { baseType, typeOptions } from "./parameterType";
 import type {
   Bundle,
   Json,
@@ -10,7 +11,7 @@ import type {
 /** The file that declares the project variables of a branch. */
 export const VARIABLES_FILE = "variables.json";
 /** Variable names: lowercase letters, digits and underscores, starting with a letter. */
-export const VARIABLE_NAME = /^[a-z][a-z0-9_]*$/;
+const VARIABLE_NAME = /^[a-z][a-z0-9_]*$/;
 /** The types a variable can declare; `choice` takes its options in parentheses. */
 export const VARIABLE_TYPES = [
   "text",
@@ -50,15 +51,6 @@ export type Declaration = {
   default?: Json;
   environments?: Record<string, Json>;
 };
-
-/** `choice(a|b)` -> `choice`, `list<text>` -> `list`. */
-export const baseType = (type: string) => type.trim().split(/[<(]/)[0].trim();
-
-/** The options of `choice(a|b)` or `keyword(a|b)`. */
-export function typeOptions(type: string): string[] {
-  const argument = type.match(/\((.*)\)/)?.[1];
-  return argument ? argument.split("|").map((option) => option.trim()) : [];
-}
 
 /** The variable named by a parameter value such as `{"$var": "order_status"}`. */
 export function variableReference(value: unknown): string | null {
@@ -323,4 +315,50 @@ export function computedDiagnostic(
     default:
       return "";
   }
+}
+
+/** Naming and value validation shared by declaration editors and quick creation. */
+export function variableNameError(name: string, taken: string[], t: Translate) {
+  return !VARIABLE_NAME.test(name)
+    ? t("invalidVariableName")
+    : taken.includes(name)
+      ? t("variableExists")
+      : "";
+}
+export function variableDefaultError(
+  type: string,
+  value: Json | undefined,
+  t: Translate,
+) {
+  return value !== undefined && !validValue(type, value)
+    ? `${t("defaultValue")}: ${fill(t("invalidVariableValue"), { type })}`
+    : "";
+}
+export function variableProblems(
+  draft: Declaration & { name: string },
+  name: string | null,
+  taken: string[],
+  t: Translate,
+) {
+  const kind = baseType(draft.type);
+  const choices = typeOptions(draft.type);
+  const values = draft.environments || {};
+  return [
+    draft.from &&
+      (!draft.from.node || !draft.from.column) &&
+      t("valueSourceRequired"),
+    !name && draft.name && variableNameError(draft.name, taken, t),
+    kind === "choice" &&
+      (!choices.length ||
+        choices.some((option) => !option || /[()]/.test(option)) ||
+        new Set(choices).size !== choices.length) &&
+      t("choiceOptionsRequired"),
+    !draft.from && variableDefaultError(draft.type, draft.default, t),
+    ...Object.entries(draft.from ? {} : values)
+      .filter(([, item]) => !validValue(draft.type, item))
+      .map(
+        ([key]) =>
+          `${key}: ${fill(t("invalidVariableValue"), { type: draft.type })}`,
+      ),
+  ].filter(Boolean) as string[];
 }

@@ -1,12 +1,12 @@
-import { withQuery } from "./api";
-import { useApiResource } from "./useApiResource";
-import { useOptionalWorktree, usePartitionQuery } from "./worktree";
 import { AlertTriangle, ChevronRight, Clock, Loader2 } from "lucide-react";
+import { withQuery } from "./api";
 import { warningCount } from "./ExecutionMessages";
 import { outputSource } from "./graph";
 import { countLabel, useT, type TranslationKey } from "./i18n";
-import { clock, computing, TAB_LABELS, type ResultsTab } from "./ResultsPanel";
+import { clock, computing, TAB_LABELS, type ResultsTab } from "./results";
 import type { Dataset, Snapshot, Statuses } from "./types";
+import { useApiResource } from "./useApiResource";
+import { useOptionalWorktree, usePartitionQuery } from "./worktree";
 
 /**
  * One line on what the node produced in the selected environment, under the

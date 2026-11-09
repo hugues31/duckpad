@@ -1,5 +1,3 @@
-import { Fragment, useState } from "react";
-import { Link } from "react-router";
 import {
   AlertTriangle,
   CircleCheck,
@@ -9,12 +7,14 @@ import {
   History,
   Info,
 } from "lucide-react";
+import { Fragment, useState } from "react";
+import { Link } from "react-router";
 import { withQuery } from "./api";
 import type { NodeInterface } from "./graph";
 import { countLabel, useT } from "./i18n";
 import { worktreeUrl } from "./navigation";
 import { nodeCode } from "./nodeCode";
-import { clock } from "./ResultsPanel";
+import { clock } from "./results";
 import { pythonCheckSource, testSource } from "./samples";
 import type {
   ExecutionResult,

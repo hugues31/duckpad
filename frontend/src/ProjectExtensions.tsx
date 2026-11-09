@@ -1,22 +1,22 @@
 import { Download, FlaskConical, Trash2, Upload } from "lucide-react";
 import { useState } from "react";
 import { Link, useSearchParams } from "react-router";
-import { api, send } from "../api";
-import ExtensionCatalog, { ExtensionAvailability } from "../ExtensionCatalog";
+import { api, send } from "./api";
+import ExtensionCatalog, { ExtensionAvailability } from "./ExtensionCatalog";
 import {
   extensionDownload,
   extensionSourceKey,
   type CoreExtension,
   type ExtensionSource,
   type ProjectExtension,
-} from "../extensions";
-import { useT, type TranslationKey } from "../i18n";
-import Select from "../Select";
-import { useWorkspace } from "../shell";
-import { useApiResource } from "../useApiResource";
-import { useAsyncAction } from "../useAsyncAction";
-import { useLoadedWorktree, useWorktree } from "../worktree";
-import { InvalidProject, PageLoading, RouteError } from "./PageStates";
+} from "./extensions";
+import { useT, type TranslationKey } from "./i18n";
+import { InvalidProject, PageLoading, RouteError } from "./pages/PageStates";
+import Select from "./Select";
+import { useWorkspace } from "./shell";
+import { useApiResource } from "./useApiResource";
+import { useAsyncAction } from "./useAsyncAction";
+import { useLoadedWorktree, useWorktree } from "./worktree";
 
 interface ExtensionState extends ProjectExtension {
   name: string;
@@ -30,7 +30,7 @@ interface Extensions {
   core_extensions: CoreExtension[];
 }
 
-export default function ExtensionsPage() {
+export default function ProjectExtensions() {
   const { snapshot, loadError } = useWorktree();
   if (!snapshot) return loadError ? <RouteError /> : <PageLoading />;
   return <ExtensionRequirements />;

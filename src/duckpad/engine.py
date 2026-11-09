@@ -72,6 +72,7 @@ class Engine:
             self.active,
         )
         self.drafts = DraftPreviews(store, projects, catalog, self.pool, self.lock, self.active)
+        self.drafts.partitions = self.partitions
         self.runs.journal.recover()
 
     def context(self, worktree: str, environment: str, create: bool = False) -> Context:
@@ -122,8 +123,10 @@ class Engine:
     ) -> Record:
         return self.drafts.preview(worktree, environment, node, code, rows, requester)
 
-    def input_columns(self, worktree: str, environment: str, node: str) -> Record:
-        return self.drafts.input_columns(worktree, environment, node)
+    def input_columns(
+        self, worktree: str, environment: str, node: str, partition_context: Record | None = None
+    ) -> Record:
+        return self.drafts.input_columns(worktree, environment, node, partition_context)
 
     def preview(
         self,

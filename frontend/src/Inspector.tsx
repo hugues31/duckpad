@@ -1,66 +1,60 @@
-import { useWorkspace } from "./shell";
-import SourcePreview from "./SourcePreview";
-import { isFileReader, sourceFileName } from "./SourceFileField";
-import { ActionMenuButton, type ActionItem } from "./ActionMenu";
-import { PartitionInspector } from "./PartitionControls";
-import { useOptionalWorktree, usePartitionQuery } from "./worktree";
-import Select from "./Select";
-import {
-  nodeCode,
-  nodeEntity,
-  nodeSourcePath,
-  templateUsage,
-} from "./nodeCode";
-import { lazy, Suspense, useRef, useState } from "react";
-import { Link as RouterLink } from "react-router";
 import {
   ArrowRight,
   BookOpen,
   Boxes,
   Code2,
   Info,
-  Link,
-  Loader2,
-  Play,
   Settings2,
   Trash2,
   X,
 } from "lucide-react";
-import { api, retainedConflict, withQuery } from "./api";
-import { containsPython, nodeInterface, type NodeInterface } from "./graph";
-import { nodeLabel, templateLabel, useT } from "./i18n";
+import { lazy, Suspense, useRef, useState } from "react";
+import { Link as RouterLink } from "react-router";
+import { ActionMenuButton, type ActionItem } from "./ActionMenu";
+import { retainedConflict, withQuery } from "./api";
+import ConnectionOnboarding from "./ConnectionOnboarding";
+import { containsPython, type NodeInterface } from "./graph";
+import { nodeLabel, useT } from "./i18n";
+import InputSelectors from "./InputSelectors";
+import InspectorHeading from "./InspectorHeading";
+import InspectorParameters from "./InspectorParameters";
+import { sourcePreviewParams } from "./inspectorParameters";
 import { projectSettingsUrl } from "./navigation";
+import {
+  nodeCode,
+  nodeEntity,
+  nodeSourcePath,
+  templateUsage,
+} from "./nodeCode";
 import NodeDocumentation from "./NodeDocumentation";
 import NodeInfo from "./NodeInfo";
 import { numberBoundsError } from "./numberBounds";
-import ParameterField from "./ParameterField";
+import { baseType, typeArgument } from "./parameterType";
+import { PartitionInspector } from "./PartitionControls";
 import QueryBuilder from "./QueryBuilder";
-import type { ResultsTab } from "./ResultsPanel";
+import type { ResultsTab } from "./results";
 import ResultSummary from "./ResultSummary";
-import { useIdleSave, useRevisionDraft } from "./useRevisionDraft";
+import { useWorkspace } from "./shell";
+import { isFileReader } from "./SourceFileField";
+import SourcePreview from "./SourcePreview";
 import type {
-  Column,
-  DatabaseObjects,
   Documentation,
   FlowEdge,
   FlowNode,
   Json,
-  PreviewPage,
-  Snapshot,
   ParsedTemplate,
+  Snapshot,
   Statement,
   Statuses,
 } from "./types";
-import { useApiResource, useResource } from "./useApiResource";
-import { BoundVariable, VariablePicker } from "./VariableBinding";
+import { useApiResource } from "./useApiResource";
+import { useAutosavedDraft } from "./useAutosavedDraft";
+import { useDatabaseObjects } from "./useDatabaseObjects";
+import { useInputColumns } from "./useInputColumns";
+import { useSaveShortcut } from "./useSaveShortcut";
 import { StatementVariables } from "./VariableFields";
-import {
-  bindTo,
-  variableReference,
-  variableSummary,
-  variableTypeFor,
-  type Declaration,
-} from "./variables";
+import { type Declaration } from "./variables";
+import { useOptionalWorktree, usePartitionQuery } from "./worktree";
 
 const CodeEditor = lazy(() => import("./Editor"));
 
@@ -132,6 +126,7 @@ export default function Inspector({
 }) {
   const t = useT();
   const workspace = useWorkspace();
+  const panel = useRef<HTMLElement>(null);
   const starting = useOptionalWorktree()?.starting;
   const partition = usePartitionQuery(fullNode);
   const [tab, setTab] = useState<(typeof TABS)[number][0]>("parameters");
@@ -142,10 +137,10 @@ export default function Inspector({
     draft,
     dirty,
     update,
-    persist: saveDraft,
-    rejected,
+    saveNow: persist,
+    error: saveError,
     rejection,
-  } = useRevisionDraft(
+  } = useAutosavedDraft(
     node,
     snapshot,
     async (value: FlowNode, base: Snapshot) => {
@@ -173,50 +168,21 @@ export default function Inspector({
       for (const name of Object.keys(variables)) delete declared.current[name];
       return saved;
     },
-    { autosave: !readOnly },
+    {
+      readOnly,
+    },
   );
-  const [saveError, setError] = useState("");
+  useSaveShortcut(() => {
+    if (tab === "parameters" && !retainedConflict(rejection()))
+      return persist();
+  }, panel);
   const worktree = snapshot.worktree.id;
-  const prefix = fullNode.includes("::")
-    ? fullNode.slice(0, fullNode.lastIndexOf("::") + 2)
-    : "";
-  const inputEdges = graphEdges.filter((e) => e.target === node.id);
-  // Column suggestions come from the materialized inputs; refresh them when results change.
-  const inputColumns =
-    useResource(
-      `${worktree}:${fullNode}`,
-      async (signal) =>
-        Object.fromEntries(
-          await Promise.all(
-            inputEdges.map(async (edge) => {
-              try {
-                const result = await api<PreviewPage>(
-                  withQuery(
-                    `/worktrees/${worktree}/preview/${encodeURIComponent(prefix + edge.source)}`,
-                    {
-                      environment,
-                      port: edge.sourceHandle,
-                      limit: 1,
-                      ...partition,
-                    },
-                  ),
-                  { signal },
-                );
-                return [edge.targetHandle, result.columns] as const;
-              } catch {
-                return [edge.targetHandle, [] as Column[]] as const;
-              }
-            }),
-          ),
-        ),
-      {
-        refresh: JSON.stringify([
-          environment,
-          inputEdges.map((e) => [e.source, e.sourceHandle, e.targetHandle]),
-          statuses.nodes,
-        ]),
-      },
-    ).data || {};
+  const inputColumns = useInputColumns(
+    snapshot,
+    fullNode,
+    environment,
+    statuses,
+  ).columns;
   // Python has no compiled SQL, so neither has a component containing it.
   const python =
     node.language === "python" ||
@@ -242,18 +208,6 @@ export default function Inspector({
       columns.map((column) => column.name),
     ]),
   );
-  const persist = async () => {
-    if (readOnly) return;
-    setError("");
-    try {
-      await saveDraft();
-    } catch (e) {
-      setError((e as Error).message);
-    }
-  };
-  useIdleSave(draft, dirty && !readOnly, () => {
-    if (!rejected()) void persist();
-  });
   // A conflict retains this draft until it is resolved: blurring the field, for
   // instance to open that conflict, must not retain another one.
   const blur = () => {
@@ -272,57 +226,20 @@ export default function Inspector({
       else params[name] = value;
       return { ...current, params };
     });
-  // Schema and table names are listed from the database connection of the first schema
-  // parameter. Fields bound to another connection get no suggestions.
-  const valueOf = (name?: string) => {
-    const parameter = parameters.find((p) => p.name === name);
-    const value = draft.params?.[name ?? ""] ?? parameter?.default;
-    return typeof value === "string" ? value : "";
-  };
-  const argumentOf = (name?: string) =>
-    parameters.find((p) => p.name === name)?.type.match(/\((\w+)\)/)?.[1];
-  const listedSchema = parameters.find((p) =>
-    p.type.startsWith("schema_name("),
-  )?.name;
-  const listedConnection = argumentOf(listedSchema);
-  const database = valueOf(listedConnection);
-  const objects = useApiResource<DatabaseObjects>(
-    tab === "parameters" &&
-      connections.some((c) => c.id === database && c.family === "database")
-      ? withQuery(
-          `/worktrees/${worktree}/connections/${encodeURIComponent(database)}/objects`,
-          { environment },
-        )
-      : null,
-  );
-  const objectNames = (parameter: { name: string; type: string }) => {
-    if (!listedConnection) return undefined;
-    const base = parameter.type.split("(")[0];
-    const argument = argumentOf(parameter.name);
-    // The listing's progress and error show once, under the first schema field.
-    const status = {
-      ...(parameter.name === listedSchema
-        ? { pending: objects.pending, error: objects.error }
-        : { pending: false, error: "" }),
-      // Without a complete listing, names are typed instead of chosen.
-      complete: objects.pending || !!(objects.data && !objects.data.truncated),
-    };
-    if (base === "schema_name" && argument === listedConnection)
-      return { names: objects.data?.schemas ?? [], ...status };
-    if (base === "table_name" && argumentOf(argument) === listedConnection)
-      return {
-        names: (objects.data?.tables ?? [])
-          .filter((table) => table.schema === valueOf(argument))
-          .map((table) => table.name),
-        ...status,
-      };
-    return undefined;
-  };
+  const { valueOf, listedSchema, listedConnection, database, objectNames } =
+    useDatabaseObjects(
+      parameters,
+      draft,
+      connections,
+      tab === "parameters",
+      worktree,
+      environment,
+    );
   // Connection parameters naming where file and destination parameters live.
   const locations = new Set(
     parameters
-      .filter((p) => /^(file|destination)\(/.test(p.type))
-      .map((p) => p.type.match(/\((\w+)\)/)?.[1]),
+      .filter((p) => ["file", "destination"].includes(baseType(p.type)))
+      .map((p) => typeArgument(p.type)),
   );
   const nodeProblems = snapshot.diagnostics.filter(
     (item) => item.file === "flow.json" && item.node === node.id,
@@ -330,37 +247,7 @@ export default function Inspector({
   const sourceKind = node.preset || node.template || node.origin;
   const csvSource = sourceKind === "load_csv";
   const fileSource = isFileReader(sourceKind) && !valueOf("connection");
-  const fileValue = valueOf("file");
-  const previewParams: Record<string, Json> | null =
-    fileSource && fileValue && !fileValue.includes("{{")
-      ? { file: fileValue }
-      : null;
-  if (previewParams)
-    for (const key of [
-      "delimiter",
-      "header",
-      "types",
-      "sheet",
-      "all_varchar",
-    ]) {
-      const value =
-        draft.params[key] ?? parameters.find((p) => p.name === key)?.default;
-      if (value !== undefined && !variableReference(value)) {
-        if (key === "types" && typeof value === "string") {
-          try {
-            previewParams[key] = JSON.parse(value);
-          } catch {
-            previewParams[key] = value;
-          }
-        } else previewParams[key] = value;
-      }
-    }
-  const previewTypes =
-    previewParams?.types &&
-    typeof previewParams.types === "object" &&
-    !Array.isArray(previewParams.types)
-      ? previewParams.types
-      : {};
+  const previewParams = sourcePreviewParams(draft, parameters, fileSource);
   // The preview edits CSV types once it reads the file; an expression or a bound variable keeps the field.
   const typesInPreview =
     csvSource &&
@@ -388,7 +275,7 @@ export default function Inspector({
       : null;
   const statements: Statement[] = compilation.data || [];
   return (
-    <aside className="inspector">
+    <aside className="inspector" ref={panel}>
       <div className="inspector-title">
         <span>{nodeLabel(node, signature, t)}</span>
         <ActionMenuButton
@@ -400,41 +287,15 @@ export default function Inspector({
           <X size={18} />
         </button>
       </div>
-      <div className="inspector-kind">
-        <span className={`kind-icon ${node.component ? "component" : ""}`}>
-          {node.component ? <Boxes size={18} /> : <Settings2 size={18} />}
-        </span>
-        <div>
-          <strong>{t(kind)}</strong>
-          <small>
-            {node.template ? (
-              <>
-                <Link size={12} /> {t("linkedNode")} ·{" "}
-                {templateLabel(
-                  node.template,
-                  snapshot.parsed_templates[node.template]?.label,
-                  t,
-                )}
-              </>
-            ) : (
-              node.component || t("normalNode")
-            )}
-          </small>
-        </div>
-        <button
-          className="icon run-node"
-          title={t("runNode")}
-          disabled={readOnly || starting || !!statuses.active}
-          aria-busy={starting}
-          onClick={onRun}
-        >
-          {starting ? (
-            <Loader2 size={16} className="spin" />
-          ) : (
-            <Play size={16} />
-          )}
-        </button>
-      </div>
+      <InspectorHeading
+        node={node}
+        kind={kind}
+        snapshot={snapshot}
+        readOnly={readOnly}
+        starting={starting}
+        statuses={statuses}
+        onRun={onRun}
+      />
       <ResultSummary
         bundle={snapshot.bundle}
         fullNode={fullNode}
@@ -494,48 +355,15 @@ export default function Inspector({
                 </button>
               </>
             )}
-            {!!inputs.length && (
-              <>
-                <h4>{t("inputs")}</h4>
-                {inputs.map((port: string) => {
-                  const edge = graphEdges.find(
-                    (e) => e.target === node.id && e.targetHandle === port,
-                  );
-                  return (
-                    <label className="field" key={port}>
-                      <span>{port}</span>
-                      <Select
-                        aria-label={port}
-                        value={
-                          edge ? `${edge.source}:${edge.sourceHandle}` : ""
-                        }
-                        onChange={(e) => onInput(port, e.target.value)}
-                      >
-                        <option value="">{t("notConnected")}</option>
-                        {graphNodes
-                          .filter((n) => n.id !== node.id)
-                          .flatMap((n) => {
-                            const source = nodeInterface(
-                              n,
-                              snapshot.parsed_templates,
-                              snapshot.bundle?.components,
-                              local,
-                            );
-                            return source.outputs.map((p) => (
-                              <option
-                                key={n.id + ":" + p}
-                                value={n.id + ":" + p}
-                              >
-                                {nodeLabel(n, source, t)} · {p}
-                              </option>
-                            ));
-                          })}
-                      </Select>
-                    </label>
-                  );
-                })}
-              </>
-            )}
+            <InputSelectors
+              inputs={inputs}
+              graphEdges={graphEdges}
+              node={node}
+              graphNodes={graphNodes}
+              snapshot={snapshot}
+              local={local}
+              onInput={onInput}
+            />
             <PartitionInspector
               node={draft}
               fullNode={fullNode}
@@ -558,170 +386,41 @@ export default function Inspector({
             />
             {sourceKind === "load_table" &&
               !connections.some((c) => c.family === "database") && (
-                <div className="source-empty notice">
-                  <p>{t("noProjectConnections")}</p>
-                  {workspace.user.role === "admin" ? (
-                    <>
-                      <RouterLink
-                        className="button secondary"
-                        to={`/instance-settings/connections?project=${snapshot.worktree.project}&worktree=${worktree}&node=${encodeURIComponent(fullNode)}`}
-                      >
-                        {t("createSourceConnection")}
-                      </RouterLink>
-                      {/* Only an existing database connection can be authorized. */}
-                      {workspace.catalog.connections.some(
-                        (c) =>
-                          workspace.catalog.connectors.find(
-                            (connector) => connector.id === c.connector,
-                          )?.family !== "storage",
-                      ) && (
-                        <RouterLink
-                          className="button secondary"
-                          to={`/projects/${snapshot.worktree.project}/settings/connections?worktree=${worktree}`}
-                        >
-                          {t("authorizeSourceConnection")}
-                        </RouterLink>
-                      )}
-                    </>
-                  ) : (
-                    <>
-                      <p>{t("askAdministratorHint")}</p>
-                      <RouterLink
-                        className="button secondary"
-                        to={`/projects/${snapshot.worktree.project}/settings/participants?worktree=${worktree}`}
-                      >
-                        {t("askAdministrator")}
-                      </RouterLink>
-                    </>
-                  )}
-                </div>
+                <ConnectionOnboarding
+                  workspace={workspace}
+                  snapshot={snapshot}
+                  worktree={worktree}
+                  fullNode={fullNode}
+                />
               )}
-            {parameters
-              .filter((p) => !(typesInPreview && p.name === "types"))
-              .map((parameter) => {
-                const value =
-                  draft.params?.[parameter.name] ?? parameter.default;
-                const type = parameter.type || "text";
-                const reference = variableReference(value);
-                const variableType = bindable ? variableTypeFor(type) : null;
-                // Column parameters name the input port they choose from.
-                const port = parameter.type.match(/\((\w+)\)/)?.[1];
-                return (
-                  <ParameterField
-                    key={parameter.name}
-                    worktree={snapshot.worktree.id}
-                    parameter={parameter}
-                    value={value}
-                    variable={
-                      variableType || reference
-                        ? {
-                            control: variableType && (
-                              <VariablePicker
-                                snapshot={snapshot}
-                                parameter={parameter.name}
-                                parameterType={type}
-                                variableType={variableType}
-                                value={reference ? undefined : value}
-                                disabled={readOnly}
-                                onBind={(name) => {
-                                  setParameter(parameter.name, bindTo(name));
-                                  void persist();
-                                }}
-                                onCreate={async (name, declaration) => {
-                                  declared.current[name] = declaration;
-                                  setParameter(parameter.name, bindTo(name));
-                                  await saveDraft();
-                                }}
-                              />
-                            ),
-                            bound: reference && (
-                              <BoundVariable
-                                snapshot={snapshot}
-                                worktree={worktree}
-                                environment={environment}
-                                parameter={parameter.name}
-                                parameterType={type}
-                                name={reference}
-                                problem={
-                                  nodeProblems.find(
-                                    (item) => item.parameter === parameter.name,
-                                  )?.message
-                                }
-                                disabled={readOnly}
-                                onUnbind={() => {
-                                  // Keep computing the same value, now written in the node.
-                                  const current = variableSummary(
-                                    snapshot,
-                                    reference,
-                                  )?.values[environment];
-                                  setParameter(parameter.name, current?.value);
-                                  void persist();
-                                }}
-                              />
-                            ),
-                          }
-                        : undefined
-                    }
-                    onChange={(value, settings) => {
-                      if (parameter.name === "file" && fileSource) {
-                        // The label follows the chosen file until renamed; an expression names no file.
-                        const named = (file: Json | undefined) =>
-                          String(file || "").includes("{{")
-                            ? ""
-                            : sourceFileName(String(file || ""));
-                        update((current) => ({
-                          ...current,
-                          label:
-                            !current.label ||
-                            current.label === named(current.params.file)
-                              ? named(value) || undefined
-                              : current.label,
-                          params: {
-                            ...current.params,
-                            file: value ?? "",
-                            ...settings,
-                          },
-                        }));
-                      } else {
-                        setParameter(parameter.name, value);
-                        // Other parsing options change the columns, so type overrides no longer apply.
-                        if (
-                          typesInPreview &&
-                          (parameter.name === "delimiter" ||
-                            parameter.name === "header") &&
-                          Object.keys(previewTypes).length
-                        )
-                          setParameter("types", {});
-                        if (parameter.name === listedConnection) {
-                          if (listedSchema) setParameter(listedSchema, "");
-                          if (listedTable) setParameter(listedTable, "");
-                        } else if (
-                          parameter.name === listedSchema &&
-                          listedTable
-                        )
-                          setParameter(listedTable, "");
-                      }
-                    }}
-                    onBlur={blur}
-                    expressionVariables={
-                      bindable
-                        ? { summary: snapshot.variables, environment }
-                        : undefined
-                    }
-                    connections={connections}
-                    location={
-                      type === "connection" && locations.has(parameter.name)
-                    }
-                    projectFile={type.startsWith("file") && !valueOf(port)}
-                    csv={csvSource}
-                    objects={objectNames(parameter)}
-                    columns={port ? inputColumns[port] : undefined}
-                    schemas={
-                      (port && schemas[port]) || Object.values(schemas).flat()
-                    }
-                  />
-                );
-              })}
+            <InspectorParameters
+              parameters={parameters}
+              typesInPreview={typesInPreview}
+              draft={draft}
+              bindable={bindable}
+              snapshot={snapshot}
+              readOnly={readOnly}
+              setParameter={setParameter}
+              persist={persist}
+              declared={declared}
+              rejection={rejection}
+              worktree={worktree}
+              environment={environment}
+              nodeProblems={nodeProblems}
+              update={update}
+              fileSource={fileSource}
+              listedConnection={listedConnection}
+              listedSchema={listedSchema}
+              listedTable={listedTable}
+              blur={blur}
+              connections={connections}
+              locations={locations}
+              valueOf={valueOf}
+              csvSource={csvSource}
+              objectNames={objectNames}
+              inputColumns={inputColumns}
+              schemas={schemas}
+            />
             {!readOnly && (
               <SourcePreview
                 worktree={worktree}

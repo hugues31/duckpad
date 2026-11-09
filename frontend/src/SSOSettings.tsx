@@ -1,9 +1,9 @@
-import { useSettingsForm } from "./useSettingsForm";
 import { useState } from "react";
 import { api, send } from "./api";
 import { useT } from "./i18n";
+import SettingsCard from "./SettingsCard";
 import { useResource } from "./useApiResource";
-import { useAsyncAction } from "./useAsyncAction";
+import { useSettingsForm } from "./useSettingsForm";
 
 type Configuration = {
   enabled: boolean;
@@ -22,26 +22,18 @@ export default function SSOSettings() {
     const value = await api<Configuration>("/sso", { signal });
     return { ...value, public_url: value.public_url || location.origin };
   });
-  const [draft, setConfig] = useState<Configuration | null>(null);
-  const config = draft ?? resource.data;
   const [secret, setSecret] = useState("");
-  const [saved, setSaved] = useState(false);
-  const { pending, run, ...save } = useAsyncAction();
-  const error = save.error || resource.error;
-  function change(values: Partial<Configuration>) {
-    setConfig(config && { ...config, ...values });
-    setSaved(false);
-  }
-  const persist = useSettingsForm({
-    dirty:
-      (!!draft && JSON.stringify(draft) !== JSON.stringify(resource.data)) ||
-      !!secret,
-    discard: () => {
-      setConfig(null);
-      setSecret("");
-    },
-    save: async () => {
-      if (!config) return;
+  const {
+    config,
+    change,
+    pending,
+    saved,
+    setSaved,
+    submit,
+    error: saveError,
+  } = useSettingsForm(
+    resource.data,
+    async (config) => {
       const {
         has_secret: _hasSecret,
         redirect_uri: _redirect,
@@ -52,28 +44,23 @@ export default function SSOSettings() {
         send({ ...settings, client_secret: secret || undefined }, "PUT"),
       );
       resource.setData(value);
-      setConfig(null);
       setSecret("");
-      setSaved(true);
     },
-  });
+    { dirty: !!secret, discard: () => setSecret("") },
+  );
+  const error = saveError || resource.error;
   return (
-    <section className="settings-card" aria-label={t("ssoSettings")}>
-      <h2>{t("ssoSettings")}</h2>
-      <p className="muted">{t("ssoDescription")}</p>
-      {error && (
-        <div className="notice error" role="alert">
-          {error}
-        </div>
-      )}
-      {!config ? (
-        <p>{t("loading")}</p>
-      ) : (
+    <SettingsCard
+      title={t("ssoSettings")}
+      description={t("ssoDescription")}
+      error={error}
+      loading={!config}
+    >
+      {config && (
         <form
           onSubmit={(event) => {
             event.preventDefault();
-            setSaved(false);
-            void run(persist);
+            void submit();
           }}
         >
           <fieldset disabled={pending} className="sso-fields">
@@ -175,6 +162,6 @@ export default function SSOSettings() {
           {saved && <p role="status">{t("ssoSaved")}</p>}
         </form>
       )}
-    </section>
+    </SettingsCard>
   );
 }

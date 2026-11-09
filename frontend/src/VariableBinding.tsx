@@ -1,7 +1,7 @@
+import { ArrowRight, Plus, Variable, X } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Link } from "react-router";
-import { ArrowRight, Plus, Variable, X } from "lucide-react";
 import { useT } from "./i18n";
 import { Modal } from "./modals";
 import { worktreeUrl } from "./navigation";
@@ -16,13 +16,14 @@ import {
   formatVariableValue,
   looksSecret,
   validValue,
+  variableDefaultError,
+  variableNameError,
   variableSummary,
-  VARIABLE_NAME,
   type Declaration,
 } from "./variables";
 
 /** How a variable's values differ between environments, in one line. */
-export function useValueSummary() {
+function useValueSummary() {
   const t = useT();
   return (variable: VariableSummary) => {
     const values = Object.entries(variable.values);
@@ -224,13 +225,8 @@ function CreateVariableDialog({
     validValue(type, initialValue) ? initialValue : undefined,
   );
   const { pending, error, run } = useAsyncAction();
-  const problem = !VARIABLE_NAME.test(name)
-    ? t("invalidVariableName")
-    : taken.includes(name)
-      ? t("variableExists")
-      : value !== undefined && !validValue(type, value)
-        ? `${t("defaultValue")}: ${fill(t("invalidVariableValue"), { type })}`
-        : "";
+  const problem =
+    variableNameError(name, taken, t) || variableDefaultError(type, value, t);
   return (
     <Modal title={t("newVariable")} onClose={onClose}>
       <form

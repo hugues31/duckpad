@@ -82,3 +82,23 @@ describe("useAsyncAction", () => {
     expect(result.current.run).toBe(run);
   });
 });
+
+it("does not submit twice before React paints pending state", async () => {
+  const { result } = renderHook(() => useAsyncAction());
+  const request = deferred();
+  let calls = 0;
+  const action = () => {
+    calls++;
+    return request.promise;
+  };
+  let first!: Promise<boolean>;
+  let second!: Promise<boolean>;
+  act(() => {
+    first = result.current.run(action);
+    second = result.current.run(action);
+  });
+  expect(calls).toBe(1);
+  await expect(second).resolves.toBe(false);
+  await act(async () => request.resolve());
+  await expect(first).resolves.toBe(true);
+});

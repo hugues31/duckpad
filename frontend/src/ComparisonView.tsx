@@ -185,6 +185,7 @@ function ComparisonGraph({
         <Controls showInteractive={false} />
       </ReactFlow>
       <button
+        type="button"
         className="button secondary small comparison-focus"
         onClick={() => {
           const node = nodes.find((n) => n.id === selected);
@@ -305,11 +306,16 @@ export default function ComparisonView({
           placeholder={t("searchChanges")}
           value={filters.search}
           onChange={(e) => setFilters({ ...filters, search: e.target.value })}
+          // The view can sit in a dialog form, which Enter must not submit.
+          onKeyDown={(e) => {
+            if (e.key === "Enter") e.preventDefault();
+          }}
         />
         <span aria-live="polite">
           {filtered.length} {t("elements")}
         </span>
         <button
+          type="button"
           className="button secondary small"
           disabled={index <= 0}
           onClick={() => choose(filtered[index - 1].id)}
@@ -317,6 +323,7 @@ export default function ComparisonView({
           {t("previousChange")}
         </button>
         <button
+          type="button"
           className="button secondary small"
           disabled={index < 0 || index >= filtered.length - 1}
           onClick={() => choose(filtered[index + 1].id)}
@@ -343,6 +350,7 @@ export default function ComparisonView({
           {filtered.length === 0 && <p className="muted">{t("noChanges")}</p>}
           {filtered.map((e) => (
             <button
+              type="button"
               key={e.id}
               className={`change-row change-${e.status} ${active?.id === e.id ? "active" : ""}`}
               aria-pressed={active?.id === e.id}
@@ -393,6 +401,7 @@ export default function ComparisonView({
                 </h3>
                 {onHistory && (
                   <button
+                    type="button"
                     className="button secondary small"
                     onClick={() => onHistory(active.id)}
                   >

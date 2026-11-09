@@ -119,3 +119,20 @@ it("pastes into a component, keeping code of templates it lacks", () => {
     y: 50 + PASTE_OFFSET,
   });
 });
+
+it("duplicates a linked node as an independent node with its code", () => {
+  const value = bundle();
+  const copied = copyNodes(value, undefined, ["source"])!;
+  const [linked] = pasteNodes(value, undefined, copied, []);
+  expect(value.flow.nodes.find((n) => n.id === linked)?.template).toBe(
+    "load_csv",
+  );
+  const [duplicate] = pasteNodes(value, undefined, copied, [], {
+    detach: true,
+  });
+  const copy = value.flow.nodes.find((n) => n.id === duplicate)!;
+  expect(copy.template).toBeUndefined();
+  expect(copy).toMatchObject({ preset: "load_csv", origin: "load_csv" });
+  expect(value.node_sql![`nodes/${duplicate}.sql`]).toBe("SELECT 1");
+  expect(value.templates.load_csv).toBe("SELECT 1");
+});

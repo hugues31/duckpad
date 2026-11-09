@@ -429,3 +429,79 @@ test("a conflict opened from the banner while editing resolves once and leaves t
     resolved.bundle!.flow.nodes.find((node) => node.id === "filtered")!.label,
   ).toBe("Mine");
 });
+
+test("component inputs populate column fields across the boundary", async ({
+  page,
+}) => {
+  const { id, endpoint } = await createFilterProject(page, (bundle) => {
+    bundle.templates.column =
+      "-- @input source\n-- @param selected: column(source) = amount\n-- @output result\nSELECT {{ selected }} FROM {{ source }};";
+    bundle.components.wrapper = {
+      name: "Wrapper",
+      inputs: { source: { node: "inner", port: "source" } },
+      outputs: { result: { node: "inner", port: "result" } },
+      parameters: {
+        selected: {
+          type: "column(source)",
+          default: "amount",
+          targets: [{ node: "inner", param: "selected" }],
+        },
+      },
+      nodes: [
+        {
+          id: "inner",
+          template: "column",
+          params: {},
+          position: { x: 0, y: 0 },
+        },
+      ],
+      edges: [],
+    };
+    bundle.flow.nodes[1] = {
+      ...bundle.flow.nodes[1],
+      template: undefined,
+      component: "wrapper",
+      params: {},
+    };
+  });
+  const launched = await page.request.post(`${endpoint}/runs`, {
+    data: { environment: "dev", node: "rows" },
+  });
+  expect(launched.ok()).toBeTruthy();
+  const run = await launched.json();
+  await expect
+    .poll(
+      async () =>
+        (await (await page.request.get(`/api/runs/${run.id}`)).json()).status,
+    )
+    .toBe("success");
+  await page.reload();
+  const inspector = page.locator(".inspector");
+  await expect
+    .poll(() =>
+      inspector
+        .locator("datalist option")
+        .evaluateAll((options) =>
+          options.map((option) => (option as HTMLOptionElement).value),
+        ),
+    )
+    .toEqual(["amount", "input_only"]);
+  const columns = await page.request.get(
+    `${endpoint}/input-columns/filtered?environment=dev`,
+  );
+  expect(columns.ok()).toBe(true);
+  expect((await columns.json()).inputs[0].input).toBe("source");
+  await page.goto(`/worktrees/${id}/flow?node=filtered%3A%3Ainner`);
+  await expect
+    .poll(() =>
+      inspector
+        .locator("datalist option")
+        .evaluateAll((options) =>
+          options.map((option) => (option as HTMLOptionElement).value),
+        ),
+    )
+    .toEqual(["amount", "input_only"]);
+  // Only the source ran: looking up suggestions never executes the component.
+  const statuses = await page.request.get(`${endpoint}/status?environment=dev`);
+  expect((await statuses.json()).nodes["filtered::inner"]).toBeUndefined();
+});
