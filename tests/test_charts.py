@@ -154,7 +154,7 @@ ACCEPTED = {
             "orient": "top",
             "tickCount": 5,
         },
-        legend={"title": "Channel", "format": "%d", "formatType": "utc", "orient": "bottom"},
+        legend={"title": "Channel", "format": "%d %b", "formatType": "time", "orient": "bottom"},
         stack="zero",
     ),
     "hidden axis and legend": encoded(axis=None, legend=None),
@@ -223,8 +223,24 @@ REJECTED = {
     "axis expr property": (encoded(axis={"expr": "1"}), "encoding.x.axis.expr is not allowed"),
     "channel formatType": (
         encoded(formatType="myFormat"),
-        "encoding.x.formatType must be number, time or utc",
+        "encoding.x.formatType must be number or time",
     ),
+    "utc formatType": (encoded(formatType="utc"), "encoding.x.formatType must be number or time"),
+    # Vega-Lite writes number formats into an expression string without escaping them.
+    "format closing its string": (
+        encoded(format='d") + warn(sequence(0, 5)) + ("'),
+        "encoding.x.format must be a string without quotes or backslashes",
+    ),
+    "format ending with a backslash": (
+        {"mark": "text", "encoding": {"tooltip": [{"field": "a", "format": "d\\"}, {"field": "b"}]}},
+        "encoding.tooltip[0].format must be a string without quotes or backslashes",
+    ),
+    "axis format quote": (encoded(axis={"format": "'"}), "encoding.x.axis.format must be a string without"),
+    "legend format quote": (
+        encoded(legend={"format": '"'}),
+        "encoding.x.legend.format must be a string without",
+    ),
+    "format number": (encoded(format=1), "encoding.x.format must be a string"),
     "axis formatType": (encoded(axis={"formatType": "custom"}), "encoding.x.axis.formatType must be"),
     "legend formatType": (encoded(legend={"formatType": None}), "encoding.x.legend.formatType must be"),
     "schema v5": (

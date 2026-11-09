@@ -85,7 +85,8 @@ Values follow these rules:
 - `width` and `height` are a positive number or `"container"`. A `title` is a
   string or an object with `text` and `subtitle` strings.
 - `type` is `quantitative`, `temporal`, `ordinal` or `nominal`; `formatType` is
-  `number`, `time` or `utc`. A channel `title` is a string, or `null` to hide it.
+  `number` or `time`. A `format` is a d3 number or time format without quotes or
+  backslashes. A channel `title` is a string, or `null` to hide it.
 - `tooltip` may be a list of channel definitions.
 - `sort` is `"ascending"`, `"descending"`, `null`, a channel name with an
   optional `-` prefix (`"-y"`), a list of literals, or

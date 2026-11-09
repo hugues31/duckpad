@@ -76,7 +76,8 @@ DEFINITION = {
     "stack",
 }
 TYPES = ("quantitative", "temporal", "ordinal", "nominal")
-FORMAT_TYPES = ("number", "time", "utc")
+# The format types of Vega-Lite 6: it drops any other, with its format, as an unconfigured custom type.
+FORMAT_TYPES = ("number", "time")
 SCALE = {"type", "domain", "range", "scheme", "zero", "nice", "reverse"}
 AXIS = {"title", "format", "formatType", "labelAngle", "grid", "orient", "tickCount"}
 LEGEND = {"title", "format", "formatType", "orient"}
@@ -121,6 +122,13 @@ def scalar(value, path):
         raise Invalid(f"{path} must be a literal (a string, number, boolean or null)")
 
 
+def check_format(value, path):
+    """A d3 format. Vega-Lite writes number formats into an expression string without escaping
+    them, so a quote or a backslash would end the string and run the rest as an expression."""
+    if not isinstance(value, str) or any(character in value for character in "\"'\\"):
+        raise Invalid(f"{path} must be a string without quotes or backslashes")
+
+
 def check_title(value, path):
     if isinstance(value, dict):
         properties(value, path, TITLE)
@@ -158,6 +166,8 @@ def check_guide(value, path, allowed, hidable=True):
         where = f"{path}.{name}"
         if name in ("domain", "range"):
             literals(item, where)
+        elif name == "format":
+            check_format(item, where)
         elif name == "formatType":
             choice(item, where, FORMAT_TYPES)
         else:
@@ -199,7 +209,7 @@ def check_definition(value, path):
         elif name == "title":
             text(item, where, nullable=True)
         elif name == "format":
-            text(item, where)
+            check_format(item, where)
         elif name == "formatType":
             choice(item, where, FORMAT_TYPES)
         elif name == "value":

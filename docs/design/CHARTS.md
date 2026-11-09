@@ -114,7 +114,8 @@ The allowlist, by level:
   of channel definitions.
 - **Channel definition:** `field` (string), `type` (`quantitative`,
   `temporal`, `ordinal`, `nominal`), `title` (string or `null`), `format`
-  (string), `formatType` (`number`, `time` or `utc`), `value` (literal),
+  (string without quotes or backslashes, which Vega-Lite writes into an
+  expression unescaped), `formatType` (`number` or `time`), `value` (literal),
   `scale`, `axis`, `legend`, `sort`, `stack`.
   - `sort`: `"ascending"`, `"descending"`, `null`, a channel name of this
     list with an optional `-` prefix, a list of literals, or
@@ -125,7 +126,7 @@ The allowlist, by level:
     `axis`: `title`, `format`, `formatType`, `labelAngle`, `grid`, `orient`,
     `tickCount`. `legend`: `title`, `format`, `formatType`, `orient`. Values
     are literals; `domain` and `range` are lists of literals, and
-    `formatType` is again `number`, `time` or `utc`. `axis` and `legend` may
+    `format` and `formatType` follow the channel rules. `axis` and `legend` may
     also be `null`, which hides them.
 
 A **literal** is a JSON scalar: a string, a number, a boolean or `null`. Any
