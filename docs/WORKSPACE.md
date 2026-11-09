@@ -18,13 +18,16 @@ collapses built-in templates by default.
 Add a palette item by clicking it or dragging it onto the canvas;
 **Search node types…** filters the palette, and **Project templates** lists the
 templates created in the project. Connect an output to an input, or choose the
-upstream output in the node's inspector. An input without a source is orange on
-the node until you connect it. Select a node for its parameters and code on the
-right and its [results](RESULTS.md) below. Its other actions, such as
+upstream output in the node's inspector. Connected sockets are filled, unused
+outputs stay hollow, and an input without a source is orange on the node until
+you connect it. Point at a node or a link to highlight it. Select a node for
+its parameters and code on the right and its [results](RESULTS.md) below. Its other actions, such as
 **Duplicate node**, are in **Node actions** (**⋯** in the inspector title, or
 right-click the node). Double-click a [component](COMPONENTS.md) to open
 its contents; use the breadcrumbs to return. **Fit view** brings the graph into
-view. Drag a port onto empty space to add a compatible connected node.
+view. **Auto-arrange nodes** places dependencies in columns, orders each column to
+avoid crossing links, and lines up linked sockets. Drag a port onto empty space to
+add a compatible connected node.
 
 Node names come from **Display name**, then the SQL `-- @label` directive or
 template name. Diagnostics, lineage, variable usage, conflict titles and new
@@ -109,8 +112,10 @@ while you type in a field or editor, or while a dialog is open.
 
 ## Preferences and access
 
-Use the account menu for **User settings**, including language and theme.
-Duckpad supports English, French and Portuguese, with light and dark themes.
+Use the account menu for **User settings**, including language, theme and link
+style. Duckpad supports English, French and Portuguese, with light and dark themes.
+**Node links** are curved by default; **Right angles** draws them with vertical
+segments, and links from different outputs never share one.
 Preferences do not change project files. Available actions depend on your
 [instance and project roles](INSTALLATION.md#accounts-and-project-access).
 
@@ -118,7 +123,7 @@ The initial language follows your browser's supported languages and the theme
 follows your system. A manual choice is saved in this browser and takes priority
 on later visits.
 
-![Language and theme choices in personal preferences](images/preferences.png)
+![Language, theme and link style choices in personal preferences](images/preferences.png)
 
 For your first working pipeline, follow [Duckpad in 15 minutes](QUICKSTART.md).
 Then [use your own data](YOUR_DATA.md), or consult

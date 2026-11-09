@@ -52,7 +52,12 @@ const NOTICE_HEIGHT = 36;
 
 export default function FlowPage() {
   const t = useT();
-  const { notify, openModal, flowPanels: panels } = useShell();
+  const {
+    notify,
+    openModal,
+    flowPanels: panels,
+    preferences: { edgeStyle },
+  } = useShell();
   const workspace = useWorkspace();
   const {
     id: worktree,
@@ -426,6 +431,10 @@ export default function FlowPage() {
             exposedInputs={
               parent ? bundle.components[parent]?.inputs : undefined
             }
+            exposedOutputs={
+              parent ? bundle.components[parent]?.outputs : undefined
+            }
+            edgeStyle={edgeStyle}
             onSelection={updateSelection}
             onWarnings={() => showResults("log")}
             onFailure={() => {

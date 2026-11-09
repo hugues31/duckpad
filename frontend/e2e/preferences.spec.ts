@@ -53,8 +53,9 @@ for (const scenario of [
         await page.evaluate(() => [
           localStorage.getItem("duckpad-language"),
           localStorage.getItem("duckpad-theme"),
+          localStorage.getItem("duckpad-edge-style"),
         ]),
-      ).toEqual([null, null]);
+      ).toEqual([null, null, null]);
 
       const nextTheme = scenario.theme === "dark" ? "light" : "dark";
       await page.emulateMedia({ colorScheme: nextTheme });
@@ -146,7 +147,10 @@ test.describe("preference controls", () => {
       .getByRole("button", { name: en.accountMenu, exact: true })
       .click();
     const menu = page.getByRole("menu");
-    const options = (labels: typeof en, group: "language" | "theme") =>
+    const options = (
+      labels: typeof en,
+      group: "language" | "theme" | "edgeStyle",
+    ) =>
       menu
         .getByRole("group", { name: labels[group], exact: true })
         .getByRole("menuitemradio");
@@ -156,6 +160,10 @@ test.describe("preference controls", () => {
       "Portuguese",
     ]);
     await expect(options(en, "theme")).toHaveText([en.light, en.dark]);
+    await expect(options(en, "edgeStyle")).toHaveText([
+      en.curvedEdges,
+      en.orthogonalEdges,
+    ]);
     await menu
       .getByRole("menuitemradio", { name: "French", exact: true })
       .click();
@@ -168,6 +176,10 @@ test.describe("preference controls", () => {
       "Portugais",
     ]);
     await expect(options(fr, "theme")).toHaveText([fr.light, fr.dark]);
+    await expect(options(fr, "edgeStyle")).toHaveText([
+      fr.curvedEdges,
+      fr.orthogonalEdges,
+    ]);
     await menu
       .getByRole("menuitem", { name: fr.userSettings, exact: true })
       .click();
@@ -183,6 +195,20 @@ test.describe("preference controls", () => {
     await expect(theme.locator("option")).toHaveText([fr.light, fr.dark]);
     await theme.selectOption("dark");
     await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+    const edgeStyle = page.getByLabel(fr.edgeStyle, { exact: true });
+    await expect(edgeStyle).toHaveValue("curved");
+    await expect(edgeStyle.locator("option")).toHaveText([
+      fr.curvedEdges,
+      fr.orthogonalEdges,
+    ]);
+    await edgeStyle.selectOption("orthogonal");
+    await page.reload();
+    await expect(page.getByLabel(fr.edgeStyle, { exact: true })).toHaveValue(
+      "orthogonal",
+    );
+    expect(
+      await page.evaluate(() => localStorage.getItem("duckpad-edge-style")),
+    ).toBe("orthogonal");
     await language.selectOption("pt");
     await expect(page.locator("html")).toHaveAttribute("lang", "pt");
     await expect(

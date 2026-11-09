@@ -23,6 +23,16 @@ export function useCanvasNodes(props: CanvasProps) {
       ]),
     [props.edges, props.exposedInputs],
   );
+  const connectedOutputs = useMemo(
+    () =>
+      new Set([
+        ...props.edges.map((edge) => `${edge.source}\0${edge.sourceHandle}`),
+        ...Object.values(props.exposedOutputs || {}).map(
+          (output) => `${output.node}\0${output.port}`,
+        ),
+      ]),
+    [props.edges, props.exposedOutputs],
+  );
   const displayNodes = useMemo(
     () =>
       props.nodes.map((node): PipelineNode => {
@@ -61,6 +71,9 @@ export function useCanvasNodes(props: CanvasProps) {
               (port) => !connectedInputs.has(`${node.id}\0${port}`),
             ),
             outputs,
+            connectedOutputs: outputs.filter((port) =>
+              connectedOutputs.has(`${node.id}\0${port}`),
+            ),
             status,
             count: primaryOutputCount(
               node,
@@ -92,6 +105,7 @@ export function useCanvasNodes(props: CanvasProps) {
       props.nodes,
       partitions,
       connectedInputs,
+      connectedOutputs,
       props.valueProducers,
       props.parsed,
       props.names,

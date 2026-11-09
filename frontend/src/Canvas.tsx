@@ -1,5 +1,6 @@
 import {
   applyNodeChanges,
+  ConnectionLineType,
   ControlButton,
   Controls,
   MarkerType,
@@ -9,8 +10,10 @@ import {
   ReactFlowProvider,
   useNodesInitialized,
   useReactFlow,
+  useStore,
   type Connection,
   type NodeChange,
+  type ReactFlowState,
 } from "@xyflow/react";
 import { Maximize, Sparkles, Workflow } from "lucide-react";
 import {
@@ -22,6 +25,14 @@ import {
   useState,
 } from "react";
 import { ActionMenu } from "./ActionMenu";
+import { PipelineEdge } from "./CanvasEdge";
+import {
+  edgeEndpoints,
+  orthogonalLanes,
+  sameEndpoints,
+  socket,
+  type EdgeEndpoints,
+} from "./canvasEdges";
 import { PipelineNode } from "./CanvasNode";
 import { showMinimap } from "./canvasResults";
 import type { CanvasProps, FocusRequest } from "./canvasTypes";
@@ -35,6 +46,8 @@ import { useCanvasFrame } from "./useCanvasFrame";
 import { useCanvasNodes } from "./useCanvasNodes";
 import { useDoubleClickGuard } from "./useDoubleClickGuard";
 const nodeTypes = { pipeline: PipelineNode };
+const edgeTypes = { pipeline: PipelineEdge };
+const NO_ENDPOINTS: EdgeEndpoints[] = [];
 function CanvasInner({ ref, ...props }: CanvasProps) {
   const t = useT();
   const [context, setContext] = useState<{
@@ -42,7 +55,7 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
     position: { x: number; y: number };
     trigger: HTMLElement;
   } | null>(null);
-  const { getNodes, screenToFlowPosition } = useReactFlow();
+  const { getNodes, getInternalNode, screenToFlowPosition } = useReactFlow();
   const initialized = useNodesInitialized();
   const safeArea = useRef<HTMLDivElement>(null);
   const viewportTouched = useRef(false);
@@ -170,34 +183,52 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
     [onSelection],
   );
   const running = !!props.statuses.active;
-  const edges = useMemo(
-    () =>
-      props.edges.map((e) => {
-        const connected = nodes.some(
-          (n) => n.selected && (n.id === e.source || n.id === e.target),
-        );
-        const highlighted = connected || running;
-        return {
-          ...e,
-          type: "smoothstep",
-          animated: highlighted,
-          className: connected ? "node-connected" : undefined,
-          markerEnd: highlighted
-            ? {
-                type: MarkerType.ArrowClosed,
-                color: "var(--accent)",
-                width: 14,
-                height: 14,
-              }
-            : undefined,
-          style: {
-            stroke: highlighted ? "var(--accent)" : "var(--edge)",
-            strokeWidth: highlighted ? 2.3 : 1.8,
-          },
-        };
-      }),
-    [props.edges, nodes, running],
+  const edgeStyle = props.edgeStyle ?? "curved";
+  // Right-angled links get separate vertical lanes from the measured socket positions.
+  const endpoints = useStore(
+    useCallback(
+      (state: ReactFlowState) =>
+        edgeStyle === "orthogonal"
+          ? edgeEndpoints(state.nodeLookup, props.edges)
+          : NO_ENDPOINTS,
+      [edgeStyle, props.edges],
+    ),
+    sameEndpoints,
   );
+  const lanes = useMemo(() => orthogonalLanes(endpoints), [endpoints]);
+  const [hovered, setHovered] = useState<string | null>(null);
+  const edges = useMemo(() => {
+    const selected = new Set(
+      nodes.filter((node) => node.selected).map((node) => node.id),
+    );
+    return props.edges.map((e): PipelineEdge => {
+      const connected = selected.has(e.source) || selected.has(e.target);
+      const pointed = hovered === e.source || hovered === e.target;
+      const highlighted = connected || pointed || running;
+      return {
+        ...e,
+        type: "pipeline",
+        data: { style: edgeStyle, lane: lanes.get(e.id) },
+        animated: connected || running,
+        className:
+          [
+            connected && "node-connected",
+            pointed && "node-hovered",
+            highlighted && "highlighted",
+          ]
+            .filter(Boolean)
+            .join(" ") || undefined,
+        markerEnd: highlighted
+          ? {
+              type: MarkerType.ArrowClosed,
+              color: "var(--accent)",
+              width: 14,
+              height: 14,
+            }
+          : undefined,
+      };
+    });
+  }, [props.edges, nodes, running, hovered, edgeStyle, lanes]);
   const changes = (changes: NodeChange<PipelineNode>[]) =>
     setNodes((current) => applyNodeChanges(changes, current));
   const persistPositions = async (moved: FlowNode[]) => {
@@ -229,7 +260,10 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
   };
   const arrangeGraph = () => {
     if (props.readOnly || !initialized || !nodes.length) return;
-    const arranged = layoutNodes(getNodes(), props.edges);
+    const arranged = layoutNodes(getNodes(), props.edges, (id, port, type) => {
+      const handle = socket(getInternalNode(id), type, port);
+      return handle && handle.y + handle.height / 2;
+    });
     const positions = new Map(arranged.map((node) => [node.id, node.position]));
     void persistPositions(
       props.nodes.map((node) => ({
@@ -279,7 +313,15 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
         nodes={nodes}
         edges={edges}
         nodeTypes={nodeTypes}
+        edgeTypes={edgeTypes}
+        connectionLineType={
+          edgeStyle === "orthogonal"
+            ? ConnectionLineType.SmoothStep
+            : ConnectionLineType.Bezier
+        }
         onNodesChange={changes}
+        onNodeMouseEnter={(_, node) => setHovered(node.id)}
+        onNodeMouseLeave={() => setHovered(null)}
         onMoveStart={(event) => {
           if (event) {
             viewportTouched.current = true;

@@ -1022,7 +1022,7 @@ test("three panel dividers resize, persist and preserve manual canvas navigation
     .toBeLessThanOrEqual(390);
 });
 
-test("selected nodes show incoming and outgoing flow, with larger usable sockets", async ({
+test("selected and pointed nodes show their flow, with filled connected sockets and the preferred link style", async ({
   page,
 }) => {
   await sample(page);
@@ -1071,6 +1071,61 @@ test("selected nodes show incoming and outgoing flow, with larger usable sockets
   const customers = page
     .locator(".react-flow__node")
     .filter({ has: page.getByText("Customers", { exact: true }) });
+  // Pointing at a node highlights its links without animating them.
+  await customers.hover();
+  const pointed = page.locator(".react-flow__edge.node-hovered");
+  await expect(pointed).toHaveCount(1);
+  await expect(pointed.locator(".react-flow__edge-path")).toHaveAttribute(
+    "marker-end",
+    /url\(/,
+  );
+  await page.mouse.move(1, 1);
+  await expect(pointed).toHaveCount(0);
+
+  // Connected sockets are filled; an unused output stays hollow.
+  const paid = page
+    .locator(".react-flow__node")
+    .filter({ has: page.getByText("Paid orders", { exact: true }) });
+  const used = paid.locator('.react-flow__handle[data-handleid="orders"]');
+  const unused = paid.locator('.react-flow__handle[data-handleid="overview"]');
+  await expect(used).toHaveClass(/is-connected/);
+  await expect(unused).not.toHaveClass(/is-connected/);
+  await expect(
+    paid.locator('.react-flow__handle[data-handleid="source"]'),
+  ).toHaveClass(/is-connected/);
+  const fill = (handle: typeof used) =>
+    handle.evaluate((element) => getComputedStyle(element).backgroundColor);
+  expect(await fill(used)).not.toBe(await fill(unused));
+
+  // Links are curved by default; right angles keep links from different outputs apart.
+  const path = (edge: any) =>
+    page.locator(
+      `.react-flow__edge[data-id="${edge.id}"] .react-flow__edge-path`,
+    );
+  const joined = graph.filter((edge: any) => edge.target === join.id);
+  expect(joined).toHaveLength(2);
+  for (const edge of joined) await expect(path(edge)).toHaveAttribute("d", /C/);
+  await page.locator(".account .avatar").click();
+  await page
+    .getByRole("menuitemradio", { name: "Right angles", exact: true })
+    .click();
+  for (const edge of joined)
+    await expect(path(edge)).not.toHaveAttribute("d", /C/);
+  const verticalX = (edge: any) =>
+    path(edge).evaluate((element) => {
+      const line = element as SVGPathElement;
+      const length = line.getTotalLength();
+      for (let at = 0; at < length; at += 2) {
+        const a = line.getPointAtLength(at);
+        const b = line.getPointAtLength(Math.min(length, at + 2));
+        if (Math.abs(a.x - b.x) < 0.01 && Math.abs(a.y - b.y) > 1) return a.x;
+      }
+      return null;
+    });
+  const [first, second] = await Promise.all(joined.map(verticalX));
+  expect(first).not.toBeNull();
+  expect(second).not.toBeNull();
+  expect(Math.abs(first! - second!)).toBeGreaterThanOrEqual(12);
   const source = customers.locator(".react-flow__handle.source");
   const target = page.locator(
     `.react-flow__node[data-id="${join.id}"] .react-flow__handle[data-handleid="left"]`,

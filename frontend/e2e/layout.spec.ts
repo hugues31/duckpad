@@ -102,6 +102,12 @@ test("auto-arrange saves only the current DAG, preserves selection and frames th
   const before: Snapshot = await (await page.request.get(url)).json();
   const after = await arrange(page, url);
   expectArranged(before.bundle!.flow, after.bundle!.flow);
+  // Links are untangled, and sockets line up along the main chain.
+  const at = (label: string) =>
+    after.bundle!.flow.nodes.find((node) => node.label === label)!.position;
+  expect(at("Orders").y).toBeLessThan(at("Customers").y);
+  expect(at("Reporting period").y).toBeLessThan(at("Enrich orders").y);
+  expect(at("Paid orders").y).toBe(at("Enrich orders").y);
   expect(after.bundle!.components).toEqual(before.bundle!.components);
   expect(after.bundle!.templates).toEqual(before.bundle!.templates);
   const positions = await page

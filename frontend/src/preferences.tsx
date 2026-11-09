@@ -1,15 +1,19 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Moon, Sun } from "lucide-react";
 import { languages, useT, type Language } from "./i18n";
-import type { Theme } from "./types";
+import type { EdgeStyle, Theme } from "./types";
 
 const LANGUAGE_KEY = "duckpad-language";
 const THEME_KEY = "duckpad-theme";
+const EDGE_STYLE_KEY = "duckpad-edge-style";
 const THEMES: readonly Theme[] = ["light", "dark"];
+const EDGE_STYLES: readonly EdgeStyle[] = ["curved", "orthogonal"];
 const isLanguage = (value: string | null): value is Language =>
   languages.includes(value as Language);
 const isTheme = (value: string | null): value is Theme =>
   THEMES.includes(value as Theme);
+const isEdgeStyle = (value: string | null): value is EdgeStyle =>
+  EDGE_STYLES.includes(value as EdgeStyle);
 
 /** The first supported browser language, with English as the fallback. */
 function browserLanguage(): Language {
@@ -31,9 +35,15 @@ export interface Preferences {
   setLanguage: (value: Language) => void;
   theme: Theme;
   setTheme: (value: Theme) => void;
+  /** How the canvas draws links between nodes. */
+  edgeStyle: EdgeStyle;
+  setEdgeStyle: (value: EdgeStyle) => void;
 }
 
-/** Language and theme follow the browser until the user picks one; choices are saved per browser. */
+/**
+ * Language and theme follow the browser until the user picks one, and links are
+ * curved by default; choices are saved per browser.
+ */
 export function usePreferences(): Preferences {
   const [language, setLanguageState] = useState<Language>(() => {
     const saved = localStorage.getItem(LANGUAGE_KEY);
@@ -42,6 +52,10 @@ export function usePreferences(): Preferences {
   const [theme, setThemeState] = useState<Theme>(() => {
     const saved = localStorage.getItem(THEME_KEY);
     return isTheme(saved) ? saved : systemTheme();
+  });
+  const [edgeStyle, setEdgeStyleState] = useState<EdgeStyle>(() => {
+    const saved = localStorage.getItem(EDGE_STYLE_KEY);
+    return isEdgeStyle(saved) ? saved : "curved";
   });
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -55,27 +69,40 @@ export function usePreferences(): Preferences {
     localStorage.setItem(THEME_KEY, value);
     setThemeState(value);
   }, []);
+  const setEdgeStyle = useCallback((value: EdgeStyle) => {
+    localStorage.setItem(EDGE_STYLE_KEY, value);
+    setEdgeStyleState(value);
+  }, []);
   return useMemo(
-    () => ({ language, setLanguage, theme, setTheme }),
-    [language, setLanguage, theme, setTheme],
+    () => ({
+      language,
+      setLanguage,
+      theme,
+      setTheme,
+      edgeStyle,
+      setEdgeStyle,
+    }),
+    [language, setLanguage, theme, setTheme, edgeStyle, setEdgeStyle],
   );
 }
 
 /** A preference and its options, labelled in the interface language. */
 export interface PreferenceChoice {
-  name: "language" | "theme";
+  name: "language" | "theme" | "edgeStyle";
   label: string;
   value: string;
   options: { value: string; label: string }[];
   choose: (value: string) => void;
 }
 
-/** The language and theme choices that every preference control offers. */
+/** The language, theme and link style choices of the preference controls. */
 export function usePreferenceChoices({
   language,
   setLanguage,
   theme,
   setTheme,
+  edgeStyle,
+  setEdgeStyle,
 }: Preferences): PreferenceChoice[] {
   const t = useT();
   // Intl names each language in the interface language ("French", or "français"
@@ -102,6 +129,16 @@ export function usePreferenceChoices({
       value: theme,
       options: THEMES.map((value) => ({ value, label: t(value) })),
       choose: (value) => setTheme(value as Theme),
+    },
+    {
+      name: "edgeStyle",
+      label: t("edgeStyle"),
+      value: edgeStyle,
+      options: EDGE_STYLES.map((value) => ({
+        value,
+        label: t(value === "curved" ? "curvedEdges" : "orthogonalEdges"),
+      })),
+      choose: (value) => setEdgeStyle(value as EdgeStyle),
     },
   ];
 }
