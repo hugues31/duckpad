@@ -26,7 +26,13 @@ import {
 } from "react";
 import { ActionMenu } from "./ActionMenu";
 import { PipelineEdge } from "./CanvasEdge";
-import { edgeEndpoints, orthogonalLanes, sameLanes } from "./canvasEdges";
+import {
+  edgeEndpoints,
+  orthogonalLanes,
+  sameEndpoints,
+  socket,
+  type EdgeEndpoints,
+} from "./canvasEdges";
 import { PipelineNode } from "./CanvasNode";
 import { showMinimap } from "./canvasResults";
 import type { CanvasProps, FocusRequest } from "./canvasTypes";
@@ -41,7 +47,7 @@ import { useCanvasNodes } from "./useCanvasNodes";
 import { useDoubleClickGuard } from "./useDoubleClickGuard";
 const nodeTypes = { pipeline: PipelineNode };
 const edgeTypes = { pipeline: PipelineEdge };
-const NO_LANES = new Map<string, number>();
+const NO_ENDPOINTS: EdgeEndpoints[] = [];
 function CanvasInner({ ref, ...props }: CanvasProps) {
   const t = useT();
   const [context, setContext] = useState<{
@@ -179,50 +185,50 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
   const running = !!props.statuses.active;
   const edgeStyle = props.edgeStyle ?? "curved";
   // Right-angled links get separate vertical lanes from the measured socket positions.
-  const lanes = useStore(
+  const endpoints = useStore(
     useCallback(
       (state: ReactFlowState) =>
         edgeStyle === "orthogonal"
-          ? orthogonalLanes(edgeEndpoints(state.nodeLookup, props.edges))
-          : NO_LANES,
+          ? edgeEndpoints(state.nodeLookup, props.edges)
+          : NO_ENDPOINTS,
       [edgeStyle, props.edges],
     ),
-    sameLanes,
+    sameEndpoints,
   );
+  const lanes = useMemo(() => orthogonalLanes(endpoints), [endpoints]);
   const [hovered, setHovered] = useState<string | null>(null);
-  const edges = useMemo(
-    () =>
-      props.edges.map((e): PipelineEdge => {
-        const connected = nodes.some(
-          (n) => n.selected && (n.id === e.source || n.id === e.target),
-        );
-        const pointed = hovered === e.source || hovered === e.target;
-        const highlighted = connected || pointed || running;
-        return {
-          ...e,
-          type: "pipeline",
-          data: { style: edgeStyle, lane: lanes.get(e.id) },
-          animated: connected || running,
-          className:
-            [
-              connected && "node-connected",
-              pointed && "node-hovered",
-              highlighted && "highlighted",
-            ]
-              .filter(Boolean)
-              .join(" ") || undefined,
-          markerEnd: highlighted
-            ? {
-                type: MarkerType.ArrowClosed,
-                color: "var(--accent)",
-                width: 14,
-                height: 14,
-              }
-            : undefined,
-        };
-      }),
-    [props.edges, nodes, running, hovered, edgeStyle, lanes],
-  );
+  const edges = useMemo(() => {
+    const selected = new Set(
+      nodes.filter((node) => node.selected).map((node) => node.id),
+    );
+    return props.edges.map((e): PipelineEdge => {
+      const connected = selected.has(e.source) || selected.has(e.target);
+      const pointed = hovered === e.source || hovered === e.target;
+      const highlighted = connected || pointed || running;
+      return {
+        ...e,
+        type: "pipeline",
+        data: { style: edgeStyle, lane: lanes.get(e.id) },
+        animated: connected || running,
+        className:
+          [
+            connected && "node-connected",
+            pointed && "node-hovered",
+            highlighted && "highlighted",
+          ]
+            .filter(Boolean)
+            .join(" ") || undefined,
+        markerEnd: highlighted
+          ? {
+              type: MarkerType.ArrowClosed,
+              color: "var(--accent)",
+              width: 14,
+              height: 14,
+            }
+          : undefined,
+      };
+    });
+  }, [props.edges, nodes, running, hovered, edgeStyle, lanes]);
   const changes = (changes: NodeChange<PipelineNode>[]) =>
     setNodes((current) => applyNodeChanges(changes, current));
   const persistPositions = async (moved: FlowNode[]) => {
@@ -255,9 +261,7 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
   const arrangeGraph = () => {
     if (props.readOnly || !initialized || !nodes.length) return;
     const arranged = layoutNodes(getNodes(), props.edges, (id, port, type) => {
-      const handle = getInternalNode(id)?.internals.handleBounds?.[type]?.find(
-        (bounds) => bounds.id === port,
-      );
+      const handle = socket(getInternalNode(id), type, port);
       return handle && handle.y + handle.height / 2;
     });
     const positions = new Map(arranged.map((node) => [node.id, node.position]));

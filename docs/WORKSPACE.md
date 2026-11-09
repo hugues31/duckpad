@@ -20,8 +20,8 @@ Add a palette item by clicking it or dragging it onto the canvas;
 templates created in the project. Connect an output to an input, or choose the
 upstream output in the node's inspector. Connected sockets are filled, unused
 outputs stay hollow, and an input without a source is orange on the node until
-you connect it. Point at a node or a link to highlight it. Select a node for its parameters and code on the
-right and its [results](RESULTS.md) below. Its other actions, such as
+you connect it. Point at a node or a link to highlight it. Select a node for
+its parameters and code on the right and its [results](RESULTS.md) below. Its other actions, such as
 **Duplicate node**, are in **Node actions** (**⋯** in the inspector title, or
 right-click the node). Double-click a [component](COMPONENTS.md) to open
 its contents; use the breadcrumbs to return. **Fit view** brings the graph into

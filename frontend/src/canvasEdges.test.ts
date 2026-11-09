@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   edgeEndpoints,
   orthogonalLanes,
-  sameLanes,
+  sameEndpoints,
   STEP_OFFSET,
   type EdgeEndpoints,
 } from "./canvasEdges";
@@ -124,10 +124,12 @@ describe("edgeEndpoints", () => {
   });
 });
 
-describe("sameLanes", () => {
-  it("compares lane positions", () => {
-    expect(sameLanes(new Map([["a", 1]]), new Map([["a", 1]]))).toBe(true);
-    expect(sameLanes(new Map([["a", 1]]), new Map([["a", 2]]))).toBe(false);
-    expect(sameLanes(new Map(), new Map([["a", 1]]))).toBe(false);
+describe("sameEndpoints", () => {
+  it("compares socket positions, not list identity", () => {
+    const a = [link("a", "x", [0, 0], [200, 100])];
+    expect(sameEndpoints(a, [link("a", "x", [0, 0], [200, 100])])).toBe(true);
+    expect(sameEndpoints(a, [link("a", "x", [0, 0], [200, 101])])).toBe(false);
+    expect(sameEndpoints(a, [link("b", "x", [0, 0], [200, 100])])).toBe(false);
+    expect(sameEndpoints(a, [])).toBe(false);
   });
 });

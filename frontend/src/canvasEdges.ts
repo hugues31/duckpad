@@ -17,6 +17,17 @@ export const STEP_OFFSET = 20;
 /** The distance between two parallel vertical segments. */
 const LANE_GAP = 16;
 
+/** The measured bounds of a socket, relative to its node, once the node is rendered. */
+export function socket(
+  node: InternalNode | undefined,
+  type: "source" | "target",
+  id: string | null | undefined,
+) {
+  return node?.internals.handleBounds?.[type]?.find(
+    (handle) => handle.id === id,
+  );
+}
+
 /** Socket positions of the links, in flow coordinates, once nodes are measured. */
 export function edgeEndpoints(
   nodes: Map<string, InternalNode>,
@@ -26,12 +37,8 @@ export function edgeEndpoints(
   for (const edge of edges) {
     const source = nodes.get(edge.source);
     const target = nodes.get(edge.target);
-    const output = source?.internals.handleBounds?.source?.find(
-      (handle) => handle.id === edge.sourceHandle,
-    );
-    const input = target?.internals.handleBounds?.target?.find(
-      (handle) => handle.id === edge.targetHandle,
-    );
+    const output = socket(source, "source", edge.sourceHandle);
+    const input = socket(target, "target", edge.targetHandle);
     if (!source || !target || !output || !input) continue;
     // Outputs sit on the right of their socket, inputs on the left, as React Flow draws them.
     endpoints.push({
@@ -161,9 +168,23 @@ export function orthogonalLanes(endpoints: EdgeEndpoints[]) {
   return lanes;
 }
 
-/** Whether two lane assignments draw the same links. */
-export function sameLanes(a: Map<string, number>, b: Map<string, number>) {
-  if (a.size !== b.size) return false;
-  for (const [id, x] of a) if (b.get(id) !== x) return false;
-  return true;
+/**
+ * Whether two lists of socket positions route the same links. Panning and zooming
+ * update the canvas store without moving any socket, so lanes are not recomputed.
+ */
+export function sameEndpoints(a: EdgeEndpoints[], b: EdgeEndpoints[]) {
+  return (
+    a.length === b.length &&
+    a.every((edge, index) => {
+      const other = b[index];
+      return (
+        edge.id === other.id &&
+        edge.output === other.output &&
+        edge.sourceX === other.sourceX &&
+        edge.sourceY === other.sourceY &&
+        edge.targetX === other.targetX &&
+        edge.targetY === other.targetY
+      );
+    })
+  );
 }

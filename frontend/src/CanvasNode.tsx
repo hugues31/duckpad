@@ -94,7 +94,6 @@ export const PipelineNode = memo(function PipelineNode({
   const partition = data.partition;
   const updateNodeInternals = useUpdateNodeInternals();
   const portLayout = JSON.stringify([data.kind, data.inputs, data.outputs]);
-  const usedOutputs = new Set(data.connectedOutputs);
   useEffect(() => {
     // SQL edits can rename or move handles without resizing the node.
     updateNodeInternals(id);
@@ -198,7 +197,9 @@ export const PipelineNode = memo(function PipelineNode({
             top: portPosition(i, data.outputs.length).top,
             right: portPosition(i, data.outputs.length).inset,
           }}
-          className={usedOutputs.has(port) ? "is-connected" : undefined}
+          className={
+            data.connectedOutputs.includes(port) ? "is-connected" : undefined
+          }
           title={port}
           aria-label={`${t("output")}: ${port}`}
         >
