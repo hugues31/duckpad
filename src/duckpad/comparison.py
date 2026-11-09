@@ -143,8 +143,8 @@ def fields(before, after, prefix=""):
 
 
 def categories(kind, paths, before, after, language="sql"):
-    # Views choose which rows are displayed; they never change a result.
-    if kind in ("documentation", "view"):
+    # Views and charts choose how rows are displayed; they never change a result.
+    if kind in ("documentation", "view", "chart"):
         return ["documentation"]
     if kind == "node" and "sql" in paths and isinstance(before, dict) and isinstance(after, dict):
         other = [p for p in paths if p != "sql"]

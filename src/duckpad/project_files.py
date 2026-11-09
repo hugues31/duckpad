@@ -10,6 +10,7 @@ from .node_code import template_path
 VARIABLES = Document("variables.json", "a JSON object of variables")
 EXTENSIONS = Document("extensions.json", "an object keyed by extension name")
 VIEWS = Document("views.json", "an object of views by node output")
+CHARTS = Document("charts.json", "an object of charts by node output")
 
 
 @dataclass(frozen=True)
@@ -54,6 +55,7 @@ FILES = (
     FileType(VARIABLES.file, "variables", "variable", "declarations", document=VARIABLES),
     FileType(EXTENSIONS.file, "extensions", "file", "declarations", document=EXTENSIONS),
     FileType(VIEWS.file, "views", "view", "named", document=VIEWS),
+    FileType(CHARTS.file, "charts", "chart", "named", document=CHARTS, whole_entries=True),
     FileType("templates/*", "templates", "template", pattern=r"templates/[A-Za-z0-9_-]+\.(?:sql|py)"),
     FileType("nodes/*", "node_sql", "node", pattern=r"nodes/[A-Za-z0-9_-]+\.(?:sql|py)"),
     FileType("components/*.json", "components", "graph", "json", r"components/[A-Za-z0-9_-]+\.json"),
@@ -65,7 +67,7 @@ FILES = (
     ),
 )
 ROOT_FILES = tuple(spec.path for spec in FILES if not spec.pattern)
-# Per-output named documents, such as views.json.
+# Per-output named documents, such as views.json and charts.json.
 NAMED = tuple(spec for spec in FILES if spec.merge == "named")
 
 

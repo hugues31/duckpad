@@ -1,8 +1,8 @@
-"""Project validation orchestration: structure, expansion, partitions, variables and views."""
+"""Project validation orchestration: structure, expansion, partitions, variables, views and charts."""
 
 import tomllib
 
-from . import partitions, project_extensions, variables, views
+from . import charts, partitions, project_extensions, variables, views
 from .components import expand
 from .graph import topological
 from .node_code import node_sql, template_path
@@ -113,4 +113,5 @@ def validate(bundle):
     except Problem as error:
         errors.append({"file": "flow.json", "message": str(error)})
     errors.extend(views.problems(bundle))
+    errors.extend(charts.problems(bundle))
     return errors

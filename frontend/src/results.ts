@@ -1,11 +1,18 @@
 import type { Snapshot, Statuses } from "./types";
 
-export const RESULT_TABS = ["data", "columns", "tests", "log"] as const;
+export const RESULT_TABS = [
+  "data",
+  "chart",
+  "columns",
+  "tests",
+  "log",
+] as const;
 /** A tab of the panel; "preview" shows while the node has a preview. */
 export type ResultsTab = (typeof RESULT_TABS)[number] | "preview";
 export const TAB_LABELS = {
   preview: "results_preview",
   data: "results_data",
+  chart: "results_chart",
   columns: "results_columns",
   tests: "results_tests",
   log: "results_log",
@@ -18,6 +25,23 @@ export interface ResultsTarget {
   port: string;
   /** For an input of the inspected node, the input port it is connected to. */
   input?: string;
+}
+
+/** The key of a stored output in views.json and charts.json: `node:port`. */
+export const outputKey = ({ node, port }: { node: string; port: string }) =>
+  `${node}:${port}`;
+
+/** How the panel runs the node and what it knows of its last run, for the Data and Chart tabs. */
+export interface RunState {
+  canEdit: boolean;
+  active: boolean;
+  starting?: boolean;
+  onRun: () => void;
+  runLabel?: string;
+  /** Why the node has no result, such as the inputs a blocked collector waits for. */
+  reason?: string;
+  /** The panel already shows the node's last run error above the tab. */
+  failureShown?: boolean;
 }
 
 /** Whether an edit to the project files comes from the results panel. */

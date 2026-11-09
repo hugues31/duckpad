@@ -16,7 +16,7 @@ from contextlib import AbstractContextManager, contextmanager, suppress
 from pathlib import Path
 from typing import Literal, TypeVar, Unpack, cast, overload
 
-from . import project_extensions, python_environment, views
+from . import project_extensions, python_environment
 from .artifacts import Artifacts
 from .builtin_templates import BUILTINS
 from .bundle import bundle_to_files, file_node_names, files_to_bundle
@@ -30,7 +30,7 @@ from .git.workspace import GitWorkspace, diagnose, history_cache_key, origin_key
 from .merge import conflict_details, merge_files
 from .node_code import owned_paths
 from .node_names import node_names
-from .project_files import definition_names, is_declarative
+from .project_files import NAMED, definition_names, is_declarative
 from .python_nodes import remember_contracts
 from .python_policy import get_policy
 from .store import Store
@@ -426,11 +426,13 @@ class Projects:
                     if name in existing:
                         (Path(path) / name).unlink(missing_ok=True)
                         existing.pop(name)
-            before = dumps([bundle["documentation"], bundle.get("views")])
+            # Deleted nodes take their documentation and named documents, such as views, with them.
+            reconciled_sections = ["documentation", *(spec.section for spec in NAMED)]
+            before = dumps([bundle.get(section) for section in reconciled_sections])
             reconcile_documentation(previous, bundle)
-            if before != dumps([bundle["documentation"], bundle.get("views")]):
+            if before != dumps([bundle.get(section) for section in reconciled_sections]):
                 reconciled = bundle_to_files(bundle)
-                for name in ("documentation.json", "README.md", views.FILE):
+                for name in ("documentation.json", "README.md", *(spec.path for spec in NAMED)):
                     if name in reconciled:
                         atomic_write(Path(path) / name, reconciled[name])
                 existing = self.read_files({"path": str(path)})

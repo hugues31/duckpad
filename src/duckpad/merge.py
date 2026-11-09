@@ -153,6 +153,9 @@ def merge_files(base, current, proposal, choices=None, evidence=None, resolution
                         raise Problem(f"Combined contents for {name} must be valid JSON", 422) from error
                 named = [named_documents.by_name(v) for v in parsed] if spec.merge == "named" else [None]
                 if all(v is not None for v in named):
+                    # Branches that both add entries to an output the base lacks merge them by name.
+                    for key in (named[1].keys() & named[2].keys()) - named[0].keys():
+                        named[0][key] = {}
                     # Named documents merge entry by entry, keyed by output and name.
                     merged, errors = merge_values(
                         *named, name, choices, evidence, named_documents.by_name(resolved)
