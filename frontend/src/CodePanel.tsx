@@ -1,9 +1,11 @@
 import { lazy, Suspense, useEffect, useState } from "react";
+import { useSearchParams } from "react-router";
 import { Download, FileCode2, Loader2, Plus, Save } from "lucide-react";
 import { downloadProject } from "./api";
 import { nodeLocation, nodeSourcePath } from "./nodeCode";
 import { useT } from "./i18n";
 import ProjectFileTree from "./ProjectFileTree";
+import { CODE_FILE_PARAM } from "./navigation";
 import { initialProjectFile, projectFileLanguage } from "./projectFiles";
 import { useRevisionDraft } from "./useRevisionDraft";
 import type { Snapshot } from "./types";
@@ -56,6 +58,21 @@ export default function CodePanel({
     setOpenedNode(selectedNode);
     setSelected(initialProjectFile(snapshot, selectedNode));
   }
+  // A link can open a project file, such as charts.json from the Chart tab.
+  const [params, setParams] = useSearchParams();
+  const requested = hidden ? null : params.get(CODE_FILE_PARAM);
+  if (requested && requested !== selected) setSelected(requested);
+  useEffect(() => {
+    if (requested)
+      setParams(
+        (current) => {
+          const next = new URLSearchParams(current);
+          next.delete(CODE_FILE_PARAM);
+          return next;
+        },
+        { replace: true },
+      );
+  }, [requested, setParams]);
   const [downloading, setDownloading] = useState(false);
   const [error, setError] = useState("");
   const path = selected in files ? selected : Object.keys(files).sort()[0];

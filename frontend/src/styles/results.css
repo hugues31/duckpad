@@ -72,6 +72,7 @@
   color: var(--muted);
 }
 .results-data,
+.results-chart,
 .results-columns,
 .results-tests,
 .results-log {
@@ -159,6 +160,14 @@
 }
 .views-bar .text-button {
   font-size: 11px;
+}
+/* The charts of the shown output, picked by name like views. */
+.chart-selector {
+  padding: 8px 14px 0;
+}
+.chart-selector .view-chip {
+  gap: 4px;
+  padding: 3px 8px;
 }
 .sample-popover {
   position: absolute;
@@ -652,4 +661,26 @@
 .draft-preview .stale-reason {
   padding: 4px 14px;
   font-size: 10px;
+}
+/* Charts of the shown dataset; Vega draws into .chart-view. */
+.results-chart {
+  overflow: auto;
+}
+.results-chart > .muted {
+  padding: 8px 14px;
+}
+.chart-figure {
+  padding: 12px 14px;
+}
+.chart-view {
+  width: 100%;
+}
+.chart-invalid {
+  padding: 14px;
+  overflow: auto;
+  font-size: 12px;
+}
+.chart-invalid ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
 }

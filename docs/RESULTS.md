@@ -3,7 +3,7 @@
 Selecting a node opens two panels. The **inspector** on the right describes the
 node: its parameters, compiled SQL, documentation and change history. Resolved
 variables and compiled SQL follow the selected environment. The **results panel**
-under the canvas shows the data, tests and logs for that environment.
+under the canvas shows the data, charts, tests and logs for that environment.
 
 ![The results panel of Paid orders on a sample of partner orders above 300, sorted by amount](images/results-data.png)
 
@@ -97,6 +97,23 @@ deletes its views in the same save. Readers and operators use views and their ow
 samples but cannot save views.
 
 For external editing, see the [saved view file format](AUTHORING.md#saved-views).
+
+## Chart
+
+![The Chart tab: revenue by region, the leading region first](images/results-chart.png)
+
+The **Chart** tab draws the shown dataset with the Vega-Lite charts declared for
+it in `charts.json`; a selector switches between several charts by name. A chart
+plots the whole retained result, up to 5,000 rows, never the displayed sample.
+Above that, aggregate the output upstream in a SQL node. The tab follows the
+same Stale, Run and failure states as the Data tab, and saving a chart never
+makes a result stale.
+
+An output without a chart explains how to declare one; editors also get **Add a
+chart**, which saves a starter bar chart and opens `charts.json` in Code. While
+`charts.json` has diagnostics, the tab lists them and draws nothing. See the
+[charts guide](CHARTS.md) for the format, the allowed specs, value conversion
+and the security model.
 
 ## Columns and statistics
 

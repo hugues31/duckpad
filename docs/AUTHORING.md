@@ -39,6 +39,7 @@ documentation.json     Node, output and column descriptions
 variables.json         Ordinary and computed variable declarations (optional)
 extensions.json        Project extension requirements (optional)
 views.json             Shared result views (optional)
+charts.json            Vega-Lite charts of node outputs (optional)
 templates/*.sql        Shared SQL templates
 nodes/*.sql            Code owned by normal nodes
 components/*.json      Reusable sub-flows
@@ -128,6 +129,12 @@ unique for its output, and optionally `rows` (1 to 10,000), `method` (`first` or
 `random`), `seed`, `filter` and `order` (`[column, "asc" | "desc"]` pairs).
 
 See [results and samples](RESULTS.md#data-and-samples) to create one in the UI.
+
+## Charts
+
+`charts.json` declares named Vega-Lite charts per node output, keyed like
+views. The [charts guide](CHARTS.md) describes its format, the allowed specs and
+how the Chart tab draws them.
 
 ## Related guides
 

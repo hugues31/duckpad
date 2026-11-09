@@ -106,6 +106,12 @@ export const sections = [
           "Explore data, save views, compute statistics and inspect the executed SQL.",
       },
       {
+        slug: "charts",
+        title: "Charts",
+        description:
+          "Draw node outputs with Vega-Lite charts declared in charts.json.",
+      },
+      {
         slug: "lineage",
         title: "Explain a value",
         description:

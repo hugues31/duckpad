@@ -3,7 +3,7 @@
 from collections import Counter
 from enum import Enum
 
-from . import partitions, processing, project_files, variables, views
+from . import named_documents, partitions, processing, project_files, variables
 from .bundle import files_to_bundle
 from .components import expand
 from .graph import reachable
@@ -83,14 +83,16 @@ def entities(bundle):
             result[f"variable/{key}"]["usages"] = used_by.get(key, [])
     elif declared is not None:
         add(f"file/{variables.FILE}", "file", variables.FILE, declared, variables.FILE)
-    shared = bundle.get("views")
-    named = views.by_name(shared)
-    if named is not None:
-        for key, values in sorted(named.items()):
-            for name, value in values.items():
-                add(f"view/{key}/{name}", "view", f"{name} view of {key}", value, views.FILE)
-    elif shared is not None:
-        add(f"file/{views.FILE}", "file", views.FILE, shared, views.FILE)
+    for spec in project_files.NAMED:
+        shared = bundle.get(spec.section)
+        named = named_documents.by_name(shared)
+        if named is not None:
+            for key, values in sorted(named.items()):
+                for name, value in values.items():
+                    entity = spec.entity
+                    add(f"{entity}/{key}/{name}", entity, f"{name} {entity} of {key}", value, spec.path)
+        elif shared is not None:
+            add(f"file/{spec.path}", "file", spec.path, shared, spec.path)
 
     def instance_name(identity):
         return node_name(bundle, identity)
@@ -141,8 +143,8 @@ def fields(before, after, prefix=""):
 
 
 def categories(kind, paths, before, after, language="sql"):
-    # Views choose which rows are displayed; they never change a result.
-    if kind in ("documentation", "view"):
+    # Views and charts choose how rows are displayed; they never change a result.
+    if kind in ("documentation", "view", "chart"):
         return ["documentation"]
     if kind == "node" and "sql" in paths and isinstance(before, dict) and isinstance(after, dict):
         other = [p for p in paths if p != "sql"]

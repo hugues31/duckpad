@@ -192,6 +192,19 @@ def test_example_runs_its_checks_messages_and_variables(app, client):
     snapshot = client.get(f"/api/worktrees/{example['id']}").json()
     assert snapshot["diagnostics"] == []
     assert [view["name"] for view in snapshot["bundle"]["views"]["validated:orders"]] == ["Orders to review"]
+    # The ranked output of Regional revenue, stored inside the instance, has a valid chart: points
+    # with tooltips on a revenue axis that does not start at 0.
+    assert list(snapshot["bundle"]["charts"]) == ["report::rank:result"]
+    [chart] = snapshot["bundle"]["charts"]["report::rank:result"]
+    assert chart["name"] == "Revenue by region"
+    assert chart["spec"]["mark"] == {"type": "circle", "size": 200, "tooltip": True}
+    assert chart["spec"]["encoding"]["x"] == {
+        "field": "revenue",
+        "type": "quantitative",
+        "title": "Revenue",
+        "format": ",",
+        "scale": {"zero": False},
+    }
     response = client.post(f"/api/worktrees/{example['id']}/runs", json={"environment": "dev"})
     run = wait_run(app.state.services.store, response.json(), timeout=120)
     assert run["status"] == "success"
