@@ -6,17 +6,17 @@ they read the retained result, never start a run and never make a result stale.
 Aggregate, bin and filter in SQL nodes, so that every plotted value is a cell of
 a node output and can be [explained](LINEAGE.md).
 
-![The Chart tab of Regional revenue with the Revenue by region bar chart](images/results-chart.png)
+![The Chart tab of Regional revenue with the Revenue by region dot plot](images/results-chart.png)
 
 ## Add a chart
 
 Charts are declared in `charts.json`, at the root of the project. For an output
 without a chart, the Chart tab offers **Add a chart** to editors and
-administrators: it saves a starter bar chart of the first two columns, creating
-`charts.json` when the project has none, and opens the file in the
-[Code tab](AUTHORING.md#edit-and-share-project-files). Edit the spec there, or in
-an external editor, then save. Readers, operators and read-only branches such as
-Job results see the charts without this action.
+administrators: it saves a starter bar chart of the first two columns, with
+tooltips, creating `charts.json` when the project has none, and opens the file
+in the [Code tab](AUTHORING.md#edit-and-share-project-files). Edit the spec
+there, or in an external editor, then save. Readers, operators and read-only
+branches such as Job results see the charts without this action.
 
 Adding a chart is a normal save: one commit, refused without the save permission,
 and a conflict to resolve when someone else saved first. The Northstar
@@ -33,10 +33,23 @@ and a conflict to resolve when someone else saved first. The Northstar
       "name": "Revenue by region",
       "spec": {
         "$schema": "https://vega.github.io/schema/vega-lite/v6.json",
-        "mark": "bar",
+        "mark": {"type": "circle", "size": 200, "tooltip": true},
+        "height": 200,
         "encoding": {
-          "x": {"field": "region", "type": "nominal", "sort": "-y"},
-          "y": {"field": "revenue", "type": "quantitative", "title": "Revenue"}
+          "x": {
+            "field": "revenue",
+            "type": "quantitative",
+            "title": "Revenue",
+            "format": ",",
+            "scale": {"zero": false}
+          },
+          "y": {"field": "region", "type": "nominal", "sort": "-x", "title": "Region"},
+          "color": {
+            "field": "region",
+            "type": "nominal",
+            "title": "Region",
+            "legend": null
+          }
         }
       }
     }
@@ -60,6 +73,11 @@ and a conflict to resolve when someone else saved first. The Northstar
 Fields name the output's columns. With several charts, a selector above the
 chart switches between them by name. A chart without `width` takes the width of
 the panel.
+
+The example plots points on a revenue axis that starts near the smallest value
+(`"scale": {"zero": false}`): bars always start at 0, which hides differences of
+a few percent. `"tooltip": true` on the mark shows the encoded values on hover;
+a `tooltip` channel picks other columns.
 
 ## Allowed specs
 

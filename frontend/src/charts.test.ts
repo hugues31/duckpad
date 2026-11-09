@@ -8,7 +8,7 @@ const COLUMNS = [
   { name: "orders", type: "BIGINT" },
 ];
 
-it("creates charts.json with a bar chart of the first two columns", () => {
+it("creates charts.json with a bar chart of the first two columns, with tooltips", () => {
   const bundle = {} as Bundle;
   addStarterChart(bundle, "report::sales:result", "New chart", COLUMNS);
   expect(bundle.charts).toEqual({
@@ -17,7 +17,7 @@ it("creates charts.json with a bar chart of the first two columns", () => {
         name: "New chart",
         spec: {
           $schema: "https://vega.github.io/schema/vega-lite/v6.json",
-          mark: "bar",
+          mark: { type: "bar", tooltip: true },
           encoding: {
             x: { field: "region", type: "nominal" },
             y: { field: "revenue", type: "quantitative" },
@@ -70,7 +70,7 @@ it("keeps the charts of other outputs", () => {
         name: "New chart",
         spec: {
           $schema: "https://vega.github.io/schema/vega-lite/v6.json",
-          mark: "bar",
+          mark: { type: "bar", tooltip: true },
           encoding: { x: { field: "region", type: "nominal" } },
         },
       },

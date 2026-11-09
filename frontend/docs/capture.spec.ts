@@ -114,7 +114,7 @@ test("record a real pipeline, source lineage and SQL workspace", async ({
     const results = page.getByRole("region", { name: "Results", exact: true });
     await click(page, results.getByRole("tab", { name: "Chart", exact: true }));
     await expect(
-      results.locator(".chart-view svg .mark-rect path"),
+      results.locator(".chart-view svg .mark-symbol path"),
     ).toHaveCount(4);
     await page.waitForTimeout(1800);
     await click(page, results.getByRole("tab", { name: "Data", exact: true }));

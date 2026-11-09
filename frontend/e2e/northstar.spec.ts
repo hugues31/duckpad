@@ -72,7 +72,8 @@ test("Northstar runs its data tests, messages, computed variable and shared view
     "10 of 107 rows match",
   );
 
-  // Regional revenue charts its ranked regions, the leading region first.
+  // Regional revenue charts its ranked regions, the leading region first, on
+  // a revenue axis that does not start at 0.
   await node("report").locator(".node-shape").click();
   await page.getByLabel("Output", { exact: true }).selectOption("report");
   await results.getByRole("tab", { name: "Chart", exact: true }).click();
@@ -80,12 +81,18 @@ test("Northstar runs its data tests, messages, computed variable and shared view
     "Revenue by region",
   );
   const chart = results.locator(".chart-view svg");
-  await expect(chart.locator(".mark-rect path")).toHaveCount(4);
-  const regions = chart
-    .locator(".role-axis")
-    .filter({ hasText: "region" })
-    .locator(".role-axis-label text");
-  await expect(regions).toHaveText(["South", "North", "West", "East"]);
+  const points = chart.locator(".mark-symbol path");
+  await expect(points).toHaveCount(4);
+  const axis = (title: string) =>
+    chart
+      .locator(".role-axis")
+      .filter({ has: page.locator(".role-axis-title", { hasText: title }) })
+      .locator(".role-axis-label text");
+  await expect(axis("Region")).toHaveText(["South", "North", "West", "East"]);
+  await expect(axis("Revenue").first()).not.toHaveText("0");
+  // Hovering a point shows its values as a tooltip.
+  await points.first().hover();
+  await expect(page.locator("#vg-tooltip-element")).toContainText("South");
   // The chart fits the panel's width rather than overflowing it.
   const view = results.locator(".chart-view");
   expect(

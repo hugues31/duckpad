@@ -58,8 +58,8 @@ export function unknownFields(spec: ChartSpec, columns: Column[]) {
 }
 
 /**
- * Add a starter bar chart of the first two columns to an output (`node:port`),
- * creating charts.json when the project has none.
+ * Add a starter bar chart of the first two columns, with tooltips, to an output
+ * (`node:port`), creating charts.json when the project has none.
  */
 export function addStarterChart(
   bundle: Bundle,
@@ -72,7 +72,7 @@ export function addStarterChart(
     name,
     spec: {
       $schema: "https://vega.github.io/schema/vega-lite/v6.json",
-      mark: "bar",
+      mark: { type: "bar", tooltip: true },
       encoding: {
         ...(x && { x: { field: x.name, type: "nominal" } }),
         ...(y && { y: { field: y.name, type: "quantitative" } }),

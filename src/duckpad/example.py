@@ -401,12 +401,26 @@ SELECT 'The report has no rows' AS problem FROM {{ source }} HAVING COUNT(*) = 0
             "report::rank:result": [
                 {
                     "name": "Revenue by region",
+                    # Points on an axis that does not start at 0: regional revenues differ by a few percent.
                     "spec": {
                         "$schema": "https://vega.github.io/schema/vega-lite/v6.json",
-                        "mark": "bar",
+                        "mark": {"type": "circle", "size": 200, "tooltip": True},
+                        "height": 200,
                         "encoding": {
-                            "x": {"field": "region", "type": "nominal", "sort": "-y"},
-                            "y": {"field": "revenue", "type": "quantitative", "title": "Revenue"},
+                            "x": {
+                                "field": "revenue",
+                                "type": "quantitative",
+                                "title": "Revenue",
+                                "format": ",",
+                                "scale": {"zero": False},
+                            },
+                            "y": {"field": "region", "type": "nominal", "sort": "-x", "title": "Region"},
+                            "color": {
+                                "field": "region",
+                                "type": "nominal",
+                                "title": "Region",
+                                "legend": None,
+                            },
                         },
                     },
                 }

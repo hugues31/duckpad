@@ -369,7 +369,9 @@ test("capture the results panel: samples, columns, tests, log and chart", async 
   await expect(panel.getByRole("figure")).toHaveAccessibleName(
     "Revenue by region",
   );
-  await expect(panel.locator(".chart-view svg .mark-rect path")).toHaveCount(4);
+  await expect(panel.locator(".chart-view svg .mark-symbol path")).toHaveCount(
+    4,
+  );
   await capture(page, "results-chart", panel);
 });
 

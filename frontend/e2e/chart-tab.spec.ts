@@ -139,7 +139,7 @@ test("Add a chart creates charts.json in one commit and opens it in Code", async
         name: en.chartStarterName,
         spec: {
           $schema: "https://vega.github.io/schema/vega-lite/v6.json",
-          mark: "bar",
+          mark: { type: "bar", tooltip: true },
           encoding: {
             x: { field: x, type: "nominal" },
             y: { field: y, type: "quantitative" },
@@ -200,7 +200,7 @@ test("Add a chart on a stale revision reports the conflict and keeps both change
   expect(
     JSON.parse(conflict.proposal["charts.json"])["validated:orders"][0].spec
       .mark,
-  ).toBe("bar");
+  ).toEqual({ type: "bar", tooltip: true });
 });
 
 test("readers and read-only branches see no Add a chart, and a reader cannot save one", async ({
