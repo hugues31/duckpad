@@ -9,6 +9,7 @@ import {
 } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import ProjectSettings from "./ProjectSettings";
+import en from "./locales/en.json";
 import type { Workspace } from "./types";
 
 afterEach(() => {
@@ -19,6 +20,68 @@ const json = (value: unknown) =>
   new Response(JSON.stringify(value), {
     headers: { "content-type": "application/json" },
   });
+
+it.each(["member", "admin"])(
+  "only lets an instance admin save connections (instance role: %s)",
+  async (role) => {
+    let connections = ["warehouse"];
+    const writes: unknown[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, options?: RequestInit) => {
+        if (options?.method === "PUT") {
+          const body = JSON.parse(String(options.body));
+          writes.push(body);
+          connections = body.connections;
+        }
+        return json({
+          project: { name: "Example" },
+          role: "admin",
+          users: [],
+          members: [],
+          connections,
+        });
+      }),
+    );
+    render(
+      <MemoryRouter>
+        <ProjectSettings
+          project="example"
+          section="connections"
+          workspace={
+            {
+              user: { role },
+              catalog: {
+                connections: [{ id: "warehouse", name: "Warehouse" }],
+              },
+            } as unknown as Workspace
+          }
+          refresh={async () => {}}
+          onDeleted={() => {}}
+        />
+      </MemoryRouter>,
+    );
+    const grant = await screen.findByRole("checkbox", { name: "Warehouse" });
+    await waitFor(() => expect(grant).toHaveProperty("checked", true));
+    if (role !== "admin") {
+      expect(grant).toHaveProperty("disabled", true);
+      expect(screen.getByText(en.projectInstanceAdminHint)).toBeTruthy();
+      expect(
+        screen.queryByRole("button", { name: en.saveConnections }),
+      ).toBeNull();
+      expect(writes).toEqual([]);
+    } else {
+      const save = screen.getByRole("button", { name: en.saveConnections });
+      expect(save).toHaveProperty("disabled", true);
+      expect(grant).toHaveProperty("disabled", false);
+      fireEvent.click(grant);
+      expect(save).toHaveProperty("disabled", false);
+      fireEvent.click(save);
+      await waitFor(() => expect(writes).toEqual([{ connections: [] }]));
+      await waitFor(() => expect(save).toHaveProperty("disabled", true));
+    }
+  },
+);
 
 it("saves Python activation explicitly and disables source builds until activation", async () => {
   let policy = { enabled: false, allow_builds: false };

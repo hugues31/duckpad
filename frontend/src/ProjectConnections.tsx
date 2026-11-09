@@ -41,18 +41,20 @@ export default function ProjectConnections({
           </label>
         ))}
       </div>
-      <div className="row gap">
-        <button
-          className="button secondary"
-          disabled={!instanceAdmin || pending || !grants.dirty}
-          onClick={onSave}
-        >
-          {t("saveConnections")}
-        </button>
-        {grants.dirty && (
-          <span className="muted small">{t("unsavedChanges")}</span>
-        )}
-      </div>
+      {instanceAdmin && (
+        <div className="row gap">
+          <button
+            className="button secondary"
+            disabled={pending || !grants.dirty}
+            onClick={onSave}
+          >
+            {t("saveConnections")}
+          </button>
+          {grants.dirty && (
+            <span className="muted small">{t("unsavedChanges")}</span>
+          )}
+        </div>
+      )}
     </div>
   );
 }

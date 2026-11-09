@@ -1337,6 +1337,7 @@
   "myProposal": "My proposal",
   "generalSettings": "General",
   "projectInstanceAdminHint": "Only an instance administrator can change these settings.",
+  "pythonExecutionDisabled": "Python execution is disabled for this project. Only an instance administrator can enable it in Project settings > Python.",
   "pythonSecretsHint": "Enabling Python gives code access to the secrets of all authorized connections in this project. Only enable it for code you trust.",
   "pythonBuildsHint": "Dependencies use wheels by default. Source builds execute package installation code on the server.",
   "pythonResetHint": "Stop this project’s active runs before saving. Saving these settings clears cached project results; run the flow again to recompute them.",

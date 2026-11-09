@@ -1337,6 +1337,7 @@
   "myProposal": "Minha proposta",
   "generalSettings": "Geral",
   "projectInstanceAdminHint": "Somente um administrador da instância pode alterar estas configurações.",
+  "pythonExecutionDisabled": "A execução de Python está desativada para este projeto. Somente um administrador da instância pode ativá-la em Configurações do projeto > Python.",
   "pythonSecretsHint": "Ao ativar Python, o código terá acesso aos segredos de todas as conexões autorizadas neste projeto. Ative apenas para código confiável.",
   "pythonBuildsHint": "As dependências usam wheels por padrão. A compilação executa código de instalação de pacotes no servidor.",
   "pythonResetHint": "Interrompa as execuções ativas do projeto antes de salvar. Salvar estas configurações apaga os resultados em cache do projeto; execute o fluxo novamente para recalculá-los.",
