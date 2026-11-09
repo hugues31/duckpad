@@ -149,3 +149,62 @@ test("Python preparation is visible in the workspace and retained in settings", 
     "No matching distribution",
   );
 });
+
+test("run details refresh preparation and the final status together", async ({
+  page,
+}) => {
+  await signIn(page);
+  const created = await page.request.post("/api/projects", {
+    data: { name: "Run preparation" },
+  });
+  const tree = await created.json();
+  let run = {
+    id: "preparation-run",
+    project: tree.project,
+    worktree: tree.id,
+    branch: tree.branch,
+    environment: "dev",
+    status: "preparing",
+    commit: "",
+    started: new Date().toISOString(),
+    nodes: {},
+    variables: {},
+    connections: {},
+    preparation: [
+      {
+        operation: "install",
+        state: "installing",
+        stage: "installing",
+        log: "Downloading packages",
+      },
+    ],
+  };
+  await page.route("**/runs/preparation-run", (route) =>
+    route.fulfill({ json: run }),
+  );
+  await page.goto(`/worktrees/${tree.id}/history?run=preparation-run`);
+  const dialog = page.getByRole("dialog", { name: "View execution" });
+  await expect(dialog.locator(".badge.preparing")).toBeVisible();
+  const preparation = dialog.getByRole("region", {
+    name: "Python environment",
+    exact: true,
+  });
+  await expect(preparation.getByRole("progressbar")).toBeVisible();
+  await preparation.getByText("Preparation log", { exact: true }).click();
+  await expect(preparation.getByRole("log")).toContainText(
+    "Downloading packages",
+  );
+  run = {
+    ...run,
+    status: "success",
+    preparation: [
+      { ...run.preparation[0], state: "ready", log: "Installed packages" },
+    ],
+  };
+  await expect(dialog.locator(".badge.success")).toBeVisible();
+  await expect(dialog.locator(".badge.preparing")).toHaveCount(0);
+  await expect(preparation.getByRole("progressbar")).toHaveCount(0);
+  await expect(preparation.getByRole("log")).toContainText(
+    "Installed packages",
+  );
+});

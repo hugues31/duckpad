@@ -1,5 +1,5 @@
 import { AlertCircle, ArrowRight, Check, Clock, GitBranch } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import { withQuery } from "./api";
 import AskAssistant from "./AskAssistant";
@@ -251,7 +251,11 @@ export default function HistoryPanel({
             {selected.entry_point === "assistant" && (
               <p className="muted">{t("assistantRunEntryPoint")}</p>
             )}
-            <RunDetails run={selected} onClose={() => setSelected(null)} />
+            <RunDetails
+              run={selected}
+              onUpdate={setSelected}
+              onClose={() => setSelected(null)}
+            />
           </div>
         </Modal>
       )}
@@ -270,6 +274,7 @@ export default function HistoryPanel({
 /** The captured requester, configuration and node logs of a run. */
 export function RunDetails(props: {
   run: Run;
+  onUpdate?: (run: Run) => void;
   onClose: () => void;
   onPartitionRetry?: () => void;
 }) {
@@ -287,6 +292,11 @@ export function RunDetails(props: {
           : false,
     },
   );
+  const { onUpdate } = props;
+  const updated = detail.data;
+  useEffect(() => {
+    if (updated) onUpdate?.(updated);
+  }, [updated, onUpdate]);
   if (detail.error)
     return (
       <p className="notice error" role="alert">
