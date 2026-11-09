@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { signIn } from "./helpers";
-import type { Run, Snapshot } from "../src/types";
+import { partitionFlow } from "./partitions-flow";
+import type { PreviewPage, Run, Snapshot } from "../src/types";
 
 /** A point per row: every rendered row is one SVG symbol. */
 const POINTS = {
@@ -96,18 +97,36 @@ test("a chart draws an output of 5,000 rows and refuses 5,001 with the count", a
   });
   await run(page, endpoint);
 
+  const chartRequests: string[] = [];
+  page.on("request", (request) => {
+    if (
+      request.url().includes("/preview/fits") &&
+      new URL(request.url()).searchParams.get("limit") === "5000"
+    )
+      chartRequests.push(request.url());
+  });
   const fits = await chartTab(page, id, "fits");
   await expect(fits.locator(".chart-view .mark-symbol path")).toHaveCount(
     5000,
     { timeout: 20000 },
   );
 
-  const over = await chartTab(page, id, "over");
+  expect(chartRequests).toHaveLength(1);
+  const previews: Promise<PreviewPage>[] = [];
+  page.on("response", (response) => {
+    if (response.url().includes("/preview/over") && response.ok())
+      previews.push(response.json());
+  });
+  // Keep Chart selected when changing nodes, so the Data tab loads no sample.
+  await page.locator('.react-flow__node[data-id="over"]').click();
+  const over = fits;
   const refusal = over.getByRole("status").filter({ hasText: "5,001 rows" });
   await expect(refusal).toContainText("5,000");
   await expect(refusal).toContainText("Aggregate");
   await expect(over.locator(".chart-view")).toHaveCount(0);
   await expect(over.locator("svg.marks")).toHaveCount(0);
+  for (const preview of await Promise.all(previews))
+    expect(preview.rows.length).toBeLessThanOrEqual(1);
 });
 
 test("the Chart tab shows the Data tab's Run hint, Stale badge and failed run", async ({
@@ -210,4 +229,54 @@ test("raw dotted and bracketed columns render in starter and authored charts", a
   ).toHaveCount(2);
   await expect(panel.locator(".role-legend-title")).toHaveText("a.b");
   await expect(panel.getByRole("alert")).toHaveCount(0);
+});
+
+test("the chart limit follows the selected partition and refuses all partitions without rows", async ({
+  page,
+}) => {
+  test.setTimeout(90000);
+  await signIn(page);
+  const { id } = await (
+    await page.request.post("/api/projects", {
+      data: { name: "Partition chart limit" },
+    })
+  ).json();
+  const endpoint = `/api/worktrees/${id}`;
+  const snapshot: Snapshot = await (await page.request.get(endpoint)).json();
+  const bundle = structuredClone(partitionFlow);
+  bundle.templates.source =
+    "-- @output result\nSELECT batch, range AS amount FROM (VALUES ('batch-011'), ('batch-012')) t(batch) CROSS JOIN range(3000);";
+  bundle.charts = {
+    "transform:result": [
+      {
+        name: "Amounts",
+        spec: {
+          mark: "point",
+          encoding: { x: { field: "amount", type: "quantitative" } },
+        },
+      },
+    ],
+  };
+  await save(page, endpoint, snapshot.revision, bundle);
+  await run(page, endpoint);
+  const panel = await chartTab(page, id, "transform");
+  await expect(
+    panel.getByRole("status").filter({ hasText: "6,000 rows" }),
+  ).toBeVisible();
+  await panel.getByRole("button", { name: /^batch-011 · Valid/ }).click();
+  await expect(
+    panel.locator(".chart-view .mark-symbol.role-mark path"),
+  ).toHaveCount(3000, { timeout: 20000 });
+  const previews: Promise<PreviewPage>[] = [];
+  page.on("response", (response) => {
+    if (response.url().includes("/preview/transform") && response.ok())
+      previews.push(response.json());
+  });
+  await panel.getByRole("button", { name: "All", exact: true }).click();
+  await expect(
+    panel.getByRole("status").filter({ hasText: "6,000 rows" }),
+  ).toBeVisible();
+  await expect(panel.locator(".chart-view")).toHaveCount(0);
+  for (const preview of await Promise.all(previews))
+    expect(preview.rows.length).toBeLessThanOrEqual(1);
 });
