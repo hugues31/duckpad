@@ -13,7 +13,7 @@ import { useAsyncAction } from "./useAsyncAction";
 const SETUP_PREFIX = "#setup=";
 
 /** The token of a first-launch setup link, which `duckpad start` opens as `/#setup=<token>`. */
-export function setupTokenFrom(hash: string) {
+function setupTokenFrom(hash: string) {
   return (
     (hash.startsWith(SETUP_PREFIX) && hash.slice(SETUP_PREFIX.length)) || null
   );

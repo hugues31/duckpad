@@ -174,3 +174,7 @@ def test_the_reset_hint_omits_the_default_home(monkeypatch, tmp_path):
     monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
     assert cli.reset_command(tmp_path / "duckpad") == "duckpad reset-password"
     assert cli.reset_command(tmp_path / "other") == f"duckpad reset-password --home {tmp_path / 'other'}"
+    assert (
+        cli.reset_command(tmp_path / "my instance")
+        == f'duckpad reset-password --home "{tmp_path / "my instance"}"'
+    )

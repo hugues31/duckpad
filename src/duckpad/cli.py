@@ -62,14 +62,18 @@ def main():
     )
     args = parser.parse_args()
     if args.command == "reset-password":
-        reset_password(parser, args)
+        reset_password(reset, args)
     else:
         start_server(parser, args)
 
 
 def reset_command(home):
     """The reset command for this instance, with --home only when it is not the default."""
-    return "duckpad reset-password" + ("" if home == default_home() else f" --home {home}")
+    if home == default_home():
+        return "duckpad reset-password"
+    # Double quotes keep a path with spaces in one argument in POSIX shells, PowerShell and cmd.
+    quoted = f'"{home}"' if any(c.isspace() for c in str(home)) else home
+    return f"duckpad reset-password --home {quoted}"
 
 
 def reset_password(parser, args):

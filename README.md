@@ -33,7 +33,7 @@ source.
 ## Try it
 
 On a supported host with Python 3.11+ and Git installed (see
-[platform requirements](docs/INSTALLATION.md#start)):
+[platform requirements](docs/INSTALLATION.md#platform-requirements)):
 
 ```sh
 pip install duckpad

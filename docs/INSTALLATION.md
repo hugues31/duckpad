@@ -98,7 +98,9 @@ In a container built from the repository's `Dockerfile`, run
 `docker exec -it <container> duckpad reset-password --home /data/duckpad`.
 Single sign-on and service accounts have no Duckpad password, and a deactivated
 account must be reactivated first. The command needs access to the instance
-directory, which already holds the instance's secrets.
+directory, which already holds the instance's secrets: run it as the
+operating-system user that runs Duckpad, with the same `DUCKPAD_MASTER_KEY_FILE`
+or `DUCKPAD_MASTER_KEY` if you [provide the master key](#secrets-and-the-master-key).
 
 After a failed attempt, the sign-in page shows these steps too:
 
