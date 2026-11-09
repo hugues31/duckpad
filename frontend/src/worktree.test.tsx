@@ -84,7 +84,7 @@ it.each([
 ] as const)(
   "explains Python refusals for direct and confirmed runs in %s",
   async (language, labels) => {
-    const detail = { reason: "policy" };
+    const detail = { code: "python_disabled" };
     vi.stubGlobal(
       "fetch",
       vi.fn(

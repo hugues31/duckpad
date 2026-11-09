@@ -186,8 +186,9 @@ def test_project_requires_administrator_activation(services):
     store, _, _, engine = services
     worktree = flow(services)
     store.put("settings", "python:" + worktree["project"], {"enabled": False})
-    with pytest.raises(Problem, match="disabled"):
+    with pytest.raises(Problem, match="disabled") as refused:
         engine.launch(worktree["id"], "dev")
+    assert refused.value.detail == {"code": "python_disabled"}
 
 
 def single(services, code, *, params=None, variables=None):

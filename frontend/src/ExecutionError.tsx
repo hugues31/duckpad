@@ -1,12 +1,14 @@
 import { AlertCircle, Code2 } from "lucide-react";
 import AskAssistant from "./AskAssistant";
-import { executionErrorMessage } from "./executionErrors";
 import { useT } from "./i18n";
 import type { NodeResult } from "./types";
 import { Link } from "react-router";
 import { missingFunctionExtension } from "./extensions";
 import { useOptionalWorktree } from "./worktree";
 import { projectPageUrl } from "./navigation";
+
+/** Node errors carry no code: a run whose Python policy was disabled mid-run fails with this. */
+const PYTHON_DISABLED = "Python execution is disabled";
 
 export default function ExecutionError({
   failure,
@@ -46,7 +48,10 @@ export default function ExecutionError({
         )}
       </div>
       <pre className="execution-error-message">
-        {executionErrorMessage(diagnostic?.message || failure.error || "", t)}
+        {diagnostic?.message ||
+          (failure.error === PYTHON_DISABLED
+            ? t("pythonExecutionDisabled")
+            : failure.error)}
       </pre>
       {extension && worktree?.canEdit && worktree.snapshot && (
         <p>
