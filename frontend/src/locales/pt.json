@@ -981,7 +981,7 @@
   "assistantWriteDocs": "Escreve documentação",
   "assistantEditVariable": "Edita uma variável",
   "assistantGroupNodes": "Agrupa nós",
-  "assistantEditChart": "Gráfico editado",
+  "assistantEditChart": "Edita um gráfico",
   "assistantUndo": "Desfazer",
   "assistantUndoTurn": "Desfazer estas {count} alterações",
   "assistantUndone": "Desfeita",
