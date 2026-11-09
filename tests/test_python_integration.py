@@ -11,6 +11,7 @@ import pytest
 from helpers import wait_run
 from test_python_nodes import SPLIT, flow, single
 
+from duckpad import python_environment
 from duckpad.bundle import bundle_to_files
 from duckpad.components import group, import_definition
 from duckpad.python_environment import lock_files, runtime_tag, runtime_wheel
@@ -90,6 +91,68 @@ def test_disabled_python_does_not_block_independent_sql(services):
     result = wait_run(store, engine.launch(tree["id"], "dev", "source"), timeout=30)
     assert result["status"] == "success"
     assert engine.preview(tree["id"], "dev", "source")["count"] == 5
+
+
+@pytest.mark.parametrize("existing_worker", [False, True])
+@pytest.mark.parametrize("save_at", ["lock", "context"])
+def test_python_worker_uses_run_snapshot_during_dependency_save(
+    services, monkeypatch, existing_worker, save_at
+):
+    store, projects, _, engine = services
+    tree = single(
+        services,
+        """import duckpad as dp
+import humanize
+
+class Version(dp.Node):
+    def run(self) -> dp.Relation:
+        return self.db.sql("SELECT '" + humanize.__version__ + "' AS version")
+""",
+    )
+    snapshot = projects.snapshot(tree["id"])
+    files = dict(snapshot["files"])
+    files["pyproject.toml"] = files["pyproject.toml"].replace(
+        '"pytz>=2024.1"', '"pytz>=2024.1", "humanize==4.13.0"'
+    )
+    snapshot = projects.write(tree["id"], snapshot["revision"], files)
+    if existing_worker:
+        warmup = wait_run(store, engine.launch(tree["id"], "dev"), timeout=40)
+        assert warmup["status"] == "success", warmup
+    # A stale lock makes the run resolve and save one: a dependency save can land meanwhile.
+    captured = projects.write(
+        tree["id"],
+        snapshot["revision"],
+        {
+            **snapshot["files"],
+            "pyproject.toml": files["pyproject.toml"].replace("4.13.0", "4.12.3"),
+        },
+        relock=save_at != "lock",
+    )
+    owner, method = (
+        (python_environment, "lock_files") if save_at == "lock" else (engine.runs.planner, "open_context")
+    )
+    original = getattr(owner, method)
+    saved = []
+
+    def save_dependencies(*args, **kwargs):
+        if not saved:
+            saved.append(None)  # The save resolves its own lock through the patched lock_files.
+            saved[0] = projects.write(tree["id"], captured["revision"], files)
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(owner, method, save_dependencies)
+    first = wait_run(store, engine.launch(tree["id"], "dev"), timeout=40)
+    assert first["status"] == "success", first
+    assert len(saved) == 1
+    if save_at == "context":
+        # In the lock window, the run's lock commit lands on top of the concurrent save.
+        assert first["commit"] == captured["commit"]
+    assert engine.preview(tree["id"], "dev", "python")["rows"][0]["values"] == ["4.12.3"]
+    second = wait_run(store, engine.launch(tree["id"], "dev"), timeout=40)
+    assert second["status"] == "success", second
+    assert second["commit"] == saved[0]["commit"]
+    assert engine.preview(tree["id"], "dev", "python")["rows"][0]["values"] == ["4.13.0"]
+    assert first["nodes"]["python"]["fingerprint"] != second["nodes"]["python"]["fingerprint"]
 
 
 def test_canceled_cursor_rejects_python_before_reading_its_payload(services):

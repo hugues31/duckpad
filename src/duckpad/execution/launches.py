@@ -564,24 +564,30 @@ class LaunchPlanner:
                 {**files, "uv.lock": locked},
                 message="build(project): lock Python dependencies",
             )
-        bundle["python_lock"] = snapshot["files"].get("uv.lock")
+        # A dependency save merged meanwhile keeps its own lock: the run uses the one for its manifest.
+        bundle["python_lock"] = locked
         return snapshot
 
     def open_context(
         self, worktree: str, environment: str, bundle: Record, token: RunToken, needs_python: bool
     ) -> Context:
         requirements = project_extensions.enabled(bundle.get("extensions"))
-        self.check_canceled(token)
-        context = self.pool.restart_for_run(
-            worktree, environment, requirements=requirements, python=needs_python
+        python_files = (
+            {"pyproject.toml": bundle["pyproject"], "uv.lock": bundle["python_lock"]}
+            if needs_python
+            else None
         )
         self.check_canceled(token)
-        self.pool.renew(context, python=needs_python)
+        context = self.pool.restart_for_run(
+            worktree, environment, requirements=requirements, python_files=python_files
+        )
+        self.check_canceled(token)
+        self.pool.renew(context, python_files=python_files)
         self.check_canceled(token)
         if getattr(context.db, "closed", False):
             # The results could not move to a worker with the new connections or environment.
             context = self.pool.restart_for_run(
-                worktree, environment, requirements=requirements, python=needs_python
+                worktree, environment, requirements=requirements, python_files=python_files
             )
         self.check_canceled(token)
         return context

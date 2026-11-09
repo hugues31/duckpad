@@ -46,8 +46,12 @@ def benchmark(rows):
             bundle["node_sql"] = {
                 "nodes/python.py": "import duckpad as dp\nclass Filter(dp.Node):\n    def run(self, source: dp.Relation) -> dp.Relation:\n        return source.filter('category < 50')\n"
             }
-            projects.write(worktree["id"], snapshot["revision"], bundle_to_files(bundle))
-            context = engine.pool.restart_for_run(worktree["id"], "dev", python=True)
+            snapshot = projects.write(worktree["id"], snapshot["revision"], bundle_to_files(bundle))
+            context = engine.pool.restart_for_run(
+                worktree["id"],
+                "dev",
+                python_files={name: snapshot["files"][name] for name in ("pyproject.toml", "uv.lock")},
+            )
             api, worker = psutil.Process(), psutil.Process(context.db.process.pid)
             baseline = api.memory_info().rss + worker.memory_info().rss
             peak = baseline
