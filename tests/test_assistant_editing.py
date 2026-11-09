@@ -24,6 +24,7 @@ from duckpad.util import Problem
 
 SQL = "-- @output result\nSELECT 1 AS value;\n"
 BAR = {"mark": "bar", "encoding": {"x": {"field": "value", "type": "quantitative"}}}
+LINE = {"mark": "line", "encoding": {"y": {"field": "value", "type": "quantitative"}}}
 
 
 def seed(app, client):
@@ -138,13 +139,7 @@ def change(app, worktree, callback):
         ),
         (
             "edit_chart",
-            {
-                "operation": "update",
-                "node": "first",
-                "output": "result",
-                "name": "Values",
-                "spec": {"mark": "line", "encoding": {"y": {"field": "value", "type": "quantitative"}}},
-            },
+            {"operation": "update", "node": "first", "output": "result", "name": "Values", "spec": LINE},
         ),
         (
             "edit_chart",
@@ -610,7 +605,6 @@ def test_charts_are_created_under_the_stored_output_key_and_committed_one_by_one
     app, client = instance
     worktree, context = seed(app, client)
     add_component_instance(app, worktree)
-    line = {"mark": "line", "encoding": {"y": {"field": "value", "type": "quantitative"}}}
     calls = [
         (
             "edit_chart",
@@ -618,7 +612,7 @@ def test_charts_are_created_under_the_stored_output_key_and_committed_one_by_one
         ),
         (
             "edit_chart",
-            {"operation": "create", "node": "summary", "output": "ranked", "name": "Trend", "spec": line},
+            {"operation": "create", "node": "summary", "output": "ranked", "name": "Trend", "spec": LINE},
         ),
     ]
     identity, result = write_turn(app, client, context, calls)
@@ -626,7 +620,7 @@ def test_charts_are_created_under_the_stored_output_key_and_committed_one_by_one
     projects = app.state.services.projects
     assert projects.snapshot(worktree["id"])["bundle"]["charts"] == {
         "first:result": [{"name": "Values", "spec": BAR}],
-        "summary::rank:result": [{"name": "Trend", "spec": line}],
+        "summary::rank:result": [{"name": "Trend", "spec": LINE}],
     }
     undo(client, identity, result, context, result["tools"][1]["id"])
     assert projects.snapshot(worktree["id"])["bundle"]["charts"] == {
@@ -665,9 +659,6 @@ def test_invalid_chart_creations_preserve_saved_files(instance, args, message):
     assert app.state.services.projects.snapshot(worktree["id"])["files"] == before["files"]
 
 
-LINE = {"mark": "line", "encoding": {"y": {"field": "value", "type": "quantitative"}}}
-
-
 def test_chart_updates_replace_the_spec_renames_stay_on_the_output_and_last_deletes_drop_the_key(instance):
     app, client = instance
     worktree, context = seed(app, client)
@@ -696,6 +687,8 @@ def test_chart_updates_replace_the_spec_renames_stay_on_the_output_and_last_dele
         ({"operation": "update", "name": "Values"}, "Provide a chart spec"),
         ({"operation": "rename", "name": "Missing", "new_name": "Lines"}, "Chart not found"),
         ({"operation": "rename", "name": "Values", "new_name": "Trend"}, "already exists"),
+        ({"operation": "rename", "name": "Values"}, "Provide a new chart name"),
+        ({"operation": "rename", "name": "Values", "new_name": ""}, "Provide a new chart name"),
         ({"operation": "delete", "name": "Missing"}, "Chart not found"),
         (
             {"operation": "rename", "name": "Values", "new_name": "Lines", "spec": LINE},
@@ -731,22 +724,43 @@ def test_saved_charts_report_fields_the_materialized_output_lacks(instance):
         "layer": [{"mark": "rule", "encoding": {"tooltip": [{"field": "value"}, {"field": "missing"}]}}],
     }
 
-    def create(name, spec):
-        args = {"operation": "create", "node": "first", "output": "result", "name": name, "spec": spec}
+    def save(operation, name, spec):
+        args = {"operation": operation, "node": "first", "output": "result", "name": name, "spec": spec}
         _, result = write_turn(app, client, context, [("edit_chart", args)])
         assert result["tools"][0]["status"] == "complete", result
         return json.loads(result["tools"][0]["summary"])
 
-    assert "unknown_fields" not in create("Before the run", misspelled)
+    assert "unknown_fields" not in save("create", "Before the run", misspelled)
     run = app.state.services.engine.launch(worktree["id"], "dev")
     assert join_run(app.state.services.store, run["id"])["status"] == "success"
-    assert create("Misspelled", misspelled)["unknown_fields"] == ["vaule", "missing"]
-    assert "unknown_fields" not in create("Correct", BAR)
+    assert save("create", "Misspelled", misspelled)["unknown_fields"] == ["vaule", "missing"]
+    assert "unknown_fields" not in save("create", "Correct", BAR)
+    retyped = {"mark": "line", "encoding": {"y": {"field": "valeu", "type": "quantitative"}}}
+    assert save("update", "Correct", retyped)["unknown_fields"] == ["valeu"]
     names = [
         c["name"]
         for c in app.state.services.projects.snapshot(worktree["id"])["bundle"]["charts"]["first:result"]
     ]
     assert names == ["Before the run", "Misspelled", "Correct"]
+
+
+def test_chart_field_warnings_ignore_flow_errors_elsewhere_in_the_project(instance):
+    from helpers import join_run
+
+    app, client = instance
+    worktree, context = seed(app, client)
+    run = app.state.services.engine.launch(worktree["id"], "dev")
+    assert join_run(app.state.services.store, run["id"])["status"] == "success"
+    change(
+        app,
+        worktree,
+        lambda b: b["flow"]["nodes"].append({"id": "broken", "component": "gone", "params": {}}),
+    )
+    misspelled = {"mark": "bar", "encoding": {"x": {"field": "vaule"}}}
+    args = {"operation": "create", "node": "first", "output": "result", "name": "Typo", "spec": misspelled}
+    _, result = write_turn(app, client, context, [("edit_chart", args)])
+    assert result["tools"][0]["status"] == "complete", result
+    assert json.loads(result["tools"][0]["summary"])["unknown_fields"] == ["vaule"]
 
 
 def test_editors_are_told_charts_are_vega_lite_even_without_data_reading(instance):

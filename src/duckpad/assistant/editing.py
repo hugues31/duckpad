@@ -7,7 +7,9 @@ from pydantic_ai import RunContext
 
 from .. import variables
 from ..bundle import bundle_to_files
-from ..components import expand, group
+from ..charts import encoded_fields
+from ..components import expand, expand_for, group
+from ..graph import reachable
 from ..node_code import code_path, find_node
 from ..util import Problem
 from .arguments import CreateVariable, DeleteVariable, RenameVariable, UpdateVariable
@@ -184,10 +186,7 @@ def write_documentation(
         if section == "nodes":
             docs.setdefault("nodes", {})[node] = text
         else:
-            nodes, _, boundaries = expand(bundle, tolerant=True)
-            outputs = boundaries[node]["outputs"] if node in boundaries else nodes[node]["parsed"]["outputs"]
-            if output not in outputs:
-                raise Problem("Output port not found", 404)
+            output_port(bundle, node, output)
             key = f"{node}:{output}"
             if section == "datasets":
                 docs.setdefault("datasets", {})[key] = text
@@ -260,46 +259,42 @@ def group_nodes(ctx: RunContext[Dependencies], nodes: list[str], name: str, comp
     return save(ctx, snapshot, bundle, selected=selected)
 
 
-def output_key(bundle, node, output):
-    """The key storing an output's rows: `node:port`, or `instance::node:port` behind an instance port."""
-    find_node(bundle, node)
+def output_port(bundle, node, output):
+    """The `(node, port)` producing a node's output, through component instance boundaries."""
     nodes, _, boundaries = expand(bundle, tolerant=True)
-    ports = boundaries[node]["outputs"] if node in boundaries else None
-    if ports is None:
-        ports = {port: (node, port) for port in nodes.get(node, {}).get("parsed", {}).get("outputs", [])}
+    if node in boundaries:
+        ports = boundaries[node]["outputs"]
+    else:
+        ports = {port: (node, port) for port in nodes[node]["parsed"]["outputs"]}
     if output not in ports:
         raise Problem("Output port not found", 404)
-    producer, port = ports[output]
-    return f"{producer}:{port}"
+    return ports[output]
 
 
-def unknown_fields(ctx, key, spec) -> dict:
-    """`unknown_fields`: the fields a chart encodes that the output's materialized columns lack.
+def unknown_fields_warning(ctx, bundle, node, port, spec) -> dict:
+    """`unknown_fields`: the fields a chart encodes that the materialized columns of an output lack.
 
-    Mirrors the Chart tab's check (top level and layers). Reads schema metadata only, from the
-    page's environment; nothing when the output was never run or its schema cannot be read.
+    Reads schema metadata only, from the page's environment; nothing when the output was never run.
+    Errors elsewhere in the flow do not matter, but the connections the output's rows come from
+    must still be granted.
     """
+    environment = ctx.deps.context["environment"]
     try:
-        worktree, environment = ctx.deps.results()
+        ctx.deps.services.catalog.environment(environment)
+        nodes, edges, _ = expand_for(bundle, environment, tolerant=True)
+        lineage = reachable({node}, edges, upstream=True)
+        ctx.deps.require_connections({k: v for k, v in nodes.items() if k in lineage})
     except Problem:
         return {}
-    context = ctx.deps.services.engine.pool.find(worktree, environment)
+    context = ctx.deps.services.engine.pool.find(ctx.deps.context["worktree"], environment)
     if not context:
         return {}
-    node, _, port = key.rpartition(":")
     with context.lock:
         dataset = context.outputs.get(node, {}).get(port)
         known = {column["name"] for column in dataset.columns} if dataset else None
     if known is None:
         return {}
-    # The save validated the spec: encodings map channels to definitions, or tooltip to a list.
-    fields = [
-        definition.get("field")
-        for part in [spec, *spec.get("layer", [])]
-        for channel in part.get("encoding", {}).values()
-        for definition in (channel if isinstance(channel, list) else [channel])
-    ]
-    unknown = list(dict.fromkeys(f for f in fields if f is not None and f not in known))
+    unknown = [field for field in encoded_fields(spec) if field not in known]
     return {"unknown_fields": unknown} if unknown else {}
 
 
@@ -331,7 +326,11 @@ def edit_chart(
         raise Problem("Rename and delete do not accept a spec", 422)
     if operation != "rename" and new_name:
         raise Problem("Only rename accepts a new name", 422)
-    key = output_key(bundle, node, output)
+    if operation == "rename" and not new_name:
+        raise Problem("Provide a new chart name", 422)
+    find_node(bundle, node)
+    producer, port = output_port(bundle, node, output)
+    key = f"{producer}:{port}"
     charts = bundle.get("charts") or {}
     if not isinstance(charts, dict) or not isinstance(charts.get(key, []), list):
         raise Problem("Correct charts.json before editing charts", 422)
@@ -359,7 +358,7 @@ def edit_chart(
     # The save validates every chart: chart rules live in duckpad.charts only.
     result = save(ctx, snapshot, bundle)
     if operation in ("create", "update") and "error" not in result:
-        result |= unknown_fields(ctx, key, spec)
+        result |= unknown_fields_warning(ctx, bundle, producer, port, spec)
     return result
 
 
