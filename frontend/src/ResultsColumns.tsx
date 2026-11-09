@@ -8,7 +8,7 @@ import {
 import { useRef, useState } from "react";
 import { api, withQuery } from "./api";
 import { useT } from "./i18n";
-import { clock, seconds, type ResultsTarget } from "./results";
+import { clock, roundDecimals, seconds, type ResultsTarget } from "./results";
 import type {
   ColumnStatistics,
   Dataset,
@@ -247,14 +247,21 @@ function StatisticCells({ value }: { value?: ColumnStatistics }) {
       </>
     );
   const peak = Math.max(1, ...(value.histogram || []));
+  const bounds =
+    value.min !== undefined && value.max !== undefined
+      ? [value.min, value.max]
+      : [];
+  const range = bounds.join(" … ");
+  const rounded = bounds.map(roundDecimals).join(" … ");
   return (
     <>
       <td className="number">
         {value.nulls === null ? "" : `${value.nulls} %`}
       </td>
       <td className="number">{value.distinct.toLocaleString()}</td>
-      <td className="range">
-        {value.min !== undefined ? `${value.min} … ${value.max}` : ""}
+      {/* Long decimals are rounded; hovering shows the exact bounds. */}
+      <td className="range" title={rounded !== range ? range : undefined}>
+        {rounded}
       </td>
       <td>
         {/* Numbers and dates keep their distribution; unique text has no top values. */}
