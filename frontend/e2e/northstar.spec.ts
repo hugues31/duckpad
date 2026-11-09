@@ -72,6 +72,26 @@ test("Northstar runs its data tests, messages, computed variable and shared view
     "10 of 107 rows match",
   );
 
+  // Regional revenue charts its ranked regions, the leading region first.
+  await node("report").locator(".node-shape").click();
+  await page.getByLabel("Output", { exact: true }).selectOption("report");
+  await results.getByRole("tab", { name: "Chart", exact: true }).click();
+  await expect(results.getByRole("figure")).toHaveAccessibleName(
+    "Revenue by region",
+  );
+  const chart = results.locator(".chart-view svg");
+  await expect(chart.locator(".mark-rect path")).toHaveCount(4);
+  const regions = chart
+    .locator(".role-axis")
+    .filter({ hasText: "region" })
+    .locator(".role-axis-label text");
+  await expect(regions).toHaveText(["South", "North", "West", "East"]);
+  // The chart fits the panel's width rather than overflowing it.
+  const view = results.locator(".chart-view");
+  expect(
+    await view.evaluate((element) => element.scrollWidth - element.clientWidth),
+  ).toBeLessThanOrEqual(0);
+
   // Checks run before the export writes the file named after the month.
   await node("export").locator(".node-shape").click();
   await results.getByRole("tab", { name: /^Tests/ }).click();

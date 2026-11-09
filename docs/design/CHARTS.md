@@ -1,7 +1,8 @@
 # Charts on node outputs (design proposal)
 
-**Status: accepted on 9 November 2026 in issue #221 (see [Decisions](#decisions)),
-not implemented yet.** This record settles the file format, validation,
+**Status: accepted on 9 November 2026 in issue #221 (see [Decisions](#decisions))
+and implemented.** See [Charts](../CHARTS.md) for the current interface and file
+format. This record settles the file format, validation,
 rendering and Git behavior of a first, read-only charting step.
 
 ## Summary
@@ -52,7 +53,7 @@ exactly `name` (1 to 100 characters, unique per output) and `spec` (a
 Vega-Lite 6 spec of at most 64 KiB when serialized). Duckpad metadata lives
 beside the spec, never inside it: Vega-Lite has its own top-level `name`.
 
-The Northstar example would gain this chart on the ranked output of the
+The Northstar example has this chart on the ranked output of the
 Regional revenue instance:
 
 ```json

@@ -10,7 +10,7 @@ of the steps below, regenerated from the application with Playwright.
 
 1. Run the pipeline in `dev`. Reporting period, marked **ƒ**, runs first: the computed `report_month` variable reads its month before the other nodes run. Orders reads 120 CSV rows and Customers reads 12 Parquet rows. Enrich orders performs a customer join; its `every_order_matched` test fails the node if an order has no customer.
 2. Select Paid orders. Its `orders` output contains paid rows, while `overview` reads that newly calculated output in a second SQL block. Switch outputs in the results panel, or show its `source` input to compare the rows before the filter.
-3. Open Regional revenue. It is an instance of the shared Regional report component. The High-value orders node uses the same definition with a different exposed filter condition.
+3. Open Regional revenue. It is an instance of the shared Regional report component. The High-value orders node uses the same definition with a different exposed filter condition. The **Chart** tab of Regional revenue draws revenue by region, the leading region first, from the bar chart declared in `charts.json`; see [charts](CHARTS.md).
 4. Double-click Regional summary inside the report. This second component contains a filter and metrics for `SUM`, `AVG`, `MIN`, `MAX`, `COUNT` and `COUNT(DISTINCT customer_id)`.
 5. Return to the report. Rank regions uses a window function over the grouped result. Inspect its current and executed SQL separately.
 6. Select Customer reach. Its four ordered outputs use `DISTINCT`, `UNION`, `INTERSECT` and `EXCEPT` to compare customer channels.

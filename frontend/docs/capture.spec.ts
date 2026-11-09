@@ -109,6 +109,15 @@ test("record a real pipeline, source lineage and SQL workspace", async ({
     );
     await point(page, page.getByLabel("Output", { exact: true }));
     await page.getByLabel("Output", { exact: true }).selectOption("report");
+    await expect(page.locator(".preview-header .badge")).toHaveText("Valid");
+    caption("Open Chart: the project's charts.json draws revenue by region.");
+    const results = page.getByRole("region", { name: "Results", exact: true });
+    await click(page, results.getByRole("tab", { name: "Chart", exact: true }));
+    await expect(
+      results.locator(".chart-view svg .mark-rect path"),
+    ).toHaveCount(4);
+    await page.waitForTimeout(1800);
+    await click(page, results.getByRole("tab", { name: "Data", exact: true }));
     const revenue = page.getByRole("button", {
       name: /Explain this value: revenue, rows 1,/,
     });
