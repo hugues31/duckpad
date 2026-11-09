@@ -11,7 +11,7 @@
     "build": "tsc -b && vite build",
     "check": "tsc -b && npm run check:i18n",
     "check:i18n": "node scripts/check-i18n.mjs",
-    "lint": "eslint . && stylelint \"src/**/*.css\" && node scripts/check-css-properties.mjs",
+    "lint": "eslint . && stylelint \"src/**/*.css\" && node scripts/check-css-properties.mjs && node scripts/check-case-collisions.mjs",
     "format": "prettier --write src e2e docs scripts playwright*.config.ts vite.config.ts eslint.config.js stylelint.config.js",
     "format:check": "prettier --check src e2e docs scripts playwright*.config.ts vite.config.ts eslint.config.js stylelint.config.js",
     "test:unit": "vitest run",
