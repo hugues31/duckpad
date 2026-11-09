@@ -18,6 +18,10 @@ in the [Code tab](AUTHORING.md#edit-and-share-project-files). Edit the spec
 there, or in an external editor, then save. Readers, operators and read-only
 branches such as Job results see the charts without this action.
 
+Editors and administrators can also ask the
+[assistant](ASSISTANT.md#request-a-change) to create, update, rename or delete
+charts.
+
 Adding a chart is a normal save: one commit, refused without the save permission,
 and a conflict to resolve when someone else saved first. The Northstar
 [example](EXAMPLE.md) includes a chart on Regional revenue.
