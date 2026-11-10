@@ -18,7 +18,9 @@ Markdown, JSON, Python, SQL and TOML files have distinct icons.
 
 ## Build and inspect
 
-Add a palette item by clicking it or dragging it onto the canvas;
+Add a palette item by clicking it or dragging it onto the canvas. While dragging,
+the preview uses the node's shape and the canvas zoom, and is crossed out where
+a drop does nothing; release to place the center of the shape at the pointer.
 **Search node types…** filters the palette, and **Project templates** lists the
 templates created in the project. Connect an output to an input, or choose the
 upstream output in the node's inspector. Connected sockets are filled, unused

@@ -33,7 +33,7 @@ import {
   socket,
   type EdgeEndpoints,
 } from "./canvasEdges";
-import { PipelineNode } from "./CanvasNode";
+import { NODE_SHAPE_CENTER, PipelineNode } from "./CanvasNode";
 import { showMinimap } from "./canvasResults";
 import type { CanvasProps, FocusRequest } from "./canvasTypes";
 import ConnectionPalette from "./ConnectionPalette";
@@ -46,6 +46,7 @@ import type { FlowEdge, FlowNode } from "./types";
 import { useCanvasFrame } from "./useCanvasFrame";
 import { useCanvasNodes } from "./useCanvasNodes";
 import { useDoubleClickGuard } from "./useDoubleClickGuard";
+import { useNodeDragPreview } from "./useNodeDragPreview";
 const nodeTypes = { pipeline: PipelineNode };
 const edgeTypes = { pipeline: PipelineEdge };
 const NO_ENDPOINTS: EdgeEndpoints[] = [];
@@ -62,7 +63,9 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
   const initialized = useNodesInitialized();
   const safeArea = useRef<HTMLDivElement>(null);
   const viewportTouched = useRef(false);
+  const dragPreview = useNodeDragPreview(props);
   useImperativeHandle(ref, () => ({
+    previewDrag: dragPreview.previewDrag,
     newNodePosition: (graphNodes) => {
       const rendered = new Map(getNodes().map((node) => [node.id, node]));
       const area = safeArea.current?.getBoundingClientRect();
@@ -282,6 +285,7 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
   };
   return (
     <>
+      {dragPreview.preview}
       <div className="canvas-safe-area" ref={safeArea} aria-hidden="true" />
       <div
         className="canvas-search"
@@ -442,11 +446,8 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
         onSelectionChange={selectionChanged}
         onDragOver={(event) => {
           event.preventDefault();
-          event.dataTransfer.dropEffect = event.dataTransfer.types.includes(
-            "Files",
-          )
-            ? "copy"
-            : "move";
+          // Files and palette items add nodes: show the copy cursor.
+          event.dataTransfer.dropEffect = "copy";
         }}
         onDrop={(event) => {
           if (props.readOnly) return;
@@ -460,11 +461,15 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
           }
           try {
             const value = JSON.parse(event.dataTransfer.getData(DRAG_TYPE));
-            props.onAdd(
-              value.kind,
-              value.id,
-              screenToFlowPosition({ x: event.clientX, y: event.clientY }),
-            );
+            const position = screenToFlowPosition({
+              x: event.clientX,
+              y: event.clientY,
+            });
+            viewportTouched.current = true;
+            props.onAdd(value.kind, value.id, {
+              x: position.x - NODE_SHAPE_CENTER.x,
+              y: position.y - NODE_SHAPE_CENTER.y,
+            });
           } catch {
             // Ignore drops that are not palette items.
           }
