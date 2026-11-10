@@ -5,17 +5,22 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, model_validator
 
 
-class Change(BaseModel):
-    """One named operation; arguments of other operations are rejected."""
+class Arguments(BaseModel):
+    """Tool arguments that reject unknown fields and treat null as omitted."""
 
     model_config = ConfigDict(extra="forbid")
-    name: str = Field(min_length=1)
 
     @model_validator(mode="before")
     @classmethod
     def omit_nulls(cls, data):
         # Some providers send null for every optional parameter: null means omitted.
         return {k: v for k, v in data.items() if v is not None} if isinstance(data, dict) else data
+
+
+class Change(Arguments):
+    """One named operation; arguments of other operations are rejected."""
+
+    name: str = Field(min_length=1)
 
 
 class VariableChange(Change):
