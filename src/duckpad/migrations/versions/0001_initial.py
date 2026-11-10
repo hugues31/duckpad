@@ -3,7 +3,7 @@
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0001_baseline"
+revision = "0001_initial"
 down_revision = None
 branch_labels = None
 depends_on = None
@@ -303,6 +303,7 @@ def upgrade():
         sa.Column("media_type", sa.String(), nullable=False),
         sa.Column("size", sa.Integer(), nullable=False),
         sa.Column("signature", sa.JSON(), nullable=False),
+        sa.Column("storage_kind", sa.String(), nullable=False),
         sa.CheckConstraint("size >= 0", name="artifact_size"),
         sa.ForeignKeyConstraint(["project"], ["project.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["run"], ["run.id"], ondelete="CASCADE"),

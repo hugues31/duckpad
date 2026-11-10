@@ -3,10 +3,6 @@
 from pathlib import Path
 from types import SimpleNamespace
 
-from alembic import command
-
-from duckpad.migrations import configuration, migration_connection, upgrade
-
 
 def test_capture_and_download_use_descriptor_metadata(services, tmp_path, monkeypatch):
     store, projects, _, engine = services
@@ -43,34 +39,3 @@ def test_capture_and_download_use_descriptor_metadata(services, tmp_path, monkey
     with artifacts.open(identity, worktree["id"], "dev", "export", "run_test") as (stream, record):
         assert stream.read() == b"value\n42\n"
         assert record["size"] == len(b"value\n42\n")
-
-
-def test_migration_preserves_existing_parquet_location_and_removal(services, tmp_path):
-    store, projects, _, engine = services
-    tree = projects.create("Existing Parquet download")
-    run = {
-        "id": "run_old",
-        "project": tree["project"],
-        "worktree": tree["id"],
-        "environment": "dev",
-        "status": "success",
-        "started": "2026-01-01T00:00:00Z",
-    }
-    store.put("run", run["id"], run)
-    source = tmp_path / "report.parquet"
-    source.write_bytes(b"PAR1")
-    artifacts = engine.exports.artifacts
-    identity = artifacts.capture(
-        {"path": str(source), "format": "parquet"}, run, "export", [tmp_path], storage_kind="partition"
-    )
-    path = artifacts.path(store.get("artifact", identity))
-    with migration_connection(store.engine) as connection:
-        command.downgrade(configuration(connection), "0001_baseline")
-    upgrade(store.engine)
-    record = store.get("artifact", identity)
-    assert record["storage_kind"] == "partition"
-    assert artifacts.path(record) == path and path.exists()
-    with artifacts.open(identity, tree["id"], "dev", "export", run["id"]) as (stream, _):
-        assert stream.read() == b"PAR1"
-    artifacts.remove(identity)
-    assert not path.exists() and store.get("artifact", identity) is None

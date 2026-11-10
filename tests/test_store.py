@@ -54,7 +54,7 @@ def test_initial_migration_matches_models_and_survives_restart(store):
     with store.engine.connect() as connection:
         assert (
             connection.exec_driver_sql("SELECT version_num FROM alembic_version").scalar_one()
-            == "0002_artifact_storage"
+            == "0001_initial"
         )
         assert "records" not in inspect(connection).get_table_names()
         assert len(SQLModel.metadata.tables) == 29
@@ -85,8 +85,10 @@ def test_unknown_document_schema_is_not_modified(tmp_path):
         ]
 
 
-# 0007_partitions was the head of the migration chain replaced by the baseline.
-@pytest.mark.parametrize("revision", [None, "0007_partitions", "unknown_revision"])
+# Earlier baseline resets replaced the chains that ended at these revisions.
+@pytest.mark.parametrize(
+    "revision", [None, "0007_partitions", "0001_baseline", "0002_artifact_storage", "unknown_revision"]
+)
 def test_unrecognized_database_is_rejected_without_changes(tmp_path, revision):
     path = tmp_path / "instance.sqlite"
     with closing(sqlite3.connect(path)) as connection, connection:
