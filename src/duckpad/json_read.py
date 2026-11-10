@@ -5,6 +5,7 @@ import math
 import re
 
 SURROGATE = re.compile(r"[\ud800-\udfff]")
+SURROGATE_ESCAPE = re.compile(r"\\u[dD][89a-fA-F]")
 
 
 def reject_constant(value):
@@ -20,8 +21,13 @@ def finite_float(value):
 
 def loads(text):
     """Reject non-finite numbers and unpaired Unicode surrogates, including in keys."""
+    if isinstance(text, bytes):
+        # Strict UTF-8, as project files are read: json.loads would let encoded surrogates pass.
+        text = text.decode()
     value = json.loads(text, parse_constant=reject_constant, parse_float=finite_float)
-    pending = [value]
+    # Only an escape or a surrogate already in the text puts one in the value: skip the walk otherwise.
+    may_hold = SURROGATE_ESCAPE.search(text) or (not text.isascii() and SURROGATE.search(text))
+    pending = [value] if may_hold else []
     while pending:
         item = pending.pop()
         if isinstance(item, str) and SURROGATE.search(item):

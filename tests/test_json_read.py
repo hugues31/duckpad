@@ -48,7 +48,17 @@ def test_nonstandard_json_in_a_project_file_has_no_snapshot_500(tmp_path, file, 
             assert any(d["file"] == file and "not valid JSON" in d["message"] for d in read["diagnostics"])
 
 
-@pytest.mark.parametrize("text", [*INVALID, '{"\\ud800": 1}', '{"nested": [{"key": "\\udfff"}]}'])
+@pytest.mark.parametrize(
+    "text",
+    # The last one holds the surrogate itself, as a request body decoded from JSON can.
+    [
+        *INVALID,
+        '{"\\ud800": 1}',
+        '{"nested": [{"key": "\\udfff"}]}',
+        b'["\\ud800"]',
+        '{"é": "\ud800"}',
+    ],
+)
 def test_strict_read_rejects_invalid_values_and_keys(text):
     with pytest.raises(ValueError, match="not valid JSON"):
         loads(text)
@@ -58,6 +68,13 @@ def test_strict_read_preserves_valid_unicode_and_finite_numbers():
     assert loads('{"\\ud83e\\udd86": [1.5, 1e300, null, true, "café"]}') == {
         "🦆": [1.5, 1e300, None, True, "café"]
     }
+
+
+def test_strict_read_takes_git_blobs_as_bytes():
+    assert loads('{"a": ["é"]}'.encode()) == {"a": ["é"]}
+    # json.loads would decode this encoded surrogate.
+    with pytest.raises(UnicodeDecodeError):
+        loads(b'["\xed\xa0\x80"]')
 
 
 @pytest.mark.parametrize("value", INVALID)
