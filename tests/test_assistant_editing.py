@@ -16,7 +16,8 @@ from test_assistant import configure, conversation, dependencies, project, turn
 from test_assistant import instance as instance
 from test_project_save_atomicity import observe_after_quiet_period
 
-from duckpad.assistant.editing import WRITE_TOOLS, NodeEdit, edit_flow
+from duckpad.assistant.arguments import AddNode
+from duckpad.assistant.editing import WRITE_TOOLS, edit_flow
 from duckpad.assistant.runs import RUN_TOOLS
 from duckpad.bundle import bundle_to_files
 from duckpad.git.command import GitTimeout
@@ -24,6 +25,7 @@ from duckpad.util import Problem
 
 SQL = "-- @output result\nSELECT 1 AS value;\n"
 BAR = {"mark": "bar", "encoding": {"x": {"field": "value", "type": "quantitative"}}}
+CONSUMER = "-- @input input\n-- @output result\nSELECT * FROM {{ input }};"
 LINE = {"mark": "line", "encoding": {"y": {"field": "value", "type": "quantitative"}}}
 
 
@@ -67,6 +69,11 @@ def variable(**change):
 def chart(**change):
     """An edit_chart call: one operation-specific change."""
     return ("edit_chart", {"change": change})
+
+
+def flow(*nodes, edges=None):
+    """An edit_flow call: operation-specific node and edge changes."""
+    return ("edit_flow", {"nodes": list(nodes), **({"edges": edges} if edges is not None else {})})
 
 
 def write_turn(app, client, context, calls, **options):
@@ -408,26 +415,70 @@ def test_rejected_variable_arguments_save_nothing(instance, change, field):
     assert after["files"] == before["files"]
 
 
-def test_rejected_variable_arguments_can_be_corrected_twice_in_a_row(instance):
+@pytest.mark.parametrize(
+    ("args", "field"),
+    [
+        (flow({"operation": "add", "id": "added", "sql": SQL, "template": "filter"}), "Choose one of"),
+        (flow({"operation": "add", "id": "added", "remove_parameters": ["x"]}), "remove_parameters"),
+        (flow({"operation": "update", "id": "first", "sql": SQL}), "sql"),
+        (flow({"operation": "update", "id": "first"}), "Provide label"),
+        (flow({"operation": "update", "id": "first", "position": {"x": 1}}), "Field required"),
+        (flow({"operation": "update", "id": "first", "position": {"x": float("nan"), "y": 0}}), "finite"),
+        (flow({"operation": "remove", "id": "second", "label": "Gone"}), "label"),
+        (flow({"operation": "move", "id": "first"}), "operation"),
+        (flow(edges=[{"operation": "connect", "id": "link"}]), "source"),
+        (flow(edges=[{"operation": "connect", "id": "link", "source": "first", "target": ""}]), "target"),
+        (flow(edges=[{"operation": "disconnect", "id": "link", "source": "first"}]), "source"),
+    ],
+)
+def test_rejected_flow_arguments_save_nothing(instance, args, field):
+    app, client = instance
+    worktree, context = seed(app, client)
+    before = app.state.services.projects.snapshot(worktree["id"])
+    _, result = write_turn(app, client, context, [args])
+    card = result["tools"][0]
+    assert card["status"] == "error", result
+    assert field in card["summary"]
+    assert "action" not in card
+    after = app.state.services.projects.snapshot(worktree["id"])
+    assert (after["commit"], after["files"]) == (before["commit"], before["files"])
+
+
+# One (rejected call, corrected call) pair per tool validated by operation-specific models.
+CORRECTIONS = [
+    (
+        variable(operation="delete", name="region", definition={"default": "South"}),
+        variable(operation="update", name="region", definition={"default": "South"}),
+    ),
+    (
+        chart(operation="create", node="first", output="result", name="Trend"),
+        chart(operation="create", node="first", output="result", name="Trend", spec=BAR),
+    ),
+    (
+        flow({"operation": "update", "id": "first", "sql": SQL}),
+        flow({"operation": "update", "id": "first", "label": "Renamed"}),
+    ),
+]
+
+
+@pytest.mark.parametrize(("bad", "good"), CORRECTIONS)
+def test_rejected_arguments_can_be_corrected_twice_in_a_row(instance, bad, good):
     app, client = instance
     worktree, context = seed(app, client)
     projects = app.state.services.projects
     before = projects.snapshot(worktree["id"])
-    bad = variable(operation="delete", name="region", definition={"default": "South"})
-    good = variable(operation="update", name="region", definition={"default": "South"})
     _, result = write_turn(app, client, context, [bad, bad, good])
     assert [t["status"] for t in result["tools"]] == ["error", "error", "complete"], result
     assert projects.git(worktree["path"], "rev-list", "--count", before["commit"] + "..HEAD") == "1"
-    assert projects.snapshot(worktree["id"])["bundle"]["variables"]["region"]["default"] == "South"
 
 
-def test_three_rejected_variable_calls_in_a_row_end_the_turn_without_saving(instance):
+@pytest.mark.parametrize(("bad", "good"), CORRECTIONS)
+def test_three_rejected_calls_in_a_row_end_the_turn_without_saving(instance, bad, good):
     app, client = instance
     worktree, context = seed(app, client)
     before = app.state.services.projects.snapshot(worktree["id"])
     identity = conversation(client, context)
-    bad = variable(operation="rename", name="region", new_name="")
-    scripted(app, [bad, bad, bad, variable(operation="delete", name="region")])
+    scripted(app, [bad, bad, bad, good])
     result = turn(client, identity, context, "Make the requested change")[-1]["turn"]
     assert result["status"] == "error", result
     # The call that exhausts the retries gets no result: the turn stops at it.
@@ -436,10 +487,10 @@ def test_three_rejected_variable_calls_in_a_row_end_the_turn_without_saving(inst
     assert (after["commit"], after["files"]) == (before["commit"], before["files"])
 
 
-def test_losing_edit_rights_after_a_rejected_call_aborts_the_turn(instance):
+@pytest.mark.parametrize(("bad", "good"), CORRECTIONS)
+def test_losing_edit_rights_after_a_rejected_call_aborts_the_turn(instance, bad, good):
     app, admin = instance
-    configure(admin)
-    _, context = project(admin)
+    _, context = seed(app, admin)
     user = app.state.auth.create_user("editor", "editor-password-123")
     app.state.access.member(context["project"], user["id"], "editor")
     projects = app.state.services.projects
@@ -447,16 +498,12 @@ def test_losing_edit_rights_after_a_rejected_call_aborts_the_turn(instance):
     with TestClient(app) as client:
         client.post("/api/login", json={"username": "editor", "password": "editor-password-123"})
         identity = conversation(client, context)
-        calls = [
-            variable(operation="create", name="limit"),
-            variable(operation="create", name="limit", definition={"type": "number", "default": 5}),
-        ]
 
         def demote(index):
             if index == 1:
                 app.state.access.member(context["project"], user["id"], "reader")
 
-        scripted(app, calls, before=demote)
+        scripted(app, [bad, good], before=demote)
         result = turn(client, identity, context, "Make the requested change")[-1]["turn"]
     assert result["status"] == "error", result
     assert "action" not in result["tools"][-1]
@@ -484,12 +531,129 @@ def test_null_variable_arguments_count_as_omitted(instance):
     assert app.state.services.projects.snapshot(worktree["id"])["bundle"]["variables"] == {}
 
 
+def test_null_flow_arguments_count_as_omitted(instance):
+    app, client = instance
+    worktree, context = seed(app, client)
+    calls = [
+        (
+            "edit_flow",
+            {
+                "nodes": [
+                    {
+                        "operation": "add",
+                        "id": "added",
+                        "label": None,
+                        "position": None,
+                        "params": None,
+                        "template": None,
+                        "component": None,
+                        "sql": None,
+                        "python": None,
+                        "remove_parameters": None,
+                    },
+                    {"operation": "update", "id": "first", "label": "Renamed", "sql": None, "params": None},
+                    {"operation": "remove", "id": "second", "label": None, "remove_parameters": None},
+                ],
+                "edges": None,
+            },
+        ),
+        flow(
+            {"operation": "add", "id": "consumer", "sql": CONSUMER, "template": None, "python": None},
+            edges=[
+                {
+                    "operation": "connect",
+                    "id": "link",
+                    "source": "first",
+                    "target": "consumer",
+                    "source_port": None,
+                    "target_port": None,
+                },
+            ],
+        ),
+    ]
+    _, result = write_turn(app, client, context, calls)
+    assert [t["status"] for t in result["tools"]] == ["complete"] * 2, result
+    bundle = app.state.services.projects.snapshot(worktree["id"])["bundle"]
+    assert [(n["id"], n.get("label")) for n in bundle["flow"]["nodes"]] == [
+        ("first", "Renamed"),
+        ("added", None),
+        ("consumer", None),
+    ]
+    assert bundle["node_sql"]["nodes/added.sql"] == SQL
+    assert [
+        (e["source"], e["sourceHandle"], e["target"], e["targetHandle"]) for e in bundle["flow"]["edges"]
+    ] == [("first", "result", "consumer", "input")]
+
+
+def test_edges_connect_existing_nodes_whatever_their_id(instance):
+    app, client = instance
+    worktree, context = seed(app, client)
+
+    def add_template_node(bundle):
+        bundle["templates"]["filter"] = CONSUMER
+        bundle["flow"]["nodes"].append({"id": "keep.rows", "params": {}, "template": "filter"})
+
+    change(app, worktree, add_template_node)
+    link = {"operation": "connect", "id": "link", "source": "first", "target": "keep.rows"}
+    _, result = write_turn(app, client, context, [flow(edges=[link])])
+    assert result["tools"][0]["status"] == "complete", result
+    edges = app.state.services.projects.snapshot(worktree["id"])["bundle"]["flow"]["edges"]
+    assert [(e["source"], e["target"]) for e in edges] == [("first", "keep.rows")]
+
+
+CHART = {"operation", "node", "output", "name"}
+NODE = {"operation", "id", "label", "position", "params"}
+
+
+# One (tool, argument, operation fields) tuple per argument validated by operation-specific models.
+@pytest.mark.parametrize(
+    ("tool", "argument", "expected"),
+    [
+        (
+            "edit_variable",
+            "change",
+            {
+                "create": {"operation", "name", "definition"},
+                "update": {"operation", "name", "definition", "remove_fields", "remove_environments"},
+                "rename": {"operation", "name", "new_name"},
+                "delete": {"operation", "name"},
+            },
+        ),
+        (
+            "edit_chart",
+            "change",
+            {
+                "create": CHART | {"spec"},
+                "update": CHART | {"spec"},
+                "rename": CHART | {"new_name"},
+                "delete": CHART,
+            },
+        ),
+        (
+            "edit_flow",
+            "nodes",
+            {
+                "add": NODE | {"template", "component", "sql", "python"},
+                "update": NODE | {"remove_parameters"},
+                "remove": {"operation", "id"},
+            },
+        ),
+        (
+            "edit_flow",
+            "edges",
+            {
+                "connect": {"operation", "id", "source", "target", "source_port", "target_port"},
+                "disconnect": {"operation", "id"},
+            },
+        ),
+    ],
+)
 @pytest.mark.parametrize("kind", ["openai", "anthropic", "google", "mistral", "deepseek", "ollama", "custom"])
-def test_every_provider_receives_the_four_variable_and_chart_operations(instance, kind):
+def test_every_provider_receives_each_operation_with_only_its_own_fields(
+    instance, kind, tool, argument, expected
+):
     from pydantic_ai import Tool
     from pydantic_ai.models import ModelRequestParameters
-
-    from duckpad.assistant.editing import edit_chart, edit_variable
 
     app, _ = instance
     provider = {
@@ -497,44 +661,34 @@ def test_every_provider_receives_the_four_variable_and_chart_operations(instance
         "api_key": "test-key",
         "base_url": "http://localhost:1/v1" if kind == "custom" else "",
     }
+    function = next(t for t in WRITE_TOOLS if t.__name__ == tool)
 
     async def render():
         async with app.state.assistant.configuration.model(provider, "test-model") as model:
-            tools = [Tool(edit_variable).tool_def, Tool(edit_chart).tool_def]
-            parameters = ModelRequestParameters(function_tools=tools)
-            return [
-                t.parameters_json_schema
-                for t in model.customize_request_parameters(parameters).function_tools
-            ]
+            parameters = ModelRequestParameters(function_tools=[Tool(function).tool_def])
+            return model.customize_request_parameters(parameters).function_tools[0].parameters_json_schema
 
-    def operations(schema):
-        union = schema["properties"]["change"]
-        variants = [
-            schema["$defs"][v["$ref"].split("/")[-1]] if "$ref" in v else v
-            for v in union.get("oneOf") or union.get("anyOf")
-        ]
-        return {
-            (v["properties"]["operation"].get("const") or v["properties"]["operation"]["enum"][0]): (
-                set(v["properties"]),
-                v.get("additionalProperties"),
-            )
-            for v in variants
-        }
+    schema = asyncio.run(render())
 
-    variable, chart = asyncio.run(render())
-    assert operations(variable) == {
-        "create": ({"operation", "name", "definition"}, False),
-        "update": ({"operation", "name", "definition", "remove_fields", "remove_environments"}, False),
-        "rename": ({"operation", "name", "new_name"}, False),
-        "delete": ({"operation", "name"}, False),
+    def variants(node):
+        if "$ref" in node:
+            return variants(schema["$defs"][node["$ref"].split("/")[-1]])
+        if union := node.get("oneOf") or node.get("anyOf"):
+            return [v for n in union for v in variants(n)]
+        if "items" in node:
+            return variants(node["items"])
+        return [] if node.get("type") == "null" else [node]
+
+    def operation(variant):
+        return (
+            variant["properties"]["operation"].get("const") or variant["properties"]["operation"]["enum"][0]
+        )
+
+    received = {
+        operation(v): (set(v["properties"]), v.get("additionalProperties"))
+        for v in variants(schema["properties"][argument])
     }
-    target = {"operation", "node", "output", "name"}
-    assert operations(chart) == {
-        "create": (target | {"spec"}, False),
-        "update": (target | {"spec"}, False),
-        "rename": (target | {"new_name"}, False),
-        "delete": (target, False),
-    }
+    assert received == {name: (fields, False) for name, fields in expected.items()}
 
 
 def add_component_instance(app, worktree):
@@ -812,7 +966,7 @@ def test_reader_has_no_write_tools_and_forced_write_or_undo_is_denied(instance):
         )
         assert {t.name for t in available}.isdisjoint(t.__name__ for t in WRITE_TOOLS)
         with pytest.raises(Problem, match="role does not allow"):
-            edit_flow(dependencies(app, reader, context), [NodeEdit(operation="add", id="forbidden")])
+            edit_flow(dependencies(app, reader, context), [AddNode(operation="add", id="forbidden")])
         response = reader.post(
             f"/api/assistant/conversations/{identity}/undo", json={"turn": result["id"], "context": context}
         )

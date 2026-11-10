@@ -2,7 +2,7 @@
 
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, JsonValue
+from pydantic import Field
 from pydantic_ai import RunContext
 
 from .. import variables
@@ -13,40 +13,21 @@ from ..components import expand, group, output_port
 from ..node_code import code_path, find_node
 from ..util import Problem
 from .arguments import (
+    AddNode,
+    ConnectEdge,
     CreateChart,
     CreateVariable,
     DeleteChart,
     DeleteVariable,
+    DisconnectEdge,
+    RemoveNode,
     RenameChart,
     RenameVariable,
     UpdateChart,
+    UpdateNode,
     UpdateVariable,
 )
 from .tools import Dependencies, variable_usages
-
-
-class NodeEdit(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    operation: Literal["add", "update", "remove"]
-    id: str = Field(pattern=r"^[A-Za-z0-9_-]+$", max_length=100)
-    label: str | None = None
-    position: dict[str, float] | None = None
-    params: dict[str, JsonValue] | None = None
-    remove_parameters: list[str] = Field(default_factory=list)
-    template: str | None = None
-    component: str | None = None
-    sql: str | None = None
-    python: str | None = None
-
-
-class EdgeEdit(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    operation: Literal["connect", "disconnect"]
-    id: str = Field(min_length=1, max_length=100)
-    source: str = ""
-    target: str = ""
-    source_port: str = "result"
-    target_port: str = "input"
 
 
 def editable(ctx):
@@ -73,28 +54,30 @@ def graph_for(bundle, component):
 
 def edit_flow(
     ctx: RunContext[Dependencies],
-    nodes: list[NodeEdit] | None = None,
-    edges: list[EdgeEdit] | None = None,
+    nodes: list[Annotated[AddNode | UpdateNode | RemoveNode, Field(discriminator="operation")]] | None = None,
+    edges: list[Annotated[ConnectEdge | DisconnectEdge, Field(discriminator="operation")]] | None = None,
     component: str = "",
 ) -> dict:
-    """Add, remove, rename (label), move or configure nodes and connect/disconnect ports in one save.
+    """Add, update or remove nodes and connect or disconnect ports in one save.
 
-    Read the flow and SQL first. IDs are stable. Update params merges the supplied keys;
-    remove_parameters deletes overrides. Template/component links and SQL are only for added nodes.
-    A normal added node uses sql or python, defaulting to SELECT 1 with a result output. Include connections
-    in the same call when a node has required inputs; the resulting bundle must be valid.
-    Set component to edit a shared component definition; omit it for the root flow.
+    Pass node changes {"operation": "add" | "update" | "remove", "id": ..., ...} and edge changes
+    {"operation": "connect" | "disconnect", "id": ..., ...} with only that operation's fields.
+    Read the flow and SQL first. IDs are stable. Add takes at most one of sql, python, template or
+    component; a normal node defaults to SELECT 1 with a result output. Update changes the label,
+    position (x and y) or params: params merges the supplied keys and remove_parameters deletes
+    overrides. Edit existing code with write_sql. Connect takes source and target node IDs; ports
+    default to result and input. Include connections in the same call when a node has required inputs;
+    the resulting bundle must be valid. Set component to edit a shared component definition; omit it
+    for the root flow.
     """
     snapshot = editable(ctx)
     bundle = snapshot["bundle"]
     graph = graph_for(bundle, component)
     for edit in nodes or []:
         node: dict | None = next((n for n in graph["nodes"] if n["id"] == edit.id), None)
-        if edit.operation == "add":
+        if isinstance(edit, AddNode):
             if node is not None:
                 raise Problem("A node with this ID already exists", 409)
-            if sum(bool(v) for v in (edit.template, edit.component, edit.sql, edit.python)) > 1:
-                raise Problem("Choose SQL, Python, a template or a component", 422)
             node = {"id": edit.id, "params": {}, "position": {"x": 0, "y": 0}}
             if edit.python is not None or (edit.template and edit.template.endswith(".py")):
                 node["language"] = "python"
@@ -113,25 +96,22 @@ def edit_flow(
             graph["nodes"].append(node)
         elif node is None:
             raise Problem("Node not found", 404)
-        elif edit.operation == "remove":
+        elif isinstance(edit, RemoveNode):
             graph["nodes"].remove(node)
             graph["edges"] = [e for e in graph["edges"] if edit.id not in (e["source"], e["target"])]
             bundle.get("node_sql", {}).pop(code_path(edit.id, component, node.get("language", "sql")), None)
             continue
-        elif any(v is not None for v in (edit.template, edit.component, edit.sql, edit.python)):
-            raise Problem("Use write_sql to edit existing code; template links cannot be changed here", 422)
         if edit.label is not None:
             node["label"] = edit.label
         if edit.position is not None:
-            if set(edit.position) != {"x", "y"}:
-                raise Problem("A position needs x and y coordinates", 422)
-            node["position"] = edit.position
+            node["position"] = edit.position.model_dump()
         node.setdefault("params", {}).update(edit.params or {})
-        for name in edit.remove_parameters:
-            node["params"].pop(name, None)
+        if isinstance(edit, UpdateNode):
+            for name in edit.remove_parameters or []:
+                node["params"].pop(name, None)
     for edit in edges or []:
         existing = next((e for e in graph["edges"] if e["id"] == edit.id), None)
-        if edit.operation == "disconnect":
+        if isinstance(edit, DisconnectEdge):
             if existing is None:
                 raise Problem("Edge not found", 404)
             graph["edges"].remove(existing)
