@@ -70,12 +70,12 @@ and a conflict to resolve when someone else saved first. The Northstar
 - **`data`** is optional. When present, it is exactly `{"name": "data"}`: Duckpad
   always supplies the rows of the output.
 
-Fields name the output's columns exactly, including literal dots and brackets:
-use `"field": "a.b"` or `"field": "x[0]"` without Vega-Lite path escapes.
-Duckpad handles those escapes when drawing; labels keep the original name.
-With several charts, a selector above the
-chart switches between them by name. A chart without `width` takes the width of
-the panel.
+A `field` is a column name exactly as the output spells it, dots and brackets
+included: write `"field": "a.b"` or `"field": "x[0]"`, without Vega-Lite's
+`\\.` path escapes. Axes, legends and tooltips show the name as written.
+
+With several charts, a selector above the chart switches between them by name.
+A chart without `width` takes the width of the panel.
 
 The example plots points on a revenue axis that starts near the smallest value
 (`"scale": {"zero": false}`): bars always start at 0, which hides differences of
