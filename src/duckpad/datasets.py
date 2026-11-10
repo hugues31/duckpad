@@ -5,7 +5,7 @@ from __future__ import annotations
 import threading
 from dataclasses import dataclass, field
 
-from .types import Connections, LineageRequest, Record, SQLDatabase
+from .types import Connections, Files, LineageRequest, Record, SQLDatabase
 from .util import now
 
 
@@ -91,7 +91,8 @@ class Context:
     value_attempts: Record = field(default_factory=dict)
     partition_cache: dict[str, str] = field(default_factory=dict)
     partition_artifacts: bool = False
-    python_signature: str = ""
+    # The pyproject.toml and uv.lock this worker was prepared from; SQL-only runs keep them.
+    python_files: Files | None = None
     lineage: dict[str, LineageRequest] = field(default_factory=dict)
     lock: threading.RLock = field(default_factory=threading.RLock)
     trace_lock: threading.RLock = field(default_factory=threading.RLock)

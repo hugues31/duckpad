@@ -23,7 +23,7 @@ from ..projects import Projects
 from ..python_policy import get_policy
 from ..store import Store
 from ..templates import URI
-from ..types import Connections, Record, SQLCursor, SQLDatabase
+from ..types import Connections, Files, Record, SQLCursor, SQLDatabase
 from ..util import Problem, digest, literal, qi, uid
 from .connections import ConnectionConfig
 
@@ -166,11 +166,16 @@ class ContextPool:
         worktree: str,
         environment: str,
         requirements: list[Record] | None = None,
-        python: bool = False,
+        python_files: Files | None = None,
     ) -> Context:
         """Apply current settings; only the run holding the worktree reservation may call this."""
         return self._get(
-            worktree, environment, create=True, requirements=requirements, python=python, restart=True
+            worktree,
+            environment,
+            create=True,
+            requirements=requirements,
+            python_files=python_files,
+            restart=True,
         )
 
     def _get(
@@ -179,7 +184,7 @@ class ContextPool:
         environment: str,
         create: bool = False,
         requirements: list[Record] | None = None,
-        python: bool = False,
+        python_files: Files | None = None,
         restart: bool = False,
     ) -> Context:
         """The live DuckDB context of an existing worktree in a configured environment.
@@ -202,7 +207,7 @@ class ContextPool:
         elif opening and requirements is None and existing:
             requirements = existing.extensions
         resources = self.sql_resources() if opening else {}
-        python_signature = self._python_signature(worktree, python, existing) if opening else ""
+        python_files = self._python_files(worktree, python_files, existing) if opening else None
         while True:
             self.projects.get(worktree)
             if environment not in self.catalog.environment_names():
@@ -231,7 +236,7 @@ class ContextPool:
                         extensions=requirements or [],
                         resources=resources,
                         partition_artifacts=partition_artifacts,
-                        python_signature=python_signature,
+                        python_files=python_files,
                     )
             if stopped:
                 # Reap the replaced worker's process and release its descriptors.
@@ -244,11 +249,12 @@ class ContextPool:
                 requirements or [],
                 resources,
                 partition_artifacts,
-                python=bool(python_signature),
+                python_files=python_files,
             )
             with self.lock:
                 if self.contexts.get(key) is context and context.db is None:
                     context.db, context.connections, context.secrets = database, connections, secrets
+                    context.python_files = python_files
                     return context
             # Another request published its database first, or the context was discarded meanwhile.
             database.close()
@@ -296,19 +302,18 @@ class ContextPool:
         """DuckDB threads and memory limit of new SQL sessions; None leaves DuckDB's automatic sizing."""
         return {**SQL_RESOURCES, **self.store.get("settings", "sql_resources", {})}
 
-    def _python_signature(self, worktree: str, python: bool, existing: Context | None) -> str:
-        """The project environment a worker runs on: requested by Python runs, kept by others."""
+    def _python_files(self, worktree: str, files: Files | None, existing: Context | None) -> Files | None:
+        """The captured dependencies a worker runs on: requested by Python runs, kept by others."""
         record = self.projects.get(worktree)
         if not get_policy(self.store, record["project"]).get("enabled"):
-            return ""
-        if python:
-            files = self.projects.read_files(record)
-            return digest([files.get("pyproject.toml"), files.get("uv.lock")])
+            return None
+        if files is not None:
+            return dict(files)
         if existing and not getattr(existing.db, "closed", False):
-            return existing.python_signature
-        return ""
+            return existing.python_files
+        return None
 
-    def renew(self, context: Context, python: bool = False) -> None:
+    def renew(self, context: Context, python_files: Files | None = None) -> None:
         """Move a context's results to a new worker when its connections or Python environment changed.
 
         A worker attaches its connections once, then locks its configuration: new settings or
@@ -320,9 +325,9 @@ class ContextPool:
         previous = context.db
         if previous is None or getattr(previous, "closed", False):
             return
-        python_signature = self._python_signature(context.worktree, python, context)
+        python_files = self._python_files(context.worktree, python_files, context)
         connections, secrets = context.connections, context.secrets
-        changed = python_signature != context.python_signature
+        changed = python_files != context.python_files
         if self.isolated:
             project = self.projects.get(context.worktree)["project"]
             connections, secrets = self.connections.configured(project, context.environment)
@@ -351,7 +356,7 @@ class ContextPool:
             context.resources,
             context.partition_artifacts,
             (connections, secrets) if self.isolated else None,
-            python=bool(python_signature),
+            python_files=python_files,
         )
         handoff = self.store.paths.exports(context.worktree, context.environment) / ".temporary"
         handoff = handoff / f"handoff-{uid()}.duckdb"
@@ -369,7 +374,7 @@ class ContextPool:
             with context.lock:
                 cancel_lineage(context)
                 context.db, context.connections, context.secrets = candidate, connections, secrets
-                context.python_signature = python_signature
+                context.python_files = python_files
                 # Release the old worker's memory before the new one loads the results.
                 previous.close()
                 try:
@@ -396,7 +401,7 @@ class ContextPool:
         resources: Record,
         partition_artifacts: bool,
         connections: tuple[Connections, list[str]] | None = None,
-        python: bool = False,
+        python_files: Files | None = None,
     ) -> tuple[SQLDatabase, Connections, list[str]]:
         """Start a context's database, with the connections an isolated worker attached."""
         extensions = self.store.paths.extensions
@@ -408,14 +413,13 @@ class ContextPool:
         project = self.projects.get(worktree)["project"]
         captured, secrets = connections or self.connections.configured(project, environment)
         roots, writable = self.access.local_roots(project, captured) if self.enforce_access else ([], [])
-        files = self.projects.read_files(self.projects.get(worktree))
         runtime = {}
         policy = get_policy(self.store, project)
-        if policy.get("enabled") and python:
+        if policy.get("enabled") and python_files is not None:
             from ..python_environment import prepare
 
             runtime = prepare(
-                files,
+                python_files,
                 self.store.home,
                 project,
                 worktree=worktree,
