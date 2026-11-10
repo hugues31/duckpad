@@ -9,6 +9,7 @@ import webbrowser
 from pathlib import Path
 
 from . import __version__, client
+from .paths import InstancePaths
 
 LOOPBACK_HOSTS = ("127.0.0.1", "::1", "localhost")
 WILDCARD_HOSTS = ("0.0.0.0", "::", "")
@@ -26,80 +27,108 @@ def browser_url(host, port):
 
 def main():
     if sys.argv[1:2] == ["run"]:
-        # Dispatch before the server's imports: schedulers start this command for every task.
+        # Schedulers keep the Job client's existing exit-code contract.
         sys.exit(client.main(sys.argv[2:]))
     parser = argparse.ArgumentParser(prog="duckpad", description="Local SQL pipelines with cell lineage")
     parser.add_argument("--version", action="version", version=f"Duckpad {__version__}")
     commands = parser.add_subparsers(dest="command", required=True)
-    commands.add_parser("version", help="Print the installed Duckpad version")
-    paths = commands.add_parser("paths", help="Locate instance configuration and state without opening it")
-    paths.add_argument(
-        "--home", type=Path, default=default_home(), help="Instance directory used by duckpad start"
-    )
-    paths.add_argument("--json", action="store_true", help="Print paths as JSON")
-    backup = commands.add_parser(
-        "backup",
-        help="Back up a stopped instance to a private .tar.gz archive",
-        description="Back up a stopped instance, including its database, projects and local master key. "
-        "External data and externally supplied keys must be backed up separately.",
-    )
-    backup.add_argument("destination", type=Path, help="New archive outside the instance directory")
-    backup.add_argument(
-        "--home", type=Path, default=default_home(), help="Instance directory used by duckpad start"
-    )
     start = commands.add_parser("start", help="Start the local workspace")
-    start.add_argument("--home", type=Path, default=default_home())
-    start.add_argument("--host", default="127.0.0.1")
-    start.add_argument("--port", type=int, default=8765)
+    server_options(start)
     start.add_argument("--no-browser", action="store_true")
-    start.add_argument(
+    commands.add_parser(
+        "run", help="Launch a Job, wait for its outcome and exit with its code", add_help=False
+    )
+    info = commands.add_parser("info", help="Show versions, platform and instance configuration")
+    home_option(info)
+    info.add_argument("--json", action="store_true", help="Print diagnostics as JSON")
+    backup = commands.add_parser("backup", help="Back up a stopped instance")
+    home_option(backup)
+    backup.add_argument(
+        "destination",
+        nargs="?",
+        help="Archive filename or directory (default: timestamped archive in the current directory)",
+    )
+    backup.add_argument(
+        "--include-python-cache", action="store_true", help="Include rebuildable Python caches"
+    )
+    restore = commands.add_parser(
+        "restore", help="Restore a backup to its original, empty instance directory"
+    )
+    restore.add_argument("archive", type=Path)
+    restore.add_argument("--home", type=Path, help="Must match the original instance path in the backup")
+    reset = commands.add_parser("reset-password", help="Generate a new password for a local account")
+    home_option(reset)
+    reset.add_argument("username", nargs="?", default="admin", help="Account to reset (default: admin)")
+    service = commands.add_parser("service-unit", help="Print a Linux systemd user unit; does not install it")
+    server_options(service)
+    args = parser.parse_args()
+    from .util import Problem
+
+    try:
+        if getattr(args, "home", None) is not None:
+            args.home = args.home.expanduser().resolve()
+        if args.command == "info":
+            from .instance import print_info
+
+            print_info(args.home, as_json=args.json)
+        elif args.command == "backup":
+            from .backup import create_backup
+
+            destination = create_backup(
+                args.home, args.destination, include_python_cache=args.include_python_cache
+            )
+            print(f"Backup saved to {destination} ({destination.stat().st_size:,} bytes)")
+            print("Private, unencrypted archive. Keep external keys, secrets and source data separately.")
+        elif args.command == "restore":
+            from .backup import restore_backup
+
+            home = restore_backup(args.archive, args.home)
+            print(f"Instance restored to {home}")
+            print("Provide any external keys and secrets before starting Duckpad.")
+        elif args.command == "reset-password":
+            reset_password(args)
+        elif args.command == "service-unit":
+            validate_server_options(parser, args)
+            from .service_unit import render_unit
+
+            print(render_unit(args), end="")
+        else:
+            start_server(parser, args)
+    except (Problem, OSError) as error:
+        message = str(error)
+        if isinstance(error, OSError) and error.strerror:
+            message = error.strerror + (f": {error.filename}" if error.filename else "")
+        parser.exit(1, f"duckpad: {message}\n")
+
+
+def home_option(parser):
+    parser.add_argument(
+        "--home", type=Path, default=default_home(), help="Instance directory used by duckpad start"
+    )
+
+
+def server_options(parser):
+    home_option(parser)
+    parser.add_argument("--host", default="127.0.0.1")
+    parser.add_argument("--port", type=int, default=8765)
+    parser.add_argument(
         "--trusted-local",
         action="store_true",
         help="Run trusted SQL without OS isolation (single-user, loopback only)",
     )
-    start.add_argument(
+    parser.add_argument(
         "--log-level",
         choices=("critical", "error", "warning", "info", "debug"),
         default="info",
-        help="Server log level (default: info); debug includes successful UI polling requests",
+        help="Server log level (default: info)",
     )
-    # Listed for `duckpad --help`; the client parses its own options.
-    commands.add_parser(
-        "run", help="Launch a Job, wait for its outcome and exit with its code", add_help=False
-    )
-    reset = commands.add_parser(
-        "reset-password",
-        help="Give a local account a new password, for example a lost admin password",
-        description="Print a new generated password for a local account and sign out its sessions. "
-        "It works while Duckpad is running.",
-    )
-    reset.add_argument("username", nargs="?", default="admin", help="Account to reset (default: admin)")
-    reset.add_argument(
-        "--home", type=Path, default=default_home(), help="Instance directory used by duckpad start"
-    )
-    args = parser.parse_args()
-    if hasattr(args, "home"):
-        args.home = args.home.expanduser().resolve()
-    if args.command == "version":
-        print(f"Duckpad {__version__}")
-    elif args.command == "paths":
-        from .backup import print_paths
 
-        print_paths(args.home, as_json=args.json)
-    elif args.command == "backup":
-        from .backup import BackupError, create_backup
 
-        try:
-            destination = create_backup(args.home, args.destination)
-        except (BackupError, OSError) as error:
-            backup.error(str(error))
-        print(f"Backup saved to {destination}")
-        print("Keep this archive private: it includes stored credentials and any local master key.")
-        print("Back up externally supplied master keys, secrets and source data separately.")
-    elif args.command == "reset-password":
-        reset_password(reset, args)
-    else:
-        start_server(parser, args)
+def validate_server_options(parser, args):
+    if args.trusted_local and args.host not in LOOPBACK_HOSTS:
+        parser.error("--trusted-local requires --host 127.0.0.1, ::1, or localhost")
+    if not 1 <= args.port <= 65535:
+        parser.error("--port must be between 1 and 65535")
 
 
 def reset_command(home):
@@ -111,24 +140,19 @@ def reset_command(home):
     return f"duckpad reset-password --home {quoted}"
 
 
-def reset_password(parser, args):
+def reset_password(args):
     from .auth import reset_password as reset
     from .store import Store
     from .util import Problem
 
     # Never create an instance here: a mistyped --home would only print a useless password.
-    if not (args.home / "instance.sqlite").is_file():
-        parser.error(
+    if not InstancePaths(args.home).database.is_file():
+        raise Problem(
             f"No Duckpad instance in {args.home}. Pass the --home directory used with duckpad start."
         )
-    try:
-        store = Store(args.home)
-    except Problem as error:
-        parser.error(str(error))
+    store = Store(args.home)
     try:
         username, password = reset(store, args.username)
-    except Problem as error:
-        parser.error(str(error))
     finally:
         store.close()
     print(
@@ -141,29 +165,17 @@ def reset_password(parser, args):
 
 def start_server(parser, args):
     import uvicorn
-    from filelock import FileLock, Timeout
 
     from .app import create_app
+    from .instance import instance_lease
     from .logging import server_log_config
     from .util import Problem
 
-    if args.trusted_local and args.host not in LOOPBACK_HOSTS:
-        parser.error("--trusted-local requires --host 127.0.0.1, ::1, or localhost")
+    validate_server_options(parser, args)
     if not shutil.which("git"):
-        parser.error("Git is required. Install Git for your operating system and run duckpad start again.")
-    args.home.mkdir(parents=True, exist_ok=True, mode=0o700)
-    lease = FileLock(args.home / "instance.lock")
-    try:
-        lease.acquire(timeout=0)
-    except Timeout:
-        parser.error(
-            "This Duckpad instance is already running. Open its browser window or choose another --home."
-        )
-    try:
-        try:
-            app = create_app(args.home, trusted_local=args.trusted_local)
-        except Problem as error:
-            parser.error(str(error))
+        raise Problem("Git is required. Install Git for your operating system and run duckpad start again.")
+    with instance_lease(args.home, create=True):
+        app = create_app(args.home, trusted_local=args.trusted_local)
         address = browser_url(args.host, args.port)
         print(f"Duckpad · {address}", flush=True)
         if args.trusted_local:
@@ -209,8 +221,6 @@ def start_server(parser, args):
             log_level=args.log_level,
             log_config=server_log_config(args.log_level),
         )
-    finally:
-        lease.release()
 
 
 if __name__ == "__main__":

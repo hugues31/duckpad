@@ -159,7 +159,7 @@ def test_reset_password_refuses_accounts_without_a_local_password(
     monkeypatch.setattr(sys, "argv", ["duckpad", "reset-password", username, "--home", str(store.home)])
     with pytest.raises(SystemExit) as exit:
         cli.main()
-    assert exit.value.code == 2
+    assert exit.value.code == 1
     error = capsys.readouterr().err
     assert message in error
     assert "Traceback" not in error

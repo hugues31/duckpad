@@ -89,7 +89,7 @@ class Store:
         self.lock = threading.RLock()
         self.configuration_revision = 0
         self._local = threading.local()
-        path = self.home / "instance.sqlite"
+        path = self.paths.database
         path.touch(mode=0o600, exist_ok=True)
         path.chmod(0o600)
         self.engine = metadata_engine(path)

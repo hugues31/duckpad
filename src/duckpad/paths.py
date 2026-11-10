@@ -4,10 +4,33 @@ from __future__ import annotations
 
 from pathlib import Path
 
+MASTER_KEY_NAME = "duckpad-master.key"
+
 
 class InstancePaths:
     def __init__(self, home: str | Path) -> None:
         self.home = Path(home)
+
+    @property
+    def database(self) -> Path:
+        return self.home / "instance.sqlite"
+
+    @property
+    def lock(self) -> Path:
+        return self.home / "instance.lock"
+
+    @property
+    def maintenance_lock(self) -> Path:
+        """Serialize startup and maintenance even while restore replaces the home directory."""
+        return self.home.parent / f".{self.home.name}.duckpad.lock"
+
+    @property
+    def master_key(self) -> Path:
+        return self.home / MASTER_KEY_NAME
+
+    @property
+    def python_cache(self) -> Path:
+        return self.home / "python"
 
     @property
     def extensions(self) -> Path:
@@ -53,7 +76,7 @@ class InstancePaths:
 
     def python_status(self, worktree: str) -> Path:
         """The latest Python environment preparation of a branch or Job worktree."""
-        return self.home / "python" / "status" / worktree
+        return self.python_cache / "status" / worktree
 
     def worktree_directories(self) -> list[Path]:
         """Every directory with one child per recorded worktree, named after it."""
@@ -61,5 +84,5 @@ class InstancePaths:
             self.home / "worktrees",
             self.home / "exports",
             self.artifacts / "partitions",
-            self.home / "python" / "status",
+            self.python_cache / "status",
         ]

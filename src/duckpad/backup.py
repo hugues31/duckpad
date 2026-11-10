@@ -1,104 +1,88 @@
-"""Locate instance state and archive a stopped instance without opening its services."""
+"""Private archives and staged restoration of stopped instances."""
 
 import io
 import json
 import os
+import shutil
 import sqlite3
 import tarfile
 import tempfile
 from contextlib import closing
 from datetime import UTC, datetime
-from pathlib import Path
-
-from filelock import FileLock, Timeout
+from pathlib import Path, PurePosixPath
 
 from . import __version__
+from .instance import instance_lease
+from .paths import InstancePaths
+from .util import Problem
 
 
-class BackupError(Exception):
+class BackupError(Problem):
     pass
 
 
-def instance_paths(home):
-    home = home.expanduser().resolve()
-    key_file = os.environ.get("DUCKPAD_MASTER_KEY_FILE")
-    if key_file:
-        key_source = "DUCKPAD_MASTER_KEY_FILE"
-        key_path = str(Path(key_file).resolve())
-    elif "DUCKPAD_MASTER_KEY" in os.environ:
-        key_source, key_path = "DUCKPAD_MASTER_KEY", None
-    else:
-        key_source, key_path = "instance", str(home / "duckpad-master.key")
-    return {
-        "home": str(home),
-        "exists": home.is_dir(),
-        "database": str(home / "instance.sqlite"),
-        "master_key": {"source": key_source, "path": key_path},
-        "projects": str(home / "projects"),
-        "worktrees": str(home / "worktrees"),
-        "resources": str(home / "resources"),
-        "artifacts": str(home / "artifacts"),
-        "exports": str(home / "exports"),
-        "extensions": str(home / "extensions"),
-        "python": str(home / "python"),
-    }
-
-
-def print_paths(home, *, as_json=False):
-    paths = instance_paths(home)
-    if as_json:
-        print(json.dumps(paths, indent=2))
-        return
-    print(f"Instance: {paths['home']}" + ("" if paths["exists"] else " (not created)"))
-    print(f"Configuration, accounts and history: {paths['database']}")
-    key = paths["master_key"]
-    print(f"Master key: {key['path'] or key['source']} ({key['source']})")
-    for name in ("projects", "worktrees", "resources", "artifacts", "exports", "extensions", "python"):
-        print(f"{name.capitalize()}: {paths[name]}")
-    print("Paths reflect this command's --home and environment, not a running server's configuration.")
-
-
-def create_backup(home, destination):
-    home = home.expanduser().resolve()
-    # Resolve the parent only: an existing destination symlink must never be followed.
-    destination = destination.expanduser().absolute()
-    destination = destination.parent.resolve() / destination.name
-    database = home / "instance.sqlite"
-    if not database.is_file() or database.is_symlink():
-        raise BackupError(f"No regular instance.sqlite in {home}. Pass the --home used with duckpad start.")
-    if destination.is_relative_to(home):
+def backup_destination(home, destination):
+    path = Path(destination).expanduser().absolute() if destination is not None else Path.cwd()
+    directory = path.is_dir() or (
+        not path.exists()
+        and not path.is_symlink()
+        and (not path.suffix or str(destination).endswith(("/", os.sep)))
+    )
+    if directory:
+        stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
+        path /= f"duckpad-{__version__}-{stamp}.tar.gz"
+    # Keep the final component literal so O_EXCL also rejects dangling symlinks.
+    path = path.parent.resolve() / path.name
+    if path.is_relative_to(home):
         raise BackupError("Choose a backup destination outside the instance directory.")
-    try:
-        with FileLock(home / "instance.lock", timeout=0):
-            return _archive(home, database, destination)
-    except Timeout:
-        raise BackupError("This Duckpad instance is running. Stop it before making a backup.") from None
-    except sqlite3.Error as error:
-        raise BackupError(f"Cannot back up the instance database: {error}") from None
+    if path.exists() or path.is_symlink():
+        raise BackupError(f"Backup already exists: {path}. Choose another filename.")
+    return path
 
 
-def _archive(home, database, destination):
+def create_backup(home, destination=None, *, include_python_cache=False):
+    home = home.expanduser().resolve()
+    paths = InstancePaths(home)
+    if not paths.database.is_file() or paths.database.is_symlink():
+        raise BackupError(f"No regular instance.sqlite in {home}. Pass the --home used with duckpad start.")
+    destination = backup_destination(home, destination)
+    with instance_lease(home):
+        destination.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        try:
+            return _archive(paths, destination, include_python_cache=include_python_cache)
+        except FileExistsError:
+            raise BackupError(f"Backup already exists: {destination}. Choose another filename.") from None
+        except sqlite3.Error as error:
+            raise BackupError(f"Cannot back up the instance database: {error}") from None
+
+
+def _archive(paths, destination, *, include_python_cache):
+    database_name = f"duckpad/{paths.database.name}"
+    excluded = {f"duckpad/{paths.lock.name}", database_name + "-wal", database_name + "-shm"}
+    if not include_python_cache:
+        excluded.add(f"duckpad/{paths.python_cache.name}")
+
     def include(member):
-        if member.name in {
-            "duckpad/instance.lock",
-            "duckpad/instance.sqlite-wal",
-            "duckpad/instance.sqlite-shm",
-        }:
+        if member.name in excluded:
             return None
         if not (member.isfile() or member.isdir() or member.issym() or member.islnk()):
             raise BackupError(f"Cannot back up special file: {member.name}")
-        # Do not preserve the machine's user names or numeric ownership on restore.
         member.uid = member.gid = 0
         member.uname = member.gname = ""
+        if member.name in {database_name, f"duckpad/{paths.master_key.name}"}:
+            member.mode = 0o600
         return member
 
     descriptor = os.open(destination, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     try:
-        with os.fdopen(descriptor, "wb") as output, tempfile.TemporaryDirectory() as directory:
-            snapshot = Path(directory) / "instance.sqlite"
-            # Include committed WAL pages, even after a crash, without migrating the original.
+        # Stage outside the instance even when TMPDIR points inside it.
+        with (
+            os.fdopen(descriptor, "wb") as output,
+            tempfile.TemporaryDirectory(dir=destination.parent) as directory,
+        ):
+            snapshot = Path(directory) / paths.database.name
             with (
-                closing(sqlite3.connect(database.as_uri() + "?mode=ro", uri=True)) as source,
+                closing(sqlite3.connect(paths.database.as_uri() + "?mode=ro", uri=True)) as source,
                 closing(sqlite3.connect(snapshot)) as target,
             ):
                 source.backup(target)
@@ -108,22 +92,177 @@ def _archive(home, database, destination):
                     "format": 1,
                     "duckpad_version": __version__,
                     "created_at": datetime.now(UTC).isoformat(),
-                    "original_home": str(home),
-                    "restore": "Stop Duckpad and restore duckpad/ to original_home using the same Duckpad version.",
-                    "external_dependencies": "Back up external master keys, secret sources and data separately. "
+                    "original_home": str(paths.home),
+                    "python_cache_included": include_python_cache,
+                    "external_dependencies": "External master keys, secret sources and data need separate backups. "
                     "Symbolic links are preserved, not followed.",
                 }
                 content = json.dumps(manifest, indent=2).encode()
                 member = tarfile.TarInfo("manifest.json")
                 member.size, member.mode = len(content), 0o600
                 archive.addfile(member, io.BytesIO(content))
-                archive.add(home, arcname="duckpad", recursive=False, filter=include)
-                for child in sorted(home.iterdir()):
-                    if child == database:
-                        archive.add(snapshot, arcname="duckpad/instance.sqlite", filter=include)
-                    else:
-                        archive.add(child, arcname=f"duckpad/{child.name}", filter=include)
+                archive.add(paths.home, arcname="duckpad", recursive=False, filter=include)
+                for child in sorted(paths.home.iterdir()):
+                    archive.add(
+                        snapshot if child == paths.database else child,
+                        arcname=f"duckpad/{child.name}",
+                        filter=include,
+                    )
         return destination
     except BaseException:
         destination.unlink()
         raise
+
+
+def _member_path(name):
+    # Reject platform-specific path spellings as well as POSIX traversal.
+    parts = name.rstrip("/").split("/")
+    if any(part in ("", ".", "..") or "\\" in part or ":" in part or "\0" in part for part in parts):
+        raise BackupError(f"Unsafe archive path: {name!r}")
+    if os.name == "nt":
+        for part in parts:
+            stem = part.split(".")[0].upper()
+            if part.rstrip(" .") != part or stem in {
+                "CON",
+                "PRN",
+                "AUX",
+                "NUL",
+                *(f"COM{i}" for i in range(1, 10)),
+                *(f"LPT{i}" for i in range(1, 10)),
+            }:
+                raise BackupError(f"Unsupported archive path: {name!r}")
+    return PurePosixPath(*parts)
+
+
+def _restore_plan(archive):
+    members = {}
+    names = set()
+    for member in archive:
+        path = _member_path(member.name)
+        identity = str(path).casefold() if os.name == "nt" else str(path)
+        if identity in names:
+            raise BackupError(f"Duplicate archive path: {member.name!r}")
+        names.add(identity)
+        if path != PurePosixPath("manifest.json") and path.parts[0] != "duckpad":
+            raise BackupError(f"Unexpected archive entry: {member.name!r}")
+        if not (member.isfile() or member.isdir() or member.issym() or member.islnk()):
+            raise BackupError(f"Unsupported archive entry: {member.name!r}")
+        members[path] = member
+    # Tar's end marker can precede gzip's checksum/trailer. Validate that too.
+    while archive.fileobj.read(1024 * 1024):
+        pass
+    manifest_member = members.get(PurePosixPath("manifest.json"))
+    if not manifest_member or not manifest_member.isfile() or manifest_member.size > 1024 * 1024:
+        raise BackupError("The archive has no valid Duckpad manifest.")
+    with archive.extractfile(manifest_member) as stream:
+        manifest = json.load(stream)
+    if not isinstance(manifest, dict) or manifest.get("format") != 1:
+        raise BackupError("Unsupported Duckpad backup format.")
+    root = PurePosixPath("duckpad")
+    if root not in members or not members[root].isdir():
+        raise BackupError("The archive has no instance directory.")
+    paths = InstancePaths(Path("duckpad"))
+    database = PurePosixPath(paths.database.as_posix())
+    if database not in members or not members[database].isfile():
+        raise BackupError("The archive has no regular instance database.")
+    forbidden = {
+        PurePosixPath(paths.lock.as_posix()),
+        database.with_name(database.name + "-wal"),
+        database.with_name(database.name + "-shm"),
+    }
+    if forbidden & members.keys():
+        raise BackupError("The archive contains live instance lock or journal files.")
+    for path, member in members.items():
+        for parent in path.parents:
+            if parent == PurePosixPath("."):
+                break
+            if parent not in members or not members[parent].isdir():
+                raise BackupError(f"Archive entry has a non-directory parent: {member.name!r}")
+        if member.islnk():
+            target = _member_path(member.linkname)
+            if target not in members or not members[target].isfile() or target.parts[0] != "duckpad":
+                raise BackupError(f"Unsafe archive hard link: {member.name!r}")
+        if member.issym() and (not member.linkname or "\0" in member.linkname):
+            raise BackupError(f"Invalid archive symbolic link: {member.name!r}")
+    return manifest, members
+
+
+def _extract(archive, members, staging):
+    # Files and directories first, links last: no write ever traverses an archive symlink.
+    for path, member in sorted(members.items(), key=lambda item: len(item[0].parts)):
+        if path.parts[0] != "duckpad":
+            continue
+        target = staging.joinpath(*path.parts)
+        if member.isdir():
+            target.mkdir(mode=0o700)
+        elif member.isfile():
+            with archive.extractfile(member) as source, target.open("xb") as output:
+                shutil.copyfileobj(source, output)
+            target.chmod(member.mode & 0o777)
+            os.utime(target, (member.mtime, member.mtime))
+    for path, member in members.items():
+        target = staging.joinpath(*path.parts)
+        if member.islnk():
+            os.link(staging.joinpath(*_member_path(member.linkname).parts), target)
+        elif member.issym():
+            target.symlink_to(member.linkname)
+    paths = InstancePaths(staging / "duckpad")
+    paths.database.chmod(0o600)
+    if paths.master_key.is_file() and not paths.master_key.is_symlink():
+        paths.master_key.chmod(0o600)
+    return paths.home
+
+
+def _require_empty(home):
+    if home.exists() and (
+        not home.is_dir() or any(item.name != InstancePaths(home).lock.name for item in home.iterdir())
+    ):
+        raise BackupError(
+            f"Restore destination is not empty: {home}. Move the existing instance aside first."
+        )
+
+
+def restore_backup(source, home=None):
+    try:
+        with tarfile.open(Path(source).expanduser(), mode="r:gz") as archive:
+            manifest, members = _restore_plan(archive)
+            saved_version = manifest.get("duckpad_version")
+            if saved_version != __version__:
+                raise BackupError(
+                    f"Backup requires Duckpad {saved_version!r}; installed version is {__version__}. "
+                    "Restore with the version that created the backup."
+                )
+            original = manifest.get("original_home")
+            if not isinstance(original, str) or not Path(original).is_absolute():
+                raise BackupError("The backup manifest has no absolute original instance path.")
+            original = Path(original).resolve()
+            home = home.expanduser().resolve() if home is not None else original
+            if home != original:
+                raise BackupError(
+                    f"Restore requires the original instance path: {original}. Moving an instance is not supported."
+                )
+            with instance_lease(home) as lease:
+                _require_empty(home)
+                with tempfile.TemporaryDirectory(prefix=".duckpad-restore-", dir=home.parent) as directory:
+                    restored = _extract(archive, members, Path(directory))
+                    database = InstancePaths(restored).database
+                    with closing(sqlite3.connect(database.as_uri() + "?mode=ro", uri=True)) as db:
+                        if db.execute("PRAGMA quick_check").fetchall() != [("ok",)]:
+                            raise BackupError("The archived database failed its integrity check.")
+                    # Keep the sibling lock while releasing the old inode (also required on Windows).
+                    if lease is not None:
+                        lease.release()
+                    _require_empty(home)
+                    existed = home.exists()
+                    if existed:
+                        InstancePaths(home).lock.unlink(missing_ok=True)
+                        home.rmdir()
+                    try:
+                        restored.rename(home)
+                    except BaseException:
+                        if existed:
+                            home.mkdir(mode=0o700, exist_ok=True)
+                        raise
+            return home
+    except (tarfile.TarError, EOFError, UnicodeError, ValueError, sqlite3.Error) as error:
+        raise BackupError(f"Cannot restore this Duckpad archive: {error}") from None
