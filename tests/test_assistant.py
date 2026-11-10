@@ -30,7 +30,14 @@ def test_only_custom_providers_normalize_split_choices(instance, kind):
 
     async def check():
         async with config.model(
-            {"id": "test", "kind": kind, "api_key": "test-key", "base_url": "https://example.invalid/v1"},
+            {
+                "id": "test",
+                "kind": kind,
+                "api_key": "test-key",
+                "base_url": "https://example.invalid/v1",
+                "auth": "api_key",
+                "streaming": True,
+            },
             "test",
         ) as model:
             assert type(model) is (GatewayChatModel if kind == "custom" else OpenAIChatModel)

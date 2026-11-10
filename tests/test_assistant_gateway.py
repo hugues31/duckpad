@@ -453,6 +453,8 @@ def test_sse_accept_is_only_set_for_custom_streaming_requests(instance, monkeypa
                 "kind": kind,
                 "api_key": "static-key",
                 "base_url": "https://gateway.example.invalid/v1",
+                "auth": "api_key",
+                "streaming": True,
             },
             "test",
         ) as model:
