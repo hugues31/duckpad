@@ -12,7 +12,16 @@ from ..components import expand, expand_for, group
 from ..graph import reachable
 from ..node_code import code_path, find_node
 from ..util import Problem
-from .arguments import CreateVariable, DeleteVariable, RenameVariable, UpdateVariable
+from .arguments import (
+    CreateChart,
+    CreateVariable,
+    DeleteChart,
+    DeleteVariable,
+    RenameChart,
+    RenameVariable,
+    UpdateChart,
+    UpdateVariable,
+)
 from .tools import Dependencies, variable_usages
 
 
@@ -300,56 +309,44 @@ def unknown_fields_warning(ctx, bundle, node, port, spec) -> dict:
 
 def edit_chart(
     ctx: RunContext[Dependencies],
-    operation: Literal["create", "update", "rename", "delete"],
-    node: str,
-    output: str,
-    name: str,
-    spec: Annotated[
-        dict[str, JsonValue] | None, Field(description="Vega-Lite 6 spec within Duckpad's chart allowlist")
-    ] = None,
-    new_name: str = "",
+    change: Annotated[
+        CreateChart | UpdateChart | RenameChart | DeleteChart, Field(discriminator="operation")
+    ],
 ) -> dict:
     """Create, update, rename or delete a named chart of a node output, with a commit and Undo for each change.
 
-    A chart is a Vega-Lite 6 spec drawn from the rows of one output, shown in its Chart tab. Duckpad
-    supplies the rows as "data": {"name": "data"} and accepts a subset of Vega-Lite: the top-level
-    fields $schema, data, mark, encoding, layer, title, description, width and height, with no
-    transforms, aggregates or expressions. Charts draw at most 5,000 rows: aggregate, bin and filter
-    in the node's SQL first. Before writing a spec, read the charts guide (read_guide), the current
-    charts.json (read_file) and the output schema (read_schemas). node is the expanded node or component-instance ID shown on the
-    canvas, output its output port name. Create and update take spec; update replaces the whole spec,
-    never merges it. Rename uses only new_name, on the same output; delete uses only name.
+    Pass one change object: {"operation": ..., "node": ..., "output": ..., "name": ..., ...} with only
+    that operation's fields. A chart is a Vega-Lite 6 spec drawn from the rows of one output, shown in
+    its Chart tab. Duckpad supplies the rows as "data": {"name": "data"} and accepts a subset of
+    Vega-Lite: the top-level fields $schema, data, mark, encoding, layer, title, description, width and
+    height, with no transforms, aggregates or expressions. Charts draw at most 5,000 rows: aggregate,
+    bin and filter in the node's SQL first. Before writing a spec, read the charts guide (read_guide),
+    the current charts.json (read_file) and the output schema (read_schemas). Create and update take
+    spec; update replaces the whole spec, never merges it. Rename stays on the same output.
     """
     snapshot = editable(ctx)
     bundle = snapshot["bundle"]
-    if operation in ("rename", "delete") and spec is not None:
-        raise Problem("Rename and delete do not accept a spec", 422)
-    if operation != "rename" and new_name:
-        raise Problem("Only rename accepts a new name", 422)
-    if operation == "rename" and not new_name:
-        raise Problem("Provide a new chart name", 422)
-    find_node(bundle, node)
-    producer, port = output_port(bundle, node, output)
+    name = change.name
+    find_node(bundle, change.node)
+    producer, port = output_port(bundle, change.node, change.output)
     key = f"{producer}:{port}"
     charts = bundle.get("charts") or {}
     if not isinstance(charts, dict) or not isinstance(charts.get(key, []), list):
         raise Problem("Correct charts.json before editing charts", 422)
     entries = charts.setdefault(key, [])
     existing = next((c for c in entries if isinstance(c, dict) and c.get("name") == name), None)
-    if operation in ("create", "update") and spec is None:
-        raise Problem("Provide a chart spec", 422)
-    if operation == "create":
+    if isinstance(change, CreateChart):
         if existing is not None:
             raise Problem("A chart with this name already exists on this output", 409)
-        entries.append({"name": name, "spec": spec})
+        entries.append({"name": name, "spec": change.spec})
     elif existing is None:
         raise Problem("Chart not found", 404)
-    elif operation == "update":
-        existing["spec"] = spec
-    elif operation == "rename":
-        if any(isinstance(c, dict) and c.get("name") == new_name for c in entries):
+    elif isinstance(change, UpdateChart):
+        existing["spec"] = change.spec
+    elif isinstance(change, RenameChart):
+        if any(isinstance(c, dict) and c.get("name") == change.new_name for c in entries):
             raise Problem("A chart with this name already exists on this output", 409)
-        existing["name"] = new_name
+        existing["name"] = change.new_name
     else:
         entries.remove(existing)
         if not entries:
@@ -357,8 +354,8 @@ def edit_chart(
     bundle["charts"] = charts
     # The save validates every chart: chart rules live in duckpad.charts only.
     result = save(ctx, snapshot, bundle)
-    if operation in ("create", "update") and "error" not in result:
-        result |= unknown_fields_warning(ctx, bundle, producer, port, spec)
+    if isinstance(change, (CreateChart, UpdateChart)) and "error" not in result:
+        result |= unknown_fields_warning(ctx, bundle, producer, port, change.spec)
     return result
 
 

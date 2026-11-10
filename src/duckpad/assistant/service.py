@@ -40,7 +40,7 @@ from ..util import Problem, now, uid
 from .actions import Actions
 from .approvals import Approvals
 from .config import Configuration, provider_error
-from .editing import WRITE_TOOLS, edit_variable
+from .editing import WRITE_TOOLS, edit_chart, edit_variable
 from .gateway import TURN_TIMEOUT
 from .knowledge import AUTHORING_INSTRUCTIONS, read_guide
 from .runs import DEBUG_TOOLS, RUN_TOOLS, read_run_sql, recheck_run_reads
@@ -86,7 +86,7 @@ UNTITLED = "New conversation"
 # Seconds between access rechecks while a response streams; tools recheck on every call.
 RECHECK_INTERVAL = 1.0
 # Tools whose arguments are validated by operation-specific models get one extra correction.
-MODEL_VALIDATED_TOOLS = {edit_variable}
+MODEL_VALIDATED_TOOLS = {edit_variable, edit_chart}
 
 
 class TurnRequest(BaseModel):

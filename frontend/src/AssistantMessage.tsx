@@ -75,6 +75,7 @@ function ToolCard({
   const action = tool.action;
   const target =
     tool.args.node ||
+    (tool.args.change as { node?: unknown } | undefined)?.node ||
     tool.args.path ||
     tool.args.template ||
     tool.args.section ||

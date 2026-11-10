@@ -64,6 +64,11 @@ def variable(**change):
     return ("edit_variable", {"change": change})
 
 
+def chart(**change):
+    """An edit_chart call: one operation-specific change."""
+    return ("edit_chart", {"change": change})
+
+
 def write_turn(app, client, context, calls, **options):
     identity = conversation(client, context)
     scripted(app, calls, **options)
@@ -133,25 +138,10 @@ def change(app, worktree, callback):
         variable(operation="delete", name="region"),
         variable(operation="update", name="region", remove_fields=["default"]),
         ("group_nodes", {"nodes": ["first", "second"], "name": "Together"}),
-        (
-            "edit_chart",
-            {"operation": "create", "node": "first", "output": "result", "name": "Trend", "spec": BAR},
-        ),
-        (
-            "edit_chart",
-            {"operation": "update", "node": "first", "output": "result", "name": "Values", "spec": LINE},
-        ),
-        (
-            "edit_chart",
-            {
-                "operation": "rename",
-                "node": "first",
-                "output": "result",
-                "name": "Values",
-                "new_name": "Sums",
-            },
-        ),
-        ("edit_chart", {"operation": "delete", "node": "first", "output": "result", "name": "Values"}),
+        chart(operation="create", node="first", output="result", name="Trend", spec=BAR),
+        chart(operation="update", node="first", output="result", name="Values", spec=LINE),
+        chart(operation="rename", node="first", output="result", name="Values", new_name="Sums"),
+        chart(operation="delete", node="first", output="result", name="Values"),
     ],
 )
 def test_each_write_is_one_attributed_commit_and_can_be_undone(instance, name, args):
@@ -546,11 +536,11 @@ def test_conversations_with_flat_variable_calls_from_before_continue(instance):
 
 
 @pytest.mark.parametrize("kind", ["openai", "anthropic", "google", "mistral", "deepseek", "ollama", "custom"])
-def test_every_provider_receives_the_four_variable_operations(instance, kind):
+def test_every_provider_receives_the_four_variable_and_chart_operations(instance, kind):
     from pydantic_ai import Tool
     from pydantic_ai.models import ModelRequestParameters
 
-    from duckpad.assistant.editing import edit_variable
+    from duckpad.assistant.editing import edit_chart, edit_variable
 
     app, _ = instance
     provider = {
@@ -561,27 +551,40 @@ def test_every_provider_receives_the_four_variable_operations(instance, kind):
 
     async def render():
         async with app.state.assistant.configuration.model(provider, "test-model") as model:
-            parameters = ModelRequestParameters(function_tools=[Tool(edit_variable).tool_def])
-            return model.customize_request_parameters(parameters).function_tools[0].parameters_json_schema
+            tools = [Tool(edit_variable).tool_def, Tool(edit_chart).tool_def]
+            parameters = ModelRequestParameters(function_tools=tools)
+            return [
+                t.parameters_json_schema
+                for t in model.customize_request_parameters(parameters).function_tools
+            ]
 
-    schema = asyncio.run(render())
-    union = schema["properties"]["change"]
-    variants = [
-        schema["$defs"][v["$ref"].split("/")[-1]] if "$ref" in v else v
-        for v in union.get("oneOf") or union.get("anyOf")
-    ]
-    fields = {
-        (v["properties"]["operation"].get("const") or v["properties"]["operation"]["enum"][0]): (
-            set(v["properties"]),
-            v.get("additionalProperties"),
-        )
-        for v in variants
-    }
-    assert fields == {
+    def operations(schema):
+        union = schema["properties"]["change"]
+        variants = [
+            schema["$defs"][v["$ref"].split("/")[-1]] if "$ref" in v else v
+            for v in union.get("oneOf") or union.get("anyOf")
+        ]
+        return {
+            (v["properties"]["operation"].get("const") or v["properties"]["operation"]["enum"][0]): (
+                set(v["properties"]),
+                v.get("additionalProperties"),
+            )
+            for v in variants
+        }
+
+    variable, chart = asyncio.run(render())
+    assert operations(variable) == {
         "create": ({"operation", "name", "definition"}, False),
         "update": ({"operation", "name", "definition", "remove_fields", "remove_environments"}, False),
         "rename": ({"operation", "name", "new_name"}, False),
         "delete": ({"operation", "name"}, False),
+    }
+    target = {"operation", "node", "output", "name"}
+    assert operations(chart) == {
+        "create": (target | {"spec"}, False),
+        "update": (target | {"spec"}, False),
+        "rename": (target | {"new_name"}, False),
+        "delete": (target, False),
     }
 
 
@@ -606,14 +609,8 @@ def test_charts_are_created_under_the_stored_output_key_and_committed_one_by_one
     worktree, context = seed(app, client)
     add_component_instance(app, worktree)
     calls = [
-        (
-            "edit_chart",
-            {"operation": "create", "node": "first", "output": "result", "name": "Values", "spec": BAR},
-        ),
-        (
-            "edit_chart",
-            {"operation": "create", "node": "summary", "output": "ranked", "name": "Trend", "spec": LINE},
-        ),
+        chart(operation="create", node="first", output="result", name="Values", spec=BAR),
+        chart(operation="create", node="summary", output="ranked", name="Trend", spec=LINE),
     ]
     identity, result = write_turn(app, client, context, calls)
     assert [t["status"] for t in result["tools"]] == ["complete", "complete"], result
@@ -635,7 +632,6 @@ def test_charts_are_created_under_the_stored_output_key_and_committed_one_by_one
         ({"node": "first", "output": "missing", "name": "New", "spec": BAR}, "Output port not found"),
         ({"node": "summary", "output": "result", "name": "New", "spec": BAR}, "Output port not found"),
         ({"node": "first", "output": "result", "name": "Values", "spec": BAR}, "already exists"),
-        ({"node": "first", "output": "result", "name": "New"}, "Provide a chart spec"),
         (
             {
                 "node": "first",
@@ -653,7 +649,7 @@ def test_invalid_chart_creations_preserve_saved_files(instance, args, message):
     add_component_instance(app, worktree)
     change(app, worktree, lambda b: b.update(charts={"first:result": [{"name": "Values", "spec": BAR}]}))
     before = app.state.services.projects.snapshot(worktree["id"])
-    _, result = write_turn(app, client, context, [("edit_chart", {"operation": "create", **args})])
+    _, result = write_turn(app, client, context, [chart(operation="create", **args)])
     assert result["tools"][0]["status"] == "error", result
     assert message in result["tools"][0]["summary"]
     assert app.state.services.projects.snapshot(worktree["id"])["files"] == before["files"]
@@ -668,10 +664,11 @@ def test_chart_updates_replace_the_spec_renames_stay_on_the_output_and_last_dele
     )
     target = {"node": "first", "output": "result"}
     calls = [
-        ("edit_chart", {"operation": "update", **target, "name": "Values", "spec": LINE}),
-        ("edit_chart", {"operation": "rename", **target, "name": "Values", "new_name": "Lines"}),
-        ("edit_chart", {"operation": "delete", **target, "name": "Trend"}),
-        ("edit_chart", {"operation": "delete", "node": "second", "output": "result", "name": "Only"}),
+        chart(operation="update", **target, name="Values", spec=LINE),
+        # Null arguments of other operations count as omitted.
+        chart(operation="rename", **target, name="Values", new_name="Lines", spec=None),
+        chart(operation="delete", **target, name="Trend", new_name=None),
+        chart(operation="delete", node="second", output="result", name="Only"),
     ]
     _, result = write_turn(app, client, context, calls)
     assert [t["status"] for t in result["tools"]] == ["complete"] * 4, result
@@ -684,20 +681,9 @@ def test_chart_updates_replace_the_spec_renames_stay_on_the_output_and_last_dele
     ("args", "message"),
     [
         ({"operation": "update", "name": "Missing", "spec": LINE}, "Chart not found"),
-        ({"operation": "update", "name": "Values"}, "Provide a chart spec"),
         ({"operation": "rename", "name": "Missing", "new_name": "Lines"}, "Chart not found"),
         ({"operation": "rename", "name": "Values", "new_name": "Trend"}, "already exists"),
-        ({"operation": "rename", "name": "Values"}, "Provide a new chart name"),
-        ({"operation": "rename", "name": "Values", "new_name": ""}, "Provide a new chart name"),
         ({"operation": "delete", "name": "Missing"}, "Chart not found"),
-        (
-            {"operation": "rename", "name": "Values", "new_name": "Lines", "spec": LINE},
-            "do not accept a spec",
-        ),
-        ({"operation": "delete", "name": "Values", "spec": LINE}, "do not accept a spec"),
-        ({"operation": "create", "name": "Lines", "spec": LINE, "new_name": "Other"}, "Only rename"),
-        ({"operation": "update", "name": "Values", "spec": LINE, "new_name": "Lines"}, "Only rename"),
-        ({"operation": "delete", "name": "Values", "new_name": "Lines"}, "Only rename"),
     ],
 )
 def test_invalid_chart_changes_preserve_saved_files(instance, args, message):
@@ -707,10 +693,40 @@ def test_invalid_chart_changes_preserve_saved_files(instance, args, message):
     change(app, worktree, lambda b: b.update(charts=charts))
     before = app.state.services.projects.snapshot(worktree["id"])
     target = {"node": "first", "output": "result"}
-    _, result = write_turn(app, client, context, [("edit_chart", {**target, **args})])
+    _, result = write_turn(app, client, context, [chart(**target, **args)])
     assert result["tools"][0]["status"] == "error", result
     assert message in result["tools"][0]["summary"]
     assert app.state.services.projects.snapshot(worktree["id"])["files"] == before["files"]
+
+
+@pytest.mark.parametrize(
+    ("args", "field"),
+    [
+        ({"operation": "create", "name": "New"}, "spec"),
+        ({"operation": "update", "name": "Values"}, "spec"),
+        ({"operation": "rename", "name": "Values"}, "new_name"),
+        ({"operation": "rename", "name": "Values", "new_name": ""}, "new_name"),
+        ({"operation": "rename", "name": "Values", "new_name": "Lines", "spec": LINE}, "spec"),
+        ({"operation": "delete", "name": "Values", "spec": LINE}, "spec"),
+        ({"operation": "create", "name": "Lines", "spec": LINE, "new_name": "Other"}, "new_name"),
+        ({"operation": "update", "name": "Values", "spec": LINE, "new_name": "Lines"}, "new_name"),
+        ({"operation": "delete", "name": "Values", "new_name": "Lines"}, "new_name"),
+        ({"operation": "create", "name": "", "spec": LINE}, "name"),
+        ({"operation": "move", "name": "Values"}, "operation"),
+    ],
+)
+def test_rejected_chart_arguments_save_nothing(instance, args, field):
+    app, client = instance
+    worktree, context = seed(app, client)
+    change(app, worktree, lambda b: b.update(charts={"first:result": [{"name": "Values", "spec": BAR}]}))
+    before = app.state.services.projects.snapshot(worktree["id"])
+    _, result = write_turn(app, client, context, [chart(node="first", output="result", **args)])
+    card = result["tools"][0]
+    assert card["status"] == "error", result
+    assert field in card["summary"]
+    assert "action" not in card
+    after = app.state.services.projects.snapshot(worktree["id"])
+    assert (after["commit"], after["files"]) == (before["commit"], before["files"])
 
 
 def test_saved_charts_report_fields_the_materialized_output_lacks(instance):
@@ -726,7 +742,7 @@ def test_saved_charts_report_fields_the_materialized_output_lacks(instance):
 
     def save(operation, name, spec):
         args = {"operation": operation, "node": "first", "output": "result", "name": name, "spec": spec}
-        _, result = write_turn(app, client, context, [("edit_chart", args)])
+        _, result = write_turn(app, client, context, [chart(**args)])
         assert result["tools"][0]["status"] == "complete", result
         return json.loads(result["tools"][0]["summary"])
 
@@ -758,7 +774,7 @@ def test_chart_field_warnings_ignore_flow_errors_elsewhere_in_the_project(instan
     )
     misspelled = {"mark": "bar", "encoding": {"x": {"field": "vaule"}}}
     args = {"operation": "create", "node": "first", "output": "result", "name": "Typo", "spec": misspelled}
-    _, result = write_turn(app, client, context, [("edit_chart", args)])
+    _, result = write_turn(app, client, context, [chart(**args)])
     assert result["tools"][0]["status"] == "complete", result
     assert json.loads(result["tools"][0]["summary"])["unknown_fields"] == ["vaule"]
 
@@ -771,9 +787,10 @@ def test_editors_are_told_charts_are_vega_lite_even_without_data_reading(instanc
     turn(client, conversation(client, context), context)
     available = app.state.assistant.configuration.model_override.last_model_request_parameters.function_tools
     tool = next(t for t in available if t.name == "edit_chart")
-    schema = tool.parameters_json_schema["properties"]
-    assert schema["operation"]["enum"] == ["create", "update", "rename", "delete"]
-    assert schema["spec"]["description"] == "Vega-Lite 6 spec within Duckpad's chart allowlist"
+    models = tool.parameters_json_schema["$defs"]
+    for model in ("CreateChart", "UpdateChart"):
+        spec = models[model]["properties"]["spec"]
+        assert spec["description"] == "Vega-Lite 6 spec within Duckpad's chart allowlist"
     for promise in ("Vega-Lite 6", '"data": {"name": "data"}', "5,000 rows", "charts.json", "read_guide"):
         assert promise in (tool.description or "")
 
