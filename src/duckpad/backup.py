@@ -29,7 +29,7 @@ def backup_destination(home, destination):
         and (not path.suffix or str(destination).endswith(("/", os.sep)))
     )
     if directory:
-        stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
+        stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
         path /= f"duckpad-{__version__}-{stamp}.tar.gz"
     # Keep the final component literal so O_EXCL also rejects dangling symlinks.
     path = path.parent.resolve() / path.name
@@ -188,20 +188,23 @@ def _restore_plan(archive):
 
 
 def _extract(archive, members, staging):
-    # Files and directories first, links last: no write ever traverses an archive symlink.
-    for path, member in sorted(members.items(), key=lambda item: len(item[0].parts)):
-        if path.parts[0] != "duckpad":
-            continue
-        target = staging.joinpath(*path.parts)
+    # Directories, then files in archive order (gzip rereads from the start to seek back),
+    # then links: no write ever traverses an archive symlink.
+    entries = [
+        (staging.joinpath(*path.parts), member)
+        for path, member in members.items()
+        if path.parts[0] == "duckpad"
+    ]
+    for target, member in sorted(entries, key=lambda entry: len(entry[0].parts)):
         if member.isdir():
             target.mkdir(mode=0o700)
-        elif member.isfile():
+    for target, member in entries:
+        if member.isfile():
             with archive.extractfile(member) as source, target.open("xb") as output:
                 shutil.copyfileobj(source, output)
             target.chmod(member.mode & 0o777)
             os.utime(target, (member.mtime, member.mtime))
-    for path, member in members.items():
-        target = staging.joinpath(*path.parts)
+    for target, member in entries:
         if member.islnk():
             os.link(staging.joinpath(*_member_path(member.linkname).parts), target)
         elif member.issym():
@@ -214,9 +217,7 @@ def _extract(archive, members, staging):
 
 
 def _require_empty(home):
-    if home.exists() and (
-        not home.is_dir() or any(item.name != InstancePaths(home).lock.name for item in home.iterdir())
-    ):
+    if any(item.name != InstancePaths(home).lock.name for item in home.iterdir()):
         raise BackupError(
             f"Restore destination is not empty: {home}. Move the existing instance aside first."
         )
@@ -241,28 +242,18 @@ def restore_backup(source, home=None):
                 raise BackupError(
                     f"Restore requires the original instance path: {original}. Moving an instance is not supported."
                 )
-            with instance_lease(home) as lease:
+            with instance_lease(home):
                 _require_empty(home)
-                with tempfile.TemporaryDirectory(prefix=".duckpad-restore-", dir=home.parent) as directory:
+                # Stage inside the home: same filesystem, even when the home is a mount point.
+                with tempfile.TemporaryDirectory(prefix=".duckpad-restore-", dir=home) as directory:
                     restored = _extract(archive, members, Path(directory))
                     database = InstancePaths(restored).database
                     with closing(sqlite3.connect(database.as_uri() + "?mode=ro", uri=True)) as db:
                         if db.execute("PRAGMA quick_check").fetchall() != [("ok",)]:
                             raise BackupError("The archived database failed its integrity check.")
-                    # Keep the sibling lock while releasing the old inode (also required on Windows).
-                    if lease is not None:
-                        lease.release()
-                    _require_empty(home)
-                    existed = home.exists()
-                    if existed:
-                        InstancePaths(home).lock.unlink(missing_ok=True)
-                        home.rmdir()
-                    try:
-                        restored.rename(home)
-                    except BaseException:
-                        if existed:
-                            home.mkdir(mode=0o700, exist_ok=True)
-                        raise
+                    # The database moves last: a home without it holds no restored instance.
+                    for item in sorted(restored.iterdir(), key=lambda item: item == database):
+                        item.rename(home / item.name)
             return home
     except (tarfile.TarError, EOFError, UnicodeError, ValueError, sqlite3.Error) as error:
         raise BackupError(f"Cannot restore this Duckpad archive: {error}") from None

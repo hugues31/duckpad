@@ -18,10 +18,9 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
-from .paths import MASTER_KEY_NAME, InstancePaths
+from .paths import InstancePaths
 from .util import Problem
 
-KEY_FILE = MASTER_KEY_NAME
 KEY_VARIABLE = "DUCKPAD_MASTER_KEY"
 KEY_FILE_VARIABLE = "DUCKPAD_MASTER_KEY_FILE"
 SEALED = re.compile(r"dpenc:1:([0-9a-f]{12}):([A-Za-z0-9_-]+)")

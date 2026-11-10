@@ -156,14 +156,15 @@ master key. It is unencrypted and owner-readable on POSIX. Keep external keys,
 secret sources and external data separately. Symbolic links are preserved,
 not followed. Avoid external edits and other maintenance during backup.
 
-To restore a trusted archive, stop Duckpad and move any existing instance aside:
+To restore a trusted archive, stop Duckpad and move any existing instance aside
+(or empty its directory, for example a mounted volume):
 
 ```sh
 duckpad restore /path/to/backups/before-upgrade.tar.gz
 ```
 
 `restore` checks the recorded version and original absolute path, validates the
-archive and database, then publishes the extracted directory. It refuses a
+archive and database, then moves the extracted instance into place. It refuses a
 nonempty destination; optional `--home` must match the original path. Restore
 with the original operating-system user and provide external keys before
 restarting. Moving an instance to another path is not supported. A project ZIP

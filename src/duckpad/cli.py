@@ -27,7 +27,7 @@ def browser_url(host, port):
 
 def main():
     if sys.argv[1:2] == ["run"]:
-        # Schedulers keep the Job client's existing exit-code contract.
+        # Dispatch before the server's imports: schedulers start this command for every task.
         sys.exit(client.main(sys.argv[2:]))
     parser = argparse.ArgumentParser(prog="duckpad", description="Local SQL pipelines with cell lineage")
     parser.add_argument("--version", action="version", version=f"Duckpad {__version__}")
@@ -56,7 +56,12 @@ def main():
     )
     restore.add_argument("archive", type=Path)
     restore.add_argument("--home", type=Path, help="Must match the original instance path in the backup")
-    reset = commands.add_parser("reset-password", help="Generate a new password for a local account")
+    reset = commands.add_parser(
+        "reset-password",
+        help="Generate a new password for a local account",
+        description="Print a new generated password for a local account and sign out its sessions. "
+        "It works while Duckpad is running.",
+    )
     home_option(reset)
     reset.add_argument("username", nargs="?", default="admin", help="Account to reset (default: admin)")
     service = commands.add_parser("service-unit", help="Print a Linux systemd user unit; does not install it")
@@ -120,7 +125,7 @@ def server_options(parser):
         "--log-level",
         choices=("critical", "error", "warning", "info", "debug"),
         default="info",
-        help="Server log level (default: info)",
+        help="Server log level (default: info); debug includes successful UI polling requests",
     )
 
 
@@ -174,7 +179,7 @@ def start_server(parser, args):
     validate_server_options(parser, args)
     if not shutil.which("git"):
         raise Problem("Git is required. Install Git for your operating system and run duckpad start again.")
-    with instance_lease(args.home, create=True):
+    with instance_lease(args.home):
         app = create_app(args.home, trusted_local=args.trusted_local)
         address = browser_url(args.host, args.port)
         print(f"Duckpad · {address}", flush=True)

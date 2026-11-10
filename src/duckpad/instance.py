@@ -46,21 +46,18 @@ def print_info(home, *, as_json=False):
 
 
 @contextmanager
-def instance_lease(home, *, create=False):
-    paths = InstancePaths(home)
-    paths.home.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+def instance_lease(home):
+    """Admit one server, backup, restore or migration command per instance directory."""
+    home.mkdir(parents=True, exist_ok=True, mode=0o700)
+    lock = FileLock(InstancePaths(home).lock, mode=0o600)
     try:
-        # This sibling lock survives the directory rename performed by restore.
-        with FileLock(paths.maintenance_lock, timeout=0, mode=0o600):
-            if create:
-                paths.home.mkdir(parents=True, exist_ok=True, mode=0o700)
-            if paths.home.exists():
-                with FileLock(paths.lock, timeout=0, mode=0o600) as lease:
-                    yield lease
-            else:
-                yield None
+        lock.acquire(timeout=0)
     except Timeout:
         raise Problem(
-            "This Duckpad instance is already running or maintenance is in progress. "
-            "Stop it and wait for other backup/restore commands to finish."
+            "This Duckpad instance is already running, or a backup or restore is using it. "
+            "Stop it or wait for that command to finish, or choose another --home."
         ) from None
+    try:
+        yield
+    finally:
+        lock.release()

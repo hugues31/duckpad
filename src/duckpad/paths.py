@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-MASTER_KEY_NAME = "duckpad-master.key"
-
 
 class InstancePaths:
     def __init__(self, home: str | Path) -> None:
@@ -20,13 +18,8 @@ class InstancePaths:
         return self.home / "instance.lock"
 
     @property
-    def maintenance_lock(self) -> Path:
-        """Serialize startup and maintenance even while restore replaces the home directory."""
-        return self.home.parent / f".{self.home.name}.duckpad.lock"
-
-    @property
     def master_key(self) -> Path:
-        return self.home / MASTER_KEY_NAME
+        return self.home / "duckpad-master.key"
 
     @property
     def python_cache(self) -> Path:

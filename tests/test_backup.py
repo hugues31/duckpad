@@ -15,7 +15,7 @@ from helpers import example_bundle
 
 from duckpad import __version__, backup, sealing
 from duckpad.auth import Auth
-from duckpad.instance import print_info
+from duckpad.instance import instance_lease, print_info
 from duckpad.services import Services
 
 
@@ -422,13 +422,11 @@ def test_restore_failure_cleans_staging_and_leaves_no_partial_instance(
     instance.rename(tmp_path / "old")
     with pytest.raises((backup.BackupError, OSError)):
         backup.restore_backup(source)
-    assert not instance.exists()
-    assert list(tmp_path.glob(".duckpad-restore-*")) == []
+    # Only the lock the failed restore held remains: no staging folder, no partial instance.
+    assert {item.name for item in instance.iterdir()} <= {"instance.lock"}
 
 
-def test_restore_and_start_share_a_lock_while_home_is_absent(instance, tmp_path):
-    from duckpad.instance import instance_lease
-
+def test_restore_and_start_share_the_instance_lock(instance, tmp_path):
     source = backup.create_backup(instance, tmp_path / "backup.tar.gz")
     instance.rename(tmp_path / "old")
     with instance_lease(instance):
@@ -436,8 +434,29 @@ def test_restore_and_start_share_a_lock_while_home_is_absent(instance, tmp_path)
         start = command("start", "--home", instance, "--no-browser")
     for result in (restore, start):
         assert result.returncode == 1
-        assert "maintenance is in progress" in result.stderr and "usage:" not in result.stderr
-    assert not instance.exists()
+        assert "already running" in result.stderr and "usage:" not in result.stderr
+    assert {item.name for item in instance.iterdir()} <= {"instance.lock"}
+
+
+def test_backup_restore_and_start_write_only_inside_the_home(tmp_path):
+    # Service state directories and volume mounts often sit in folders the user cannot write.
+    parent = tmp_path / "state"
+    home = parent / "duckpad"
+    home.mkdir(parents=True)
+    with closing(sqlite3.connect(home / "instance.sqlite")) as db, db:
+        db.execute("CREATE TABLE example(value TEXT)")
+    parent.chmod(0o555)
+    try:
+        archive = backup.create_backup(home, tmp_path / "backups")
+        # Empty the home in place, as a mount point must be.
+        (home / "instance.sqlite").unlink()
+        assert backup.restore_backup(archive) == home
+        with instance_lease(home):
+            pass
+    finally:
+        parent.chmod(0o755)
+    assert list(parent.iterdir()) == [home]
+    assert {item.name for item in home.iterdir()} - {"instance.lock"} == {"instance.sqlite"}
 
 
 def test_restore_reports_a_running_instance_before_suggesting_moving_it(instance, tmp_path):
