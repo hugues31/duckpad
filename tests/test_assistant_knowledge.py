@@ -11,6 +11,7 @@ from test_assistant import configure, conversation, dependencies, project, turn
 from test_assistant import instance as instance
 from test_assistant_editing import change, seed
 
+from duckpad.assistant.arguments import DeleteVariable
 from duckpad.assistant.editing import edit_variable
 from duckpad.assistant.knowledge import GUIDES, checkout_guides, guide_text, read_guide
 from duckpad.assistant.service import guarded
@@ -108,7 +109,7 @@ def test_reader_can_page_variable_usages_but_cannot_delete(instance):
             found += result["items"]
         assert [u.get("node", u.get("view")) for u in found] == ["first", "second", "Regional"]
         with pytest.raises(Problem, match="role does not allow"):
-            edit_variable(ctx, "delete", "region")
+            edit_variable(ctx, DeleteVariable(operation="delete", name="region"))
         app.state.access.member(worktree["project"], user["id"], None)
         with pytest.raises(Problem):
             read_variables(ctx, "region")

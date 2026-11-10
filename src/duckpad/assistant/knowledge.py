@@ -90,9 +90,9 @@ Project variables:
   instead of default/environments. Their source must return exactly one non-null compatible cell.
   Reading definitions, compiling and inspecting values never run that source.
 - Use read_variables for declarations, values by environment and paginated usages. Use
-  edit_variable to create, update, rename or delete; rename updates references. To clear a field
-  use remove_fields, and to restore inheritance use remove_environments, not null. Changing
-  ordinary/computed mode must remove incompatible fields in the same call.
+  edit_variable with one change: create, update, rename or delete; rename updates references. To
+  clear a field on update use remove_fields, and to restore inheritance use remove_environments, not
+  null. Changing ordinary/computed mode must remove incompatible fields in the same call.
   Delete refuses variables still used by nodes or saved result views. Report the usages and
   replace/remove only the bindings the user requested before deleting. Do not silently break them.
 """
