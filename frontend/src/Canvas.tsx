@@ -45,7 +45,7 @@ import type { FlowEdge, FlowNode } from "./types";
 import { useCanvasFrame } from "./useCanvasFrame";
 import { useCanvasNodes } from "./useCanvasNodes";
 import { useDoubleClickGuard } from "./useDoubleClickGuard";
-import { useNodeDragImage } from "./useNodeDragImage";
+import { useNodeDragPreview } from "./useNodeDragPreview";
 const nodeTypes = { pipeline: PipelineNode };
 const edgeTypes = { pipeline: PipelineEdge };
 const NO_ENDPOINTS: EdgeEndpoints[] = [];
@@ -60,9 +60,9 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
   const initialized = useNodesInitialized();
   const safeArea = useRef<HTMLDivElement>(null);
   const viewportTouched = useRef(false);
-  const dragImage = useNodeDragImage(props);
+  const dragPreview = useNodeDragPreview(props);
   useImperativeHandle(ref, () => ({
-    setDragImage: dragImage.setDragImage,
+    previewDrag: dragPreview.previewDrag,
     newNodePosition: (graphNodes) => {
       const rendered = new Map(getNodes().map((node) => [node.id, node]));
       const area = safeArea.current?.getBoundingClientRect();
@@ -279,7 +279,7 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
   };
   return (
     <>
-      {dragImage.image}
+      {dragPreview.preview}
       <div className="canvas-safe-area" ref={safeArea} aria-hidden="true" />
       <div
         className="canvas-search"
@@ -416,11 +416,8 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
         onSelectionChange={selectionChanged}
         onDragOver={(event) => {
           event.preventDefault();
-          event.dataTransfer.dropEffect = event.dataTransfer.types.includes(
-            "Files",
-          )
-            ? "copy"
-            : "move";
+          // Files and palette items add nodes: show the copy cursor.
+          event.dataTransfer.dropEffect = "copy";
         }}
         onDrop={(event) => {
           if (props.readOnly) return;

@@ -110,7 +110,7 @@ export default function NodePalette({
                         DRAG_TYPE,
                         JSON.stringify({ kind: item.kind, id: item.id }),
                       );
-                      e.dataTransfer.effectAllowed = "move";
+                      e.dataTransfer.effectAllowed = "copy";
                       onDragStart(item.kind, item.id, e.dataTransfer);
                     }}
                     onClick={(event) =>

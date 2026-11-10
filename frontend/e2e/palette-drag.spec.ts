@@ -1,7 +1,10 @@
 import { expect, test, type Page } from "@playwright/test";
 import { canvasZoom, signIn } from "./helpers";
+import type { Snapshot } from "../src/types";
 
-async function prepare(page: Page, example = false) {
+type Point = { x: number; y: number };
+
+async function open(page: Page, example: boolean) {
   await signIn(page);
   const response = await page.request.post(
     example ? "/api/example" : "/api/projects",
@@ -11,147 +14,152 @@ async function prepare(page: Page, example = false) {
   const { id } = await response.json();
   await page.goto(`/worktrees/${id}/flow`);
   await expect(page.locator(".palette-item").first()).toBeVisible();
-  // Native drag images are outside page screenshots. Observe the real browser
-  // API without replacing it, including its image dimensions and pointer anchor.
-  await page.evaluate(() => {
-    const original = DataTransfer.prototype.setDragImage;
-    DataTransfer.prototype.setDragImage = function (image, x, y) {
-      const shape = image.querySelector(".node-shape")!;
-      const bounds = image.getBoundingClientRect();
-      const rect = shape.getBoundingClientRect();
-      document.body.dataset.dragImage = JSON.stringify({
-        nodeClass: image.querySelector(".pipeline-node")!.className,
-        label: image.querySelector(".node-title")!.textContent,
-        ports: [...image.querySelectorAll(".handle-label")].map(
-          (port) => port.textContent,
-        ),
-        width: rect.width,
-        height: rect.height,
-        offsetX: x - (rect.x + rect.width / 2 - bounds.x),
-        offsetY: y - (rect.y + rect.height / 2 - bounds.y),
-      });
-      original.call(this, image, x, y);
-    };
-  });
-  return id as string;
+  return `/api/worktrees/${id}`;
 }
 
+const preview = (page: Page) => page.locator(".node-drag-preview");
 const viewport = (page: Page) =>
   page
     .locator(".react-flow__viewport")
     .evaluate((element) => getComputedStyle(element).transform);
 
-for (const entry of [
-  { label: "Load CSV", shape: "source-node", zoom: 0, example: false },
-  { label: "Filter", shape: "round-node", zoom: -20, example: true },
-  { label: "Join", shape: "round-node", zoom: -2, example: true },
-  { label: "Export CSV", shape: "round-node", zoom: 2, example: true },
-  { label: "Regional report", shape: "component", zoom: -1, example: true },
-]) {
-  test(`dragging ${entry.label} previews its shape and drops at the pointer`, async ({
-    page,
-  }) => {
-    const errors: string[] = [];
-    page.on("pageerror", (error) => errors.push(error.message));
-    const id = await prepare(page, entry.example);
-    const nodes = page.locator(".react-flow__node");
-    const before = await nodes.count();
-    const area = (await page.locator(".canvas-safe-area").boundingBox())!;
-    if (entry.example) {
-      // Move away from the initial fit before choosing a non-default zoom.
-      await page.mouse.move(area.x + area.width - 10, area.y + 30);
-      await page.mouse.down();
-      await page.mouse.move(area.x + area.width - 160, area.y + 80, {
-        steps: 6,
-      });
-      await page.mouse.up();
-      for (let n = 0; n < Math.abs(entry.zoom); n++) {
-        const control = page.getByRole("button", {
-          name: entry.zoom > 0 ? "Zoom in" : "Zoom out",
-          exact: true,
-        });
-        if (await control.isDisabled()) break;
-        await control.click();
-      }
-    }
-    const zoom = await canvasZoom(page);
-    if (entry.zoom === -20) expect(zoom).toBe(0.1);
-    const transform = await viewport(page);
-    const point = {
-      x: Math.round(area.x + area.width / 2),
-      y: Math.round(area.y + area.height / 2),
-    };
-    const pane = page.locator(".react-flow__pane");
-    const bounds = (await pane.boundingBox())!;
-    const saved = page.waitForResponse(
-      (response) =>
-        response.url().endsWith(`/api/worktrees/${id}`) &&
-        response.request().method() === "PUT",
-    );
-    await page
-      .locator(".palette")
-      .getByRole("button", { name: entry.label, exact: true })
-      .dragTo(pane, {
-        sourcePosition: { x: 15, y: 10 },
-        targetPosition: { x: point.x - bounds.x, y: point.y - bounds.y },
-      });
-    expect((await saved).ok()).toBe(true);
-    await expect(nodes).toHaveCount(before + 1);
-    const node = nodes.filter({ has: page.locator(".is-selected") });
-    await expect(node).toHaveCount(1);
-    const shape = (await node.locator(".node-shape").boundingBox())!;
-    expect(shape.x + shape.width / 2).toBeCloseTo(point.x, 0);
-    expect(shape.y + shape.height / 2).toBeCloseTo(point.y, 0);
-    expect(await viewport(page)).toBe(transform);
-
-    const image = await page.evaluate(() =>
-      JSON.parse(document.body.dataset.dragImage!),
-    );
-    expect(image.nodeClass).toContain(entry.shape);
-    expect(image.label).toBe(entry.label);
-    expect(image.ports).toEqual(
-      await node.locator(".handle-label").allTextContents(),
-    );
-    expect(image.width).toBeCloseTo(96 * zoom, 1);
-    expect(image.height).toBeCloseTo(96 * zoom, 1);
-    expect(image.width).toBeCloseTo(shape.width, 1);
-    expect(image.offsetX).toBe(0);
-    expect(image.offsetY).toBe(0);
-    await expect(page.locator(".node-drag-image")).toHaveCount(0);
-
-    const endpoint = `/api/worktrees/${id}`;
-    const snapshot = await (await page.request.get(endpoint)).json();
-    const created = snapshot.bundle.flow.nodes.at(-1);
-    await page.reload();
-    await expect(nodes).toHaveCount(before + 1);
-    const reloaded = await (await page.request.get(endpoint)).json();
-    expect(reloaded.bundle.flow.nodes.at(-1).position).toEqual(
-      created.position,
-    );
-    expect(errors).toEqual([]);
-  });
-}
-
-test("canceling a palette drag leaves the graph unchanged", async ({
-  page,
-}) => {
-  const id = await prepare(page);
+async function startDrag(page: Page, label: string) {
   const item = page
     .locator(".palette")
-    .getByRole("button", { name: "Filter", exact: true });
+    .getByRole("button", { name: label, exact: true });
   const bounds = (await item.boundingBox())!;
-  await page.mouse.move(bounds.x + 20, bounds.y + 10);
+  await page.mouse.move(bounds.x + 15, bounds.y + 10);
   await page.mouse.down();
-  await page.mouse.move(bounds.x + 40, bounds.y + 10, { steps: 5 });
-  await expect
-    .poll(() => page.evaluate(() => document.body.dataset.dragImage))
-    .toBeTruthy();
+  return { x: bounds.x + 60, y: bounds.y + 12 };
+}
+
+/** The preview's shape center follows the pointer, where the drop puts it. */
+async function dragOver(page: Page, point: Point, accepted: boolean) {
+  await page.mouse.move(point.x, point.y, { steps: 4 });
+  // Blink tells whether a zone accepts the drop on its next dragover.
+  await page.mouse.move(point.x, point.y);
+  await expect(preview(page).locator(".node-shape")).toBeVisible();
+  if (accepted) await expect(preview(page)).not.toHaveClass(/refused/);
+  else await expect(preview(page)).toHaveClass(/refused/);
+  const shape = (await preview(page).locator(".node-shape").boundingBox())!;
+  expect(shape.x + shape.width / 2).toBeCloseTo(point.x, 0);
+  expect(shape.y + shape.height / 2).toBeCloseTo(point.y, 0);
+  return shape;
+}
+
+/** Drop under the pointer, without moving the viewport, as previewed. */
+async function drop(page: Page, endpoint: string, point: Point) {
+  const nodes = page.locator(".react-flow__node");
+  const ids = () =>
+    nodes.evaluateAll((elements) => elements.map((node) => node.dataset.id));
+  const before = await ids();
+  const transform = await viewport(page);
+  const shape = await dragOver(page, point, true);
+  const ports = await preview(page).locator(".handle-label").allTextContents();
+  const saved = page.waitForResponse(
+    (response) =>
+      response.url().endsWith(endpoint) &&
+      response.request().method() === "PUT",
+  );
+  await page.mouse.up();
+  expect((await saved).ok()).toBe(true);
+  await expect(preview(page)).toHaveCount(0);
+  await expect(nodes).toHaveCount(before.length + 1);
+  const id = (await ids()).find((value) => !before.includes(value));
+  const node = page.locator(`.react-flow__node[data-id="${id}"]`);
+  await expect(node).toHaveClass(/selected/);
+  const dropped = (await node.locator(".node-shape").boundingBox())!;
+  expect(dropped.x).toBeCloseTo(shape.x, 0);
+  expect(dropped.y).toBeCloseTo(shape.y, 0);
+  expect(dropped.width).toBeCloseTo(shape.width, 1);
+  expect(await node.locator(".handle-label").allTextContents()).toEqual(ports);
+  expect(await viewport(page)).toBe(transform);
+  // The saved position is the rendered one.
+  const snapshot: Snapshot = await (await page.request.get(endpoint)).json();
+  const created = snapshot.bundle!.flow.nodes.find((n) => n.id === id)!;
+  const [x, y] = await node.evaluate((element) => {
+    const matrix = new DOMMatrix(getComputedStyle(element).transform);
+    return [matrix.e, matrix.f];
+  });
+  expect(x).toBeCloseTo(created.position!.x, 1);
+  expect(y).toBeCloseTo(created.position!.y, 1);
+  return node;
+}
+
+test("palette drags preview nodes at the canvas zoom and refuse drops outside the canvas", async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  const endpoint = await open(page, true);
+  const area = (await page.locator(".canvas-safe-area").boundingBox())!;
+  const point = {
+    x: Math.round(area.x + area.width / 2),
+    y: Math.round(area.y + area.height / 2),
+  };
+  // Move the graph away from the drop point.
+  await page.mouse.move(area.x + area.width - 10, area.y + 30);
+  await page.mouse.down();
+  await page.mouse.move(area.x + area.width - 160, area.y + 80, { steps: 6 });
+  await page.mouse.up();
+  await page.locator(".react-flow__node").first().click();
+  const search = (await page.locator(".canvas-search").boundingBox())!;
+  await expect(page.locator(".inspector")).toBeVisible();
+  const inspector = (await page.locator(".inspector").boundingBox())!;
+  for (const entry of [
+    { label: "Join", shape: "round-node", zoom: 0 },
+    { label: "Filter", shape: "round-node", zoom: -20 },
+    { label: "Regional report", shape: "component", zoom: 22 },
+  ]) {
+    for (let n = 0; n < Math.abs(entry.zoom); n++) {
+      const control = page.getByRole("button", {
+        name: entry.zoom > 0 ? "Zoom in" : "Zoom out",
+        exact: true,
+      });
+      if (await control.isDisabled()) break;
+      await control.click();
+    }
+    const zoom = await canvasZoom(page);
+    if (entry.zoom) expect(zoom).toBe(entry.zoom < 0 ? 0.1 : 1.8);
+    const palette = await startDrag(page, entry.label);
+    const shape = await dragOver(page, palette, false);
+    expect(shape.width).toBeCloseTo(96 * zoom, 1);
+    // The search field and the inspector cover the canvas without accepting drops.
+    await dragOver(page, { x: search.x + 40, y: search.y + 15 }, false);
+    await dragOver(
+      page,
+      { x: inspector.x + 80, y: inspector.y + inspector.height / 2 },
+      false,
+    );
+    await expect(preview(page).locator(".pipeline-node")).toHaveClass(
+      new RegExp(entry.shape),
+    );
+    await expect(preview(page).locator(".node-title")).toHaveText(entry.label);
+    await drop(page, endpoint, point);
+  }
+  expect(errors).toEqual([]);
+});
+
+test("a first palette drop keeps the viewport, and a canceled drag adds nothing", async ({
+  page,
+}) => {
+  const endpoint = await open(page, false);
+  await dragOver(page, await startDrag(page, "Filter"), false);
   await page.keyboard.press("Escape");
   await page.mouse.up();
-  await expect(page.locator(".node-drag-image")).toHaveCount(0);
+  await expect(preview(page)).toHaveCount(0);
   await expect(page.locator(".react-flow__node")).toHaveCount(0);
-  const snapshot = await (
-    await page.request.get(`/api/worktrees/${id}`)
-  ).json();
-  expect(snapshot.bundle.flow.nodes).toEqual([]);
+  const snapshot: Snapshot = await (await page.request.get(endpoint)).json();
+  expect(snapshot.bundle!.flow.nodes).toEqual([]);
+
+  const area = (await page.locator(".canvas-safe-area").boundingBox())!;
+  await startDrag(page, "Load CSV");
+  // Outside the window, no event reports the pointer: the preview hides.
+  await page.mouse.move(-5, area.y + 40, { steps: 4 });
+  await expect(preview(page).locator(".node-shape")).toBeHidden();
+  const node = await drop(page, endpoint, {
+    x: Math.round(area.x + area.width / 3),
+    y: Math.round(area.y + area.height / 3),
+  });
+  await expect(node.locator(".pipeline-node")).toHaveClass(/source-node/);
 });

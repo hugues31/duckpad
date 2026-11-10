@@ -332,7 +332,7 @@ export default function FlowPage() {
           safe(() => addNode(kind, id, undefined, undefined, linked))
         }
         onDragStart={(kind, id, transfer) =>
-          canvas.current?.setDragImage(kind, id, transfer)
+          canvas.current?.previewDrag(kind, id, transfer)
         }
         onNewTemplate={(language) =>
           openModal({

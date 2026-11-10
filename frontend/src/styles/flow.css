@@ -556,13 +556,34 @@ fieldset.palette-bottom {
   align-items: center;
   color: var(--text);
 }
-.node-drag-image {
+/* Palette drags: the origin follows the pointer, where the shape center drops. */
+.node-drag-preview {
   position: fixed;
-  left: -10000px;
+  left: 0;
   top: 0;
-  padding: 24px;
-  width: max-content;
+  z-index: 300;
   pointer-events: none;
+}
+.node-drag-preview > div {
+  position: absolute;
+  opacity: 0.85;
+}
+.node-drag-preview > svg {
+  display: none;
+}
+.node-drag-preview.refused > div {
+  opacity: 0.4;
+  filter: grayscale(1);
+}
+.node-drag-preview.refused > svg {
+  display: block;
+  position: absolute;
+  translate: -50% -50%;
+  padding: 2px;
+  color: var(--danger);
+  background: var(--surface);
+  border-radius: 50%;
+  box-shadow: var(--shadow);
 }
 .node-shape {
   width: 96px;
