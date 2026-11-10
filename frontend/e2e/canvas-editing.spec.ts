@@ -136,6 +136,8 @@ test("selected links delete, undo and survive a rejected save without deleting n
   expect((await read()).bundle!.flow.nodes).toHaveLength(4);
   await page.keyboard.press("ControlOrMeta+Z");
   await expect(edge).toHaveCount(1);
+  // A restored link is not selected, so deleting a node next cannot remove it.
+  await expect(edge).not.toHaveClass(/selected/);
   await page.route(`**${endpoint}`, (route) =>
     route.request().method() === "PUT"
       ? route.fulfill({ status: 503, json: { error: "Save unavailable" } })
@@ -145,8 +147,10 @@ test("selected links delete, undo and survive a rejected save without deleting n
   await page.keyboard.press("Backspace");
   await expect(page.locator(".toast")).toContainText("Save unavailable");
   await expect(edge).toHaveCount(1);
+  await expect(edge).not.toHaveClass(/selected/);
   expect((await read()).bundle!.flow.edges).toHaveLength(2);
   await page.unroute(`**${endpoint}`);
+  await clickEdge();
   await page.keyboard.down("Shift");
   await clickEdge("filtered_doubled");
   await page.keyboard.up("Shift");

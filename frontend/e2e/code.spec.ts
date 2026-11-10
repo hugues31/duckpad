@@ -24,7 +24,7 @@ test("file filtering reveals nested matches and keeps the current draft", async 
 }) => {
   const { snapshot } = await openCode(page);
   await editCode(page, snapshot.files["README.md"] + "\nFiltered draft\n");
-  const filter = page.getByRole("searchbox", { name: "Filter files…" });
+  const filter = page.getByRole("textbox", { name: "Filter files…" });
   const tree = page.getByRole("tree", { name: "Project files" });
   await filter.fill("TEMPLATES/SQL.SQL");
   await expect(
@@ -208,6 +208,11 @@ test("project Markdown and Python dependencies round trip between Code, Document
   );
   await expect(editor).toHaveValue(formatted);
   await expect(editor).toBeFocused();
+  // Formats go through the browser's undo history.
+  await page.keyboard.press("ControlOrMeta+Z");
+  await expect(editor).toHaveValue(changed);
+  await page.keyboard.press("ControlOrMeta+Shift+Z");
+  await expect(editor).toHaveValue(formatted);
   await page
     .getByRole("button", { name: "Markdown preview", exact: true })
     .click();

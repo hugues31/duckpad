@@ -706,7 +706,8 @@ test("documentation waits for its refreshed revision and preserves edits during 
   );
   await button.click();
   expect((await saved).ok()).toBe(true);
-  await expect(button).toBeEnabled();
+  // Nothing is left to save.
+  await expect(button).toBeDisabled();
   const snapshot = await (
     await page.request.get(`/api/worktrees/${worktree}`)
   ).json();

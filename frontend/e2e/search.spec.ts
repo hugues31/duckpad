@@ -90,6 +90,13 @@ test("command search runs the project and navigates project and settings destina
       new RegExp(`/settings/${section.toLowerCase()}`),
     );
   }
+  await page.keyboard.press("ControlOrMeta+k");
+  dialog = page.getByRole("dialog", { name: "Search instance" });
+  await dialog.getByRole("combobox").fill("API tokens");
+  await dialog
+    .getByRole("option", { name: "API tokens User settings", exact: true })
+    .click();
+  await expect(page).toHaveURL(/\/user-settings\/api-tokens$/);
 });
 
 test("canvas search finds labels and IDs, centers distant nodes and never saves or runs", async ({

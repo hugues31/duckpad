@@ -217,7 +217,6 @@ export default function ProjectFileTree({
         <Search size={15} aria-hidden="true" />
         <input
           ref={input}
-          type="search"
           aria-label={t("filterFiles")}
           placeholder={t("filterFiles")}
           value={query}
@@ -230,7 +229,7 @@ export default function ProjectFileTree({
             else if (event.key === "ArrowDown") {
               event.preventDefault();
               focus(visible[0]?.path);
-            } else if (event.key === "Enter" && firstFile) {
+            } else if (event.key === "Enter" && filtering && firstFile) {
               event.preventDefault();
               onSelect(firstFile);
               focus(firstFile);

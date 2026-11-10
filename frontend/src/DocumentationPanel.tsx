@@ -81,7 +81,6 @@ export default function DocumentationPanel({
       ) : (
         <MarkdownEditor
           value={draft}
-          disabled={pending}
           onChange={(text) => {
             update(() => text);
             setMessage("");

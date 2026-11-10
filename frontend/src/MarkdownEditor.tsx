@@ -23,14 +23,32 @@ const formats = [
   ["code", "markdownCodeBlock", Code2],
 ] as const;
 
+/** Type only the changed span, so the browser's Ctrl+Z undoes a format. */
+function insertChange(input: HTMLTextAreaElement, text: string) {
+  const old = input.value;
+  let start = 0;
+  while (start < old.length && old[start] === text[start]) start++;
+  let end = 0;
+  while (
+    end < old.length - start &&
+    end < text.length - start &&
+    old.at(-1 - end) === text.at(-1 - end)
+  )
+    end++;
+  input.setSelectionRange(start, old.length - end);
+  return document.execCommand(
+    "insertText",
+    false,
+    text.slice(start, text.length - end),
+  );
+}
+
 export default function MarkdownEditor({
   value,
   onChange,
-  disabled,
 }: {
   value: string;
   onChange: (value: string) => void;
-  disabled: boolean;
 }) {
   const t = useT();
   const editor = useRef<HTMLTextAreaElement>(null);
@@ -46,7 +64,7 @@ export default function MarkdownEditor({
   }, [value]);
   const format = (format: MarkdownFormat) => {
     const input = editor.current;
-    if (!input || disabled) return;
+    if (!input) return;
     const result = formatMarkdown(
       value,
       input.selectionStart,
@@ -55,7 +73,8 @@ export default function MarkdownEditor({
       t("markdownText"),
     );
     selection.current = result;
-    onChange(result.text);
+    input.focus();
+    if (!insertChange(input, result.text)) onChange(result.text);
   };
   return (
     <div className="markdown-editor">
@@ -71,7 +90,6 @@ export default function MarkdownEditor({
             className="icon"
             title={t(label)}
             aria-label={t(label)}
-            disabled={disabled}
             onMouseDown={(event) => event.preventDefault()}
             onClick={() => format(kind)}
           >
@@ -82,7 +100,6 @@ export default function MarkdownEditor({
       <textarea
         ref={editor}
         aria-label={t("projectDocs")}
-        disabled={disabled}
         className="project-documentation"
         value={value}
         placeholder={t("documentationPlaceholder")}

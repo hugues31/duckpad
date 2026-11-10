@@ -19,7 +19,9 @@ it("filters by a node's display name and file path without selecting another fil
       onSelect={onSelect}
     />,
   );
-  const filter = screen.getByRole("searchbox");
+  const filter = screen.getByRole("textbox", { name: "Filter files…" });
+  fireEvent.keyDown(filter, { key: "Enter" });
+  expect(onSelect).not.toHaveBeenCalled();
   fireEvent.change(filter, { target: { value: "REVENUE sql" } });
   expect(screen.getByRole("treeitem", { name: "Revenue total" })).toBeTruthy();
   expect(screen.queryByRole("treeitem", { name: "README.md" })).toBeNull();

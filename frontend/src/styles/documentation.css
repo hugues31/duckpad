@@ -30,6 +30,14 @@
   border-radius: 8px;
   overflow: hidden;
 }
+/* The frame shows the focus: it clips the editor's own outline. */
+.markdown-editor:has(.project-documentation:focus-visible) {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+.markdown-editor .project-documentation:focus-visible {
+  outline: none;
+}
 .markdown-toolbar {
   display: flex;
   flex-wrap: wrap;

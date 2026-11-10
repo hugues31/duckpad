@@ -88,7 +88,7 @@ Project roles and permissions are listed in the
 | --- | --- |
 | `/projects` | Project dashboard |
 | `/instance-settings/:section` | Instance configuration |
-| `/user-settings` | Account settings |
+| `/user-settings/:section` | Account settings; `/user-settings` opens Preferences |
 | `/projects/:projectId/jobs` | Jobs |
 | `/projects/:projectId/settings` | Project settings |
 | `/worktrees/:worktreeId/:tab` | Flow, Code, Documentation, Variables or History |

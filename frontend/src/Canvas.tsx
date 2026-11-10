@@ -330,6 +330,8 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
           setSelectedEdges((current) => {
             const next = new Set(current);
             for (const change of changes) {
+              // A deleted link restored by Undo or a failed save comes back unselected.
+              if (change.type === "remove") next.delete(change.id);
               if (change.type !== "select") continue;
               if (change.selected) next.add(change.id);
               else next.delete(change.id);
