@@ -11,6 +11,7 @@ from test_assistant import configure, conversation, dependencies, project, turn
 from test_assistant import instance as instance
 from test_assistant_editing import change, seed
 
+from duckpad.assistant.arguments import DeleteVariable
 from duckpad.assistant.editing import edit_variable
 from duckpad.assistant.knowledge import GUIDES, checkout_guides, guide_text, read_guide
 from duckpad.assistant.service import guarded
@@ -43,6 +44,11 @@ def test_manual_is_available_without_a_project_and_instructions_reach_each_turn(
         assert result["tools"][0]["name"] == "read_guide"
     assert all("@param minimum: number = 0" in instructions for instructions in received)
     assert all('"$var":"minimum"' in instructions for instructions in received)
+    charts = (
+        "Charts in charts.json are Vega-Lite 6 specs on node outputs; they draw at most 5,000 rows, "
+        "so aggregate in SQL before charting."
+    )
+    assert all(charts in " ".join((instructions or "").split()) for instructions in received)
 
 
 def test_every_docs_guide_is_a_complete_paginated_topic(instance):
@@ -108,7 +114,7 @@ def test_reader_can_page_variable_usages_but_cannot_delete(instance):
             found += result["items"]
         assert [u.get("node", u.get("view")) for u in found] == ["first", "second", "Regional"]
         with pytest.raises(Problem, match="role does not allow"):
-            edit_variable(ctx, "delete", "region")
+            edit_variable(ctx, DeleteVariable(operation="delete", name="region"))
         app.state.access.member(worktree["project"], user["id"], None)
         with pytest.raises(Problem):
             read_variables(ctx, "region")

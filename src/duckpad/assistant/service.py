@@ -40,7 +40,7 @@ from ..util import Problem, now, uid
 from .actions import Actions
 from .approvals import Approvals
 from .config import Configuration, provider_error
-from .editing import WRITE_TOOLS
+from .editing import WRITE_TOOLS, edit_chart, edit_variable
 from .gateway import TURN_TIMEOUT
 from .knowledge import AUTHORING_INSTRUCTIONS, read_guide
 from .runs import DEBUG_TOOLS, RUN_TOOLS, read_run_sql, recheck_run_reads
@@ -85,6 +85,8 @@ MAX_TURNS = 100
 UNTITLED = "New conversation"
 # Seconds between access rechecks while a response streams; tools recheck on every call.
 RECHECK_INTERVAL = 1.0
+# Tools whose arguments are validated by operation-specific models get one extra correction.
+MODEL_VALIDATED_TOOLS = {edit_variable, edit_chart}
 
 
 class TurnRequest(BaseModel):
@@ -419,7 +421,12 @@ class Assistant:
                     deps_type=Dependencies,
                     output_type=str | DeferredToolRequests,
                     tools=[
-                        Tool(guarded(t), sequential=True, requires_approval=t.__name__ == "launch_run")
+                        Tool(
+                            guarded(t),
+                            sequential=True,
+                            requires_approval=t.__name__ == "launch_run",
+                            max_retries=2 if t in MODEL_VALIDATED_TOOLS else None,
+                        )
                         for t in tools
                     ],
                     instructions=INSTRUCTIONS

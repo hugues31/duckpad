@@ -300,11 +300,11 @@ place hard-wired to `views.json` handles `charts.json` too:
 
 ## Out of scope
 
-A chart editor or **Save as chart** from the Data tab; assistant tools that
-create or render charts; downsampling; click-to-explain on marks; interactive
-selections, parameters, expressions, transforms and spec `config`; charts in
-the draft Preview tab; chart output from Jobs; dashboards; rendered visual
-diffs in Git review.
+A chart editor or **Save as chart** from the Data tab; assistant chart
+rendering (in chat or server-side); downsampling; click-to-explain on marks;
+interactive selections, parameters, expressions, transforms and spec `config`;
+charts in the draft Preview tab; chart output from Jobs; dashboards; rendered
+visual diffs in Git review.
 
 ## Sources
 
