@@ -617,6 +617,8 @@ test("double-click opens Python code and read-only nodes cannot be changed", asy
   await page.keyboard.insertText("should not be saved");
   await closeCode(page);
   expect((await read()).revision).toBe(before);
+  // The snapshot poll keeps reaching the route; let it finish before teardown.
+  await page.unrouteAll({ behavior: "wait" });
 });
 
 test("canvas shortcuts yield to fields, editors and dialogs", async ({
