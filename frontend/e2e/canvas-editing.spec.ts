@@ -576,7 +576,7 @@ test("double-click opens Python code and read-only nodes cannot be changed", asy
     position: { x: 700, y: 300 },
   });
   bundle.node_sql!["nodes/python_node.py"] =
-    "# @output result\nresult = session.sql('SELECT 42 AS amount')";
+    "import duckpad as dp\nclass Source(dp.Node):\n    def run(self) -> dp.Relation:\n        return self.db.sql('SELECT 42 AS amount')\n";
   expect(
     (
       await page.request.put(endpoint, {
