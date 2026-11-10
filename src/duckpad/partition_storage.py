@@ -66,7 +66,7 @@ class PartitionStorage:
         metadata = {**metadata, "digest": content}
         with self.store.transaction() as session:
             previous = self.manifest(signature=metadata["signature"])
-            if previous and previous.get("digest") == content:
+            if previous and previous["digest"] == content:
                 return previous, self.entries(previous["id"])
             session.add(
                 m.PartitionManifest(

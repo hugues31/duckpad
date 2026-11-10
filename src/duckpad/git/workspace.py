@@ -700,7 +700,7 @@ class GitWorkspace:
         raise Problem(message, 422)
 
     def prepare_origin(self, worktree_id):
-        """Review this branch into its recorded origin; older branches default to main.
+        """Review this branch into its recorded origin, or main for a branch without one.
 
         `prepare` validates history before taking the repository lock, so it is not called under it.
         """

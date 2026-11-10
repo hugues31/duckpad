@@ -3,9 +3,7 @@
 import base64
 import json
 import os
-import sqlite3
 import stat
-from contextlib import closing
 
 import pytest
 from sqlalchemy import text
@@ -136,38 +134,6 @@ def test_a_sealed_value_only_opens_in_its_own_field(tmp_path):
             )
         with pytest.raises(Problem, match="settings/oidc/client_secret was modified outside Duckpad"):
             store.get("settings", "oidc")
-    finally:
-        store.close()
-
-
-def test_startup_seals_plaintext_secrets_and_erases_them_from_the_file(tmp_path):
-    store = Store(tmp_path)
-    store.close()
-    (tmp_path / sealing.KEY_FILE).unlink()
-    # An instance created before secrets were sealed.
-    with closing(sqlite3.connect(tmp_path / "instance.sqlite")) as connection, connection:
-        connection.execute(
-            "INSERT INTO connection VALUES ('pg', 'PG', 'postgres', ?)", (json.dumps(["password"]),)
-        )
-        connection.execute(
-            "INSERT INTO connection_environment VALUES ('pg', 'dev', ?)",
-            (json.dumps({"host": "db.internal", "password": SECRETS[0]}),),
-        )
-        connection.execute(
-            "INSERT INTO setting VALUES ('oidc', ?)",
-            (json.dumps({"enabled": False, "client_secret": SECRETS[1]}),),
-        )
-        # Deleted rows linger in free pages until the file is rewritten.
-        connection.execute("INSERT INTO setting VALUES ('deleted', ?)", (json.dumps(SECRETS[2]),))
-        connection.execute("DELETE FROM setting WHERE id = 'deleted'")
-    assert SECRETS[0].encode() in raw(tmp_path)
-
-    store = Store(tmp_path)
-    try:
-        assert (tmp_path / sealing.KEY_FILE).exists()
-        assert store.get("connection", "pg")["environments"]["dev"]["password"] == SECRETS[0]
-        assert store.get("settings", "oidc")["client_secret"] == SECRETS[1]
-        assert not any(secret.encode() in raw(tmp_path) for secret in SECRETS[:2])
     finally:
         store.close()
 
