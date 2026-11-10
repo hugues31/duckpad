@@ -3,9 +3,7 @@
 from pathlib import Path
 from types import SimpleNamespace
 
-from alembic import command
-
-from duckpad.migrations import configuration, migration_connection, upgrade
+import pytest
 
 
 def test_capture_and_download_use_descriptor_metadata(services, tmp_path, monkeypatch):
@@ -45,11 +43,12 @@ def test_capture_and_download_use_descriptor_metadata(services, tmp_path, monkey
         assert record["size"] == len(b"value\n42\n")
 
 
-def test_migration_preserves_existing_parquet_location_and_removal(services, tmp_path):
+@pytest.mark.parametrize("storage_kind", ["download", "partition"])
+def test_parquet_storage_is_independent_of_format(services, tmp_path, storage_kind):
     store, projects, _, engine = services
-    tree = projects.create("Existing Parquet download")
+    tree = projects.create("Parquet storage")
     run = {
-        "id": "run_old",
+        "id": "run_parquet",
         "project": tree["project"],
         "worktree": tree["id"],
         "environment": "dev",
@@ -61,15 +60,17 @@ def test_migration_preserves_existing_parquet_location_and_removal(services, tmp
     source.write_bytes(b"PAR1")
     artifacts = engine.exports.artifacts
     identity = artifacts.capture(
-        {"path": str(source), "format": "parquet"}, run, "export", [tmp_path], storage_kind="partition"
+        {"path": str(source), "format": "parquet"}, run, "export", [tmp_path], storage_kind=storage_kind
     )
-    path = artifacts.path(store.get("artifact", identity))
-    with migration_connection(store.engine) as connection:
-        command.downgrade(configuration(connection), "0001_baseline")
-    upgrade(store.engine)
     record = store.get("artifact", identity)
-    assert record["storage_kind"] == "partition"
-    assert artifacts.path(record) == path and path.exists()
+    path = artifacts.path(record)
+    assert record["storage_kind"] == storage_kind
+    directory = (
+        store.paths.partition_artifacts(tree["id"], "dev")
+        if storage_kind == "partition"
+        else artifacts.directory
+    )
+    assert path.parent == directory and path.exists()
     with artifacts.open(identity, tree["id"], "dev", "export", run["id"]) as (stream, _):
         assert stream.read() == b"PAR1"
     artifacts.remove(identity)

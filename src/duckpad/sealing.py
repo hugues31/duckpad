@@ -146,9 +146,11 @@ class MasterKeys:
         return f"dpenc:1:{self.primary}:{base64.urlsafe_b64encode(nonce + data).decode().rstrip('=')}"
 
     def open(self, value: Any, location: str) -> Any:
+        if not sealable(value):
+            return value
         match = SEALED.fullmatch(value) if isinstance(value, str) else None
         if not match:
-            return value
+            raise Problem(f"The stored secret {location} is not encrypted", 500)
         try:
             data = base64.urlsafe_b64decode(match[2] + "=" * (-len(match[2]) % 4))
             plain = self.ciphers[match[1]].decrypt(data[:12], data[12:], location.encode())

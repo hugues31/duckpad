@@ -140,36 +140,20 @@ def test_a_sealed_value_only_opens_in_its_own_field(tmp_path):
         store.close()
 
 
-def test_startup_seals_plaintext_secrets_and_erases_them_from_the_file(tmp_path):
+@pytest.mark.parametrize("value", ["unsealed-secret", "dpenc:1:invalid", 42])
+def test_unencrypted_stored_secret_is_rejected_without_conversion(tmp_path, value):
     store = Store(tmp_path)
     store.close()
-    (tmp_path / sealing.KEY_FILE).unlink()
-    # An instance created before secrets were sealed.
     with closing(sqlite3.connect(tmp_path / "instance.sqlite")) as connection, connection:
         connection.execute(
-            "INSERT INTO connection VALUES ('pg', 'PG', 'postgres', ?)", (json.dumps(["password"]),)
-        )
-        connection.execute(
-            "INSERT INTO connection_environment VALUES ('pg', 'dev', ?)",
-            (json.dumps({"host": "db.internal", "password": SECRETS[0]}),),
-        )
-        connection.execute(
             "INSERT INTO setting VALUES ('oidc', ?)",
-            (json.dumps({"enabled": False, "client_secret": SECRETS[1]}),),
+            (json.dumps({"enabled": False, "client_secret": value}),),
         )
-        # Deleted rows linger in free pages until the file is rewritten.
-        connection.execute("INSERT INTO setting VALUES ('deleted', ?)", (json.dumps(SECRETS[2]),))
-        connection.execute("DELETE FROM setting WHERE id = 'deleted'")
-    assert SECRETS[0].encode() in raw(tmp_path)
-
-    store = Store(tmp_path)
-    try:
-        assert (tmp_path / sealing.KEY_FILE).exists()
-        assert store.get("connection", "pg")["environments"]["dev"]["password"] == SECRETS[0]
-        assert store.get("settings", "oidc")["client_secret"] == SECRETS[1]
-        assert not any(secret.encode() in raw(tmp_path) for secret in SECRETS[:2])
-    finally:
-        store.close()
+        original = list(connection.iterdump())
+    with pytest.raises(Problem, match="settings/oidc/client_secret is not encrypted"):
+        Store(tmp_path)
+    with closing(sqlite3.connect(tmp_path / "instance.sqlite")) as connection:
+        assert list(connection.iterdump()) == original
 
 
 def test_rotation_reseals_with_the_first_key(tmp_path, monkeypatch):

@@ -20,7 +20,7 @@ from sqlmodel import Session, col, create_engine, select
 from . import models as m
 from .migrations import upgrade
 from .paths import InstancePaths
-from .sealing import MasterKeys, sealable, sealed_fields, sealed_with
+from .sealing import MasterKeys, sealed_fields, sealed_with
 from .util import Problem, dumps
 
 MODELS = {
@@ -120,19 +120,16 @@ class Store:
             ]
 
     def _reseal(self, records):
-        """Seal plaintext secrets, and those sealed before a rotation, with the first master key.
-
-        This also encrypts instances created before secrets were sealed. Rewriting the file
-        afterwards drops the pages that held the previous values.
-        """
+        """Validate stored secrets and reseal them with the first key after a rotation."""
         changed = False
         with self.transaction():
             for kind, key, record in records:
+                opened = self._open(kind, key, record)
                 if any(
-                    sealable(container[field]) and sealed_with(container[field]) != self.keys.primary
+                    (identity := sealed_with(container[field])) and identity != self.keys.primary
                     for container, field, _ in sealed_fields(kind, key, record)
                 ):
-                    self.put(kind, key, self._open(kind, key, record))
+                    self.put(kind, key, opened)
                     changed = True
         if changed:
             self.compact()
