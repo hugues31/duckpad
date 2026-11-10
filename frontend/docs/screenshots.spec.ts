@@ -145,7 +145,6 @@ test("capture project creation, results, lineage and SQL", async ({ page }) => {
   await expect(
     dialog.getByRole("button", { name: "Create", exact: true }),
   ).toBeEnabled();
-  await capture(page, "new-project", dialog);
   await dialog.getByRole("button", { name: "Create", exact: true }).click();
   await expect(page.locator(".react-flow__node")).toHaveCount(10);
   await run(page);
@@ -387,7 +386,6 @@ test("capture parameters, node documentation and nested components", async ({
     "paid",
   );
   await expect(page.locator(".preview-header .badge")).toHaveText("Valid");
-  await capture(page, "parameters");
   await inspector
     .getByRole("button", { name: "Documentation", exact: true })
     .click();

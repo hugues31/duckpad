@@ -498,6 +498,7 @@ def test_reader_results_and_no_recalculation(instance):
         client, headers, "GET", f"/worktrees/{worktree['id']}/preview/orders?environment=dev"
     ).json()
     assert response["count"] == 120
+    assert len(store.all("run")) == 1
 
 
 def test_sql_worker_blocks_metadata_other_projects_and_symlinks(instance, tmp_path):
@@ -561,6 +562,8 @@ def test_sql_worker_blocks_metadata_other_projects_and_symlinks(instance, tmp_pa
 def test_account_validation_and_no_credential_disclosure(instance):
     _, client = instance
     assert client.post("/api/users", json={"username": "new", "password": "short"}).status_code == 400
+    owner = {"username": "new", "password": PASSWORD, "role": "owner"}
+    assert client.post("/api/users", json=owner).status_code == 422
     created = client.post("/api/users", json={"username": "new", "password": PASSWORD}).json()
     assert set(created) == {"id", "username", "role", "active"}
     assert client.post("/api/users", json={"username": "NEW", "password": PASSWORD}).status_code == 409
