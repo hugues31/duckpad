@@ -1,10 +1,11 @@
 import { lazy, Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "react-router";
-import { Download, FileCode2, Loader2, Plus, Save } from "lucide-react";
+import { Download, Loader2, Plus, Save } from "lucide-react";
 import { downloadProject } from "./api";
 import { nodeLocation, nodeSourcePath } from "./nodeCode";
 import { useT } from "./i18n";
 import ProjectFileTree from "./ProjectFileTree";
+import ProjectFileIcon from "./ProjectFileIcon";
 import { CODE_FILE_PARAM } from "./navigation";
 import { initialProjectFile, projectFileLanguage } from "./projectFiles";
 import { useRevisionDraft } from "./useRevisionDraft";
@@ -290,7 +291,7 @@ export default function CodePanel({
           {path ? (
             <>
               <div className="code-file-heading">
-                <FileCode2 size={15} />
+                <ProjectFileIcon path={path} />
                 <span>{path}</span>
                 {files[path] !== saved[path] && (
                   <span className="muted">· {t("unsavedChanges")}</span>

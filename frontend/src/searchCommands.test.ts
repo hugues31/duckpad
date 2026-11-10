@@ -33,6 +33,13 @@ it("offers every project tab, settings sections and available working branch act
   expect(
     items.find((item) => item.key === "projectSettings:connections")?.detail,
   ).toBe("Project settings · Revenue");
+  expect(items.find((item) => item.key === "userSettings:api-tokens")).toEqual(
+    expect.objectContaining({
+      label: "API tokens",
+      detail: "User settings",
+      to: "/user-settings/api-tokens",
+    }),
+  );
   expect(items.some((item) => item.key.startsWith("settings:"))).toBe(false);
   expect(commands(workspace, false).some((item) => item.action === "run")).toBe(
     false,

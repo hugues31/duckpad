@@ -127,7 +127,7 @@ export default function GitSyncTab({
           keyRequired ? (
             <Link
               className="button secondary small"
-              to="/user-settings"
+              to="/user-settings/ssh-key"
               onClick={onClose}
             >
               {t("openUserSettings")}

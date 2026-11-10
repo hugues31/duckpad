@@ -1549,5 +1549,16 @@
   "muteNode": "Silenciar nó (M)",
   "unmuteNode": "Reativar nó (M)",
   "mutedNode": "Silenciado",
-  "mutedNodeHint": "As entradas passam para as saídas pela ordem das portas. As saídas adicionais usam a primeira entrada. O código do nó é ignorado."
+  "mutedNodeHint": "As entradas passam para as saídas pela ordem das portas. As saídas adicionais usam a primeira entrada. O código do nó é ignorado.",
+  "filterFiles": "Filter files…",
+  "markdownFormatting": "Markdown formatting",
+  "markdownHeading": "Heading",
+  "markdownBold": "Bold",
+  "markdownItalic": "Italic",
+  "markdownLink": "Link",
+  "markdownBulletList": "Bulleted list",
+  "markdownNumberedList": "Numbered list",
+  "markdownQuote": "Quote",
+  "markdownCodeBlock": "Code block",
+  "markdownText": "Text"
 }

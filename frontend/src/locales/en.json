@@ -1549,5 +1549,16 @@
   "muteNode": "Mute node (M)",
   "unmuteNode": "Unmute node (M)",
   "mutedNode": "Muted",
-  "mutedNodeHint": "Inputs pass through to outputs in port order. Extra outputs use the first input. Node code is skipped."
+  "mutedNodeHint": "Inputs pass through to outputs in port order. Extra outputs use the first input. Node code is skipped.",
+  "filterFiles": "Filter files…",
+  "markdownFormatting": "Markdown formatting",
+  "markdownHeading": "Heading",
+  "markdownBold": "Bold",
+  "markdownItalic": "Italic",
+  "markdownLink": "Link",
+  "markdownBulletList": "Bulleted list",
+  "markdownNumberedList": "Numbered list",
+  "markdownQuote": "Quote",
+  "markdownCodeBlock": "Code block",
+  "markdownText": "Text"
 }

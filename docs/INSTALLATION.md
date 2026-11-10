@@ -115,8 +115,8 @@ duckpad reset-password
 ```
 
 It prints a new generated password for `admin` and signs out that account's
-sessions. Sign in with it, then choose your own in **User settings → Change
-password**. To reset another local account, name it, and pass the `--home` used
+sessions. Sign in with it, then choose your own in **User settings → Password →
+Change password**. To reset another local account, name it, and pass the `--home` used
 with `duckpad start` if you chose one:
 
 ```sh
@@ -425,7 +425,7 @@ versions and checks. Installed release wheels already include the interface.
 The initial `admin` account manages the instance. Open **Instance settings → Users and permissions** to create individual
 accounts, reset passwords, change instance roles, or deactivate/reactivate accounts.
 Passwords require at least 12 characters. Users can change their own password in
-**Account menu → User settings**; resets and deactivations revoke existing sessions.
+**Account menu → User settings → Password**; resets and deactivations revoke existing sessions.
 
 **API tokens.** Local and SSO users can create named tokens under **User settings → API tokens**.
 The form proposes an expiration date 90 days away; clear it for a token without expiration.

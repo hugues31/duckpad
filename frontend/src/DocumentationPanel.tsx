@@ -1,5 +1,6 @@
 import { useState } from "react";
 import MarkdownText from "./MarkdownText";
+import MarkdownEditor from "./MarkdownEditor";
 import GeneratedDocumentation from "./GeneratedDocumentation";
 import { useT } from "./i18n";
 import { useRevisionDraft } from "./useRevisionDraft";
@@ -20,7 +21,7 @@ export default function DocumentationPanel({
   const t = useT();
   const [message, setMessage] = useState("");
   const [preview, setPreview] = useState(readOnly);
-  const { draft, update, persist, pending } = useRevisionDraft(
+  const { draft, update, persist, pending, dirty } = useRevisionDraft(
     snapshot.bundle?.documentation.project || "",
     snapshot,
     onSave,
@@ -30,26 +31,47 @@ export default function DocumentationPanel({
       <span className="eyebrow">{t("documentation")}</span>
       <h1>{t("projectDocs")}</h1>
       <p className="muted">{t("emptyDocumentation")}</p>
-      {/* Readers only get the preview. */}
-      {!readOnly && (
-        <div className="segmented">
+      <div className="documentation-actions">
+        {!readOnly && (
+          <div className="segmented">
+            <button
+              aria-pressed={!preview}
+              className={!preview ? "active" : ""}
+              onClick={() => setPreview(false)}
+            >
+              {t("edit")}
+            </button>
+            <button
+              aria-pressed={preview}
+              className={preview ? "active" : ""}
+              onClick={() => setPreview(true)}
+            >
+              {t("markdownPreview")}
+            </button>
+          </div>
+        )}
+        {!readOnly && (
           <button
-            aria-pressed={!preview}
-            className={!preview ? "active" : ""}
-            onClick={() => setPreview(false)}
+            className="button primary small"
+            disabled={!dirty || pending}
+            onClick={async () => {
+              setMessage("");
+              try {
+                await persist();
+                setMessage(t("saved"));
+              } catch (e) {
+                setMessage((e as Error).message);
+              }
+            }}
           >
-            {t("edit")}
+            {t(pending ? "saving" : "save")}
           </button>
-          <button
-            aria-pressed={preview}
-            className={preview ? "active" : ""}
-            onClick={() => setPreview(true)}
-          >
-            {t("markdownPreview")}
-          </button>
-        </div>
-      )}
-      {preview ? (
+        )}
+        <span className="muted small" role="status">
+          {message}
+        </span>
+      </div>
+      {readOnly || preview ? (
         <section
           className="documentation-preview"
           aria-label={t("markdownPreview")}
@@ -57,33 +79,14 @@ export default function DocumentationPanel({
           <MarkdownText>{draft}</MarkdownText>
         </section>
       ) : (
-        <textarea
-          aria-label={t("projectDocs")}
-          readOnly={readOnly}
-          className="project-documentation"
+        <MarkdownEditor
           value={draft}
-          placeholder={t("documentationPlaceholder")}
-          onChange={(e) => update(() => e.target.value)}
+          onChange={(text) => {
+            update(() => text);
+            setMessage("");
+          }}
         />
       )}
-      <div className="row gap">
-        <button
-          className="button primary"
-          disabled={readOnly || pending}
-          onClick={async () => {
-            setMessage("");
-            try {
-              await persist();
-              setMessage(t("saved"));
-            } catch (e) {
-              setMessage((e as Error).message);
-            }
-          }}
-        >
-          {t(pending ? "saving" : "save")}
-        </button>
-        <span className="muted small">{message}</span>
-      </div>
       <GeneratedDocumentation snapshot={snapshot} statuses={statuses} />
     </section>
   );

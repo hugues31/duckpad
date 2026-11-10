@@ -58,6 +58,35 @@ test("settings remain usable on narrow screens in both languages", async ({
   await openUserSettings(page);
   await page.getByLabel("Language", { exact: true }).selectOption("fr");
   await noPageOverflow(page);
+  const userNavigation = page.getByRole("navigation", {
+    name: fr.settingsSections,
+    exact: true,
+  });
+  await expect(userNavigation.getByRole("link")).toHaveCount(4);
+  await userNavigation
+    .getByRole("link", { name: fr.password, exact: true })
+    .focus();
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(/\/user-settings\/password$/);
+  await expect(
+    page.getByLabel(fr.currentPassword, { exact: true }),
+  ).toBeVisible();
+  await noPageOverflow(page);
+  await page.reload();
+  await expect(
+    userNavigation.getByRole("link", { name: fr.password, exact: true }),
+  ).toHaveAttribute("aria-current", "page");
+  await page.goBack();
+  await expect(page.getByLabel(fr.language, { exact: true })).toBeVisible();
+  for (const label of [fr.sshKey, fr.apiTokens]) {
+    await userNavigation
+      .getByRole("link", { name: label, exact: true })
+      .click();
+    await expect(
+      page.getByRole("region", { name: label, exact: true }),
+    ).toBeVisible();
+    await noPageOverflow(page);
+  }
   await page.goto("/instance-settings");
   await expect(page).toHaveURL(/\/instance-settings\/users$/);
   await expect(

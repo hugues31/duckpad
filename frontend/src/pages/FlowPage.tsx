@@ -333,6 +333,9 @@ export default function FlowPage() {
         onAdd={(kind, id, linked) =>
           safe(() => addNode(kind, id, undefined, undefined, linked))
         }
+        onDragStart={(kind, id, transfer) =>
+          canvas.current?.previewDrag(kind, id, transfer)
+        }
         onNewTemplate={(language) =>
           openModal({
             kind: "template",

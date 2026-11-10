@@ -82,7 +82,7 @@ test("configure OIDC, sign in through a signing provider, administer access and 
     expect(
       (await member.request.delete(`/api/projects/${project.project}`)).ok(),
     ).toBeTruthy();
-    await openUserSettings(member);
+    await openUserSettings(member, "Password");
     await expect(
       member.getByRole("region", { name: "Single sign-on (OIDC)" }),
     ).toHaveCount(0);

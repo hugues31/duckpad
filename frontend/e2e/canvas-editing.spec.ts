@@ -190,6 +190,67 @@ test("mute handles multiple selected nodes and yields to typing", async ({
   );
 });
 
+test("selected links delete, undo and survive a rejected save without deleting nodes", async ({
+  page,
+}) => {
+  const { endpoint, read } = await prepare(page);
+  const edge = page.locator('.react-flow__edge[data-id="rows_filtered"]');
+  const clickEdge = async (id = "rows_filtered") => {
+    const selectedEdge = page.locator(`.react-flow__edge[data-id="${id}"]`);
+    const point = await selectedEdge
+      .locator(".react-flow__edge-path")
+      .evaluate((element) => {
+        const path = element as SVGPathElement;
+        const middle = path.getPointAtLength(path.getTotalLength() / 2);
+        const screen = new DOMPoint(middle.x, middle.y).matrixTransform(
+          path.getScreenCTM()!,
+        );
+        return { x: screen.x, y: screen.y };
+      });
+    await page.mouse.click(point.x, point.y);
+    await expect(selectedEdge).toHaveClass(/selected/);
+  };
+  await select(page, "filtered");
+  await clickEdge();
+  await expect(page.locator(".react-flow__node.selected")).toHaveCount(0);
+  // Typing in a filter must not delete the selected link.
+  const search = page.getByRole("combobox", { name: "Find a node…" });
+  await search.focus();
+  await page.keyboard.press("Delete");
+  await expect(edge).toHaveCount(1);
+  await clickEdge();
+  await page.keyboard.press("Delete");
+  await expect(edge).toHaveCount(0);
+  await expect
+    .poll(async () => (await read()).bundle!.flow.edges.map((edge) => edge.id))
+    .toEqual(["filtered_doubled"]);
+  expect((await read()).bundle!.flow.nodes).toHaveLength(4);
+  await page.keyboard.press("ControlOrMeta+Z");
+  await expect(edge).toHaveCount(1);
+  // A restored link is not selected, so deleting a node next cannot remove it.
+  await expect(edge).not.toHaveClass(/selected/);
+  await page.route(`**${endpoint}`, (route) =>
+    route.request().method() === "PUT"
+      ? route.fulfill({ status: 503, json: { error: "Save unavailable" } })
+      : route.continue(),
+  );
+  await clickEdge();
+  await page.keyboard.press("Backspace");
+  await expect(page.locator(".toast")).toContainText("Save unavailable");
+  await expect(edge).toHaveCount(1);
+  await expect(edge).not.toHaveClass(/selected/);
+  expect((await read()).bundle!.flow.edges).toHaveLength(2);
+  await page.unroute(`**${endpoint}`);
+  await clickEdge();
+  await page.keyboard.down("Shift");
+  await clickEdge("filtered_doubled");
+  await page.keyboard.up("Shift");
+  await expect(page.locator(".react-flow__edge.selected")).toHaveCount(2);
+  await page.keyboard.press("Delete");
+  await expect(page.locator(".react-flow__edge")).toHaveCount(0);
+  expect((await read()).bundle!.flow.nodes).toHaveLength(4);
+});
+
 test("deleting a node offers Undo, and Ctrl+Z / Ctrl+Shift+Z keep a concurrent edit", async ({
   page,
 }) => {

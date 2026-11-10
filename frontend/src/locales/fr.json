@@ -1549,5 +1549,16 @@
   "muteNode": "Désactiver le nœud (M)",
   "unmuteNode": "Réactiver le nœud (M)",
   "mutedNode": "Désactivé",
-  "mutedNodeHint": "Les entrées passent directement aux sorties dans l’ordre des ports. Les sorties supplémentaires utilisent la première entrée. Le code du nœud est ignoré."
+  "mutedNodeHint": "Les entrées passent directement aux sorties dans l’ordre des ports. Les sorties supplémentaires utilisent la première entrée. Le code du nœud est ignoré.",
+  "filterFiles": "Filtrer les fichiers…",
+  "markdownFormatting": "Mise en forme Markdown",
+  "markdownHeading": "Titre",
+  "markdownBold": "Gras",
+  "markdownItalic": "Italique",
+  "markdownLink": "Lien",
+  "markdownBulletList": "Liste à puces",
+  "markdownNumberedList": "Liste numérotée",
+  "markdownQuote": "Citation",
+  "markdownCodeBlock": "Bloc de code",
+  "markdownText": "Texte"
 }
