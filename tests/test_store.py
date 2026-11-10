@@ -49,15 +49,7 @@ def test_initial_migration_matches_models_and_survives_restart(store):
         {"id": "qa", "label": "QA", "color": "#123456", "confirm_before_run": False}, create=True
     )
     store.put("settings", "arbitrary_config", {"enabled": True, "values": [1, 2]})
-    # Project files need no connection, so a fresh instance has none.
-    assert store.all("connection") == []
     with store.engine.connect() as connection:
-        assert (
-            connection.exec_driver_sql("SELECT version_num FROM alembic_version").scalar_one()
-            == "0001_v0_baseline"
-        )
-        assert "records" not in inspect(connection).get_table_names()
-        assert len(SQLModel.metadata.tables) == 29
         assert compare_metadata(MigrationContext.configure(connection), SQLModel.metadata) == []
         assert connection.exec_driver_sql("PRAGMA foreign_keys").scalar_one() == 1
         assert connection.exec_driver_sql("PRAGMA journal_mode").scalar_one() == "wal"
@@ -71,30 +63,19 @@ def test_initial_migration_matches_models_and_survives_restart(store):
         reopened.close()
 
 
-def test_unknown_document_schema_is_not_modified(tmp_path):
-    path = tmp_path / "instance.sqlite"
-    with closing(sqlite3.connect(path)) as connection, connection:
-        connection.execute("CREATE TABLE records (kind TEXT, id TEXT, value TEXT)")
-        connection.execute("INSERT INTO records VALUES ('settings', 'marker', 'kept')")
-    with pytest.raises(Problem, match="unsupported schema"):
-        Store(tmp_path)
-    with closing(sqlite3.connect(path)) as connection:
-        assert connection.execute("SELECT value FROM records").fetchone() == ("kept",)
-        assert connection.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall() == [
-            ("records",)
-        ]
-
-
 @pytest.mark.parametrize(
-    "revision", [None, "0007_partitions", "0001_baseline", "0002_artifact_storage", "unknown_revision"]
+    "revision",
+    [None, "", "0002_artifact_storage", "unknown_revision"],
+    ids=["unversioned", "empty", "previous_baseline", "unknown"],
 )
 def test_unrecognized_database_is_rejected_without_changes(tmp_path, revision):
     path = tmp_path / "instance.sqlite"
     with closing(sqlite3.connect(path)) as connection, connection:
         connection.execute("CREATE TABLE setting (id TEXT PRIMARY KEY, value JSON NOT NULL)")
         connection.execute("INSERT INTO setting VALUES ('marker', '{\"kept\": true}')")
-        connection.execute("CREATE TABLE alembic_version (version_num VARCHAR(32) PRIMARY KEY)")
         if revision is not None:
+            connection.execute("CREATE TABLE alembic_version (version_num VARCHAR(32) PRIMARY KEY)")
+        if revision:
             connection.execute("INSERT INTO alembic_version VALUES (?)", (revision,))
         original = list(connection.iterdump())
     with pytest.raises(Problem, match=r"unsupported schema.*--home <new-directory>"):

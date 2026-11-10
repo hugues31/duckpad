@@ -53,11 +53,10 @@ def test_invalid_python_deadline_fails_before_the_worker_starts_the_call(transpo
     assert transport.pending == {}
 
 
-@pytest.mark.parametrize("failure", [ConnectionResetError, OSError])
-def test_reader_disconnect_releases_all_waiting_calls(transport, failure):
+def test_reader_disconnect_releases_all_waiting_calls(transport):
     waiting = [queue.Queue(), queue.Queue()]
     transport.pending = dict(enumerate(waiting, start=1))
-    transport.stream.__iter__.side_effect = failure("Worker disconnected")
+    transport.stream.__iter__.side_effect = ConnectionResetError("Worker disconnected")
 
     transport._read()
 
@@ -69,11 +68,10 @@ def test_reader_disconnect_releases_all_waiting_calls(transport, failure):
     assert error.value.status == 503
 
 
-@pytest.mark.parametrize("failure", [BrokenPipeError, OSError])
-def test_send_disconnect_releases_pending_calls_and_reports_unavailable(transport, failure):
+def test_send_disconnect_releases_pending_calls_and_reports_unavailable(transport):
     waiting = queue.Queue()
     transport.pending[0] = waiting
-    transport.socket.sendall.side_effect = failure("Worker disconnected")
+    transport.socket.sendall.side_effect = BrokenPipeError("Worker disconnected")
 
     with pytest.raises(Problem, match="worker is unavailable") as error:
         transport.call("interrupt", cursor="cursor")

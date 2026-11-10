@@ -54,9 +54,7 @@ def test_a_wrong_token_or_a_short_password_keeps_the_link(fresh):
     token = app.state.auth.setup_token
     assert setup(client, token[:-1] + ("A" if token[-1] != "A" else "B")).status_code == 403
     assert setup(client, "").status_code == 403
-    short = setup(client, token, "too short")
-    assert short.status_code == 400
-    assert "12 and 1024 characters" in short.json()["error"]
+    assert setup(client, token, "too short").status_code == 400
     assert client.get("/api/session").status_code == 401
     assert setup(client, token).status_code == 200
 

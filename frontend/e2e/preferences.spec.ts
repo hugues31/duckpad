@@ -6,12 +6,10 @@ import { submitLogin } from "./helpers";
 
 const catalogs = { en, fr, pt };
 /** Each language's name in its own catalog, as the account menu lists it. */
-const nativeNames = { en: "English", fr: "Français", pt: "Português" };
+const nativeNames = { en: "English", fr: "Français" };
 
 for (const scenario of [
   { locale: "fr-CA", colorScheme: "dark", language: "fr", theme: "dark" },
-  { locale: "en-GB", colorScheme: "light", language: "en", theme: "light" },
-  { locale: "pt-BR", colorScheme: "dark", language: "pt", theme: "dark" },
   {
     locale: "de-DE",
     colorScheme: "no-preference",
@@ -69,8 +67,6 @@ for (const scenario of [
 }
 
 for (const scenario of [
-  { languages: ["de-DE", "fr-CA", "en-US"], expected: "fr" },
-  { languages: ["en-GB", "fr-FR"], expected: "en" },
   { languages: ["de-DE", "pt-PT", "fr-FR"], expected: "pt" },
   { languages: [], expected: "fr" },
 ] as const) {

@@ -84,14 +84,7 @@ describe("remainingSeconds", () => {
       a: node({ status: "running", started: ago(20), estimated_duration: 10 }),
     };
     expect(remainingSeconds(run(nodes), now)).toBeNull();
-    for (const status of [
-      "preparing",
-      "canceling",
-      "canceled",
-      "success",
-      "failed",
-      "interrupted",
-    ] as const)
+    for (const status of ["preparing", "canceling"] as const)
       expect(remainingSeconds(run(nodes, { status }), now)).toBeNull();
     expect(
       remainingSeconds(

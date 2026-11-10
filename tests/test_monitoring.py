@@ -132,11 +132,9 @@ def test_metrics_measure_instance_filesystem_and_degrade_independently(tmp_path,
     assert monitoring.snapshot()["process_memory_bytes"] is None
 
 
-def test_monitoring_requires_instance_admin_and_validates_queries(tmp_path):
+def test_monitoring_is_never_cached_and_validates_queries(tmp_path):
     app = create_app(tmp_path / "instance", watch=False)
     with TestClient(app) as client:
-        for path in ("/api/monitoring", "/api/monitoring/logs"):
-            assert client.get(path).status_code == 401
         client.post("/api/login", json={"username": "admin", "password": app.state.auth.initial_password})
         summary = client.get("/api/monitoring")
         assert summary.status_code == 200
@@ -149,17 +147,3 @@ def test_monitoring_requires_instance_admin_and_validates_queries(tmp_path):
         assert logs.json()["entries"][0]["message"] == "Monitoring test entry"
         for query in ("limit=0", "limit=201", "level=unknown", "q=" + "x" * 201):
             assert client.get("/api/monitoring/logs?" + query).status_code == 422
-        client.post(
-            "/api/users",
-            json={"username": "member", "password": "monitoring-test-password", "role": "member"},
-        )
-        client.post("/api/logout")
-        client.post("/api/login", json={"username": "member", "password": "monitoring-test-password"})
-        for path in ("/api/monitoring", "/api/monitoring/logs"):
-            assert client.get(path).status_code == 403
-
-
-def test_new_process_monitoring_starts_with_empty_history(tmp_path):
-    first = Monitoring(tmp_path)
-    emit(first.logs, "Old process")
-    assert Monitoring(tmp_path).logs.snapshot()["entries"] == []

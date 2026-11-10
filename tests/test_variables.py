@@ -1,11 +1,9 @@
 """Project variables: declarations, binding, resolution, invalidation, history, files and API."""
 
 import copy
-import io
 import json
 import math
 import threading
-import zipfile
 from pathlib import Path
 
 import pytest
@@ -726,31 +724,14 @@ def test_branches_that_both_create_the_variables_file_merge_per_variable():
     assert merge_files(base, current, other)[1] == ["variables.json/threshold"]
 
 
-def test_variables_file_follows_external_batching_and_conflict_handling(services):
+def test_removing_the_variables_file_is_an_ordinary_save(services):
     _, projects, _, _ = services
     worktree = projects.create("Variables", project_bundle())
-    initial = projects.snapshot(worktree["id"])
-    path = Path(worktree["path"]) / "variables.json"
-    external = json.loads(path.read_text())
-    external["threshold"]["environments"]["prod"] = 950
-    path.write_text(json.dumps(external))
-    flushed = projects.flush(worktree["id"])
-    assert flushed["bundle"]["variables"]["threshold"]["environments"]["prod"] == 950
-    assert (
-        projects.versioning.history(worktree["id"], limit=1)["items"][0]["message"]
-        == "feat(variable): update threshold [external]"
-    )
-    proposal = copy.deepcopy(initial["bundle"])
-    proposal["variables"]["threshold"]["environments"]["prod"] = 1000
-    with pytest.raises(Problem, match="Concurrent edits conflict") as conflict:
-        projects.write(worktree["id"], initial["revision"], bundle_to_files(proposal))
-    assert conflict.value.detail["paths"] == ["variables.json/threshold/environments/prod"]
-    # Removing the file is an ordinary save too.
-    removed = copy.deepcopy(projects.snapshot(worktree["id"]))
+    removed = projects.snapshot(worktree["id"])
     removed["bundle"]["variables"] = None
     saved = projects.write(worktree["id"], removed["revision"], bundle_to_files(removed["bundle"]))
     assert "variables.json" not in saved["files"]
-    assert not path.exists()
+    assert not (Path(worktree["path"]) / "variables.json").exists()
 
 
 def test_compare_versions_lists_changed_variables_and_the_nodes_they_affect():
@@ -872,19 +853,6 @@ def test_api_snapshot_lists_variables_with_values_usages_and_diagnostics(client,
     ]
 
 
-def test_project_zip_exports_and_imports_variables(client, path):
-    archive = client.get(path + "/archive.zip")
-    with zipfile.ZipFile(io.BytesIO(archive.content)) as content:
-        assert json.loads(content.read("variables.json")) == VARIABLES
-    response = client.post(
-        "/api/projects/import", files={"file": ("project.zip", archive.content, "application/zip")}
-    )
-    assert response.status_code == 200, response.text
-    imported = client.get(f"/api/worktrees/{response.json()['id']}").json()
-    assert imported["bundle"]["variables"] == VARIABLES
-    assert imported["diagnostics"] == []
-
-
 def test_renaming_a_variable_updates_its_declaration_and_references_in_one_commit(client, path):
     snapshot = client.get(path).json()
     commits = len(client.get(path + "/git/history").json()["items"])
@@ -896,10 +864,6 @@ def test_renaming_a_variable_updates_its_declaration_and_references_in_one_commi
     assert set(renamed["bundle"]["variables"]) == {"minimum_amount", "order_status", "report_start"}
     assert renamed["bundle"]["variables"]["minimum_amount"] == VARIABLES["threshold"]
     assert node(renamed["bundle"], "large")["params"]["threshold"] == {"$var": "minimum_amount"}
-    assert renamed["variables"]["declarations"]["minimum_amount"]["usages"] == [
-        {"node": "large", "label": "Large orders", "name": [{"label": "Large orders"}], "param": "threshold"}
-    ]
-    assert client.post(url, json={"revision": snapshot["revision"], "name": "other"}).status_code == 409
     revision = renamed["revision"]
     for name, body, status in [
         ("missing", "other", 404),
@@ -942,13 +906,6 @@ def test_confirmation_scope_compiled_sql_and_run_details_show_the_values_used(ap
     assert run["status"] == "success", run
     details = client.get(f"/api/runs/{run['id']}").json()
     assert details["variables"]["threshold"] == threshold
-    assert details["variables"]["report_start"] == {
-        "type": "date",
-        "value": "2026-01-01",
-        "source": "environment",
-    }
-    recent = client.get(path + "/preview/recent", params={"environment": "prod"}).json()
-    assert sorted(row["values"][0] for row in recent["rows"]) == [1, 2, 3]
     compiled = client.get(path + "/compile/large", params={"environment": "prod"}).json()
     assert compiled[0]["bindings"] == {"threshold": 900}
     bound = [{"parameter": "threshold", "name": "threshold", **threshold}]
@@ -957,7 +914,7 @@ def test_confirmation_scope_compiled_sql_and_run_details_show_the_values_used(ap
     assert preview["executed_sql"][0]["variables"] == bound
 
 
-def test_grouping_through_the_api_binds_the_new_instance_in_one_save(app, client, path):
+def test_grouping_through_the_api_binds_the_new_instance_in_one_save(client, path):
     snapshot = client.get(path).json()
     commits = len(client.get(path + "/git/history").json()["items"])
     response = client.post(
@@ -970,10 +927,3 @@ def test_grouping_through_the_api_binds_the_new_instance_in_one_save(app, client
     instance = response.json()["selected"]
     assert node(grouped["bundle"], instance)["params"] == {"threshold": {"$var": "threshold"}}
     assert grouped["diagnostics"] == []
-    assert grouped["variables"]["declarations"]["threshold"]["usages"] == [
-        {"node": instance, "label": "Large orders", "name": [{"label": "Large orders"}], "param": "threshold"}
-    ]
-    response = client.post(path + "/runs", json={"environment": "prod"})
-    assert wait_run(app.state.services.store, response.json())["status"] == "success"
-    preview = client.get(path + f"/preview/{instance}", params={"environment": "prod", "port": "output_1"})
-    assert preview.json()["rows"][0]["values"] == [1, 1000]

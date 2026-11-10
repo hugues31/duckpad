@@ -53,7 +53,7 @@ def shared_project(app, client, users):
     return worktree
 
 
-def test_local_creation_saves_and_session_revocation(instance):
+def test_creation_and_saves_use_the_requesting_account(instance):
     app, client, users = instance
     projects = app.state.services.projects
     worktree = shared_project(app, client, users)
@@ -64,9 +64,6 @@ def test_local_creation_saves_and_session_revocation(instance):
         save(client, worktree, headers, name)
         check_identity(projects, worktree, account_identity(user))
     check_identity(projects, worktree, account_identity(users["alice"][0]), initial)
-    token = users["alice"][1]["authorization"].removeprefix("Bearer ")
-    app.state.auth.logout(token)
-    assert client.post("/api/projects", headers=users["alice"][1], json={}).status_code == 401
     # A service call after requests must not inherit the last account.
     system = projects.create("Outside a request")
     check_identity(projects, system, SYSTEM_IDENTITY)

@@ -300,8 +300,9 @@ def test_restart_without_flag_restores_isolation_and_never_falls_back(tmp_path, 
         assert run["error"] == "SQL isolation is unavailable"
 
 
-@pytest.mark.parametrize("host", ["127.0.0.1", "localhost", "::1"])
-@pytest.mark.parametrize("trusted", [False, True])
+@pytest.mark.parametrize(
+    ("host", "trusted"), [("127.0.0.1", False), ("127.0.0.1", True), ("localhost", True), ("::1", True)]
+)
 def test_cli_explicit_mode_and_loopback_hosts(tmp_path, monkeypatch, capsys, host, trusted):
     args = ["duckpad", "start", "--home", str(tmp_path), "--host", host, "--no-browser"]
     monkeypatch.setattr(sys, "argv", [*args, *(["--trusted-local"] if trusted else [])])

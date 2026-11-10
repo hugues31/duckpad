@@ -173,7 +173,7 @@ def worker(folder):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--rows", type=int, default=1_000_000)
-    parser.add_argument("--output", type=Path, default=Path("docs/validation/benchmark.json"))
+    parser.add_argument("--output", type=Path, default=Path(".duckpad-dev/benchmark-wide.json"))
     parser.add_argument("--worker", type=Path)
     args = parser.parse_args()
     if args.worker:

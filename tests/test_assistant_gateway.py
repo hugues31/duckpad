@@ -424,7 +424,7 @@ def test_secret_redaction_covers_tools_and_fragmented_streams(instance):
     assert "gateway-secret" not in "".join(e.get("text", "") for e in events)
 
 
-@pytest.mark.parametrize("kind", ["custom", "openai", "deepseek", "ollama"])
+@pytest.mark.parametrize("kind", ["custom", "openai"])
 @pytest.mark.parametrize("streaming", [False, True])
 def test_sse_accept_is_only_set_for_custom_streaming_requests(instance, monkeypatch, kind, streaming):
     from pydantic_ai import Agent

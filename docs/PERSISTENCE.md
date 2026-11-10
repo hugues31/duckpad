@@ -151,9 +151,7 @@ enabled on every application connection.
 
 Project creation, environment creation and each run/export-state update commit
 their rows together. Filesystem and Git actions are outside SQLite's guarantees;
-their cleanup remains explicit in the project services. The dictionary-oriented
-service boundary is retained, but entity kinds map to explicit models and
-columns; there is no generic JSON fallback. Account lookup, expiration cleanup
+their cleanup remains explicit in the project services. Account lookup, expiration cleanup
 and run visibility/filtering use SQL predicates and indexed columns.
 
 ## Evolving the schema
@@ -181,9 +179,6 @@ enforcement is restored afterward. This prevents a parent-table
 rebuild from cascading into its children. Failed DDL and data changes roll back
 together. The migration runner serializes Alembic's process-global environment.
 
-Tests compare the initial schema to SQLModel metadata and exercise rollback,
-constraints, cascades, thread isolation, rejection of unsupported databases,
-initialization failure recovery and a failed batch rebuild with child rows.
 Migration scripts and their template ship inside the wheel and sdist.
 
 ## Execution history retention
@@ -208,5 +203,4 @@ captured project definitions, connection settings or node logs. They default to
 with the same filters. Ordering uses start time and run ID, so equal timestamps
 and concurrent new runs do not duplicate records. `/api/runs/{id}` retains the
 complete record. The History and Jobs pages load older records explicitly and
-fetch details when a run is opened. The public automation API keeps its existing
-response contract.
+fetch details when a run is opened.

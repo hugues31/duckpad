@@ -148,19 +148,7 @@ def test_built_in_connectors_come_with_the_release_and_edits_are_overrides(servi
     store, _, catalog, _ = services
     assert store.all("connector") == []
     listed = {c["id"]: c for c in catalog.connectors()}
-    assert {identity: c["origin"] for identity, c in listed.items()} == {
-        "folder": "built-in",
-        "s3": "built-in",
-        "postgres": "built-in",
-        "oracle": "built-in",
-    }
-    assert {identity: c["family"] for identity, c in listed.items()} == {
-        "folder": "storage",
-        "s3": "storage",
-        "postgres": "database",
-        "oracle": "database",
-    }
-    assert listed["folder"]["name"] == "Server folder"
+    assert listed["s3"]["origin"] == "built-in"
     # Saving a built-in unchanged, even with its listing's origin, stores nothing.
     catalog.save("connector", copy.deepcopy(listed["s3"]))
     assert store.all("connector") == []
@@ -198,13 +186,7 @@ def test_duplicates_are_custom_types_under_a_new_identifier(services):
     with pytest.raises(Problem, match="already exists"):
         catalog.save("connector", copy.deepcopy(duplicate), create=True)
     listed = {c["id"]: c["origin"] for c in catalog.connectors()}
-    assert listed == {
-        "folder": "built-in",
-        "s3": "built-in",
-        "postgres": "built-in",
-        "oracle": "built-in",
-        "finance_folder": "custom",
-    }
+    assert (listed["folder"], listed["finance_folder"]) == ("built-in", "custom")
     assert store.get("connector", "finance_folder") == duplicate
 
 

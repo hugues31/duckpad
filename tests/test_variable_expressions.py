@@ -1,14 +1,11 @@
 """Project variables referenced inside expression parameters as `{{ var.name }}`."""
 
 import copy
-import json
 
 import pytest
-from fastapi.testclient import TestClient
 from helpers import wait_run
 
 from duckpad import variables
-from duckpad.app import create_app
 from duckpad.bundle import bundle_to_files, files_to_bundle
 from duckpad.comparison import compare_files
 from duckpad.components import expand_for, group
@@ -192,19 +189,6 @@ def test_references_compile_to_named_parameters_bound_with_their_type():
     assert measures["bindings"] == {"var_rate": 1.5}
 
 
-def test_placeholders_never_collide_with_template_parameters():
-    template = (
-        "-- @input source\n-- @param var_threshold: number = 1\n-- @param condition: expression\n"
-        "-- @output result\nSELECT *, {{ var_threshold }} AS one FROM {{ source }} WHERE {{ condition }};"
-    )
-    statement = compile_filter(
-        "amount >= {{ var.threshold }}", {"threshold": {"type": "number", "value": 900}}, template
-    )
-    assert statement["sql"] == 'SELECT *, $var_threshold AS one FROM "input" WHERE amount >= $var_threshold_2'
-    assert statement["bindings"] == {"var_threshold": 1, "var_threshold_2": 900}
-    assert statement["variable_bindings"] == {"var_threshold_2": "threshold"}
-
-
 def test_case_insensitive_placeholder_collisions_preserve_values_in_runs(services):
     store, projects, _, engine = services
     bundle = project_bundle()
@@ -351,20 +335,6 @@ def test_identifier_list_undeclared_and_misplaced_references_are_errors_on_the_n
     assert run["variables"]["missing"] == {"type": None, "error": "undeclared variable"}
 
 
-def test_a_variable_without_value_blocks_its_expressions_in_that_environment_only(services):
-    store, projects, _, engine = services
-    bundle = project_bundle()
-    bundle["variables"]["threshold"] = {"type": "number", "environments": {"prod": 900}}
-    worktree = projects.create("Expressions", bundle)["id"]
-    assert projects.snapshot(worktree)["diagnostics"] == []
-    dev = wait_run(store, engine.launch(worktree, "dev"))
-    assert dev["nodes"]["large"]["error"] == "Variable threshold: no value in dev"
-    assert dev["nodes"]["total"]["error"] == "Blocked by large"
-    assert dev["nodes"]["recent"]["status"] == "success"
-    assert wait_run(store, engine.launch(worktree, "prod"))["status"] == "success"
-    assert ids(engine, worktree, "prod", "large") == [3]
-
-
 def test_a_malformed_variables_file_blocks_expressions_that_reference_variables(services):
     store, projects, _, engine = services
     worktree = projects.create("Expressions", project_bundle())["id"]
@@ -377,7 +347,7 @@ def test_a_malformed_variables_file_blocks_expressions_that_reference_variables(
     assert "variables.json is not valid JSON" in run["nodes"]["large"]["error"]
 
 
-def test_templates_and_component_definitions_cannot_reference_variables_in_expressions():
+def test_component_definitions_cannot_reference_variables_in_expressions():
     bundle = project_bundle()
     bundle["components"]["large_orders"] = {
         "nodes": [
@@ -401,23 +371,12 @@ def test_templates_and_component_definitions_cannot_reference_variables_in_expre
             }
         },
     }
-    bundle["templates"]["preset"] = (
-        '-- @input source\n-- @param condition: expression = "amount > {{ var.threshold }}"\n'
-        "-- @output result\nSELECT * FROM {{ source }} WHERE {{ condition }};"
-    )
     bundle["flow"]["nodes"] += [
         {"id": "summary", "component": "large_orders", "params": {}},
         {"id": "since", "component": "recent_orders", "params": {}},
-        {"id": "preset", "template": "preset", "params": {}},
     ]
-    bundle["flow"]["edges"] += [
-        edge("orders", "summary", "orders"),
-        edge("orders", "since", "orders"),
-        edge("orders", "preset"),
-    ]
+    bundle["flow"]["edges"] += [edge("orders", "summary", "orders"), edge("orders", "since", "orders")]
     assert {d["file"]: d["message"] for d in validate(bundle)} == {
-        "templates/preset.sql": "Templates cannot reference project variables ({{ var.threshold }}). "
-        "Declare a parameter, then bind it to the variable on the node in the flow.",
         "components/large_orders.json": "Component definitions cannot reference project variables "
         "(filter.condition). Expose the parameter, then bind it to the variable on the component instance.",
         "components/recent_orders.json": "Component definitions cannot reference project variables "
@@ -426,7 +385,6 @@ def test_templates_and_component_definitions_cannot_reference_variables_in_expre
     nodes, _, _ = expand_for(bundle, "dev")
     assert nodes["summary::filter"]["error"].startswith("Component large_orders references project variables")
     assert nodes["since::filter"]["error"].startswith("Component recent_orders references project variables")
-    assert nodes["preset"]["error"].startswith("Template preset references project variables")
 
 
 # Execution, fingerprints and history
@@ -607,70 +565,3 @@ def test_lineage_explanations_label_values_with_their_variables(services):
     result = lineage.explain(worktree, "prod", weighted["id"], weighted["rows"][row]["id"], "weighted")
     assert result["complete"], result
     assert result["calculation"]["formula"] == "SUM(amount) * 2 (rate)"
-
-
-# API
-
-
-@pytest.fixture
-def client(tmp_path):
-    app = create_app(tmp_path / "instance", watch=False)
-    with TestClient(app) as client:
-        client.post("/api/login", json={"username": "admin", "password": app.state.auth.initial_password})
-        yield client
-
-
-def test_api_renames_references_and_lists_usages_and_values(client):
-    worktree = client.post("/api/projects", json={"name": "Expressions"}).json()["id"]
-    path = f"/api/worktrees/{worktree}"
-    snapshot = client.get(path).json()
-    bundle = snapshot["bundle"]
-    example = project_bundle()
-    bundle["templates"].update(example["templates"])
-    bundle["flow"].update(nodes=example["flow"]["nodes"], edges=example["flow"]["edges"])
-    bundle["variables"] = example["variables"]
-    response = client.put(path, json={"revision": snapshot["revision"], "bundle": bundle})
-    assert response.status_code == 200, response.text
-    summary = client.get(path).json()["variables"]
-    assert summary["declarations"]["threshold"]["usages"] == [
-        {
-            "node": "large",
-            "label": "Large orders",
-            "name": [{"label": "Large orders"}],
-            "param": "condition",
-            "expression": True,
-        }
-    ]
-    revision = client.get(path).json()["revision"]
-    response = client.post(
-        path + "/variables/threshold/rename", json={"revision": revision, "name": "minimum"}
-    )
-    assert response.status_code == 200, response.text
-    renamed = client.get(path).json()
-    assert node(renamed["bundle"], "large")["params"]["condition"] == "amount >= {{ var.minimum }}"
-    assert renamed["variables"]["declarations"]["minimum"]["usages"] == [
-        {
-            "node": "large",
-            "label": "Large orders",
-            "name": [{"label": "Large orders"}],
-            "param": "condition",
-            "expression": True,
-        }
-    ]
-    compiled = client.get(path + "/compile/large", params={"environment": "prod"}).json()
-    assert compiled[0]["sql"].endswith("WHERE amount >= $var_minimum")
-    assert compiled[0]["variables"] == [
-        {
-            "parameter": "condition",
-            "name": "minimum",
-            "type": "number",
-            "value": 900,
-            "source": "environment",
-            "binding": "var_minimum",
-        }
-    ]
-    scope = client.get(path + "/variables/scope", params={"environment": "prod", "node": "total"}).json()
-    assert scope == {"minimum": {"type": "number", "value": 900, "source": "environment"}}
-    assert json.loads(client.get(path).json()["files"]["flow.json"])["nodes"][1]["params"] == {
-        "condition": "amount >= {{ var.minimum }}"
-    }

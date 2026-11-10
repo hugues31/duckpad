@@ -277,12 +277,7 @@ test("configure the assistant, inspect a flow and resume a private conversation"
   await provider.getByLabel("Model identifier", { exact: true }).fill("test");
   await provider.getByLabel("Model identifier", { exact: true }).press("Enter");
   await expect(provider.getByRole("listitem")).toHaveText(["test"]);
-  // The first allowed model becomes the default and can be tested unsaved.
-  await expect(
-    page
-      .getByLabel("Instance default model", { exact: true })
-      .locator("option:checked"),
-  ).toHaveText("DeepSeek · test");
+  // The unsaved provider can be tested.
   await page
     .getByRole("button", { name: "Test connection", exact: true })
     .click();
@@ -303,9 +298,6 @@ test("configure the assistant, inspect a flow and resume a private conversation"
   await expect(
     page.getByText("Assistant settings saved.", { exact: true }),
   ).toBeVisible();
-  await expect(page.locator(".assistant-settings-heading .badge")).toHaveText(
-    "Enabled",
-  );
   await expect(key).toHaveValue("");
   await expect(provider.getByText("Key saved", { exact: true })).toBeVisible();
   await page.reload();

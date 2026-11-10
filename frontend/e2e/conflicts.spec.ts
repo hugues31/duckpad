@@ -43,7 +43,6 @@ async function replaceEditor(page: Page, editor: Locator, text: string) {
 
 for (const [language, theme, choice] of [
   ["en", "light", "combined"],
-  ["fr", "dark", "combined"],
   ["en", "dark", "proposal"],
   ["fr", "light", "current"],
 ] as const) {

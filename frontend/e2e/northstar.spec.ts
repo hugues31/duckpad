@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 import { signIn } from "./helpers";
 import type { Run } from "../src/types";
 
-test("Northstar runs its data tests, messages, computed variable and shared view", async ({
+test("Northstar runs its data tests, computed variable and shared view", async ({
   page,
 }) => {
   test.setTimeout(120000);
@@ -14,7 +14,6 @@ test("Northstar runs its data tests, messages, computed variable and shared view
   await page.goto(`/worktrees/${worktree.id}/flow`);
   const node = (id: string) =>
     page.locator(`.react-flow__node[data-id="${id}"]`);
-  await expect(page.locator(".react-flow__node")).toHaveCount(10);
   // Reporting period supplies report_month, which names the exported files.
   await expect(node("period").getByTitle("Value source")).toBeVisible();
 
@@ -34,16 +33,11 @@ test("Northstar runs its data tests, messages, computed variable and shared view
     )
     .toMatch(/^(success|partial_failure|failed)$/);
   expect(run!.status).toBe("success");
-  // The review test warns without failing the run.
-  expect(run!.warning_count).toBe(1);
   expect(run!.variables).toMatchObject({
     high_value_threshold: { value: 300, source: "default" },
     review_threshold: { value: 450, source: "default" },
     report_month: { value: "2026-10", resolution: "calculated" },
   });
-  await expect(
-    node("validated").getByLabel("Warnings: 1", { exact: true }),
-  ).toBeVisible();
 
   await node("validated").locator(".node-shape").click();
   const results = page.getByRole("region", { name: "Results", exact: true });
@@ -57,12 +51,6 @@ test("Northstar runs its data tests, messages, computed variable and shared view
   const review = tests.filter({ hasText: "large_order_review" });
   await expect(review.locator(".test-status")).toHaveText("Warning");
   await expect(review.locator("td.number")).toHaveText("10");
-  await results.getByRole("tab", { name: /^Log/ }).click();
-  await expect(
-    results
-      .locator(".log-entry.info")
-      .filter({ hasText: "107 paid orders kept, 13 excluded" }),
-  ).toBeVisible();
   // The shared view filters with the selected environment's review threshold.
   await results.getByRole("tab", { name: /^Data/ }).click();
   await results

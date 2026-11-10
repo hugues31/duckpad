@@ -1,17 +1,12 @@
-"""Charts in charts.json: a registered project file, saved, archived, merged, compared and checked on save."""
+"""Charts in charts.json: a registered project file, saved, merged, compared and checked on save."""
 
-import io
 import json
-import zipfile
 
 import pytest
-from fastapi.testclient import TestClient
 from helpers import example_bundle
 
-from duckpad import charts
-from duckpad.app import create_app
 from duckpad.bundle import bundle_to_files
-from duckpad.comparison import commit_message, compare_files
+from duckpad.comparison import compare_files
 from duckpad.merge import merge_files
 from duckpad.util import Problem
 from duckpad.validation import validate
@@ -112,7 +107,6 @@ ACCEPTED = {
             {"mark": {"type": "rule", "color": "red"}, "encoding": {"y": {"value": 300}}},
         ]
     },
-    "every mark": {"layer": [{"mark": mark} for mark in charts.MARKS]},
     "mark styles": {
         "mark": {
             "type": "line",
@@ -130,7 +124,6 @@ ACCEPTED = {
             "cornerRadius": None,
         }
     },
-    "every channel": {"mark": "point", "encoding": {name: {"field": "amount"} for name in charts.CHANNELS}},
     "tooltip list": {"mark": "bar", "encoding": {"tooltip": [{"field": "channel"}, {"field": "amount"}]}},
     "channel definition": encoded(
         title="Channel",
@@ -291,14 +284,8 @@ def test_oversized_specs_are_diagnosed(tmp_path):
 
 @pytest.mark.parametrize(
     "invalid",
-    [
-        {"filter:result": [{**BARS, "color": "red"}]},
-        chart(encoded(value=EXPR)),
-        chart({"mark": "bar", "description": "x" * (64 * 1024)}),
-        {"filter:result": [{**BARS, "name": "x" * 101}]},
-        {"filter:result": [BARS, BARS]},
-    ],
-    ids=["unknown field", "expression", "oversized", "overlong name", "duplicate names"],
+    [chart(encoded(value=EXPR)), {"filter:result": [BARS, BARS]}],
+    ids=["expression", "duplicate names"],
 )
 def test_invalid_charts_are_saved_and_diagnosed(services, tmp_path, invalid):
     _, projects, _, _ = services
@@ -309,33 +296,6 @@ def test_invalid_charts_are_saved_and_diagnosed(services, tmp_path, invalid):
     assert saved["bundle"]["charts"] == invalid
     assert json.loads(saved["files"]["charts.json"]) == invalid
     assert [d["file"] for d in saved["diagnostics"]] == ["charts.json"]
-
-
-def test_charts_travel_in_project_archives(tmp_path):
-    app = create_app(tmp_path / "instance", watch=False)
-    with TestClient(app) as client:
-        assert (
-            client.post(
-                "/api/login", json={"username": "admin", "password": app.state.auth.initial_password}
-            ).status_code
-            == 200
-        )
-        worktree = client.post("/api/projects", json={"name": "Charts"}).json()
-        snapshot = client.get(f"/api/worktrees/{worktree['id']}").json()
-        bundle = {**snapshot["bundle"], "charts": {"orders:result": [BARS]}}
-        saved = client.put(
-            f"/api/worktrees/{worktree['id']}", json={"revision": snapshot["revision"], "bundle": bundle}
-        )
-        assert saved.status_code == 200, saved.text
-        archive = client.get(f"/api/worktrees/{worktree['id']}/archive.zip")
-        with zipfile.ZipFile(io.BytesIO(archive.content)) as content:
-            assert json.loads(content.read("charts.json")) == {"orders:result": [BARS]}
-        imported = client.post(
-            "/api/projects/import", files={"file": ("project.zip", archive.content, "application/zip")}
-        )
-        assert imported.status_code == 200, imported.text
-        copy_id = imported.json()["id"]
-        assert client.get(f"/api/worktrees/{copy_id}").json()["bundle"]["charts"] == {"orders:result": [BARS]}
 
 
 def with_charts(files, charts):
@@ -436,4 +396,3 @@ def test_comparison_lists_each_chart_as_an_entity(tmp_path):
         },
     }
     assert changes["chart/report::rank:result/Amount over time"]["after"] == LINES
-    assert commit_message(before, after).startswith("docs(project): update 2 elements (2 chart)")

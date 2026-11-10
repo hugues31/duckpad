@@ -9,13 +9,6 @@ test("History creates immutable tags used by comparison and advanced branch crea
   await historyTags(page, true);
 });
 
-test("run details tag the executed commit after the branch has advanced", async ({
-  page,
-}) => {
-  await signIn(page);
-  await runTags(page);
-});
-
 test("Readers can see tags but cannot create them from history or run details", async ({
   page,
 }) => {

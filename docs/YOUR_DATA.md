@@ -87,9 +87,8 @@ see [SQL exports](SQL.md#write-an-export).
 ## Keep and share the project
 
 Completed edits are saved as Git commits. Use **Code → Download project ZIP**
-to share the pipeline definition. It contains code and documentation, but
-excludes uploaded files, result data, Git history and instance connections.
-Upload sources and configure connections again on the destination instance.
+to share the pipeline definition, without uploaded files, results or connections
+([project files](AUTHORING.md#edit-and-share-project-files)).
 
 Use **Download exported data** to share a result file, and
 [project access](INSTALLATION.md#accounts-and-project-access) to let colleagues

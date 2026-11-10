@@ -20,11 +20,7 @@ branches such as Job results see the charts without this action.
 
 Editors and administrators can also ask the
 [assistant](ASSISTANT.md#request-a-change) to create, update, rename or delete
-charts.
-
-Adding a chart is a normal save: one commit, refused without the save permission,
-and a conflict to resolve when someone else saved first. The Northstar
-[example](EXAMPLE.md) includes a chart on Regional revenue.
+charts. The Northstar [example](EXAMPLE.md) includes a chart on Regional revenue.
 
 ## File format
 
@@ -198,6 +194,3 @@ external editors, so the browser applies its own barriers on top of validation:
   deleting a node or an instance deletes its charts. Charts belong to the
   instance; they are not copied into the component definition.
 - **ZIP archives** include `charts.json` with the other project files.
-
-The [design record](../docs/design/CHARTS.md) explains these choices and the
-alternatives considered.

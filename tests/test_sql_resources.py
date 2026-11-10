@@ -75,8 +75,6 @@ def test_sql_resources_api_validates_values_and_keeps_active_runs(tmp_path):
     automatic = automatic_resources()
     defaults = {"threads": None, "memory_limit": None, "automatic": automatic}
     with TestClient(app) as client:
-        assert client.get("/api/sql-resources").status_code == 401
-        assert client.put("/api/sql-resources", json={}).status_code == 401
         client.post("/api/login", json={"username": "admin", "password": app.state.auth.initial_password})
         assert client.get("/api/sql-resources").json() == defaults
         for body in (

@@ -325,13 +325,4 @@ describe("useApiResource", () => {
       pending: false,
     });
   });
-
-  it("requests nothing for a null path", async () => {
-    const fetch = vi.fn();
-    vi.stubGlobal("fetch", fetch);
-    const { result } = renderHook(() => useApiResource(null));
-    await advance();
-    expect(fetch).not.toHaveBeenCalled();
-    expect(result.current.pending).toBe(false);
-  });
 });

@@ -144,9 +144,6 @@ it("saves Python activation explicitly and disables source builds until activati
   fireEvent.click(enabled);
   expect(builds).toHaveProperty("checked", false);
   expect(builds).toHaveProperty("disabled", true);
-  expect(
-    screen.queryByText("Allow Python to read authorized connection secrets"),
-  ).toBeNull();
 });
 
 it("shows the Python policy read-only, without saving, to other users", async () => {

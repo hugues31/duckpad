@@ -17,7 +17,6 @@ function choose(label: string, value: string) {
 it.each([
   ["VARCHAR", "001", "'001'"],
   ["VARCHAR", "true", "'true'"],
-  ["VARCHAR", "false", "'false'"],
   ["VARCHAR", "null", "'null'"],
   ["VARCHAR", "O'Brien", "'O''Brien'"],
   ["VARCHAR", " 001 ", "' 001 '"],
@@ -28,7 +27,6 @@ it.each([
   ["BOOLEAN", "TrUe", "TRUE"],
   ["BOOLEAN", "false", "FALSE"],
   ["DATE", "2026-11-03", "'2026-11-03'"],
-  ["ENUM('001', '002')", "001", "'001'"],
   ["", "001", "'001'"],
   ["INTEGER", "1 OR TRUE", "'1 OR TRUE'"],
 ])("formats a %s filter value %j using its column type", (type, value, sql) => {

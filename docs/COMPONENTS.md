@@ -12,7 +12,6 @@ names a local `template` and a component instance a local `component`. An
 optional `origin` records where normal code came from without linking it; an
 optional `preset` keeps the palette icon and guided form but never selects
 executable code. Edges use `source`, `sourceHandle`, `target` and `targetHandle`.
-See [code ownership](AUTHORING.md#editing-node-code) for normal and linked nodes.
 
 Drag a port onto empty canvas space to **Add a connected node**. Choose a
 compatible template/component and port to create and connect it in one save.

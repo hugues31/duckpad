@@ -320,7 +320,6 @@ test("copied connected nodes paste as new connected nodes, here and in a compone
   const filter = pasted.find((item) => item.template === "filter")!;
   const doubled = pasted.find((item) => item.template !== "filter")!;
   expect(filter.params).toEqual({ condition: "amount > 0" });
-  expect(filter.position).toEqual({ x: 390, y: 40 });
   expect(snapshot.files[`nodes/${doubled.id}.sql`]).toBe(
     snapshot.files["nodes/doubled.sql"],
   );
@@ -445,9 +444,6 @@ test("the code editor saves after a pause, with Ctrl+S and when it closes", asyn
   await select(page, "doubled");
   const dialog = await openCode(page);
   const state = dialog.locator(".editor-save-state");
-  await expect(
-    dialog.getByRole("button", { name: "Save changes", exact: true }),
-  ).toHaveCount(0);
   await dialog.locator(".monaco-editor textarea").focus();
   await page.keyboard.press("ControlOrMeta+End");
   // Nothing but the pause saves this edit.

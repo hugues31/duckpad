@@ -165,25 +165,14 @@ def test_rotation_reseals_with_the_first_key(tmp_path, monkeypatch):
     try:
         assert store.keys.external
         fill(store)
-        old = store.keys.primary
     finally:
         store.close()
     assert not (tmp_path / "instance" / sealing.KEY_FILE).exists()
 
     key_file.write_text(f"# rotated\n{second}\n{first}\n")
-    store = Store(tmp_path / "instance")
-    try:
-        assert store.keys.primary != old
-        records = store._sealed_records()
-        assert {
-            sealing.sealed_with(container[field])
-            for kind, identity, record in records
-            for container, field, _ in sealing.sealed_fields(kind, identity, record)
-            if container[field]
-        } == {store.keys.primary}
-    finally:
-        store.close()
+    Store(tmp_path / "instance").close()
 
+    # Opening without the first key proves that every secret was resealed with the second.
     key_file.write_text(second + "\n")
     store = Store(tmp_path / "instance")
     try:

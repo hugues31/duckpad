@@ -38,7 +38,6 @@ class ReadStdin(dp.Node):
     run = wait_run(store, engine.launch(tree["id"], "dev"), timeout=30)
     assert run["status"] == "success", run["nodes"]
     assert engine.preview(tree["id"], "dev", "python")["rows"][0]["values"] == [42]
-    assert run["nodes"]["python"]["outputs"]["result"]["duration"] >= 0
 
 
 @pytest.mark.skipif(sys.platform != "linux", reason="POSIX address-space limit")

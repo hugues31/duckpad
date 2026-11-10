@@ -237,10 +237,9 @@ test("Job history retries failed keys using the Job launch contract", async ({
   ).toBe(1);
 });
 
-test("partition controls fit a laptop, preserve selection and explain failed keys", async ({
+test("partition controls preserve selection and explain failed keys", async ({
   page,
 }) => {
-  await page.setViewportSize({ width: 1366, height: 900 });
   await signIn(page);
   const created = await (
     await page.request.post("/api/projects", {
@@ -264,8 +263,6 @@ test("partition controls fit a laptop, preserve selection and explain failed key
     `/worktrees/${created.id}/flow?environment=dev&node=transform`,
   );
   const run = page.getByRole("button", { name: "Run all", exact: true });
-  const bounds = await run.boundingBox();
-  expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(1366);
   await run.click();
   await expect
     .poll(

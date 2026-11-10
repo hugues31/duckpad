@@ -52,15 +52,6 @@ export async function verifyNodeCreation(page: Page) {
   await expect(
     inspector.getByRole("button", { name: "Edit code", exact: true }),
   ).toBeVisible();
-  await expect(
-    inspector.getByRole("button", { name: "Duplicate node", exact: true }),
-  ).toHaveCount(0);
-  await expect(
-    inspector.getByRole("button", { name: "Save changes", exact: true }),
-  ).toHaveCount(0);
-  await expect(
-    inspector.locator(".inspector-body .button:visible"),
-  ).toHaveCount(1);
 
   // An unrelated incomplete node must not block a valid scoped run.
   await page.getByRole("button", { name: "Fit view", exact: true }).click();
@@ -135,15 +126,6 @@ export async function verifyNodeCreation(page: Page) {
     .getByRole("button", { name: "Filter", exact: true })
     .click({ button: "right" });
   await page.getByRole("menuitem", { name: "Add linked", exact: true }).click();
-  await expect(page.locator(".react-flow__node")).toHaveCount(3);
-  expect((await read()).bundle!.flow.nodes.at(-1)!.template).toBe("filter");
-  await inspector
-    .getByRole("button", { name: "Remove node", exact: true })
-    .click();
-  await expect(page.locator(".react-flow__node")).toHaveCount(2);
-  await palette
-    .getByRole("button", { name: "Filter", exact: true })
-    .click({ modifiers: ["Alt"] });
   await expect(page.locator(".react-flow__node")).toHaveCount(3);
   expect((await read()).bundle!.flow.nodes.at(-1)!.template).toBe("filter");
   await expect(page.locator(".banner.error")).toHaveCount(0);

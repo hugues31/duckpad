@@ -1,32 +1,14 @@
-# Job automation: decisions and remaining proposals
+# Job automation: remaining proposals
 
 Single-instance Jobs are implemented: API tokens, service accounts, Operator
 access, annotated tags, pinned versions, reviewed promotion, read-only results,
 API v1 and `duckpad run`. Use [Jobs](../JOBS.md), [automation](../AUTOMATION.md)
 and [Git](../GIT.md) for those features.
 
-## Decisions
-
-- Jobs are instance metadata with stable slugs. Putting them in project Git would
-  let a code publication alter another instance's execution configuration.
-- Tag targets pin the reviewed commit; branch targets resolve their head at launch
-  for acceptance runs. Editors create tags; project admins promote Jobs.
-- Operators can execute reviewed Jobs without editing projects. Service accounts
-  are limited to Reader and Operator roles.
-- A Job owns a read-only worktree. Running an editable worktree would collide
-  with development runs and execute whichever edits were saved last.
-- Busy launches return 409 without queuing. Duckpad never retries or resumes a
-  run; restart marks unfinished runs interrupted and the orchestrator decides.
-- External orchestrators control timing. A headless `duckpad run ./project` mode
-  would bypass instance connections, authorization, history and lineage.
-- No run-as account per Job: connections are granted per project, so the
-  requesting account is recorded but does not change what a run can access.
-
 ## Constraints for schedules and webhooks
 
-A completed comparison preferred APScheduler 3.x over SqliteHuey as a future
-adapter; neither is a dependency. A schedule or webhook must launch through the
-same execution service and worktree admission as manual runs: a scheduler's
+A schedule or webhook must launch through the same execution service and
+worktree admission as manual runs: a scheduler's
 per-job concurrency setting is not enough. It records its trigger identity and
 occurrence or delivery ID, captures fresh configuration, carries no SQL,
 connection settings or credentials, and is refused on a busy worktree, never
@@ -73,10 +55,10 @@ Two instances add machine isolation (a large preview on A cannot slow down or bl
 
 ## Delivery plan
 
-Step 1 is complete. The following work remains proposed, not available:
+The following work remains proposed, not available:
 
-2. **Two instances.** Projects created from a Git URL, the deployed project mode, per-project read-only deploy keys, publishing and fetching tags, new versions listed for promotion.
-3. **Run-time values and notifications.** Variables marked `"runtime": true` in `variables.json` and allowed by a Job can be set at launch (typed, validated, bound, captured and fingerprinted, as deferred by [project variables](PROJECT_VARIABLES.md#alternatives-considered)); signed outgoing webhooks when a run ends; a History filter by trigger.
-4. **Ready-made integrations.** An Airflow provider in a separate repository (operator, hook, sensor, deferrable mode, OpenLineage events), a Control-M Application Integrator template, then an internal scheduler and an inbound webhook once time zones, missed occurrences and rejected triggers are specified.
+1. **Two instances.** Projects created from a Git URL, the deployed project mode, per-project read-only deploy keys, publishing and fetching tags, new versions listed for promotion.
+2. **Run-time values and notifications.** Variables marked `"runtime": true` in `variables.json` and allowed by a Job can be set at launch (typed, validated, bound, captured and fingerprinted); signed outgoing webhooks when a run ends; a History filter by trigger.
+3. **Ready-made integrations.** An Airflow provider in a separate repository (operator, hook, sensor, deferrable mode, OpenLineage events), a Control-M Application Integrator template, then an internal scheduler and an inbound webhook once time zones, missed occurrences and rejected triggers are specified.
 
-Steps 2 and 3 can swap if orchestrators need business dates before a dedicated execution instance.
+Steps 1 and 2 can swap if orchestrators need business dates before a dedicated execution instance.

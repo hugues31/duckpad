@@ -140,7 +140,6 @@ export async function jobsFlow(page: Page) {
   await expect(
     page.locator(".job-details button.history-row").first(),
   ).toContainText(en.success);
-  await page.screenshot({ path: "test-results/jobs.png", fullPage: true });
   const runs = await (await page.request.get(`/api/jobs/${slug}/runs`)).json();
   expect(runs[0].commit).toBe(second);
   expect(runs[0].requester.username).toBe(username);

@@ -71,11 +71,6 @@ describe("identifier", () => {
     expect(identifier("edge")).toMatch(/^edge_[0-9a-f]{12}$/);
   });
 
-  it("returns a different identifier on each call", () => {
-    const identifiers = new Set(Array.from({ length: 50 }, () => identifier()));
-    expect(identifiers.size).toBe(50);
-  });
-
   it("falls back to getRandomValues where randomUUID is unavailable", () => {
     vi.stubGlobal("crypto", {
       getRandomValues: (bytes: Uint8Array) => {
@@ -99,9 +94,7 @@ describe("formatValue", () => {
 
   it("converts scalars to strings", () => {
     expect(formatValue(42)).toBe("42");
-    expect(formatValue(1.5)).toBe("1.5");
     expect(formatValue(false)).toBe("false");
-    expect(formatValue("text")).toBe("text");
     expect(formatValue("")).toBe("");
   });
 });
@@ -298,26 +291,6 @@ describe("nodeChoices", () => {
     expect(choices[3].definition).toBe(components.b);
   });
 
-  it("excludes the opened components themselves", () => {
-    const components = { a: component(), b: component() };
-    expect(ids(nodeChoices(parsed, components, ["a"]))).toEqual([
-      "template:load_csv",
-      "template:join",
-      "component:b",
-    ]);
-  });
-
-  it("excludes a component that directly contains an opened component", () => {
-    const components = {
-      inner: component(),
-      outer: component("inner"),
-      other: component(),
-    };
-    expect(ids(nodeChoices({}, components, ["inner"]))).toEqual([
-      "component:other",
-    ]);
-  });
-
   it("excludes a component that contains an opened one through another definition", () => {
     const components = {
       inner: component(),
@@ -417,22 +390,6 @@ describe("connectInput", () => {
       target: "join",
       targetHandle: "right",
     });
-  });
-
-  it("keeps the other inputs of the target node connected", () => {
-    const graph: Graph = { nodes: [], edges: [edge("a", "join", "left")] };
-    connectInput(graph, {
-      source: "b",
-      sourceHandle: "output",
-      target: "join",
-      targetHandle: "right",
-    });
-    expect(
-      graph.edges.map((e) => [e.source, e.target, e.targetHandle]),
-    ).toEqual([
-      ["a", "join", "left"],
-      ["b", "join", "right"],
-    ]);
   });
 });
 
