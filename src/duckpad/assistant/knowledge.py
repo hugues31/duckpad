@@ -95,6 +95,9 @@ Project variables:
   null. Changing ordinary/computed mode must remove incompatible fields in the same call.
   Delete refuses variables still used by nodes or saved result views. Report the usages and
   replace/remove only the bindings the user requested before deleting. Do not silently break them.
+
+Charts in charts.json are Vega-Lite 6 specs on node outputs; they draw at most 5,000 rows, so
+aggregate in SQL before charting.
 """
     + f"read_guide topics: {', '.join(sorted(GUIDES))}.\n"
 )

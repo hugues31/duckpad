@@ -142,8 +142,8 @@ Each turn is limited to 12 provider requests, 30 tool calls and two minutes.
 
 For example, ask “Add a normal SQL node that returns the number 1”, “Rename this
 node to Paid orders”, or “Document the regional revenue output”. It can edit the
-flow, node/template SQL, documentation and variables. Shared template edits
-report how many linked instances they affect.
+flow, node/template SQL, documentation, variables and charts. Shared template
+edits report how many linked instances they affect.
 
 For variables, it can inspect declarations, values by environment and usages;
 create, update, rename and delete; remove a default or environment override; and
@@ -151,6 +151,19 @@ switch between ordinary and computed values. Updating an environment preserves
 the other overrides. Deletion refuses variables still used by node bindings,
 expressions, paths or saved result views. Ask it to inspect those usages first.
 Computed-value inspection does not execute the source node or read its retained data.
+
+For [charts](CHARTS.md), ask for example “Chart revenue by region” or “Make this
+a line chart”. It can create, update, rename and delete a named chart on any
+node output, including outputs of component instances. An update replaces the
+whole spec, and a rename keeps the chart on its output. The assistant is told
+to shape rows in SQL, since a chart draws at most 5,000 rows. An invalid spec is
+refused with the same diagnostic as `charts.json` validation, leaving the files
+unchanged. When a saved chart encodes a field that the output's retained result
+in the current environment lacks, the tool result names it so the assistant can
+fix the chart or the SQL in the same turn; the warning never blocks the save,
+and an output without a result is not checked. Chart editing reads no row
+values and requires the same editing rights as the other writing tools. Each
+change has an Undo button; see the result in the output's **Chart** tab.
 
 Each successful writing tool call is one commit on the open branch, authored by
 your Git identity, with a `Duckpad-Assistant: <conversation>` trailer that

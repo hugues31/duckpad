@@ -18,7 +18,9 @@ in the [Code tab](AUTHORING.md#edit-and-share-project-files). Edit the spec
 there, or in an external editor, then save. Readers, operators and read-only
 branches such as Job results see the charts without this action.
 
-The Northstar [example](EXAMPLE.md) includes a chart on Regional revenue.
+Editors and administrators can also ask the
+[assistant](ASSISTANT.md#request-a-change) to create, update, rename or delete
+charts. The Northstar [example](EXAMPLE.md) includes a chart on Regional revenue.
 
 ## File format
 

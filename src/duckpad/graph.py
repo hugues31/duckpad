@@ -22,6 +22,15 @@ def connection_references(node: Record) -> list[str]:
     return [reference for reference in selected if reference not in (None, "")]
 
 
+def output_ports(
+    nodes: dict[str, Record], boundaries: dict[str, Record], node: str
+) -> dict[str, tuple[str, str]]:
+    """A node's output ports as {port: (producer, producer_port)}, through component instance boundaries."""
+    if node in boundaries:
+        return boundaries[node]["outputs"]
+    return {port: (node, port) for port in nodes.get(node, {}).get("parsed", {}).get("outputs", [])}
+
+
 def reachable(seeds: Iterable[str], edges: list[Record], upstream: bool) -> set[str]:
     """Return the seeds and every node reachable against (upstream) or along the edges."""
     origin, destination = ("target", "source") if upstream else ("source", "target")

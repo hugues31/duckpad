@@ -7,7 +7,7 @@ requires exactly one row; neither source resolution nor inspection executes SQL.
 import copy
 
 from . import variables
-from .graph import reachable
+from .graph import output_ports, reachable
 from .util import Problem, digest, qi
 from .value_types import convert, resolve_column
 
@@ -22,9 +22,7 @@ def locate(bundle, nodes, boundaries, source):
     roots = [n for n in bundle["flow"].get("nodes", []) if n.get("id") == key]
     if len(roots) != 1:
         raise Problem(f"Value source node {key} is missing or ambiguous in the root flow")
-    ports = boundaries.get(key, {}).get("outputs")
-    if ports is None:
-        ports = {port: (key, port) for port in nodes.get(key, {}).get("parsed", {}).get("outputs", [])}
+    ports = output_ports(nodes, boundaries, key)
     port = source.get("port")
     if "port" not in source:
         if len(ports) != 1:
