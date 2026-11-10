@@ -54,6 +54,56 @@ export async function verifyNodeCode(page: Page) {
   await expect(
     inspector.getByRole("textbox", { name: /marker/ }),
   ).toBeVisible();
+  // Actions stay available on every tab and above long parameter forms.
+  const actions = inspector.getByRole("group", {
+    name: "Node actions",
+    exact: true,
+  });
+  // An icon is named as soon as the pointer reaches it.
+  const icon = actions.getByRole("button", {
+    name: "Duplicate node",
+    exact: true,
+  });
+  await icon.hover();
+  await expect
+    .poll(() =>
+      icon.evaluate((button) => {
+        const name = getComputedStyle(button, "::after");
+        return name.opacity === "1" && name.content;
+      }),
+    )
+    .toBe('"Duplicate node"');
+  for (const tab of ["Info", "Documentation", "Parameters"]) {
+    await inspector.getByRole("button", { name: tab, exact: true }).click();
+    await inspector.locator(".inspector-body").evaluate((body) => {
+      body.scrollTop = body.scrollHeight;
+    });
+    for (const name of [
+      "Edit code",
+      "Run with ancestors",
+      "Duplicate node",
+      "Mute node (M)",
+      "Convert to template",
+      "Remove node",
+    ]) {
+      await expect(
+        actions.getByRole("button", { name, exact: true }),
+      ).toBeInViewport();
+    }
+  }
+  // A short panel scrolls as a whole, so its fields and actions stay reachable.
+  const viewport = page.viewportSize()!;
+  await page.setViewportSize({ width: 900, height: 720 });
+  const label = inspector.getByRole("textbox", {
+    name: "Display name",
+    exact: true,
+  });
+  await label.scrollIntoViewIfNeeded();
+  await expect(label).toBeInViewport();
+  const main = actions.getByRole("button", { name: "Edit code", exact: true });
+  await main.scrollIntoViewIfNeeded();
+  await expect(main).toBeInViewport();
+  await page.setViewportSize(viewport);
   await nodeMenuAction(page, "Convert to template");
   const conversion = page.getByRole("dialog");
   await conversion.getByLabel("Template name").fill("Shared filter");

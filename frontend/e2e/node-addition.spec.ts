@@ -103,17 +103,9 @@ for (const addition of additions) {
   }) => {
     const { endpoint, existing } = await prepare(page);
     const { writes, release } = await delaySave(page, endpoint);
-    if (addition.panel)
-      await page
-        .locator(".inspector")
-        .getByRole("button", { name: "Node actions", exact: true })
-        .click();
     const button = page
-      .locator(addition.panel ? ".node-action-menu" : ".palette")
-      .getByRole(addition.panel ? "menuitem" : "button", {
-        name: addition.button,
-        exact: true,
-      });
+      .locator(addition.panel ? ".inspector" : ".palette")
+      .getByRole("button", { name: addition.button, exact: true });
     if (addition.drop)
       await button.dragTo(page.locator(".react-flow__pane"), {
         targetPosition: { x: 650, y: 350 },

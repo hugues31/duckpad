@@ -540,13 +540,81 @@ test("a double-click acts on the node its first click selected, even after the g
     .getByRole("button", { name: "Canvas editing", exact: true })
     .click();
   await expect(page.locator(".react-flow__node")).toHaveCount(4);
-  const refitted = await slowDoubleClick(page, "filtered");
+  await slowDoubleClick(page, "filtered");
   await page.waitForTimeout(500);
   // Neither the pane nor another node takes the second click.
-  expect(await canvasZoom(page)).toBe(refitted);
+  await expect(codePanel(page).locator(".monaco-editor")).toBeVisible();
+  await expect(codePanel(page)).toContainText("Shared template, 1 node");
   await expect(page.locator(".react-flow__node.selected")).toHaveCount(1);
   await expect(node(page, "filtered")).toHaveClass(/selected/);
   await expect(page.locator(".component-notice")).toHaveCount(0);
+  await closeCode(page);
+  await node(page, "doubled").locator(".node-shape").dblclick();
+  await expect(codePanel(page).locator(".monaco-editor")).toContainText(
+    "amount * 2",
+  );
+  await closeCode(page);
+  await node(page, "boxed").locator(".node-shape").dblclick();
+  await expect(node(page, "inner")).toBeVisible();
+  await node(page, "inner").locator(".node-shape").dblclick();
+  await expect(codePanel(page).locator(".monaco-editor")).toContainText(
+    "1 AS amount",
+  );
+});
+
+test("double-click opens Python code and read-only nodes cannot be changed", async ({
+  page,
+}) => {
+  const { endpoint, read } = await prepare(page);
+  const snapshot = await read();
+  const bundle = snapshot.bundle!;
+  bundle.flow.nodes.push({
+    id: "python_node",
+    language: "python",
+    label: "Python rows",
+    params: {},
+    position: { x: 700, y: 300 },
+  });
+  bundle.node_sql!["nodes/python_node.py"] =
+    "import duckpad as dp\nclass Source(dp.Node):\n    def run(self) -> dp.Relation:\n        return self.db.sql('SELECT 42 AS amount')\n";
+  expect(
+    (
+      await page.request.put(endpoint, {
+        data: { revision: snapshot.revision, bundle },
+      })
+    ).ok(),
+  ).toBe(true);
+  await page.reload();
+  await node(page, "python_node").locator(".node-shape").dblclick();
+  await expect(codePanel(page)).toContainText("Python");
+  await expect(codePanel(page).locator(".monaco-editor")).toContainText(
+    "SELECT 42",
+  );
+  await closeCode(page);
+  await page.route(`**${endpoint}`, async (route) => {
+    if (route.request().method() !== "GET") return route.continue();
+    const response = await route.fetch();
+    const value: Snapshot = await response.json();
+    value.worktree.read_only = true;
+    await route.fulfill({ response, json: value });
+  });
+  await page.reload();
+  await select(page, "python_node");
+  const actions = page.getByRole("group", {
+    name: "Node actions",
+    exact: true,
+  });
+  await expect(actions).toBeVisible();
+  for (const button of await actions.getByRole("button").all())
+    await expect(button).toBeDisabled();
+  const before = (await read()).revision;
+  await node(page, "python_node").locator(".node-shape").dblclick();
+  await expect(codePanel(page).locator(".monaco-editor")).toBeVisible();
+  await codePanel(page).locator(".monaco-editor textarea").focus();
+  await page.keyboard.press("ControlOrMeta+A");
+  await page.keyboard.insertText("should not be saved");
+  await closeCode(page);
+  expect((await read()).revision).toBe(before);
 });
 
 test("canvas shortcuts yield to fields, editors and dialogs", async ({

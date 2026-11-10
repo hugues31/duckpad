@@ -28,16 +28,20 @@ outputs stay hollow, and an input without a source is orange on the node until
 you connect it. Point at a node or a link to highlight it. Click a link to select
 it, then press Delete or Backspace to disconnect it. Shift-click selects multiple
 links; Ctrl/Cmd+Z undoes a deletion. Select a node for
-its parameters and code on the right and its [results](RESULTS.md) below. Its other actions, such as
-**Duplicate node**, are in **Node actions** (**⋯** in the inspector title, or
-right-click the node). Double-click a [component](COMPONENTS.md) to open
+its parameters on the right and its [results](RESULTS.md) below. Double-click a
+SQL or Python node to edit its code; a linked node opens its shared template.
+**Edit code** at the top of the inspector does the same. The icons under it run
+the node with its ancestors, mute it, duplicate it, link it to a template or
+remove it; point at an icon for its name, or right-click the node for the same
+actions in a menu. Removing a node can be undone with **Undo** in the
+notification or Ctrl/Cmd+Z. Double-click a [component](COMPONENTS.md) to open
 its contents; use the breadcrumbs to return. **Fit view** brings the graph into
 view. **Auto-arrange nodes** places dependencies in columns, orders each column to
 avoid crossing links, and lines up linked sockets. Drag a port onto empty space to
 add a compatible connected node.
 
-Select one or more nodes and press **M**, or choose **Mute node (M)** from **Node
-actions**, to bypass their code; repeat to restore it. A muted node is faded, with a
+Select one or more nodes and press **M**, or choose **Mute node (M)** among a
+node's actions, to bypass their code; repeat to restore it. A muted node is faded, with a
 dashed outline and its links drawn through it, and its inspector offers **Unmute
 node (M)**. Code, parameters and links are kept, the state is saved with the
 project, and undo works as for other edits.

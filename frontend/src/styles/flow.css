@@ -908,11 +908,20 @@ fieldset.palette-bottom {
   box-shadow: var(--shadow);
 }
 .node-action-menu button {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 9px;
   width: 100%;
   padding: 9px 12px;
   border-radius: 4px;
   text-align: left;
+}
+.node-action-menu svg {
+  flex-shrink: 0;
+  color: var(--muted);
+}
+.node-action-menu .danger svg {
+  color: inherit;
 }
 .node-action-menu button:hover,
 .node-action-menu button:focus-visible {

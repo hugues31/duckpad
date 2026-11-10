@@ -1,36 +1,36 @@
-import { Boxes, Link, Loader2, Play, Settings2 } from "lucide-react";
+import { Boxes, Link, Settings2, X } from "lucide-react";
 import { templateLabel, useT } from "./i18n";
-import type { FlowNode, Snapshot, Statuses } from "./types";
+import type { FlowNode, Snapshot } from "./types";
 
+/** The selected node's name over its kind, as the code panel names its node. */
 export default function InspectorHeading({
+  title,
   node,
   kind,
   snapshot,
-  readOnly,
-  starting,
-  statuses,
-  onRun,
+  onClose,
 }: {
+  title: string;
   node: FlowNode;
   kind: "component" | import("./types").TemplateKind;
   snapshot: Snapshot;
-  readOnly: boolean;
-  starting: boolean | undefined;
-  statuses: Statuses;
-  onRun: () => void;
+  onClose: () => void;
 }) {
   const t = useT();
   return (
-    <div className="inspector-kind">
+    <div className="inspector-title">
       <span className={`kind-icon ${node.component ? "component" : ""}`}>
         {node.component ? <Boxes size={18} /> : <Settings2 size={18} />}
       </span>
-      <div>
-        <strong>{t(kind)}</strong>
-        <small>
+      <span className="panel-heading">
+        <span title={title}>{title}</span>
+        <small className="muted">
+          {t(kind)}
+          {" · "}
           {node.template ? (
             <>
-              <Link size={12} /> {t("linkedNode")} ·{" "}
+              <Link size={11} aria-hidden="true" />
+              {t("linkedNode")} ·{" "}
               {templateLabel(
                 node.template,
                 snapshot.parsed_templates[node.template]?.label,
@@ -41,15 +41,9 @@ export default function InspectorHeading({
             node.component || t("normalNode")
           )}
         </small>
-      </div>
-      <button
-        className="icon run-node"
-        title={t("runNode")}
-        disabled={readOnly || starting || !!statuses.active}
-        aria-busy={starting}
-        onClick={onRun}
-      >
-        {starting ? <Loader2 size={16} className="spin" /> : <Play size={16} />}
+      </span>
+      <button className="icon" onClick={onClose} title={t("close")}>
+        <X size={18} />
       </button>
     </div>
   );

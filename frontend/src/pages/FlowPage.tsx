@@ -293,15 +293,18 @@ export default function FlowPage() {
           },
     );
   };
+  /** A node's main action: its code, or the contents of a component. */
+  const openNode = (target: FlowNode) =>
+    target.component
+      ? openComponent(target.id)
+      : editCode(undefined, prefix + target.id);
   const actionsFor = (target: FlowNode) =>
     nodeActions(target, {
       t,
       canEdit,
       busy,
       bundle,
-      openComponent,
-      editCode,
-      prefix,
+      open: openNode,
       safe,
       parent,
       paste,
@@ -429,7 +432,10 @@ export default function FlowPage() {
             onAdd={(kind, id, position, connection) =>
               safe(() => addNode(kind, id, position, connection))
             }
-            onOpen={openComponent}
+            onOpen={(id) => {
+              const target = graph.nodes.find((item) => item.id === id);
+              if (target) openNode(target);
+            }}
             actionsFor={(id) =>
               actionsFor(graph.nodes.find((node) => node.id === id)!)
             }
@@ -523,10 +529,7 @@ export default function FlowPage() {
         path={path}
         safe={safe}
         updateGraph={updateGraph}
-        removeNodes={removeNodes}
         run={run}
-        openComponent={openComponent}
-        editCode={editCode}
         actionsFor={actionsFor}
         openModal={openModal}
         showResults={showResults}

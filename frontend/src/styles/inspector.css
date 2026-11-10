@@ -16,6 +16,10 @@
   overflow: hidden;
   border-left: 1px solid var(--border);
 }
+/* Short panels scroll as a whole before their fields become unusably small. */
+.inspector {
+  overflow: auto;
+}
 .inspector-title {
   height: 52px;
   padding: 0 17px;
@@ -29,24 +33,36 @@
   flex-shrink: 0;
   gap: 8px;
 }
-.inspector-title > span {
+/* A panel's node: its name over one line on what it is. */
+.panel-heading {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  line-height: 1.25;
+}
+.panel-heading > * {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.inspector-kind {
-  padding: 19px;
-  display: flex;
-  align-items: center;
-  gap: 11px;
+.panel-heading small {
+  font-size: 11px;
+  font-weight: 500;
+}
+.panel-heading small svg {
+  margin-right: 4px;
+  vertical-align: -1px;
 }
 .kind-icon {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
-  border-radius: 10px;
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
   color: var(--accent);
   background: var(--accent-soft);
 }
@@ -54,27 +70,72 @@
   background: var(--surface-alt);
   color: light-dark(#6b589c, #d0bcff);
 }
-.inspector-kind > div {
+/* The node's main action, then the others as one bar of named icons. */
+.inspector-actions {
+  flex-shrink: 0;
+  display: grid;
+  gap: 6px;
+  padding: 12px 17px;
+}
+.inspector-toolbar {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--surface);
+}
+.inspector-toolbar button {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.inspector-kind strong {
-  font-size: 12px;
-  font-weight: 600;
-}
-.inspector-kind small {
-  font-size: 11px;
+  align-items: center;
+  justify-content: center;
+  height: 28px;
   color: var(--muted);
 }
-.run-node {
-  margin-left: auto;
+.inspector-toolbar button + button {
+  border-left: 1px solid var(--border);
+}
+.inspector-toolbar button:first-child {
+  border-radius: 6px 0 0 6px;
+}
+.inspector-toolbar button:last-child {
+  border-radius: 0 6px 6px 0;
+}
+/* Only the icon fades, so the name of a disabled action stays readable. */
+.inspector-toolbar button:disabled {
+  opacity: 1;
+}
+.inspector-toolbar button:disabled svg {
+  opacity: 0.45;
+}
+.inspector-toolbar button:not(:disabled):hover {
+  background: var(--surface-alt);
+  color: var(--text);
+}
+.inspector-toolbar .run-node:not(:disabled),
+.inspector-toolbar .active {
   color: var(--accent);
+}
+.inspector-toolbar .active {
   background: var(--accent-soft);
+}
+.inspector-toolbar .danger:not(:disabled):hover {
+  color: var(--danger);
+}
+/* Names of the outer icons open inwards, to stay inside the panel. */
+.inspector-toolbar button:nth-child(-n + 2)::after {
+  left: 0;
+  translate: none;
+}
+.inspector-toolbar button:nth-last-child(-n + 2)::after {
+  left: auto;
+  right: 0;
+  translate: none;
 }
 /* One line on what the node produced; each part opens the results panel. */
 .result-summary {
-  margin: -4px 17px 15px;
+  flex-shrink: 0;
+  margin: 0 17px 15px;
   padding: 8px 10px;
   display: flex;
   flex-wrap: wrap;
@@ -110,6 +171,7 @@
  * panel they shorten, never below three characters, and short ones stay whole.
  */
 .inspector-tabs {
+  flex-shrink: 0;
   display: grid;
   grid-auto-flow: column;
   justify-content: start;
@@ -133,6 +195,7 @@
   white-space: nowrap;
 }
 .inspector-body {
+  min-height: 160px;
   padding: 21px 18px;
   overflow: auto;
   flex: 1;
@@ -159,11 +222,6 @@
   margin: 0;
   padding: 0;
   min-width: 0;
-}
-.inspector-danger {
-  margin-top: 35px;
-  padding-top: 18px;
-  border-top: 1px solid var(--border);
 }
 .file-upload {
   display: flex;
@@ -268,25 +326,6 @@
   }
 }
 /* Code panel: the selected node's code, docked in the inspector's place. */
-.code-panel-title {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-  line-height: 1.25;
-}
-.code-panel-title > span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.code-panel-title small {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 11px;
-  font-weight: 500;
-}
 .code-panel-toolbar {
   display: flex;
   flex-wrap: wrap;
