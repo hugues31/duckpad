@@ -18,12 +18,9 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
-from cryptography.exceptions import InvalidTag
-from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-
+from .paths import InstancePaths
 from .util import Problem
 
-KEY_FILE = "duckpad-master.key"
 KEY_VARIABLE = "DUCKPAD_MASTER_KEY"
 KEY_FILE_VARIABLE = "DUCKPAD_MASTER_KEY_FILE"
 SEALED = re.compile(r"dpenc:1:([0-9a-f]{12}):([A-Za-z0-9_-]+)")
@@ -33,6 +30,19 @@ KEY_FILE_HEADER = (
 )
 # Read once per process, then removed from the environment so Git and SQL workers never inherit it.
 _environment_keys: str | None = None
+
+
+def key_source(home: Path) -> tuple[str, Path | None]:
+    """Describe the configured source without reading, consuming or exposing its secret."""
+    path = os.environ.get(KEY_FILE_VARIABLE)
+    from_environment = KEY_VARIABLE in os.environ or _environment_keys is not None
+    if path and from_environment:
+        raise Problem(f"Set either {KEY_FILE_VARIABLE} or {KEY_VARIABLE}, not both")
+    if path:
+        return KEY_FILE_VARIABLE, Path(path).resolve()
+    if from_environment:
+        return KEY_VARIABLE, None
+    return "instance", InstancePaths(home).master_key
 
 
 def key_id(key: bytes) -> str:
@@ -93,6 +103,8 @@ class MasterKeys:
     """The first key seals; the others only open values sealed before a rotation."""
 
     def __init__(self, keys: list[bytes], *, external: bool) -> None:
+        from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
         self.ciphers = {key_id(key): AESGCM(key) for key in keys}
         self.primary = key_id(keys[0])
         # False when the key sits next to the database it protects, in the instance home.
@@ -108,19 +120,18 @@ class MasterKeys:
         global _environment_keys
         if KEY_VARIABLE in os.environ:
             _environment_keys = os.environ.pop(KEY_VARIABLE)
-        path = os.environ.get(KEY_FILE_VARIABLE)
-        if path and _environment_keys is not None:
-            raise Problem(f"Set either {KEY_FILE_VARIABLE} or {KEY_VARIABLE}, not both")
-        if path:
+        source, path = key_source(home)
+        if source == KEY_FILE_VARIABLE:
+            assert path is not None
             try:
-                text = Path(path).read_text(encoding="utf-8")
+                text = path.read_text(encoding="utf-8")
             except OSError as error:
                 raise Problem(f"Cannot read {KEY_FILE_VARIABLE}: {error.strerror}") from None
             keys = cls(parse_keys(text, KEY_FILE_VARIABLE), external=True)
         elif _environment_keys is not None:
             keys = cls(parse_keys(_environment_keys, KEY_VARIABLE), external=True)
         else:
-            file = home / KEY_FILE
+            file = InstancePaths(home).master_key
             if not file.exists():
                 if sealed:
                     raise Problem(
@@ -146,6 +157,8 @@ class MasterKeys:
         return f"dpenc:1:{self.primary}:{base64.urlsafe_b64encode(nonce + data).decode().rstrip('=')}"
 
     def open(self, value: Any, location: str) -> Any:
+        from cryptography.exceptions import InvalidTag
+
         if not sealable(value):
             return value
         match = SEALED.fullmatch(value) if isinstance(value, str) else None

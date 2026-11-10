@@ -4,9 +4,10 @@ import argparse
 from pathlib import Path
 
 from alembic import command
-from filelock import FileLock, Timeout
 
+from duckpad.instance import instance_lease
 from duckpad.migrations import configuration, migration_connection
+from duckpad.paths import InstancePaths
 from duckpad.store import metadata_engine
 from duckpad.util import Problem
 
@@ -17,12 +18,15 @@ def main():
     parser.add_argument("--home", required=True, type=Path)
     parser.add_argument("--message", default="Update instance metadata")
     args = parser.parse_args()
-    path = args.home / "instance.sqlite"
+    args.home = args.home.expanduser().resolve()
+    path = InstancePaths(args.home).database
     if not path.is_file():
-        parser.error("Initialize a disposable instance first, then stop it before running migration commands")
+        parser.exit(
+            1, "Initialize a disposable instance first, then stop it before running migration commands\n"
+        )
     engine = metadata_engine(path)
     try:
-        with FileLock(args.home / "instance.lock", timeout=0), migration_connection(engine) as connection:
+        with instance_lease(args.home), migration_connection(engine) as connection:
             config = configuration(connection)
             if args.action == "revision":
                 command.revision(config, message=args.message, autogenerate=True)
@@ -30,10 +34,8 @@ def main():
                 command.upgrade(config, "head")
             else:
                 getattr(command, args.action)(config)
-    except Timeout:
-        parser.error("Stop this Duckpad instance before running migration commands")
     except Problem as error:
-        parser.error(str(error))
+        parser.exit(1, f"{error}\n")
     finally:
         engine.dispose()
 

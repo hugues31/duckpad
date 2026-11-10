@@ -26,6 +26,7 @@ import _duckdb
 import duckdb
 from filelock import FileLock, Timeout
 
+from .paths import InstancePaths
 from .python_progress import LOG_LIMIT, Preparation, clean_output, environment_status
 from .python_sdk import SDK_CONTRACT
 from .util import Problem, atomic_write, digest
@@ -461,7 +462,7 @@ def lock_files(files, home, *, read_only=False, allow_builds=False, worktree=Non
 
 def cached_lock(files, home, *, read_only=False, allow_builds=False, progress=None):
     validate_manifest(files["pyproject.toml"])
-    root = Path(home) / "python" / "locks"
+    root = InstancePaths(home).python_cache / "locks"
     root.mkdir(parents=True, exist_ok=True)
 
     def key(lock):
@@ -487,7 +488,7 @@ def cached_lock(files, home, *, read_only=False, allow_builds=False, progress=No
 def resolve_lock(files, home, *, read_only=False, allow_builds=False, progress=None):
     """Resolve in scratch space; tagged worktrees are never written."""
     validate_manifest(files["pyproject.toml"])
-    root = Path(home) / "python"
+    root = InstancePaths(home).python_cache
     root.mkdir(parents=True, exist_ok=True)
     if progress:
         progress.step("runtime")
@@ -540,7 +541,7 @@ def prepare(files, home, project, *, allow_builds=False, worktree=None):
             progress.step("cached")
         progress.finish("ready")
         try:
-            prune_environments(Path(home) / "python")
+            prune_environments(InstancePaths(home).python_cache)
         except Exception:  # Housekeeping must not fail a prepared run.
             logger.warning("Python environment cleanup failed", exc_info=True)
         return result
@@ -608,7 +609,7 @@ def prepare_environment(files, home, project, *, allow_builds=False, progress=No
     if not files.get("uv.lock"):
         raise Problem("Save the Python project to generate uv.lock before execution", 422)
     check_lock_sources(files["uv.lock"])
-    root = Path(home) / "python"
+    root = InstancePaths(home).python_cache
     root.mkdir(parents=True, exist_ok=True)
     signature = digest([project, files["pyproject.toml"], files["uv.lock"], runtime_signature()])
     directory = root / signature
