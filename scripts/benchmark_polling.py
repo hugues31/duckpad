@@ -76,7 +76,9 @@ def benchmark(repeats, keys):
     with tempfile.TemporaryDirectory(prefix="duckpad-polling-") as directory:
         app = create_app(Path(directory), watch=False, trusted_local=True)
         with TestClient(app) as client:
-            client.post("/api/login", json={"password": app.state.auth.initial_password}).raise_for_status()
+            client.post(
+                "/api/login", json={"username": "admin", "password": app.state.auth.initial_password}
+            ).raise_for_status()
             services = app.state.services
             store, projects, engine = services.store, services.projects, services.engine
             example = client.post("/api/example").json()

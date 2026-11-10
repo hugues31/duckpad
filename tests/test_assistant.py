@@ -44,7 +44,10 @@ def instance(tmp_path):
     app.state.assistant.configuration.model_override = deterministic_model()
     with TestClient(app) as client:
         assert (
-            client.post("/api/login", json={"password": app.state.auth.initial_password}).status_code == 200
+            client.post(
+                "/api/login", json={"username": "admin", "password": app.state.auth.initial_password}
+            ).status_code
+            == 200
         )
         yield app, client
 

@@ -30,7 +30,7 @@ def test_documentation_mount_preserves_application_and_api_boundaries(tmp_path, 
         assert client.get("/assets/missing.js").status_code == 404
         assert client.get("/api/session").status_code == 401
         assert client.get("/api/missing").status_code == 401
-        client.post("/api/login", json={"password": app.state.auth.initial_password})
+        client.post("/api/login", json={"username": "admin", "password": app.state.auth.initial_password})
         assert client.get("/api/missing").status_code == 404
         assert client.get("/api").status_code == 404
 
@@ -43,7 +43,9 @@ def test_session_cookie_transport(tmp_path, monkeypatch, secure, scheme, session
     monkeypatch.setenv("DUCKPAD_SECURE_COOKIES", secure)
     app = create_app(tmp_path / "instance", watch=False)
     with TestClient(app, base_url=f"{scheme}://duckpad.test") as client:
-        response = client.post("/api/login", json={"password": app.state.auth.initial_password})
+        response = client.post(
+            "/api/login", json={"username": "admin", "password": app.state.auth.initial_password}
+        )
         assert response.status_code == 200
         assert "HttpOnly" in response.headers["set-cookie"]
         assert client.get("/api/session").status_code == session_status

@@ -35,7 +35,9 @@ def local(tmp_path, monkeypatch):
     app = create_app(tmp_path / "instance", watch=False, trusted_local=True)
     with TestClient(app) as client:
         assert client.get("/api/workspace").status_code == 401
-        response = client.post("/api/login", json={"password": app.state.auth.initial_password})
+        response = client.post(
+            "/api/login", json={"username": "admin", "password": app.state.auth.initial_password}
+        )
         assert response.status_code == 200
         yield app, client
 
@@ -286,11 +288,11 @@ def test_restart_without_flag_restores_isolation_and_never_falls_back(tmp_path, 
     trusted = create_app(tmp_path / "instance", watch=False, trusted_local=True)
     with TestClient(trusted) as client:
         password = trusted.state.auth.initial_password
-        client.post("/api/login", json={"password": password})
+        client.post("/api/login", json={"username": "admin", "password": password})
         worktree = client.post("/api/example", json={}).json()["id"]
     app = create_app(tmp_path / "instance", watch=False)
     with TestClient(app) as client:
-        assert client.post("/api/login", json={"password": password}).status_code == 200
+        assert client.post("/api/login", json={"username": "admin", "password": password}).status_code == 200
         response = client.post(f"/api/worktrees/{worktree}/runs", json={"environment": "dev"})
         assert response.status_code == 200
         run = join_run(app.state.services.store, response.json()["id"])
