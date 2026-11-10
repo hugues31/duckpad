@@ -24,8 +24,10 @@ embedded engine, not browser latency or the isolated HTTP worker.
 For a wider, 50-column Parquet workload, run:
 
 ```sh
-uv run python scripts/benchmark.py --output .duckpad-dev/benchmark-wide.json
+uv run python scripts/benchmark.py
 ```
+
+The report is written to `.duckpad-dev/benchmark-wide.json`, outside tracked files.
 
 ## Connector reports
 

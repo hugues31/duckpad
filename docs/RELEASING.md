@@ -37,6 +37,8 @@ pushing the first release tag.
 
 ## Publish a version
 
+Replace `<version>` below with the package version from the approved commit.
+
 1. Update `[project].version` in `pyproject.toml` and run `uv lock`. Use a release
    PR with a Conventional Commit title such as `chore(release): prepare <version>`.
    The frontend's private npm version is not the Python package version.
@@ -45,9 +47,8 @@ pushing the first release tag.
 
    ```sh
    git fetch origin main --tags
-   version="$(uv run python -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')"
-   git tag -a "v$version" <approved-commit> -m "Release Duckpad $version"
-   git push origin "v$version"
+   git tag -a "v<version>" <approved-commit> -m "Release Duckpad <version>"
+   git push origin "v<version>"
    ```
 
 Tags must exactly match `vMAJOR.MINOR.PATCH` and the package version. Pre-releases
@@ -77,13 +78,13 @@ the most recent stable tag reachable from `HEAD`, by commit date:
 
 ```sh
 uv sync --locked
-uv run git-cliff --offline --no-exec --unreleased --tag "v$version" --output release-notes.md
+uv run git-cliff --offline --no-exec --unreleased --tag "v<version>" --output release-notes.md
 ```
 
 To reproduce the exact workflow output from a release checkout:
 
 ```sh
-uv run python scripts/release.py "v$version" --output release-notes.md
+uv run python scripts/release.py "v<version>" --output release-notes.md
 ```
 
 Generated notes are build artifacts, not committed changelog files.
