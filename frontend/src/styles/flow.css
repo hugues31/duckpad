@@ -594,6 +594,27 @@ fieldset.palette-bottom {
 .pipeline-node:hover .node-shape {
   border-color: var(--accent);
 }
+.node-passthrough {
+  position: absolute;
+  top: 0;
+  left: 0;
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2;
+  pointer-events: none;
+}
+.pipeline-node.is-muted .node-shape {
+  background: color-mix(in srgb, var(--surface) 35%, transparent);
+  border-style: dashed;
+  color: var(--muted);
+  box-shadow: none;
+}
+.pipeline-node.is-muted .node-shape > svg {
+  opacity: 0.3;
+}
+.pipeline-node.is-muted .node-title {
+  color: var(--muted);
+}
 .node-title {
   font-size: 14px;
   font-weight: 650;

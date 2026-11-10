@@ -1544,5 +1544,9 @@
   "ancestorsOf": "Ancêtres de {node}",
   "ancestorsScope": "les ancêtres de ce nœud",
   "sharedTemplateOne": "Modèle partagé, 1 nœud",
-  "sharedTemplateCount": "Modèle partagé, {count} nœuds"
+  "sharedTemplateCount": "Modèle partagé, {count} nœuds",
+  "muteNode": "Désactiver le nœud (M)",
+  "unmuteNode": "Réactiver le nœud (M)",
+  "mutedNode": "Désactivé",
+  "mutedNodeHint": "Les entrées passent directement aux sorties dans l’ordre des ports. Les sorties supplémentaires utilisent la première entrée. Le code du nœud est ignoré."
 }

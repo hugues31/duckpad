@@ -25,6 +25,8 @@ def compile_node(
     project_files: dict[str, Path],
     input_schemas: dict[str, list[dict[str, str]]] | None = None,
 ) -> list[Record]:
+    if node.get("muted"):
+        inputs = {alias: inputs[port] for alias, port in node.get("mute_inputs", {}).items()}
     return compile_template(
         node["parsed"],
         node.get("params", {}),

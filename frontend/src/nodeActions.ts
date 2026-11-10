@@ -1,8 +1,14 @@
 import type { ActionItem } from "./ActionMenu";
 import type { Translate } from "./i18n";
 import { countLabel, isBuiltinTemplate } from "./i18n";
+import { nodeInterface } from "./graph";
 import { nodeCopies, type CopiedNodes } from "./nodeClipboard";
-import { detachNode, nodeGraph, templateUsage } from "./nodeCode";
+import {
+  detachNode,
+  localDefinitions,
+  nodeGraph,
+  templateUsage,
+} from "./nodeCode";
 import type { useShell } from "./shell";
 import type { Bundle, FlowNode, Snapshot } from "./types";
 import type { useLoadedWorktree } from "./worktree";
@@ -24,6 +30,7 @@ export function nodeActions(
     openModal,
     worktree,
     removeNodes,
+    toggleMute,
   }: {
     t: Translate;
     canEdit: boolean;
@@ -40,6 +47,7 @@ export function nodeActions(
     openModal: ReturnType<typeof useShell>["openModal"];
     worktree: string;
     removeNodes: (ids: string[]) => Promise<void>;
+    toggleMute: (ids: string[]) => Promise<void>;
   },
 ): ActionItem[] {
   const item = (id: string, label: string, run: () => void): ActionItem => ({
@@ -68,6 +76,21 @@ export function nodeActions(
     ),
   ];
   actions.push(
+    {
+      ...item("mute", t(target.muted ? "unmuteNode" : "muteNode"), () =>
+        safe(() => toggleMute([target.id])),
+      ),
+      disabled:
+        !canEdit ||
+        busy ||
+        (!target.muted &&
+          !nodeInterface(
+            target,
+            snapshot.parsed_templates,
+            bundle.components,
+            localDefinitions(snapshot, parent),
+          ).inputs.length),
+    },
     item("duplicate", t("duplicateNode"), () =>
       safe(async () => {
         const copied = nodeCopies(bundle, parent, [target.id]);

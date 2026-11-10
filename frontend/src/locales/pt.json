@@ -1544,5 +1544,9 @@
   "ancestorsOf": "Ancestrais de {node}",
   "ancestorsScope": "os ancestrais deste nó",
   "sharedTemplateOne": "Modelo compartilhado, 1 nó",
-  "sharedTemplateCount": "Modelo compartilhado, {count} nós"
+  "sharedTemplateCount": "Modelo compartilhado, {count} nós",
+  "muteNode": "Silenciar nó (M)",
+  "unmuteNode": "Reativar nó (M)",
+  "mutedNode": "Silenciado",
+  "mutedNodeHint": "As entradas passam para as saídas pela ordem das portas. As saídas adicionais usam a primeira entrada. O código do nó é ignorado."
 }

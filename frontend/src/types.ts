@@ -14,6 +14,7 @@ export type Theme = "light" | "dark";
 /** Curved links, or links with right angles. */
 export type EdgeStyle = "curved" | "orthogonal";
 export interface FlowNode {
+  muted?: boolean;
   language?: "sql" | "python";
   partitions?: "all";
   outputs?: Record<string, { partition?: { by: string; column: string } }>;

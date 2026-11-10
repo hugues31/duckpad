@@ -1544,5 +1544,9 @@
   "ancestorsOf": "Ancestors of {node}",
   "ancestorsScope": "the ancestors of this node",
   "sharedTemplateOne": "Shared template, 1 node",
-  "sharedTemplateCount": "Shared template, {count} nodes"
+  "sharedTemplateCount": "Shared template, {count} nodes",
+  "muteNode": "Mute node (M)",
+  "unmuteNode": "Unmute node (M)",
+  "mutedNode": "Muted",
+  "mutedNodeHint": "Inputs pass through to outputs in port order. Extra outputs use the first input. Node code is skipped."
 }

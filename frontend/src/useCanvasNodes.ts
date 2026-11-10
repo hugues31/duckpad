@@ -55,6 +55,7 @@ export function useCanvasNodes(props: CanvasProps) {
           position: node.position || { x: 0, y: 0 },
           selected: node.id === props.selected,
           data: {
+            muted: node.muted,
             fullNode: props.prefix + node.id,
             partition: partitions?.[props.prefix + node.id],
             valueProducer: props.valueProducers?.includes(
@@ -68,7 +69,9 @@ export function useCanvasNodes(props: CanvasProps) {
             kind,
             inputs,
             missingInputs: inputs.filter(
-              (port) => !connectedInputs.has(`${node.id}\0${port}`),
+              (port, index) =>
+                (!node.muted || index < outputs.length) &&
+                !connectedInputs.has(`${node.id}\0${port}`),
             ),
             outputs,
             connectedOutputs: outputs.filter((port) =>

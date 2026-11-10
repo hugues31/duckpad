@@ -16,12 +16,14 @@ import {
 import {
   graphAt,
   identifier,
+  nodeInterface,
   type NodeConnection,
   type NodeKind,
   type PathPart,
 } from "./graph";
 import { findNodePosition } from "./graphLayout";
 import { useT } from "./i18n";
+import { localDefinitions } from "./nodeCode";
 import {
   copyNodes,
   pastableNodes,
@@ -76,6 +78,30 @@ export function useFlowEditing({
   async function updateGraph(change: (graph: Graph) => void) {
     if (!canEdit) return;
     await save(snapshot, (value) => change(graphAt(value, path)));
+  }
+  async function toggleMute(ids: string[]) {
+    if (!canEdit || busy || saving || !bundle) return;
+    const local = localDefinitions(snapshot, parent);
+    const eligible = graph!.nodes.filter(
+      (item) =>
+        ids.includes(item.id) &&
+        (item.muted ||
+          nodeInterface(
+            item,
+            snapshot.parsed_templates,
+            bundle.components,
+            local,
+          ).inputs.length > 0),
+    );
+    if (!eligible.length) return;
+    const muted = !eligible.every((item) => item.muted);
+    await updateGraph((value) => {
+      for (const item of value.nodes) {
+        if (!eligible.some((candidate) => candidate.id === item.id)) continue;
+        if (muted) item.muted = true;
+        else delete item.muted;
+      }
+    });
   }
   /**
    * Save new nodes, then select the one `change` returns. Editors stay inert
@@ -244,6 +270,7 @@ export function useFlowEditing({
     safe,
     copy,
     paste,
+    toggleMute,
   });
   /** Insert a Filter node reading one output of the selected node, with a sample's condition. */
   async function addFilterNode(port: string, condition: string) {
@@ -273,5 +300,6 @@ export function useFlowEditing({
     removeNodes,
     paste,
     addFilterNode,
+    toggleMute,
   };
 }

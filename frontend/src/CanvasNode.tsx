@@ -56,6 +56,7 @@ function StatusIcon({ status, ...props }: LucideProps & { status: string }) {
 
 /** What the canvas shows of a node. */
 type PipelineData = {
+  muted?: boolean;
   count?: number;
   fullNode: string;
   valueProducer?: boolean;
@@ -108,8 +109,30 @@ export const PipelineNode = memo(function PipelineNode({
   };
   return (
     <div
-      className={`pipeline-node ${source ? "source-node" : "round-node"} ${data.kind} ${selected ? "is-selected" : ""}`}
+      className={`pipeline-node ${source ? "source-node" : "round-node"} ${data.kind} ${selected ? "is-selected" : ""} ${data.muted ? "is-muted" : ""}`}
     >
+      {data.muted && data.inputs.length > 0 && (
+        <svg
+          className="node-passthrough"
+          width="150"
+          height="96"
+          aria-hidden="true"
+        >
+          {data.outputs.map((port, index) => {
+            const input = portPosition(
+              index < data.inputs.length ? index : 0,
+              data.inputs.length,
+            );
+            const output = portPosition(index, data.outputs.length);
+            return (
+              <path
+                key={port}
+                d={`M ${input.inset} ${input.top} C 75 ${input.top}, 75 ${output.top}, ${150 - output.inset} ${output.top}`}
+              />
+            );
+          })}
+        </svg>
+      )}
       <div className="node-shape">
         <NodeIcon kind={data.icon} size={27} strokeWidth={1.6} />
       </div>
@@ -133,6 +156,11 @@ export const PipelineNode = memo(function PipelineNode({
         </span>
       )}
       <div className="node-status-slot">
+        {data.muted && (
+          <span className="badge neutral" title={t("mutedNodeHint")}>
+            {t("mutedNode")}
+          </span>
+        )}
         {data.valueProducer && (
           <span className="badge neutral" title={t("valueProducer")}>
             ƒ
