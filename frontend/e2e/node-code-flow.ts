@@ -60,14 +60,14 @@ export async function verifyNodeCode(page: Page) {
     exact: true,
   });
   // An icon is named as soon as the pointer reaches it.
-  const duplicate = actions.getByRole("button", {
+  const icon = actions.getByRole("button", {
     name: "Duplicate node",
     exact: true,
   });
-  await duplicate.hover();
+  await icon.hover();
   await expect
     .poll(() =>
-      duplicate.evaluate((button) => {
+      icon.evaluate((button) => {
         const name = getComputedStyle(button, "::after");
         return name.opacity === "1" && name.content;
       }),
@@ -91,6 +91,19 @@ export async function verifyNodeCode(page: Page) {
       ).toBeInViewport();
     }
   }
+  // A short panel scrolls as a whole, so its fields and actions stay reachable.
+  const viewport = page.viewportSize()!;
+  await page.setViewportSize({ width: 900, height: 720 });
+  const label = inspector.getByRole("textbox", {
+    name: "Display name",
+    exact: true,
+  });
+  await label.scrollIntoViewIfNeeded();
+  await expect(label).toBeInViewport();
+  const main = actions.getByRole("button", { name: "Edit code", exact: true });
+  await main.scrollIntoViewIfNeeded();
+  await expect(main).toBeInViewport();
+  await page.setViewportSize(viewport);
   await nodeMenuAction(page, "Convert to template");
   const conversion = page.getByRole("dialog");
   await conversion.getByLabel("Template name").fill("Shared filter");

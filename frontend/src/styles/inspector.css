@@ -16,6 +16,10 @@
   overflow: hidden;
   border-left: 1px solid var(--border);
 }
+/* Short panels scroll as a whole before their fields become unusably small. */
+.inspector {
+  overflow: auto;
+}
 .inspector-title {
   height: 52px;
   padding: 0 17px;
@@ -130,6 +134,7 @@
 }
 /* One line on what the node produced; each part opens the results panel. */
 .result-summary {
+  flex-shrink: 0;
   margin: 0 17px 15px;
   padding: 8px 10px;
   display: flex;
@@ -166,6 +171,7 @@
  * panel they shorten, never below three characters, and short ones stay whole.
  */
 .inspector-tabs {
+  flex-shrink: 0;
   display: grid;
   grid-auto-flow: column;
   justify-content: start;
@@ -189,6 +195,7 @@
   white-space: nowrap;
 }
 .inspector-body {
+  min-height: 160px;
   padding: 21px 18px;
   overflow: auto;
   flex: 1;

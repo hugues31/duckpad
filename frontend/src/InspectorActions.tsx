@@ -50,7 +50,9 @@ export default function InspectorActions({
         {others.map((action) => (
           <button
             key={action.id}
-            className={`${action.danger ? "danger" : ""} ${action.active ? "active" : ""}`}
+            className={
+              action.danger ? "danger" : action.active ? "active" : undefined
+            }
             aria-label={action.label}
             data-tooltip={action.label}
             disabled={action.disabled}
