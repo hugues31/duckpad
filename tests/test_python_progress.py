@@ -211,7 +211,9 @@ def test_status_api_selects_the_worktree_and_checks_its_project(tmp_path):
 
     app = create_app(tmp_path / "api")
     with TestClient(app) as client:
-        assert client.post("/api/login", json={"password": app.state.auth.initial_password}).is_success
+        assert client.post(
+            "/api/login", json={"username": "admin", "password": app.state.auth.initial_password}
+        ).is_success
         main = client.post("/api/projects", json={"name": "Branches"}).json()
         other = client.post("/api/projects", json={"name": "Other"}).json()
         branch = app.state.services.projects.branch(main["id"], "experiment")

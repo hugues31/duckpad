@@ -254,7 +254,8 @@ def test_gateway_tools_approval_and_token_reuse_across_turns(instance, remote, s
     assert result["status"] == "complete", result
     assert len(client.get("/api/runs").json()) == 1
     assert result["tools"][0]["run"]["id"]
-    assert client.get("/api/assistant/models/primary").json()["models"] == ["test"]
+    saved = {**PROVIDER, "streaming": streaming, "client_secret": ""}
+    assert client.post("/api/assistant/models", json=saved).json()["models"] == ["test"]
     assert client.post("/api/assistant/test").json() == {"ok": True}
     assert remote.tokens == 1
     for request in remote.requests:

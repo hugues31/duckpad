@@ -16,14 +16,11 @@ PASSWORD = "commit-identity-password"
 
 @pytest.fixture
 def instance(tmp_path, monkeypatch):
-    # Server configuration and legacy settings must not override either Git identity.
+    # Server configuration must not override either Git identity.
     for role in ("AUTHOR", "COMMITTER"):
         monkeypatch.setenv(f"GIT_{role}_NAME", "Server process")
         monkeypatch.setenv(f"GIT_{role}_EMAIL", "server@example.com")
     app = create_app(tmp_path / "instance", watch=False)
-    app.state.services.store.put(
-        "settings", "identity", {"name": "Legacy author", "email": "legacy@example.com"}
-    )
     with TestClient(app) as client:
         users = {}
         for name in ("alice", "bob"):
@@ -56,7 +53,7 @@ def shared_project(app, client, users):
     return worktree
 
 
-def test_local_creation_saves_removed_setting_and_session_revocation(instance):
+def test_local_creation_saves_and_session_revocation(instance):
     app, client, users = instance
     projects = app.state.services.projects
     worktree = shared_project(app, client, users)
@@ -66,8 +63,6 @@ def test_local_creation_saves_removed_setting_and_session_revocation(instance):
         user, headers = users[name]
         save(client, worktree, headers, name)
         check_identity(projects, worktree, account_identity(user))
-        assert "identity" not in client.get("/api/workspace", headers=headers).json()
-        assert client.put("/api/identity", headers=headers, json={"name": "Spoof"}).status_code == 404
     check_identity(projects, worktree, account_identity(users["alice"][0]), initial)
     token = users["alice"][1]["authorization"].removeprefix("Bearer ")
     app.state.auth.logout(token)

@@ -273,7 +273,7 @@ def test_isolated_export_checks_precede_writes_and_survive_in_history(tmp_path):
     app = create_app(home, watch=False)
     password = app.state.auth.initial_password
     with TestClient(app) as client:
-        assert client.post("/api/login", json={"password": password}).status_code == 200
+        assert client.post("/api/login", json={"username": "admin", "password": password}).status_code == 200
         tree = client.post("/api/projects", json={"name": "Checked export"}).json()
         wt = tree["id"]
         services = app.state.services
@@ -336,7 +336,7 @@ SELECT 'warning' AS level, count(*) || ' rows to export' AS message FROM {{ sour
     # History is persisted with node runs, independently of in-memory SQL contexts.
     reopened = create_app(home, watch=False)
     with TestClient(reopened) as client:
-        client.post("/api/login", json={"password": password})
+        client.post("/api/login", json={"username": "admin", "password": password})
         stored = client.get(f"/api/runs/{failed['id']}").json()
         assert stored["nodes"]["export"]["results"] == state["results"]
         assert stored["warning_count"] == 1

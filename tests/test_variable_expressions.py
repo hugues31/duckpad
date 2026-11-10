@@ -616,7 +616,7 @@ def test_lineage_explanations_label_values_with_their_variables(services):
 def client(tmp_path):
     app = create_app(tmp_path / "instance", watch=False)
     with TestClient(app) as client:
-        client.post("/api/login", json={"password": app.state.auth.initial_password})
+        client.post("/api/login", json={"username": "admin", "password": app.state.auth.initial_password})
         yield client
 
 

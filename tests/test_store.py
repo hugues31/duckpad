@@ -453,6 +453,7 @@ def test_scoped_queries_and_bulk_deletes_leave_other_projects_untouched(store):
                 "node": "export",
                 "filename": "report.csv",
                 "media_type": "text/csv",
+                "storage_kind": "download",
                 "size": 0,
                 "signature": [],
             },

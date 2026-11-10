@@ -685,15 +685,6 @@ test("reopening resolves the chosen names again after the branch moves", async (
   const feature = (
     await (await page.request.get("/api/workspace")).json()
   ).worktrees.find((w: any) => w.branch === "feature/moving");
-  // A frozen state stored by an earlier version would have expired with the server.
-  await page.evaluate(
-    (key) =>
-      sessionStorage.setItem(
-        key,
-        JSON.stringify({ a: "frozen_expired", b: "frozen_expired" }),
-      ),
-    `duckpad.git.${main.id}`,
-  );
   const compared: string[][] = [];
   page.on("request", (request) => {
     const url = new URL(request.url());
@@ -729,7 +720,7 @@ test("reopening resolves the chosen names again after the branch moves", async (
   expect(compared).toEqual([["working", "refs/heads/feature/moving"]]);
   expect(
     await page.evaluate(() => JSON.stringify({ ...sessionStorage })),
-  ).not.toMatch(/frozen_(?!expired)|[0-9a-f]{40}/);
+  ).not.toMatch(/frozen_|[0-9a-f]{40}/);
 });
 
 test("a reference chosen after opening a commit survives history filtering", async ({

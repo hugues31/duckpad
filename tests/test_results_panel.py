@@ -335,7 +335,10 @@ def test_readers_compute_statistics_and_read_failing_rows(tmp_path):
     app = create_app(tmp_path / "instance", watch=False)
     with TestClient(app) as client:
         assert (
-            client.post("/api/login", json={"password": app.state.auth.initial_password}).status_code == 200
+            client.post(
+                "/api/login", json={"username": "admin", "password": app.state.auth.initial_password}
+            ).status_code
+            == 200
         )
         worktree = client.post("/api/projects", json={"name": "Shared"}).json()
         services = app.state.services

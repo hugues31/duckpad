@@ -169,7 +169,10 @@ def test_views_travel_in_project_archives(tmp_path):
     app = create_app(tmp_path / "instance", watch=False)
     with TestClient(app) as client:
         assert (
-            client.post("/api/login", json={"password": app.state.auth.initial_password}).status_code == 200
+            client.post(
+                "/api/login", json={"username": "admin", "password": app.state.auth.initial_password}
+            ).status_code
+            == 200
         )
         worktree = client.post("/api/projects", json={"name": "Views"}).json()
         snapshot = client.get(f"/api/worktrees/{worktree['id']}").json()

@@ -182,7 +182,10 @@ def instance(tmp_path):
     app = create_app(tmp_path / "instance", watch=False)
     with TestClient(app) as client:
         assert (
-            client.post("/api/login", json={"password": app.state.auth.initial_password}).status_code == 200
+            client.post(
+                "/api/login", json={"username": "admin", "password": app.state.auth.initial_password}
+            ).status_code
+            == 200
         )
         yield app, client
 
@@ -234,7 +237,7 @@ def test_accounts_memberships_and_grants_survive_restart(tmp_path):
     app = create_app(home, watch=False)
     with TestClient(app) as client:
         password = app.state.auth.initial_password
-        assert client.post("/api/login", json={"password": password}).status_code == 200
+        assert client.post("/api/login", json={"username": "admin", "password": password}).status_code == 200
         owner, headers = account(app, "owner")
         worktree = own_project(app, client, headers)
         settings_path = "/projects/" + worktree["project"] + "/settings"
@@ -244,7 +247,7 @@ def test_accounts_memberships_and_grants_survive_restart(tmp_path):
     app = create_app(home, watch=False)
     with TestClient(app) as client:
         assert app.state.auth.initial_password is None
-        assert client.post("/api/login", json={"password": password}).status_code == 200
+        assert client.post("/api/login", json={"username": "admin", "password": password}).status_code == 200
         assert request(client, headers, "GET", settings_path).json() == settings
 
 

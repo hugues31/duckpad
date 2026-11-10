@@ -137,7 +137,7 @@ def test_monitoring_requires_instance_admin_and_validates_queries(tmp_path):
     with TestClient(app) as client:
         for path in ("/api/monitoring", "/api/monitoring/logs"):
             assert client.get(path).status_code == 401
-        client.post("/api/login", json={"password": app.state.auth.initial_password})
+        client.post("/api/login", json={"username": "admin", "password": app.state.auth.initial_password})
         summary = client.get("/api/monitoring")
         assert summary.status_code == 200
         assert summary.headers["cache-control"] == "no-store"

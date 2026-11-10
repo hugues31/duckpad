@@ -19,7 +19,7 @@ def test_resources_require_authentication_and_return_machine_counters(tmp_path, 
     app = create_app(tmp_path / "instance", watch=False)
     with TestClient(app) as client:
         assert client.get("/api/resources").status_code == 401
-        client.post("/api/login", json={"password": app.state.auth.initial_password})
+        client.post("/api/login", json={"username": "admin", "password": app.state.auth.initial_password})
         first = client.get("/api/resources")
         second = client.get("/api/resources").json()
         assert first.status_code == 200

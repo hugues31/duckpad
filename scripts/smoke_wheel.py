@@ -59,7 +59,10 @@ def smoke(python):
             assert duplicate.returncode != 0 and "already running" in duplicate.stderr
             with httpx.Client(base_url=base) as client:
                 assert client.get("/api/workspace").status_code == 401
-                assert client.post("/api/login", json={"password": password}).status_code == 200
+                assert (
+                    client.post("/api/login", json={"username": "admin", "password": password}).status_code
+                    == 200
+                )
                 html = client.get("/").text
                 scripts = re.findall(r'src="(/assets/[^\"]+)"', html)
                 assert scripts and all(client.get(script).status_code == 200 for script in scripts)
@@ -77,7 +80,10 @@ def smoke(python):
                 first.wait(10)
                 second, next_log = start("second.log")
                 assert "Password:" not in next_log.read_text()
-                assert client.post("/api/login", json={"password": password}).status_code == 200
+                assert (
+                    client.post("/api/login", json={"username": "admin", "password": password}).status_code
+                    == 200
+                )
                 assert client.get(f"/api/runs/{run['id']}").json()["status"] == "success"
                 assert (
                     client.get(f"/api/worktrees/{example['id']}/preview/orders?environment=dev").status_code

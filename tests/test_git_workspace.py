@@ -542,7 +542,7 @@ def test_a_worktree_that_cannot_be_recorded_leaves_no_checkout(project, monkeypa
 def test_cleanup_releases_engine_contexts_and_catalog_remains_writable(tmp_path, execute):
     app = create_app(tmp_path / "instance", watch=False)
     with TestClient(app) as client:
-        client.post("/api/login", json={"password": app.state.auth.initial_password})
+        client.post("/api/login", json={"username": "admin", "password": app.state.auth.initial_password})
         services = app.state.services
         projects, engine = services.projects, services.engine
         main = client.post("/api/projects", json={"name": "Cleanup"}).json()

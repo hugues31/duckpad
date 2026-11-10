@@ -21,7 +21,9 @@ PASSWORD = "api-token-test-password"
 def instance(tmp_path):
     app = create_app(tmp_path / "instance", watch=False)
     with TestClient(app) as client:
-        assert client.post("/api/login", json={"password": app.state.auth.initial_password}).is_success
+        assert client.post(
+            "/api/login", json={"username": "admin", "password": app.state.auth.initial_password}
+        ).is_success
         yield app, client
 
 
