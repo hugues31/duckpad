@@ -1,0 +1,485 @@
+import { expect, test } from "@playwright/test";
+import {
+  deferred,
+  openInstanceSettings,
+  openUserSettings,
+  signIn,
+} from "./helpers";
+import fr from "../src/locales/fr.json" with { type: "json" };
+
+test("unsigned extension settings persist, report rejected changes and are translated", async ({
+  page,
+}) => {
+  await signIn(page);
+  const original = await (
+    await page.request.get("/api/extensions/settings")
+  ).json();
+  try {
+    await openInstanceSettings(page);
+    await expect(
+      page.getByRole("heading", { name: "DuckDB extensions", exact: true }),
+    ).toHaveCount(0);
+    await expect(
+      page.getByRole("checkbox", {
+        name: "Allow unsigned extensions",
+        exact: true,
+      }),
+    ).toHaveCount(0);
+    await openInstanceSettings(page, "Extensions");
+    await expect(page).toHaveURL(/\/instance-settings\/extensions$/);
+    await expect(
+      page.getByRole("link", { name: "Extensions", exact: true }),
+    ).toHaveAttribute("aria-current", "page");
+    const checkbox = page.getByRole("checkbox", {
+      name: "Allow unsigned extensions",
+      exact: true,
+    });
+    const save = page.getByRole("button", {
+      name: "Save extension settings",
+      exact: true,
+    });
+    await expect(checkbox).not.toBeChecked();
+    await checkbox.check();
+    await save.click();
+    await expect(page.getByRole("status")).toContainText(
+      "Extension settings saved.",
+    );
+    await page.reload();
+    await expect(checkbox).toBeChecked();
+    await page.route("**/api/extensions/settings", async (route) => {
+      if (route.request().method() === "PUT") {
+        await route.fulfill({
+          status: 409,
+          json: {
+            error: "Stop active executions before changing extension settings",
+          },
+        });
+      } else await route.continue();
+    });
+    await checkbox.uncheck();
+    await save.click();
+    await expect(page.getByRole("alert")).toContainText(
+      "Stop active executions",
+    );
+    expect(
+      (await (await page.request.get("/api/extensions/settings")).json())
+        .allow_unsigned_extensions,
+    ).toBe(true);
+    await page.unroute("**/api/extensions/settings");
+    await save.click();
+    await expect(page.getByRole("status")).toContainText(
+      "Extension settings saved.",
+    );
+    await page.reload();
+    await expect(checkbox).not.toBeChecked();
+    await openUserSettings(page);
+    await page.getByLabel("Language", { exact: true }).selectOption("fr");
+    await page.goto("/instance-settings/extensions");
+    await expect(
+      page.getByRole("checkbox", {
+        name: fr.allowUnsignedExtensions,
+        exact: true,
+      }),
+    ).not.toBeChecked();
+    await expect(
+      page.getByRole("button", { name: fr.saveExtensionSettings, exact: true }),
+    ).toBeVisible();
+  } finally {
+    await page.unroute("**/api/extensions/settings");
+    await page.request.put("/api/extensions/settings", { data: original });
+  }
+});
+
+test("SQL resource settings show automatic sizing, persist explicit limits and are translated", async ({
+  page,
+}) => {
+  await signIn(page);
+  const original = await (await page.request.get("/api/sql-resources")).json();
+  const { automatic } = original;
+  try {
+    await page.request.put("/api/sql-resources", {
+      data: { threads: null, memory_limit: null },
+    });
+    await openInstanceSettings(page, "SQL resources");
+    await expect(page).toHaveURL(/\/instance-settings\/sql-resources$/);
+    const threads = page.getByLabel("Threads per session", { exact: true });
+    const memory = page.getByLabel("Memory limit per session", {
+      exact: true,
+    });
+    const save = page.getByRole("button", {
+      name: "Save SQL resources",
+      exact: true,
+    });
+    await expect(threads).toHaveValue("");
+    await expect(threads).toHaveAttribute(
+      "placeholder",
+      `Automatic (${automatic.threads})`,
+    );
+    await expect(memory).toHaveAttribute(
+      "placeholder",
+      `Automatic (${automatic.memory_limit})`,
+    );
+    await expect(page.locator("#sql-memory-hint")).toContainText(
+      `Automatic: ${automatic.memory_limit}`,
+    );
+
+    await threads.fill("4");
+    await memory.fill("16");
+    await save.click();
+    await expect(page.getByRole("alert")).toContainText(
+      "Enter a memory limit such as 16GB, 512MiB or 50%",
+    );
+    await memory.fill(" 16 gib ");
+    await save.click();
+    await expect(page.getByRole("status")).toContainText(
+      "SQL resources saved.",
+    );
+    await expect(memory).toHaveValue("16GiB");
+    await page.reload();
+    await expect(threads).toHaveValue("4");
+    await expect(memory).toHaveValue("16GiB");
+
+    await threads.fill("");
+    await memory.fill("");
+    await save.click();
+    await expect(page.getByRole("status")).toContainText(
+      "SQL resources saved.",
+    );
+    expect(
+      await (await page.request.get("/api/sql-resources")).json(),
+    ).toMatchObject({ threads: null, memory_limit: null });
+
+    await openUserSettings(page);
+    await page.getByLabel("Language", { exact: true }).selectOption("fr");
+    await page.goto("/instance-settings/sql-resources");
+    await expect(
+      page.getByLabel(fr.sqlThreads, { exact: true }),
+    ).toHaveAttribute(
+      "placeholder",
+      fr.automaticValue.replace("{value}", String(automatic.threads)),
+    );
+    await expect(
+      page.getByRole("button", { name: fr.saveSqlResources, exact: true }),
+    ).toBeVisible();
+  } finally {
+    await page.request.put("/api/sql-resources", {
+      data: { threads: original.threads, memory_limit: original.memory_limit },
+    });
+  }
+});
+
+test("instance configuration is available without a project and separate from personal settings", async ({
+  page,
+}) => {
+  await page.route("**/api/workspace", async (route) => {
+    const response = await route.fetch();
+    const workspace = await response.json();
+    await route.fulfill({
+      json: { ...workspace, projects: [], worktrees: [] },
+    });
+  });
+  await signIn(page);
+  await openUserSettings(page);
+  await expect(
+    page.getByRole("heading", { name: "User settings", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Change password", exact: true }),
+  ).toBeVisible();
+  await expect(page.getByLabel("Author name", { exact: true })).toHaveCount(0);
+  await expect(page.getByLabel("Active project", { exact: true })).toHaveCount(
+    0,
+  );
+  await expect(page.getByLabel("Environments", { exact: true })).toHaveCount(0);
+  await expect(
+    page.getByLabel("Enable single sign-on", { exact: true }),
+  ).toHaveCount(0);
+
+  try {
+    await openInstanceSettings(page);
+    await expect(
+      page.getByRole("heading", { name: "Instance settings", exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByLabel("Active project", { exact: true }),
+    ).toHaveCount(0);
+    await expect(
+      page.getByLabel("Current password", { exact: true }),
+    ).toHaveCount(0);
+    await expect(page.getByLabel("Theme", { exact: true })).toHaveCount(0);
+    await expect(page.getByLabel("Author name", { exact: true })).toHaveCount(
+      0,
+    );
+    await expect(page.getByLabel("Author email", { exact: true })).toHaveCount(
+      0,
+    );
+    await expect(
+      page.getByRole("heading", { name: "Users", exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("link", { name: "General", exact: true }),
+    ).toHaveCount(0);
+    await openInstanceSettings(page, "Environments");
+    await page
+      .getByRole("button", { name: "Add environment", exact: true })
+      .click();
+    await page.getByLabel("ID", { exact: true }).fill("staging");
+    await page.getByLabel("Label", { exact: true }).fill("staging");
+    await page
+      .getByRole("button", { name: "Save changes", exact: true })
+      .click();
+    await expect
+      .poll(
+        async () =>
+          (await (await page.request.get("/api/workspace")).json()).catalog
+            .environments,
+      )
+      .toContain("staging");
+    await openInstanceSettings(page, "Connections");
+    await page
+      .getByRole("button", { name: "New connection", exact: true })
+      .click();
+    await expect(
+      page
+        .getByRole("dialog")
+        .getByRole("button", { name: "staging", exact: true }),
+    ).toBeVisible();
+    await page.getByRole("button", { name: "Cancel", exact: true }).click();
+    await page.setViewportSize({ width: 800, height: 900 });
+    const navigation = page.getByRole("navigation", {
+      name: "Settings sections",
+      exact: true,
+    });
+    expect(
+      await navigation.evaluate(
+        (element) => element.scrollWidth <= element.clientWidth,
+      ),
+    ).toBe(true);
+  } finally {
+    await page.request.delete("/api/environments/staging");
+  }
+});
+
+test("project administrators manage their project and password without instance settings", async ({
+  page,
+  browser,
+}) => {
+  await signIn(page);
+  const username = `settings-member-${Date.now()}`;
+  const password = "settings-member-password";
+  const created = await page.request.post("/api/users", {
+    data: { username, password, role: "member" },
+  });
+  expect(created.ok()).toBeTruthy();
+  const context = await browser.newContext();
+  try {
+    const member = await context.newPage();
+    await member.goto("/");
+    await member.getByLabel("Username", { exact: true }).fill(username);
+    await member.getByLabel("Password", { exact: true }).fill(password);
+    await member.getByRole("button", { name: "Sign in", exact: true }).click();
+    await expect(
+      member.getByRole("navigation", { name: "Workspace", exact: true }),
+    ).toBeVisible();
+    await expect(
+      member.getByRole("link", { name: "Instance settings", exact: true }),
+    ).toHaveCount(0);
+    await openUserSettings(member);
+    await expect(member.getByLabel("Language", { exact: true })).toBeVisible();
+    await expect(member.getByLabel("Author name", { exact: true })).toHaveCount(
+      0,
+    );
+    await member.getByLabel("Current password", { exact: true }).fill(password);
+    await member
+      .getByLabel("New password", { exact: true })
+      .fill("updated-settings-password");
+    await member
+      .getByRole("button", { name: "Change password", exact: true })
+      .click();
+    await expect(
+      member.getByRole("button", { name: "Sign in", exact: true }),
+    ).toBeVisible();
+    await member.getByLabel("Username", { exact: true }).fill(username);
+    await member
+      .getByLabel("Password", { exact: true })
+      .fill("updated-settings-password");
+    await member.getByRole("button", { name: "Sign in", exact: true }).click();
+    await expect(
+      member.getByRole("navigation", { name: "Workspace", exact: true }),
+    ).toBeVisible();
+    const worktree = await (
+      await member.request.post("/api/projects", {
+        data: { name: "Scoped project" },
+      })
+    ).json();
+    await member.goto(`/worktrees/${worktree.id}/flow`);
+    await member
+      .getByRole("link", { name: "Project settings", exact: true })
+      .click();
+    await expect(
+      member.getByRole("heading", { name: "Project settings", exact: true }),
+    ).toBeVisible();
+    await expect(
+      member.getByLabel(`Project role · ${username}`, { exact: true }),
+    ).toBeEnabled();
+    await member.getByRole("link", { name: "General", exact: true }).click();
+    await expect(
+      member.getByRole("button", { name: "Delete project", exact: true }),
+    ).toBeVisible();
+    await member
+      .getByRole("link", { name: "Connections", exact: true })
+      .click();
+    await expect(
+      member.getByRole("heading", {
+        name: "Authorized connections",
+        exact: true,
+      }),
+    ).toBeVisible();
+    await expect(
+      member.getByText(
+        "Only an instance administrator can change these settings.",
+      ),
+    ).toBeVisible();
+    await expect(
+      member.getByRole("button", { name: "Save connections", exact: true }),
+    ).toHaveCount(0);
+    await expect(
+      member.getByRole("link", { name: "Instance settings", exact: true }),
+    ).toHaveCount(0);
+    await expect(member.getByLabel("Branch", { exact: true })).toHaveCount(0);
+    await expect(member.getByLabel("Environment", { exact: true })).toHaveCount(
+      0,
+    );
+    expect((await member.request.get("/api/users")).status()).toBe(403);
+    expect((await member.request.get("/api/sso")).status()).toBe(403);
+    await member.goto("/instance-settings/users");
+    await expect(
+      member.getByRole("heading", { name: "Page unavailable", exact: true }),
+    ).toBeVisible();
+    await member.goBack();
+    await expect(
+      member.getByRole("heading", { name: "Project settings", exact: true }),
+    ).toBeVisible();
+    await member.getByRole("link", { name: "Pipelines", exact: true }).click();
+    await expect(member.getByLabel("Branch", { exact: true })).toBeVisible();
+    await expect(
+      member.getByRole("button", { name: "Run all", exact: true }),
+    ).toBeEnabled();
+  } finally {
+    await context.close();
+  }
+});
+
+test("leaving modified instance settings confirms and keeps a draft on Stay", async ({
+  page,
+}) => {
+  await signIn(page);
+  const guard = page.getByRole("dialog", {
+    name: "Unsaved changes",
+    exact: true,
+  });
+  const leave = () =>
+    page
+      .getByRole("link", { name: "Users and permissions", exact: true })
+      .click();
+  const edits: Record<string, () => Promise<unknown>> = {
+    sso: () =>
+      page.getByLabel("Client secret", { exact: true }).fill("unsaved-secret"),
+    assistant: async () => {
+      await page.getByRole("button", { name: "DeepSeek", exact: true }).click();
+      await page.getByLabel("API key", { exact: true }).fill("unsaved-key");
+    },
+    "sql-resources": () =>
+      page.getByLabel("Threads per session", { exact: true }).fill("3"),
+    "git-hosts": () =>
+      page
+        .getByLabel("Trusted SSH host keys", { exact: true })
+        .fill("unsaved host key"),
+    extensions: () =>
+      page
+        .getByRole("checkbox", {
+          name: "Allow unsigned extensions",
+          exact: true,
+        })
+        .click(),
+  };
+  for (const [section, edit] of Object.entries(edits))
+    await test.step(section, async () => {
+      await page.goto(`/instance-settings/${section}`);
+      await edit();
+      await leave();
+      await guard
+        .getByRole("button", { name: "Stay on this page", exact: true })
+        .click();
+      await expect(page).toHaveURL(
+        new RegExp(`/instance-settings/${section}$`),
+      );
+      // Closing the tab gets the same protection.
+      expect(
+        await page.evaluate(() => {
+          const event = new Event("beforeunload", { cancelable: true });
+          window.dispatchEvent(event);
+          return event.defaultPrevented;
+        }),
+      ).toBe(true);
+      await leave();
+      await guard
+        .getByRole("button", { name: "Discard and leave", exact: true })
+        .click();
+      await expect(page).toHaveURL(/\/instance-settings\/users$/);
+    });
+});
+
+test("leaving SQL resources ignores a cleared field and waits for a save in flight", async ({
+  page,
+}) => {
+  await signIn(page);
+  await page.request.put("/api/sql-resources", {
+    data: { threads: null, memory_limit: null },
+  });
+  const leave = () =>
+    page
+      .getByRole("link", { name: "Users and permissions", exact: true })
+      .click();
+  try {
+    await page.goto("/instance-settings/sql-resources");
+    const memory = page.getByLabel("Memory limit per session", {
+      exact: true,
+    });
+    await memory.fill("1GB");
+    await memory.fill("");
+    await leave();
+    await expect(page).toHaveURL(/\/instance-settings\/users$/);
+
+    await page.goBack();
+    await page.getByLabel("Threads per session", { exact: true }).fill("3");
+    const release = deferred();
+    await page.route("**/api/sql-resources", async (route) => {
+      if (route.request().method() !== "PUT") return route.continue();
+      await release.promise;
+      await route.continue();
+    });
+    await page
+      .getByRole("button", { name: "Save SQL resources", exact: true })
+      .click();
+    await leave();
+    // A save already sent cannot be discarded: leaving waits for it, without
+    // offering to discard it in the meantime.
+    const guard = page.getByRole("dialog", {
+      name: "Unsaved changes",
+      exact: true,
+    });
+    await page.waitForTimeout(500);
+    await expect(guard).toHaveCount(0);
+    await expect(page).toHaveURL(/\/instance-settings\/sql-resources$/);
+    release.resolve();
+    await expect(page).toHaveURL(/\/instance-settings\/users$/);
+    expect(
+      (await (await page.request.get("/api/sql-resources")).json()).threads,
+    ).toBe(3);
+  } finally {
+    await page.request.put("/api/sql-resources", {
+      data: { threads: null, memory_limit: null },
+    });
+  }
+});
