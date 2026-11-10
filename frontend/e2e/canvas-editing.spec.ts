@@ -110,6 +110,13 @@ test("mute shortcuts and menu preserve the graph and bypass execution", async ({
   await expect(doubled.locator(".pipeline-node")).toHaveClass(/is-muted/);
   await expect(doubled.locator(".node-passthrough path")).toHaveCount(1);
   await expect(doubled).toContainText("Muted");
+  // The selection ring stays visible on the faded node.
+  await expect(doubled.locator(".node-shape")).not.toHaveCSS(
+    "box-shadow",
+    "none",
+  );
+  const notice = page.locator(".inspector .notice", { hasText: "Muted." });
+  await expect(notice).toBeVisible();
   const saved = (await read()).bundle!;
   expect(saved.flow.nodes.find((item) => item.id === "doubled")?.muted).toBe(
     true,
@@ -150,6 +157,12 @@ test("mute shortcuts and menu preserve the graph and bypass execution", async ({
   await run(2);
   await page.keyboard.press("ControlOrMeta+Z");
   await expect(doubled.locator(".pipeline-node")).toHaveClass(/is-muted/);
+  await select(page, "doubled");
+  await autosaved(page, () =>
+    notice.getByRole("button", { name: "Unmute node (M)" }).click(),
+  );
+  await expect(doubled.locator(".pipeline-node")).not.toHaveClass(/is-muted/);
+  await expect(notice).toHaveCount(0);
   await select(page, "rows");
   await node(page, "rows").click({ button: "right" });
   await expect(

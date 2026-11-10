@@ -13,7 +13,7 @@ from sqlglot import exp
 
 from .. import variables
 from ..catalog import Catalog, redact
-from ..components import expand, expand_for, in_subtree
+from ..components import expand, expand_for, in_subtree, missing_node
 from ..datasets import Context, Dataset
 from ..graph import connection_references
 from ..partition_filters import filter_statements
@@ -547,7 +547,7 @@ class Results:
         )
         selected = [key for key in nodes if in_subtree(key, node_id)]
         if not selected:
-            raise Problem("Node not found", 404)
+            raise missing_node(nodes, node_id)
         output = []
         for key in selected:
             node = nodes[key]

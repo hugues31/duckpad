@@ -1,14 +1,8 @@
 import type { ActionItem } from "./ActionMenu";
 import type { Translate } from "./i18n";
 import { countLabel, isBuiltinTemplate } from "./i18n";
-import { nodeInterface } from "./graph";
 import { nodeCopies, type CopiedNodes } from "./nodeClipboard";
-import {
-  detachNode,
-  localDefinitions,
-  nodeGraph,
-  templateUsage,
-} from "./nodeCode";
+import { canMute, detachNode, nodeGraph, templateUsage } from "./nodeCode";
 import type { useShell } from "./shell";
 import type { Bundle, FlowNode, Snapshot } from "./types";
 import type { useLoadedWorktree } from "./worktree";
@@ -80,16 +74,7 @@ export function nodeActions(
       ...item("mute", t(target.muted ? "unmuteNode" : "muteNode"), () =>
         safe(() => toggleMute([target.id])),
       ),
-      disabled:
-        !canEdit ||
-        busy ||
-        (!target.muted &&
-          !nodeInterface(
-            target,
-            snapshot.parsed_templates,
-            bundle.components,
-            localDefinitions(snapshot, parent),
-          ).inputs.length),
+      disabled: !canEdit || busy || !canMute(snapshot, target, parent),
     },
     item("duplicate", t("duplicateNode"), () =>
       safe(async () => {

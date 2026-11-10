@@ -3,6 +3,7 @@ import copy
 import pytest
 from helpers import example_bundle, wait_run
 
+from duckpad import processing
 from duckpad.bundle import bundle_to_files
 from duckpad.components import expand, group
 from duckpad.lineage import Lineage
@@ -32,6 +33,9 @@ def test_mute_invalidates_results_passes_through_and_restores_code(services, tmp
     trace = Lineage(engine).explain(wt, "dev", preview["id"], 0, "amount")
     assert trace["complete"] and trace["total"] == 1
     assert engine.preview(wt, "dev", "total")["rows"][0]["values"] == ["North", 30, 2]
+    # The code editor previews the node's own code, which the next unmuted run computes.
+    draft = engine.draft_preview(wt, "dev", "filter", bundle["templates"]["filter"])
+    assert draft["outputs"][0]["count"] == 2
     saved = projects.snapshot(wt)["bundle"]
     assert saved["templates"] == bundle["templates"]
     assert saved["flow"]["edges"] == bundle["flow"]["edges"]
@@ -92,6 +96,9 @@ SELECT error('skipped');"""
     assert engine.preview(wt, "dev", target, ports[1])["rows"][0]["values"] == [99]
     assert engine.preview(wt, "dev", target, ports[2])["count"] == 3
     assert not any(key.startswith(target + "::") for key in run["nodes"])
+    if component:
+        with pytest.raises(Problem, match="Unmute Muted group to use the nodes it contains"):
+            engine.launch(wt, "dev", target + "::filter")
 
 
 def test_mute_inside_nested_component_and_component_with_identical_port_names(services, tmp_path):
@@ -126,6 +133,7 @@ def test_muted_export_does_not_write_or_require_unused_inputs(services, tmp_path
     run = wait_run(store, engine.launch(wt, "dev", "export", entry_point="ui"))
     assert run["status"] == "success", run
     assert run["nodes"]["export"]["statements"] == []
+    assert run["nodes"]["export"]["muted"]
     assert not destination.exists()
 
 
@@ -155,6 +163,19 @@ def test_muted_python_needs_no_python_execution_permission(services, tmp_path):
     wt = projects.create("Muted Python", bundle)["id"]
     run = wait_run(store, engine.launch(wt, "dev", "total"))
     assert run["status"] == "success", run
+
+
+def test_unmuted_nodes_keep_their_computation_inputs(tmp_path):
+    # Upgrading must not make every existing result stale.
+    bundle = example_bundle(tmp_path / "input.csv")
+    nodes, _, _ = expand(bundle)
+    assert set(processing.inputs(bundle, nodes["filter"])) == {
+        "sql",
+        "python",
+        "error",
+        "params",
+        "extensions",
+    }
 
 
 def test_source_mute_is_rejected_and_state_must_be_boolean(tmp_path):

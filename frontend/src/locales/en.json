@@ -1154,6 +1154,7 @@
   "logColumnsOne": "{count} column",
   "logColumns": "{count} columns",
   "seeTests": "See Tests",
+  "logMuted": "Muted, code skipped",
   "logPublished": "Published",
   "logExported": "Written to the destination",
   "logFilter": "Log entries",

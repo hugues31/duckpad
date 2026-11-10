@@ -1154,6 +1154,7 @@
   "logColumnsOne": "{count} colonne",
   "logColumns": "{count} colonnes",
   "seeTests": "Voir les tests",
+  "logMuted": "Désactivé, code ignoré",
   "logPublished": "Publié",
   "logExported": "Écrit vers la destination",
   "logFilter": "Entrées du journal",

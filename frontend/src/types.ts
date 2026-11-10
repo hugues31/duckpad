@@ -416,6 +416,8 @@ export interface NodeRun {
   status: NodeRunStatus;
   label: string;
   writes_external: boolean;
+  /** The node ran as a passthrough, without its code. */
+  muted?: boolean;
   /** Each output with the seconds its statement took. */
   outputs?: Record<string, Dataset & { duration: number }>;
   error?: string;

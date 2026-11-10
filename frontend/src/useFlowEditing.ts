@@ -16,14 +16,13 @@ import {
 import {
   graphAt,
   identifier,
-  nodeInterface,
   type NodeConnection,
   type NodeKind,
   type PathPart,
 } from "./graph";
 import { findNodePosition } from "./graphLayout";
 import { useT } from "./i18n";
-import { localDefinitions } from "./nodeCode";
+import { canMute } from "./nodeCode";
 import {
   copyNodes,
   pastableNodes,
@@ -81,17 +80,8 @@ export function useFlowEditing({
   }
   async function toggleMute(ids: string[]) {
     if (!canEdit || busy || saving || !bundle) return;
-    const local = localDefinitions(snapshot, parent);
     const eligible = graph!.nodes.filter(
-      (item) =>
-        ids.includes(item.id) &&
-        (item.muted ||
-          nodeInterface(
-            item,
-            snapshot.parsed_templates,
-            bundle.components,
-            local,
-          ).inputs.length > 0),
+      (item) => ids.includes(item.id) && canMute(snapshot, item, parent),
     );
     if (!eligible.length) return;
     const muted = !eligible.every((item) => item.muted);

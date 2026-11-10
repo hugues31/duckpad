@@ -1,4 +1,4 @@
-import { resolveNodePath } from "./graph";
+import { nodeInterface, resolveNodePath } from "./graph";
 import type { Bundle, FlowNode, ParsedTemplate, Snapshot } from "./types";
 
 export const nodeCodePath = (id: string, parent?: string, language = "sql") => {
@@ -61,6 +61,19 @@ export function localDefinitions(
           : undefined) ||
         {},
     ]),
+  );
+}
+
+/** Whether muting can pass the node's inputs through: sources have none. */
+export function canMute(snapshot: Snapshot, node: FlowNode, parent?: string) {
+  return (
+    !!node.muted ||
+    nodeInterface(
+      node,
+      snapshot.parsed_templates,
+      snapshot.bundle?.components,
+      localDefinitions(snapshot, parent),
+    ).inputs.length > 0
   );
 }
 

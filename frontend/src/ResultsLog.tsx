@@ -236,7 +236,9 @@ export default function ResultsLog({
       kind: "step",
       level: "success",
       time: state.finished,
-      message: exportNode ? t("logExported") : t("logPublished"),
+      message: t(
+        state.muted ? "logMuted" : exportNode ? "logExported" : "logPublished",
+      ),
       aside:
         typeof state.duration === "number"
           ? seconds(state.duration)
@@ -381,7 +383,7 @@ export default function ResultsLog({
             );
           })}
         </ol>
-        {(exportNode || state.artifact) && (
+        {(exportNode || state.artifact) && !state.muted && (
           <section className="log-export">
             <h4>
               <Upload size={13} aria-hidden="true" /> {t("exportOutcome")}

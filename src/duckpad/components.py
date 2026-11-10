@@ -21,6 +21,14 @@ def in_subtree(key, root):
     return key == root or key.startswith(root + "::")
 
 
+def missing_node(nodes, key):
+    """The error for a node absent from the expanded flow, such as one inside a muted component instance."""
+    muted = next((n for n in nodes if key.startswith(n + "::") and nodes[n].get("muted")), None)
+    if muted:
+        return Problem(f"Unmute {nodes[muted]['display_name']} to use the nodes it contains", 422)
+    return Problem("Node not found", 404)
+
+
 def expand_for(bundle, environment, tolerant=True, computed=None, partition=None):
     """Expand a bundle with variable references bound to their values in an environment."""
     nodes, edges, boundaries = expand(bundle, tolerant=tolerant)
