@@ -154,11 +154,16 @@ export async function openInstanceSettings(
     .click();
 }
 
-export async function openUserSettings(page: Page) {
+export async function openUserSettings(page: Page, section?: string) {
   await page.getByRole("button", { name: "Account menu", exact: true }).click();
   await page
     .getByRole("menuitem", { name: "User settings", exact: true })
     .click();
+  if (section)
+    await page
+      .getByRole("navigation", { name: "Settings sections", exact: true })
+      .getByRole("link", { name: section, exact: true })
+      .click();
 }
 
 /**

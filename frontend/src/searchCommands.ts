@@ -2,6 +2,8 @@ import {
   projectPageUrl,
   projectSettingsSections,
   settingsSections,
+  userSettingsSections,
+  userSettingsUrl,
   workspaceTabs,
   worktreeUrl,
 } from "./navigation";
@@ -84,12 +86,14 @@ export function searchCommands(
       );
   }
   add("projects", t("projects"), t("workspace"), "/projects");
-  add(
-    "preferences",
-    t("userSettings"),
-    `${t("preferences")} · ${t("apiTokens")}`,
-    "/user-settings",
-  );
+  add("userSettings", t("userSettings"), "", userSettingsUrl("preferences"));
+  for (const [slug, label] of userSettingsSections)
+    add(
+      `userSettings:${slug}`,
+      t(label),
+      t("userSettings"),
+      userSettingsUrl(slug),
+    );
   if (workspace.user.role === "admin")
     for (const [slug, label] of settingsSections)
       add(

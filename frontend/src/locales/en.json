@@ -1544,5 +1544,16 @@
   "ancestorsOf": "Ancestors of {node}",
   "ancestorsScope": "the ancestors of this node",
   "sharedTemplateOne": "Shared template, 1 node",
-  "sharedTemplateCount": "Shared template, {count} nodes"
+  "sharedTemplateCount": "Shared template, {count} nodes",
+  "filterFiles": "Filter files…",
+  "markdownFormatting": "Markdown formatting",
+  "markdownHeading": "Heading",
+  "markdownBold": "Bold",
+  "markdownItalic": "Italic",
+  "markdownLink": "Link",
+  "markdownBulletList": "Bulleted list",
+  "markdownNumberedList": "Numbered list",
+  "markdownQuote": "Quote",
+  "markdownCodeBlock": "Code block",
+  "markdownText": "Text"
 }

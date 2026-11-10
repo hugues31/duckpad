@@ -83,3 +83,20 @@ it("combines retained schema with descriptions and declares schemas unavailable 
   expect(after.outputs[0].dataset?.status).toBe("stale");
   expect(after.description).toBe("Daily revenue");
 });
+
+it("shows only rendered documentation to readers, including after editing access is revoked", () => {
+  const props = {
+    snapshot,
+    statuses: { nodes: {}, active: null },
+    onSave: vi.fn(),
+  };
+  const { rerender } = render(<DocumentationPanel {...props} />);
+  expect(screen.getByRole("textbox")).toBeTruthy();
+  rerender(<DocumentationPanel {...props} readOnly />);
+  expect(screen.getByRole("heading", { name: "Revenue guide" })).toBeTruthy();
+  expect(screen.queryByRole("textbox")).toBeNull();
+  expect(
+    screen.queryByRole("group", { name: "Markdown formatting" }),
+  ).toBeNull();
+  expect(screen.queryByRole("button", { name: "Save changes" })).toBeNull();
+});

@@ -94,7 +94,7 @@ test("manage instance accounts, project users and live reader access", async ({
   await expect(documentation.locator("textarea")).toHaveCount(0);
   await expect(
     documentation.getByRole("button", { name: "Save changes", exact: true }),
-  ).toBeDisabled();
+  ).toHaveCount(0);
   await readerPage.getByRole("link", { name: "Code", exact: true }).click();
   const files = readerPage.getByRole("region", { name: "Code", exact: true });
   await expect(

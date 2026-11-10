@@ -229,7 +229,7 @@ test("a rejected password change is reported and keeps the session", async ({
   page,
 }) => {
   await signIn(page);
-  await openUserSettings(page);
+  await openUserSettings(page, en.password);
   await page
     .getByLabel(en.currentPassword, { exact: true })
     .fill("not-the-current-password");

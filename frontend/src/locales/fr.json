@@ -1544,5 +1544,16 @@
   "ancestorsOf": "Ancêtres de {node}",
   "ancestorsScope": "les ancêtres de ce nœud",
   "sharedTemplateOne": "Modèle partagé, 1 nœud",
-  "sharedTemplateCount": "Modèle partagé, {count} nœuds"
+  "sharedTemplateCount": "Modèle partagé, {count} nœuds",
+  "filterFiles": "Filtrer les fichiers…",
+  "markdownFormatting": "Mise en forme Markdown",
+  "markdownHeading": "Titre",
+  "markdownBold": "Gras",
+  "markdownItalic": "Italique",
+  "markdownLink": "Lien",
+  "markdownBulletList": "Liste à puces",
+  "markdownNumberedList": "Liste numérotée",
+  "markdownQuote": "Citation",
+  "markdownCodeBlock": "Bloc de code",
+  "markdownText": "Texte"
 }

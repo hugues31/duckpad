@@ -11,7 +11,10 @@ settings apply to the branch shown in the top bar.
 projects, search by project name, or sort by name, modification date or latest run.
 **Code** opens the selected node's source, or the README without a selected node.
 Its tree labels node files by display name, keeps file paths in tooltips, and
-collapses built-in templates by default.
+collapses built-in templates by default. **Filter files…** matches paths and node
+display names, revealing matching files inside folders. Press Enter to open the
+first match or Escape to clear the filter; filtering keeps your editor draft.
+Markdown, JSON, Python, SQL and TOML files have distinct icons.
 
 ## Build and inspect
 
@@ -22,7 +25,9 @@ a drop does nothing; release to place the center of the shape at the pointer.
 templates created in the project. Connect an output to an input, or choose the
 upstream output in the node's inspector. Connected sockets are filled, unused
 outputs stay hollow, and an input without a source is orange on the node until
-you connect it. Point at a node or a link to highlight it. Select a node for
+you connect it. Point at a node or a link to highlight it. Click a link to select
+it, then press Delete or Backspace to disconnect it. Shift-click selects multiple
+links; Ctrl/Cmd+Z undoes a deletion. Select a node for
 its parameters and code on the right and its [results](RESULTS.md) below. Its other actions, such as
 **Duplicate node**, are in **Node actions** (**⋯** in the inspector title, or
 right-click the node). Double-click a [component](COMPONENTS.md) to open
@@ -97,8 +102,10 @@ while you type in a field or editor, or while a dialog is open.
 
 ## Preferences and access
 
-Use the account menu for **User settings**, including language, theme and link
-style. Duckpad supports English, French and Portuguese, with light and dark themes.
+Use the account menu for **User settings**. Its sections separate **Preferences**
+(language, theme and link style), **Password**, **SSH key for Git** and **API tokens**.
+Each section has its own URL for bookmarks and supports browser back and forward.
+Duckpad supports English, French and Portuguese, with light and dark themes.
 **Node links** are curved by default; **Right angles** draws them with vertical
 segments, and links from different outputs never share one.
 Preferences do not change project files. Available actions depend on your

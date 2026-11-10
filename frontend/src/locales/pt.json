@@ -1544,5 +1544,16 @@
   "ancestorsOf": "Ancestrais de {node}",
   "ancestorsScope": "os ancestrais deste nó",
   "sharedTemplateOne": "Modelo compartilhado, 1 nó",
-  "sharedTemplateCount": "Modelo compartilhado, {count} nós"
+  "sharedTemplateCount": "Modelo compartilhado, {count} nós",
+  "filterFiles": "Filter files…",
+  "markdownFormatting": "Markdown formatting",
+  "markdownHeading": "Heading",
+  "markdownBold": "Bold",
+  "markdownItalic": "Italic",
+  "markdownLink": "Link",
+  "markdownBulletList": "Bulleted list",
+  "markdownNumberedList": "Numbered list",
+  "markdownQuote": "Quote",
+  "markdownCodeBlock": "Code block",
+  "markdownText": "Text"
 }

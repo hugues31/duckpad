@@ -3,6 +3,8 @@ import { matchRoutes, redirect, type RouteObject } from "react-router";
 import {
   projectSettingsSections,
   settingsSections,
+  userSettingsSections,
+  userSettingsUrl,
   workspaceTabs,
   type PageHandle,
   type WorkspaceTab,
@@ -38,7 +40,13 @@ const tabPages: Record<WorkspaceTab, ComponentType> = {
 export const pageRoutes: RouteObject[] = [
   { index: true, handle: { area: "home" }, Component: HomePage },
   page("projects", { area: "projects" }, ProjectsPage),
-  page("user-settings", { area: "userSettings" }, UserSettingsPage),
+  ...userSettingsSections.map(([section]) =>
+    page(
+      userSettingsUrl(section).slice(1),
+      { area: "userSettings", section },
+      UserSettingsPage,
+    ),
+  ),
   {
     path: "instance-settings",
     handle: { area: "instanceSettings" },

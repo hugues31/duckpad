@@ -185,6 +185,10 @@ test("instance configuration is available without a project and separate from pe
   ).toBeVisible();
   await expect(
     page.getByRole("heading", { name: "Change password", exact: true }),
+  ).toHaveCount(0);
+  await page.getByRole("link", { name: "Password", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "Change password", exact: true }),
   ).toBeVisible();
   await expect(page.getByLabel("Author name", { exact: true })).toHaveCount(0);
   await expect(page.getByLabel("Active project", { exact: true })).toHaveCount(
@@ -289,6 +293,7 @@ test("project administrators manage their project and password without instance 
     await expect(member.getByLabel("Author name", { exact: true })).toHaveCount(
       0,
     );
+    await member.getByRole("link", { name: "Password", exact: true }).click();
     await member.getByLabel("Current password", { exact: true }).fill(password);
     await member
       .getByLabel("New password", { exact: true })
