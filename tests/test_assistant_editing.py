@@ -57,6 +57,11 @@ def scripted(app, calls, before=None, fail=False):
     app.state.assistant.configuration.model_override = FunctionModel(stream_function=stream)
 
 
+def variable(**change):
+    """An edit_variable call: one operation-specific change."""
+    return ("edit_variable", {"change": change})
+
+
 def write_turn(app, client, context, calls, **options):
     identity = conversation(client, context)
     scripted(app, calls, **options)
@@ -120,14 +125,11 @@ def change(app, worktree, callback):
                 "text": "An integer",
             },
         ),
-        (
-            "edit_variable",
-            {"operation": "create", "name": "limit", "definition": {"type": "number", "default": 5}},
-        ),
-        ("edit_variable", {"operation": "update", "name": "region", "definition": {"default": "South"}}),
-        ("edit_variable", {"operation": "rename", "name": "region", "new_name": "area"}),
-        ("edit_variable", {"operation": "delete", "name": "region"}),
-        ("edit_variable", {"operation": "update", "name": "region", "remove_fields": ["default"]}),
+        variable(operation="create", name="limit", definition={"type": "number", "default": 5}),
+        variable(operation="update", name="region", definition={"default": "South"}),
+        variable(operation="rename", name="region", new_name="area"),
+        variable(operation="delete", name="region"),
+        variable(operation="update", name="region", remove_fields=["default"]),
         ("group_nodes", {"nodes": ["first", "second"], "name": "Together"}),
     ],
 )
@@ -278,9 +280,7 @@ def test_deleting_a_used_variable_is_refused_without_a_commit(instance, referenc
     else:
         assert usages["items"][0]["node"] == "first"
     assert read_variables(ctx, "region")["items"][0]["usage_count"] == 1
-    _, result = write_turn(
-        app, client, context, [("edit_variable", {"operation": "delete", "name": "region"})]
-    )
+    _, result = write_turn(app, client, context, [variable(operation="delete", name="region")])
     card = result["tools"][0]
     assert card["status"] == "error"
     assert "still in use" in card["summary"]
@@ -297,11 +297,8 @@ def test_variable_environment_updates_preserve_other_values_and_can_restore_inhe
         app, worktree, lambda b: b["variables"]["region"].update(environments={"dev": "West", "prod": "East"})
     )
     calls = [
-        (
-            "edit_variable",
-            {"operation": "update", "name": "region", "definition": {"environments": {"dev": "South"}}},
-        ),
-        ("edit_variable", {"operation": "update", "name": "region", "remove_environments": ["dev"]}),
+        variable(operation="update", name="region", definition={"environments": {"dev": "South"}}),
+        variable(operation="update", name="region", remove_environments=["dev"]),
     ]
     identity, result = write_turn(app, client, context, calls)
     projects = app.state.services.projects
@@ -322,39 +319,26 @@ def test_variable_can_switch_to_computed_and_back_without_running_its_source(ins
     app, client = instance
     worktree, context = seed(app, client)
     calls = [
-        (
-            "edit_variable",
-            {
-                "operation": "update",
-                "name": "region",
-                "remove_fields": ["default", "environments"],
-                "definition": {
-                    "type": "number",
-                    "from": {"node": "first", "port": "result", "column": "value"},
-                },
-            },
+        variable(
+            operation="update",
+            name="region",
+            remove_fields=["default", "environments"],
+            definition={"type": "number", "from": {"node": "first", "port": "result", "column": "value"}},
         ),
     ]
     _, result = write_turn(app, client, context, calls)
     assert result["tools"][0]["status"] == "complete", result
     projects = app.state.services.projects
-    assert projects.snapshot(worktree["id"])["bundle"]["variables"]["region"] == calls[0][1]["definition"]
+    assert (
+        projects.snapshot(worktree["id"])["bundle"]["variables"]["region"]
+        == calls[0][1]["change"]["definition"]
+    )
     assert app.state.services.engine.pool.find(worktree["id"], "dev") is None
     _, result = write_turn(
         app,
         client,
         context,
-        [
-            (
-                "edit_variable",
-                {
-                    "operation": "update",
-                    "name": "region",
-                    "remove_fields": ["from"],
-                    "definition": {"default": 2},
-                },
-            )
-        ],
+        [variable(operation="update", name="region", remove_fields=["from"], definition={"default": 2})],
     )
     assert result["tools"][0]["status"] == "complete", result
     assert projects.snapshot(worktree["id"])["bundle"]["variables"]["region"] == {
@@ -364,23 +348,218 @@ def test_variable_can_switch_to_computed_and_back_without_running_its_source(ins
 
 
 @pytest.mark.parametrize(
-    ("args", "message"),
+    ("change", "message"),
     [
-        ({"operation": "delete", "name": "missing"}, "not found"),
-        ({"operation": "delete", "name": "region", "definition": {"default": "South"}}, "do not accept"),
-        ({"operation": "create", "name": "new", "remove_fields": ["default"]}, "require an update"),
-        ({"operation": "update", "name": "region", "new_name": "area"}, "Only rename"),
+        ({"operation": "delete", "name": "missing"}, "Variable not found"),
+        (
+            {"operation": "update", "name": "missing", "definition": {"default": "South"}},
+            "Variable not found",
+        ),
+        ({"operation": "rename", "name": "missing", "new_name": "area"}, "not found"),
+        ({"operation": "create", "name": "region", "definition": {"type": "text"}}, "already exists"),
         ({"operation": "update", "name": "region", "definition": {"environments": {"dev": 42}}}, "invalid"),
     ],
 )
-def test_invalid_variable_edits_preserve_saved_files(instance, args, message):
+def test_variable_edits_the_project_refuses_preserve_saved_files(instance, change, message):
     app, client = instance
     worktree, context = seed(app, client)
     before = app.state.services.projects.snapshot(worktree["id"])
-    _, result = write_turn(app, client, context, [("edit_variable", args)])
+    _, result = write_turn(app, client, context, [variable(**change)])
     assert result["tools"][0]["status"] == "error", result
     assert message in result["tools"][0]["summary"]
+    assert "action" not in result["tools"][0]
     assert app.state.services.projects.snapshot(worktree["id"])["files"] == before["files"]
+
+
+@pytest.mark.parametrize(
+    ("change", "field"),
+    [
+        ({"operation": "delete", "name": "region", "definition": {"default": "South"}}, "definition"),
+        ({"operation": "rename", "name": "region", "new_name": "area", "definition": {}}, "definition"),
+        (
+            {
+                "operation": "create",
+                "name": "new",
+                "definition": {"type": "text"},
+                "remove_fields": ["default"],
+            },
+            "remove_fields",
+        ),
+        (
+            {"operation": "update", "name": "region", "new_name": "area", "definition": {"default": "South"}},
+            "new_name",
+        ),
+        ({"operation": "delete", "name": "region", "new_name": "area"}, "new_name"),
+        (
+            {"operation": "update", "name": "region"},
+            "Provide definition, remove_fields or remove_environments",
+        ),
+        ({"operation": "update", "name": "region", "definition": {}}, "Provide definition"),
+        ({"operation": "create", "name": "new", "definition": {}}, "definition"),
+        ({"operation": "create", "name": "new"}, "definition"),
+        ({"operation": "rename", "name": "region", "new_name": ""}, "new_name"),
+        ({"operation": "rename", "name": "region"}, "new_name"),
+        ({"operation": "move", "name": "region"}, "operation"),
+        ({"operation": "delete", "name": ""}, "name"),
+    ],
+)
+def test_rejected_variable_arguments_save_nothing(instance, change, field):
+    app, client = instance
+    worktree, context = seed(app, client)
+    before = app.state.services.projects.snapshot(worktree["id"])
+    _, result = write_turn(app, client, context, [variable(**change)])
+    card = result["tools"][0]
+    assert card["status"] == "error", result
+    assert field in card["summary"]
+    assert "action" not in card
+    after = app.state.services.projects.snapshot(worktree["id"])
+    assert after["commit"] == before["commit"]
+    assert after["files"] == before["files"]
+
+
+def test_rejected_variable_arguments_can_be_corrected_twice_in_a_row(instance):
+    app, client = instance
+    worktree, context = seed(app, client)
+    projects = app.state.services.projects
+    before = projects.snapshot(worktree["id"])
+    bad = variable(operation="delete", name="region", definition={"default": "South"})
+    good = variable(operation="update", name="region", definition={"default": "South"})
+    _, result = write_turn(app, client, context, [bad, bad, good])
+    assert [t["status"] for t in result["tools"]] == ["error", "error", "complete"], result
+    assert projects.git(worktree["path"], "rev-list", "--count", before["commit"] + "..HEAD") == "1"
+    assert projects.snapshot(worktree["id"])["bundle"]["variables"]["region"]["default"] == "South"
+
+
+def test_three_rejected_variable_calls_in_a_row_end_the_turn_without_saving(instance):
+    app, client = instance
+    worktree, context = seed(app, client)
+    before = app.state.services.projects.snapshot(worktree["id"])
+    identity = conversation(client, context)
+    bad = variable(operation="rename", name="region", new_name="")
+    scripted(app, [bad, bad, bad, variable(operation="delete", name="region")])
+    result = turn(client, identity, context, "Make the requested change")[-1]["turn"]
+    assert result["status"] == "error", result
+    # The call that exhausts the retries gets no result: the turn stops at it.
+    assert [t["status"] for t in result["tools"]] == ["error", "error", "stopped"], result
+    after = app.state.services.projects.snapshot(worktree["id"])
+    assert (after["commit"], after["files"]) == (before["commit"], before["files"])
+
+
+def test_losing_edit_rights_after_a_rejected_call_aborts_the_turn(instance):
+    app, admin = instance
+    configure(admin)
+    _, context = project(admin)
+    user = app.state.auth.create_user("editor", "editor-password-123")
+    app.state.access.member(context["project"], user["id"], "editor")
+    projects = app.state.services.projects
+    before = projects.snapshot(context["worktree"])
+    with TestClient(app) as client:
+        client.post("/api/login", json={"username": "editor", "password": "editor-password-123"})
+        identity = conversation(client, context)
+        calls = [
+            variable(operation="create", name="limit"),
+            variable(operation="create", name="limit", definition={"type": "number", "default": 5}),
+        ]
+
+        def demote(index):
+            if index == 1:
+                app.state.access.member(context["project"], user["id"], "reader")
+
+        scripted(app, calls, before=demote)
+        result = turn(client, identity, context, "Make the requested change")[-1]["turn"]
+    assert result["status"] == "error", result
+    assert "action" not in result["tools"][-1]
+    after = projects.snapshot(context["worktree"])
+    assert (after["commit"], after["files"]) == (before["commit"], before["files"])
+
+
+def test_null_variable_arguments_count_as_omitted(instance):
+    app, client = instance
+    worktree, context = seed(app, client)
+    calls = [
+        variable(
+            operation="update",
+            name="region",
+            definition={"default": "South"},
+            new_name=None,
+            remove_fields=None,
+            remove_environments=None,
+        ),
+        variable(operation="rename", name="region", new_name="area", definition=None, remove_fields=None),
+        variable(operation="delete", name="area", definition=None, new_name=None, remove_environments=None),
+    ]
+    _, result = write_turn(app, client, context, calls)
+    assert [t["status"] for t in result["tools"]] == ["complete"] * 3, result
+    assert app.state.services.projects.snapshot(worktree["id"])["bundle"]["variables"] == {}
+
+
+def test_conversations_with_flat_variable_calls_from_before_continue(instance):
+    app, client = instance
+    _, context = seed(app, client)
+    identity, _ = write_turn(app, client, context, [variable(operation="delete", name="region")])
+    store = app.state.services.store
+    record = store.get("assistant_conversation", identity)
+    flat = {"operation": "delete", "name": "region"}
+    for message in record["messages"]:
+        for part in message["parts"]:
+            if part["part_kind"] == "tool-call" and part["tool_name"] == "edit_variable":
+                part["args"] = json.dumps(flat)
+    store.put("assistant_conversation", identity, record)
+    replayed = []
+
+    async def stream(messages, info):
+        replayed.extend(
+            p.args_as_dict()
+            for m in messages
+            for p in m.parts
+            if p.part_kind == "tool-call" and p.tool_name == "edit_variable"
+        )
+        yield "Nothing else to change."
+
+    app.state.assistant.configuration.model_override = FunctionModel(stream_function=stream)
+    result = turn(client, identity, context, "Anything else?")[-1]["turn"]
+    assert result["status"] == "complete", result
+    assert replayed == [flat]
+
+
+@pytest.mark.parametrize("kind", ["openai", "anthropic", "google", "mistral", "deepseek", "ollama", "custom"])
+def test_every_provider_receives_the_four_variable_operations(instance, kind):
+    from pydantic_ai import Tool
+    from pydantic_ai.models import ModelRequestParameters
+
+    from duckpad.assistant.editing import edit_variable
+
+    app, _ = instance
+    provider = {
+        "kind": kind,
+        "api_key": "test-key",
+        "base_url": "http://localhost:1/v1" if kind == "custom" else "",
+    }
+
+    async def render():
+        async with app.state.assistant.configuration.model(provider, "test-model") as model:
+            parameters = ModelRequestParameters(function_tools=[Tool(edit_variable).tool_def])
+            return model.customize_request_parameters(parameters).function_tools[0].parameters_json_schema
+
+    schema = asyncio.run(render())
+    union = schema["properties"]["change"]
+    variants = [
+        schema["$defs"][v["$ref"].split("/")[-1]] if "$ref" in v else v
+        for v in union.get("oneOf") or union.get("anyOf")
+    ]
+    fields = {
+        (v["properties"]["operation"].get("const") or v["properties"]["operation"]["enum"][0]): (
+            set(v["properties"]),
+            v.get("additionalProperties"),
+        )
+        for v in variants
+    }
+    assert fields == {
+        "create": ({"operation", "name", "definition"}, False),
+        "update": ({"operation", "name", "definition", "remove_fields", "remove_environments"}, False),
+        "rename": ({"operation", "name", "new_name"}, False),
+        "delete": ({"operation", "name"}, False),
+    }
 
 
 def test_reader_has_no_write_tools_and_forced_write_or_undo_is_denied(instance):
@@ -663,7 +842,7 @@ def test_template_impact_connections_parameters_and_variable_rename(instance):
                     "sql": '-- @param region: text = "East"\n-- @output result\nSELECT {{ region }} AS value;\n',
                 },
             ),
-            ("edit_variable", {"operation": "rename", "name": "region", "new_name": "area"}),
+            variable(operation="rename", name="region", new_name="area"),
         ],
     )
     assert all(t["status"] == "complete" for t in result["tools"]), result
