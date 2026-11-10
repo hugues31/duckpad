@@ -7,7 +7,7 @@ from pydantic_ai import RunContext
 
 from .. import variables
 from ..bundle import bundle_to_files
-from ..charts import unknown_fields
+from ..charts import check_chart, unknown_fields
 from ..components import expand, group, output_port
 from ..node_code import code_path, find_node
 from ..util import Problem
@@ -311,8 +311,10 @@ def edit_chart(
         entries.remove(existing)
         if not entries:
             del charts[key]
+    if isinstance(change, (CreateChart, UpdateChart)):
+        # The save ignores problems the file already had, which can hide one in the requested spec.
+        check_chart(key, {"name": name, "spec": change.spec})
     bundle["charts"] = charts
-    # The save validates every chart: chart rules live in duckpad.charts only.
     result = save(ctx, snapshot, bundle)
     if isinstance(change, (CreateChart, UpdateChart)) and "error" not in result:
         columns = ctx.deps.output_columns(bundle, producer, port)

@@ -655,6 +655,50 @@ def test_invalid_chart_creations_preserve_saved_files(instance, args, message):
     assert app.state.services.projects.snapshot(worktree["id"])["files"] == before["files"]
 
 
+AGGREGATE = {"mark": "bar", "encoding": {"x": {"field": "value", "aggregate": "sum"}}}
+
+
+@pytest.mark.parametrize(
+    ("args", "message"),
+    [
+        ({"operation": "create", "name": "New"}, "chart New of first:result: encoding.x.aggregate"),
+        ({"operation": "update", "name": "Values"}, "chart Values of first:result: encoding.x.aggregate"),
+    ],
+)
+def test_requested_charts_are_checked_even_when_another_chart_is_invalid(instance, args, message):
+    app, client = instance
+    worktree, context = seed(app, client)
+    broken = {"name": "Broken", "spec": {"mark": "bar", "encoding": None}}
+    change(
+        app, worktree, lambda b: b.update(charts={"first:result": [broken, {"name": "Values", "spec": BAR}]})
+    )
+    before = app.state.services.projects.snapshot(worktree["id"])
+    _, result = write_turn(
+        app, client, context, [chart(node="first", output="result", spec=AGGREGATE, **args)]
+    )
+    assert result["tools"][0]["status"] == "error", result
+    assert message in result["tools"][0]["summary"]
+    after = app.state.services.projects.snapshot(worktree["id"])
+    assert after["files"] == before["files"]
+    assert after["commit"] == before["commit"]
+
+
+def test_charts_can_be_edited_beside_an_existing_invalid_chart(instance):
+    app, client = instance
+    worktree, context = seed(app, client)
+    broken = {"name": "Broken", "spec": {"mark": "bar", "encoding": None}}
+    change(
+        app, worktree, lambda b: b.update(charts={"first:result": [broken, {"name": "Values", "spec": BAR}]})
+    )
+    target = {"node": "first", "output": "result"}
+    calls = [
+        chart(operation="create", **target, name="New", spec=BAR),
+        chart(operation="update", **target, name="Values", spec=LINE),
+    ]
+    _, result = write_turn(app, client, context, calls)
+    assert [t["status"] for t in result["tools"]] == ["complete"] * 2, result
+
+
 def test_chart_updates_replace_the_spec_renames_stay_on_the_output_and_last_deletes_drop_the_key(instance):
     app, client = instance
     worktree, context = seed(app, client)
