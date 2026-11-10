@@ -1,7 +1,6 @@
 """ZIP archives of a project's declarative files, for download and import."""
 
 import io
-import json
 import re
 import zipfile
 import zlib
@@ -11,6 +10,7 @@ from . import project_extensions
 from .bundle import files_to_bundle
 from .components import expand
 from .graph import connection_references
+from .json_read import loads
 from .node_names import graph_names, name_text
 from .project_files import is_declarative
 from .projects import decode
@@ -85,7 +85,7 @@ def archive_bundle(files):
     for name, text in files.items():
         if name.endswith(".json"):
             try:
-                value = json.loads(text)
+                value = loads(text)
             except ValueError as error:
                 raise Problem(f"{name} is not valid JSON: {error}", 422) from error
             if not isinstance(value, dict):

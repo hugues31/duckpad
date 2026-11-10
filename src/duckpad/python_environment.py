@@ -46,6 +46,7 @@ MODULES = (
     "project_extensions.py",
     "project_files.py",
     "json_document.py",
+    "json_read.py",
     "node_code.py",
     "python_execution.py",
     "partition_filters.py",

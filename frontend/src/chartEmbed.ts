@@ -8,7 +8,7 @@ import type { Loader } from "vega";
 import type { EmbedOptions, Result, VisualizationSpec } from "vega-embed";
 import type { Config } from "vega-lite";
 import type { ChartSpec } from "./charts";
-import type { ChartRow } from "./chartValues";
+import { ROW_ID, type ChartRow } from "./chartValues";
 import type { Language, TranslationKey } from "./i18n";
 
 /**
@@ -127,10 +127,89 @@ export function embedOptions(
 export function chartSpec(spec: ChartSpec, rows: ChartRow[]): ChartSpec {
   // `usermeta.embedOptions` would override the embed options above.
   const { usermeta: _, ...drawn } = spec;
+  // Vega-Lite's path escaping does not round-trip every quote/backslash combination.
+  // Compile only generated identifiers; original names remain display titles.
+  const fields = new Map<string, string>();
+  const fieldName = (field: string) => {
+    if (!fields.has(field)) fields.set(field, `column_${fields.size}`);
+    return fields.get(field)!;
+  };
+  const rendered = literalFields(drawn, fieldName);
   return {
     width: "container",
-    ...drawn,
-    data: { name: "data", values: rows },
+    ...rendered,
+    data: {
+      name: "data",
+      values: rows.map((row) => ({
+        ...Object.fromEntries(
+          [...fields].map(([field, alias]) => [alias, row[field]]),
+        ),
+        [ROW_ID]: row[ROW_ID],
+      })),
+    },
+  };
+}
+
+/** Give flat column names internal identifiers in the rendered spec only. */
+function literalFields(
+  spec: ChartSpec,
+  fieldName: (field: string) => string,
+): ChartSpec {
+  const definition = (name: string, value: unknown): unknown => {
+    if (Array.isArray(value))
+      return value.map((item) => definition(name, item));
+    if (!value || typeof value !== "object") return value;
+    const channel = value as Record<string, unknown>;
+    if (typeof channel.field !== "string") return channel;
+    const title = channel.title === undefined ? channel.field : channel.title;
+    const guide = ["x", "y"].includes(name)
+      ? "axis"
+      : [
+            "color",
+            "fill",
+            "stroke",
+            "opacity",
+            "size",
+            "shape",
+            "strokeDash",
+          ].includes(name)
+        ? "legend"
+        : null;
+    // Vega-Lite quotes tooltip/ARIA titles but fails to escape backslashes and
+    // line breaks. Quotes themselves are escaped by the compiler.
+    const escaped = String(title || channel.field)
+      .replace(/\\/g, "\\\\")
+      .replace(/\n/g, "\\n")
+      .replace(/\r/g, "\\r")
+      .replace(/\t/g, "\\t");
+    return {
+      ...channel,
+      field: fieldName(channel.field),
+      title: escaped,
+      // The guide shows the original title only where it differs: otherwise
+      // Vega-Lite still merges the titles of x and x2 ("start, end").
+      ...(guide &&
+        escaped !== title &&
+        channel[guide] !== null && {
+          [guide]: { title, ...(channel[guide] as object | undefined) },
+        }),
+    };
+  };
+  return {
+    ...spec,
+    ...(spec.encoding
+      ? {
+          encoding: Object.fromEntries(
+            Object.entries(spec.encoding).map(([name, value]) => [
+              name,
+              definition(name, value),
+            ]),
+          ),
+        }
+      : {}),
+    ...(Array.isArray(spec.layer) && {
+      layer: spec.layer.map((layer) => literalFields(layer, fieldName)),
+    }),
   };
 }
 

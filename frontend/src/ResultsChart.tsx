@@ -124,20 +124,39 @@ function ChartView({
   const t = useT();
   const translate = useTranslateValue();
   const partition = usePartitionQuery(target.node, target.port);
+  // ResultsPanel supplies the selected partition's count via its limit=1 preview.
+  const oversized = !!dataset && dataset.count > CHART_ROW_LIMIT;
   // The whole output, never the sample of the Data tab.
-  const path = withQuery(
-    `/worktrees/${snapshot.worktree.id}/preview/${encodeURIComponent(target.node)}`,
-    { environment, port: target.port, limit: CHART_ROW_LIMIT, ...partition },
-  );
+  const endpoint = `/worktrees/${snapshot.worktree.id}/preview/${encodeURIComponent(target.node)}`;
+  const query = { environment, port: target.port, ...partition };
+  const path = withQuery(endpoint, { ...query, limit: CHART_ROW_LIMIT });
   const preview = useResource<PreviewPage | null>(
-    path,
-    (signal) => fetchPreview(path, signal),
+    oversized ? null : path,
+    async (signal) => {
+      // A missing dataset has no known count yet (for example during a run).
+      if (!dataset) {
+        const probe = await fetchPreview(
+          withQuery(endpoint, { ...query, limit: 1 }),
+          signal,
+        );
+        if (
+          !probe ||
+          (probe.matched_count ?? probe.filtered_count) > CHART_ROW_LIMIT
+        )
+          return probe;
+      }
+      return fetchPreview(path, signal);
+    },
     { refresh: `${dataset?.id}:${dataset?.status}` },
   );
   const page = preview.data;
   const staleVariables = useStaleVariables(snapshot, environment, page);
   // Only a whole output is drawn: a truncated series would look complete.
-  const count = page ? (page.matched_count ?? page.filtered_count) : 0;
+  const count = oversized
+    ? dataset.count
+    : page
+      ? (page.matched_count ?? page.filtered_count)
+      : 0;
   const tooMany = count > CHART_ROW_LIMIT;
   const rows = useMemo(
     () => (page && !tooMany ? chartRows(page.columns, page.rows) : null),
@@ -206,7 +225,7 @@ function ChartView({
       {!!staleVariables.length && (
         <div className="stale-reason">{staleVariables.join(" ")}</div>
       )}
-      {!page && !error && (
+      {!page && !error && !tooMany && (
         <p className="muted small" role="status">
           <Loader2 size={13} className="spin" aria-hidden="true" />{" "}
           {t("chartLoading")}

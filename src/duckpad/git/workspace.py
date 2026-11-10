@@ -1,6 +1,5 @@
 """Frozen comparisons and reviewed Git integration for project repositories."""
 
-import json
 import tempfile
 import threading
 from collections import OrderedDict
@@ -9,6 +8,7 @@ from pathlib import Path
 
 from ..bundle import file_node_names, files_to_bundle
 from ..comparison import categories, compare_files, fields
+from ..json_read import loads
 from ..merge import merge_files
 from ..node_code import code_path, template_path
 from ..project_files import is_declarative
@@ -61,7 +61,7 @@ def entity_sources(entity):
 def graph_node(content, node):
     """The node with this ID in a graph file, None when absent, UNREADABLE when malformed."""
     try:
-        nodes = json.loads(content).get("nodes", [])
+        nodes = loads(content).get("nodes", [])
         return next((n for n in nodes if isinstance(n, dict) and n.get("id") == node), None)
     except (ValueError, AttributeError, TypeError):
         return UNREADABLE

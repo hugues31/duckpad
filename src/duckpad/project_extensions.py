@@ -13,6 +13,7 @@ from pathlib import Path
 import duckdb
 
 from .extensions import SOURCES, runtime
+from .json_read import loads
 from .project_files import EXTENSIONS as DOCUMENT
 from .util import Problem, qi
 
@@ -177,7 +178,7 @@ def activate_file_readers(base, proposal):
             if path != "flow.json" and not re.fullmatch(r"components/[^/]+\.json", path):
                 continue
             try:
-                graph = json.loads(text)
+                graph = loads(text)
             except ValueError:
                 continue
             if not isinstance(graph, dict) or not isinstance(graph.get("nodes"), list):
