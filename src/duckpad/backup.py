@@ -24,7 +24,7 @@ def instance_paths(home):
     key_file = os.environ.get("DUCKPAD_MASTER_KEY_FILE")
     if key_file:
         key_source = "DUCKPAD_MASTER_KEY_FILE"
-        key_path = str(Path(key_file).expanduser().resolve())
+        key_path = str(Path(key_file).resolve())
     elif "DUCKPAD_MASTER_KEY" in os.environ:
         key_source, key_path = "DUCKPAD_MASTER_KEY", None
     else:

@@ -88,6 +88,11 @@ def test_paths_report_external_keys_without_reading_or_printing_secrets(tmp_path
     output = capsys.readouterr().out
     assert json.loads(output)["master_key"] == {"source": "DUCKPAD_MASTER_KEY_FILE", "path": str(key)}
     assert secret not in output
+    # Match the server: environment key paths are literal, unlike --home arguments.
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("DUCKPAD_MASTER_KEY_FILE", "~/external.key")
+    backup.print_paths(tmp_path, as_json=True)
+    assert json.loads(capsys.readouterr().out)["master_key"]["path"] == str(tmp_path / "~" / "external.key")
 
 
 @pytest.fixture
