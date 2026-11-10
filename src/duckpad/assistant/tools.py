@@ -24,34 +24,10 @@ from .config import Configuration
 
 class PageContext(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    # Keep these allowlists aligned with frontend/src/navigation.ts; a contract test checks them.
-    page: Literal[
-        "home",
-        "projects",
-        "jobs",
-        "pipelines",
-        "instanceSettings",
-        "userSettings",
-        "projectSettings",
-        "notFound",
-    ]
-    tab: Literal["flow", "code", "documentation", "variables", "history"] | None = None
-    section: Literal[
-        "",
-        "usersPermissions",
-        "ssoSettings",
-        "assistant",
-        "gitHosts",
-        "environments",
-        "connections",
-        "extensions",
-        "sqlResources",
-        "monitoring",
-        "participants",
-        "python",
-        "partitions",
-        "general",
-    ] = ""
+    # Navigation names describe the page; resource identifiers below determine access.
+    page: str = Field(pattern=r"^[a-z][A-Za-z0-9]{0,39}$")
+    tab: str | None = Field(default=None, pattern=r"^[a-z][A-Za-z0-9]{0,39}$")
+    section: str = Field(default="", pattern=r"^([a-z][A-Za-z0-9]{0,39})?$")
     project: str | None = None
     worktree: str = ""
     branch: str = Field(default="", max_length=255)
@@ -201,12 +177,7 @@ def validate_context(services, user, context: PageContext):
         return value
     project = access.worktree(user, context.worktree)
     worktree = services.projects.get(context.worktree)
-    # Python, partition and extension settings also carry the selected working branch.
-    if (
-        context.project != project
-        or context.branch != worktree["branch"]
-        or context.page not in ("pipelines", "projectSettings")
-    ):
+    if context.project != project or context.branch != worktree["branch"]:
         raise Problem("Page context does not match the working branch", 422)
     services.catalog.environment(context.environment)
     if context.run:
