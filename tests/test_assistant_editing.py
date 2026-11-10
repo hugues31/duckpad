@@ -1097,7 +1097,10 @@ def test_multiple_calls_in_one_model_response_are_sequential_and_restart_undoabl
     restarted = create_app(app.state.services.store.home, watch=False)
     with TestClient(restarted) as resumed:
         assert (
-            resumed.post("/api/login", json={"password": app.state.auth.initial_password}).status_code == 200
+            resumed.post(
+                "/api/login", json={"username": "admin", "password": app.state.auth.initial_password}
+            ).status_code
+            == 200
         )
         saved = resumed.get(f"/api/assistant/conversations/{identity}").json()["turns"][0]
         updated = undo(resumed, identity, saved, context)

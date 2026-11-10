@@ -56,7 +56,7 @@ def test_extension_policy_recreates_databases_and_persists_across_restarts(tmp_p
 def test_extension_settings_api_requires_a_boolean_and_preserves_active_runs(tmp_path):
     app = create_app(tmp_path / "instance", watch=False)
     with TestClient(app) as client:
-        client.post("/api/login", json={"password": app.state.auth.initial_password})
+        client.post("/api/login", json={"username": "admin", "password": app.state.auth.initial_password})
         defaults = {"allow_unsigned_extensions": False}
         assert client.get("/api/extensions/settings").json() == defaults
         for body in ({}, {"allow_unsigned_extensions": "true"}, {"allow_unsigned_extensions": 1}):
@@ -98,7 +98,7 @@ def test_extension_upload_validation_preserves_settings_and_cache(tmp_path, monk
 
     app = create_app(tmp_path / "instance", watch=False)
     with TestClient(app) as client:
-        client.post("/api/login", json={"password": app.state.auth.initial_password})
+        client.post("/api/login", json={"username": "admin", "password": app.state.auth.initial_password})
         runtime = client.get("/api/extensions/runtime").json()
         assert runtime["version"] and runtime["platform"] and runtime["imports"] == []
         # DuckDB's built-in list lets the UI suggest core names without network access.

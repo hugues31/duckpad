@@ -183,7 +183,7 @@ def test_isolated_export_cancel_and_persisted_history_api(tmp_path):
     app = create_app(home, watch=False)
     password = app.state.auth.initial_password
     with TestClient(app) as client:
-        assert client.post("/api/login", json={"password": password}).status_code == 200
+        assert client.post("/api/login", json={"username": "admin", "password": password}).status_code == 200
         wt = client.post("/api/projects", json={"name": "Tested export"}).json()["id"]
         services = app.state.services
         bundle = {
@@ -235,7 +235,7 @@ SELECT * FROM {{ source }};
     with TestClient(reopened) as client:
         url = f"/api/worktrees/{wt}/test-history/export?environment=dev"
         assert client.get(url).status_code == 401
-        client.post("/api/login", json={"password": password})
+        client.post("/api/login", json={"username": "admin", "password": password})
         history = client.get(url).json()
         assert [h["run"] for h in history] == [failed["id"], run["id"]]
         assert history[0]["results"] == state["results"]

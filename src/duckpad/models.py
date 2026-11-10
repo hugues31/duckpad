@@ -217,7 +217,7 @@ class Artifact(SQLModel, table=True):
     media_type: str
     size: int
     signature: list = Field(sa_type=JSON)
-    storage_kind: str = "download"
+    storage_kind: str
 
 
 class PartitionManifest(SQLModel, table=True):

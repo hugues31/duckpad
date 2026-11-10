@@ -174,7 +174,7 @@ def test_xlsx_api_upload_needs_no_connection_and_blocks_outside_files(tmp_path, 
     instance = app.state.services
     shutil.copytree(excel_cache, instance.store.home / "extensions")
     with TestClient(app) as client:
-        client.post("/api/login", json={"password": app.state.auth.initial_password})
+        client.post("/api/login", json={"username": "admin", "password": app.state.auth.initial_password})
         worktree = client.post("/api/projects", json={"name": "XLSX uploads"}).json()
         identity = worktree["id"]
         source = workbook(tmp_path / "outside.xlsx")

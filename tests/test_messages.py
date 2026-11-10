@@ -255,7 +255,7 @@ def test_isolated_export_messages_precede_writes(tmp_path):
     app = create_app(tmp_path / "instance", watch=False)
     password = app.state.auth.initial_password
     with TestClient(app) as client:
-        assert client.post("/api/login", json={"password": password}).status_code == 200
+        assert client.post("/api/login", json={"username": "admin", "password": password}).status_code == 200
         tree = client.post("/api/projects", json={"name": "Checked export"}).json()
         wt = tree["id"]
         services = app.state.services

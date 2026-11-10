@@ -33,10 +33,6 @@ def router(assistant: Assistant):
     async def test(request: Request, check: ConnectionCheck | None = None):
         return await configuration.test(check)
 
-    @routes.get("/models/{provider}", dependencies=[Depends(instance_admin)])
-    async def models(request: Request, provider: str):
-        return await configuration.models(provider)
-
     @routes.post("/models", dependencies=[Depends(instance_admin)])
     async def discover(request: Request, provider: ProviderSettings):
         """List the models of unsaved provider settings, reusing the saved key when allowed."""

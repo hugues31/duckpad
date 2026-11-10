@@ -16,7 +16,7 @@ from duckpad.source_files import read_sample
 def source(tmp_path):
     app = create_app(tmp_path / "instance", watch=False)
     with TestClient(app) as client:
-        client.post("/api/login", json={"password": app.state.auth.initial_password})
+        client.post("/api/login", json={"username": "admin", "password": app.state.auth.initial_password})
         tree = client.post("/api/projects", json={"name": "Sources"}).json()
         yield app, client, f"/api/worktrees/{tree['id']}"
 

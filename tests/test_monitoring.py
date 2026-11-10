@@ -135,7 +135,7 @@ def test_metrics_measure_instance_filesystem_and_degrade_independently(tmp_path,
 def test_monitoring_is_never_cached_and_validates_queries(tmp_path):
     app = create_app(tmp_path / "instance", watch=False)
     with TestClient(app) as client:
-        client.post("/api/login", json={"password": app.state.auth.initial_password})
+        client.post("/api/login", json={"username": "admin", "password": app.state.auth.initial_password})
         summary = client.get("/api/monitoring")
         assert summary.status_code == 200
         assert summary.headers["cache-control"] == "no-store"

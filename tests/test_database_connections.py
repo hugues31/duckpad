@@ -525,7 +525,7 @@ def app(tmp_path):
 
 def test_test_connection_and_object_listing_api(app, tmp_path):
     with TestClient(app) as client:
-        client.post("/api/login", json={"password": app.state.auth.initial_password})
+        client.post("/api/login", json={"username": "admin", "password": app.state.auth.initial_password})
         client.put("/api/catalog/connector", json=NATIVE).raise_for_status()
         connection = {
             "id": "warehouse",

@@ -732,7 +732,7 @@ def test_shared_python_template_contracts_are_retained_per_node(tmp_path, revers
 
     app = create_app(tmp_path / "instance", watch=False)
     with TestClient(app) as client:
-        client.post("/api/login", json={"password": app.state.auth.initial_password})
+        client.post("/api/login", json={"username": "admin", "password": app.state.auth.initial_password})
         worktree = client.post("/api/projects", json={"name": "Shared contracts"}).json()
         projects = app.state.services.projects
         snapshot = projects.snapshot(worktree["id"])

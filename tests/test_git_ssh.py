@@ -138,7 +138,10 @@ def test_network_git_uses_only_the_account_key(tmp_path, ssh_server, server_cred
     app = create_app(tmp_path / "instance", watch=False)
     with TestClient(app) as client:
         assert (
-            client.post("/api/login", json={"password": app.state.auth.initial_password}).status_code == 200
+            client.post(
+                "/api/login", json={"username": "admin", "password": app.state.auth.initial_password}
+            ).status_code
+            == 200
         )
         assert (
             client.put(

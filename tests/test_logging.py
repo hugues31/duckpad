@@ -61,7 +61,10 @@ def test_cli_polling_logs(tmp_path, level):
                 else:
                     pytest.fail("The CLI server did not start")
                 assert client.get("/api/resources").status_code == 401
-                assert client.post("/api/login", json={"password": password}).status_code == 200
+                assert (
+                    client.post("/api/login", json={"username": "admin", "password": password}).status_code
+                    == 200
+                )
                 project = client.post("/api/projects", json={"name": "Logging checks"})
                 assert project.status_code == 200
                 worktree = project.json()["id"]

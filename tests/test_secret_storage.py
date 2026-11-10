@@ -3,7 +3,9 @@
 import base64
 import json
 import os
+import sqlite3
 import stat
+from contextlib import closing
 
 import pytest
 from sqlalchemy import text
@@ -136,6 +138,22 @@ def test_a_sealed_value_only_opens_in_its_own_field(tmp_path):
             store.get("settings", "oidc")
     finally:
         store.close()
+
+
+@pytest.mark.parametrize("value", ["unsealed-secret", "dpenc:1:invalid", 42])
+def test_unencrypted_stored_secret_is_rejected_without_conversion(tmp_path, value):
+    store = Store(tmp_path)
+    store.close()
+    with closing(sqlite3.connect(tmp_path / "instance.sqlite")) as connection, connection:
+        connection.execute(
+            "INSERT INTO setting VALUES ('oidc', ?)",
+            (json.dumps({"enabled": False, "client_secret": value}),),
+        )
+        original = list(connection.iterdump())
+    with pytest.raises(Problem, match="settings/oidc/client_secret is not encrypted"):
+        Store(tmp_path)
+    with closing(sqlite3.connect(tmp_path / "instance.sqlite")) as connection:
+        assert list(connection.iterdump()) == original
 
 
 def test_rotation_reseals_with_the_first_key(tmp_path, monkeypatch):

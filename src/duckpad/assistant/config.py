@@ -322,7 +322,7 @@ class Configuration:
     def require_key(provider):
         if (
             provider["kind"] == "custom"
-            and provider.get("auth") == "oauth2"
+            and provider["auth"] == "oauth2"
             and not all(provider.get(k) for k in ("token_url", "client_id", "client_secret"))
         ):
             raise Problem("Provide a token URL, client ID and client secret for OAuth2")
@@ -330,7 +330,7 @@ class Configuration:
             raise Problem("Provide an API key for this provider")
 
     def authentication(self, provider):
-        if provider["kind"] != "custom" or provider.get("auth", "api_key") != "oauth2":
+        if provider["kind"] != "custom" or provider["auth"] != "oauth2":
             return None
         self.require_key(provider)
         key = (
@@ -405,7 +405,7 @@ class Configuration:
                         base_url=provider["base_url"] or BASE_URLS[kind], api_key=key, http_client=client
                     )
                 model = (GatewayChatModel if custom else OpenAIChatModel)(name, provider=sdk)
-            if custom and provider.get("streaming") is False:
+            if custom and not provider["streaming"]:
                 model = NonStreamingModel(model)
             yield model
 
@@ -433,13 +433,6 @@ class Configuration:
             await run_in_threadpool(self.log_failure, error, provider, name, operation="connection test")
             raise Problem(provider_error(error), 502) from None
         return {"ok": True}
-
-    async def models(self, identity):
-        config = await run_in_threadpool(self.get)
-        provider = next((p for p in config["providers"] if p["id"] == identity), None)
-        if provider is None:
-            raise Problem("Provider not found", 404)
-        return await self.discover(provider)
 
     async def discover(self, provider):
         """List chat models; `listed` is false when the server has no model-list endpoint."""

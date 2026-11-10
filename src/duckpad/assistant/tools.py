@@ -27,7 +27,7 @@ class PageContext(BaseModel):
     page: Literal[
         "home", "projects", "pipelines", "instanceSettings", "userSettings", "projectSettings", "notFound"
     ]
-    tab: Literal["flow", "code", "documentation", "variables", "extensions", "history"] | None = None
+    tab: Literal["flow", "code", "documentation", "variables", "history"] | None = None
     section: Literal[
         "",
         "usersPermissions",

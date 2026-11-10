@@ -239,7 +239,7 @@ def test_loading_crashes_and_timeouts_are_actionable(tmp_path, monkeypatch):
 def test_project_api_checks_loading_and_retains_unavailable_imported_requirements(tmp_path):
     app = create_app(tmp_path / "instance", watch=False)
     with TestClient(app) as client:
-        client.post("/api/login", json={"password": app.state.auth.initial_password})
+        client.post("/api/login", json={"username": "admin", "password": app.state.auth.initial_password})
         files = bundle_to_files(bundle({"missing_capability": {"source": "community", "enabled": True}}))
         response = client.post("/api/projects/import", files={"file": ("project.zip", write_archive(files))})
         assert response.status_code == 200, response.text

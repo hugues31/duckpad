@@ -14,7 +14,7 @@ from duckpad.extensions import MAX_UPLOAD_BYTES as MAX_EXTENSION_BYTES
 def uploads(tmp_path):
     app = create_app(tmp_path / "instance", watch=False)
     with TestClient(app) as client:
-        client.post("/api/login", json={"password": app.state.auth.initial_password})
+        client.post("/api/login", json={"username": "admin", "password": app.state.auth.initial_password})
         worktree = client.post("/api/projects", json={"name": "Uploads"}).json()["id"]
         yield client, worktree
 

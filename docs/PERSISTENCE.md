@@ -2,10 +2,10 @@
 
 Duckpad stores instance metadata in SQLite through SQLModel. Alembic applies the
 packaged revisions in `src/duckpad/migrations/versions/` before the application
-starts serving requests. The `0001_baseline` revision creates the
+starts serving requests. The single `0001_v0_baseline` revision creates the
 business tables, including assistant conversations, API tokens, Jobs,
-idempotency keys and partitions. It seeds the `dev` and `prod` environments,
-but no connector or connection.
+idempotency keys, partitions and explicit artifact storage locations. It seeds
+the `dev` and `prod` environments, but no connector or connection.
 
 Duckpad is in v0: earlier instance schemas are not upgraded. Startup rejects a
 database with an unknown revision, or a nonempty one without a revision, without
@@ -138,7 +138,8 @@ write and decrypts them on read: secret connection parameters, the `oidc` client
 secret, `assistant` provider API keys and `ssh_key.private_key`. A sealed value
 reads `dpenc:1:<key id>:<data>`. Public responses are
 assembled and redacted by the existing service/API schemas, never by returning
-database models containing credentials.
+database models containing credentials. Empty values and references to server
+secrets are stored as is; startup rejects any other unencrypted value.
 
 ## Transactions and queries
 
@@ -155,25 +156,26 @@ and run visibility/filtering use SQL predicates and indexed columns.
 
 ## Evolving the schema
 
-Use a stopped, disposable development instance. Production startup applies
-pending revisions within the current baseline. Add a revision for subsequent
-schema changes, or explicitly document another breaking baseline reset during
-v0; never silently reuse a revision identifier for a different schema. Back up
-an instance's database and files while stopped before upgrading.
+Use a stopped, disposable development instance. During v0, keep a single baseline
+for the current schema instead of adding conversions for earlier releases. A
+schema change needs a new baseline revision identifier and a documented reset;
+never silently reuse a revision identifier for a different schema. Back up an
+instance's database and files while stopped before changing versions.
 
 ```sh
 uv run python -m duckpad.migrations current --home .duckpad-dev
 uv run python -m duckpad.migrations check --home .duckpad-dev
-# After editing models.py, generate and review a new revision:
+# Generate operations to review while preparing the replacement baseline:
 uv run python -m duckpad.migrations revision --home .duckpad-dev --message "Add metadata field"
 uv run python -m duckpad.migrations upgrade --home .duckpad-dev
 ```
 
-Review generated operations, data transformations, defaults and downgrade
-behavior. JSON transformations require explicit migration code. SQLite batch
-rebuilds run inside an explicit transaction with foreign-key enforcement disabled
-on that migration connection before `BEGIN`; `foreign_key_check` must pass before
-commit, and enforcement is restored afterward. This prevents a parent-table
+Fold the reviewed schema changes into the replacement baseline, remove the old
+revisions and verify initialization on an empty database. Do not retain data
+transformations for discarded schemas. SQLite batch rebuilds run inside an
+explicit transaction with foreign-key enforcement disabled on that migration
+connection before `BEGIN`; `foreign_key_check` must pass before commit, and
+enforcement is restored afterward. This prevents a parent-table
 rebuild from cascading into its children. Failed DDL and data changes roll back
 together. The migration runner serializes Alembic's process-global environment.
 

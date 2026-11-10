@@ -63,7 +63,11 @@ def test_initial_migration_matches_models_and_survives_restart(store):
         reopened.close()
 
 
-@pytest.mark.parametrize("revision", [None, "", "unknown_revision"], ids=["unversioned", "empty", "unknown"])
+@pytest.mark.parametrize(
+    "revision",
+    [None, "", "0002_artifact_storage", "unknown_revision"],
+    ids=["unversioned", "empty", "previous_baseline", "unknown"],
+)
 def test_unrecognized_database_is_rejected_without_changes(tmp_path, revision):
     path = tmp_path / "instance.sqlite"
     with closing(sqlite3.connect(path)) as connection, connection:
@@ -430,6 +434,7 @@ def test_scoped_queries_and_bulk_deletes_leave_other_projects_untouched(store):
                 "node": "export",
                 "filename": "report.csv",
                 "media_type": "text/csv",
+                "storage_kind": "download",
                 "size": 0,
                 "signature": [],
             },

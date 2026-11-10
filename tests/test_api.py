@@ -33,7 +33,7 @@ def app(tmp_path):
 @pytest.fixture
 def client(app):
     with TestClient(app) as client:
-        client.post("/api/login", json={"password": app.state.auth.initial_password})
+        client.post("/api/login", json={"username": "admin", "password": app.state.auth.initial_password})
         yield client
 
 
@@ -806,7 +806,9 @@ def test_library_lists_components_without_a_name(client, worktree):
 
 def test_logout_revokes_a_bearer_token(app):
     with TestClient(app) as client:
-        login = client.post("/api/login", json={"password": app.state.auth.initial_password})
+        login = client.post(
+            "/api/login", json={"username": "admin", "password": app.state.auth.initial_password}
+        )
         client.cookies.clear()
         headers = {"Authorization": f"Bearer {login.cookies[SESSION_COOKIE]}"}
         assert client.get("/api/session", headers=headers).status_code == 200

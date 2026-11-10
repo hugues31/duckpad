@@ -23,7 +23,10 @@ def instance(tmp_path):
     app.state.assistant.configuration.model_override = deterministic_model()
     with TestClient(app) as client:
         assert (
-            client.post("/api/login", json={"password": app.state.auth.initial_password}).status_code == 200
+            client.post(
+                "/api/login", json={"username": "admin", "password": app.state.auth.initial_password}
+            ).status_code
+            == 200
         )
         yield app, client
 
@@ -166,7 +169,6 @@ def test_admin_only_configuration_and_private_conversations(instance):
         assert reader.get("/api/assistant/settings").status_code == 403
         assert configure(reader).status_code == 403
         assert reader.post("/api/assistant/test").status_code == 403
-        assert reader.get("/api/assistant/models/primary").status_code == 403
         assert reader.post("/api/assistant/models", json={}).status_code == 403
         assert reader.get("/api/assistant/conversations").json()["items"] == []
         for method in ("get", "delete", "patch"):
@@ -570,7 +572,11 @@ def test_saved_provider_discovery_sends_its_key_and_sorts_models(instance, monke
     monkeypatch.setattr(
         httpx2, "AsyncClient", lambda **kwargs: original(transport=httpx2.MockTransport(handle), **kwargs)
     )
-    assert client.get("/api/assistant/models/primary").json()["models"] == ["other", "test"]
+    # A blank key reuses the saved one.
+    discovered = client.post(
+        "/api/assistant/models", json={"id": "primary", "kind": "deepseek", "models": []}
+    )
+    assert discovered.json()["models"] == ["other", "test"]
     assert seen[0].headers["Authorization"] == "Bearer private-test-key"
     assert seen[0].url.path == "/models"
 

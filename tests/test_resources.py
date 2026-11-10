@@ -12,7 +12,7 @@ from duckpad.resources import resource_usage
 def test_resources_api_returns_live_machine_counters(tmp_path):
     app = create_app(tmp_path / "instance", watch=False)
     with TestClient(app) as client:
-        client.post("/api/login", json={"password": app.state.auth.initial_password})
+        client.post("/api/login", json={"username": "admin", "password": app.state.auth.initial_password})
         before = client.get("/api/resources").json()
         second = client.get("/api/resources").json()
         assert second["sampled_at"] > before["sampled_at"]

@@ -40,7 +40,7 @@ def instance(tmp_path, monkeypatch):
     app = create_app(tmp_path / "instance", watch=False)
     with TestClient(app, base_url="https://duckpad.example.com") as client:
         password = app.state.auth.initial_password
-        assert client.post("/api/login", json={"password": password}).status_code == 200
+        assert client.post("/api/login", json={"username": "admin", "password": password}).status_code == 200
         yield app, client, provider, password
 
 
@@ -272,7 +272,7 @@ def test_deactivation_recovery_and_config_changes_revoke_sso(instance):
     user = client.get("/api/session").json()
     token = client.cookies.get("duckpad_session")
     client.cookies.clear()
-    client.post("/api/login", json={"password": password})
+    client.post("/api/login", json={"username": "admin", "password": password})
     assert client.patch(f"/api/users/{user['id']}", json={"password": "new-password-123"}).status_code == 400
     assert client.patch(f"/api/users/{user['id']}", json={"active": False}).status_code == 200
     assert (
@@ -281,7 +281,7 @@ def test_deactivation_recovery_and_config_changes_revoke_sso(instance):
     )
     client.cookies.clear()
     assert complete(client, provider).headers["location"] == "/?sso_error=failed"
-    client.post("/api/login", json={"password": password})
+    client.post("/api/login", json={"username": "admin", "password": password})
     assert client.patch(f"/api/users/{user['id']}", json={"active": True, "role": "admin"}).status_code == 200
     assert client.patch("/api/users/admin", json={"role": "member"}).status_code == 409
     client.post("/api/logout")
@@ -290,7 +290,7 @@ def test_deactivation_recovery_and_config_changes_revoke_sso(instance):
     assert configure(client, enabled=False).status_code == 200
     assert client.get("/api/session").status_code == 401
     assert client.get("/api/oidc/provider").json() is None
-    assert client.post("/api/login", json={"password": password}).status_code == 200
+    assert client.post("/api/login", json={"username": "admin", "password": password}).status_code == 200
     configure(client)
     assert (
         client.get("/api/session", headers={"cookie": "", "authorization": "Bearer " + token}).status_code
@@ -399,7 +399,7 @@ def test_discovery_failure_preserves_config_and_local_access(instance, monkeypat
     assert configure(client, issuer="https://other.example.com", client_secret="").status_code == 400
     client.post("/api/logout")
     assert client.get("/api/oidc/login", follow_redirects=False).headers["location"] == "/?sso_error=failed"
-    assert client.post("/api/login", json={"password": password}).status_code == 200
+    assert client.post("/api/login", json={"username": "admin", "password": password}).status_code == 200
 
 
 def test_settings_accounts_and_sessions_survive_service_restart(instance):
