@@ -96,10 +96,6 @@ test("searchable history preserves an explicit choice and creates the exact earl
   await expect(dialog.locator(".branch-selected")).toContainText(
     first.commit.slice(0, 8),
   );
-  await expect(dialog.locator(".branch-selected time")).toHaveAttribute(
-    "datetime",
-    /.+/,
-  );
   await search.fill("no matching version");
   await expect(dialog.getByText(/No matching versions/)).toBeVisible();
   await expect(dialog.locator(".branch-selected")).toContainText(

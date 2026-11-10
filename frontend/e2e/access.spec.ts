@@ -53,10 +53,6 @@ test("manage instance accounts, project users and live reader access", async ({
   await expect(
     page.getByRole("row").filter({ hasText: username }),
   ).toBeVisible();
-  await page.screenshot({
-    path: "test-results/project-access.png",
-    fullPage: true,
-  });
   const readerContext = await browser.newContext();
   const readerPage = await readerContext.newPage();
   await login(readerPage, username, "reader-browser-password");
@@ -134,10 +130,6 @@ test("manage instance accounts, project users and live reader access", async ({
   await expect(
     readerPage.getByRole("button", { name: "Sign in", exact: true }),
   ).toBeVisible({ timeout: 15000 });
-  await page.screenshot({
-    path: "test-results/instance-users.png",
-    fullPage: true,
-  });
   await readerContext.close();
 });
 

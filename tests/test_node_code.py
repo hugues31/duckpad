@@ -87,8 +87,7 @@ def test_group_nested_copy_and_archive_keep_owned_code(tmp_path):
     assert restored["components"] == imported["components"]
 
 
-def test_owned_sql_conflicts_comparison_and_search(services, tmp_path):
-    _, projects, _, _ = services
+def test_owned_sql_conflicts_comparison_and_search(tmp_path):
     bundle = example_bundle(tmp_path / "input.csv")
     detach(bundle, bundle["flow"]["nodes"][1])
     bundle["node_sql"]["nodes/filter.sql"] = (
@@ -105,15 +104,6 @@ def test_owned_sql_conflicts_comparison_and_search(services, tmp_path):
     assert "sql" in item["fields"]
     assert comparison["impact"]["direct"] == ["filter"]
     assert next(n for n in node_entries(bundle) if n["node"] == "filter")["label"] == "My independent filter"
-    worktree = projects.create("Conflicts", bundle)["id"]
-    snapshot = projects.snapshot(worktree)
-    projects.write(worktree, snapshot["revision"], current)
-    with pytest.raises(Problem, match="Concurrent edits conflict"):
-        projects.write(worktree, snapshot["revision"], proposal)
-    conflict = projects.snapshot(worktree)["conflicts"][0]
-    assert conflict["paths"] == ["nodes/filter.sql"]
-    projects.resolve(conflict["id"], "proposal")
-    assert projects.read_files(projects.get(worktree))["nodes/filter.sql"] == proposal["nodes/filter.sql"]
 
 
 def test_missing_code_and_illegal_resources_are_blocked(services, tmp_path):

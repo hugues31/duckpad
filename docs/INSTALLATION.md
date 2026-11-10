@@ -4,16 +4,6 @@ If your team already runs Duckpad, open its address in your browser and ask an
 administrator for an account and project access. You do not need to install
 Python, Git or Duckpad on your own computer to use that server.
 
-| I want to… | Read next |
-| --- | --- |
-| Run Duckpad myself | [Start](#start) and [platform requirements](#platform-requirements) |
-| Upgrade or keep a backup | [Upgrades and backups](#upgrades-and-backups) |
-| Add people or understand a missing action | [Accounts and project access](#accounts-and-project-access) |
-| Host a shared instance | [Reverse proxy](#reverse-proxy), [secrets](#secrets-and-the-master-key) and [SQL resources](#sql-resources) |
-| Change language or theme | [Workspace preferences](WORKSPACE.md#preferences-and-access) |
-| Get back in after losing a password | [Reset a lost password](#reset-a-lost-password) |
-| Fix a startup or sign-in error | [Troubleshooting](TROUBLESHOOTING.md#start-and-sign-in) |
-
 ## Start
 
 You need **Python 3.11 or later** and **Git**. If you are not on Linux, read the
@@ -59,8 +49,7 @@ Python and Git must be on `PATH`. The default isolated SQL mode also requires **
 
 The distribution is available on [PyPI](https://pypi.org/project/duckpad/).
 Version tags also create a GitHub release with downloadable wheels. To install
-a downloaded wheel, use `pip install <wheel-file>`. See the
-[release guide](../docs/RELEASING.md) for publishing instructions.
+a downloaded wheel, use `pip install <wheel-file>`.
 
 ### Instance directory and options
 
@@ -140,10 +129,9 @@ excludes SQL worker processes. Unavailable counters are reported independently.
 A warning appears when at most 10% of the data disk remains available.
 
 Instance admins can monitor server CPU and RAM in the top bar. Click either
-indicator for two minutes of history; samples refresh every two seconds. Values
-are machine-wide and include other applications. In a container they follow what
-its runtime exposes, usually the host rather than the container's limits. Missing
-measurements appear as unavailable. History resets on reload or sign-out.
+indicator for two minutes of history. Values are machine-wide and include other
+applications; in a container they usually reflect the host rather than the
+container's limits.
 
 The same page shows recent Duckpad and Uvicorn logs, newest first, with minimum
 severity and case-insensitive text filters. While the page is open, it refreshes
@@ -151,7 +139,7 @@ every 5 seconds by default; choose another interval or Manual next to the
 Refresh button. Capture follows the server's configured log level. Successful
 monitoring requests do not enter this history.
 
-This first version keeps up to 1,000 entries in backend memory, truncates each
+Duckpad keeps up to 1,000 entries in backend memory, truncates each
 message to 4,000 characters, and returns up to 200 matches. Restarting clears
 the history. It does not read arbitrary server files or capture stdout, the
 initial admin password, reverse-proxy logs or historical container logs. Common
@@ -166,9 +154,7 @@ snapshots, status, and generations) are logged at DEBUG. The default INFO level
 still shows other requests, including failed polling requests. Use
 `duckpad start --log-level debug` to include polling in the server logs.
 
-Debug also logs complete tracebacks of assistant provider failures. Credentials
-are masked, but these traces can contain prompts, responses and project data:
-keep them private and use debug temporarily. See
+Debug also logs complete tracebacks of assistant provider failures; see
 [assistant troubleshooting](ASSISTANT.md#troubleshoot-provider-failures).
 
 ## Reverse proxy
@@ -225,8 +211,7 @@ previous one on a later line, then restart. The first key encrypts; the others
 only decrypt. At startup, Duckpad encrypts every secret again with the first key,
 then rewrites the database file so that no deleted page keeps a previous value.
 Remove the previous key after that restart. `DUCKPAD_MASTER_KEY` accepts several
-keys separated by commas. The same startup pass encrypts the secrets of an
-instance created before encryption.
+keys separated by commas.
 
 Encryption protects copies of the database, not a running server: anyone who
 controls the Duckpad process or can read the key can decrypt the secrets. An
@@ -350,8 +335,7 @@ The form proposes an expiration date 90 days away; clear it for a token without 
 Copy the `dpk_` secret when it is created: it is shown only once, and the database stores
 only its hash. Send it as `Authorization: Bearer dpk_…` to use the account's current permissions.
 Tokens are never accepted from cookies and do not authorize SSH key management or network Git.
-Creating, listing, or revoking tokens requires an interactive session. API tokens cannot
-manage their own tokens or another account's tokens, even with administrator permissions.
+Creating, listing, or revoking tokens requires an interactive session, even for administrators.
 The list shows creation, expiration and last use (updated at most once per minute), and allows revocation.
 Changing a password leaves API tokens valid. Deactivation deletes all tokens permanently,
 including after reactivation. An SSO account's tokens work only while SSO is enabled.

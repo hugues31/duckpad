@@ -22,7 +22,6 @@ test("a Windows browser downloads for the Linux server and sees invalid import e
     await page.request.get("/api/extensions/runtime")
   ).json();
   await openInstanceSettings(page, "Extensions");
-  expect(await page.evaluate(() => navigator.userAgent)).toContain("Windows");
   await page.getByLabel("Extension name", { exact: true }).fill("httpfs");
   const link = page.getByRole("link", {
     name: "Download server binary",

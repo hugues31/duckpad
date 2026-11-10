@@ -131,27 +131,13 @@ response bytes and actual Git subprocess counts. Set `PYTHONPATH` to another
 revision's `src` directory when comparing the same fixture against that revision.
 The script never connects to external data sources.
 
-The following comparison uses baseline `ed87b52`, Python 3.12.12 and DuckDB 2.0.0
-on Linux. Values are medians of three requests after warming each endpoint. These
-are measurements on a shared development machine, not latency guarantees.
+`frontend/e2e/polling.spec.ts` checks on a 105-node canvas that another
+workspace poll renders no node again.
 
-| Request / fixture | Before | After | Additional result |
-| --- | ---: | ---: | --- |
-| Worktree snapshot, Northstar example | 79.54 ms | 25.08 ms | 3 → 1 Git processes |
-| Worktree snapshot, 105 nodes | 54.87 ms | 30.21 ms | 3 → 1 Git processes |
-| Branch listing, 10 open branches | 238.28 ms | 44.48 ms | 61 → 2 Git processes |
-| Job listing, 10 jobs | 160.10 ms | 65.25 ms | 30 → 1 Git processes; 1,280,921 → 16,811 bytes |
-| Job history, 50 runs | 158.24 ms | 20.83 ms | 6,374,451 → 53,901 bytes |
-| Selected partition preview, 1,000 keys, 105 nodes | 5,358.22 ms | 74.58 ms | 4 → 1 Git processes |
+## Python nodes
 
-The partition fixture retains a real result for the selected key and creates a
-synthetic 1,000-key manifest. It measures reading and validity checks, excluding
-execution of the other keys. Job records contain representative captured SQL;
-only their summaries are returned by the history endpoint. Detailed records
-remain available separately.
-
-`frontend/e2e/polling.spec.ts` counts React fiber renders on a 105-node canvas.
-After initial layout, another workspace poll produces **zero additional node
-renders**. The test observes the real production build, including snapshot and
-status polling. Unit regressions also check hidden-tab suspension, idle polling
-intervals and protection against a status response older than a newly started run.
+`uv run python scripts/benchmark_python.py --rows 1000000` runs a SQL → Python
+relation filter → SQL aggregate and reports elapsed time and API/worker RSS,
+excluding environment installation. Its reference budget, 30 seconds and 512 MiB
+of incremental RSS for this narrow three-column fixture, is a regression check,
+not a limit or promise for arbitrary Python.

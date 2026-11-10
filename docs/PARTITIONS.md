@@ -95,11 +95,9 @@ budget. The settings also allow all keys within that budget, or no intermediate
 previews. Mandatory collector inputs use separate retention. An evicted preview
 still has run evidence; explicitly run that key when fresh inspection is needed.
 Neither Git nor project ZIPs contain manifests, selected keys or retained data.
-Each branch and environment has its own manifest and results. Metadata belongs
-to the instance Store and follows run and project history ownership. Deleting a
+Each branch and environment has its own manifest and results. Deleting a
 project removes its partition files; deleting a node releases its artifacts at
-the next run. Immutable files sit outside the SQL worker's writable directories.
-The preview budget is shown in MiB (1 MiB = 1,048,576 bytes).
+the next run.
 
 ## Launch and retry
 
@@ -129,8 +127,7 @@ New keys are **Missing**; stale keys remain visible and can be recomputed with
 Jobs accept the same options through `POST /api/v1/jobs/{slug}/runs`. The body is
 part of the idempotency identity. Readers can page through
 `GET /api/v1/runs/{id}/partitions` and filter the text log by opaque `partition_id`;
-launch and retry require the existing Operator role. Read contexts use
-`manifest=<id>&partition_id=<id>` or `manifest=<id>&partition_mode=all`.
+launch and retry require the Operator role.
 
 ```sh
 duckpad run daily-orders --partitions failed

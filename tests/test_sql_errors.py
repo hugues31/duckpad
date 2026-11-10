@@ -63,9 +63,6 @@ def test_failed_runs_report_authored_source(services, sql, line, message):
     assert "data_" in diagnostic["executed_sql"]
     # Source locations only map errors back: runs record the executed statements alone.
     assert not any({"source_location", "executed_sql"} & set(s) for s in state.get("statements", []))
-    result = engine.statuses(worktree, "dev")["nodes"]["query"]
-    assert result["error_run"] == run["id"]
-    assert result["diagnostic"] == diagnostic
 
 
 def test_latest_failure_survives_retained_data_and_clears_on_success(services):

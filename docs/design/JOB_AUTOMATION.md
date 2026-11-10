@@ -55,10 +55,10 @@ Two instances add machine isolation (a large preview on A cannot slow down or bl
 
 ## Delivery plan
 
-Step 1 is complete. The following work remains proposed, not available:
+The following work remains proposed, not available:
 
-2. **Two instances.** Projects created from a Git URL, the deployed project mode, per-project read-only deploy keys, publishing and fetching tags, new versions listed for promotion.
-3. **Run-time values and notifications.** Variables marked `"runtime": true` in `variables.json` and allowed by a Job can be set at launch (typed, validated, bound, captured and fingerprinted); signed outgoing webhooks when a run ends; a History filter by trigger.
-4. **Ready-made integrations.** An Airflow provider in a separate repository (operator, hook, sensor, deferrable mode, OpenLineage events), a Control-M Application Integrator template, then an internal scheduler and an inbound webhook once time zones, missed occurrences and rejected triggers are specified.
+1. **Two instances.** Projects created from a Git URL, the deployed project mode, per-project read-only deploy keys, publishing and fetching tags, new versions listed for promotion.
+2. **Run-time values and notifications.** Variables marked `"runtime": true` in `variables.json` and allowed by a Job can be set at launch (typed, validated, bound, captured and fingerprinted); signed outgoing webhooks when a run ends; a History filter by trigger.
+3. **Ready-made integrations.** An Airflow provider in a separate repository (operator, hook, sensor, deferrable mode, OpenLineage events), a Control-M Application Integrator template, then an internal scheduler and an inbound webhook once time zones, missed occurrences and rejected triggers are specified.
 
-Steps 2 and 3 can swap if orchestrators need business dates before a dedicated execution instance.
+Steps 1 and 2 can swap if orchestrators need business dates before a dedicated execution instance.

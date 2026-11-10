@@ -4,8 +4,8 @@ Open a project from **Projects** to enter its working branch. **Flow** is the
 canvas; **Code** edits its files; **Documentation** explains the project;
 **Variables** configures shared values; **History** lists executions;
 **Jobs** manages repeatable runs; **Project settings** contains access, connections,
-Python, partitions, extensions and general settings. These tabs keep the selected
-branch and environment when you return to the flow. Partition and extension settings apply to the branch shown in the top bar.
+Python, partitions, extensions and general settings. Partition and extension
+settings apply to the branch shown in the top bar.
 
 **Projects** shows the last modification date and latest run status. From seven
 projects, search by project name, or sort by name, modification date or latest run.
@@ -49,10 +49,7 @@ sections according to the current context and permissions. Actions appear before
 typing; filter by their names or settings category.
 
 Press **Ctrl+F** (**⌘F** on macOS) for canvas search or **Ctrl+K** (**⌘K**) for
-instance search. Both shortcuts also work while typing in the floating AI
-assistant, without sending or clearing the draft. Text editors, other form fields
-and blocking dialogs (including the maximized assistant) retain their own keyboard
-shortcuts.
+instance search.
 
 ## Save and run
 
@@ -63,10 +60,8 @@ saves before it closes. The top bar shows **Saving…**, **All changes saved** o
 **Unsaved changes**; a failed save shows its error where you typed and is retried
 when you edit again or leave the field.
 
-A save applies its project files and Git commit together. If writing a file or
-committing fails, the previous files, staged changes and branch commit are
-restored before the file watcher resumes. Failed assistant edits follow the same
-rule. Existing external edits remain available for their own save.
+A save applies its project files and Git commit together: a failed save leaves
+the previous files and branch commit in place.
 
 Every run first saves pending editor changes and waits for saves already in
 progress; a failed save stops the launch. **Run all** runs the whole flow;
@@ -75,27 +70,15 @@ refused while an input in its scope has no source: the banner names the input
 and the node is selected. **Stop execution** requests cancellation of active
 SQL. A protected environment asks for confirmation.
 
-While a run is active, the strip below the project tabs shows its environment,
-completed nodes and total, with a gently animated progress bar. Partitioned runs
-show completed and failed partitions out of the selected total; failed partitions
-count toward progress but remain identified separately. Preparation uses an
-indeterminate bar until the total is known. The animation respects reduced-motion
-preferences and pauses while stopping. When the project tabs and run controls
-do not fit on one row, the controls move to a second row instead of hiding tabs.
-The same progress strip appears in a running Job's details on the **Jobs** page.
-It also shows an approximate time remaining, using previous successful node
-durations in the same worktree and environment. Without that history, completed
-nodes provide a simple average; partitioned runs use their observed key throughput.
-The estimate updates during execution and shows **Estimating…** until enough timing
-data is available or when work outlasts its estimate. It disappears on cancellation.
+While a run is active, the strip below the project tabs, and a running Job's
+details, show its environment, completed nodes (or partitions, failed ones
+counted separately) and an approximate time remaining. The estimate uses previous
+successful node durations in the same worktree and environment.
 
-Results belong to a branch and environment. A change can mark previous results
-**Stale**, and a failed run retains the previous successful data. Successful canvas
-nodes show the primary output's row count. Stale, failed and warning indicators
-remain visible; the minimap hides when panels leave little canvas space. After a
-backend restart, run again to restore previews and lineage. **History** retains execution
-records; the node's **Log** connects the displayed data to its recorded run.
-See [results and logs](RESULTS.md) and [environments](ENVIRONMENTS.md).
+Successful canvas nodes show the primary output's row count; stale, failed and
+warning indicators remain visible. Results belong to a branch and environment;
+see [result lifetime](RESULTS.md#result-lifetime) and
+[environments](ENVIRONMENTS.md).
 
 ## Undo, copy and paste
 

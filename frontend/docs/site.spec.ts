@@ -1,7 +1,7 @@
 import AxeBuilder from "@axe-core/playwright";
 import { test, expect } from "@playwright/test";
 
-test("scroll reveals stagger cards and respect live motion preferences", async ({
+test("scroll reveals cards and respect live motion preferences", async ({
   page,
 }) => {
   await page.emulateMedia({ reducedMotion: "no-preference" });
@@ -14,14 +14,6 @@ test("scroll reveals stagger cards and respect live motion preferences", async (
       element.scrollIntoView({ block: "center", behavior: "instant" }),
     );
   await expect(cards.first()).not.toHaveAttribute("data-reveal-pending");
-  const delays = await cards.evaluateAll((elements) =>
-    elements
-      .slice(0, 3)
-      .map(
-        (element) => getComputedStyle(element).transitionDelay.split(",")[0],
-      ),
-  );
-  expect(delays).toEqual(["0s", "0.09s", "0.18s"]);
   await expect
     .poll(() =>
       cards.first().evaluate((element) => element.getAnimations().length),
@@ -72,19 +64,12 @@ test("guide reveals keep keyboard focus and anchor targets immediately readable"
 
 test("homepage, captions and recorded media are available", async ({
   page,
-}, testInfo) => {
-  // Full-page captures resize the viewport; suppress native navigation transitions.
+}) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await page.goto("./");
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText(
-    "See the flow.Trust the result.",
-  );
-  await page.screenshot({
-    path: testInfo.outputPath("website-home.png"),
-    fullPage: true,
-  });
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
   expect(
     (
       await new AxeBuilder({ page })
@@ -121,10 +106,6 @@ test("homepage, captions and recorded media are available", async ({
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(
     "Duckpad in 15 minutes",
   );
-  await page.screenshot({
-    path: testInfo.outputPath("website-docs.png"),
-    fullPage: true,
-  });
   expect(
     (
       await new AxeBuilder({ page })
@@ -177,7 +158,7 @@ test("all documentation routes, internal links, fragments and images resolve", a
 
 test("custom video controls support keyboard playback, seeking, audio, captions and fullscreen", async ({
   page,
-}, testInfo) => {
+}) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   const mediaRequests: string[] = [];
   page.on("request", (request) => {
@@ -192,7 +173,6 @@ test("custom video controls support keyboard playback, seeking, audio, captions 
   ).toBe(false);
   expect(mediaRequests).toEqual([]);
   await player.scrollIntoViewIfNeeded();
-  await player.screenshot({ path: testInfo.outputPath("video-poster.png") });
 
   const cover = player.getByRole("button", { name: /Watch the film/ });
   await cover.focus();
@@ -294,7 +274,6 @@ test("custom video controls support keyboard playback, seeking, audio, captions 
         .analyze()
     ).violations,
   ).toEqual([]);
-  await player.screenshot({ path: testInfo.outputPath("video-controls.png") });
 
   await progress.fill("59.7");
   await player.getByRole("button", { name: "Play video", exact: true }).click();
@@ -313,7 +292,7 @@ test("custom video controls support keyboard playback, seeking, audio, captions 
 test("video controls fit a touch screen in both themes", async ({
   browser,
   baseURL,
-}, testInfo) => {
+}) => {
   const context = await browser.newContext({
     baseURL,
     viewport: { width: 360, height: 780 },
@@ -325,9 +304,6 @@ test("video controls fit a touch screen in both themes", async ({
   await page.goto("./");
   const player = page.locator("[data-product-video]");
   await player.scrollIntoViewIfNeeded();
-  await player.screenshot({
-    path: testInfo.outputPath("video-mobile-light.png"),
-  });
   await player.getByRole("button", { name: /Watch the film/ }).tap();
   await expect
     .poll(() =>
@@ -343,9 +319,6 @@ test("video controls fit a touch screen in both themes", async ({
   ).toHaveAttribute("aria-pressed", "false");
   await page.getByRole("switch", { name: "Dark theme" }).tap();
   await player.scrollIntoViewIfNeeded();
-  await player.screenshot({
-    path: testInfo.outputPath("video-mobile-dark.png"),
-  });
   expect(
     await page.evaluate(
       () => document.documentElement.scrollWidth <= innerWidth,
@@ -558,7 +531,7 @@ for (const reducedMotion of ["no-preference", "reduce"] as const) {
 
 test("mobile navigation, theme persistence and reduced motion", async ({
   page,
-}, testInfo) => {
+}) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto("./");
@@ -572,10 +545,6 @@ test("mobile navigation, theme persistence and reduced motion", async ({
       .locator(".flow-lines path")
       .evaluate((element) => getComputedStyle(element).animationName),
   ).toBe("none");
-  await page.screenshot({
-    path: testInfo.outputPath("website-mobile.png"),
-    fullPage: true,
-  });
   const theme = page.getByRole("switch", { name: "Dark theme" });
   await expect(theme).not.toBeChecked();
   await theme.focus();

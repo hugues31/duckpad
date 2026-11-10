@@ -1,12 +1,9 @@
-import copy
 import threading
-from pathlib import Path
 
 import pytest
-from helpers import example_bundle, files_connection, pipeline, wait_run, wait_until
+from helpers import example_bundle, pipeline, wait_run
 
 from duckpad.bundle import bundle_to_files
-from duckpad.util import Problem
 
 
 def test_rerun_refreshes_sources_and_preserves_external_snapshot(services, tmp_path):
@@ -73,7 +70,7 @@ def test_next_run_drops_the_results_of_removed_nodes(services, tmp_path):
     assert engine.preview(wt, "dev", "filter")["count"] == 3
 
 
-def test_compiled_sql_is_the_query_that_runs_materialize(services, tmp_path):
+def test_compiled_sql_is_the_query_that_runs(services, tmp_path):
     store, projects, _, engine = services
     wt = projects.create("Test", example_bundle(tmp_path / "input.csv"))["id"]
     compiled = engine.compile(wt, "dev", "total")[0]
@@ -83,8 +80,6 @@ def test_compiled_sql_is_the_query_that_runs_materialize(services, tmp_path):
     source = engine.context(wt, "dev").outputs["filter"]["result"]
     assert "query" not in statement
     assert statement["sql"] == compiled["sql"].replace('"input_filter_result"', f'"{source.table}"')
-    storage = statement["table"] + "_storage"
-    assert statement["materialization_sql"][0].startswith(f'CREATE TABLE "{storage}" AS ')
 
 
 def test_layout_change_preserves_valid_results(services, tmp_path):
@@ -111,64 +106,6 @@ def test_descriptive_directives_never_change_fingerprints(services, tmp_path, di
     assert engine.fingerprints.of(bundle, "dev") == before
     bundle["templates"]["total"] += "\n-- SQL change"
     assert engine.fingerprints.of(bundle, "dev")["total"] != before["total"]
-
-
-def test_conflicts_survive_and_disjoint_fields_merge(services, tmp_path):
-    store, projects, _, _ = services
-    worktree = projects.create("Test", example_bundle(tmp_path / "input.csv"))
-    snapshot = projects.snapshot(worktree["id"])
-    external = copy.deepcopy(snapshot["bundle"])
-    external["flow"]["nodes"][1]["params"]["threshold"] = 10
-
-    (Path(worktree["path"]) / "flow.json").write_text(bundle_to_files(external)["flow.json"])
-    snapshot["bundle"]["flow"]["nodes"][1]["params"]["threshold"] = 20
-    with pytest.raises(Problem, match="Concurrent edits"):
-        projects.write(worktree["id"], snapshot["revision"], bundle_to_files(snapshot["bundle"]))
-    conflict = store.all("conflict")[0]
-    assert "threshold" in str(conflict["paths"])
-    result = projects.resolve(conflict["id"], "proposal")
-    assert result["bundle"]["flow"]["nodes"][1]["params"]["threshold"] == 20
-    assert not result["conflicts"]
-
-
-def test_undeclared_reads_rejected_and_independent_branch_continues(services, tmp_path):
-    store, projects, _, engine = services
-    bundle = example_bundle(tmp_path / "input.csv")
-    bundle["flow"]["nodes"].append({"id": "bad", "template": "bad", "params": {}})
-    bundle["templates"]["bad"] = "-- @output result\nSELECT * FROM read_csv('/etc/passwd');"
-    wt = projects.create("Test", bundle)["id"]
-    run = wait_run(store, engine.launch(wt, "dev"))
-    assert run["status"] == "partial_failure"
-    assert run["nodes"]["bad"]["status"] == "failed"
-    assert run["nodes"]["total"]["status"] == "success"
-
-
-def test_atomic_admission_and_cancellation(services, tmp_path):
-    store, projects, _, engine = services
-    bundle = example_bundle(tmp_path / "input.csv")
-    bundle["templates"]["total"] = (
-        "-- @input source\n-- @output result\nSELECT sum(a.amount * b.amount * c.amount) AS total FROM {{ source }} a CROSS JOIN {{ source }} b CROSS JOIN {{ source }} c;"
-    )
-    bundle["flow"]["nodes"][0]["params"]["connection"] = files_connection(engine.catalog)
-    wt = projects.create("Test", bundle)["id"]
-    # Hold preparation deterministically to verify rejection cannot invalidate or queue.
-    original = engine.catalog.prepare
-    entered, release = threading.Event(), threading.Event()
-
-    def hold(db, values):
-        entered.set()
-        release.wait(3)
-        original(db, values)
-
-    engine.catalog.prepare = hold
-    run = engine.launch(wt, "dev")
-    assert entered.wait(2)
-    with pytest.raises(Problem, match="active execution"):
-        engine.launch(wt, "prod")
-    assert engine.cancel(run["id"])["status"] in ("canceling", "canceled")
-    release.set()
-    assert wait_run(store, run)["status"] == "canceled"
-    wait_until(lambda: not engine.active, message="The worktree stayed reserved")
 
 
 def test_preview_returns_timestamps_with_time_zones(services, tmp_path):

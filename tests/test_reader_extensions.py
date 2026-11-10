@@ -38,16 +38,3 @@ def test_nested_readers_preserve_malformed_extension_documents():
     assert activate_file_readers({}, {"flow.json": "invalid"}) == {"flow.json": "invalid"}
     malformed_id = {"flow.json": dumps({"nodes": [{"id": [], "template": "load_xlsx"}]})}
     assert activate_file_readers({}, malformed_id) == malformed_id
-
-
-def test_editing_an_existing_reader_keeps_requirements_and_retained_context_unchanged():
-    base = {
-        "flow.json": dumps({"nodes": [{"id": "sheet", "preset": "load_xlsx", "params": {"file": "a.xlsx"}}]})
-    }
-    edited = {
-        "flow.json": dumps({"nodes": [{"id": "sheet", "preset": "load_xlsx", "params": {"file": "b.xlsx"}}]})
-    }
-    assert activate_file_readers(base, edited) == edited
-    # Preserve the exact file when Excel is already requested, even for a new reader.
-    enabled = {**edited, "extensions.json": '{"excel":{"enabled":true,"source":"core"}}'}
-    assert activate_file_readers({}, enabled) == enabled

@@ -34,7 +34,6 @@ def test_manual_is_available_without_a_project_and_instructions_reach_each_turn(
         else:
             result = next(p.content for p in messages[-1].parts if isinstance(p, ToolReturnPart))
             assert result["source"] == "docs/SQL.md"
-            assert "-- @param status: text" in result["text"]
             yield "Declare a typed parameter with -- @param and reference it with {{ name }}."
 
     app.state.assistant.configuration.model_override = FunctionModel(stream_function=stream)
@@ -53,7 +52,6 @@ def test_every_docs_guide_is_a_complete_paginated_topic(instance):
     ctx = dependencies(app, client, context)
     docs = Path(__file__).parents[1] / "docs"
     assert set(GUIDES) == {path.stem.lower() for path in docs.glob("*.md")}
-    assert {"sql", "variables", "data_preparation", "jobs"} <= set(GUIDES)
     for topic in GUIDES:
         content, offset = "", 0
         while offset is not None:

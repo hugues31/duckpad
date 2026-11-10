@@ -216,11 +216,6 @@ test("manage environment labels, colors, confirmation and selected-environment d
       "rgb(18, 58, 188)",
     );
     await expect(card).toContainText("Confirm every run");
-    await page.setViewportSize({ width: 800, height: 900 });
-    await page.screenshot({
-      path: "test-results/environments.png",
-      fullPage: true,
-    });
     await openInstanceSettings(page, "Connections");
     await page
       .getByRole("button", { name: "New connection", exact: true })

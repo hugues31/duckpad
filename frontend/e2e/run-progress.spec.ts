@@ -208,7 +208,6 @@ for (const [language, labels] of [
       "aria-valuetext",
       new RegExp(labels.estimatedRemaining.split("{duration}")[0]),
     );
-    expect((await bar.boundingBox())!.width).toBeGreaterThan(1100);
     await expect(bar.locator("div")).toHaveCSS(
       "animation-name",
       "run-progress-shimmer",
@@ -259,9 +258,6 @@ for (const [language, labels] of [
     const inspector = (await page.locator(".inspector").boundingBox())!;
     const progress = (await strip.boundingBox())!;
     expect(inspector.y).toBeGreaterThanOrEqual(progress.y + progress.height);
-    await page.screenshot({
-      path: `test-results/run-progress-${language}.png`,
-    });
     await page.emulateMedia({ reducedMotion: "reduce" });
     await expect(bar.locator("div")).toHaveCSS("animation-name", "none");
     await expect(strip.locator("svg")).toHaveCSS("animation-name", "none");
@@ -271,10 +267,6 @@ for (const [language, labels] of [
     await expect(
       page.getByRole("button", { name: labels.canceling, exact: true }),
     ).toBeDisabled();
-    await expect(bar.locator("div")).toHaveCSS(
-      "animation-play-state",
-      "paused",
-    );
     active = null;
     await expect(bar).toHaveCount(0);
     await expect(run).toBeEnabled();

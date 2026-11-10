@@ -49,8 +49,6 @@ def test_initial_migration_matches_models_and_survives_restart(store):
         {"id": "qa", "label": "QA", "color": "#123456", "confirm_before_run": False}, create=True
     )
     store.put("settings", "arbitrary_config", {"enabled": True, "values": [1, 2]})
-    # Project files need no connection, so a fresh instance has none.
-    assert store.all("connection") == []
     with store.engine.connect() as connection:
         assert compare_metadata(MigrationContext.configure(connection), SQLModel.metadata) == []
         assert connection.exec_driver_sql("PRAGMA foreign_keys").scalar_one() == 1

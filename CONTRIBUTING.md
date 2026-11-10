@@ -24,8 +24,7 @@ uv run duckpad start --home .duckpad-dev --no-browser
 - Vitest unit tests sit next to the frontend helpers and hooks they cover, as `frontend/src/*.test.ts` or `*.test.tsx`.
 - `website` is the static Astro presentation and documentation site. See the
   [website guide](docs/WEBSITE.md) for its Node.js requirement, local preview,
-  Playwright demo recording and publishing. Update the relevant guide and captured
-  media when changing a demonstrated workflow; CI regenerates them before publishing.
+  Playwright demo recording and publishing.
 
 ## Run the checks
 

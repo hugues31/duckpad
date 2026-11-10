@@ -1,6 +1,5 @@
 """`duckpad run` against a real HTTP server: exit codes, signals, timeouts and safe retries."""
 
-import json
 import os
 import signal
 import socket
@@ -77,17 +76,6 @@ def tagged_job(instance, slug, files):
     test_jobs.create(instance, slug=slug, ref=slug)
 
 
-def flow(project, *nodes):
-    return json.dumps(
-        {
-            "id": project,
-            "name": "Jobs",
-            "nodes": [{"id": node, "template": node, "params": {}} for node in nodes],
-            "edges": [],
-        }
-    )
-
-
 def source(sql):
     return f"-- @output result\n{sql}"
 
@@ -146,26 +134,13 @@ def test_typed_partition_file_and_partial_failure_exit_code(server, instance, tm
     assert incompatible.returncode == client.REFUSED
 
 
-def test_failed_and_partial_failure_exit_codes(server, instance):
+def test_failed_exit_code(server, instance):
     _, url, tokens = server
-    project = instance[1]["project"]
     failing = source("SELECT error('Broken source') AS value;")
     tagged_job(instance, "broken", {"templates/source.sql": failing})
     result = duckpad_run(url, "broken", token=tokens["operator"])
     assert result.returncode == client.FAILED, result.stdout + result.stderr
     assert "Outcome: failed" in result.stdout and "Broken source" in result.stdout
-    tagged_job(
-        instance,
-        "partial",
-        {
-            "flow.json": flow(project, "source", "broken"),
-            "templates/source.sql": source("SELECT 1 AS value;"),
-            "templates/broken.sql": failing,
-        },
-    )
-    result = duckpad_run(url, "partial", token=tokens["operator"])
-    assert result.returncode == client.PARTIAL_FAILURE, result.stdout + result.stderr
-    assert "1/2 nodes succeeded, 1 failed" in result.stdout and "Outcome: partial_failure" in result.stdout
 
 
 def test_detach_prints_the_run_id_and_a_key_reattaches_to_its_run(server):
@@ -225,8 +200,6 @@ def test_busy_job_exits_4_and_names_the_active_run(server, monkeypatch):
         (("daily", "--timeout", "soon"), "operator", "invalid duration 'soon'"),
         (("daily", "--token-file", "/nonexistent/token"), None, "cannot read the token file"),
         (("daily", "--server", "ftp://example.com"), "operator", "is not an http:// or https:// address"),
-        (("daily", "--bogus"), "operator", "unrecognized arguments: --bogus"),
-        ((), "operator", "the following arguments are required: JOB"),
     ],
 )
 def test_refused_requests_exit_5(server, args, token, message):

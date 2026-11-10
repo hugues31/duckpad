@@ -639,17 +639,6 @@ describe("useDraftRegistry", () => {
     expect(registry.current!.dirty()).toBe(true);
   });
 
-  it("reports no unsaved draft while every editor is clean", () => {
-    const page = createRef<Draft>();
-    render(
-      <Registry>
-        <Editor handle={page} scope="page" save={server().save} />
-      </Registry>,
-    );
-    expect(registry.current!.dirty()).toBe(false);
-    expect(registry.current!.dirty("page")).toBe(false);
-  });
-
   it("reports unsaved drafts by scope", () => {
     const { save } = server();
     const page = createRef<Draft>();

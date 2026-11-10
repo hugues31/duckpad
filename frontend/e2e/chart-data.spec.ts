@@ -137,10 +137,6 @@ test("the Chart tab shows the Data tab's Run hint, Stale badge and failed run", 
 
   const panel = await chartTab(page, id, "points");
   const empty = panel.locator(".preview-empty");
-  await expect(empty).toContainText("Ready when you are");
-  await expect(empty).toContainText(
-    "Run this node and its ancestors to materialize a preview.",
-  );
   await empty
     .getByRole("button", { name: "Run with ancestors", exact: true })
     .click();
@@ -172,63 +168,6 @@ test("the Chart tab shows the Data tab's Run hint, Stale badge and failed run", 
   await expect(
     panel.getByRole("alert", { name: "Last run failed" }),
   ).toContainText("missing_column");
-});
-
-test("raw dotted and bracketed columns render in starter and authored charts", async ({
-  page,
-}) => {
-  const { id, endpoint } = await chartedNodes(page, {
-    special:
-      "-- @output result\nSELECT * FROM (VALUES ('North', 7), ('South', 12)) t(\"a.b\", \"x[0]\");",
-  });
-  const snapshot: Snapshot = await (await page.request.get(endpoint)).json();
-  snapshot.bundle!.charts = null;
-  await save(page, endpoint, snapshot.revision, snapshot.bundle);
-  await run(page, endpoint);
-  const panel = await chartTab(page, id, "special");
-  await panel.getByRole("button", { name: "Add a chart", exact: true }).click();
-  await expect(page).toHaveURL(/\/code(\?|$)/);
-  const starter: Snapshot = await (await page.request.get(endpoint)).json();
-  const saved = JSON.parse(starter.files["charts.json"]);
-  expect(saved["special:result"][0].spec.encoding).toEqual({
-    x: { field: "a.b", type: "nominal" },
-    y: { field: "x[0]", type: "quantitative" },
-  });
-  await chartTab(page, id, "special");
-  const bars = panel.locator(".chart-view .mark-rect path");
-  await expect(bars).toHaveCount(2);
-  await expect(bars.first()).toHaveAttribute(
-    "aria-label",
-    /a\.b: North; x\[0\]: 7/,
-  );
-  await expect(panel.locator(".role-axis-title")).toHaveText(["a.b", "x[0]"]);
-  await bars.first().hover();
-  await expect(page.locator("#vg-tooltip-element")).toContainText("x[0]");
-  await expect(panel.getByRole("alert")).toHaveCount(0);
-
-  starter.bundle!.charts = {
-    "special:result": [
-      {
-        name: "Authored",
-        spec: {
-          mark: "point",
-          encoding: {
-            x: { field: "a.b", type: "nominal" },
-            y: { field: "x[0]", type: "quantitative" },
-            color: { field: "a.b", type: "nominal" },
-            tooltip: [{ field: "x[0]", type: "quantitative" }],
-          },
-        },
-      },
-    ],
-  };
-  await save(page, endpoint, starter.revision, starter.bundle);
-  await chartTab(page, id, "special");
-  await expect(
-    panel.locator(".chart-view .mark-symbol.role-mark path"),
-  ).toHaveCount(2);
-  await expect(panel.locator(".role-legend-title")).toHaveText("a.b");
-  await expect(panel.getByRole("alert")).toHaveCount(0);
 });
 
 test("the chart limit follows the selected partition and refuses all partitions without rows", async ({

@@ -7,7 +7,6 @@ the flow and connect its tabular ports to SQL nodes. Each ordinary insertion own
 an independent copy of the code; **Add linked** (Alt+click or right-click the
 palette entry) creates instances that share the template. Results, parameters, messages and downloads use the same panels.
 Operators run reviewed jobs; they cannot activate Python or edit its code.
-Assistant run approvals list the Python nodes that will execute.
 
 Use a `# @label My transform` comment to name the template's palette entry.
 
@@ -85,7 +84,7 @@ Run again after a dependency change; existing contexts are recreated.
 Keep the generated `duckdb==...` pin, `.duckpad-runtime/...` source and
 `tool.duckpad.sdk-contract`. The runtime wheel is supplied from the server's
 installed DuckDB binary, including an operator's portable CPU build. It is not
-downloaded from PyPI. The SDK is installed in the prepared environment and has no API-server dependencies. That environment’s interpreter can also import `duckpad` directly for local node calls. Package `.pth` hooks run only after the worker applies confinement. The
+downloaded from PyPI. Package `.pth` hooks run only after the worker applies confinement. The
 generated `pytz` dependency supports DuckDB timestamp conversion. Tags and jobs
 use `uv --locked`: missing, conflicting, stale or incompatible locks fail without
 editing the tag. Regenerate a conflicted lock on an editable branch and tag the
@@ -113,10 +112,8 @@ and bounded logs, including canceled preparations. Stopping installation removes
 the incomplete environment so the next run can safely retry.
 
 While dependencies are resolved on save or the environment is built for a run,
-the workspace shows a notice with the current preparation stage, an indeterminate
-progress bar, elapsed time and expandable live uv output. No download percentage is
-estimated. A success closes the notice after a few seconds unless its log is open; a
-failure stays until closed. Cached environments are reused without reinstalling
+the workspace shows a notice with the current preparation stage, elapsed time and
+live uv output. Cached environments are reused without reinstalling
 dependencies or showing the notice. Each branch and Job keeps its own latest
 preparation: the project’s Python settings show the selected branch’s, with its error
 and up to 16,000 characters of log output, credentials and local runtime paths
@@ -177,7 +174,6 @@ url = "https://artifactory.example.com/artifactory/api/pypi/python/simple"
 default = true
 ```
 
-`default = true` (or `index-url`) replaces PyPI; additional indexes retain it.
 Duckpad accepts sources declared in these operator files when validating
 `uv.lock`. `pip.conf` and `PIP_INDEX_URL` do not configure uv. Project index
 overrides are still rejected: only `tool.uv.package` and the server's DuckDB
@@ -188,9 +184,7 @@ PEM CA bundle readable by the Duckpad service account, and mount it into the
 container when applicable. For example, set
 `SSL_CERT_FILE=/path/to/company-ca-bundle.pem` in that service's environment.
 The bundle replaces uv's default CA bundle, so include every CA needed by the
-configured sources. Keep TLS verification enabled. Proxy settings, when needed,
-also belong in the server environment (`HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY`)
-or its user/system `uv.toml` as shown below.
+configured sources. Keep TLS verification enabled.
 See [uv's custom CA configuration](https://docs.astral.sh/uv/concepts/authentication/certificates/#custom-certificates).
 
 After restarting the server, run the Python node on an editable branch. Its
@@ -218,16 +212,11 @@ If preparation still fails:
 
 ### User and system uv configuration
 
-Duckpad reads uv configuration for the account running the **server**. On Linux
-and macOS, user settings come from `$XDG_CONFIG_HOME/uv/uv.toml`, or
-`~/.config/uv/uv.toml`. System settings come from the first `uv/uv.toml` found
-in `$XDG_CONFIG_DIRS` (default `/etc/xdg`), falling back to `/etc/uv/uv.toml`.
-On Windows, uv uses `%APPDATA%\uv\uv.toml` and
-`%SYSTEMDRIVE%\ProgramData\uv\uv.toml`.
-
-User settings override system settings; lists are combined with user entries
-first. Environment variables override file settings. Proxy, certificates,
-indexes and cache settings can all be configured in these files. For example:
+Duckpad reads the user and system `uv.toml` files of the account running the
+**server**, found as described in
+[uv configuration discovery](https://docs.astral.sh/uv/concepts/configuration-files/).
+Environment variables override file settings. Proxy, certificates, indexes and
+cache settings can all be configured in these files. For example:
 
 ```toml
 https-proxy = "http://proxy.example.com:8080"
@@ -239,7 +228,6 @@ In Docker, the file must exist **inside the container**, for example by mounting
 an operator-owned file read-only at `/etc/uv/uv.toml`. Install the company CA
 certificates in the container's trust store when using `system-certs = true`.
 The host account's configuration is not automatically available to the service.
-See [uv configuration discovery](https://docs.astral.sh/uv/concepts/configuration-files/).
 
 Duckpad's generated manifest stops discovery of project and parent-directory
 configuration. `UV_CONFIG_FILE` and `UV_NO_CONFIG` are not forwarded. The server
@@ -279,9 +267,7 @@ from the partition key or provide coordination in the destination system.
 
 Native relations retain DuckDB types, including decimals, huge integers, dates,
 timezone timestamps, nulls and nested values. Tabular inputs and outputs never
-travel as JSON or Python row collections between processes. The worker
-materializes successful outputs once for the existing result and lineage model.
-Scalar preview pages still use Duckpad's normal display encoding.
+travel as JSON or Python row collections between processes.
 
 Return adapters accept Arrow tables or record-batch readers, pandas DataFrames,
 and Polars DataFrames. Install the corresponding project libraries, including
@@ -332,13 +318,11 @@ a partial or unknown outcome (see
 
 ## Trust boundary
 
-Python shares the existing SQL worker's filesystem policy. Isolated Linux mode
+Python shares the SQL worker's filesystem policy. Isolated Linux mode
 allows authorized data roots, temporary files and read-only runtime libraries;
 project code cannot read the API metadata database or inherited API credentials.
 Trusted local mode, including on macOS and Windows, uses the same worker
 protocol without Landlock and has the user's ordinary filesystem permissions.
-Process pipes work on every platform; no Linux namespace or kernel upgrade is
-required beyond the existing isolated SQL requirements.
 
 This is **not a hostile-code sandbox**. Network access and same-user process
 signals are deliberately unconfined. Administrators must trust project editors
@@ -350,7 +334,7 @@ inspection. Secrets are never injected into environment variables. Exact secret
 values are redacted from recorded messages; arbitrary encodings or external
 exfiltration cannot be prevented. There is no HTTP credential proxy.
 
-## Examples and performance check
+## Examples
 
 - [GitHub releases](examples/python/github_releases.py): a real paginated API
   source with 10 records and a 2 MiB ceiling per page. Create a custom connector
@@ -362,8 +346,5 @@ exfiltration cannot be prevented. There is no HTTP credential proxy.
 - [Encoded ZIP](examples/python/encoded_zip.py): a SQL relation streamed to CSV,
   converted in 64 KiB character chunks to Windows-1252, then compressed into a
   managed download. Unrepresentable characters fail explicitly.
-- `python scripts/benchmark_python.py --rows 1000000`: a reproducible
-  SQL → Python relation filter → SQL aggregate run, reporting elapsed time and
-  API/worker RSS. Environment installation is excluded. The reference budget is
-  30 seconds and 512 MiB incremental RSS for this narrow three-column fixture;
-  these are a regression check, not limits or promises for arbitrary Python.
+
+For Python node performance, see [Scaling benchmarks](BENCHMARKS.md#python-nodes).

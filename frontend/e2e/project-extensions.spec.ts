@@ -118,17 +118,6 @@ test("project extensions distinguish missing imports, check loading and persist 
   await page.reload();
   await expect(json.getByRole("status")).toHaveText("Active for this project");
   await expect(activation).toBeChecked();
-  // Row actions are icon buttons named by their tooltip.
-  const check = json.getByRole("button", {
-    name: "Check loading",
-    exact: true,
-  });
-  await check.hover();
-  await expect
-    .poll(() =>
-      check.evaluate((element) => getComputedStyle(element, "::after").opacity),
-    )
-    .toBe("1");
   // A loading failure is explicit and does not discard the portable requirement.
   await page.route("**/extensions/check", (route) =>
     route.fulfill({

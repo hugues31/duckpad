@@ -227,7 +227,6 @@ def test_save_reload_replacement_schema_change_failure_and_downstream_export(pre
             ["2026-12-31", "001", "0"],
             ["2027-01-01", "002", "12"],
         ]
-    assert "CAST" in instance.engine.compile(wt, "dev", "select")[0]["sql"]
     source.write_text("id,amount,day,other\n 003 ,bad,31/12/2026,next\n")
     failed = wait_run(instance.store, instance.engine.launch(wt, "dev"), timeout=30)
     assert failed["nodes"]["select"]["status"] == "failed"

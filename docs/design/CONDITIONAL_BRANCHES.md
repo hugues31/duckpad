@@ -1,6 +1,6 @@
 # Conditional branches (design proposal)
 
-**Status: accepted on 2 November 2026 (see [Decisions](#decisions)), not implemented yet.** This document defines the first version; the mockups illustrate the proposed interface.
+**Status: accepted (see [Decisions](#decisions)), not implemented.** This document defines the first version; the mockups illustrate the proposed interface.
 
 ## Summary
 
@@ -17,8 +17,6 @@ every join, export or SQL node. Inactivity propagation and the explicit junction
 follow KNIME's IF/CASE switches.
 
 ## Decisions
-
-Accepted on 2 November 2026:
 
 1. `enabled` belongs to a node, including component instances, never to an output port in v1. Omission means active; there is no implicit environment predicate.
 2. Conditions use a restricted boolean expression over typed variables and literals. They cannot query data, call functions or refer to columns or partitions.
@@ -260,7 +258,7 @@ No ordinary SQL template should gain scheduling privileges from its name. No fro
 
 ## Delivery and acceptance
 
-Step 0, this document and its mockups, was accepted on 2 November 2026. A dedicated implementation issue delivers these steps in order:
+A dedicated implementation issue delivers these steps in order:
 
 | Step | Deliverable | Required evidence |
 | --- | --- | --- |

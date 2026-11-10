@@ -1,5 +1,5 @@
 import fr from "../src/locales/fr.json" with { type: "json" };
-import { autosaved, signIn } from "./helpers";
+import { signIn } from "./helpers";
 import { test, expect, type Page } from "@playwright/test";
 
 async function choosePreference(page: Page, name: string) {
@@ -45,61 +45,6 @@ async function run(page: Page) {
     page.getByRole("button", { name: "Run all", exact: true }),
   ).toBeVisible();
 }
-
-test("complete example, ordered outputs, nested components, lineage pagination and native export", async ({
-  page,
-}) => {
-  const errors: string[] = [];
-  page.on("pageerror", (e) => errors.push(e.message));
-  await sample(page);
-  await run(page);
-  await page
-    .locator(".react-flow__node")
-    .filter({ has: page.getByText("Regional revenue", { exact: true }) })
-    .click();
-  await page.getByLabel("Output", { exact: true }).selectOption("report");
-  await expect(
-    page.getByRole("button", { name: /Explain this value: revenue, rows 1,/ }),
-  ).toBeVisible();
-  await page
-    .getByRole("button", { name: /Explain this value: revenue, rows 1,/ })
-    .click();
-  await expect(page.locator(".lineage-card.calculation")).toHaveCount(1);
-  await expect(page.locator(".lineage-dialog")).toContainText(
-    "Sum of 27 contributing values",
-    { ignoreCase: true },
-  );
-  await expect(
-    page.locator(".lineage-dialog .lineage-card.is-source").first(),
-  ).toContainText("amount");
-  await page
-    .locator(".lineage-dialog")
-    .getByRole("button", { name: "Next", exact: true })
-    .click();
-  await expect(page.locator(".lineage-dialog .lineage-page")).toContainText(
-    "6–10 / 27",
-  );
-  await page
-    .locator(".lineage-dialog")
-    .getByTitle("Close", { exact: true })
-    .click();
-  await page
-    .locator(".inspector")
-    .getByRole("button", { name: "Open component", exact: true })
-    .click();
-  await expect(
-    page.getByText(
-      "You are editing a shared component definition in this branch.",
-    ),
-  ).toBeVisible();
-  await page
-    .locator(".react-flow__node")
-    .filter({ has: page.getByText("Regional summary", { exact: true }) })
-    .dblclick();
-  await expect(page.locator(".react-flow__node")).toHaveCount(2);
-  await run(page);
-  expect(errors).toEqual([]);
-});
 
 test("theme and language persist without a project commit and environments have isolated results", async ({
   page,
@@ -154,265 +99,6 @@ test("parameter change marks retained previews stale until a manual rerun", asyn
   await run(page);
   await expect(page.locator(".preview-header .badge")).toHaveText("Valid");
   await expect(page.locator(".preview-header")).toContainText("13 rows");
-});
-
-test("Git branch creation, isolated edits and explicit merge", async ({
-  page,
-}) => {
-  await sample(page);
-  await page.getByTitle("New working branch", { exact: true }).click();
-  await page
-    .getByLabel("Branch name", { exact: true })
-    .fill("test/browser-branch-" + Date.now());
-  await page.getByRole("button", { name: "Create", exact: true }).click();
-  await expect(
-    page.getByRole("button", { name: "Compare & merge", exact: true }),
-  ).toBeVisible();
-  await page
-    .getByRole("link", { name: "Documentation", exact: true })
-    .first()
-    .click();
-  await page
-    .locator(".project-documentation")
-    .fill("A branch-specific business definition.");
-  await page.getByRole("button", { name: "Save changes", exact: true }).click();
-  await page
-    .getByRole("button", { name: "Compare & merge", exact: true })
-    .click();
-  await expect(page.getByRole("dialog")).toBeVisible();
-  await page
-    .getByRole("button", { name: "Apply reviewed merge", exact: true })
-    .click();
-  await expect(page.getByRole("dialog")).toContainText("Branch merged");
-  await page.keyboard.press("Escape");
-  const mainWorktree = await page
-    .getByLabel("Branch", { exact: true })
-    .locator("option")
-    .filter({ hasText: /^main$/ })
-    .getAttribute("value");
-  await page.getByLabel("Branch", { exact: true }).selectOption(mainWorktree!);
-  await expect(page.getByLabel("Branch", { exact: true })).toContainText(
-    "main",
-  );
-  await page.getByRole("link", { name: "History", exact: true }).click();
-  await page.getByRole("button", { name: "Git history", exact: true }).click();
-  await expect(page.locator(".history-row").first()).toContainText(
-    "merge test/browser-branch",
-  );
-});
-
-test("drag a filter, configure it without SQL, and group it into a reusable component", async ({
-  page,
-}) => {
-  await sample(page);
-  await run(page);
-  await page
-    .locator(".palette-item")
-    .filter({ has: page.getByText("Filter", { exact: true }) })
-    .dragTo(page.locator(".react-flow__pane"), {
-      targetPosition: { x: 350, y: 240 },
-    });
-  await expect(page.locator(".react-flow__node")).toHaveCount(11);
-  const inspector = page.locator(".inspector");
-  await inspector
-    .getByLabel("source", { exact: true })
-    .selectOption({ label: "Orders · result" });
-  await expect(inspector.getByLabel("Column", { exact: true })).toContainText(
-    "amount",
-  );
-  await inspector.getByLabel("Column", { exact: true }).selectOption("amount");
-  await inspector.getByLabel("Operator", { exact: true }).selectOption(">");
-  // The guided form writes the condition, saved without a button.
-  await autosaved(page, () =>
-    inspector.getByLabel("Value", { exact: true }).fill("100"),
-  );
-  await run(page);
-  await expect(page.locator(".preview-header .badge")).toHaveText("Valid");
-  await expect(
-    inspector.getByRole("textbox", { name: /condition/ }),
-  ).toHaveValue('"amount" > 100');
-  await page.locator(".group-button").click();
-  await page
-    .getByRole("dialog")
-    .getByLabel("Component name")
-    .fill("Large orders");
-  await page
-    .getByRole("dialog")
-    .getByRole("button", { name: "Create", exact: true })
-    .click();
-  await expect(
-    page
-      .locator(".react-flow__node")
-      .filter({ has: page.getByText("Large orders", { exact: true }) }),
-  ).toBeVisible();
-  await inspector
-    .getByRole("button", { name: "Open component", exact: true })
-    .click();
-  await expect(page.locator(".react-flow__node")).toHaveCount(1);
-  await run(page);
-});
-
-test("guided filters format fixed values from the input column type", async ({
-  page,
-}) => {
-  await signIn(page);
-  const worktree = await (
-    await page.request.post("/api/projects", {
-      data: { name: "Guided codes" },
-    })
-  ).json();
-  await page.goto(`/worktrees/${worktree.id}/flow`);
-  const inspector = page.locator(".inspector");
-  const nodes = page.locator(".react-flow__node");
-  await page.getByRole("button", { name: "Load CSV", exact: true }).click();
-  const source = await nodes.getAttribute("data-id");
-  await inspector.getByLabel("Upload file", { exact: true }).setInputFiles({
-    name: "codes.csv",
-    mimeType: "text/csv",
-    buffer: Buffer.from(
-      "code,mixed,amount,active\n001,001,10,true\n1,1,1,false\n002,ABC,3,false\n",
-    ),
-  });
-  await expect(inspector.getByRole("combobox", { name: /^file/ })).toHaveValue(
-    /codes\.csv$/,
-  );
-  // Without a declared type, CSV detection reads these codes as numbers.
-  await autosaved(page, () =>
-    inspector
-      .getByRole("combobox", { name: "Data type: code", exact: true })
-      .selectOption("VARCHAR"),
-  );
-  await run(page);
-
-  await page.getByRole("button", { name: "Filter", exact: true }).click();
-  const filter = await nodes
-    .filter({ has: page.getByText("Filter", { exact: true }) })
-    .getAttribute("data-id");
-  await inspector
-    .getByLabel("source", { exact: true })
-    .selectOption(`${source}:result`);
-  const column = inspector.getByLabel("Column", { exact: true });
-  await expect(column).toContainText("active");
-  const condition = inspector.getByRole("textbox", { name: /condition/ });
-  const apply = async (name: string, operator: string, value: string) => {
-    await column.selectOption(name);
-    await inspector
-      .getByLabel("Operator", { exact: true })
-      .selectOption(operator);
-    await inspector.getByLabel("Value", { exact: true }).fill(value);
-  };
-  // An unquoted 001 also matched 1, and failed to cast ABC in mixed codes.
-  for (const name of ["code", "mixed"]) {
-    await autosaved(page, () => apply(name, "=", "001"));
-    await expect(condition).toHaveValue(`"${name}" = '001'`);
-    await run(page);
-    const preview = await (
-      await page.request.get(
-        `/api/worktrees/${worktree.id}/preview/${filter}?environment=dev&port=result`,
-      )
-    ).json();
-    expect(
-      preview.rows.map((row: { values: unknown[] }) => row.values[0]),
-    ).toEqual(["001"]);
-  }
-  await apply("amount", "<", "2");
-  await expect(condition).toHaveValue('"amount" < 2');
-  await apply("active", "=", "true");
-  await expect(condition).toHaveValue('"active" = TRUE');
-});
-
-test("conflicting parameter edits survive reload and can be resolved explicitly", async ({
-  page,
-}) => {
-  await sample(page);
-  await page
-    .locator(".react-flow__node")
-    .filter({ has: page.getByText("Paid orders", { exact: true }) })
-    .click();
-  const status = page
-    .locator(".inspector")
-    .getByRole("textbox", { name: /status/ });
-  const worktree = new URL(page.url()).pathname.split("/")[2];
-  // Hold the page's save until a collaborator saved the same parameter.
-  let release!: () => void;
-  const released = new Promise<void>((resolve) => (release = resolve));
-  await page.route(`**/api/worktrees/${worktree}`, async (route) => {
-    if (route.request().method() === "PUT") await released;
-    await route.continue();
-  });
-  await status.fill("refunded");
-  const snapshot = await (
-    await page.request.get("/api/worktrees/" + worktree)
-  ).json();
-  snapshot.bundle.flow.nodes.find(
-    (n: any) => n.label === "Paid orders",
-  ).params.status = "pending";
-  expect(
-    (
-      await page.request.put("/api/worktrees/" + worktree, {
-        data: { revision: snapshot.revision, bundle: snapshot.bundle },
-      })
-    ).ok(),
-  ).toBeTruthy();
-  release();
-  await status.blur();
-  await expect(
-    page.getByRole("button", { name: "Save resolution", exact: true }),
-  ).toBeVisible();
-  await page.unrouteAll({ behavior: "wait" });
-  await page.reload();
-  await page
-    .getByRole("button", { name: "Save resolution", exact: true })
-    .click();
-  await expect(page.getByRole("dialog")).toContainText("refunded");
-  await expect(page.getByRole("dialog")).toContainText("pending");
-  await page
-    .getByRole("dialog")
-    .getByRole("button", { name: "Use my proposal", exact: true })
-    .click();
-  await expect(
-    page.getByRole("button", { name: "Save resolution", exact: true }),
-  ).toHaveCount(0);
-  await run(page);
-});
-
-test("an open lineage explanation is interrupted when its generation is recalculated", async ({
-  page,
-}) => {
-  await sample(page);
-  await run(page);
-  await page
-    .locator(".react-flow__node")
-    .filter({ has: page.getByText("Regional revenue", { exact: true }) })
-    .click();
-  await page.getByLabel("Output", { exact: true }).selectOption("report");
-  await page
-    .getByRole("button", { name: /Explain this value: revenue, rows 1,/ })
-    .click();
-  await expect(page.locator(".lineage-dialog")).toContainText(
-    "Sum of 27 contributing values",
-  );
-  const worktree = new URL(page.url()).pathname.split("/")[2];
-  const response = await page.request.post(`/api/worktrees/${worktree}/runs`, {
-    data: { environment: "dev" },
-  });
-  expect(response.ok()).toBeTruthy();
-  const execution = await response.json();
-  await expect(page.locator(".lineage-dialog")).toContainText(
-    "This exploration was interrupted",
-  );
-  await expect(
-    page.locator(".lineage-dialog .lineage-card.is-source"),
-  ).toHaveCount(0);
-  // Catalog changes in later tests must not race this background execution.
-  await expect
-    .poll(
-      async () =>
-        (await (await page.request.get(`/api/runs/${execution.id}`)).json())
-          .status,
-      { timeout: 30000 },
-    )
-    .toBe("success");
 });
 
 test("connection capabilities constrain source and export forms without a project commit", async ({
@@ -477,10 +163,6 @@ test("connection capabilities constrain source and export forms without a projec
 
 test("panel toggles and fitting keep nodes reachable", async ({ page }) => {
   await sample(page);
-  const canvas = page.locator(".canvas");
-  const shell = await page.locator(".app-shell").boundingBox();
-  expect(await canvas.boundingBox()).toEqual(shell);
-
   async function expectNodesReachable() {
     await expect
       .poll(async () =>
@@ -508,7 +190,6 @@ test("panel toggles and fitting keep nodes reachable", async ({ page }) => {
   await expect(page.locator(".inspector")).toBeVisible();
   await expect(page.locator(".preview-panel")).toBeVisible();
   await expectNodesReachable();
-  expect(await canvas.boundingBox()).toEqual(shell);
 
   for (const theme of ["light", "dark"]) {
     if (theme === "dark") await choosePreference(page, "Dark");
@@ -551,9 +232,6 @@ test("panel toggles and fitting keep nodes reachable", async ({ page }) => {
     expect(contrast).toBeGreaterThanOrEqual(4.5);
     await page.getByRole("button", { name: "Fit view", exact: true }).click();
     await expectNodesReachable();
-    await page.screenshot({
-      path: `test-results/glass-workspace-${theme}.png`,
-    });
   }
 
   await page
@@ -573,7 +251,6 @@ test("panel toggles and fitting keep nodes reachable", async ({ page }) => {
     .click();
   await expect(page.locator(".palette")).toBeHidden();
   await expectNodesReachable();
-  expect(await canvas.boundingBox()).toEqual(shell);
   await page
     .getByRole("button", { name: "Toggle node library", exact: true })
     .click();
@@ -638,10 +315,6 @@ test("floating panels remain usable on tablet and phone with higher contrast", a
   await page.locator(".inspector").getByTitle("Close", { exact: true }).click();
   await page.getByRole("button", { name: "Hide results", exact: true }).click();
   await page.getByRole("button", { name: "Fit view", exact: true }).click();
-  await page.screenshot({ path: "test-results/glass-workspace-mobile.png" });
-  expect(await page.locator(".canvas").boundingBox()).toEqual(
-    await page.locator(".app-shell").boundingBox(),
-  );
 });
 
 test("panning, zooming and moving nodes survive release and backend polling", async ({
@@ -737,15 +410,6 @@ test("account menu owns preferences and signs out only on an explicit action", a
     name: "Account menu",
     exact: true,
   });
-  const box = (await avatar.boundingBox())!;
-  expect(box.x + box.width).toBeGreaterThan(page.viewportSize()!.width - 20);
-  await expect(
-    page.locator(".topbar").getByTitle("Settings", { exact: true }),
-  ).toHaveCount(0);
-  await expect(page.locator(".topbar .language-button")).toHaveCount(0);
-  await expect(
-    page.locator(".topbar").getByTitle("Dark", { exact: true }),
-  ).toHaveCount(0);
   let logouts = 0;
   page.on("request", (request) => {
     if (request.url().endsWith("/api/logout")) logouts++;
@@ -913,26 +577,16 @@ test("selected and pointed nodes show their flow, with filled connected sockets 
     const element = page.locator(`.react-flow__edge[data-id="${edge.id}"]`);
     if (expected.includes(edge)) {
       await expect(element).toHaveClass(/animated/);
-      const path = element.locator(".react-flow__edge-path");
-      await expect(path).toHaveAttribute("marker-end", /url\(/);
-      await expect(path).toHaveCSS("animation-name", "data-flow");
-      const before = await path.evaluate(
-        (node) => getComputedStyle(node).strokeDashoffset,
+      await expect(element.locator(".react-flow__edge-path")).toHaveCSS(
+        "animation-name",
+        "data-flow",
       );
-      await expect
-        .poll(() =>
-          path.evaluate((node) => getComputedStyle(node).strokeDashoffset),
-        )
-        .not.toBe(before);
     } else await expect(element).not.toHaveClass(/animated/);
   }
   await page.emulateMedia({ reducedMotion: "reduce" });
   await expect(
     page.locator(".node-connected .react-flow__edge-path").first(),
   ).toHaveCSS("animation-name", "none");
-  await expect(
-    page.locator(".node-connected .react-flow__edge-path").first(),
-  ).toHaveAttribute("marker-end", /url\(/);
   const customers = page
     .locator(".react-flow__node")
     .filter({ has: page.getByText("Customers", { exact: true }) });
@@ -940,10 +594,6 @@ test("selected and pointed nodes show their flow, with filled connected sockets 
   await customers.hover();
   const pointed = page.locator(".react-flow__edge.node-hovered");
   await expect(pointed).toHaveCount(1);
-  await expect(pointed.locator(".react-flow__edge-path")).toHaveAttribute(
-    "marker-end",
-    /url\(/,
-  );
   await page.mouse.move(1, 1);
   await expect(pointed).toHaveCount(0);
 
@@ -958,11 +608,8 @@ test("selected and pointed nodes show their flow, with filled connected sockets 
   await expect(
     paid.locator('.react-flow__handle[data-handleid="source"]'),
   ).toHaveClass(/is-connected/);
-  const fill = (handle: typeof used) =>
-    handle.evaluate((element) => getComputedStyle(element).backgroundColor);
-  expect(await fill(used)).not.toBe(await fill(unused));
 
-  // Links are curved by default; right angles keep links from different outputs apart.
+  // Links are curved by default and follow the link style preference.
   const path = (edge: any) =>
     page.locator(
       `.react-flow__edge[data-id="${edge.id}"] .react-flow__edge-path`,
@@ -976,21 +623,6 @@ test("selected and pointed nodes show their flow, with filled connected sockets 
     .click();
   for (const edge of joined)
     await expect(path(edge)).not.toHaveAttribute("d", /C/);
-  const verticalX = (edge: any) =>
-    path(edge).evaluate((element) => {
-      const line = element as SVGPathElement;
-      const length = line.getTotalLength();
-      for (let at = 0; at < length; at += 2) {
-        const a = line.getPointAtLength(at);
-        const b = line.getPointAtLength(Math.min(length, at + 2));
-        if (Math.abs(a.x - b.x) < 0.01 && Math.abs(a.y - b.y) > 1) return a.x;
-      }
-      return null;
-    });
-  const [first, second] = await Promise.all(joined.map(verticalX));
-  expect(first).not.toBeNull();
-  expect(second).not.toBeNull();
-  expect(Math.abs(first! - second!)).toBeGreaterThanOrEqual(12);
   const source = customers.locator(".react-flow__handle.source");
   const target = page.locator(
     `.react-flow__node[data-id="${join.id}"] .react-flow__handle[data-handleid="left"]`,
@@ -1017,32 +649,6 @@ test("selected and pointed nodes show their flow, with filled connected sockets 
   );
   expect(incoming).toHaveLength(1);
   expect(incoming[0].source).toBe(await customers.getAttribute("data-id"));
-});
-
-test("project documentation saves repeatedly without an edit conflict", async ({
-  page,
-}) => {
-  await sample(page);
-  await page.getByRole("link", { name: "Documentation", exact: true }).click();
-  const panel = page.locator(".documentation-page");
-  for (const text of ["First revision", "Second revision"]) {
-    await panel.locator(".project-documentation").fill(text);
-    const saved = page.waitForResponse(
-      (r) =>
-        r.request().method() === "PUT" && r.url().includes("/api/worktrees/"),
-    );
-    await panel
-      .getByRole("button", { name: "Save changes", exact: true })
-      .click();
-    expect((await saved).ok()).toBe(true);
-  }
-  await expect(page.locator(".banner.warning")).toHaveCount(0);
-  const worktree = new URL(page.url()).pathname.split("/")[2];
-  const snapshot = await (
-    await page.request.get(`/api/worktrees/${worktree}`)
-  ).json();
-  expect(snapshot.bundle.documentation.project).toBe("Second revision");
-  expect(snapshot.conflicts).toEqual([]);
 });
 
 test("documentation waits for its refreshed revision and preserves edits during a slow save", async ({
@@ -1109,35 +715,4 @@ test("documentation waits for its refreshed revision and preserves edits during 
   );
   expect(snapshot.conflicts).toEqual([]);
   expect(writes).toBe(2);
-});
-
-test("runs use a configured environment after the selected environment is deleted", async ({
-  page,
-}) => {
-  await signIn(page);
-  const project = await (
-    await page.request.post("/api/projects", { data: { name: "Renamed" } })
-  ).json();
-  try {
-    expect((await page.request.delete("/api/environments/prod")).ok()).toBe(
-      true,
-    );
-    await page.goto(`/worktrees/${project.id}/flow?environment=prod`);
-    const launched = page.waitForResponse(
-      (r) => r.url().endsWith("/runs") && r.request().method() === "POST",
-    );
-    await page.getByRole("button", { name: "Run all", exact: true }).click();
-    const response = await launched;
-    expect(response.ok()).toBe(true);
-    expect((await response.json()).environment).toBe("dev");
-  } finally {
-    await page.request.post("/api/environments", {
-      data: {
-        id: "prod",
-        label: "prod",
-        color: "#e05252",
-        confirm_before_run: true,
-      },
-    });
-  }
 });

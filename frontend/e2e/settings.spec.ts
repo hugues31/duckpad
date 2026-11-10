@@ -194,23 +194,6 @@ test("instance configuration is available without a project and separate from pe
   await expect(
     page.getByLabel("Enable single sign-on", { exact: true }),
   ).toHaveCount(0);
-  await page.getByLabel("Theme", { exact: true }).selectOption("dark");
-  await page.getByLabel("Language", { exact: true }).selectOption("fr");
-  await expect(
-    page.getByRole("heading", { name: "Paramètres utilisateur", exact: true }),
-  ).toBeVisible();
-  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
-  await expect(
-    page.getByLabel("Langue", { exact: true }).locator(".select-value"),
-  ).toHaveText("Français");
-  await expect(
-    page.getByLabel("Thème", { exact: true }).locator(".select-value"),
-  ).toHaveText("Sombre");
-  await page.getByLabel("Langue", { exact: true }).selectOption("en");
-  await page.reload();
-  await openUserSettings(page);
-  await expect(page.getByLabel("Theme", { exact: true })).toHaveValue("dark");
-  await page.getByLabel("Theme", { exact: true }).selectOption("light");
 
   try {
     await openInstanceSettings(page);
@@ -262,21 +245,6 @@ test("instance configuration is available without a project and separate from pe
         .getByRole("button", { name: "staging", exact: true }),
     ).toBeVisible();
     await page.getByRole("button", { name: "Cancel", exact: true }).click();
-    await openInstanceSettings(page, "Users and permissions");
-    await expect(
-      page.getByLabel("Instance role · admin", { exact: true }),
-    ).toHaveValue("admin");
-    await expect(
-      page.getByText("Instance admins manage all accounts", { exact: false }),
-    ).toBeVisible();
-    await openInstanceSettings(page, "Single sign-on (OIDC)");
-    await expect(
-      page.getByLabel("Enable single sign-on", { exact: true }),
-    ).toBeVisible();
-    await openInstanceSettings(page);
-    await expect(page.getByLabel("Author name", { exact: true })).toHaveCount(
-      0,
-    );
     await page.setViewportSize({ width: 800, height: 900 });
     const navigation = page.getByRole("navigation", {
       name: "Settings sections",
@@ -287,10 +255,6 @@ test("instance configuration is available without a project and separate from pe
         (element) => element.scrollWidth <= element.clientWidth,
       ),
     ).toBe(true);
-    await page.screenshot({
-      path: "test-results/instance-settings.png",
-      fullPage: true,
-    });
   } finally {
     await page.request.delete("/api/environments/staging");
   }

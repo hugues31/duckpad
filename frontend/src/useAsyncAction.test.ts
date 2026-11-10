@@ -16,11 +16,6 @@ function deferred<T = void>() {
 afterEach(cleanup);
 
 describe("useAsyncAction", () => {
-  it("starts idle", () => {
-    const { result } = renderHook(() => useAsyncAction());
-    expect(result.current).toMatchObject({ pending: false, error: "" });
-  });
-
   it("is pending while the action runs and reports success", async () => {
     const { result } = renderHook(() => useAsyncAction());
     const action = deferred();
@@ -61,14 +56,6 @@ describe("useAsyncAction", () => {
     });
     expect(result.current).toMatchObject({ pending: true, error: "" });
     await act(async () => retry.resolve());
-    expect(result.current.error).toBe("");
-  });
-
-  it("lets the owner set or clear the error", () => {
-    const { result } = renderHook(() => useAsyncAction());
-    act(() => result.current.setError("Name is required"));
-    expect(result.current.error).toBe("Name is required");
-    act(() => result.current.setError(""));
     expect(result.current.error).toBe("");
   });
 

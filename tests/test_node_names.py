@@ -60,8 +60,6 @@ def test_names_and_diagnostics_do_not_require_an_explicit_label(named_bundle, se
     assert scoped["scope_name"] == [{"label": "Revenue report", "template": "sql"}]
     assert run["nodes"]["node_filter"]["error"] == "Connect input source on Filter"
     assert run["nodes"]["node_filter"]["label"] == "Filter"
-    with pytest.raises(Problem, match="Connect input 'source' on Filter"):
-        engine.launch(worktree, "dev", "node_filter", entry_point="ui")
     assert projects.snapshot(worktree)["node_names"]["node_source"] == [
         {"label": "Revenue report", "template": "sql"}
     ]

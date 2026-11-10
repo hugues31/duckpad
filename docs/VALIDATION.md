@@ -31,7 +31,6 @@ The report is written to `.duckpad-dev/benchmark-wide.json`, outside tracked fil
 
 ## Connector reports
 
-- `validation/oracle.json`: live Oracle 19.3, OraDuck 0.4.0, exact DuckDB 2.0.0; read, transform, native export equivalence, repeated append, schema/data refresh, materialized-source lineage and secret redaction.
-- `validation/s3.json`: Moto S3 endpoint on localhost, recorded by the CI job that runs `scripts/integration.py s3`; CSV/Parquet reads by relative path under a URI root, a custom storage type, join, CSV writes, repeated native replacement, connection reuse and lineage. Live AWS has not been claimed as tested.
-
-See [connector prerequisites](CONNECTORS.md) and [the explicit SQL coverage matrix](LINEAGE.md) for the scope and limits of these checks.
+The [connectors' validated scope](CONNECTORS.md#validated-scope) summarizes the
+recorded connector reports. The [SQL coverage matrix](LINEAGE.md) lists lineage
+limits.

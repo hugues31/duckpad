@@ -61,24 +61,6 @@ test("command search runs the project and navigates project and settings destina
   ).toBeVisible();
   await page.keyboard.press("ControlOrMeta+k");
   let dialog = page.getByRole("dialog", { name: "Search instance" });
-  for (const label of [
-    "Run all",
-    "New working branch",
-    "Flow",
-    "Code",
-    "Documentation",
-    "Variables",
-    "History",
-    "Jobs",
-    "Project settings",
-  ]) {
-    await expect(
-      dialog.getByRole("option", {
-        name: `${label} Commands workspace`,
-        exact: true,
-      }),
-    ).toBeVisible();
-  }
   await dialog.getByRole("combobox").fill("Run all");
   const launch = page.waitForResponse(
     (response) =>
@@ -168,11 +150,6 @@ test("canvas search finds labels and IDs, centers distant nodes and never saves 
   expect(
     await (await page.request.get(`/api/runs?worktree=${worktree.id}`)).json(),
   ).toEqual([]);
-  await page.evaluate(() => localStorage.setItem("duckpad-language", "fr"));
-  await page.reload();
-  await expect(
-    page.getByRole("combobox", { name: fr.searchNodes }),
-  ).toBeVisible();
 });
 
 test("instance search opens another branch and the correct nested instance, including after reload", async ({

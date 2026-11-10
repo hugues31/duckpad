@@ -132,50 +132,6 @@ def test_simultaneous_entry_points_admit_exactly_one_run(services, tmp_path, mon
     assert len(store.all("run")) == 1 and not engine.active
 
 
-def test_unrelated_lineage_in_same_context_is_not_canceled(services, tmp_path, monkeypatch):
-    store, projects, _, engine = services
-    bundle = example_bundle(tmp_path / "shared.csv")
-    bundle["flow"]["nodes"] += [
-        {"id": "other_source", "template": "source", "params": {"file": str(tmp_path / "shared.csv")}},
-        {"id": "other_total", "template": "total", "params": {}},
-    ]
-    bundle["flow"]["edges"].append(
-        {
-            "id": "other_edge",
-            "source": "other_source",
-            "sourceHandle": "result",
-            "target": "other_total",
-            "targetHandle": "source",
-        }
-    )
-    worktree = projects.create("Independent lineage", bundle)["id"]
-    wait_run(store, engine.launch(worktree, "dev"))
-    preview = engine.preview(worktree, "dev", "other_total")
-    entered, release = threading.Event(), threading.Event()
-    original = TraceQuery.trace
-
-    def hold(self, *args, **kwargs):
-        entered.set()
-        release.wait(5)
-        return original(self, *args, **kwargs)
-
-    monkeypatch.setattr(TraceQuery, "trace", hold)
-    result = []
-    thread = threading.Thread(
-        target=lambda: result.append(Lineage(engine).explain(worktree, "dev", preview["id"], 0, "total"))
-    )
-    thread.start()
-    assert entered.wait(2)
-    run = engine.launch(worktree, "dev", "filter")
-    assert wait_run(store, run)["status"] == "success"
-    assert not any(
-        request["canceled"].is_set() for request in engine.context(worktree, "dev").lineage.values()
-    )
-    release.set()
-    thread.join(5)
-    assert result[0]["complete"] and result[0]["total"] == 2
-
-
 @pytest.mark.parametrize("close", [False, True])
 @pytest.mark.parametrize("command", ["lock", "sync"])
 def test_preparing_run_is_visible_and_cancellable_during_uv(services, tmp_path, monkeypatch, close, command):

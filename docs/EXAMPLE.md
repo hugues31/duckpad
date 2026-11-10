@@ -4,7 +4,7 @@ Choose **New project** on the Projects page or beside the active project selecto
 
 New to Duckpad? Follow the [quickstart](QUICKSTART.md) to install it and run your
 first pipeline. The website version of this guide includes a captioned recording
-of the steps below, regenerated from the application with Playwright.
+of the steps below.
 
 ## Explore the pipeline
 

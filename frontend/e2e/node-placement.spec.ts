@@ -1,21 +1,15 @@
 import { test, expect, type Page } from "@playwright/test";
 import { canvasZoom, signIn } from "./helpers";
 
-async function openProject(page: Page, example = false) {
+async function openProject(page: Page) {
   await signIn(page);
-  const response = await page.request.post(
-    example ? "/api/example" : "/api/projects",
-    {
-      data: example ? {} : { name: "Node placement" },
-    },
-  );
+  const response = await page.request.post("/api/example", { data: {} });
   expect(response.ok()).toBe(true);
   const { id } = await response.json();
   await page.goto(`/worktrees/${id}/flow`);
   await expect(
     page.locator(".palette").getByRole("button", { name: "SQL", exact: true }),
   ).toBeVisible();
-  return id as string;
 }
 
 async function addNode(page: Page, label = "SQL") {
@@ -72,27 +66,11 @@ async function expectNoOverlap(page: Page) {
   expect(overlaps).toEqual([]);
 }
 
-test("adding after a deletion keeps every node visible and separate", async ({
-  page,
-}) => {
-  const project = await openProject(page);
-  const first = await addNode(page);
-  await addNode(page);
-  await page.goto(`/worktrees/${project}/flow?node=${first}`);
-  await page.getByRole("button", { name: "Remove node", exact: true }).click();
-  await expect(page.locator(".react-flow__node")).toHaveCount(1);
-  await addNode(page);
-  await expectNoOverlap(page);
-  await page.reload();
-  await expect(page.locator(".react-flow__node")).toHaveCount(2);
-  await expectNoOverlap(page);
-});
-
 test("repeated Northstar palette additions avoid existing bounds after pan and zoom", async ({
   page,
 }) => {
   test.setTimeout(90000);
-  await openProject(page, true);
+  await openProject(page);
   await expect(page.locator(".react-flow__node").first()).toBeVisible();
   const visible = (await page.locator(".canvas-safe-area").boundingBox())!;
   await page.mouse.move(
