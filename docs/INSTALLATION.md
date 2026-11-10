@@ -129,9 +129,8 @@ old directory as a backup and start a fresh instance:
 duckpad start --home /path/to/new-instance
 ```
 
-The current `0001_v0_baseline` replaces the earlier `0001_baseline` and
-`0002_artifact_storage` revisions; instances on either need this fresh start.
-Do not change the old database's revision marker to bypass the check.
+Do not change the old database's revision marker to bypass the check: its schema
+and data were never converted.
 
 The new instance creates a new administrator password. Reconfigure accounts and
 connections, then import each project as a ZIP downloaded from the previous
@@ -235,8 +234,7 @@ previous one on a later line, then restart. The first key encrypts; the others
 only decrypt. At startup, Duckpad encrypts every secret again with the first key,
 then rewrites the database file so that no deleted page keeps a previous value.
 Remove the previous key after that restart. `DUCKPAD_MASTER_KEY` accepts several
-keys separated by commas. Plaintext stored secrets are rejected; instances from
-before encryption require a fresh start as described under [Upgrades and backups](#upgrades-and-backups).
+keys separated by commas.
 
 Encryption protects copies of the database, not a running server: anyone who
 controls the Duckpad process or can read the key can decrypt the secrets. An

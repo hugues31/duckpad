@@ -7,8 +7,7 @@ business tables, including assistant conversations, API tokens, Jobs,
 idempotency keys, partitions and explicit artifact storage locations. It seeds
 the `dev` and `prod` environments, but no connector or connection.
 
-Duckpad is in v0: earlier instance schemas, including `0001_baseline` and
-`0002_artifact_storage`, are not upgraded. Startup rejects a
+Duckpad is in v0: earlier instance schemas are not upgraded. Startup rejects a
 database with an unknown revision, or a nonempty one without a revision, without
 changing it; start a new instance as described in
 [Installation](INSTALLATION.md). Do not stamp an old database with the current
@@ -139,9 +138,8 @@ write and decrypts them on read: secret connection parameters, the `oidc` client
 secret, `assistant` provider API keys and `ssh_key.private_key`. A sealed value
 reads `dpenc:1:<key id>:<data>`. Public responses are
 assembled and redacted by the existing service/API schemas, never by returning
-database models containing credentials. Stored nonempty secrets must be encrypted;
-startup rejects plaintext values instead of converting older instances. Empty
-values and references to server secrets remain supported, as does master-key rotation.
+database models containing credentials. Empty values and references to server
+secrets are stored as is; startup rejects any other unencrypted value.
 
 ## Transactions and queries
 
@@ -176,10 +174,10 @@ uv run python -m duckpad.migrations upgrade --home .duckpad-dev
 
 Fold the reviewed schema changes into the replacement baseline, remove the old
 revisions and verify initialization on an empty database. Do not retain data
-transformations for discarded schemas. Review defaults and downgrade behavior.
-SQLite batch rebuilds run inside an explicit transaction with foreign-key enforcement disabled
-on that migration connection before `BEGIN`; `foreign_key_check` must pass before
-commit, and enforcement is restored afterward. This prevents a parent-table
+transformations for discarded schemas. SQLite batch rebuilds run inside an
+explicit transaction with foreign-key enforcement disabled on that migration
+connection before `BEGIN`; `foreign_key_check` must pass before commit, and
+enforcement is restored afterward. This prevents a parent-table
 rebuild from cascading into its children. Failed DDL and data changes roll back
 together. The migration runner serializes Alembic's process-global environment.
 
