@@ -61,6 +61,17 @@
 .code-file-actions .field p {
   margin: 0;
 }
+.file-filter {
+  margin: 0 4px 10px;
+}
+.file-filter input {
+  width: 100%;
+  min-width: 0;
+}
+.file-filter-empty {
+  padding: 0 10px;
+  font-size: 12px;
+}
 .file-tree-row {
   display: flex;
   align-items: center;

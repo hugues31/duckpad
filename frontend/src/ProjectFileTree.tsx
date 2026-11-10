@@ -2,10 +2,12 @@ import { useMemo, useRef, useState, type KeyboardEvent } from "react";
 import {
   ChevronDown,
   ChevronRight,
-  FileCode2,
   Folder,
   FolderOpen,
+  Search,
+  X,
 } from "lucide-react";
+import ProjectFileIcon from "./ProjectFileIcon";
 import { useT } from "./i18n";
 import { nodeFileLabel } from "./projectFiles";
 import type { NodeNames } from "./nodeNames";
@@ -67,7 +69,19 @@ export default function ProjectFileTree({
   names?: NodeNames;
 }) {
   const t = useT();
-  const entries = useMemo(() => fileTree(Object.keys(files)), [files]);
+  const [query, setQuery] = useState("");
+  const [filteredCollapsed, setFilteredCollapsed] = useState(new Set<string>());
+  const input = useRef<HTMLInputElement>(null);
+  const filtering = !!query.trim();
+  const matches = useMemo(() => {
+    const terms = query.trim().toLocaleLowerCase().split(/\s+/);
+    return Object.keys(files).filter((path) => {
+      const text =
+        `${path} ${nodeFileLabel(path, names, t) ?? ""}`.toLocaleLowerCase();
+      return terms.every((term) => text.includes(term));
+    });
+  }, [files, names, query, t]);
+  const entries = useMemo(() => fileTree(matches), [matches]);
   // Built-in templates start folded, except around the opened file.
   const [collapsed, setCollapsed] = useState<Set<string>>(() =>
     reveal(new Set(["templates"]), selected),
@@ -80,14 +94,16 @@ export default function ProjectFileTree({
     setCollapsed(reveal(collapsed, selected));
   }
   const [focused, setFocused] = useState(selected);
+  const folded = filtering ? filteredCollapsed : collapsed;
   const tree = useRef<HTMLDivElement>(null);
   const visible: Entry[] = [];
   const visit = (items: Entry[]) =>
     items.forEach((entry) => {
       visible.push(entry);
-      if (!collapsed.has(entry.path)) visit(entry.children);
+      if (!folded.has(entry.path)) visit(entry.children);
     });
   visit(entries);
+  const firstFile = visible.find((entry) => !entry.children.length)?.path;
   const focusable = visible.some((entry) => entry.path === focused)
     ? focused
     : visible[0]?.path;
@@ -102,7 +118,7 @@ export default function ProjectFileTree({
   };
   const toggle = (path: string) => {
     setRevealed(selected);
-    setCollapsed((previous) => {
+    (filtering ? setFilteredCollapsed : setCollapsed)((previous) => {
       const next = new Set(previous);
       if (next.has(path)) next.delete(path);
       else next.add(path);
@@ -132,11 +148,11 @@ export default function ProjectFileTree({
         focus(visible.at(-1)?.path);
         break;
       case "ArrowRight":
-        if (folder && collapsed.has(entry.path)) toggle(entry.path);
+        if (folder && folded.has(entry.path)) toggle(entry.path);
         else if (folder) focus(entry.children[0]?.path);
         break;
       case "ArrowLeft":
-        if (folder && !collapsed.has(entry.path)) toggle(entry.path);
+        if (folder && !folded.has(entry.path)) toggle(entry.path);
         else focus(entry.path.split("/").slice(0, -1).join("/"));
         break;
       default:
@@ -148,8 +164,8 @@ export default function ProjectFileTree({
   const render = (items: Entry[], level = 1) =>
     items.map((entry) => {
       const folder = !!entry.children.length;
-      const expanded = !collapsed.has(entry.path);
-      const Icon = folder ? (expanded ? FolderOpen : Folder) : FileCode2;
+      const expanded = !folded.has(entry.path);
+      const Icon = expanded ? FolderOpen : Folder;
       const Chevron = expanded ? ChevronDown : ChevronRight;
       const label = folder ? null : nodeFileLabel(entry.path, names, t);
       return (
@@ -182,7 +198,11 @@ export default function ProjectFileTree({
             ) : (
               <span className="file-tree-indent" />
             )}
-            <Icon size={15} />
+            {folder ? (
+              <Icon size={15} aria-hidden="true" />
+            ) : (
+              <ProjectFileIcon path={entry.path} />
+            )}
             <span>{label ?? entry.name}</span>
           </div>
           {folder && expanded && (
@@ -192,13 +212,57 @@ export default function ProjectFileTree({
       );
     });
   return (
-    <div
-      ref={tree}
-      role="tree"
-      aria-label={t("files")}
-      className="project-file-tree"
-    >
-      {render(entries)}
-    </div>
+    <>
+      <div className="search file-filter">
+        <Search size={15} aria-hidden="true" />
+        <input
+          ref={input}
+          type="search"
+          aria-label={t("filterFiles")}
+          placeholder={t("filterFiles")}
+          value={query}
+          onChange={(event) => {
+            setQuery(event.target.value);
+            setFilteredCollapsed(new Set());
+          }}
+          onKeyDown={(event) => {
+            if (event.key === "Escape") setQuery("");
+            else if (event.key === "ArrowDown") {
+              event.preventDefault();
+              focus(visible[0]?.path);
+            } else if (event.key === "Enter" && firstFile) {
+              event.preventDefault();
+              onSelect(firstFile);
+              focus(firstFile);
+            }
+          }}
+        />
+        {query && (
+          <button
+            className="icon"
+            aria-label={t("clearSearch")}
+            onClick={() => {
+              setQuery("");
+              input.current?.focus();
+            }}
+          >
+            <X size={14} />
+          </button>
+        )}
+      </div>
+      <div
+        ref={tree}
+        role="tree"
+        aria-label={t("files")}
+        className="project-file-tree"
+      >
+        {render(entries)}
+      </div>
+      {filtering && !matches.length && (
+        <p className="file-filter-empty muted" role="status">
+          {t("noSearchResults")}
+        </p>
+      )}
+    </>
   );
 }

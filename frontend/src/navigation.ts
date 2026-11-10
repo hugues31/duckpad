@@ -8,6 +8,14 @@ export const workspaceTabs = [
   "history",
 ] as const;
 export type WorkspaceTab = (typeof workspaceTabs)[number];
+export const userSettingsSections = [
+  ["preferences", "preferences"],
+  ["password", "password"],
+  ["ssh-key", "sshKey"],
+  ["api-tokens", "apiTokens"],
+] as const;
+export const userSettingsUrl = (section: string) =>
+  `/user-settings${section === "preferences" ? "" : `/${section}`}`;
 export const settingsSections = [
   ["users", "usersPermissions"],
   ["sso", "ssoSettings"],

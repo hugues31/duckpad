@@ -41,6 +41,7 @@ import { DRAG_TYPE, type NodeConnection } from "./graph";
 import { findNodePosition, layoutNodes } from "./graphLayout";
 import { useT } from "./i18n";
 import { SearchField } from "./Search";
+import { blockingDialogShown, typingTarget } from "./searchShortcuts";
 import type { FlowEdge, FlowNode } from "./types";
 import { useCanvasFrame } from "./useCanvasFrame";
 import { useCanvasNodes } from "./useCanvasNodes";
@@ -48,6 +49,8 @@ import { useDoubleClickGuard } from "./useDoubleClickGuard";
 const nodeTypes = { pipeline: PipelineNode };
 const edgeTypes = { pipeline: PipelineEdge };
 const NO_ENDPOINTS: EdgeEndpoints[] = [];
+// Keep listening through saves and undo so keyup events cannot leave modifiers stuck.
+const DELETE_KEYS = ["Backspace", "Delete"];
 function CanvasInner({ ref, ...props }: CanvasProps) {
   const t = useT();
   const [context, setContext] = useState<{
@@ -197,6 +200,7 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
   );
   const lanes = useMemo(() => orthogonalLanes(endpoints), [endpoints]);
   const [hovered, setHovered] = useState<string | null>(null);
+  const [selectedEdges, setSelectedEdges] = useState(new Set<string>());
   const edges = useMemo(() => {
     const selected = new Set(
       nodes.filter((node) => node.selected).map((node) => node.id),
@@ -204,9 +208,11 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
     return props.edges.map((e): PipelineEdge => {
       const connected = selected.has(e.source) || selected.has(e.target);
       const pointed = hovered === e.source || hovered === e.target;
-      const highlighted = connected || pointed || running;
+      const edgeSelected = selectedEdges.has(e.id);
+      const highlighted = edgeSelected || connected || pointed || running;
       return {
         ...e,
+        selected: edgeSelected,
         type: "pipeline",
         data: { style: edgeStyle, lane: lanes.get(e.id) },
         animated: connected || running,
@@ -228,7 +234,7 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
           : undefined,
       };
     });
-  }, [props.edges, nodes, running, hovered, edgeStyle, lanes]);
+  }, [props.edges, nodes, running, hovered, edgeStyle, lanes, selectedEdges]);
   const changes = (changes: NodeChange<PipelineNode>[]) =>
     setNodes((current) => applyNodeChanges(changes, current));
   const persistPositions = async (moved: FlowNode[]) => {
@@ -320,6 +326,21 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
             : ConnectionLineType.Bezier
         }
         onNodesChange={changes}
+        onEdgesChange={(changes) => {
+          setSelectedEdges((current) => {
+            const next = new Set(current);
+            for (const change of changes) {
+              if (change.type !== "select") continue;
+              if (change.selected) next.add(change.id);
+              else next.delete(change.id);
+            }
+            return next;
+          });
+        }}
+        onEdgeClick={() => {
+          setFocus(null);
+          props.onSelect(null);
+        }}
         onNodeMouseEnter={(_, node) => setHovered(node.id)}
         onNodeMouseLeave={() => setHovered(null)}
         onMoveStart={(event) => {
@@ -400,6 +421,13 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
             })),
           )
         }
+        onBeforeDelete={async () =>
+          !props.readOnly &&
+          !pendingConnection &&
+          !context &&
+          !blockingDialogShown() &&
+          !typingTarget(document.activeElement)
+        }
         onDelete={({ nodes, edges }) => {
           if (props.readOnly) return;
           props
@@ -449,11 +477,7 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
         minZoom={0.1}
         maxZoom={1.8}
         connectionRadius={28}
-        deleteKeyCode={
-          props.readOnly || pendingConnection || context
-            ? null
-            : ["Backspace", "Delete"]
-        }
+        deleteKeyCode={DELETE_KEYS}
         selectionKeyCode="Shift"
         multiSelectionKeyCode="Shift"
         proOptions={{ hideAttribution: true }}

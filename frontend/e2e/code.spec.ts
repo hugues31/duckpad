@@ -19,6 +19,39 @@ async function openCode(page: Page) {
   };
 }
 
+test("file filtering reveals nested matches and keeps the current draft", async ({
+  page,
+}) => {
+  const { snapshot } = await openCode(page);
+  await editCode(page, snapshot.files["README.md"] + "\nFiltered draft\n");
+  const filter = page.getByRole("searchbox", { name: "Filter files…" });
+  const tree = page.getByRole("tree", { name: "Project files" });
+  await filter.fill("TEMPLATES/SQL.SQL");
+  await expect(
+    tree.getByRole("treeitem", { name: "templates/sql.sql", exact: true }),
+  ).toBeVisible();
+  await expect(
+    tree.getByRole("treeitem", { name: "README.md", exact: true }),
+  ).toHaveCount(0);
+  await filter.press("Enter");
+  await expect(page.locator(".code-file-heading")).toContainText(
+    "templates/sql.sql",
+  );
+  await filter.fill("not-a-project-file");
+  await expect(
+    page.getByRole("status").filter({ hasText: "No matching results" }),
+  ).toBeVisible();
+  await expect(page.locator(".code-file-heading")).toContainText(
+    "templates/sql.sql",
+  );
+  await filter.press("Escape");
+  await tree.getByRole("treeitem", { name: "README.md", exact: true }).click();
+  await expect(page.locator(".code-editor-body")).toContainText(
+    "Filtered draft",
+  );
+  await page.getByRole("button", { name: "Discard changes" }).click();
+});
+
 test("Code has a keyboard file tree, preserves drafts across files and tabs, saves and downloads a ZIP", async ({
   page,
 }) => {
@@ -163,12 +196,43 @@ test("project Markdown and Python dependencies round trip between Code, Document
   ).toBeDisabled();
   await page.getByRole("link", { name: "Documentation", exact: true }).click();
   await expect(page.locator(".project-documentation")).toHaveValue(changed);
+  const editor = page.locator(".project-documentation");
+  await editor.evaluate((element: HTMLTextAreaElement) => {
+    const start = element.value.indexOf("Edited from Code.");
+    element.setSelectionRange(start, start + "Edited from Code.".length);
+  });
+  await page.getByRole("button", { name: "Bold", exact: true }).click();
+  const formatted = changed.replace(
+    "Edited from Code.",
+    "**Edited from Code.**",
+  );
+  await expect(editor).toHaveValue(formatted);
+  await expect(editor).toBeFocused();
+  await page
+    .getByRole("button", { name: "Markdown preview", exact: true })
+    .click();
+  await expect(page.locator(".documentation-preview strong").last()).toHaveText(
+    "Edited from Code.",
+  );
+  await page.getByRole("button", { name: "Save changes", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "Save changes", exact: true }),
+  ).toBeDisabled();
   await page.reload();
-  await expect(page.locator(".project-documentation")).toHaveValue(changed);
+  await expect(editor).toHaveValue(formatted);
+  const toolbar = page.getByRole("group", { name: "Markdown formatting" });
+  expect((await editor.boundingBox())!.width).toBeGreaterThan(1000);
+  await page.setViewportSize({ width: 760, height: 800 });
+  await expect(toolbar).toBeVisible();
+  expect(
+    await page
+      .locator(".documentation-page")
+      .evaluate((element) => element.scrollWidth <= element.clientWidth),
+  ).toBe(true);
   const result = await (
     await page.request.get(`/api/worktrees/${worktree.id}`)
   ).json();
-  expect(result.files["README.md"]).toBe(changed);
+  expect(result.files["README.md"]).toBe(formatted);
   expect(JSON.parse(result.files["documentation.json"])).not.toHaveProperty(
     "project",
   );
