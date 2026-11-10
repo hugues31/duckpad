@@ -7,6 +7,8 @@ Python, Git or Duckpad on your own computer to use that server.
 | I want to… | Read next |
 | --- | --- |
 | Run Duckpad myself | [Start](#start) and [platform requirements](#platform-requirements) |
+| Keep Duckpad running in the background | [Linux user service](#linux-user-service) |
+| Find my version or instance files | [Version and paths](#version-and-paths) |
 | Upgrade or keep a backup | [Upgrades and backups](#upgrades-and-backups) |
 | Add people or understand a missing action | [Accounts and project access](#accounts-and-project-access) |
 | Host a shared instance | [Reverse proxy](#reverse-proxy), [secrets](#secrets-and-the-master-key) and [SQL resources](#sql-resources) |
@@ -76,6 +78,81 @@ For air-gapped deployments, [download extensions on any connected computer and
 import them into Duckpad](OFFLINE_EXTENSIONS.md) before running connectors that
 need them.
 
+### Version and paths
+
+```sh
+duckpad --version
+duckpad version
+duckpad paths
+duckpad paths --home /path/to/my-instance --json
+```
+
+Both version commands print the installed package version without starting the
+server. `paths` locates the instance directory, the SQLite database containing
+configuration and history, the master key source, projects, uploads and other
+state. It does not create an instance, open its database or print secret values.
+Use `--json` for scripts. Paths reflect this command's `--home` and environment;
+run it with the same settings as the server, including an externally configured
+master key. Duckpad does not use a separate configuration file: settings live
+in `instance.sqlite`, with deployment options supplied by CLI flags and the
+environment. Browser preferences remain in the browser.
+
+### Linux user service
+
+For background operation on Linux with systemd, run the existing foreground
+command as a user service. systemd owns start, stop, restart and logs; Duckpad
+does not install an additional daemon or manage PID files. On macOS and Windows,
+use the platform's service manager with `duckpad start --no-browser` and the
+[trusted local mode requirements](#trusted-local-mode). In containers, let the
+container runtime manage the foreground process.
+
+First run Duckpad in the foreground with the intended `--home`, choose the
+administrator password, and stop it with Ctrl+C. This keeps the first-launch
+password and setup link out of the service journal. Find the executable with
+`command -v duckpad`. Create `~/.config/systemd/user/duckpad.service`, replacing
+the executable below with that absolute path and choosing an absolute `--home`:
+
+```ini
+[Unit]
+Description=Duckpad workspace
+
+[Service]
+Type=exec
+ExecStart=/absolute/path/to/.venv/bin/duckpad start --home %h/.local/share/duckpad --no-browser
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=120
+UMask=0077
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target
+```
+
+Quote paths containing spaces in `ExecStart`. `%h` expands to the service user's
+home. The service does not inherit your interactive shell's environment: configure
+any proxy, master-key or connection-secret settings explicitly, for example with
+an owner-readable `EnvironmentFile=` outside the instance directory. Keep that
+file in your separate deployment backup.
+
+```sh
+systemctl --user daemon-reload
+systemctl --user enable --now duckpad
+systemctl --user status duckpad
+journalctl --user -u duckpad -f
+systemctl --user stop duckpad
+systemctl --user start duckpad
+```
+
+Stop the service before making a backup; `Restart=on-failure` does not undo an
+explicit stop. `systemctl --user disable --now duckpad` stops it and removes
+automatic startup. To start at boot and keep running after logout, an operator
+can enable lingering with `loginctl enable-linger` for the service user; host
+policy may require administrator authorization. See the official
+[systemd service documentation](https://www.freedesktop.org/software/systemd/man/latest/systemd.service.html)
+and [loginctl documentation](https://www.freedesktop.org/software/systemd/man/latest/loginctl.html).
+
 ### Reset a lost password
 
 An instance administrator resets other people's passwords in **Instance settings →
@@ -111,9 +188,45 @@ After a failed attempt, the sign-in page shows these steps too:
 
 Before upgrading, stop the server and keep a private backup of the entire
 instance directory, including its project repositories and SQLite database.
-Keep the master key too; if it is supplied externally, back it up separately.
-Source data in external folders or databases needs its own backup. A project
-ZIP excludes data, Git history, accounts, connection settings and run history.
+Use the same `--home` as for startup, or omit it for the default instance:
+
+```sh
+duckpad backup /path/to/backups/duckpad-before-upgrade.tar.gz --home /path/to/my-instance
+```
+
+The destination's parent directory must exist and be outside the instance.
+Existing files are never overwritten. The command refuses a running instance,
+holds its startup lock until finished, and snapshots SQLite so committed WAL
+pages are included after an unclean shutdown. It archives all instance files,
+including project Git history, branches, uploads, exports, caches and any local
+master key. It excludes the startup lock and replaces the database and its
+temporary WAL files with the snapshot. Avoid other maintenance commands and
+external file edits during a backup.
+
+The archive is **not encrypted**. It is created with owner-only permissions on
+POSIX; keep it in private storage with suitable access controls on every platform.
+An archive with the local master key can decrypt its stored credentials. Back up
+externally supplied master keys, deployment environment files, referenced secrets,
+and external source data separately. Symbolic links are preserved, not followed;
+their targets also need separate backups. A project ZIP excludes data, Git history,
+accounts, connection settings and run history and is not an instance backup.
+
+To restore, stop Duckpad and use the same version as recorded in the archive's
+`manifest.json`. Extract a trusted backup into a new private staging directory:
+
+```sh
+mkdir -m 700 /path/to/private-staging
+tar -xzf /path/to/backups/duckpad-before-upgrade.tar.gz -C /path/to/private-staging
+```
+
+Check `manifest.json` for `original_home`, move the current instance aside, then
+move the extracted `duckpad` directory into that **same original absolute path**.
+Do not overlay an existing instance: it could retain stale WAL or project files.
+Run as the original operating-system user, restore externally supplied keys and
+secret sources, and restart with the original `--home`. Verify sign-in, projects
+and branches before discarding the previous directory. Moving to another path or
+machine is not supported by this backup command: database records and Git
+worktrees can contain absolute paths.
 
 Upgrade Duckpad in the same Python environment with `pip install --upgrade duckpad`,
 then start it with the same `--home`. Read the

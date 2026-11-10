@@ -8,7 +8,7 @@ import threading
 import webbrowser
 from pathlib import Path
 
-from . import client
+from . import __version__, client
 
 LOOPBACK_HOSTS = ("127.0.0.1", "::1", "localhost")
 WILDCARD_HOSTS = ("0.0.0.0", "::", "")
@@ -29,7 +29,24 @@ def main():
         # Dispatch before the server's imports: schedulers start this command for every task.
         sys.exit(client.main(sys.argv[2:]))
     parser = argparse.ArgumentParser(prog="duckpad", description="Local SQL pipelines with cell lineage")
+    parser.add_argument("--version", action="version", version=f"Duckpad {__version__}")
     commands = parser.add_subparsers(dest="command", required=True)
+    commands.add_parser("version", help="Print the installed Duckpad version")
+    paths = commands.add_parser("paths", help="Locate instance configuration and state without opening it")
+    paths.add_argument(
+        "--home", type=Path, default=default_home(), help="Instance directory used by duckpad start"
+    )
+    paths.add_argument("--json", action="store_true", help="Print paths as JSON")
+    backup = commands.add_parser(
+        "backup",
+        help="Back up a stopped instance to a private .tar.gz archive",
+        description="Back up a stopped instance, including its database, projects and local master key. "
+        "External data and externally supplied keys must be backed up separately.",
+    )
+    backup.add_argument("destination", type=Path, help="New archive outside the instance directory")
+    backup.add_argument(
+        "--home", type=Path, default=default_home(), help="Instance directory used by duckpad start"
+    )
     start = commands.add_parser("start", help="Start the local workspace")
     start.add_argument("--home", type=Path, default=default_home())
     start.add_argument("--host", default="127.0.0.1")
@@ -61,7 +78,25 @@ def main():
         "--home", type=Path, default=default_home(), help="Instance directory used by duckpad start"
     )
     args = parser.parse_args()
-    if args.command == "reset-password":
+    if hasattr(args, "home"):
+        args.home = args.home.expanduser().resolve()
+    if args.command == "version":
+        print(f"Duckpad {__version__}")
+    elif args.command == "paths":
+        from .backup import print_paths
+
+        print_paths(args.home, as_json=args.json)
+    elif args.command == "backup":
+        from .backup import BackupError, create_backup
+
+        try:
+            destination = create_backup(args.home, args.destination)
+        except (BackupError, OSError) as error:
+            backup.error(str(error))
+        print(f"Backup saved to {destination}")
+        print("Keep this archive private: it includes stored credentials and any local master key.")
+        print("Back up externally supplied master keys, secrets and source data separately.")
+    elif args.command == "reset-password":
         reset_password(reset, args)
     else:
         start_server(parser, args)
