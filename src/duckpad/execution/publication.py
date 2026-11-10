@@ -104,6 +104,8 @@ class Publication:
 
     def prune_documentation(self, execution: Execution, key: str, staged: dict[str, Dataset]) -> None:
         """Remove documentation of columns that the node's current outputs no longer have."""
+        if execution.nodes[key].get("muted"):
+            return
         context = execution.context
         columns = {
             port: [c["name"] for c in data.columns] for port, data in staged.items() if data.status == "valid"

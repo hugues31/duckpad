@@ -49,6 +49,7 @@ class PythonContract(Definition):
 
 class Node(Definition):
     id: Identity
+    muted: bool = False
     params: dict[str, Any] = Field(default_factory=dict)
     template: str | None = None
     component: str | None = None

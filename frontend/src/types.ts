@@ -14,6 +14,7 @@ export type Theme = "light" | "dark";
 /** Curved links, or links with right angles. */
 export type EdgeStyle = "curved" | "orthogonal";
 export interface FlowNode {
+  muted?: boolean;
   language?: "sql" | "python";
   partitions?: "all";
   outputs?: Record<string, { partition?: { by: string; column: string } }>;
@@ -415,6 +416,8 @@ export interface NodeRun {
   status: NodeRunStatus;
   label: string;
   writes_external: boolean;
+  /** The node ran as a passthrough, without its code. */
+  muted?: boolean;
   /** Each output with the seconds its statement took. */
   outputs?: Record<string, Dataset & { duration: number }>;
   error?: string;

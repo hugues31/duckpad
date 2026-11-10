@@ -6,7 +6,7 @@ test("create a personal token once, attribute a run and revoke it", async ({
   page,
 }) => {
   await signIn(page);
-  await openUserSettings(page);
+  await openUserSettings(page, en.apiTokens);
   const section = page.getByRole("region", { name: en.apiTokens, exact: true });
   await section
     .getByLabel(en.apiTokenName, { exact: true })
@@ -41,7 +41,7 @@ test("create a personal token once, attribute a run and revoke it", async ({
   await expect(dialog).toContainText(`${en.runRequester}: admin`);
   await expect(dialog).toContainText("Browser automation");
   await expect(dialog).toContainText(run.id);
-  await page.goto("/user-settings");
+  await page.goto("/user-settings/api-tokens");
   await expect(secret).toHaveCount(0);
   const row = section
     .getByRole("row")

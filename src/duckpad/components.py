@@ -5,6 +5,7 @@ import tomllib
 
 from . import named_documents, partitions, project_files, value_sources, variables
 from .graph import output_ports
+from .muting import passthrough
 from .node_code import code_path, node_sql
 from .node_names import name_text, node_caption
 from .python_environment import requirement_name
@@ -18,6 +19,14 @@ DOCUMENTATION_SECTIONS = ("nodes", "datasets", "columns")
 def in_subtree(key, root):
     """Whether an expanded node key is the root node or nested inside that component instance."""
     return key == root or key.startswith(root + "::")
+
+
+def missing_node(nodes, key):
+    """The error for a node absent from the expanded flow, such as one inside a muted component instance."""
+    muted = next((n for n in nodes if key.startswith(n + "::") and nodes[n].get("muted")), None)
+    if muted:
+        return Problem(f"Unmute {nodes[muted]['display_name']} to use the nodes it contains", 422)
+    return Problem("Node not found", 404)
 
 
 def expand_for(bundle, environment, tolerant=True, computed=None, partition=None):
@@ -54,6 +63,21 @@ def expand(bundle, tolerant=False):
             # Display name parts: component instances, then this node.
             path = [*parents, node_caption(bundle, node, stack[-1] if stack else None)]
             try:
+                if node.get("muted"):
+                    template, text, aliases = passthrough(bundle, node, stack[-1] if stack else None)
+                    add_leaf(
+                        {**node, "language": "sql", "params": {}, "mute_inputs": aliases},
+                        key,
+                        path,
+                        template,
+                        text,
+                        local_ports,
+                    )
+                    if node.get("component"):
+                        boundaries[key] = local_ports[node["id"]]
+                    # Keep the original sockets for resolving edges, but only routed inputs are required.
+                    template["inputs"] = list(aliases.values())
+                    continue
                 if node.get("component"):
                     definition_id = node["component"]
                     if definition_id in stack:
@@ -159,6 +183,12 @@ def expand(bundle, tolerant=False):
         return local_ports
 
     visit(bundle["flow"])
+    edges = [
+        edge
+        for edge in edges
+        if not nodes[edge["target"]].get("muted")
+        or edge["targetHandle"] in nodes[edge["target"]]["parsed"]["inputs"]
+    ]
     if tolerant:
         occupied = set()
         for edge in edges:

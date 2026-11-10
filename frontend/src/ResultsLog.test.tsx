@@ -191,3 +191,38 @@ it("names Python messages and captured output instead of a message block", async
   expect(timeline).toContain("Message block 2 · result");
   expect(timeline).not.toContain("Message block Python");
 });
+
+it("does not claim that a muted export wrote its destination", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () =>
+      json({
+        id: "run",
+        commit: "abc123456",
+        status: "success",
+        environment: "dev",
+        nodes: {
+          python: {
+            status: "success",
+            muted: true,
+            writes_external: false,
+            statements: [],
+          },
+        },
+      }),
+    ),
+  );
+  const { container } = render(
+    <MemoryRouter>
+      <ResultsLog
+        {...logProps}
+        exportNode
+        download={false}
+        result={{ result_run: "run" } as NodeResult}
+      />
+    </MemoryRouter>,
+  );
+  expect(await screen.findByText("Muted, code skipped")).toBeTruthy();
+  expect(screen.queryByText("Written to the destination")).toBeNull();
+  expect(container.querySelector(".log-export")).toBeNull();
+});

@@ -21,23 +21,17 @@ from ..services import Services
 from ..util import Problem, clean
 from .config import Configuration
 
+# One camelCase or kebab-case word, as frontend areas and route slugs are. The model reads these
+# names as validated context, so they stay short and free of spaces and punctuation.
+NAVIGATION_NAME = r"[a-z][A-Za-z0-9-]{0,39}"
+
 
 class PageContext(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    page: Literal[
-        "home", "projects", "pipelines", "instanceSettings", "userSettings", "projectSettings", "notFound"
-    ]
-    tab: Literal["flow", "code", "documentation", "variables", "history"] | None = None
-    section: Literal[
-        "",
-        "usersPermissions",
-        "ssoSettings",
-        "assistant",
-        "gitHosts",
-        "environments",
-        "connections",
-        "extensions",
-    ] = ""
+    # Navigation names describe the page; resource identifiers below determine access.
+    page: str = Field(pattern=f"^{NAVIGATION_NAME}$")
+    tab: str | None = Field(default=None, pattern=f"^{NAVIGATION_NAME}$")
+    section: str = Field(default="", pattern=f"^({NAVIGATION_NAME})?$")
     project: str | None = None
     worktree: str = ""
     branch: str = Field(default="", max_length=255)
@@ -187,7 +181,7 @@ def validate_context(services, user, context: PageContext):
         return value
     project = access.worktree(user, context.worktree)
     worktree = services.projects.get(context.worktree)
-    if context.project != project or context.branch != worktree["branch"] or context.page != "pipelines":
+    if context.project != project or context.branch != worktree["branch"]:
         raise Problem("Page context does not match the working branch", 422)
     services.catalog.environment(context.environment)
     if context.run:

@@ -22,6 +22,7 @@ import {
 } from "./graph";
 import { findNodePosition } from "./graphLayout";
 import { useT } from "./i18n";
+import { canMute } from "./nodeCode";
 import {
   copyNodes,
   pastableNodes,
@@ -76,6 +77,21 @@ export function useFlowEditing({
   async function updateGraph(change: (graph: Graph) => void) {
     if (!canEdit) return;
     await save(snapshot, (value) => change(graphAt(value, path)));
+  }
+  async function toggleMute(ids: string[]) {
+    if (!canEdit || busy || saving || !bundle) return;
+    const eligible = graph!.nodes.filter(
+      (item) => ids.includes(item.id) && canMute(snapshot, item, parent),
+    );
+    if (!eligible.length) return;
+    const muted = !eligible.every((item) => item.muted);
+    await updateGraph((value) => {
+      for (const item of value.nodes) {
+        if (!eligible.some((candidate) => candidate.id === item.id)) continue;
+        if (muted) item.muted = true;
+        else delete item.muted;
+      }
+    });
   }
   /**
    * Save new nodes, then select the one `change` returns. Editors stay inert
@@ -244,6 +260,7 @@ export function useFlowEditing({
     safe,
     copy,
     paste,
+    toggleMute,
   });
   /** Insert a Filter node reading one output of the selected node, with a sample's condition. */
   async function addFilterNode(port: string, condition: string) {
@@ -273,5 +290,6 @@ export function useFlowEditing({
     removeNodes,
     paste,
     addFilterNode,
+    toggleMute,
   };
 }

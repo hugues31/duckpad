@@ -65,6 +65,45 @@ For air-gapped deployments, [download extensions on any connected computer and
 import them into Duckpad](OFFLINE_EXTENSIONS.md) before running connectors that
 need them.
 
+### Version and instance diagnostics
+
+```sh
+duckpad --version
+duckpad info
+duckpad info --home /path/to/my-instance --json
+```
+
+`info` reports the Duckpad, Python and installed DuckDB versions, platform,
+instance/database paths and master-key source without opening the instance or
+printing secrets. Use the same `--home` and environment as the server.
+Administrative commands exit with 0 on success, 1 for operational failures and
+2 for invalid arguments. `duckpad run` keeps its [Job exit codes](AUTOMATION.md).
+
+### Run in the background
+
+On Linux, initialize your instance interactively and stop it, then generate a
+systemd user unit with the current Python executable and instance path:
+
+```sh
+mkdir -p ~/.config/systemd/user
+duckpad service-unit > ~/.config/systemd/user/duckpad.service
+systemctl --user daemon-reload
+systemctl --user enable --now duckpad
+systemctl --user status duckpad
+journalctl --user -u duckpad -f
+systemctl --user stop duckpad
+systemctl --user start duckpad
+```
+
+`service-unit` only prints configuration. It accepts the same `--home`, `--host`,
+`--port`, `--log-level` and `--trusted-local` options as `start`. Add an
+owner-readable `EnvironmentFile=` for deployment settings; the service does not
+inherit your shell's environment. Regenerate the unit if you move the Python
+installation. To continue after logout, configure
+[lingering](https://www.freedesktop.org/software/systemd/man/latest/loginctl.html).
+On other platforms use their service manager; containers manage `duckpad start
+--no-browser` directly. Duckpad does not install its own daemon.
+
 ### Reset a lost password
 
 An instance administrator resets other people's passwords in **Instance settings →
@@ -76,8 +115,8 @@ duckpad reset-password
 ```
 
 It prints a new generated password for `admin` and signs out that account's
-sessions. Sign in with it, then choose your own in **User settings → Change
-password**. To reset another local account, name it, and pass the `--home` used
+sessions. Sign in with it, then choose your own in **User settings → Password →
+Change password**. To reset another local account, name it, and pass the `--home` used
 with `duckpad start` if you chose one:
 
 ```sh
@@ -98,11 +137,69 @@ After a failed attempt, the sign-in page shows these steps too:
 
 ## Upgrades and backups
 
-Before upgrading, stop the server and keep a private backup of the entire
-instance directory, including its project repositories and SQLite database.
-Keep the master key too; if it is supplied externally, back it up separately.
-Source data in external folders or databases needs its own backup. A project
-ZIP excludes data, Git history, accounts, connection settings and run history.
+Stop Duckpad, then create a private archive:
+
+```sh
+duckpad backup
+duckpad backup ~/backups/ --home /path/to/my-instance
+duckpad backup /path/to/backups/before-upgrade.tar.gz --home /path/to/my-instance
+```
+
+Without a destination, Duckpad creates a timestamped archive in the current
+directory. A directory destination also gets an automatic name; missing parent
+folders are created. Existing archives are never overwritten, and the command
+prints the final size. Rebuildable Python caches are excluded by default; use
+`--include-python-cache` to include them. Offline DuckDB extensions are always kept.
+
+The archive includes the database, projects, Git history, uploads and local
+master key. It is unencrypted and owner-readable on POSIX. Keep external keys,
+secret sources and external data separately. Symbolic links are preserved,
+not followed. Avoid external edits and other maintenance during backup.
+
+To restore a trusted archive, stop Duckpad and move any existing instance aside
+(or empty its directory, for example a mounted volume):
+
+```sh
+duckpad restore /path/to/backups/before-upgrade.tar.gz
+```
+
+`restore` checks the recorded version and original absolute path, validates the
+archive and database, then moves the extracted instance into place. It refuses a
+nonempty destination; optional `--home` must match the original path. Restore
+with the original operating-system user and provide external keys before
+restarting. Moving an instance to another path is not supported. A project ZIP
+is not an instance backup.
+
+### Back up a service or container
+
+With the systemd unit above:
+
+```sh
+systemctl --user stop duckpad &&
+  duckpad backup ~/backups/ &&
+  systemctl --user start duckpad
+```
+
+For the [Compose service below](#secrets-from-docker-or-kubernetes), use its same
+image and persistent `/data` volume, with a writable backup mount. The image
+runs as UID/GID 10001:
+
+```sh
+mkdir -p backups
+sudo chown 10001:10001 backups
+chmod 700 backups
+docker compose stop duckpad &&
+  docker compose run --rm --no-deps -v "$PWD/backups:/backups" duckpad duckpad backup /backups --home /data/duckpad &&
+  docker compose start duckpad
+```
+
+These sequences leave the service stopped if the backup fails; fix the reported
+error before starting it again. `docker exec` cannot make an offline backup of
+the running server. For restoration, use the same one-off container and mounts
+with `duckpad restore /backups/<archive>.tar.gz` after moving the old instance aside.
+See [Compose run](https://docs.docker.com/reference/cli/docker/compose/run/).
+
+### Upgrade
 
 Upgrade with `pip install --upgrade duckpad`. Breaking releases may require a
 fresh instance; check the [release notes](https://github.com/hugues31/duckpad/releases)
@@ -328,7 +425,7 @@ versions and checks. Installed release wheels already include the interface.
 The initial `admin` account manages the instance. Open **Instance settings → Users and permissions** to create individual
 accounts, reset passwords, change instance roles, or deactivate/reactivate accounts.
 Passwords require at least 12 characters. Users can change their own password in
-**Account menu → User settings**; resets and deactivations revoke existing sessions.
+**Account menu → User settings → Password**; resets and deactivations revoke existing sessions.
 
 **API tokens.** Local and SSO users can create named tokens under **User settings → API tokens**.
 The form proposes an expiration date 90 days away; clear it for a token without expiration.

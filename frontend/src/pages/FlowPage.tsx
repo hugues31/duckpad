@@ -217,6 +217,7 @@ export default function FlowPage() {
     removeNodes,
     paste,
     addFilterNode,
+    toggleMute,
   } = useFlowEditing({
     path,
     selected,
@@ -309,6 +310,7 @@ export default function FlowPage() {
       openModal,
       worktree,
       removeNodes,
+      toggleMute,
     });
   return (
     <div
@@ -330,6 +332,9 @@ export default function FlowPage() {
         onClose={() => panels.set({ palette: false })}
         onAdd={(kind, id, linked) =>
           safe(() => addNode(kind, id, undefined, undefined, linked))
+        }
+        onDragStart={(kind, id, transfer) =>
+          canvas.current?.previewDrag(kind, id, transfer)
         }
         onNewTemplate={(language) =>
           openModal({

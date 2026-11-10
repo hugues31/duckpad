@@ -22,7 +22,7 @@ import {
   Square,
   type LucideProps,
 } from "lucide-react";
-import { memo, useEffect } from "react";
+import { memo, useEffect, type ComponentProps } from "react";
 import { PythonIcon } from "./AddIcon";
 import { WarningBadge } from "./ExecutionMessages";
 import { useT } from "./i18n";
@@ -56,6 +56,7 @@ function StatusIcon({ status, ...props }: LucideProps & { status: string }) {
 
 /** What the canvas shows of a node. */
 type PipelineData = {
+  muted?: boolean;
   count?: number;
   fullNode: string;
   valueProducer?: boolean;
@@ -85,19 +86,37 @@ type PipelineData = {
 
 export type PipelineNode = Node<PipelineData, "pipeline">;
 
+/** Center of the 96px shape inside the 150px node (see flow.css). */
+export const NODE_SHAPE_CENTER = { x: 75, y: 48 };
+
 export const PipelineNode = memo(function PipelineNode({
   id,
   data,
   selected,
 }: NodeProps<PipelineNode>) {
-  const t = useT();
-  const partition = data.partition;
   const updateNodeInternals = useUpdateNodeInternals();
   const portLayout = JSON.stringify([data.kind, data.inputs, data.outputs]);
   useEffect(() => {
     // SQL edits can rename or move handles without resizing the node.
     updateNodeInternals(id);
   }, [id, portLayout, updateNodeInternals]);
+  return <PipelineNodeView data={data} selected={selected} />;
+});
+PipelineNode.displayName = "PipelineNode";
+
+/** The same appearance for a canvas node and its native palette drag image. */
+export function PipelineNodeView({
+  data,
+  selected,
+  preview = false,
+}: {
+  data: PipelineData;
+  selected?: boolean;
+  preview?: boolean;
+}) {
+  const t = useT();
+  const partition = data.partition;
+  const Port = preview ? PreviewHandle : Handle;
   const source = data.kind === "source";
   const StatusTag = data.status === "failed" ? "button" : "span";
   const portPosition = (index: number, count: number) => {
@@ -108,8 +127,30 @@ export const PipelineNode = memo(function PipelineNode({
   };
   return (
     <div
-      className={`pipeline-node ${source ? "source-node" : "round-node"} ${data.kind} ${selected ? "is-selected" : ""}`}
+      className={`pipeline-node ${source ? "source-node" : "round-node"} ${data.kind} ${selected ? "is-selected" : ""} ${data.muted ? "is-muted" : ""}`}
     >
+      {data.muted && data.inputs.length > 0 && (
+        <svg
+          className="node-passthrough"
+          width="150"
+          height="96"
+          aria-hidden="true"
+        >
+          {data.outputs.map((port, index) => {
+            const input = portPosition(
+              index < data.inputs.length ? index : 0,
+              data.inputs.length,
+            );
+            const output = portPosition(index, data.outputs.length);
+            return (
+              <path
+                key={port}
+                d={`M ${input.inset} ${input.top} C 75 ${input.top}, 75 ${output.top}, ${150 - output.inset} ${output.top}`}
+              />
+            );
+          })}
+        </svg>
+      )}
       <div className="node-shape">
         <NodeIcon kind={data.icon} size={27} strokeWidth={1.6} />
       </div>
@@ -133,6 +174,11 @@ export const PipelineNode = memo(function PipelineNode({
         </span>
       )}
       <div className="node-status-slot">
+        {data.muted && (
+          <span className="badge neutral" title={t("mutedNodeHint")}>
+            {t("mutedNode")}
+          </span>
+        )}
         {data.valueProducer && (
           <span className="badge neutral" title={t("valueProducer")}>
             ƒ
@@ -164,7 +210,7 @@ export const PipelineNode = memo(function PipelineNode({
           )}
       </div>
       {data.inputs.map((port: string, i: number) => (
-        <Handle
+        <Port
           key={"in" + port}
           type="target"
           position={Position.Left}
@@ -185,10 +231,10 @@ export const PipelineNode = memo(function PipelineNode({
           aria-label={`${t("inputs")}: ${port}${data.missingInputs.includes(port) ? ` · ${t("connectSource")}` : ""}`}
         >
           <span className="handle-label in">{port}</span>
-        </Handle>
+        </Port>
       ))}
       {data.outputs.map((port: string, i: number) => (
-        <Handle
+        <Port
           key={"out" + port}
           type="source"
           position={Position.Right}
@@ -204,9 +250,25 @@ export const PipelineNode = memo(function PipelineNode({
           aria-label={`${t("output")}: ${port}`}
         >
           <span className="handle-label out">{port}</span>
-        </Handle>
+        </Port>
       ))}
     </div>
   );
-});
-PipelineNode.displayName = "PipelineNode";
+}
+
+/** Drag images have decorative ports, without registering live connections. */
+function PreviewHandle({
+  position,
+  style,
+  className,
+  children,
+}: ComponentProps<typeof Handle>) {
+  return (
+    <span
+      className={`react-flow__handle react-flow__handle-${position} ${className || ""}`}
+      style={style}
+    >
+      {children}
+    </span>
+  );
+}

@@ -10,6 +10,22 @@ class InstancePaths:
         self.home = Path(home)
 
     @property
+    def database(self) -> Path:
+        return self.home / "instance.sqlite"
+
+    @property
+    def lock(self) -> Path:
+        return self.home / "instance.lock"
+
+    @property
+    def master_key(self) -> Path:
+        return self.home / "duckpad-master.key"
+
+    @property
+    def python_cache(self) -> Path:
+        return self.home / "python"
+
+    @property
     def extensions(self) -> Path:
         """The private DuckDB extension cache shared by every SQL worker."""
         return self.home / "extensions"
@@ -53,7 +69,7 @@ class InstancePaths:
 
     def python_status(self, worktree: str) -> Path:
         """The latest Python environment preparation of a branch or Job worktree."""
-        return self.home / "python" / "status" / worktree
+        return self.python_cache / "status" / worktree
 
     def worktree_directories(self) -> list[Path]:
         """Every directory with one child per recorded worktree, named after it."""
@@ -61,5 +77,5 @@ class InstancePaths:
             self.home / "worktrees",
             self.home / "exports",
             self.artifacts / "partitions",
-            self.home / "python" / "status",
+            self.python_cache / "status",
         ]

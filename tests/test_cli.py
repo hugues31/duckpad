@@ -11,6 +11,7 @@ import uvicorn
 from fastapi.testclient import TestClient
 
 from duckpad import cli, sealing
+from duckpad.paths import InstancePaths
 from duckpad.store import Store
 
 
@@ -63,7 +64,7 @@ def test_network_binds_warn_when_the_master_key_is_in_the_instance(
     monkeypatch.setattr(uvicorn, "run", serve)
     cli.main()
     assert ("master key that encrypts stored secrets" in capsys.readouterr().out) is warned
-    assert (home / sealing.KEY_FILE).exists() is not external
+    assert InstancePaths(home).master_key.exists() is not external
 
 
 def test_a_missing_master_key_is_reported_without_traceback(tmp_path, monkeypatch):
@@ -73,7 +74,7 @@ def test_a_missing_master_key_is_reported_without_traceback(tmp_path, monkeypatc
     store = Store(tmp_path)
     store.put("settings", "oidc", {"enabled": False, "client_secret": "kept"})
     store.close()
-    (tmp_path / sealing.KEY_FILE).unlink()
+    InstancePaths(tmp_path).master_key.unlink()
     result = subprocess.run(
         [sys.executable, "-m", "duckpad", "start", "--home", str(tmp_path), "--no-browser"],
         capture_output=True,

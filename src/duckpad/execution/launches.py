@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from .. import partitions, project_extensions, value_sources, variables
 from ..bundle import files_to_bundle
 from ..catalog import Catalog, redact
-from ..components import expand, expand_for, in_subtree
+from ..components import expand, expand_for, in_subtree, missing_node
 from ..datasets import Context, Dataset
 from ..graph import connection_references, reachable, topological
 from ..node_names import node_name_parts
@@ -63,7 +63,7 @@ def launch_scope(
         return set(nodes)
     scope = {n for n in nodes if in_subtree(n, target)}
     if not scope:
-        raise Problem("Node not found", 404)
+        raise missing_node(nodes, target)
     upstream = reachable(scope, edges, upstream=True)
     if not ancestors:
         return upstream
@@ -406,6 +406,7 @@ class LaunchPlanner:
                         "status": "pending",
                         "label": nodes[n]["display_name"],
                         "writes_external": nodes[n]["parsed"]["writes_external"],
+                        **({"muted": True} if nodes[n].get("muted") else {}),
                         "fingerprint": fingerprints[n],
                         "results": [],
                         **variables.run_usages(nodes[n]),

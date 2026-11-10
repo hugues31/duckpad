@@ -12,6 +12,7 @@ from sqlalchemy import text
 
 from duckpad import sealing
 from duckpad.catalog import Catalog
+from duckpad.paths import InstancePaths
 from duckpad.services import Services
 from duckpad.store import Store
 from duckpad.util import Problem
@@ -91,7 +92,7 @@ def test_secrets_are_sealed_at_rest_and_read_in_plain(tmp_path):
     store = Store(tmp_path)
     try:
         fill(store)
-        key_file = tmp_path / sealing.KEY_FILE
+        key_file = InstancePaths(tmp_path).master_key
         assert stat.S_IMODE(key_file.stat().st_mode) == 0o600
         assert not store.keys.external
         parameters = json.loads(
@@ -167,7 +168,7 @@ def test_rotation_reseals_with_the_first_key(tmp_path, monkeypatch):
         fill(store)
     finally:
         store.close()
-    assert not (tmp_path / "instance" / sealing.KEY_FILE).exists()
+    assert not InstancePaths(tmp_path / "instance").master_key.exists()
 
     key_file.write_text(f"# rotated\n{second}\n{first}\n")
     Store(tmp_path / "instance").close()
@@ -189,7 +190,7 @@ def test_a_missing_or_wrong_key_refuses_to_start(tmp_path, monkeypatch):
         identity = store.keys.primary
     finally:
         store.close()
-    key_file = tmp_path / sealing.KEY_FILE
+    key_file = InstancePaths(tmp_path).master_key
     saved = key_file.read_text()
     key_file.unlink()
     with pytest.raises(Problem, match=f"master key {identity}, but .*duckpad-master.key is missing"):
@@ -214,7 +215,7 @@ def test_key_variables(tmp_path, monkeypatch):
         # Git and SQL workers never inherit the key.
         assert sealing.KEY_VARIABLE not in os.environ
         assert store.keys.external
-        assert not (tmp_path / "first" / sealing.KEY_FILE).exists()
+        assert not InstancePaths(tmp_path / "first").master_key.exists()
         fill(store)
     finally:
         store.close()

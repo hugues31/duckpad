@@ -127,7 +127,7 @@ test("synchronize over SSH with the account key after confirming each origin URL
     "Generate your SSH key",
   );
   await dialog.getByRole("link", { name: "Open user settings" }).click();
-  await expect(page).toHaveURL(/\/user-settings$/);
+  await expect(page).toHaveURL(/\/user-settings\/ssh-key$/);
   const card = page.getByRole("region", { name: "SSH key for Git" });
   await card.getByRole("button", { name: "Generate SSH key" }).click();
   const publicKey = card.getByLabel("Public key", { exact: true });
@@ -181,6 +181,7 @@ test("synchronize over SSH with the account key after confirming each origin URL
   await openUserSettings(page);
   await page.getByLabel("Language", { exact: true }).selectOption("fr");
   const translated = page.getByRole("region", { name: fr.sshKey });
+  await page.getByRole("link", { name: fr.sshKey, exact: true }).click();
   await expect(translated).toContainText(fr.sshPublicKey);
   await translated
     .getByRole("button", { name: fr.deleteSshKey, exact: true })
@@ -192,6 +193,7 @@ test("synchronize over SSH with the account key after confirming each origin URL
   await expect(
     translated.getByRole("button", { name: fr.generateSshKey }),
   ).toBeVisible();
+  await page.getByRole("link", { name: fr.preferences, exact: true }).click();
   await page.getByLabel(fr.language, { exact: true }).selectOption("en");
   expect(await (await page.request.get("/api/ssh-key")).json()).toBeNull();
 });
