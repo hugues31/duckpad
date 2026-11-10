@@ -43,6 +43,7 @@ const viewport = (page: Page) =>
 
 for (const entry of [
   { label: "Load CSV", shape: "source-node", zoom: 0, example: false },
+  { label: "Filter", shape: "round-node", zoom: -20, example: true },
   { label: "Join", shape: "round-node", zoom: -2, example: true },
   { label: "Export CSV", shape: "round-node", zoom: 2, example: true },
   { label: "Regional report", shape: "component", zoom: -1, example: true },
@@ -65,15 +66,16 @@ for (const entry of [
       });
       await page.mouse.up();
       for (let n = 0; n < Math.abs(entry.zoom); n++) {
-        await page
-          .getByRole("button", {
-            name: entry.zoom > 0 ? "Zoom in" : "Zoom out",
-            exact: true,
-          })
-          .click();
+        const control = page.getByRole("button", {
+          name: entry.zoom > 0 ? "Zoom in" : "Zoom out",
+          exact: true,
+        });
+        if (await control.isDisabled()) break;
+        await control.click();
       }
     }
     const zoom = await canvasZoom(page);
+    if (entry.zoom === -20) expect(zoom).toBe(0.1);
     const transform = await viewport(page);
     const point = {
       x: Math.round(area.x + area.width / 2),

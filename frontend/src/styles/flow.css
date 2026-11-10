@@ -563,7 +563,6 @@ fieldset.palette-bottom {
   padding: 24px;
   width: max-content;
   pointer-events: none;
-  transform-origin: top left;
 }
 .node-shape {
   width: 96px;

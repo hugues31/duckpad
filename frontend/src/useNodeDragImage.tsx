@@ -16,7 +16,9 @@ export function useNodeDragImage({ parsed, components }: CanvasProps) {
       <div
         ref={element}
         className="node-drag-image"
-        style={{ transform: `scale(${getZoom()})` }}
+        // Native Chromium drag capture ignores the root element's transform.
+        // Layout zoom is preserved in both the captured image and its hotspot.
+        style={{ zoom: getZoom() }}
         aria-hidden="true"
       >
         <PipelineNodeView data={data} preview />
