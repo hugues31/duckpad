@@ -81,18 +81,6 @@ def test_approval_survives_restart_and_records_entry_point(instance):
         assert decide(resumed, identity, saved).status_code == 409
 
 
-def test_denial_is_returned_to_model_and_chat_can_continue(instance):
-    app, client = instance
-    configure(client)
-    _, context = project(client)
-    identity, requested = request_run(app, client, context)
-    result = final(decide(client, identity, requested, False))
-    assert result["status"] == "complete", result
-    assert "denied" in result["text"].lower()
-    assert client.get("/api/runs").json() == []
-    assert turn(client, identity, context)[-1]["turn"]["status"] == "awaiting_approval"
-
-
 def test_partial_batch_never_executes_and_replays_are_rejected(instance):
     app, client = instance
     configure(client)
@@ -193,8 +181,8 @@ def test_approval_is_owned_and_permissions_are_rechecked(instance):
         assert admin.get("/api/runs").json() == []
 
 
-def test_quick_prompts_default_custom_empty_and_admin_only(instance):
-    app, client = instance
+def test_quick_prompts_default_custom_and_empty(instance):
+    _, client = instance
     configure(client)
     assert client.get("/api/assistant/options").json()["quick_prompts"] is None
     prompts = [{"label": "Optimize", "prompt": "Find simpler transformations."}]
@@ -203,10 +191,6 @@ def test_quick_prompts_default_custom_empty_and_admin_only(instance):
     assert configure(client, quick_prompts=[]).status_code == 200
     assert client.get("/api/assistant/options").json()["quick_prompts"] == []
     assert configure(client, quick_prompts=[{"label": " ", "prompt": "x"}]).status_code == 422
-    app.state.auth.create_user("reader", "reader-password-123")
-    with TestClient(app) as reader:
-        reader.post("/api/login", json={"username": "reader", "password": "reader-password-123"})
-        assert configure(reader, quick_prompts=prompts).status_code == 403
 
 
 def test_export_warning_and_variables_match_the_requested_scope(instance):

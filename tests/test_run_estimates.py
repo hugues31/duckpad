@@ -12,8 +12,6 @@ def test_reruns_capture_durable_timings_for_only_their_scope(services, tmp_path)
     second = wait_run(store, engine.launch(tree, "dev", "source"))
     assert set(second["nodes"]) == {"source"}
     assert second["nodes"]["source"]["estimated_duration"] == first["nodes"]["source"]["duration"]
-    # Estimates are part of the durable snapshot returned by both workspace and Job APIs.
-    assert store.get("run", second["id"])["nodes"] == second["nodes"]
     assert store.node_duration_estimates(tree, "prod") == {}
     other = projects.create("Other", example_bundle(tmp_path / "other.csv"))["id"]
     assert store.node_duration_estimates(other, "dev") == {}

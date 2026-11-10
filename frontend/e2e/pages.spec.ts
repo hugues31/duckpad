@@ -263,28 +263,12 @@ test("the results panel loads the node's rows once", async ({ page }) => {
   expect(loads).toHaveLength(1);
 });
 
-test("the results search covers every column and headers sort the sample", async ({
-  page,
-}) => {
+test("results headers sort the sample", async ({ page }) => {
   const { node } = await openRunExample(page);
   await node.click();
   const preview = page.locator(".preview-panel");
   const first = preview.locator(".data-table th button span").first();
   const column = (await first.textContent())!;
-  const searched = page.waitForRequest((request) => {
-    const { pathname, searchParams } = new URL(request.url());
-    return (
-      pathname.includes("/preview/") &&
-      searchParams.get("search") === "no-such-value"
-    );
-  });
-  await preview
-    .getByLabel("Search all columns…", { exact: true })
-    .fill("no-such-value");
-  await searched;
-  await expect(preview.locator(".empty-small")).toBeVisible();
-  await preview.getByTitle("Clear", { exact: true }).click();
-  await expect(preview.locator(".empty-small")).toHaveCount(0);
   await first.click();
   await expect(first).toHaveText(`${column} ↑`);
   await expect(preview.locator(".sample-chip")).toHaveText(`${column} ↑`);

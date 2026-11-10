@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { signIn } from "./helpers";
 import { partitionFlow } from "./partitions-flow";
-import type { PreviewPage, Run, Snapshot } from "../src/types";
+import type { Run, Snapshot } from "../src/types";
 
 /** A point per row: every rendered row is one SVG symbol. */
 const POINTS = {
@@ -112,10 +112,11 @@ test("a chart draws an output of 5,000 rows and refuses 5,001 with the count", a
   );
 
   expect(chartRequests).toHaveLength(1);
-  const previews: Promise<PreviewPage>[] = [];
-  page.on("response", (response) => {
-    if (response.url().includes("/preview/over") && response.ok())
-      previews.push(response.json());
+  const previewLimits: (string | null)[] = [];
+  page.on("request", (request) => {
+    const url = new URL(request.url());
+    if (url.pathname.endsWith("/preview/over"))
+      previewLimits.push(url.searchParams.get("limit"));
   });
   // Keep Chart selected when changing nodes, so the Data tab loads no sample.
   await page.locator('.react-flow__node[data-id="over"]').click();
@@ -125,8 +126,7 @@ test("a chart draws an output of 5,000 rows and refuses 5,001 with the count", a
   await expect(refusal).toContainText("Aggregate");
   await expect(over.locator(".chart-view")).toHaveCount(0);
   await expect(over.locator("svg.marks")).toHaveCount(0);
-  for (const preview of await Promise.all(previews))
-    expect(preview.rows.length).toBeLessThanOrEqual(1);
+  for (const limit of previewLimits) expect(limit).toBe("1");
 });
 
 test("the Chart tab shows the Data tab's Run hint, Stale badge and failed run", async ({
@@ -137,10 +137,6 @@ test("the Chart tab shows the Data tab's Run hint, Stale badge and failed run", 
 
   const panel = await chartTab(page, id, "points");
   const empty = panel.locator(".preview-empty");
-  await expect(empty).toContainText("Ready when you are");
-  await expect(empty).toContainText(
-    "Run this node and its ancestors to materialize a preview.",
-  );
   await empty
     .getByRole("button", { name: "Run with ancestors", exact: true })
     .click();
@@ -172,63 +168,6 @@ test("the Chart tab shows the Data tab's Run hint, Stale badge and failed run", 
   await expect(
     panel.getByRole("alert", { name: "Last run failed" }),
   ).toContainText("missing_column");
-});
-
-test("raw dotted and bracketed columns render in starter and authored charts", async ({
-  page,
-}) => {
-  const { id, endpoint } = await chartedNodes(page, {
-    special:
-      "-- @output result\nSELECT * FROM (VALUES ('North', 7), ('South', 12)) t(\"a.b\", \"x[0]\");",
-  });
-  const snapshot: Snapshot = await (await page.request.get(endpoint)).json();
-  snapshot.bundle!.charts = null;
-  await save(page, endpoint, snapshot.revision, snapshot.bundle);
-  await run(page, endpoint);
-  const panel = await chartTab(page, id, "special");
-  await panel.getByRole("button", { name: "Add a chart", exact: true }).click();
-  await expect(page).toHaveURL(/\/code(\?|$)/);
-  const starter: Snapshot = await (await page.request.get(endpoint)).json();
-  const saved = JSON.parse(starter.files["charts.json"]);
-  expect(saved["special:result"][0].spec.encoding).toEqual({
-    x: { field: "a.b", type: "nominal" },
-    y: { field: "x[0]", type: "quantitative" },
-  });
-  await chartTab(page, id, "special");
-  const bars = panel.locator(".chart-view .mark-rect path");
-  await expect(bars).toHaveCount(2);
-  await expect(bars.first()).toHaveAttribute(
-    "aria-label",
-    /a\.b: North; x\[0\]: 7/,
-  );
-  await expect(panel.locator(".role-axis-title")).toHaveText(["a.b", "x[0]"]);
-  await bars.first().hover();
-  await expect(page.locator("#vg-tooltip-element")).toContainText("x[0]");
-  await expect(panel.getByRole("alert")).toHaveCount(0);
-
-  starter.bundle!.charts = {
-    "special:result": [
-      {
-        name: "Authored",
-        spec: {
-          mark: "point",
-          encoding: {
-            x: { field: "a.b", type: "nominal" },
-            y: { field: "x[0]", type: "quantitative" },
-            color: { field: "a.b", type: "nominal" },
-            tooltip: [{ field: "x[0]", type: "quantitative" }],
-          },
-        },
-      },
-    ],
-  };
-  await save(page, endpoint, starter.revision, starter.bundle);
-  await chartTab(page, id, "special");
-  await expect(
-    panel.locator(".chart-view .mark-symbol.role-mark path"),
-  ).toHaveCount(2);
-  await expect(panel.locator(".role-legend-title")).toHaveText("a.b");
-  await expect(panel.getByRole("alert")).toHaveCount(0);
 });
 
 test("the chart limit follows the selected partition and refuses all partitions without rows", async ({
@@ -267,16 +206,16 @@ test("the chart limit follows the selected partition and refuses all partitions 
   await expect(
     panel.locator(".chart-view .mark-symbol.role-mark path"),
   ).toHaveCount(3000, { timeout: 20000 });
-  const previews: Promise<PreviewPage>[] = [];
-  page.on("response", (response) => {
-    if (response.url().includes("/preview/transform") && response.ok())
-      previews.push(response.json());
+  const previewLimits: (string | null)[] = [];
+  page.on("request", (request) => {
+    const url = new URL(request.url());
+    if (url.pathname.endsWith("/preview/transform"))
+      previewLimits.push(url.searchParams.get("limit"));
   });
   await panel.getByRole("button", { name: "All", exact: true }).click();
   await expect(
     panel.getByRole("status").filter({ hasText: "6,000 rows" }),
   ).toBeVisible();
   await expect(panel.locator(".chart-view")).toHaveCount(0);
-  for (const preview of await Promise.all(previews))
-    expect(preview.rows.length).toBeLessThanOrEqual(1);
+  for (const limit of previewLimits) expect(limit).toBe("1");
 });

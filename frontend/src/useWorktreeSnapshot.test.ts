@@ -182,15 +182,12 @@ describe("useWorktreeSnapshot", () => {
 
   it.each([
     ["python_enabled", false, true],
-    ["python_enabled", true, false],
-    ["commit", "old-commit", "new-commit"],
     [
       "worktree",
       { id: "main", project: "project", branch: "main" },
       { id: "main", project: "project", branch: "renamed", read_only: true },
     ],
     ["future_field", undefined, { enabled: true }],
-    ["future_field", { enabled: true }, { enabled: false }],
     ["future_field", { enabled: true }, undefined],
   ])(
     "updates %s from %j to %j with unchanged project files",

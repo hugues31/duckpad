@@ -70,7 +70,6 @@ test("creates a scoped Job without tags and shows external scheduling examples",
   ).json();
   await page.goto(`/projects/${tree.project}/jobs`);
   const empty = page.locator(".empty-state");
-  await expect(empty).toContainText("A Job runs a chosen version");
   await empty.getByRole("button", { name: "New Job", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "New Job", exact: true });
   await expect(dialog.getByLabel("Name", { exact: true })).toBeFocused();

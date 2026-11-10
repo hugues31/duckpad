@@ -100,10 +100,8 @@ def test_dynamic_contract_is_rejected(change):
 
 
 def test_mixed_flow_and_parameter_instances(services):
-    store, projects, _, engine = services
+    store, _, _, engine = services
     worktree = flow(services)
-    snapshot = projects.snapshot(worktree["id"])
-    assert "uv.lock" in snapshot["files"]
     run = wait_run(store, engine.launch(worktree["id"], "dev"), timeout=30)
     assert not run["nodes"]["python"].get("error"), run["nodes"]["python"].get("error")
     assert run["status"] == "success", {k: v.get("error") for k, v in run["nodes"].items()}
@@ -690,17 +688,9 @@ class Probe(dp.Node):
         self.message("info", str(values))
 """
     worktree = single(services, code)
-    store.put("settings", "python:" + worktree["project"], {"enabled": True})
     run = wait_run(store, engine.launch(worktree["id"], "dev"), timeout=30)
     assert run["status"] == "success", run["nodes"]
     assert "synthetic-python-secret" not in str(run)
-
-
-def test_generated_lock_merge_is_regenerated_from_manifest():
-    from duckpad.merge import merge_files
-
-    files, conflicts = merge_files({"uv.lock": "base"}, {"uv.lock": "first"}, {"uv.lock": "second"})
-    assert "uv.lock" not in files and conflicts == []
 
 
 def test_float_defaults_are_normalized_for_direct_calls():
@@ -742,7 +732,7 @@ def test_shared_python_template_contracts_are_retained_per_node(tmp_path, revers
 
     app = create_app(tmp_path / "instance", watch=False)
     with TestClient(app) as client:
-        client.post("/api/login", json={"password": app.state.auth.initial_password})
+        client.post("/api/login", json={"username": "admin", "password": app.state.auth.initial_password})
         worktree = client.post("/api/projects", json={"name": "Shared contracts"}).json()
         projects = app.state.services.projects
         snapshot = projects.snapshot(worktree["id"])

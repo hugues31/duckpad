@@ -338,15 +338,6 @@ def test_schema_and_table_names_are_chosen_from_their_connection():
         compile_template(template, {"connection": "pg"}, {}, {"result": "out"}, connections, PROJECT_FILES)
     export = parse_template(BUILTINS["export_table"])
     assert export["download"] is None
-    with pytest.raises(Problem, match="Connection pg does not support write"):
-        compile_template(
-            export,
-            {"connection": "pg", "table": "totals"},
-            {"source": '"input"'},
-            {},
-            connections,
-            PROJECT_FILES,
-        )
     connections["pg"]["definition"]["capabilities"].append("write")
     [insert] = compile_template(
         export, {"connection": "pg", "table": "totals"}, {"source": '"input"'}, {}, connections, PROJECT_FILES

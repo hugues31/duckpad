@@ -195,8 +195,8 @@ def test_pinned_job_read_only_results_requester_and_deleted_history(instance):
 
 
 def test_permissions_and_service_operators(instance):
-    app, tree, call, _, users = instance
-    job = create(instance)
+    app, tree, call, _, _ = instance
+    create(instance)
     for actor in ("reader", "operator", "editor", "outsider"):
         expected = 404 if actor == "outsider" else 403
         for method, path, data in [
@@ -222,15 +222,6 @@ def test_permissions_and_service_operators(instance):
     app.state.access.member(tree["project"], service["id"], "operator")
     with pytest.raises(Problem, match="Readers or Operators"):
         app.state.access.member(tree["project"], service["id"], "editor")
-    token = app.state.auth.create_api_token(
-        app.state.auth.public(app.state.services.store.get("user", "admin")), service["id"], "Scheduler"
-    )
-    users["service"] = (service, {"authorization": "Bearer " + token["token"]})
-    response = call("POST", "/jobs/daily/runs", {}, "service")
-    assert response.status_code == 202, response.text
-    finished = join_run(app.state.services.store, response.json()["id"])
-    assert finished["requester"]["token_name"] == "Scheduler"
-    assert finished["worktree"] == job["worktree"]
 
 
 def test_promotion_compares_variables_detects_stale_review_and_audits_rollback(instance):

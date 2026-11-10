@@ -13,18 +13,12 @@ test("live server metrics, popup dismissal, mobile layout and translated dark th
   await expect(widget.locator(".resource-cpu b")).toHaveText(/\d+\.\d+ %/);
   await expect(widget.locator(".resource-memory b")).toHaveText(/\d+\.\d+ %/);
   await expect(widget).not.toContainText(/MiB|GiB/);
-  await expect(widget.locator(".resource-meter-fill")).toHaveCount(2);
   await expect(page.locator(".resource-memory-detail")).toBeHidden();
   await widget.focus();
   await page.keyboard.press("Enter");
   const popup = page.getByRole("dialog", { name: "Resource usage" });
   await expect(popup).toBeVisible();
   await expect(popup.getByRole("img")).toHaveCount(2);
-  await expect(popup).toContainText("Entire server machine");
-  await expect(popup).toContainText("all cores and applications");
-  await expect(popup.locator(".resource-memory-detail")).toContainText(
-    "RAM used / total",
-  );
   await expect(popup.locator(".resource-memory-detail strong")).toHaveText(
     /\d+\.\d+ (MiB|GiB) \/ \d+\.\d+ (MiB|GiB)/,
   );

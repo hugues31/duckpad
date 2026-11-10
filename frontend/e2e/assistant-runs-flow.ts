@@ -58,9 +58,6 @@ export async function verifyAssistantRuns(page: Page) {
   const runs = async (): Promise<Run[]> =>
     (await page.request.get(`/api/runs?worktree=${example.id}`)).json();
   await open();
-  await expect(
-    chat.getByRole("button", { name: "Optimize the flow", exact: true }),
-  ).toBeVisible();
   await chat
     .getByRole("button", { name: "Debug the latest run", exact: true })
     .click();

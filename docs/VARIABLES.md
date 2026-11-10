@@ -127,10 +127,7 @@ identifiers or escaped paths, never as SQL text, including inside expressions.
 ## Runs, history and Git
 
 A launch resolves the variables of its scope from the committed files and the
-selected environment. The run record lists each variable used with its type,
-value and source (`default` or `environment`), and the compiled and executed
-SQL list the bound value next to the variable name. Results depend on the
-resolved values only. Changing the `prod` value makes the `prod` results of the
+selected environment. Results depend on the resolved values only. Changing the `prod` value makes the `prod` results of the
 nodes that use it and of their descendants stale. Other environments and
 unrelated nodes stay valid. Renaming a variable, editing its description, or
 binding a parameter to a variable that holds its current value leaves results
@@ -146,23 +143,6 @@ variable and its field. Two branches that
 both create `variables.json` also merge variable by variable. Variables are not
 secrets. Their values are stored in Git, shown in SQL and history, and exported
 in ZIP archives; keep credentials in connections.
-
-## API
-
-The API exposes what the interface needs:
-
-- `GET /api/worktrees/{worktree}` returns the declarations in `bundle.variables`.
-  `variables` lists each variable's values per environment, the root flow
-  parameters bound to it or referencing it (`"expression": true`), diagnostics
-  and warnings.
-- `POST /api/worktrees/{worktree}/variables/{name}/rename` with `revision` and
-  the new `name` renames the declaration and every reference in one commit.
-- `GET /api/worktrees/{worktree}/variables/scope?environment=prod&node=…` lists
-  the variables a launch would use. The environment confirmation error of a UI
-  launch includes the same list.
-- Run records, `compile/{node}` and the executed SQL of previews include the
-  variables used. A sample filter may reference `{{ var.name }}`; the selected
-  environment's value is bound, never pasted.
 
 ## Variables in expressions
 
@@ -195,11 +175,8 @@ For other parameter types, bind the whole parameter instead.
 
 A variable referenced in an expression counts like a bound parameter: the run
 records it, fingerprints include its type and value in each environment, and a
-rename keeps results valid. The **SQL** tab lists the named parameter next to the
-variable and its value. Lineage explanations show the value that was used,
+rename keeps results valid. Lineage explanations show the value that was used,
 labeled with its variable, for example `amount >= 900 (high_value_threshold)`.
-**Create component** exposes each expression that references variables, so
-the new instance keeps the references.
 
 See [environments](ENVIRONMENTS.md) for instance settings and
 [SQL syntax](SQL.md) for typed node parameters.

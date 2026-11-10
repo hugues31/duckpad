@@ -4,18 +4,6 @@ If your team already runs Duckpad, open its address in your browser and ask an
 administrator for an account and project access. You do not need to install
 Python, Git or Duckpad on your own computer to use that server.
 
-| I want to… | Read next |
-| --- | --- |
-| Run Duckpad myself | [Start](#start) and [platform requirements](#platform-requirements) |
-| Keep Duckpad running in the background | [Linux user service](#linux-user-service) |
-| Find my version or instance files | [Version and paths](#version-and-paths) |
-| Upgrade or keep a backup | [Upgrades and backups](#upgrades-and-backups) |
-| Add people or understand a missing action | [Accounts and project access](#accounts-and-project-access) |
-| Host a shared instance | [Reverse proxy](#reverse-proxy), [secrets](#secrets-and-the-master-key) and [SQL resources](#sql-resources) |
-| Change language or theme | [Workspace preferences](WORKSPACE.md#preferences-and-access) |
-| Get back in after losing a password | [Reset a lost password](#reset-a-lost-password) |
-| Fix a startup or sign-in error | [Troubleshooting](TROUBLESHOOTING.md#start-and-sign-in) |
-
 ## Start
 
 You need **Python 3.11 or later** and **Git**. If you are not on Linux, read the
@@ -61,8 +49,7 @@ Python and Git must be on `PATH`. The default isolated SQL mode also requires **
 
 The distribution is available on [PyPI](https://pypi.org/project/duckpad/).
 Version tags also create a GitHub release with downloadable wheels. To install
-a downloaded wheel, use `pip install <wheel-file>`. See the
-[release guide](../docs/RELEASING.md) for publishing instructions.
+a downloaded wheel, use `pip install <wheel-file>`.
 
 ### Instance directory and options
 
@@ -77,81 +64,6 @@ Only one backend may own an instance directory at a time. Use separate `--home` 
 For air-gapped deployments, [download extensions on any connected computer and
 import them into Duckpad](OFFLINE_EXTENSIONS.md) before running connectors that
 need them.
-
-### Version and paths
-
-```sh
-duckpad --version
-duckpad version
-duckpad paths
-duckpad paths --home /path/to/my-instance --json
-```
-
-Both version commands print the installed package version without starting the
-server. `paths` locates the instance directory, the SQLite database containing
-configuration and history, the master key source, projects, uploads and other
-state. It does not create an instance, open its database or print secret values.
-Use `--json` for scripts. Paths reflect this command's `--home` and environment;
-run it with the same settings as the server, including an externally configured
-master key. Duckpad does not use a separate configuration file: settings live
-in `instance.sqlite`, with deployment options supplied by CLI flags and the
-environment. Browser preferences remain in the browser.
-
-### Linux user service
-
-For background operation on Linux with systemd, run the existing foreground
-command as a user service. systemd owns start, stop, restart and logs; Duckpad
-does not install an additional daemon or manage PID files. On macOS and Windows,
-use the platform's service manager with `duckpad start --no-browser` and the
-[trusted local mode requirements](#trusted-local-mode). In containers, let the
-container runtime manage the foreground process.
-
-First run Duckpad in the foreground with the intended `--home`, choose the
-administrator password, and stop it with Ctrl+C. This keeps the first-launch
-password and setup link out of the service journal. Find the executable with
-`command -v duckpad`. Create `~/.config/systemd/user/duckpad.service`, replacing
-the executable below with that absolute path and choosing an absolute `--home`:
-
-```ini
-[Unit]
-Description=Duckpad workspace
-
-[Service]
-Type=exec
-ExecStart=/absolute/path/to/.venv/bin/duckpad start --home %h/.local/share/duckpad --no-browser
-Restart=on-failure
-RestartSec=5
-TimeoutStopSec=120
-UMask=0077
-StandardOutput=journal
-StandardError=journal
-
-[Install]
-WantedBy=default.target
-```
-
-Quote paths containing spaces in `ExecStart`. `%h` expands to the service user's
-home. The service does not inherit your interactive shell's environment: configure
-any proxy, master-key or connection-secret settings explicitly, for example with
-an owner-readable `EnvironmentFile=` outside the instance directory. Keep that
-file in your separate deployment backup.
-
-```sh
-systemctl --user daemon-reload
-systemctl --user enable --now duckpad
-systemctl --user status duckpad
-journalctl --user -u duckpad -f
-systemctl --user stop duckpad
-systemctl --user start duckpad
-```
-
-Stop the service before making a backup; `Restart=on-failure` does not undo an
-explicit stop. `systemctl --user disable --now duckpad` stops it and removes
-automatic startup. To start at boot and keep running after logout, an operator
-can enable lingering with `loginctl enable-linger` for the service user; host
-policy may require administrator authorization. See the official
-[systemd service documentation](https://www.freedesktop.org/software/systemd/man/latest/systemd.service.html)
-and [loginctl documentation](https://www.freedesktop.org/software/systemd/man/latest/loginctl.html).
 
 ### Reset a lost password
 
@@ -188,64 +100,22 @@ After a failed attempt, the sign-in page shows these steps too:
 
 Before upgrading, stop the server and keep a private backup of the entire
 instance directory, including its project repositories and SQLite database.
-Use the same `--home` as for startup, or omit it for the default instance:
+Keep the master key too; if it is supplied externally, back it up separately.
+Source data in external folders or databases needs its own backup. A project
+ZIP excludes data, Git history, accounts, connection settings and run history.
 
-```sh
-duckpad backup /path/to/backups/duckpad-before-upgrade.tar.gz --home /path/to/my-instance
-```
-
-The destination's parent directory must exist and be outside the instance.
-Existing files are never overwritten. The command refuses a running instance,
-holds its startup lock until finished, and snapshots SQLite so committed WAL
-pages are included after an unclean shutdown. It archives all instance files,
-including project Git history, branches, uploads, exports, caches and any local
-master key. It excludes the startup lock and replaces the database and its
-temporary WAL files with the snapshot. Avoid other maintenance commands and
-external file edits during a backup.
-
-The archive is **not encrypted**. It is created with owner-only permissions on
-POSIX; keep it in private storage with suitable access controls on every platform.
-An archive with the local master key can decrypt its stored credentials. Back up
-externally supplied master keys, deployment environment files, referenced secrets,
-and external source data separately. Symbolic links are preserved, not followed;
-their targets also need separate backups. A project ZIP excludes data, Git history,
-accounts, connection settings and run history and is not an instance backup.
-
-To restore, stop Duckpad and use the same version as recorded in the archive's
-`manifest.json`. Extract a trusted backup into a new private staging directory:
-
-```sh
-mkdir -m 700 /path/to/private-staging
-tar -xzf /path/to/backups/duckpad-before-upgrade.tar.gz -C /path/to/private-staging
-```
-
-Check `manifest.json` for `original_home`, move the current instance aside, then
-move the extracted `duckpad` directory into that **same original absolute path**.
-Do not overlay an existing instance: it could retain stale WAL or project files.
-Run as the original operating-system user, restore externally supplied keys and
-secret sources, and restart with the original `--home`. Verify sign-in, projects
-and branches before discarding the previous directory. Moving to another path or
-machine is not supported by this backup command: database records and Git
-worktrees can contain absolute paths.
-
-Upgrade Duckpad in the same Python environment with `pip install --upgrade duckpad`,
-then start it with the same `--home`. Read the
-[release notes](https://github.com/hugues31/duckpad/releases) before changing
-versions. To recover the old instance, use its backup with the Duckpad version
-that created it.
-
-Duckpad is in v0: a release may reset the storage schema without an upgrade
-path. Startup then rejects the existing database without changing it. Keep the
-old directory as a backup and start a fresh instance:
+Upgrade with `pip install --upgrade duckpad`. Breaking releases may require a
+fresh instance; check the [release notes](https://github.com/hugues31/duckpad/releases)
+first. Startup rejects unsupported databases without changing them. In that case,
+keep the backup and choose a new instance directory:
 
 ```sh
 duckpad start --home /path/to/new-instance
 ```
 
-The new instance creates a new administrator password. Reconfigure accounts and
-connections, then import each project as a ZIP downloaded from the previous
-version; its files must follow the current [file format](AUTHORING.md).
-The old instance's execution history remains in its original database.
+Set up the administrator account and connections, then import project ZIPs that
+follow the current [file format](AUTHORING.md). Execution history stays in the
+original instance backup.
 
 ## Instance monitoring
 
@@ -259,10 +129,9 @@ excludes SQL worker processes. Unavailable counters are reported independently.
 A warning appears when at most 10% of the data disk remains available.
 
 Instance admins can monitor server CPU and RAM in the top bar. Click either
-indicator for two minutes of history; samples refresh every two seconds. Values
-are machine-wide and include other applications. In a container they follow what
-its runtime exposes, usually the host rather than the container's limits. Missing
-measurements appear as unavailable. History resets on reload or sign-out.
+indicator for two minutes of history. Values are machine-wide and include other
+applications; in a container they usually reflect the host rather than the
+container's limits.
 
 The same page shows recent Duckpad and Uvicorn logs, newest first, with minimum
 severity and case-insensitive text filters. While the page is open, it refreshes
@@ -270,7 +139,7 @@ every 5 seconds by default; choose another interval or Manual next to the
 Refresh button. Capture follows the server's configured log level. Successful
 monitoring requests do not enter this history.
 
-This first version keeps up to 1,000 entries in backend memory, truncates each
+Duckpad keeps up to 1,000 entries in backend memory, truncates each
 message to 4,000 characters, and returns up to 200 matches. Restarting clears
 the history. It does not read arbitrary server files or capture stdout, the
 initial admin password, reverse-proxy logs or historical container logs. Common
@@ -285,9 +154,7 @@ snapshots, status, and generations) are logged at DEBUG. The default INFO level
 still shows other requests, including failed polling requests. Use
 `duckpad start --log-level debug` to include polling in the server logs.
 
-Debug also logs complete tracebacks of assistant provider failures. Credentials
-are masked, but these traces can contain prompts, responses and project data:
-keep them private and use debug temporarily. See
+Debug also logs complete tracebacks of assistant provider failures; see
 [assistant troubleshooting](ASSISTANT.md#troubleshoot-provider-failures).
 
 ## Reverse proxy
@@ -344,8 +211,7 @@ previous one on a later line, then restart. The first key encrypts; the others
 only decrypt. At startup, Duckpad encrypts every secret again with the first key,
 then rewrites the database file so that no deleted page keeps a previous value.
 Remove the previous key after that restart. `DUCKPAD_MASTER_KEY` accepts several
-keys separated by commas. The same startup pass encrypts the secrets of an
-instance created before encryption.
+keys separated by commas.
 
 Encryption protects copies of the database, not a running server: anyone who
 controls the Duckpad process or can read the key can decrypt the secrets. An
@@ -469,8 +335,7 @@ The form proposes an expiration date 90 days away; clear it for a token without 
 Copy the `dpk_` secret when it is created: it is shown only once, and the database stores
 only its hash. Send it as `Authorization: Bearer dpk_…` to use the account's current permissions.
 Tokens are never accepted from cookies and do not authorize SSH key management or network Git.
-Creating, listing, or revoking tokens requires an interactive session. API tokens cannot
-manage their own tokens or another account's tokens, even with administrator permissions.
+Creating, listing, or revoking tokens requires an interactive session, even for administrators.
 The list shows creation, expiration and last use (updated at most once per minute), and allows revocation.
 Changing a password leaves API tokens valid. Deactivation deletes all tokens permanently,
 including after reactivation. An SSO account's tokens work only while SSO is enabled.

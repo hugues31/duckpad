@@ -13,7 +13,7 @@ from ..execution.launches import launch_scope
 from ..graph import connection_references
 from ..python_policy import get_policy
 from ..util import Problem
-from .tools import Dependencies, page, read_runs
+from .tools import Dependencies, page
 
 
 def proposal(deps, environment="", node=""):
@@ -229,5 +229,4 @@ def compare_run(ctx: RunContext[Dependencies], run: str, offset: int = 0, limit:
 RUN_TOOLS = [launch_run, cancel_run]
 DEBUG_TOOLS = [inspect_run, compare_run, wait_for_run]
 # Tools whose results hold a run's node outcomes, rechecked before they go back to a provider.
-# Saved conversations can also hold read_runs calls from before it only listed runs.
-RUN_READERS = [inspect_run, read_run_sql, compare_run, wait_for_run, read_runs]
+RUN_READERS = [inspect_run, read_run_sql, compare_run, wait_for_run]

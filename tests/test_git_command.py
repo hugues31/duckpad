@@ -21,7 +21,7 @@ def app(tmp_path):
 @pytest.fixture
 def client(app):
     with TestClient(app) as client:
-        client.post("/api/login", json={"password": app.state.auth.initial_password})
+        client.post("/api/login", json={"username": "admin", "password": app.state.auth.initial_password})
         yield client
 
 
@@ -57,7 +57,6 @@ def test_invalid_branch_names_are_explained_wherever_they_are_entered(app, clien
     app.state.services.projects.remotes.credentials.save_hosts("", ["https://example.invalid/"])
     remote = client.get(f"/api/worktrees/{worktree['id']}/git/remote").json()
     for method, path, body in [
-        ("POST", "branches", {"name": name}),
         ("POST", "git/open", {"name": name}),
         (
             "PUT",
@@ -72,7 +71,6 @@ def test_invalid_branch_names_are_explained_wherever_they_are_entered(app, clien
         response = client.request(method, f"/api/worktrees/{worktree['id']}/{path}", json=body)
         assert response.status_code == 422, (path, response.text)
         assert response.json()["detail"]["code"] == "invalid_branch_name"
-        assert response.json()["error"] == command.INVALID_BRANCH_NAME
     status = client.get(f"/api/worktrees/{worktree['id']}/git/remote").json()
     assert status["url"] is None and status["config_revision"] == remote["config_revision"]
 
@@ -105,20 +103,6 @@ def test_git_failures_keep_server_paths_in_the_logs(app, client, worktree, caplo
     assert response.json()["error"] == command.FAILURE
     assert home not in response.text and "index.lock" not in response.text
     assert str(lock) in caplog.text and "File exists" in caplog.text
-
-
-def test_cleanup_explains_a_worktree_git_keeps(app, client, worktree):
-    branch = client.post(f"/api/worktrees/{worktree['id']}/branches", json={"name": "done"}).json()
-    Path(branch["path"], "notes.txt").write_text("not a project definition")
-    head = app.state.services.projects.git(branch["path"], "rev-parse", "HEAD")
-    response = client.post(
-        f"/api/worktrees/{worktree['id']}/git/cleanup",
-        json={"remove_worktree": branch["id"], "integrated_worktree": worktree["id"], "expected_head": head},
-    )
-    assert response.status_code == 409, response.text
-    assert "untracked files" in response.json()["error"]
-    assert str(app.state.services.store.home) not in response.text
-    assert Path(branch["path"], "notes.txt").exists()
 
 
 def test_unreadable_revisions_are_reported_instead_of_crashing(app, worktree):

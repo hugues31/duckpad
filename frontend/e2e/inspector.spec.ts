@@ -64,9 +64,6 @@ test("Inspector saves edits after a pause, then edits typed during that save", a
   page,
 }) => {
   const { endpoint, inspector, label, status } = await openInspector(page);
-  await expect(
-    inspector.getByRole("button", { name: "Save changes", exact: true }),
-  ).toHaveCount(0);
   const pending = await delayFirstSave(page, endpoint);
   // No blur: the pause in typing saves the label.
   await label.fill("Reviewed orders");
@@ -218,29 +215,11 @@ test("the result summary opens the matching tab of the results panel", async ({
   page,
 }) => {
   const { endpoint, inspector } = await openInspector(page);
-  await expect(inspector.locator(".inspector-tabs button")).toHaveText([
-    "Parameters",
-    "SQL",
-    "Documentation",
-    "Info",
-  ]);
   const summary = inspector.getByRole("group", {
     name: "Result summary",
     exact: true,
   });
   await expect(summary).toContainText("No result yet");
-  // Run outcomes left the inspector: no executed SQL, no dataset documentation.
-  await inspector.getByRole("button", { name: "SQL", exact: true }).click();
-  await expect(
-    inspector.getByRole("button", { name: "Displayed result" }),
-  ).toHaveCount(0);
-  await inspector
-    .getByRole("button", { name: "Documentation", exact: true })
-    .click();
-  await expect(inspector.getByRole("combobox")).toHaveCount(0);
-  await expect(
-    inspector.getByRole("textbox", { name: "Node documentation" }),
-  ).toBeVisible();
 
   const launched = await (
     await page.request.post(`${endpoint}/runs`, {

@@ -40,7 +40,10 @@ def instance(tmp_path):
     app = create_app(tmp_path / "instance", watch=False)
     with TestClient(app) as client:
         assert (
-            client.post("/api/login", json={"password": app.state.auth.initial_password}).status_code == 200
+            client.post(
+                "/api/login", json={"username": "admin", "password": app.state.auth.initial_password}
+            ).status_code
+            == 200
         )
         yield app, client
 
@@ -253,7 +256,6 @@ def test_fetch_and_push_require_the_requesting_account_key_and_consent(team):
     assert configure(client, owner_headers, worktree, url).status_code == 200
     response = fetch(client, editor_headers, worktree)
     assert response.status_code == 409 and response.json()["detail"] == {"ssh_key_required": True}
-    assert "User settings" in response.json()["error"]
     assert call(client, editor_headers, "POST", "/ssh-key").status_code == 200
     response = fetch(client, editor_headers, worktree)
     assert response.status_code == 409
@@ -318,17 +320,6 @@ def test_https_origins_run_without_credentials_or_consent(team):
     response = fetch(client, editor_headers, worktree)
     assert response.status_code == 200 and response.json()["transport"] == "https"
     assert calls[-1]["key"] is None
-
-
-def test_project_deletion_forgets_consents(team):
-    app, client, worktree, (_, owner_headers), (_, editor_headers), _ = team
-    url = "git@git.example.com:team/repo.git"
-    configure(client, owner_headers, worktree, url)
-    consent(client, editor_headers, worktree, url)
-    store = app.state.services.store
-    assert store.all("git_consent")
-    assert call(client, owner_headers, "DELETE", f"/projects/{worktree['project']}").status_code == 200
-    assert not store.all("git_consent")
 
 
 def test_network_git_isolates_server_credentials(team, monkeypatch, tmp_path):

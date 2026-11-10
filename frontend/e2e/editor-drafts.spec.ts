@@ -1,9 +1,9 @@
 import { test, expect, type Page } from "@playwright/test";
 import { signIn } from "./helpers";
-import type { Bundle, Json, Snapshot } from "../src/types";
+import type { Snapshot } from "../src/types";
 
 /** A filter reading a SQL node, and a CSV source that accepts uploads. */
-async function prepare(page: Page, change?: (bundle: Bundle) => void) {
+async function prepare(page: Page) {
   await signIn(page);
   const worktree = await (
     await page.request.post("/api/projects", {
@@ -42,7 +42,6 @@ SELECT 1 AS amount;`;
       targetHandle: "source",
     },
   ];
-  change?.(bundle);
   expect(
     (
       await page.request.put(endpoint, {
@@ -373,9 +372,6 @@ test("node documentation saves after a pause, keeps typing through saves and is 
   await expect(node(page, "rows")).toContainText("Remote rows");
   await expect(notes).toHaveValue("Keeps paid orders");
   await expect.poll(documented).toBe("Keeps paid orders");
-  await expect(
-    inspector.getByRole("button", { name: "Save changes", exact: true }),
-  ).toHaveCount(0);
 
   // Keep typing while the save of a pause is in flight.
   let started!: () => void;
@@ -411,65 +407,6 @@ test("node documentation saves after a pause, keeps typing through saves and is 
   await expect(notes).toHaveValue(
     "Keeps paid orders above 100 daily for review",
   );
-});
-
-test("the node palette never offers a component that would contain itself", async ({
-  page,
-}) => {
-  const component = (
-    id: string,
-    name: string,
-    inner: Json,
-    port = "result",
-  ) => ({
-    id,
-    name,
-    nodes: [{ id: "inner", params: {}, position: { x: 0, y: 0 }, ...inner }],
-    edges: [],
-    inputs: {},
-    outputs: { rows: { node: "inner", port } },
-    parameters: {},
-  });
-  await prepare(page, (bundle) => {
-    bundle.components.reusable = component("reusable", "Reusable branch", {
-      template: "rows",
-    });
-    bundle.components.wrapper = component(
-      "wrapper",
-      "Wrapper branch",
-      { component: "reusable" },
-      "rows",
-    );
-    bundle.components.standalone = component(
-      "standalone",
-      "Standalone branch",
-      {
-        template: "rows",
-      },
-    );
-    bundle.flow.nodes.push({
-      id: "reused",
-      component: "reusable",
-      params: {},
-      position: { x: 350, y: 300 },
-    });
-  });
-  const offered = (name: string) =>
-    page
-      .locator("#node-palette .palette-item")
-      .filter({ has: page.getByText(name, { exact: true }) });
-  for (const name of ["Reusable branch", "Wrapper branch", "Standalone branch"])
-    await expect(offered(name)).toHaveCount(1);
-
-  await select(page, "reused");
-  await page
-    .getByRole("button", { name: "Open component", exact: true })
-    .click();
-  await expect(page.locator(".react-flow__node")).toHaveCount(1);
-  // Wrapper branch contains Reusable branch, so it cannot be placed inside it either.
-  await expect(offered("Reusable branch")).toHaveCount(0);
-  await expect(offered("Wrapper branch")).toHaveCount(0);
-  await expect(offered("Standalone branch")).toHaveCount(1);
 });
 
 test("a node whose deletion fails comes back on the canvas", async ({

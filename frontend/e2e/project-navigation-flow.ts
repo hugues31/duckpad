@@ -34,7 +34,6 @@ export async function projectNavigationFlow(page: Page) {
   const navigation = page.getByRole("navigation", {
     name: en.projectNavigation,
   });
-  await expect(navigation.getByRole("link")).toHaveCount(7);
   const toolbar = page.locator(".flow-toolbar");
   // The new branch also offers its first run in the missing-results notice.
   await expect(
@@ -137,7 +136,6 @@ export async function projectNavigationFlow(page: Page) {
   const main = await (await page.request.get(endpoint)).json();
   expect(main.bundle.flow.partitions.batch.execution?.parallelism ?? 1).toBe(1);
   expect(runs).toBe(0);
-  await page.screenshot({ path: "test-results/partition-settings-inline.png" });
   // Switching the branch in settings must keep the section and load its own values.
   await page.getByLabel(en.branch, { exact: true }).selectOption(project.id);
   await expect(editor.getByLabel(en.partitionParallelism)).toHaveValue("1");
@@ -155,9 +153,6 @@ export async function projectNavigationFlow(page: Page) {
     navigation.getByRole("link", { name: en.flow, exact: true }),
   ).toHaveAttribute("aria-current", "page");
   expect(runs).toBe(0);
-  await page.screenshot({
-    path: "test-results/project-navigation-desktop.png",
-  });
   // Long translated labels stay reachable without overflowing the page.
   await openUserSettings(page);
   await page.getByLabel(en.language, { exact: true }).selectOption("fr");
@@ -178,7 +173,6 @@ export async function projectNavigationFlow(page: Page) {
     translated.getByRole("link", { name: fr.projectSettings, exact: true }),
   ).toBeInViewport();
   await expect(page.locator("html")).toHaveJSProperty("scrollWidth", 390);
-  await page.screenshot({ path: "test-results/project-navigation-mobile.png" });
   await page
     .getByRole("navigation", { name: fr.settingsSections })
     .getByRole("link", { name: fr.partitions, exact: true })
@@ -189,9 +183,6 @@ export async function projectNavigationFlow(page: Page) {
       .getByLabel(fr.partitionDimension),
   ).toBeVisible();
   await expect(page.locator("html")).toHaveJSProperty("scrollWidth", 390);
-  await page.screenshot({
-    path: "test-results/partition-settings-inline-mobile.png",
-  });
   await translated.getByRole("link", { name: fr.flow, exact: true }).click();
   await expect(
     page

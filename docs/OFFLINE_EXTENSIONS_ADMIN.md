@@ -9,8 +9,6 @@ or through authenticated `GET /api/extensions/runtime`. Download
 the file on any computer with Internet access. No extension is installed or
 executed on that computer.
 
-![Choose a core extension for the displayed server version and platform before downloading and importing it](images/extensions.png)
-
 Official download addresses use these patterns:
 
 ```text
@@ -22,13 +20,7 @@ For example, `v2.0.0/linux_amd64/httpfs.duckdb_extension.gz` selects the Linux
 x86-64 core binary, even when downloaded with a Windows browser. The interface
 constructs this URL from the backend runtime. A missing download means that
 name/version/platform combination is unavailable in the selected repository;
-check its catalog or obtain a compatible build from its publisher. When the
-browser can reach the repository, the interface reports a missing download
-before you click the link.
-
-The same import accepts matching files extracted from release archives. Select
-the inner `.duckdb_extension` or `.duckdb_extension.gz`; do not upload the entire
-`.tar.gz` or `.zip`. Keep its original extension name in the filename.
+check its catalog or obtain a compatible build from its publisher.
 
 ## What import checks
 
@@ -59,10 +51,9 @@ An imported extension that fails to load does not fall back to downloading a
 replacement. Disabling unsigned extensions closes existing databases and prevents
 unsigned imports from loading again.
 
-The instance directory is selected by `duckpad start --home`; the default is
-`$XDG_DATA_HOME/duckpad` or `~/.local/share/duckpad`. Back up the whole instance,
-including its `extensions` directory and instance metadata. In containers, keep
-that directory on a persistent volume. Replacement imports retain previous
+Imports live in the `extensions` directory of the instance: include it in
+[backups](INSTALLATION.md#upgrades-and-backups) and, in containers, keep the
+instance directory on a persistent volume. Replacement imports retain previous
 binary versions in the cache.
 
 ## Troubleshooting
@@ -79,18 +70,13 @@ binary versions in the cache.
 
 Project SQL and data uploads cannot install extensions. SQL workers receive
 read-only access to the cache and a locked configuration. Connections without an
-import still use Duckpad's existing repository-install fallback; enforce any
-instance-wide egress restrictions outside Duckpad.
+import install their extensions from the repository; enforce any instance-wide
+egress restrictions outside Duckpad.
 
 Project editors can activate only a local binary matching the declared source.
-The project-scoped `GET /api/worktrees/{id}/extensions` endpoint reports
-availability without loading native code. Editors can use
-`POST /api/worktrees/{id}/extensions/check` with a `name` and `source` to check
-loading in a disposable process. Requirements are saved through the normal
-versioned project save, so the same authorization and conflict handling apply.
-Missing or incompatible requirements stop execution with import guidance; there
-is no automatic installation fallback for project activations. Disabled unsigned
-policy continues to block unsigned project requirements.
+Requirements are saved through the normal versioned project save. Missing or
+incompatible requirements stop execution with import guidance. Disabled unsigned
+policy also blocks unsigned project requirements.
 
 ## Reproduce the offline verification
 

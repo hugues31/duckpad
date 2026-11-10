@@ -30,7 +30,7 @@ def verify(community, core, wrong_platform):
         root = Path(temporary)
         app = create_app(root / "api", watch=False)
         with TestClient(app) as client:
-            client.post("/api/login", json={"password": app.state.auth.initial_password})
+            client.post("/api/login", json={"username": "admin", "password": app.state.auth.initial_password})
 
             def upload(filename, content, source="community"):
                 return client.post(

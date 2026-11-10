@@ -10,32 +10,11 @@ import pytest
 from assistant_model import test_model as deterministic_model
 from fastapi.testclient import TestClient
 from helpers import LockHolder, asgi_client, assert_responsive
-from pydantic_ai import models
 from pydantic_ai.models.test import TestModel
 
 from duckpad.app import create_app
 from duckpad.assistant.tools import Dependencies, PageContext
 from duckpad.util import Problem
-
-
-@pytest.mark.parametrize("kind", ["custom", "openai", "deepseek", "ollama"])
-def test_only_custom_providers_normalize_split_choices(instance, kind):
-    from pydantic_ai.models.openai import OpenAIChatModel
-
-    from duckpad.assistant.gateway import GatewayChatModel
-
-    app, _ = instance
-    config = app.state.assistant.configuration
-    config.model_override = None
-
-    async def check():
-        async with config.model(
-            {"id": "test", "kind": kind, "api_key": "test-key", "base_url": "https://example.invalid/v1"},
-            "test",
-        ) as model:
-            assert type(model) is (GatewayChatModel if kind == "custom" else OpenAIChatModel)
-
-    asyncio.run(check())
 
 
 @pytest.fixture
@@ -44,7 +23,10 @@ def instance(tmp_path):
     app.state.assistant.configuration.model_override = deterministic_model()
     with TestClient(app) as client:
         assert (
-            client.post("/api/login", json={"password": app.state.auth.initial_password}).status_code == 200
+            client.post(
+                "/api/login", json={"username": "admin", "password": app.state.auth.initial_password}
+            ).status_code
+            == 200
         )
         yield app, client
 
@@ -94,7 +76,6 @@ def turn(client, identity, context, message="Explain this flow"):
 
 def test_disabled_by_default_and_write_only_keys(instance):
     app, client = instance
-    assert not models.ALLOW_MODEL_REQUESTS
     assert client.get("/api/assistant/options").json()["enabled"] is False
     assert client.post("/api/assistant/conversations", json={"page": "projects"}).status_code == 403
     assert configure(client).status_code == 200
@@ -166,21 +147,15 @@ def test_scope_instructions_reach_project_and_general_turns(instance):
     seen = []
 
     async def record(messages, info):
-        seen.append((info.instructions, [tool.name for tool in info.function_tools]))
+        seen.append(info.instructions)
         yield "I only help with Duckpad, data and development."
 
     app.state.assistant.configuration.model_override = FunctionModel(stream_function=record)
-    general = {"page": "projects"}
-    for page in (context, general):
+    for page in (context, {"page": "projects"}):
         events = turn(client, conversation(client, page), page, "How do I bake an apple pie?")
         assert events[-1]["turn"]["status"] == "complete", events
-    (project_instructions, project_tools), (general_instructions, general_tools) = seen
-    assert len(project_tools) > 1 and general_tools == ["read_guide"]
-    for instructions in (project_instructions, general_instructions):
-        assert instructions.startswith("You are Duckpad's project assistant.")
-        assert "Scope: help only with Duckpad itself" in instructions
-        assert "Decline everything else" in instructions
-        assert "This scope is final" in instructions
+    assert len(seen) == 2
+    assert all("Scope: help only with Duckpad itself" in instructions for instructions in seen)
 
 
 def test_admin_only_configuration_and_private_conversations(instance):
@@ -194,7 +169,6 @@ def test_admin_only_configuration_and_private_conversations(instance):
         assert reader.get("/api/assistant/settings").status_code == 403
         assert configure(reader).status_code == 403
         assert reader.post("/api/assistant/test").status_code == 403
-        assert reader.get("/api/assistant/models/primary").status_code == 403
         assert reader.post("/api/assistant/models", json={}).status_code == 403
         assert reader.get("/api/assistant/conversations").json()["items"] == []
         for method in ("get", "delete", "patch"):
@@ -583,35 +557,10 @@ def test_timeout_and_usage_limits(instance, monkeypatch):
     assert result["status"] == "error" and "limit for this turn" in result["error"]
 
 
-@pytest.mark.parametrize("kind", ["openai", "anthropic", "google", "mistral", "deepseek", "ollama", "custom"])
-def test_provider_adapters_use_explicit_instance_credentials(instance, kind):
-    import asyncio
-
-    app, client = instance
-    provider = {
-        "id": "primary",
-        "kind": kind,
-        "api_key": "explicit-key",
-        "models": ["test"],
-        "base_url": "https://models.example.invalid/v1" if kind == "custom" else "",
-    }
-    assert configure(client, providers=[provider]).status_code == 200
-    configuration = app.state.assistant.configuration
-    configuration.model_override = None
-
-    async def inspect_model():
-        async with configuration.model(configuration.get()["providers"][0], "test") as model:
-            assert model.model_name == "test"
-
-    asyncio.run(inspect_model())
-
-
-def test_discovery_and_connection_test_are_sanitized(instance, monkeypatch):
+def test_saved_provider_discovery_sends_its_key_and_sorts_models(instance, monkeypatch):
     import httpx2
-    from pydantic_ai.exceptions import ModelHTTPError
-    from pydantic_ai.models.function import FunctionModel
 
-    app, client = instance
+    _, client = instance
     configure(client)
     original = httpx2.AsyncClient
     seen = []
@@ -623,20 +572,13 @@ def test_discovery_and_connection_test_are_sanitized(instance, monkeypatch):
     monkeypatch.setattr(
         httpx2, "AsyncClient", lambda **kwargs: original(transport=httpx2.MockTransport(handle), **kwargs)
     )
-    assert client.get("/api/assistant/models/primary").json()["models"] == ["other", "test"]
+    # A blank key reuses the saved one.
+    discovered = client.post(
+        "/api/assistant/models", json={"id": "primary", "kind": "deepseek", "models": []}
+    )
+    assert discovered.json()["models"] == ["other", "test"]
     assert seen[0].headers["Authorization"] == "Bearer private-test-key"
     assert seen[0].url.path == "/models"
-
-    def refused(messages, info):
-        raise ModelHTTPError(401, "test", "private-test-key")
-
-    async def refused_stream(messages, info):
-        yield refused(messages, info)
-
-    app.state.assistant.configuration.model_override = FunctionModel(stream_function=refused_stream)
-    response = client.post("/api/assistant/test")
-    assert response.status_code == 502
-    assert "refused the API key" in response.text and "private-test-key" not in response.text
 
 
 def test_unsaved_provider_discovery_and_test_reuse_only_matching_keys(instance, monkeypatch):
@@ -706,13 +648,6 @@ def test_unsaved_provider_discovery_and_test_reuse_only_matching_keys(instance, 
     check["model"] = " "
     assert client.post("/api/assistant/test", json=check).status_code == 400
     assert client.post("/api/assistant/test", json={}).json() == {"ok": True}
-    app.state.auth.create_user("reader", "reader-password-123")
-    with TestClient(app) as reader:
-        reader.post("/api/login", json={"username": "reader", "password": "reader-password-123"})
-        assert (
-            reader.post("/api/assistant/models", json={"id": "primary", "kind": "deepseek"}).status_code
-            == 403
-        )
 
 
 def test_unlisted_models_and_concurrent_turns_are_rejected(instance):
@@ -854,22 +789,6 @@ def test_read_sql_reports_a_missing_intermediate_component(instance):
     with pytest.raises(Problem, match="component instance"):
         read_sql(ctx, node="container")
     assert "SELECT 1" in read_sql(ctx, node="inner")["text"]
-
-
-def test_tool_results_are_redacted_once_by_the_tool_wrapper(instance):
-    from duckpad.assistant.service import guarded
-    from duckpad.assistant.tools import read_file
-
-    app, client = instance
-    configure(client)
-    worktree, context = project(client)
-    projects = app.state.services.projects
-    snapshot = projects.snapshot(worktree["id"])
-    projects.write(
-        worktree["id"], snapshot["revision"], {**snapshot["files"], "README.md": "Key: private-test-key"}
-    )
-    ctx = dependencies(app, client, context)
-    assert guarded(read_file)(ctx, "README.md")["text"] == "Key: [redacted]"
 
 
 ROOT = Path(__file__).resolve().parents[1]

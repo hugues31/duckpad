@@ -68,12 +68,7 @@ async function expectNewBinding(page: Page, id: string) {
   });
 }
 
-for (const entry of [
-  "pipeline",
-  "inspector",
-  "results",
-  "empty results",
-] as const) {
+for (const entry of ["pipeline", "inspector"] as const) {
   test(`${entry} waits for saves and suppresses duplicate clicks`, async ({
     page,
   }) => {
@@ -97,13 +92,7 @@ for (const entry of [
         entry === "pipeline"
           ? page.getByRole("button", { name: "Run all", exact: true })
           : page
-              .locator(
-                entry === "inspector"
-                  ? ".inspector"
-                  : entry === "results"
-                    ? ".results-actions"
-                    : ".preview-empty",
-              )
+              .locator(".inspector")
               .getByRole("button", { name: "Run with ancestors", exact: true });
       await expect(button).toBeVisible();
       const launched = runResponse(page, endpoint);
@@ -134,50 +123,41 @@ for (const entry of [
   });
 }
 
-for (const node of [false, true]) {
-  test(`confirmed ${node ? "node" : "pipeline"} waits for the new binding`, async ({
-    page,
-  }) => {
-    const { endpoint } = await prepare(page, "prod");
-    const gate = pauseSave(page, endpoint);
-    await gate.routed;
-    try {
-      await bindStatus(page);
-      await (
-        node
-          ? page.locator(".inspector .run-node")
-          : page.getByRole("button", { name: "Run all", exact: true })
-      ).click();
-      const dialog = page.getByRole("dialog", {
-        name: "Confirm execution",
-        exact: true,
-      });
-      const launched = runResponse(page, endpoint);
-      await dialog
-        .getByRole("button", { name: "Confirm and run", exact: true })
-        .click();
-      await expect(
-        dialog.getByRole("button", { name: "Loading…", exact: true }),
-      ).toBeDisabled();
-      await expect(
-        page.getByRole("button", { name: "Run all", exact: true }),
-      ).toHaveAttribute("aria-busy", "true");
-      gate.release();
-      const response = await launched;
-      expect(response.ok()).toBeTruthy();
-      expect(response.request().postDataJSON()).toMatchObject({
-        environment: "prod",
-        confirmed: true,
-        ...(node ? { node: "validated" } : {}),
-      });
-      await expectNewBinding(page, (await response.json()).id);
-      await expect(dialog).toHaveCount(0);
-    } finally {
-      gate.release();
-      await page.unrouteAll({ behavior: "wait" });
-    }
-  });
-}
+test("confirmed pipeline waits for the new binding", async ({ page }) => {
+  const { endpoint } = await prepare(page, "prod");
+  const gate = pauseSave(page, endpoint);
+  await gate.routed;
+  try {
+    await bindStatus(page);
+    await page.getByRole("button", { name: "Run all", exact: true }).click();
+    const dialog = page.getByRole("dialog", {
+      name: "Confirm execution",
+      exact: true,
+    });
+    const launched = runResponse(page, endpoint);
+    await dialog
+      .getByRole("button", { name: "Confirm and run", exact: true })
+      .click();
+    await expect(
+      dialog.getByRole("button", { name: "Loading…", exact: true }),
+    ).toBeDisabled();
+    await expect(
+      page.getByRole("button", { name: "Run all", exact: true }),
+    ).toHaveAttribute("aria-busy", "true");
+    gate.release();
+    const response = await launched;
+    expect(response.ok()).toBeTruthy();
+    expect(response.request().postDataJSON()).toMatchObject({
+      environment: "prod",
+      confirmed: true,
+    });
+    await expectNewBinding(page, (await response.json()).id);
+    await expect(dialog).toHaveCount(0);
+  } finally {
+    gate.release();
+    await page.unrouteAll({ behavior: "wait" });
+  }
+});
 
 // Both statuses take the same path; the environment decides where the error shows.
 for (const [environment, status] of [

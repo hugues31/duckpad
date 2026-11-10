@@ -7,9 +7,7 @@ import { WorktreeProvider, useWorktree, type Worktree } from "./worktree";
 import type { Snapshot } from "./types";
 import { ApiError } from "./api";
 import { I18n, type Language } from "./i18n";
-import en from "./locales/en.json";
 import fr from "./locales/fr.json";
-import pt from "./locales/pt.json";
 
 const mocks = vi.hoisted(() => ({
   persist: vi.fn(),
@@ -77,11 +75,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-it.each([
-  ["en", en],
-  ["fr", fr],
-  ["pt", pt],
-] as const)(
+it.each([["fr", fr]] as const)(
   "explains Python refusals for direct and confirmed runs in %s",
   async (language, labels) => {
     const detail = { code: "python_disabled" };

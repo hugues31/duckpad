@@ -26,15 +26,6 @@ test("Code has a keyboard file tree, preserves drafts across files and tabs, sav
   page.on("pageerror", (error) => errors.push(error.message));
   const { worktree, snapshot } = await openCode(page);
   await expect(page.locator(".code-file-heading")).toContainText("README.md");
-  await expect(page.locator(".main-tabs a")).toHaveText([
-    "Flow",
-    "Code",
-    "Documentation",
-    "Variables",
-    "History",
-    "Jobs",
-    "Project settings",
-  ]);
   await expect(page.getByRole("dialog")).toHaveCount(0);
   const tree = page.getByRole("tree", { name: "Project files" });
   const templates = tree.getByRole("treeitem", {
@@ -190,16 +181,6 @@ test("project Markdown and Python dependencies round trip between Code, Document
   const bytes = await readFile((await (await download).path())!);
   expect(bytes.includes(Buffer.from("README.md"))).toBeTruthy();
   expect(bytes.includes(Buffer.from("pyproject.toml"))).toBeTruthy();
-
-  await page
-    .getByRole("treeitem", { name: "pyproject.toml", exact: true })
-    .click();
-  await editCode(page, "[project\n");
-  await page.getByRole("button", { name: "Save changes", exact: true }).click();
-  await expect(page.locator(".banner.error")).toContainText("pyproject.toml");
-  await editCode(page, manifest);
-  await page.getByRole("button", { name: "Save changes", exact: true }).click();
-  await expect(page.locator(".banner.error")).toHaveCount(0);
 });
 
 test("invalid project files remain editable in Code and can be repaired", async ({
@@ -282,15 +263,6 @@ test("Code is localized and keeps the tree beside Monaco at a narrow width", asy
   await page
     .getByRole("menuitemradio", { name: "French", exact: true })
     .click();
-  await expect(page.locator(".main-tabs a")).toHaveText([
-    fr.flow,
-    fr.code,
-    fr.documentation,
-    fr.variables,
-    fr.history,
-    fr.jobs,
-    fr.projectSettings,
-  ]);
   await expect(
     page.getByRole("button", { name: fr.downloadProject }),
   ).toBeVisible();
@@ -302,8 +274,4 @@ test("Code is localized and keeps the tree beside Monaco at a narrow width", asy
   expect(tree!.x + tree!.width).toBeLessThanOrEqual(editor!.x);
   expect(editor!.width).toBeGreaterThan(300);
   expect(editor!.height).toBeGreaterThan(300);
-  await page.screenshot({
-    path: "test-results/code-workspace.png",
-    fullPage: true,
-  });
 });

@@ -58,13 +58,9 @@ in `pyproject.toml`. Edit `project.dependencies` to add business packages; comme
 custom TOML tables survive UI saves. Malformed TOML remains editable with a
 diagnostic.
 
-For enabled Python projects, saving resolves `uv.lock`, and execution prepares an
-immutable environment using the server's DuckDB binary and lightweight SDK.
 The manifest sets `tool.uv.package = false` because the project is a pipeline.
-Project ZIPs include the manifest and lock, without copying environments.
-Import them through the interface, then configure connections, extensions and
-source data on the destination. See [Python nodes](PYTHON.md) for activation,
-runtime compatibility, dependencies and authoring.
+See [Python nodes](PYTHON.md) for activation, locking, runtime compatibility and
+authoring.
 
 ## Editing node code
 
@@ -99,11 +95,6 @@ The inspector's **Info** tab shows the node's ID, code file, creator, contributo
 and last change, including whether it touched processing, documentation or layout.
 Linked nodes also show the template's last change. **View change history** opens
 its element history in the [Git workspace](GIT.md).
-
-## Node results
-
-Use the [results guide](RESULTS.md) for data, samples, column statistics, tests
-and logs, including [export downloads](RESULTS.md#download-exported-data).
 
 ## Saved views
 

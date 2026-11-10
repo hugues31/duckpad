@@ -2,8 +2,7 @@
 
 This reference collects the constraints shared across features. Current usage
 and file formats live in the linked guides; implementation details live in
-[Architecture](ARCHITECTURE.md). Design records under `design/` distinguish
-accepted decisions from features that are still proposed.
+[Architecture](ARCHITECTURE.md). Remaining proposals live under `design/`.
 
 ## Projects, code and history
 
@@ -116,28 +115,14 @@ context, conversation history and requested tool results:
 The data-reading switch governs result access, not secrets embedded in
 user-authored text. Questions, code, variables and commit messages can contain
 sensitive values even when data reading is disabled. Turning it off prevents
-resuming conversations that previously allowed data, so old values are not
-resent. Provider discovery uses the configured API key or OAuth2 credentials; a
-connection test sends only a short verification prompt. Provider and token
-endpoint redirects are disabled. OAuth2 client secrets are write-only, encrypted
-in instance storage, and never included in project exports. Tokens are cached
-only in memory; changing the provider or credential identity prevents reusing
-the saved secret or token.
-
-Tools cannot execute arbitrary SQL, access arbitrary files or change instance
-settings. Each writing action produces a commit; Undo creates an inverse change
-and preserves independent later edits. Stopping a response does not undo saved
-actions. Run confirmations persist across reloads, cannot be replayed, and must be
-renewed when the proposed configuration changes. Stop cancels the model request;
-Cancel run cancels execution. Neither reverses completed external writes.
-
-Each turn is bounded to 12 provider requests, 30 tool calls and 120 seconds.
-See [the assistant guide](ASSISTANT.md) for configuration, editing and debugging.
+resuming conversations that allowed data, so their values are not resent. Tools
+cannot execute arbitrary SQL, access arbitrary files or change instance settings.
+See [the assistant guide](ASSISTANT.md) for configuration, editing, run approval
+and limits.
 
 ## Validation
 
 Keep native-equivalence checks for SQL and lineage, service tests for execution
-and access, and browser scenarios for user workflows. Historical benchmark
-reports describe their measured environment; they are not current CI results or
-performance guarantees. See [validation](VALIDATION.md) and the
+and access, and browser scenarios for user workflows. See
+[validation](VALIDATION.md) and the
 [contributor checks](../CONTRIBUTING.md#run-the-checks).

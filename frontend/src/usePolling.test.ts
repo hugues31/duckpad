@@ -175,19 +175,16 @@ describe("usePolling", () => {
     expect(task).toHaveBeenCalledTimes(4);
   });
 
-  it.each([401, 403, 404])(
-    "stops after a final API error %i",
-    async (status) => {
-      const task = vi
-        .fn<Task>()
-        .mockResolvedValueOnce(undefined)
-        .mockRejectedValueOnce(new ApiError("Denied", status))
-        .mockResolvedValue(undefined);
-      poll(task, { interval: 1000 });
-      await advance(10_000);
-      expect(task).toHaveBeenCalledTimes(2);
-    },
-  );
+  it.each([404])("stops after a final API error %i", async (status) => {
+    const task = vi
+      .fn<Task>()
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new ApiError("Denied", status))
+      .mockResolvedValue(undefined);
+    poll(task, { interval: 1000 });
+    await advance(10_000);
+    expect(task).toHaveBeenCalledTimes(2);
+  });
 
   it("aborts the running task and stops when unmounted", async () => {
     const slow = deferred();

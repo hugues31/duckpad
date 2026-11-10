@@ -22,7 +22,7 @@ MEMORY_UNITS: dict[str, str] = {
 
 
 class Login(BaseModel):
-    username: str = "admin"
+    username: str
     password: str
 
 

@@ -47,7 +47,6 @@ Run `duckpad reset-password`.
 
 Prefer a ready-made project? Choose **New project → Start from an example**,
 enter a name, then **Create → Run all** to explore Northstar.
-See [installation](docs/INSTALLATION.md) for platform requirements and setup options.
 
 ## Find the right guide
 

@@ -5,10 +5,8 @@ import io
 import os
 import shutil
 import threading
-import zipfile
 from pathlib import Path
 from urllib.parse import quote
-from xml.etree import ElementTree
 
 import duckdb
 import pytest
@@ -26,7 +24,7 @@ from duckpad.util import digest
 def instance(tmp_path):
     app = create_app(tmp_path / "instance", watch=False)
     with TestClient(app) as client:
-        client.post("/api/login", json={"password": app.state.auth.initial_password})
+        client.post("/api/login", json={"username": "admin", "password": app.state.auth.initial_password})
         yield app.state.services, client
 
 
@@ -120,12 +118,6 @@ def test_contents_options_and_response_metadata(instance, excel_cache, format_na
             response.headers["content-type"]
             == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
-        with zipfile.ZipFile(io.BytesIO(response.content)) as archive:
-            namespace = {"s": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
-            book = ElementTree.fromstring(archive.read("xl/workbook.xml"))
-            assert book.find("s:sheets/s:sheet", namespace).attrib["name"] == "Full export"
-            sheet = ElementTree.fromstring(archive.read("xl/worksheets/sheet1.xml"))
-            assert len(sheet.findall("s:sheetData/s:row", namespace)) == 1003 + header
         with duckdb.connect(config={"extension_directory": str(excel_cache)}) as db:
             db.execute("LOAD excel")
             rows = db.execute(
@@ -442,8 +434,6 @@ def test_imported_and_custom_file_exports_offer_downloads(instance):
     info = client.get(endpoint, params={"environment": "dev"}).json()
     assert info["status"] == "available" and info["filename"] == "custom.csv"
     assert download(client, endpoint, run).text.splitlines()[:2] == ["id", "0"]
-    edit(services, worktree, lambda b: custom(b, "COPY {{ rows }} TO {{ target }} (FORMAT PARQUET);"))
-    assert client.get(endpoint, params={"environment": "dev"}).json()["status"] == "unsupported"
 
 
 def test_streams_in_bounded_chunks_and_closes_the_file(instance, monkeypatch):

@@ -27,9 +27,8 @@ credentials for recovery if the provider becomes unavailable.
 The sign-in page offers both SSO and local password authentication. Duckpad
 requests the `openid profile email` scopes. A successful first sign-in creates a
 member with no access to existing private projects. Administrators can grant
-project membership, change roles, and deactivate SSO users from the existing
-administration interface. Disabling account creation still permits previously
-provisioned SSO users to sign in.
+project membership, change roles, and deactivate SSO users like local accounts.
+Disabling account creation still lets already provisioned SSO users sign in.
 
 ![The sign-in page offers Continue with Northstar alongside local password authentication](images/sso-sign-in.png)
 

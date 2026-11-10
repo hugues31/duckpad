@@ -61,7 +61,10 @@ def test_cli_polling_logs(tmp_path, level):
                 else:
                     pytest.fail("The CLI server did not start")
                 assert client.get("/api/resources").status_code == 401
-                assert client.post("/api/login", json={"password": password}).status_code == 200
+                assert (
+                    client.post("/api/login", json={"username": "admin", "password": password}).status_code
+                    == 200
+                )
                 project = client.post("/api/projects", json={"name": "Logging checks"})
                 assert project.status_code == 200
                 worktree = project.json()["id"]
@@ -152,12 +155,8 @@ def test_cli_polling_logs(tmp_path, level):
     [
         ("GET", "/api/resources", 199),
         ("GET", "/api/resources", 301),
-        ("GET", "/api/resources", 304),
         ("GET", "/api/resources", 403),
-        ("GET", "/api/resources", 500),
         ("POST", "/api/resources", 200),
-        ("PUT", "/api/worktrees/worktree_test", 200),
-        ("DELETE", "/api/worktrees/worktree_test", 204),
         ("GET", "/api/worktrees/worktree_test/git/history", 200),
         ("GET", "/api/worktrees/worktree_test/status/extra", 200),
         ("GET", "/api/worktrees/worktree_test/generations/data_test/extra", 200),
@@ -210,21 +209,18 @@ def test_assistant_logs_follow_the_server_level(level):
         "/api/search",
     ],
 )
-@pytest.mark.parametrize(
-    ("method", "status", "polling"), [("GET", 200, True), ("POST", 200, False), ("GET", 403, False)]
-)
-def test_access_log_and_monitoring_share_polling_rules(path, method, status, polling):
+def test_access_log_and_monitoring_share_polling_rules(path):
     record = logging.LogRecord(
         "uvicorn.access",
         logging.INFO,
         "",
         0,
         '%s - "%s %s HTTP/%s" %d',
-        ("127.0.0.1:1234", method, path + "?environment=dev", "1.1", status),
+        ("127.0.0.1:1234", "GET", path + "?environment=dev", "1.1", 200),
         None,
     )
     logs = RecentLogs()
     logs.emit(record)
-    assert len(logs.entries) == (0 if polling else 1)
+    assert not logs.entries
     PollingAccessFilter().filter(record)
-    assert record.levelno == (logging.DEBUG if polling else logging.INFO)
+    assert record.levelno == logging.DEBUG

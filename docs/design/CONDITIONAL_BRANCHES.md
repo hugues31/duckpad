@@ -1,6 +1,6 @@
 # Conditional branches (design proposal)
 
-**Status: accepted on 2 November 2026 (see [Decisions](#decisions)), not implemented yet.** This document defines the first version; the mockups illustrate the proposed interface.
+**Status: accepted (see [Decisions](#decisions)), not implemented.** This document defines the first version; the mockups illustrate the proposed interface.
 
 ## Summary
 
@@ -17,8 +17,6 @@ every join, export or SQL node. Inactivity propagation and the explicit junction
 follow KNIME's IF/CASE switches.
 
 ## Decisions
-
-Accepted on 2 November 2026:
 
 1. `enabled` belongs to a node, including component instances, never to an output port in v1. Omission means active; there is no implicit environment predicate.
 2. Conditions use a restricted boolean expression over typed variables and literals. They cannot query data, call functions or refer to columns or partitions.
@@ -114,7 +112,7 @@ The current runner already separates computed-value sources from consumers. Exte
 
 Launch scope does not change: whole-flow and targeted launches select nodes as today, then run the active ones. Inactivity only propagates downstream, as in KNIME, so a condition on a transformation does not stop its upstream source from running; place the gate on the source or on a component containing that branch. Targeting an inactive node never overrides its gate.
 
-[Partitions](PARTITIONS.md) consume this frozen plan: one activation decision per run, shared by every partition. No per-partition reevaluation or references. Partition enumeration needed by active work follows the same source dependency rules; an inactive partitioned branch cannot trigger its data reads or exports.
+[Partitions](../PARTITIONS.md) consume this frozen plan: one activation decision per run, shared by every partition. No per-partition reevaluation or references. Partition enumeration needed by active work follows the same source dependency rules; an inactive partitioned branch cannot trigger its data reads or exports.
 
 ### Propagation and failures
 
@@ -260,7 +258,7 @@ No ordinary SQL template should gain scheduling privileges from its name. No fro
 
 ## Delivery and acceptance
 
-Step 0, this document and its mockups, was accepted on 2 November 2026. A dedicated implementation issue delivers these steps in order:
+A dedicated implementation issue delivers these steps in order:
 
 | Step | Deliverable | Required evidence |
 | --- | --- | --- |

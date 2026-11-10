@@ -16,22 +16,20 @@ Duckpad's interface and are internal contracts.
    and is useful for acceptance runs.
 2. For a shared scheduler, an instance admin creates a service account in
    **Instance settings → Users and permissions**, then gives it **Operator** access
-   in the project's settings. A Reader can inspect Jobs, runs and logs; Operators
-   can also launch and cancel Jobs. Editors and admins inherit those rights.
+   in the project's settings.
 3. Create a named token for that service account in its account administration.
    People can create their own tokens in **User settings → API tokens**. Copy the
    token when it is shown: only its hash is stored. Set an expiration if needed,
    store it in the orchestrator's secret store and revoke it when no longer used.
 
-Service accounts cannot sign in interactively. Tokens use the account's current
-project permissions, so revocation or an access change applies to subsequent
-requests. Send tokens in `Authorization: Bearer …`; session authentication is also
-supported. Browser writes must come from the same origin.
+Tokens use the account's current project permissions, so revocation or an access
+change applies to subsequent requests. Send tokens in `Authorization: Bearer …`;
+session authentication is also supported.
 
 Jobs execute in internal read-only worktrees. Creating or promoting a Job confirms
 its environment for API launches; the browser's run confirmation is not needed.
-Only project admins can configure or promote Jobs. See [Version control](GIT.md)
-and the [access matrix](INSTALLATION.md#accounts-and-project-access).
+See [Version control](GIT.md) and the
+[access matrix](INSTALLATION.md#accounts-and-project-access).
 
 ## Run a Job from the command line
 

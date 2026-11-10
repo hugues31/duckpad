@@ -65,9 +65,6 @@ instance administrator can import binaries or change the signature policy.
   retain the requirement, and ask an administrator to resolve it. Activation
   never enables unsigned extensions on its own.
 
-Project activation and execution use local binaries. Online connector setup can
-install its declared extensions; project activation never installs on demand.
-
 For example, add **duckfn_statrs** with origin **DuckDB community**, import its
 server binary, and activate it. Create this SQL model without a connection
 parameter:

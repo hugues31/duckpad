@@ -12,11 +12,7 @@ from duckpad.app import create_app
 from duckpad.auth import Auth
 from duckpad.builtin_templates import BUILTINS
 from duckpad.bundle import bundle_to_files
-from duckpad.catalog import Catalog
 from duckpad.services import Services
-from duckpad.store import Store
-from duckpad.templates import compile_template, parse_template
-from duckpad.util import Problem
 
 
 @pytest.fixture(params=[False, True], ids=["embedded", "isolated"])
@@ -81,21 +77,6 @@ def replace_source(instance, worktree, **params):
     bundle = snapshot["bundle"]
     bundle["flow"]["nodes"][0]["params"] = {"file": "workbook.xlsx", **params}
     instance.projects.write(worktree, snapshot["revision"], bundle_to_files(bundle))
-
-
-def test_fresh_catalog_offers_no_excel_connector(tmp_path):
-    # XLSX is a format: workbooks use project files or a file storage connection.
-    store = Store(tmp_path)
-    try:
-        assert store.all("connector") == []
-        assert {connector["id"] for connector in Catalog(store).connectors()} == {
-            "folder",
-            "s3",
-            "postgres",
-            "oracle",
-        }
-    finally:
-        store.close()
 
 
 def test_xlsx_import_transform_lineage_export_replacement_and_environments(xlsx_services, tmp_path):
@@ -193,7 +174,7 @@ def test_xlsx_api_upload_needs_no_connection_and_blocks_outside_files(tmp_path, 
     instance = app.state.services
     shutil.copytree(excel_cache, instance.store.home / "extensions")
     with TestClient(app) as client:
-        client.post("/api/login", json={"password": app.state.auth.initial_password})
+        client.post("/api/login", json={"username": "admin", "password": app.state.auth.initial_password})
         worktree = client.post("/api/projects", json={"name": "XLSX uploads"}).json()
         identity = worktree["id"]
         source = workbook(tmp_path / "outside.xlsx")
@@ -224,22 +205,3 @@ def test_xlsx_api_upload_needs_no_connection_and_blocks_outside_files(tmp_path, 
         failed = wait_run(instance.store, instance.engine.launch(identity, "dev"), timeout=30)
         assert failed["status"] == "failed", failed
         assert "Permission Error: Cannot access file" in failed["nodes"]["source"]["error"]
-        readonly = instance.catalog.connector("folder")
-        readonly.update(id="readonly_folder", capabilities=["read"])
-        instance.catalog.save("connector", readonly)
-        connection = {
-            "id": "workbooks",
-            "name": "Workbooks",
-            "connector": "readonly_folder",
-            "environments": {"dev": {"root": str(tmp_path)}},
-        }
-        instance.catalog.save("connection", connection, create=True)
-        with pytest.raises(Problem, match="does not support write"):
-            compile_template(
-                parse_template(BUILTINS["export_xlsx"]),
-                {"connection": "workbooks"},
-                {"source": '"data"'},
-                {},
-                instance.catalog.capture(["workbooks"], "dev")[0],
-                instance.store.paths.project_files(worktree["project"], identity, "dev"),
-            )

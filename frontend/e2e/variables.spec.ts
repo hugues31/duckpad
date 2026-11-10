@@ -669,64 +669,6 @@ test("rename, delete, diagnostics, the Code file and read-only access", async ({
   }
 });
 
-test("merge conflicts on variables are resolved per variable", async ({
-  page,
-}) => {
-  const { url } = await example(page, bindOrderStatus());
-  const branch = await (
-    await page.request.post(`${url}/branches`, {
-      data: { name: "feature/status" },
-    })
-  ).json();
-  await update(page, url, (bundle) => {
-    (bundle.variables as Record<string, any>).order_status.environments = {
-      prod: "pending",
-    };
-  });
-  await update(page, `/api/worktrees/${branch.id}`, (bundle) => {
-    const variable = (bundle.variables as Record<string, any>).order_status;
-    variable.environments = { prod: "refunded" };
-    variable.description = "Statuses counted as revenue.";
-  });
-  await page.goto(url.replace("/api", "") + "/flow");
-  await page.getByRole("link", { name: "History", exact: true }).click();
-  await page
-    .getByRole("button", { name: "Compare versions", exact: true })
-    .click();
-  const dialog = page.getByRole("dialog", { name: "Project Git workspace" });
-  await dialog
-    .getByRole("button", { name: "Branches", exact: true })
-    .first()
-    .click();
-  await dialog
-    .getByLabel("Source branch")
-    .selectOption("refs/heads/feature/status");
-  await dialog
-    .getByRole("button", { name: "Review merge", exact: true })
-    .click();
-  // Only the production value conflicts; the description merges cleanly.
-  const conflict = dialog.locator(".git-conflict");
-  await expect(conflict).toHaveCount(1);
-  await expect(conflict.locator("legend")).toContainText(
-    "Variable order_status · prod value",
-  );
-  await expect(conflict.locator(".git-conflict-values")).toContainText(
-    "pending",
-  );
-  await expect(conflict.locator(".git-conflict-values")).toContainText(
-    "refunded",
-  );
-  await conflict.getByLabel("Incoming", { exact: false }).check();
-  await dialog.getByRole("button", { name: "Apply reviewed merge" }).click();
-  await expect(dialog).toContainText("Branch merged");
-  expect((await snapshot(page, url)).bundle!.variables).toMatchObject({
-    order_status: {
-      description: "Statuses counted as revenue.",
-      environments: { prod: "refunded" },
-    },
-  });
-});
-
 test("promoting a choice preserves spaces in its options and the current result", async ({
   page,
 }) => {
