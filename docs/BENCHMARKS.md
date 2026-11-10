@@ -3,8 +3,7 @@
 `scripts/benchmark_scaling.py` measures 10,000, 100,000, 1,000,000 and 10,000,000
 synthetic fact rows. It validates results against native DuckDB and, optionally,
 PostgreSQL. It measures the embedded execution service, not browser latency or
-the isolated HTTP SQL worker. The older 50-column reference in
-[Validation](VALIDATION.md) is a different workload and machine.
+the isolated HTTP SQL worker.
 
 ## Reproduce
 

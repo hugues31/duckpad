@@ -38,20 +38,21 @@ pushing the first release tag.
 ## Publish a version
 
 1. Update `[project].version` in `pyproject.toml` and run `uv lock`. Use a release
-   PR with a Conventional Commit title such as `chore(release): prepare 0.2.0`.
+   PR with a Conventional Commit title such as `chore(release): prepare <version>`.
    The frontend's private npm version is not the Python package version.
 2. Review and merge the PR into `main`, following the project's approval workflow.
 3. Tag the approved commit and push that specific tag:
 
    ```sh
    git fetch origin main --tags
-   git tag -a v0.2.0 <approved-commit> -m "Release Duckpad 0.2.0"
-   git push origin v0.2.0
+   version="$(uv run python -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')"
+   git tag -a "v$version" <approved-commit> -m "Release Duckpad $version"
+   git push origin "v$version"
    ```
 
 Tags must exactly match `vMAJOR.MINOR.PATCH` and the package version. Pre-releases
-use Python's canonical spelling: `v0.2.0a1`, `v0.2.0b1`, or `v0.2.0rc1`, with
-`0.2.0rc1` in `pyproject.toml` for the last example. They publish to PyPI and are
+append Python's canonical `aN`, `bN` or `rcN` suffix to that version, where `N`
+is the prerelease number. They publish to PyPI and are
 marked as pre-releases on GitHub, without replacing its latest stable release.
 Other tag formats, mismatched versions, and commits outside `origin/main` fail
 before publishing. Both annotated and lightweight tags are supported.
@@ -76,13 +77,13 @@ the most recent stable tag reachable from `HEAD`, by commit date:
 
 ```sh
 uv sync --locked
-uv run git-cliff --offline --no-exec --unreleased --tag v0.2.0 --output release-notes.md
+uv run git-cliff --offline --no-exec --unreleased --tag "v$version" --output release-notes.md
 ```
 
 To reproduce the exact workflow output from a release checkout:
 
 ```sh
-uv run python scripts/release.py v0.2.0 --output release-notes.md
+uv run python scripts/release.py "v$version" --output release-notes.md
 ```
 
 Generated notes are build artifacts, not committed changelog files.

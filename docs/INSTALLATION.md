@@ -115,24 +115,18 @@ Keep the master key too; if it is supplied externally, back it up separately.
 Source data in external folders or databases needs its own backup. A project
 ZIP excludes data, Git history, accounts, connection settings and run history.
 
-Upgrade Duckpad in the same Python environment with `pip install --upgrade duckpad`,
-then start it with the same `--home`. Read the
-[release notes](https://github.com/hugues31/duckpad/releases) before changing
-versions. To recover the old instance, use its backup with the Duckpad version
-that created it.
-
-Duckpad is in v0: a release may reset the storage schema without an upgrade
-path. Startup then rejects the existing database without changing it. Keep the
-old directory as a backup and start a fresh instance:
+Upgrade with `pip install --upgrade duckpad`. Breaking releases may require a
+fresh instance; check the [release notes](https://github.com/hugues31/duckpad/releases)
+first. Startup rejects unsupported databases without changing them. In that case,
+keep the backup and choose a new instance directory:
 
 ```sh
 duckpad start --home /path/to/new-instance
 ```
 
-The new instance creates a new administrator password. Reconfigure accounts and
-connections, then import each project as a ZIP downloaded from the previous
-version; its files must follow the current [file format](AUTHORING.md).
-The old instance's execution history remains in its original database.
+Set up the administrator account and connections, then import project ZIPs that
+follow the current [file format](AUTHORING.md). Execution history stays in the
+original instance backup.
 
 ## Instance monitoring
 

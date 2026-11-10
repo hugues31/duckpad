@@ -2,8 +2,7 @@
 
 This reference collects the constraints shared across features. Current usage
 and file formats live in the linked guides; implementation details live in
-[Architecture](ARCHITECTURE.md). Design records under `design/` distinguish
-accepted decisions from features that are still proposed.
+[Architecture](ARCHITECTURE.md). Remaining proposals live under `design/`.
 
 ## Projects, code and history
 

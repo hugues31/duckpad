@@ -194,6 +194,3 @@ external editors, so the browser applies its own barriers on top of validation:
   deleting a node or an instance deletes its charts. Charts belong to the
   instance; they are not copied into the component definition.
 - **ZIP archives** include `charts.json` with the other project files.
-
-The [design record](../docs/design/CHARTS.md) explains these choices and the
-alternatives considered.
