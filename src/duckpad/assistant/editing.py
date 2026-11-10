@@ -7,7 +7,8 @@ from pydantic_ai import RunContext
 
 from .. import variables
 from ..bundle import bundle_to_files
-from ..charts import check_chart, unknown_fields
+from ..charts import declarations as chart_declarations
+from ..charts import unknown_fields
 from ..components import expand, group, output_port
 from ..node_code import code_path, find_node
 from ..util import Problem
@@ -298,7 +299,8 @@ def edit_chart(
     if isinstance(change, CreateChart):
         if existing is not None:
             raise Problem("A chart with this name already exists on this output", 409)
-        entries.append({"name": name, "spec": change.spec})
+        existing = {"name": name, "spec": change.spec}
+        entries.append(existing)
     elif existing is None:
         raise Problem("Chart not found", 404)
     elif isinstance(change, UpdateChart):
@@ -311,9 +313,10 @@ def edit_chart(
         entries.remove(existing)
         if not entries:
             del charts[key]
-    if isinstance(change, (CreateChart, UpdateChart)):
-        # The save ignores problems the file already had, which can hide one in the requested spec.
-        check_chart(key, {"name": name, "spec": change.spec})
+    if not isinstance(change, DeleteChart):
+        # The save ignores problems the file already had, and the first one hides the others:
+        # check the requested chart, name included, on its own.
+        chart_declarations({"charts": {key: [existing]}})
     bundle["charts"] = charts
     result = save(ctx, snapshot, bundle)
     if isinstance(change, (CreateChart, UpdateChart)) and "error" not in result:

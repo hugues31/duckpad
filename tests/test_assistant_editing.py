@@ -661,8 +661,16 @@ AGGREGATE = {"mark": "bar", "encoding": {"x": {"field": "value", "aggregate": "s
 @pytest.mark.parametrize(
     ("args", "message"),
     [
-        ({"operation": "create", "name": "New"}, "chart New of first:result: encoding.x.aggregate"),
-        ({"operation": "update", "name": "Values"}, "chart Values of first:result: encoding.x.aggregate"),
+        (
+            {"operation": "create", "name": "New", "spec": AGGREGATE},
+            "chart New of first:result: encoding.x.aggregate",
+        ),
+        (
+            {"operation": "update", "name": "Values", "spec": AGGREGATE},
+            "chart Values of first:result: encoding.x.aggregate",
+        ),
+        ({"operation": "create", "name": " ", "spec": BAR}, "needs a name of 1 to 100 characters"),
+        ({"operation": "rename", "name": "Values", "new_name": "x" * 101}, "needs a name of 1 to 100"),
     ],
 )
 def test_requested_charts_are_checked_even_when_another_chart_is_invalid(instance, args, message):
@@ -673,9 +681,7 @@ def test_requested_charts_are_checked_even_when_another_chart_is_invalid(instanc
         app, worktree, lambda b: b.update(charts={"first:result": [broken, {"name": "Values", "spec": BAR}]})
     )
     before = app.state.services.projects.snapshot(worktree["id"])
-    _, result = write_turn(
-        app, client, context, [chart(node="first", output="result", spec=AGGREGATE, **args)]
-    )
+    _, result = write_turn(app, client, context, [chart(node="first", output="result", **args)])
     assert result["tools"][0]["status"] == "error", result
     assert message in result["tools"][0]["summary"]
     after = app.state.services.projects.snapshot(worktree["id"])
@@ -694,9 +700,10 @@ def test_charts_can_be_edited_beside_an_existing_invalid_chart(instance):
     calls = [
         chart(operation="create", **target, name="New", spec=BAR),
         chart(operation="update", **target, name="Values", spec=LINE),
+        chart(operation="rename", **target, name="Values", new_name="Totals"),
     ]
     _, result = write_turn(app, client, context, calls)
-    assert [t["status"] for t in result["tools"]] == ["complete"] * 2, result
+    assert [t["status"] for t in result["tools"]] == ["complete"] * 3, result
 
 
 def test_chart_updates_replace_the_spec_renames_stay_on_the_output_and_last_deletes_drop_the_key(instance):
