@@ -22,6 +22,7 @@ export default function NodePalette({
   hidden,
   onClose,
   onAdd,
+  onDragStart,
   onNewTemplate,
   onLibrary,
 }: {
@@ -32,6 +33,7 @@ export default function NodePalette({
   hidden: boolean;
   onClose: () => void;
   onAdd: (kind: NodeKind, id: string, linked?: boolean) => void;
+  onDragStart: (kind: NodeKind, id: string, transfer: DataTransfer) => void;
   onNewTemplate: (language: "sql" | "python") => void;
   onLibrary: () => void;
 }) {
@@ -109,6 +111,7 @@ export default function NodePalette({
                         JSON.stringify({ kind: item.kind, id: item.id }),
                       );
                       e.dataTransfer.effectAllowed = "move";
+                      onDragStart(item.kind, item.id, e.dataTransfer);
                     }}
                     onClick={(event) =>
                       onAdd(

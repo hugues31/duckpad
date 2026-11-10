@@ -15,7 +15,9 @@ collapses built-in templates by default.
 
 ## Build and inspect
 
-Add a palette item by clicking it or dragging it onto the canvas;
+Add a palette item by clicking it or dragging it onto the canvas. While dragging,
+the preview uses the node's shape and the canvas zoom; release to place the
+center of the shape at the pointer.
 **Search node types…** filters the palette, and **Project templates** lists the
 templates created in the project. Connect an output to an input, or choose the
 upstream output in the node's inspector. Connected sockets are filled, unused

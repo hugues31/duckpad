@@ -15,6 +15,7 @@ import type {
 
 export interface CanvasHandle {
   newNodePosition: (nodes: FlowNode[]) => FlowNode["position"];
+  setDragImage: (kind: NodeKind, id: string, transfer: DataTransfer) => void;
 }
 
 export interface FocusRequest {

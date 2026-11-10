@@ -556,6 +556,15 @@ fieldset.palette-bottom {
   align-items: center;
   color: var(--text);
 }
+.node-drag-image {
+  position: fixed;
+  left: -10000px;
+  top: 0;
+  padding: 24px;
+  width: max-content;
+  pointer-events: none;
+  transform-origin: top left;
+}
 .node-shape {
   width: 96px;
   height: 96px;
