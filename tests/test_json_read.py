@@ -23,7 +23,9 @@ INVALID = ["NaN", "Infinity", "-Infinity", "1e400", "-1e400", '"\\ud800"', '"\\u
 def test_nonstandard_json_in_a_project_file_has_no_snapshot_500(tmp_path, file, value):
     app = create_app(tmp_path / "instance", watch=False)
     with TestClient(app) as client:
-        client.post("/api/login", json={"password": app.state.auth.initial_password}).raise_for_status()
+        client.post(
+            "/api/login", json={"username": "admin", "password": app.state.auth.initial_password}
+        ).raise_for_status()
         worktree = client.post("/api/projects", json={"name": "Strict JSON"}).json()
         endpoint = f"/api/worktrees/{worktree['id']}"
         snapshot = client.get(endpoint).json()
