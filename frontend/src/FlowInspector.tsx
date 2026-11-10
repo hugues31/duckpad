@@ -56,10 +56,7 @@ export default function FlowInspector({
   path,
   safe,
   updateGraph,
-  removeNodes,
   run,
-  openComponent,
-  editCode,
   actionsFor,
   openModal,
   showResults,
@@ -93,10 +90,7 @@ export default function FlowInspector({
   path: PathPart[];
   safe: (action: () => Promise<unknown>) => void;
   updateGraph: (change: (graph: Graph) => void) => Promise<void>;
-  removeNodes: (ids: string[], edges?: string[]) => Promise<void>;
   run: (node?: string, options?: PartitionLaunchOptions) => Promise<void>;
-  openComponent: (id: string) => void;
-  editCode: (line?: number, target?: string) => void;
   actionsFor: (target: FlowNode) => ActionItem[];
   openModal: (modal: ModalState) => void;
   showResults: (tab: ResultsTab) => void;
@@ -197,15 +191,8 @@ export default function FlowInspector({
               }),
             )
           }
-          onDelete={() => safe(() => removeNodes([node.id]))}
           onRun={() => run(fullNode)}
-          onOpen={() => openComponent(node.id)}
-          onEditTemplate={() => editCode()}
-          actions={() =>
-            actionsFor(node).filter(
-              (action) => !["edit", "remove"].includes(action.id),
-            )
-          }
+          actions={() => actionsFor(node)}
           onHistory={() =>
             openModal({
               kind: "git",

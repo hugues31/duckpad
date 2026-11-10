@@ -28,10 +28,13 @@ outputs stay hollow, and an input without a source is orange on the node until
 you connect it. Point at a node or a link to highlight it. Click a link to select
 it, then press Delete or Backspace to disconnect it. Shift-click selects multiple
 links; Ctrl/Cmd+Z undoes a deletion. Select a node for
-its parameters and code on the right and its [results](RESULTS.md) below. Its other actions, such as
-**Duplicate node**, are in **Node actions** (**⋯** in the inspector title, or
-right-click the node). Double-click a [component](COMPONENTS.md) to open
-its contents; use the breadcrumbs to return. **Fit view** brings the graph into
+its parameters on the right and its [results](RESULTS.md) below. Double-click a
+SQL or Python node to edit its code; a linked node opens its shared template.
+The inspector keeps **Edit code**, execution, duplication, muting, template
+actions and removal above the scrolling fields, on every tab. Removing a node
+can be undone with **Undo** in the notification or Ctrl/Cmd+Z. Right-click a node
+for the same actions in a context menu. Double-click a [component](COMPONENTS.md)
+to open its contents; use the breadcrumbs to return. **Fit view** brings the graph into
 view. **Auto-arrange nodes** places dependencies in columns, orders each column to
 avoid crossing links, and lines up linked sockets. Drag a port onto empty space to
 add a compatible connected node.

@@ -1,23 +1,15 @@
-import { Boxes, Link, Loader2, Play, Settings2 } from "lucide-react";
+import { Boxes, Link, Settings2 } from "lucide-react";
 import { templateLabel, useT } from "./i18n";
-import type { FlowNode, Snapshot, Statuses } from "./types";
+import type { FlowNode, Snapshot } from "./types";
 
 export default function InspectorHeading({
   node,
   kind,
   snapshot,
-  readOnly,
-  starting,
-  statuses,
-  onRun,
 }: {
   node: FlowNode;
   kind: "component" | import("./types").TemplateKind;
   snapshot: Snapshot;
-  readOnly: boolean;
-  starting: boolean | undefined;
-  statuses: Statuses;
-  onRun: () => void;
 }) {
   const t = useT();
   return (
@@ -42,15 +34,6 @@ export default function InspectorHeading({
           )}
         </small>
       </div>
-      <button
-        className="icon run-node"
-        title={t("runNode")}
-        disabled={readOnly || starting || !!statuses.active}
-        aria-busy={starting}
-        onClick={onRun}
-      >
-        {starting ? <Loader2 size={16} className="spin" /> : <Play size={16} />}
-      </button>
     </div>
   );
 }

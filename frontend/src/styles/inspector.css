@@ -16,6 +16,10 @@
   overflow: hidden;
   border-left: 1px solid var(--border);
 }
+/* Short panels scroll as a whole before their fields become unusably small. */
+.inspector {
+  overflow: auto;
+}
 .inspector-title {
   height: 52px;
   padding: 0 17px;
@@ -35,7 +39,8 @@
   white-space: nowrap;
 }
 .inspector-kind {
-  padding: 19px;
+  padding: 12px 17px;
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   gap: 11px;
@@ -67,13 +72,42 @@
   font-size: 11px;
   color: var(--muted);
 }
-.run-node {
-  margin-left: auto;
-  color: var(--accent);
-  background: var(--accent-soft);
+.inspector-actions {
+  padding: 12px 12px 0;
+  flex-shrink: 0;
+}
+.inspector-primary-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.inspector-primary-actions .button {
+  flex: 1;
+}
+.inspector-primary-actions .icon {
+  flex-shrink: 0;
+}
+.inspector-secondary-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+.inspector-actions .button {
+  white-space: normal;
+  text-align: left;
+  min-width: 0;
+}
+.inspector-secondary-actions .button {
+  justify-content: flex-start;
+  font-size: 11px;
+}
+.inspector-actions svg {
+  flex-shrink: 0;
 }
 /* One line on what the node produced; each part opens the results panel. */
 .result-summary {
+  flex-shrink: 0;
   margin: -4px 17px 15px;
   padding: 8px 10px;
   display: flex;
@@ -110,6 +144,7 @@
  * panel they shorten, never below three characters, and short ones stay whole.
  */
 .inspector-tabs {
+  flex-shrink: 0;
   display: grid;
   grid-auto-flow: column;
   justify-content: start;
@@ -133,6 +168,7 @@
   white-space: nowrap;
 }
 .inspector-body {
+  min-height: 160px;
   padding: 21px 18px;
   overflow: auto;
   flex: 1;
@@ -159,11 +195,6 @@
   margin: 0;
   padding: 0;
   min-width: 0;
-}
-.inspector-danger {
-  margin-top: 35px;
-  padding-top: 18px;
-  border-top: 1px solid var(--border);
 }
 .file-upload {
   display: flex;

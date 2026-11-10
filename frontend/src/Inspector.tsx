@@ -1,31 +1,18 @@
-import {
-  ArrowRight,
-  BookOpen,
-  Boxes,
-  Code2,
-  Info,
-  Settings2,
-  Trash2,
-  X,
-} from "lucide-react";
+import { BookOpen, Code2, Info, Settings2, X } from "lucide-react";
 import { lazy, Suspense, useRef, useState } from "react";
 import { Link as RouterLink } from "react-router";
-import { ActionMenuButton, type ActionItem } from "./ActionMenu";
+import type { ActionItem } from "./ActionMenu";
 import { retainedConflict, withQuery } from "./api";
 import ConnectionOnboarding from "./ConnectionOnboarding";
 import { containsPython, type NodeInterface } from "./graph";
 import { nodeLabel, useT } from "./i18n";
 import InputSelectors from "./InputSelectors";
 import InspectorHeading from "./InspectorHeading";
+import InspectorActions from "./InspectorActions";
 import InspectorParameters from "./InspectorParameters";
 import { sourcePreviewParams } from "./nodeParameters";
 import { projectSettingsUrl } from "./navigation";
-import {
-  nodeCode,
-  nodeEntity,
-  nodeSourcePath,
-  templateUsage,
-} from "./nodeCode";
+import { nodeCode, nodeEntity, nodeSourcePath } from "./nodeCode";
 import NodeDocumentation from "./NodeDocumentation";
 import NodeInfo from "./NodeInfo";
 import { numberBoundsError } from "./numberBounds";
@@ -82,10 +69,7 @@ export default function Inspector({
   onSaveDocumentation,
   onInput,
   actions,
-  onDelete,
   onRun,
-  onOpen,
-  onEditTemplate,
   onHistory,
   onResults,
   onClose,
@@ -115,10 +99,7 @@ export default function Inspector({
   ) => Promise<Snapshot>;
   onInput: (port: string, source: string) => void;
   actions: () => ActionItem[];
-  onDelete: () => void;
   onRun: () => void;
-  onOpen: () => void;
-  onEditTemplate: () => void;
   onHistory: () => void;
   /** Open the results panel on one of its tabs. */
   onResults: (tab: ResultsTab) => void;
@@ -214,9 +195,6 @@ export default function Inspector({
     if (!retainedConflict(rejection())) void persist();
   };
   const { kind, parameters, inputs } = signature;
-  const linkedCount = node.template
-    ? templateUsage(snapshot.bundle!, node.template)
-    : 0;
   // Only the root flow binds variables; component definitions stay portable.
   const bindable = !fullNode.includes("::");
   const setParameter = (name: string, value: Json | undefined) =>
@@ -278,24 +256,18 @@ export default function Inspector({
     <aside className="inspector" ref={panel}>
       <div className="inspector-title">
         <span>{nodeLabel(node, signature, t)}</span>
-        <ActionMenuButton
-          label={t("nodeActions")}
-          items={actions}
-          disabled={readOnly}
-        />
         <button className="icon" onClick={onClose} title={t("close")}>
           <X size={18} />
         </button>
       </div>
-      <InspectorHeading
-        node={node}
-        kind={kind}
-        snapshot={snapshot}
-        readOnly={readOnly}
+      <InspectorActions
+        actions={actions()}
+        component={!!node.component}
         starting={starting}
-        statuses={statuses}
+        runDisabled={readOnly || !!starting || !!statuses.active}
         onRun={onRun}
       />
+      <InspectorHeading node={node} kind={kind} snapshot={snapshot} />
       <ResultSummary
         bundle={snapshot.bundle}
         fullNode={fullNode}
@@ -363,14 +335,7 @@ export default function Inspector({
               />
             </label>
             {node.component && (
-              <>
-                <p className="muted small">{t("sharedTemplateHint")}</p>
-                <button className="button secondary full" onClick={onOpen}>
-                  <Boxes size={15} />
-                  {t("openComponent")}
-                  <ArrowRight size={15} />
-                </button>
-              </>
+              <p className="muted small">{t("sharedTemplateHint")}</p>
             )}
             <InputSelectors
               inputs={inputs}
@@ -447,27 +412,6 @@ export default function Inspector({
                 onTypes={(types) => setParameter("types", types)}
               />
             )}
-            {!node.component && (
-              <button
-                className="button secondary full"
-                onClick={onEditTemplate}
-              >
-                <Code2 size={15} />
-                {node.template
-                  ? t(
-                      linkedCount === 1
-                        ? "editTemplateOne"
-                        : "editTemplateCount",
-                    ).replace("{count}", String(linkedCount))
-                  : t("editNodeCode")}
-              </button>
-            )}
-            <div className="inspector-danger">
-              <button className="text-button danger" onClick={onDelete}>
-                <Trash2 size={14} />
-                {t("deleteNode")}
-              </button>
-            </div>
           </fieldset>
         ) : tab === "sql" && node.language === "python" ? (
           <Suspense fallback={<p>{t("loading")}</p>}>

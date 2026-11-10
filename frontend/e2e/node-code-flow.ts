@@ -54,6 +54,44 @@ export async function verifyNodeCode(page: Page) {
   await expect(
     inspector.getByRole("textbox", { name: /marker/ }),
   ).toBeVisible();
+  // Actions stay available on every tab and above long parameter forms.
+  const actions = inspector.getByRole("group", {
+    name: "Node actions",
+    exact: true,
+  });
+  for (const tab of ["Info", "Documentation", "Parameters"]) {
+    await inspector.getByRole("button", { name: tab, exact: true }).click();
+    await inspector.locator(".inspector-body").evaluate((body) => {
+      body.scrollTop = body.scrollHeight;
+    });
+    for (const name of [
+      "Edit code",
+      "Run with ancestors",
+      "Duplicate node",
+      "Mute node (M)",
+      "Convert to template",
+      "Remove node",
+    ]) {
+      await expect(
+        actions.getByRole("button", { name, exact: true }),
+      ).toBeInViewport();
+    }
+  }
+  const viewport = page.viewportSize()!;
+  await page.setViewportSize({ width: 900, height: 720 });
+  const label = inspector.getByRole("textbox", {
+    name: "Display name",
+    exact: true,
+  });
+  await label.scrollIntoViewIfNeeded();
+  await expect(label).toBeInViewport();
+  await actions
+    .getByRole("button", { name: "Edit code", exact: true })
+    .scrollIntoViewIfNeeded();
+  await expect(
+    actions.getByRole("button", { name: "Edit code", exact: true }),
+  ).toBeInViewport();
+  await page.setViewportSize(viewport);
   await nodeMenuAction(page, "Convert to template");
   const conversion = page.getByRole("dialog");
   await conversion.getByLabel("Template name").fill("Shared filter");
