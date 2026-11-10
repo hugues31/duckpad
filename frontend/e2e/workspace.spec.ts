@@ -475,9 +475,7 @@ test("connection capabilities constrain source and export forms without a projec
   expect(after.commit).toBe(before.commit);
 });
 
-test("panel toggles and fitting keep nodes reachable", async ({
-  page,
-}) => {
+test("panel toggles and fitting keep nodes reachable", async ({ page }) => {
   await sample(page);
   const canvas = page.locator(".canvas");
   const shell = await page.locator(".app-shell").boundingBox();
