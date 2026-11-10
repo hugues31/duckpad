@@ -226,6 +226,8 @@ test("selected links delete, undo and survive a rejected save without deleting n
     .toEqual(["filtered_doubled"]);
   expect((await read()).bundle!.flow.nodes).toHaveLength(4);
   await page.keyboard.press("ControlOrMeta+Z");
+  // The canvas ignores clicks until the undo is saved and reloaded.
+  await expect(page.locator(".toast")).toContainText("Change undone");
   await expect(edge).toHaveCount(1);
   // A restored link is not selected, so deleting a node next cannot remove it.
   await expect(edge).not.toHaveClass(/selected/);
