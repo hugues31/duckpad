@@ -1,6 +1,6 @@
 """Bounded project edits, saved through the same optimistic writer as the UI."""
 
-from typing import Annotated, Literal
+from typing import Annotated
 
 from pydantic import Field
 from pydantic_ai import RunContext
@@ -14,12 +14,16 @@ from ..node_code import code_path, find_node
 from ..util import Problem
 from .arguments import (
     AddNode,
+    ColumnDocumentation,
     ConnectEdge,
     CreateChart,
     CreateVariable,
+    DatasetDocumentation,
     DeleteChart,
     DeleteVariable,
     DisconnectEdge,
+    NodeDocumentation,
+    ProjectDocumentation,
     RemoveNode,
     RenameChart,
     RenameVariable,
@@ -158,31 +162,33 @@ def write_sql(ctx: RunContext[Dependencies], sql: str, node: str = "", template:
 
 def write_documentation(
     ctx: RunContext[Dependencies],
-    section: Literal["project", "nodes", "datasets", "columns"],
-    text: str,
-    node: str = "",
-    output: str = "",
-    column: str = "",
+    entry: Annotated[
+        ProjectDocumentation | NodeDocumentation | DatasetDocumentation | ColumnDocumentation,
+        Field(discriminator="section"),
+    ],
 ) -> dict:
-    """Write README or a node/output/column description. Use expanded node IDs and output port names."""
+    """Write the README or a node, output or column description, with a commit and Undo for each change.
+
+    Pass one entry object: {"section": ..., "text": ..., ...} with only that section's fields.
+    project takes text; nodes adds node; datasets adds node and output; columns adds node, output and
+    column. Use expanded node IDs and output port names.
+    """
     snapshot = editable(ctx)
     bundle = snapshot["bundle"]
     docs = bundle["documentation"]
-    if section == "project":
-        docs["project"] = text
+    if isinstance(entry, ProjectDocumentation):
+        docs["project"] = entry.text
     else:
-        find_node(bundle, node)
-        if section == "nodes":
-            docs.setdefault("nodes", {})[node] = text
+        find_node(bundle, entry.node)
+        if isinstance(entry, NodeDocumentation):
+            docs.setdefault("nodes", {})[entry.node] = entry.text
         else:
-            output_port(bundle, node, output)
-            key = f"{node}:{output}"
-            if section == "datasets":
-                docs.setdefault("datasets", {})[key] = text
+            output_port(bundle, entry.node, entry.output)
+            key = f"{entry.node}:{entry.output}"
+            if isinstance(entry, DatasetDocumentation):
+                docs.setdefault("datasets", {})[key] = entry.text
             else:
-                if not column:
-                    raise Problem("Choose a column", 422)
-                docs.setdefault("columns", {}).setdefault(key, {})[column] = text
+                docs.setdefault("columns", {}).setdefault(key, {})[entry.column] = entry.text
     return save(ctx, snapshot, bundle)
 
 

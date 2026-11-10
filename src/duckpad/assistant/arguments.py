@@ -62,11 +62,17 @@ class DeleteVariable(VariableChange):
     operation: Literal["delete"]
 
 
+NodeReference = Annotated[
+    str, Field(min_length=1, description="Expanded node or component-instance ID shown on the canvas")
+]
+OutputPort = Annotated[str, Field(min_length=1, description="Output port name")]
+
+
 class ChartChange(Change):
     """One chart operation on a node output."""
 
-    node: str = Field(min_length=1, description="Expanded node or component-instance ID shown on the canvas")
-    output: str = Field(min_length=1, description="Output port name")
+    node: NodeReference
+    output: OutputPort
 
 
 ChartSpec = Annotated[
@@ -175,3 +181,37 @@ class DisconnectEdge(Arguments):
 
     operation: Literal["disconnect"]
     id: str = Field(min_length=1, max_length=100)
+
+
+class ProjectDocumentation(Arguments):
+    """The project README."""
+
+    section: Literal["project"]
+    text: str
+
+
+class NodeDocumentation(Arguments):
+    """The description of a node."""
+
+    section: Literal["nodes"]
+    node: NodeReference
+    text: str
+
+
+class DatasetDocumentation(Arguments):
+    """The description of a node output."""
+
+    section: Literal["datasets"]
+    node: NodeReference
+    output: OutputPort
+    text: str
+
+
+class ColumnDocumentation(Arguments):
+    """The description of one column of a node output."""
+
+    section: Literal["columns"]
+    node: NodeReference
+    output: OutputPort
+    column: str = Field(min_length=1)
+    text: str
