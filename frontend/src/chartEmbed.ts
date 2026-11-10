@@ -175,22 +175,24 @@ function literalFields(
           ].includes(name)
         ? "legend"
         : null;
+    // Vega-Lite quotes tooltip/ARIA titles but fails to escape backslashes and
+    // line breaks. Quotes themselves are escaped by the compiler.
+    const escaped = String(title || channel.field)
+      .replace(/\\/g, "\\\\")
+      .replace(/\n/g, "\\n")
+      .replace(/\r/g, "\\r")
+      .replace(/\t/g, "\\t");
     return {
       ...channel,
       field: fieldName(channel.field),
-      // Vega-Lite quotes tooltip/ARIA titles but fails to escape backslashes and
-      // line breaks. Quotes themselves are escaped by the compiler.
-      title: String(title || channel.field)
-        .replace(/\\/g, "\\\\")
-        .replace(/\n/g, "\\n")
-        .replace(/\r/g, "\\r")
-        .replace(/\t/g, "\\t"),
-      ...(guide && {
-        [guide]:
-          channel[guide] === null
-            ? null
-            : { title, ...(channel[guide] as object | undefined) },
-      }),
+      title: escaped,
+      // The guide shows the original title only where it differs: otherwise
+      // Vega-Lite still merges the titles of x and x2 ("start, end").
+      ...(guide &&
+        escaped !== title &&
+        channel[guide] !== null && {
+          [guide]: { title, ...(channel[guide] as object | undefined) },
+        }),
     };
   };
   return {

@@ -271,3 +271,20 @@ it("maps layer fields and tooltip lists while preserving explicit titles and val
     ],
   });
 });
+
+it("keeps Vega-Lite's merged axis title of a range", () => {
+  const spec = {
+    mark: "bar",
+    encoding: {
+      x: { field: "start", type: "quantitative" },
+      x2: { field: "end" },
+      y: { field: "task", type: "nominal" },
+    },
+  };
+  const { axes } = compile(chartSpec(spec, []) as unknown as TopLevelSpec)
+    .spec as { axes: { title?: unknown }[] };
+  expect(axes.map((axis) => axis.title).filter(Boolean)).toEqual([
+    "start, end",
+    "task",
+  ]);
+});
