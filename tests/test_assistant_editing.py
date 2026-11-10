@@ -76,6 +76,11 @@ def flow(*nodes, edges=None):
     return ("edit_flow", {"nodes": list(nodes), **({"edges": edges} if edges is not None else {})})
 
 
+def documentation(**entry):
+    """A write_documentation call: one section-specific entry."""
+    return ("write_documentation", {"entry": entry})
+
+
 def write_turn(app, client, context, calls, **options):
     identity = conversation(client, context)
     scripted(app, calls, **options)
@@ -123,22 +128,10 @@ def change(app, worktree, callback):
             "write_sql",
             {"template": "filter", "sql": "-- @input input\n-- @output result\nSELECT * FROM {{ input }};"},
         ),
-        ("write_documentation", {"section": "project", "text": "Overview"}),
-        ("write_documentation", {"section": "nodes", "node": "first", "text": "Source"}),
-        (
-            "write_documentation",
-            {"section": "datasets", "node": "first", "output": "result", "text": "Results"},
-        ),
-        (
-            "write_documentation",
-            {
-                "section": "columns",
-                "node": "first",
-                "output": "result",
-                "column": "value",
-                "text": "An integer",
-            },
-        ),
+        documentation(section="project", text="Overview"),
+        documentation(section="nodes", node="first", text="Source"),
+        documentation(section="datasets", node="first", output="result", text="Results"),
+        documentation(section="columns", node="first", output="result", column="value", text="An integer"),
         variable(operation="create", name="limit", definition={"type": "number", "default": 5}),
         variable(operation="update", name="region", definition={"default": "South"}),
         variable(operation="rename", name="region", new_name="area"),
@@ -458,6 +451,10 @@ CORRECTIONS = [
         flow({"operation": "update", "id": "first", "sql": SQL}),
         flow({"operation": "update", "id": "first", "label": "Renamed"}),
     ),
+    (
+        documentation(section="nodes", node="first", output="result", text="Source"),
+        documentation(section="nodes", node="first", text="Source"),
+    ),
 ]
 
 
@@ -470,6 +467,7 @@ def test_rejected_arguments_can_be_corrected_twice_in_a_row(instance, bad, good)
     _, result = write_turn(app, client, context, [bad, bad, good])
     assert [t["status"] for t in result["tools"]] == ["error", "error", "complete"], result
     assert projects.git(worktree["path"], "rev-list", "--count", before["commit"] + "..HEAD") == "1"
+    assert projects.snapshot(worktree["id"])["files"] != before["files"]
 
 
 @pytest.mark.parametrize(("bad", "good"), CORRECTIONS)
@@ -585,6 +583,48 @@ def test_null_flow_arguments_count_as_omitted(instance):
     ] == [("first", "result", "consumer", "input")]
 
 
+@pytest.mark.parametrize(
+    ("entry", "field"),
+    [
+        ({"section": "columns", "node": "first", "output": "result", "text": "An integer"}, "column"),
+        ({"section": "columns", "node": "first", "output": "result", "column": "", "text": "X"}, "column"),
+        ({"section": "datasets", "node": "first", "text": "Results"}, "output"),
+        ({"section": "nodes", "node": "first", "column": "value", "text": "Source"}, "column"),
+        ({"section": "project", "node": "first", "text": "Overview"}, "node"),
+        ({"section": "variables", "text": "Overview"}, "section"),
+    ],
+)
+def test_rejected_documentation_arguments_save_nothing(instance, entry, field):
+    app, client = instance
+    worktree, context = seed(app, client)
+    before = app.state.services.projects.snapshot(worktree["id"])
+    _, result = write_turn(app, client, context, [documentation(**entry)])
+    card = result["tools"][0]
+    assert card["status"] == "error", result
+    assert field in card["summary"]
+    assert "action" not in card
+    after = app.state.services.projects.snapshot(worktree["id"])
+    assert (after["commit"], after["files"]) == (before["commit"], before["files"])
+
+
+def test_null_documentation_arguments_count_as_omitted(instance):
+    app, client = instance
+    worktree, context = seed(app, client)
+    calls = [
+        documentation(section="project", text="Overview", node=None, output=None, column=None),
+        documentation(section="nodes", node="first", text="Source", output=None, column=None),
+        documentation(section="datasets", node="first", output="result", text="Results", column=None),
+    ]
+    _, result = write_turn(app, client, context, calls)
+    assert [t["status"] for t in result["tools"]] == ["complete"] * 3, result
+    docs = app.state.services.projects.snapshot(worktree["id"])["bundle"]["documentation"]
+    assert (docs["project"], docs["nodes"], docs["datasets"]) == (
+        "Overview",
+        {"first": "Source"},
+        {"first:result": "Results"},
+    )
+
+
 def test_edges_connect_existing_nodes_whatever_their_id(instance):
     app, client = instance
     worktree, context = seed(app, client)
@@ -646,6 +686,16 @@ NODE = {"operation", "id", "label", "position", "params"}
                 "disconnect": {"operation", "id"},
             },
         ),
+        (
+            "write_documentation",
+            "entry",
+            {
+                "project": {"section", "text"},
+                "nodes": {"section", "node", "text"},
+                "datasets": {"section", "node", "output", "text"},
+                "columns": {"section", "node", "output", "column", "text"},
+            },
+        ),
     ],
 )
 @pytest.mark.parametrize("kind", ["openai", "anthropic", "google", "mistral", "deepseek", "ollama", "custom"])
@@ -680,9 +730,8 @@ def test_every_provider_receives_each_operation_with_only_its_own_fields(
         return [] if node.get("type") == "null" else [node]
 
     def operation(variant):
-        return (
-            variant["properties"]["operation"].get("const") or variant["properties"]["operation"]["enum"][0]
-        )
+        tag = variant["properties"].get("operation") or variant["properties"]["section"]
+        return tag.get("const") or tag["enum"][0]
 
     received = {
         operation(v): (set(v["properties"]), v.get("additionalProperties"))

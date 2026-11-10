@@ -73,12 +73,16 @@ function ToolCard({
 }: { tool: AssistantTool } & ActionControls) {
   const t = useT();
   const action = tool.action;
+  // Tools with operation-specific models nest their arguments in one object.
+  const nested = (tool.args.change ?? tool.args.entry) as
+    { node?: unknown; section?: unknown } | undefined;
   const target =
     tool.args.node ||
-    (tool.args.change as { node?: unknown } | undefined)?.node ||
+    nested?.node ||
     tool.args.path ||
     tool.args.template ||
     tool.args.section ||
+    nested?.section ||
     "";
   const status =
     tool.approval?.decision === null
