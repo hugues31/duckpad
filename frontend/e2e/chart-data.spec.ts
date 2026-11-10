@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { signIn } from "./helpers";
 import { partitionFlow } from "./partitions-flow";
-import type { PreviewPage, Run, Snapshot } from "../src/types";
+import type { Run, Snapshot } from "../src/types";
 
 /** A point per row: every rendered row is one SVG symbol. */
 const POINTS = {
@@ -112,10 +112,11 @@ test("a chart draws an output of 5,000 rows and refuses 5,001 with the count", a
   );
 
   expect(chartRequests).toHaveLength(1);
-  const previews: Promise<PreviewPage>[] = [];
-  page.on("response", (response) => {
-    if (response.url().includes("/preview/over") && response.ok())
-      previews.push(response.json());
+  const previewLimits: (string | null)[] = [];
+  page.on("request", (request) => {
+    const url = new URL(request.url());
+    if (url.pathname.endsWith("/preview/over"))
+      previewLimits.push(url.searchParams.get("limit"));
   });
   // Keep Chart selected when changing nodes, so the Data tab loads no sample.
   await page.locator('.react-flow__node[data-id="over"]').click();
@@ -125,8 +126,7 @@ test("a chart draws an output of 5,000 rows and refuses 5,001 with the count", a
   await expect(refusal).toContainText("Aggregate");
   await expect(over.locator(".chart-view")).toHaveCount(0);
   await expect(over.locator("svg.marks")).toHaveCount(0);
-  for (const preview of await Promise.all(previews))
-    expect(preview.rows.length).toBeLessThanOrEqual(1);
+  for (const limit of previewLimits) expect(limit).toBe("1");
 });
 
 test("the Chart tab shows the Data tab's Run hint, Stale badge and failed run", async ({
@@ -267,16 +267,16 @@ test("the chart limit follows the selected partition and refuses all partitions 
   await expect(
     panel.locator(".chart-view .mark-symbol.role-mark path"),
   ).toHaveCount(3000, { timeout: 20000 });
-  const previews: Promise<PreviewPage>[] = [];
-  page.on("response", (response) => {
-    if (response.url().includes("/preview/transform") && response.ok())
-      previews.push(response.json());
+  const previewLimits: (string | null)[] = [];
+  page.on("request", (request) => {
+    const url = new URL(request.url());
+    if (url.pathname.endsWith("/preview/transform"))
+      previewLimits.push(url.searchParams.get("limit"));
   });
   await panel.getByRole("button", { name: "All", exact: true }).click();
   await expect(
     panel.getByRole("status").filter({ hasText: "6,000 rows" }),
   ).toBeVisible();
   await expect(panel.locator(".chart-view")).toHaveCount(0);
-  for (const preview of await Promise.all(previews))
-    expect(preview.rows.length).toBeLessThanOrEqual(1);
+  for (const limit of previewLimits) expect(limit).toBe("1");
 });
