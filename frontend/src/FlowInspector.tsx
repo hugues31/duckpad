@@ -1,4 +1,3 @@
-import type { ActionItem } from "./ActionMenu";
 import type { PreviewState, SampleSize } from "./draftPreview";
 import {
   connectInput,
@@ -10,6 +9,7 @@ import { nodeLabel, useT } from "./i18n";
 import Inspector from "./Inspector";
 import type { ModalState } from "./ModalHost";
 import NodeCodePanel, { type CodeReveal } from "./NodeCodePanel";
+import type { NodeAction } from "./nodeActions";
 import { nodeEntity } from "./nodeCode";
 import type { PartitionLaunchOptions } from "./partitions";
 import type { ResultsTab } from "./results";
@@ -91,7 +91,7 @@ export default function FlowInspector({
   safe: (action: () => Promise<unknown>) => void;
   updateGraph: (change: (graph: Graph) => void) => Promise<void>;
   run: (node?: string, options?: PartitionLaunchOptions) => Promise<void>;
-  actionsFor: (target: FlowNode) => ActionItem[];
+  actionsFor: (target: FlowNode) => NodeAction[];
   openModal: (modal: ModalState) => void;
   showResults: (tab: ResultsTab) => void;
 }) {
@@ -192,7 +192,7 @@ export default function FlowInspector({
             )
           }
           onRun={() => run(fullNode)}
-          actions={() => actionsFor(node)}
+          actions={actionsFor(node)}
           onHistory={() =>
             openModal({
               kind: "git",

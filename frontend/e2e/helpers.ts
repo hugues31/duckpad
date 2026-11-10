@@ -229,10 +229,11 @@ export function withoutExampleVariables(
   delete bundle.views;
 }
 
-/** Choose a visible inspector action shared with the canvas context menu. */
+/** Choose one of the selected node's actions in the inspector. */
 export async function nodeMenuAction(page: Page, name: string) {
   await page
     .locator(".inspector")
+    .getByRole("group", { name: "Node actions", exact: true })
     .getByRole("button", { name, exact: true })
     .click();
 }

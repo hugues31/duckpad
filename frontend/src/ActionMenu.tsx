@@ -4,15 +4,15 @@ import {
   useRef,
   useState,
   type KeyboardEvent,
-  type RefObject,
 } from "react";
 import { createPortal } from "react-dom";
-import { MoreHorizontal } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 
 export interface ActionItem {
   id: string;
   label: string;
   run: () => void;
+  icon?: LucideIcon;
   disabled?: boolean;
   danger?: boolean;
 }
@@ -32,18 +32,16 @@ export function moveMenuFocus(event: KeyboardEvent, items: HTMLElement[]) {
   items[index]?.focus();
 }
 
-/** Shared keyboard and pointer actions for an overflow button or a context menu. */
+/** Keyboard and pointer actions of a context menu. */
 export function ActionMenu({
   label,
   items,
   position,
-  trigger,
   onClose,
 }: {
   label: string;
   items: ActionItem[];
   position: { x: number; y: number };
-  trigger?: RefObject<HTMLButtonElement | null>;
   onClose: () => void;
 }) {
   const menu = useRef<HTMLDivElement>(null);
@@ -69,11 +67,7 @@ export function ActionMenu({
   }, []);
   useEffect(() => {
     const outside = (event: Event) => {
-      if (
-        !menu.current?.contains(event.target as Node) &&
-        !trigger?.current?.contains(event.target as Node)
-      )
-        onClose();
+      if (!menu.current?.contains(event.target as Node)) onClose();
     };
     // Zooming or scrolling would leave the menu beside another node.
     document.addEventListener("pointerdown", outside, true);
@@ -87,7 +81,7 @@ export function ActionMenu({
       document.removeEventListener("wheel", outside, true);
       window.removeEventListener("resize", onClose);
     };
-  }, [onClose, trigger]);
+  }, [onClose]);
   return createPortal(
     <div
       ref={menu}
@@ -98,11 +92,7 @@ export function ActionMenu({
       style={{ left: point.x, top: point.y }}
       onContextMenu={(event) => event.preventDefault()}
       onBlur={(event) => {
-        if (
-          !event.currentTarget.contains(event.relatedTarget) &&
-          !trigger?.current?.contains(event.relatedTarget)
-        )
-          onClose();
+        if (!event.currentTarget.contains(event.relatedTarget)) onClose();
       }}
       onKeyDown={(event) => {
         event.stopPropagation();
@@ -129,65 +119,11 @@ export function ActionMenu({
             item.run();
           }}
         >
+          {item.icon && <item.icon size={14} aria-hidden="true" />}
           {item.label}
         </button>
       ))}
     </div>,
     document.body,
-  );
-}
-
-export function ActionMenuButton({
-  label,
-  items: getItems,
-  disabled,
-}: {
-  label: string;
-  items: () => ActionItem[];
-  disabled?: boolean;
-}) {
-  const [items, setItems] = useState<ActionItem[]>([]);
-  const trigger = useRef<HTMLButtonElement>(null);
-  const [position, setPosition] = useState<{ x: number; y: number } | null>(
-    null,
-  );
-  const open = () => {
-    setItems(getItems());
-    const bounds = trigger.current!.getBoundingClientRect();
-    setPosition({ x: bounds.left, y: bounds.bottom + 4 });
-  };
-  return (
-    <>
-      <button
-        ref={trigger}
-        className="icon"
-        title={label}
-        aria-label={label}
-        aria-haspopup="menu"
-        aria-expanded={!!position}
-        disabled={disabled}
-        onClick={() => (position ? setPosition(null) : open())}
-        onKeyDown={(event) => {
-          if (event.key === "ArrowDown") {
-            event.preventDefault();
-            open();
-          }
-        }}
-      >
-        <MoreHorizontal size={18} />
-      </button>
-      {position && !disabled && (
-        <ActionMenu
-          label={label}
-          items={items}
-          position={position}
-          trigger={trigger}
-          onClose={() => {
-            setPosition(null);
-            trigger.current?.focus();
-          }}
-        />
-      )}
-    </>
   );
 }

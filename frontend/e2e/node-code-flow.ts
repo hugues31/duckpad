@@ -59,6 +59,20 @@ export async function verifyNodeCode(page: Page) {
     name: "Node actions",
     exact: true,
   });
+  // An icon is named as soon as the pointer reaches it.
+  const duplicate = actions.getByRole("button", {
+    name: "Duplicate node",
+    exact: true,
+  });
+  await duplicate.hover();
+  await expect
+    .poll(() =>
+      duplicate.evaluate((button) => {
+        const name = getComputedStyle(button, "::after");
+        return name.opacity === "1" && name.content;
+      }),
+    )
+    .toBe('"Duplicate node"');
   for (const tab of ["Info", "Documentation", "Parameters"]) {
     await inspector.getByRole("button", { name: tab, exact: true }).click();
     await inspector.locator(".inspector-body").evaluate((body) => {
@@ -77,21 +91,6 @@ export async function verifyNodeCode(page: Page) {
       ).toBeInViewport();
     }
   }
-  const viewport = page.viewportSize()!;
-  await page.setViewportSize({ width: 900, height: 720 });
-  const label = inspector.getByRole("textbox", {
-    name: "Display name",
-    exact: true,
-  });
-  await label.scrollIntoViewIfNeeded();
-  await expect(label).toBeInViewport();
-  await actions
-    .getByRole("button", { name: "Edit code", exact: true })
-    .scrollIntoViewIfNeeded();
-  await expect(
-    actions.getByRole("button", { name: "Edit code", exact: true }),
-  ).toBeInViewport();
-  await page.setViewportSize(viewport);
   await nodeMenuAction(page, "Convert to template");
   const conversion = page.getByRole("dialog");
   await conversion.getByLabel("Template name").fill("Shared filter");

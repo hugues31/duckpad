@@ -152,7 +152,7 @@ export default function NodeCodePanel({
   return (
     <aside className="code-panel" ref={panel} aria-label={t("codePanel")}>
       <div className="inspector-title">
-        <span className="code-panel-title">
+        <span className="panel-heading">
           <span title={label}>{label}</span>
           <small className="muted">
             {python ? "Python" : "SQL"}

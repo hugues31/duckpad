@@ -1,7 +1,6 @@
-import { BookOpen, Code2, Info, Settings2, X } from "lucide-react";
+import { BookOpen, Code2, Info, Settings2 } from "lucide-react";
 import { lazy, Suspense, useRef, useState } from "react";
 import { Link as RouterLink } from "react-router";
-import type { ActionItem } from "./ActionMenu";
 import { retainedConflict, withQuery } from "./api";
 import ConnectionOnboarding from "./ConnectionOnboarding";
 import { containsPython, type NodeInterface } from "./graph";
@@ -12,6 +11,7 @@ import InspectorActions from "./InspectorActions";
 import InspectorParameters from "./InspectorParameters";
 import { sourcePreviewParams } from "./nodeParameters";
 import { projectSettingsUrl } from "./navigation";
+import type { NodeAction } from "./nodeActions";
 import { nodeCode, nodeEntity, nodeSourcePath } from "./nodeCode";
 import NodeDocumentation from "./NodeDocumentation";
 import NodeInfo from "./NodeInfo";
@@ -98,7 +98,7 @@ export default function Inspector({
     base: Snapshot,
   ) => Promise<Snapshot>;
   onInput: (port: string, source: string) => void;
-  actions: () => ActionItem[];
+  actions: NodeAction[];
   onRun: () => void;
   onHistory: () => void;
   /** Open the results panel on one of its tabs. */
@@ -254,20 +254,19 @@ export default function Inspector({
   const statements: Statement[] = compilation.data || [];
   return (
     <aside className="inspector" ref={panel}>
-      <div className="inspector-title">
-        <span>{nodeLabel(node, signature, t)}</span>
-        <button className="icon" onClick={onClose} title={t("close")}>
-          <X size={18} />
-        </button>
-      </div>
+      <InspectorHeading
+        title={nodeLabel(node, signature, t)}
+        node={node}
+        kind={kind}
+        snapshot={snapshot}
+        onClose={onClose}
+      />
       <InspectorActions
-        actions={actions()}
-        component={!!node.component}
+        actions={actions}
         starting={starting}
         runDisabled={readOnly || !!starting || !!statuses.active}
         onRun={onRun}
       />
-      <InspectorHeading node={node} kind={kind} snapshot={snapshot} />
       <ResultSummary
         bundle={snapshot.bundle}
         fullNode={fullNode}
@@ -301,9 +300,7 @@ export default function Inspector({
               <button
                 className="text-button"
                 onClick={() =>
-                  actions()
-                    .find((item) => item.id === "mute")
-                    ?.run()
+                  actions.find((item) => item.id === "mute")?.run()
                 }
               >
                 {t("unmuteNode")}
