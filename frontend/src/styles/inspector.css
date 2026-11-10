@@ -1,0 +1,506 @@
+/* Node inspector panel and its controls. */
+.inspector-layer {
+  display: contents;
+}
+.inspector,
+.code-panel {
+  position: absolute;
+  z-index: 20;
+  top: var(--stage-top);
+  bottom: 0;
+  right: 0;
+  width: var(--inspector-width);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  border-left: 1px solid var(--border);
+}
+/* Short panels scroll as a whole before their fields become unusably small. */
+.inspector {
+  overflow: auto;
+}
+.inspector-title {
+  height: 52px;
+  padding: 0 17px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-family: inherit;
+  font-weight: 700;
+  font-size: 13px;
+  flex-shrink: 0;
+  gap: 8px;
+}
+/* A panel's node: its name over one line on what it is. */
+.panel-heading {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  line-height: 1.25;
+}
+.panel-heading > * {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.panel-heading small {
+  font-size: 11px;
+  font-weight: 500;
+}
+.panel-heading small svg {
+  margin-right: 4px;
+  vertical-align: -1px;
+}
+.kind-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+.kind-icon.component {
+  background: var(--surface-alt);
+  color: light-dark(#6b589c, #d0bcff);
+}
+/* The node's main action, then the others as one bar of named icons. */
+.inspector-actions {
+  flex-shrink: 0;
+  display: grid;
+  gap: 6px;
+  padding: 12px 17px;
+}
+.inspector-toolbar {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--surface);
+}
+.inspector-toolbar button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 28px;
+  color: var(--muted);
+}
+.inspector-toolbar button + button {
+  border-left: 1px solid var(--border);
+}
+.inspector-toolbar button:first-child {
+  border-radius: 6px 0 0 6px;
+}
+.inspector-toolbar button:last-child {
+  border-radius: 0 6px 6px 0;
+}
+/* Only the icon fades, so the name of a disabled action stays readable. */
+.inspector-toolbar button:disabled {
+  opacity: 1;
+}
+.inspector-toolbar button:disabled svg {
+  opacity: 0.45;
+}
+.inspector-toolbar button:not(:disabled):hover {
+  background: var(--surface-alt);
+  color: var(--text);
+}
+.inspector-toolbar .run-node:not(:disabled),
+.inspector-toolbar .active {
+  color: var(--accent);
+}
+.inspector-toolbar .active {
+  background: var(--accent-soft);
+}
+.inspector-toolbar .danger:not(:disabled):hover {
+  color: var(--danger);
+}
+/* Names of the outer icons open inwards, to stay inside the panel. */
+.inspector-toolbar button:nth-child(-n + 2)::after {
+  left: 0;
+  translate: none;
+}
+.inspector-toolbar button:nth-last-child(-n + 2)::after {
+  left: auto;
+  right: 0;
+  translate: none;
+}
+/* One line on what the node produced; each part opens the results panel. */
+.result-summary {
+  flex-shrink: 0;
+  margin: 0 17px 15px;
+  padding: 8px 10px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 9px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 11px;
+}
+.result-summary .badge {
+  gap: 4px;
+}
+.result-summary .warning-badge {
+  padding: 2px 6px;
+}
+.summary-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 0;
+  font-size: 11px;
+}
+.summary-link:hover {
+  text-decoration: underline;
+}
+.result-summary .results-link {
+  margin-left: auto;
+  color: var(--accent);
+  font-weight: 600;
+}
+/*
+ * Grid tracks share missing width from the longest labels first: in a narrow
+ * panel they shorten, never below three characters, and short ones stay whole.
+ */
+.inspector-tabs {
+  flex-shrink: 0;
+  display: grid;
+  grid-auto-flow: column;
+  justify-content: start;
+  padding: 0 6px;
+  gap: 6px;
+  border-bottom: 1px solid var(--border);
+}
+.inspector-tabs button {
+  min-width: 0;
+  font-size: 11px;
+  gap: 4px;
+  padding: 12px 0;
+}
+.inspector-tabs svg {
+  flex-shrink: 0;
+}
+.inspector-tabs span {
+  min-width: 3ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.inspector-body {
+  min-height: 160px;
+  padding: 21px 18px;
+  overflow: auto;
+  flex: 1;
+}
+.inspector-body .button.full {
+  margin-top: 8px;
+  font-size: 11px;
+}
+.inspector-body h4 {
+  margin-top: 23px;
+  margin-bottom: 15px;
+}
+.inspector-body input,
+.inspector-body select,
+.inspector-body textarea {
+  font-size: 12px;
+}
+.code-input {
+  font-size: 10px !important;
+  background: var(--surface-alt);
+}
+.readonly-fields {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+.file-upload {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--accent);
+  font-size: 10px;
+  position: relative;
+  cursor: pointer;
+  width: max-content;
+  padding: 3px 0;
+}
+.file-upload input {
+  opacity: 0;
+  position: absolute;
+  inset: 0;
+  cursor: pointer;
+}
+.segmented {
+  display: flex;
+  padding: 3px;
+  border: 1px solid var(--border);
+  background: var(--surface-alt);
+  border-radius: 7px;
+  gap: 3px;
+}
+.segmented button {
+  flex: 1;
+  font-size: 10px;
+  padding: 7px 9px;
+  border-radius: 4px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.segmented button.active {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 1px 4px #0000000a;
+}
+.expression {
+  background: var(--surface-alt);
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 10px;
+  line-height: 1.7;
+  max-height: 350px;
+  overflow: auto;
+}
+.documentation-editor {
+  width: 100%;
+  min-height: 250px;
+  font-size: 12px;
+  line-height: 1.8;
+}
+.node-info > section:first-child > h4 {
+  margin-top: 0;
+}
+.info-list {
+  display: grid;
+  grid-template-columns: minmax(80px, max-content) minmax(0, 1fr);
+  gap: 10px 14px;
+  margin: 0;
+  font-size: 12px;
+}
+.info-list dt {
+  color: var(--muted);
+  opacity: 0.75;
+}
+.info-list dd {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.info-list small {
+  font-size: 11px;
+  color: var(--muted);
+  opacity: 0.75;
+}
+@media (max-width: 1099px) {
+  .inspector,
+  .code-panel {
+    top: calc(var(--stage-top) + 38px);
+  }
+  .preview-open .inspector,
+  .preview-open .code-panel {
+    bottom: var(--preview-height);
+  }
+}
+@media (max-width: 600px) {
+  .inspector,
+  .code-panel {
+    width: min(var(--inspector-width), 100%);
+    z-index: 26;
+  }
+  .preview-open .inspector {
+    bottom: 0;
+  }
+}
+/* Code panel: the selected node's code, docked in the inspector's place. */
+.code-panel-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.code-panel-toolbar .spacer {
+  flex: 1;
+}
+.code-panel-toolbar select {
+  width: auto;
+  font-size: 11px;
+  padding: 4px 7px;
+}
+.code-panel-notice {
+  margin: 8px 12px 0;
+  flex-shrink: 0;
+}
+.code-panel-editor {
+  position: relative;
+  flex: 1;
+  min-height: 160px;
+}
+.input-columns {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  max-height: 35%;
+  border-bottom: 1px solid var(--border);
+}
+.input-columns-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+.input-columns-toggle .muted {
+  margin-left: auto;
+  font-weight: 400;
+}
+.input-columns-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0 12px 10px;
+  overflow: auto;
+}
+.input-columns-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.input-columns-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.column-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  max-width: 100%;
+  padding: 2px 7px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+.column-chip span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.column-chip small {
+  color: var(--muted);
+  font-size: 10px;
+}
+.column-chip.input {
+  font-weight: 600;
+}
+.column-chip:not(:disabled):hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.column-chip:disabled {
+  cursor: default;
+}
+
+.source-preview {
+  min-width: 0;
+  margin-block: 12px;
+}
+
+.source-sample {
+  overflow: auto;
+  max-height: 260px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.source-sample table,
+.source-types {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.source-sample th,
+.source-sample td,
+.source-types th,
+.source-types td {
+  padding: 6px 8px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+/* Long values are cut; their cell's title holds them whole. */
+.source-sample td {
+  max-width: 16em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* The types table fits the inspector: long names wrap, selects shrink. */
+.source-types {
+  table-layout: fixed;
+}
+
+.source-types td:first-child {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.source-types select {
+  width: 100%;
+}
+
+.source-error {
+  max-height: 160px;
+  overflow: auto;
+  white-space: pre-wrap;
+}
+
+.source-sample th small {
+  display: block;
+  color: var(--muted);
+  font-weight: normal;
+}
+
+.source-types caption {
+  padding-block: 12px 6px;
+  text-align: left;
+  font-weight: 600;
+}
+
+.source-empty {
+  display: grid;
+  gap: 8px;
+}
