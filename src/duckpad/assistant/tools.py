@@ -21,13 +21,17 @@ from ..services import Services
 from ..util import Problem, clean
 from .config import Configuration
 
+# One camelCase or kebab-case word, as frontend areas and route slugs are. The model reads these
+# names as validated context, so they stay short and free of spaces and punctuation.
+NAVIGATION_NAME = r"[a-z][A-Za-z0-9-]{0,39}"
+
 
 class PageContext(BaseModel):
     model_config = ConfigDict(extra="forbid")
     # Navigation names describe the page; resource identifiers below determine access.
-    page: str = Field(pattern=r"^[a-z][A-Za-z0-9]{0,39}$")
-    tab: str | None = Field(default=None, pattern=r"^[a-z][A-Za-z0-9]{0,39}$")
-    section: str = Field(default="", pattern=r"^([a-z][A-Za-z0-9]{0,39})?$")
+    page: str = Field(pattern=f"^{NAVIGATION_NAME}$")
+    tab: str | None = Field(default=None, pattern=f"^{NAVIGATION_NAME}$")
+    section: str = Field(default="", pattern=f"^({NAVIGATION_NAME})?$")
     project: str | None = None
     worktree: str = ""
     branch: str = Field(default="", max_length=255)
