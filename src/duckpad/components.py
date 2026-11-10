@@ -4,6 +4,7 @@ import copy
 import tomllib
 
 from . import named_documents, partitions, project_files, value_sources, variables
+from .graph import output_ports
 from .node_code import code_path, node_sql
 from .node_names import name_text, node_caption
 from .python_environment import requirement_name
@@ -172,6 +173,15 @@ def expand(bundle, tolerant=False):
                 if (key, port) not in occupied:
                     node["error"] = f"Connect input {port} on {node['display_name']}"
     return nodes, edges, boundaries
+
+
+def output_port(bundle, node, output):
+    """The `(producer, port)` behind a node's output, through component instance boundaries."""
+    nodes, _, boundaries = expand(bundle, tolerant=True)
+    ports = output_ports(nodes, boundaries, node)
+    if output not in ports:
+        raise Problem("Output port not found", 404)
+    return ports[output]
 
 
 def group(bundle, selection, label, exposed=None, parent=None):

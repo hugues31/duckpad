@@ -7,10 +7,21 @@ from pydantic_ai import RunContext
 
 from .. import variables
 from ..bundle import bundle_to_files
-from ..components import expand, group
+from ..charts import declarations as chart_declarations
+from ..charts import unknown_fields
+from ..components import expand, group, output_port
 from ..node_code import code_path, find_node
 from ..util import Problem
-from .arguments import CreateVariable, DeleteVariable, RenameVariable, UpdateVariable
+from .arguments import (
+    CreateChart,
+    CreateVariable,
+    DeleteChart,
+    DeleteVariable,
+    RenameChart,
+    RenameVariable,
+    UpdateChart,
+    UpdateVariable,
+)
 from .tools import Dependencies, variable_usages
 
 
@@ -184,10 +195,7 @@ def write_documentation(
         if section == "nodes":
             docs.setdefault("nodes", {})[node] = text
         else:
-            nodes, _, boundaries = expand(bundle, tolerant=True)
-            outputs = boundaries[node]["outputs"] if node in boundaries else nodes[node]["parsed"]["outputs"]
-            if output not in outputs:
-                raise Problem("Output port not found", 404)
+            output_port(bundle, node, output)
             key = f"{node}:{output}"
             if section == "datasets":
                 docs.setdefault("datasets", {})[key] = text
@@ -260,4 +268,62 @@ def group_nodes(ctx: RunContext[Dependencies], nodes: list[str], name: str, comp
     return save(ctx, snapshot, bundle, selected=selected)
 
 
-WRITE_TOOLS = [edit_flow, write_sql, write_documentation, edit_variable, group_nodes]
+def edit_chart(
+    ctx: RunContext[Dependencies],
+    change: Annotated[
+        CreateChart | UpdateChart | RenameChart | DeleteChart, Field(discriminator="operation")
+    ],
+) -> dict:
+    """Create, update, rename or delete a named chart of a node output, with a commit and Undo for each change.
+
+    Pass one change object: {"operation": ..., "node": ..., "output": ..., "name": ..., ...} with only
+    that operation's fields. A chart is a Vega-Lite 6 spec drawn from the rows of one output, shown in
+    its Chart tab. Duckpad supplies the rows as "data": {"name": "data"} and accepts a subset of
+    Vega-Lite: the top-level fields $schema, data, mark, encoding, layer, title, description, width and
+    height, with no transforms, aggregates or expressions. Charts draw at most 5,000 rows: aggregate,
+    bin and filter in the node's SQL first. Before writing a spec, read the charts guide (read_guide),
+    the current charts.json (read_file) and the output schema (read_schemas). Create and update take
+    spec; update replaces the whole spec, never merges it. Rename stays on the same output.
+    """
+    snapshot = editable(ctx)
+    bundle = snapshot["bundle"]
+    name = change.name
+    find_node(bundle, change.node)
+    producer, port = output_port(bundle, change.node, change.output)
+    key = f"{producer}:{port}"
+    charts = bundle.get("charts") or {}
+    if not isinstance(charts, dict) or not isinstance(charts.get(key, []), list):
+        raise Problem("Correct charts.json before editing charts", 422)
+    entries = charts.setdefault(key, [])
+    existing = next((c for c in entries if isinstance(c, dict) and c.get("name") == name), None)
+    if isinstance(change, CreateChart):
+        if existing is not None:
+            raise Problem("A chart with this name already exists on this output", 409)
+        existing = {"name": name, "spec": change.spec}
+        entries.append(existing)
+    elif existing is None:
+        raise Problem("Chart not found", 404)
+    elif isinstance(change, UpdateChart):
+        existing["spec"] = change.spec
+    elif isinstance(change, RenameChart):
+        if any(isinstance(c, dict) and c.get("name") == change.new_name for c in entries):
+            raise Problem("A chart with this name already exists on this output", 409)
+        existing["name"] = change.new_name
+    else:
+        entries.remove(existing)
+        if not entries:
+            del charts[key]
+    if not isinstance(change, DeleteChart):
+        # The save ignores problems the file already had, and the first one hides the others:
+        # check the requested chart, name included, on its own.
+        chart_declarations({"charts": {key: [existing]}})
+    bundle["charts"] = charts
+    result = save(ctx, snapshot, bundle)
+    if isinstance(change, (CreateChart, UpdateChart)) and "error" not in result:
+        columns = ctx.deps.output_columns(bundle, producer, port)
+        if columns is not None and (unknown := unknown_fields(change.spec, columns)):
+            result["unknown_fields"] = unknown
+    return result
+
+
+WRITE_TOOLS = [edit_flow, write_sql, write_documentation, edit_variable, group_nodes, edit_chart]

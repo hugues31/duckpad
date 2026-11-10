@@ -36,6 +36,7 @@ const toolLabels: Record<string, TranslationKey> = {
   write_documentation: "assistantWriteDocs",
   edit_variable: "assistantEditVariable",
   group_nodes: "assistantGroupNodes",
+  edit_chart: "assistantEditChart",
   launch_run: "assistantLaunchRun",
   cancel_run: "assistantCancelRun",
   wait_for_run: "assistantWaitRun",
@@ -74,6 +75,7 @@ function ToolCard({
   const action = tool.action;
   const target =
     tool.args.node ||
+    (tool.args.change as { node?: unknown } | undefined)?.node ||
     tool.args.path ||
     tool.args.template ||
     tool.args.section ||
