@@ -427,7 +427,7 @@ def test_rejected_variable_arguments_save_nothing(instance, change, field):
         (flow({"operation": "remove", "id": "second", "label": "Gone"}), "label"),
         (flow({"operation": "move", "id": "first"}), "operation"),
         (flow(edges=[{"operation": "connect", "id": "link"}]), "source"),
-        (flow(edges=[{"operation": "connect", "id": "link", "source": "first", "target": "a b"}]), "target"),
+        (flow(edges=[{"operation": "connect", "id": "link", "source": "first", "target": ""}]), "target"),
         (flow(edges=[{"operation": "disconnect", "id": "link", "source": "first"}]), "source"),
     ],
 )
@@ -583,6 +583,22 @@ def test_null_flow_arguments_count_as_omitted(instance):
     assert [
         (e["source"], e["sourceHandle"], e["target"], e["targetHandle"]) for e in bundle["flow"]["edges"]
     ] == [("first", "result", "consumer", "input")]
+
+
+def test_edges_connect_existing_nodes_whatever_their_id(instance):
+    app, client = instance
+    worktree, context = seed(app, client)
+
+    def add_template_node(bundle):
+        bundle["templates"]["filter"] = CONSUMER
+        bundle["flow"]["nodes"].append({"id": "keep.rows", "params": {}, "template": "filter"})
+
+    change(app, worktree, add_template_node)
+    link = {"operation": "connect", "id": "link", "source": "first", "target": "keep.rows"}
+    _, result = write_turn(app, client, context, [flow(edges=[link])])
+    assert result["tools"][0]["status"] == "complete", result
+    edges = app.state.services.projects.snapshot(worktree["id"])["bundle"]["flow"]["edges"]
+    assert [(e["source"], e["target"]) for e in edges] == [("first", "keep.rows")]
 
 
 CHART = {"operation", "node", "output", "name"}

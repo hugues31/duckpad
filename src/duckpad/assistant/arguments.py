@@ -164,8 +164,9 @@ class ConnectEdge(Arguments):
 
     operation: Literal["connect"]
     id: str = Field(min_length=1, max_length=100)
-    source: NodeId
-    target: NodeId
+    # Existing nodes keep whatever ID their project gave them; NodeId only limits the IDs of new nodes.
+    source: str = Field(min_length=1)
+    target: str = Field(min_length=1)
     source_port: str = "result"
     target_port: str = "input"
 
